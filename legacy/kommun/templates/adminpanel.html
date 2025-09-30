@@ -1,0 +1,745 @@
+{% extends "base.html" %}
+{% block title %}Adminpanel - Yuplan{% endblock %}
+
+{% block head %}
+<style>
+    /* Avdelningar grid layout */
+    .avdelningar-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .avdelning-card {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius-lg);
+        padding: 1.5rem;
+        box-shadow: var(--shadow-sm);
+        transition: var(--transition);
+    }
+    
+    .avdelning-card:hover {
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
+    
+    .avdelning-header {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid var(--primary-light);
+    }
+    
+    .avdelning-header h4 {
+        margin-bottom: 0.5rem;
+        color: var(--primary-dark);
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+    
+    .avdelning-info {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .avdelning-info i {
+        margin-right: 0.5rem;
+        color: var(--primary-color);
+    }
+    
+    .kosttyper-section {
+        margin-bottom: 1.5rem;
+    }
+    
+    .kosttyper-section h5 {
+        color: var(--primary-color);
+        font-size: 1rem;
+        font-weight: 500;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .kosttyper-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .kosttyp-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        background: var(--bg-secondary);
+        border-radius: var(--border-radius);
+        border: 1px solid var(--border-color);
+    }
+    
+    .kosttyp-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        margin-bottom: 0;
+        cursor: pointer;
+    }
+    
+    .kosttyp-label input[type="checkbox"] {
+        margin: 0;
+    }
+    
+    .kosttyp-name {
+        font-size: 0.875rem;
+        color: var(--text-primary);
+    }
+    
+    .kosttyp-antal {
+        width: 100%;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .faktaruta-section {
+        border-top: 1px solid var(--border-color);
+        padding-top: 1rem;
+    }
+    
+    .faktaruta-section .form-label {
+        color: var(--primary-color);
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    @media (max-width: 768px) {
+        .avdelningar-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+        
+        .kosttyper-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .avdelning-card {
+            padding: 1rem;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .kosttyp-item {
+            padding: 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-cog"></i> Adminpanel</h1>
+        <div class="d-flex gap-2">
+            <span class="badge" style="background: var(--info-color); color: white; padding: 0.5rem 1rem; border-radius: 20px;">
+                <i class="fas fa-calendar-alt"></i> Vecka {{ valt_vecka }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <a href="{{ url_for('meny_avdelning_admin') }}" class="card" style="text-decoration: none; color: inherit;">
+            <div class="text-center">
+                <i class="fas fa-utensils" style="font-size: 2rem; color: var(--primary-color); margin-bottom: 0.5rem;"></i>
+                <h4>Meny & Avdelningar</h4>
+                <p class="text-secondary">Hantera menytext och avdelningslogin</p>
+                <!-- menyimport knapp borttagen -->
+            </div>
+        </a>
+        
+        <a href="{{ url_for('veckovy', vecka=valt_vecka) }}" class="card" style="text-decoration: none; color: inherit;">
+            <div class="text-center">
+                <i class="fas fa-users" style="font-size: 2rem; color: var(--secondary-color); margin-bottom: 0.5rem;"></i>
+                <h4>Personalvy</h4>
+                <p class="text-secondary">Se veckans registreringar</p>
+            </div>
+        </a>
+        
+        <a href="{{ url_for('rapport') }}" class="card" style="text-decoration: none; color: inherit;">
+            <div class="text-center">
+                <i class="fas fa-chart-bar" style="font-size: 2rem; color: var(--accent-color); margin-bottom: 0.5rem;"></i>
+                <h4>Rapporter</h4>
+                <p class="text-secondary">Analys och statistik</p>
+            </div>
+        </a>
+    </div>
+
+    <!-- Vecka selector -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-calendar-week"></i> Välj aktiv vecka</h3>
+        </div>
+        <form method="GET" class="d-flex gap-2 align-items-center">
+            <label for="vecka" class="form-label" style="margin-bottom: 0; min-width: max-content;">Vecka:</label>
+            <select name="vecka" id="vecka" class="form-control" style="width: auto;" onchange="this.form.submit()">
+                {% for v in range(1, 53) %}
+                    <option value="{{ v }}" {% if v == valt_vecka %}selected{% endif %}>Vecka {{ v }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+        <!-- Lägg till avdelning -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-plus-circle"></i> Lägg till avdelning</h3>
+            </div>
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label for="avd_namn" class="form-label">Avdelningsnamn</label>
+                    <input type="text" id="avd_namn" name="avd_namn" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="boende_antal" class="form-label">Antal boende</label>
+                    <select name="boende_antal" id="boende_antal" class="form-control" required>
+                        {% for n in range(0, 21) %}
+                            <option value="{{ n }}">{{ n }} personer</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <button type="submit" name="lägg_till_avd" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Lägg till avdelning
+                </button>
+            </form>
+        </div>
+
+        <!-- Lägg till specialkost -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-utensils"></i> Lägg till specialkost</h3>
+            </div>
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label for="kost_namn" class="form-label">Kosttyp</label>
+                    <input type="text" id="kost_namn" name="kost_namn" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="d-flex align-items-center gap-2">
+                        <input type="checkbox" name="formarkeras">
+                        <span>Förmarkeras automatiskt</span>
+                    </label>
+                </div>
+                
+                <button type="submit" name="lägg_till_kost" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Lägg till kosttyp
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Kopplingar -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-link"></i> Koppla kosttyper till avdelningar</h3>
+        </div>
+        
+        <form method="POST">
+            <input type="hidden" name="spara_kopplingar" value="1">
+            
+            <!-- Responsiv layout för avdelningar -->
+            <div class="avdelningar-grid">
+                {% for avd in avdelningar %}
+                <div class="avdelning-card">
+                    <div class="avdelning-header">
+                        <h4>{{ avd.namn }}</h4>
+                        <div class="avdelning-info">
+                            <i class="fas fa-users"></i>
+                            {% if avd.boende_antal == 'varierat' %}
+                                Varierat antal
+                            {% else %}
+                                {{ avd.boende_antal }} personer
+                            {% endif %}
+                        </div>
+                        <a href="{{ url_for('redigera_boende', avdelning_id=avd.id, vecka=valt_vecka) }}" 
+                           class="btn btn-sm btn-outline">
+                            <i class="fas fa-edit"></i> Redigera antal
+                        </a>
+                    </div>
+                    
+                    <div class="kosttyper-section">
+                        <h5><i class="fas fa-utensils"></i> Kosttyper</h5>
+                        <div class="kosttyper-grid">
+                            {% for kost in kosttyper %}
+                            <div class="kosttyp-item">
+                                <label class="kosttyp-label">
+                                    <input type="checkbox" 
+                                           name="koppling" 
+                                           value="{{ avd.id }}_{{ kost.id }}"
+                                           {% if kost.id in avd.kopplade_kosttyper %}checked{% endif %}>
+                                    <span class="kosttyp-name">{{ kost.namn }}</span>
+                                </label>
+                                <select name="antal_{{ avd.id }}_{{ kost.id }}" 
+                                        class="form-control kosttyp-antal">
+                                    {% for n in range(0, 11) %}
+                                        <option value="{{ n }}" {% if avd.kopplade_antal.get(kost.id, 1) == n %}selected{% endif %}>{{ n }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="faktaruta-section">
+                        <label for="faktaruta_{{ avd.id }}" class="form-label">
+                            <i class="fas fa-info-circle"></i> Information om avdelningen
+                        </label>
+                        <textarea name="faktaruta_{{ avd.id }}" 
+                                  id="faktaruta_{{ avd.id }}"
+                                  class="form-control" 
+                                  rows="3" 
+                                  placeholder="Lägg till information om avdelningen...">{{ avd.faktaruta }}</textarea>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="text-center mt-3">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save"></i> Spara alla ändringar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Ta bort specialkosttyper -->
+    <div class="card" style="border-left: 4px solid var(--danger-color);">
+        <div class="card-header" style="background: #ffebee;">
+            <h3 class="card-title" style="color: var(--danger-color);">
+                <i class="fas fa-trash-alt"></i> Ta bort specialkosttyper
+            </h3>
+        </div>
+        
+        <p class="text-secondary">Klicka på en kosttyp för att ta bort den. <strong>Varning:</strong> Detta kan inte ångras!</p>
+        
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+            {% for kost in kosttyper %}
+            <form method="POST" style="display: inline-block;">
+                <input type="hidden" name="radera_kosttyp" value="{{ kost.id }}">
+                <button type="submit" 
+                        class="btn btn-danger btn-sm" 
+                        onclick="return confirm('Är du säker på att du vill ta bort kosttypen {{ kost.namn }}? Detta kan inte ångras!')">
+                    <i class="fas fa-trash"></i> {{ kost.namn }}
+                </button>
+            </form>
+            {% endfor %}
+            {% if not kosttyper %}
+            <p class="text-secondary"><em>Inga specialkosttyper att ta bort.</em></p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+    // Auto-save indikator
+    document.addEventListener('DOMContentLoaded', function() {
+        const forms = document.querySelectorAll('form');
+        forms.forEach(form => {
+            const inputs = form.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                input.addEventListener('change', function() {
+                    // Visa att det finns osparade ändringar
+                    const saveButton = form.querySelector('button[type="submit"]');
+                    if (saveButton) {
+                        saveButton.style.background = 'var(--warning-color)';
+                        saveButton.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Spara ändringar';
+                    }
+                });
+            });
+        });
+    });
+
+    // Smooth scroll till ankare
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            document.querySelector(this.getAttribute('href')).scrollIntoView({
+                behavior: 'smooth'
+            });
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}
+    <title>Adminpanel</title>
+    <style>
+        .mini-tabell {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.85em;
+    background-color: #fff;
+    margin-top: 1em;
+}
+
+.mini-tabell th,
+.mini-tabell td {
+    border: 1px solid #ccc;
+    padding: 2px 4px;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.mini-tabell th {
+    background-color: #f2f2f2;
+    font-weight: normal;
+}
+
+.ta-bort-mini {
+    background-color: #e57373;
+    color: white;
+    border: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+}
+
+.ta-bort-mini:hover {
+    background-color: #d32f2f;
+}
+
+        .sektion-rubrik-liten {
+    font-size: 1.2em;
+    color: #388e3c;
+    margin-top: 2em;
+    margin-bottom: 0.2em;
+    border-bottom: 1px solid #4CAF50;
+}
+
+.sektion-info {
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 1em;
+}
+
+.smal-tabell {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.95em;
+    background-color: #fff;
+    margin-top: 1em;
+}
+
+.smal-tabell th,
+.smal-tabell td {
+    border: 1px solid #ccc;
+    padding: 0,4px 0,8px;
+    text-align: center;
+    
+}
+
+.smal-tabell th {
+    background-color: #f2f2f2;
+    font-weight: normal;
+}
+
+.ta-bort-liten {
+    background-color: #e57373;
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.ta-bort-liten:hover {
+    background-color: #d32f2f;
+}
+
+        .knapp {
+    background-color: #f44336;
+    color: white;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.knapp:hover {
+    background-color: #d32f2f;
+}
+
+        body {
+            font-family: sans-serif;
+            padding: 2em;
+            max-width: 1200px;
+            margin: auto;
+            background-color: #fafafa;
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 0.5em;
+            background-color: #e8f5e9;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            padding: 0.4em 1em;
+            color: #2e7d32;
+            font-size: 1.8em;
+        }
+
+        h2 {
+            margin-top: 1.5em;
+            padding-bottom: 0.2em;
+            border-bottom: 2px solid #4CAF50;
+            color: #388e3c;
+            font-size: 1.4em;
+        }
+
+        form {
+            margin-top: 2em;
+            background-color: #fff;
+            padding: 1.5em;
+            border-radius: 8px;
+            box-shadow: 0 0 8px rgba(0,0,0,0.05);
+            border-top: 4px solid #4CAF50;
+        }
+
+        label {
+            display: block;
+            margin-top: 0.5em;
+            font-weight: bold;
+        }
+
+        input, textarea, button, select {
+            padding: 0.5em;
+            font-size: 1em;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 1em;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .knapp {
+            padding: 8px 14px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 1em;
+            background-color: #fff;
+            overflow-x: auto;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 6px 8px;
+            text-align: center;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        th:first-child, td.avd-cell {
+            width: 200px;
+        }
+
+        th:last-child, td:last-child {
+            min-width: 250px;
+            width: 30%;
+        }
+
+        .faktaruta {
+            width: 100%;
+            resize: vertical;
+            font-style: italic;
+        }
+
+        .specialkost-col, .specialkost-cell {
+            width: 80px;
+        }
+
+        .antal-input {
+            width: 50px;
+        }
+
+        .zebra tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        a.edit-link {
+            display: inline-block;
+            margin-top: 4px;
+            text-decoration: none;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        a.edit-link:hover {
+            text-decoration: underline;
+        }
+
+        .top-links {
+            text-align: center;
+            margin-bottom: 1em;
+        }
+
+        .top-links a {
+            margin: 0 10px;
+            color: #4CAF50;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .top-links a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1em;
+            }
+
+            form {
+                padding: 1em;
+            }
+
+            table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            th, td {
+                padding: 6px 6px;
+            }
+
+            .specialkost-col, .specialkost-cell {
+                width: 60px;
+                font-size: 0.9em;
+            }
+
+            th:first-child, td.avd-cell {
+                width: 180px;
+                font-size: 1em;
+            }
+
+            .faktaruta {
+                min-height: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Adminpanel – Vecka {{ valt_vecka }}</h1>
+    <div class="top-links">
+        <a href="{{ url_for('index') }}">🏠 Startsida</a>
+        <a href="{{ url_for('veckovy', vecka=valt_vecka if valt_vecka else 1) }}">👥 Personalvy</a>
+        <a href="{{ url_for('meny_avdelning_admin') }}">📋 Meny- och Avdelningsadministrering</a>
+    </div>
+
+    <form method="GET">
+        <label>Välj vecka:
+            <select name="vecka">
+                {% for v in range(1, 53) %}
+                    <option value="{{ v }}" {% if v == valt_vecka %}selected{% endif %}>Vecka {{ v }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit">Byt vecka</button>
+    </form>
+    <hr>
+
+    <form method="POST">
+        <input type="hidden" name="vecka" value="{{ valt_vecka }}">
+        <h2>1. Lägg till avdelning</h2>
+        <label>Avdelningsnamn: <input type="text" name="avd_namn" required></label>
+        <label>Antal boende:
+            <select name="boende_antal" required>
+                {% for n in range(0, 21) %}
+                    <option value="{{ n }}">{{ n }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit" name="lägg_till_avd" class="knapp">➕ Lägg till</button>
+    </form>
+
+    <form method="POST">
+        <input type="hidden" name="vecka" value="{{ valt_vecka }}">
+        <h2>2. Lägg till specialkost</h2>
+        <label>Kostnamn: <input type="text" name="kost_namn" required></label>
+        <label><input type="checkbox" name="formarkeras"> Förmarkeras automatiskt</label>
+        <button type="submit" name="lägg_till_kost" class="knapp">➕ Lägg till</button>
+    </form>
+    
+
+    <form method="POST">
+        <input type="hidden" name="vecka" value="{{ valt_vecka }}">
+        <h2>3. Koppla kosttyper till avdelningar + faktarutor</h2>
+        <input type="hidden" name="spara_kopplingar" value="1">
+
+        <div style="overflow-x: auto;">
+            <table class="zebra">
+                <tr>
+                    <th>Avdelning<br>(med totalantal)</th>
+                    {% for kost in kosttyper %}
+                        <th class="specialkost-col">{{ kost.namn }}</th>
+                    {% endfor %}
+                    <th>Faktaruta</th>
+                </tr>
+                {% for avd in avdelningar %}
+                    <tr>
+                        <td class="avd-cell">
+                            <strong>{{ avd.namn }}</strong><br>
+                            👥 {% if avd.boende_antal == 'varierat' %}varierat{% else %}{{ avd.boende_antal }} st{% endif %}<br>
+                            <a class="edit-link" href="{{ url_for('redigera_boende', avdelning_id=avd.id, vecka=valt_vecka) }}">✏️ Antal</a>
+                        </td>
+                        {% for kost in kosttyper %}
+                            <td class="specialkost-cell">
+                                <input type="checkbox" name="koppling" value="{{ avd.id }}_{{ kost.id }}"
+                                {% if kost.id in avd.kopplade_kosttyper %}checked{% endif %}>
+                                <br>
+                                <select name="antal_{{ avd.id }}_{{ kost.id }}" class="antal-input">
+                                    {% for n in range(0, 11) %}
+                                        <option value="{{ n }}" {% if avd.kopplade_antal.get(kost.id, 1) == n %}selected{% endif %}>{{ n }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                        {% endfor %}
+                        <td>
+                            <textarea name="faktaruta_{{ avd.id }}" rows="2" class="faktaruta">{{ avd.faktaruta }}</textarea>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </table>
+        </div>
+        <button type="submit" class="knapp">💾 Spara alla ändringar</button>
+

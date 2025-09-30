@@ -1,0 +1,136 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container-fluid" style="max-width:1500px;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4 class="mb-0">Periodplanering {{ period_start }} – {{ period_end }}</h4>
+      <small class="text-muted">Samlad lista över alla prepp- och frysplockrader (privat)</small>
+    </div>
+    <div class="btn-group">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('week_prep_view', date_s=anchor_date) }}">Veckovy</a>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('day_detail', date_s=anchor_date) }}">Dag</a>
+    </div>
+  </div>
+  <div class="row g-4">
+    <div class="col-12 col-xl-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
+          <strong>Prepp</strong>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-info text-dark" id="prepSummary"></span>
+            <input type="text" id="prepFilter" class="form-control form-control-sm" placeholder="Filter…" style="width:160px;" />
+            <div class="form-check form-check-sm mb-0">
+              <input class="form-check-input" type="checkbox" id="prepOpenOnly" />
+              <label class="form-check-label small" for="prepOpenOnly">Endast öppna</label>
+            </div>
+          </div>
+        </div>
+        <div class="table-responsive" style="max-height:70vh;">
+          <table class="table table-sm align-middle mb-0" id="prepTable">
+            <thead class="table-light position-sticky top-0">
+              <tr>
+                <th style="width:90px;">Dag</th>
+                <th style="width:70px;">Måltid</th>
+                <th style="width:80px;">Kategori</th>
+                <th>Rätt</th>
+                <th>Prepp</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for r in prep_rows %}
+              <tr data-id="{{ r.id }}" class="prep-row {% if r.done %}done text-muted{% endif %}">
+                <td><span class="small">{{ r.weekday }} {{ r.date }}</span></td>
+                <td class="text-capitalize small">{{ r.meal }}</td>
+                <td class="text-capitalize small">{{ r.category }}</td>
+                <td class="small">{{ r.dish or '–' }}</td>
+                <td class="small toggle-prep" style="cursor:pointer;">{{ r.text }}</td>
+              </tr>
+            {% endfor %}
+            {% if not prep_rows %}
+              <tr><td colspan="5" class="text-center text-muted small py-3">Ingen prepp funnen.</td></tr>
+            {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-xl-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex justify-content-between align-items-center py-2">
+          <strong>Frysplock</strong>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-info text-dark" id="frysSummary"></span>
+            <input type="text" id="frysFilter" class="form-control form-control-sm" placeholder="Filter…" style="width:160px;" />
+            <div class="form-check form-check-sm mb-0">
+              <input class="form-check-input" type="checkbox" id="frysOpenOnly" />
+              <label class="form-check-label small" for="frysOpenOnly">Endast öppna</label>
+            </div>
+          </div>
+        </div>
+        <div class="table-responsive" style="max-height:70vh;">
+          <table class="table table-sm align-middle mb-0" id="frysTable">
+            <thead class="table-light position-sticky top-0">
+              <tr>
+                <th style="width:90px;">Dag</th>
+                <th style="width:70px;">Måltid</th>
+                <th style="width:80px;">Kategori</th>
+                <th>Rätt</th>
+                <th>Plock</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for r in frys_rows %}
+              <tr data-id="{{ r.id }}" class="frys-row {% if r.done %}done text-muted{% endif %}">
+                <td><span class="small">{{ r.weekday }} {{ r.date }}</span></td>
+                <td class="text-capitalize small">{{ r.meal }}</td>
+                <td class="text-capitalize small">{{ r.category }}</td>
+                <td class="small">{{ r.dish or '–' }}</td>
+                <td class="small toggle-frys" style="cursor:pointer;">{{ r.item_name }}{% if r.qty %} ({{ r.qty }} {{ r.unit or '' }}){% endif %}</td>
+              </tr>
+            {% endfor %}
+            {% if not frys_rows %}
+              <tr><td colspan="5" class="text-center text-muted small py-3">Ingen frysplock funnen.</td></tr>
+            {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function summarize(){
+  const prepRows=[...document.querySelectorAll('#prepTable tbody tr.prep-row')];
+  const frysRows=[...document.querySelectorAll('#frysTable tbody tr.frys-row')];
+  const po=prepRows.filter(r=>!r.classList.contains('done')).length;
+  const pt=prepRows.length; document.getElementById('prepSummary').textContent=`Öppna: ${po}/${pt}`;
+  const fo=frysRows.filter(r=>!r.classList.contains('done')).length;
+  const ft=frysRows.length; document.getElementById('frysSummary').textContent=`Öppna: ${fo}/${ft}`;
+}
+function applyFilter(tableId, inputId, openOnlyId){
+  const q=(document.getElementById(inputId).value||'').toLowerCase();
+  const openOnly=document.getElementById(openOnlyId).checked;
+  for(const tr of document.querySelectorAll(`#${tableId} tbody tr`)){
+    if(!tr.dataset.id){continue}
+    const done=tr.classList.contains('done');
+    const txt=tr.textContent.toLowerCase();
+    const match=!q || txt.indexOf(q)>-1;
+    const keep = match && (!openOnly || !done);
+    tr.style.display = keep ? '' : 'none';
+  }
+}
+async function togglePrep(id,tr){
+  try{const r=await fetch("{{ url_for('prep_tasks_toggle') }}",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});const j=await r.json();if(j.ok){tr.classList.toggle('done');tr.classList.toggle('text-muted'); summarize(); applyFilter('prepTable','prepFilter','prepOpenOnly');}}
+  catch(e){}
+}
+async function toggleFrys(id,tr){
+  try{const r=await fetch("{{ url_for('frys_items_toggle') }}",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});const j=await r.json();if(j.ok){tr.classList.toggle('done');tr.classList.toggle('text-muted'); summarize(); applyFilter('frysTable','frysFilter','frysOpenOnly');}}
+  catch(e){}
+}
+for(const td of document.querySelectorAll('.toggle-prep')){ td.addEventListener('click',()=>togglePrep(td.parentElement.dataset.id, td.parentElement)); }
+for(const td of document.querySelectorAll('.toggle-frys')){ td.addEventListener('click',()=>toggleFrys(td.parentElement.dataset.id, td.parentElement)); }
+['prepFilter','frysFilter','prepOpenOnly','frysOpenOnly'].forEach(id=>{document.getElementById(id).addEventListener('input',()=>{applyFilter('prepTable','prepFilter','prepOpenOnly');applyFilter('frysTable','frysFilter','frysOpenOnly');});document.getElementById(id).addEventListener('change',()=>{applyFilter('prepTable','prepFilter','prepOpenOnly');applyFilter('frysTable','frysFilter','frysOpenOnly');});});
+ summarize();
+</script>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container py-3" style="max-width:960px;">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+    <div>
+  <h1 class="mb-1" style="font-weight:800; font-size:2rem; background:var(--brand-gradient); -webkit-background-clip:text; background-clip:text; color:transparent;">{{ recipe.title }}</h1>
+      <div class="small text-muted">Skapad {{ recipe.created_at[:10] }} • Uppdat {{ recipe.updated_at[:10] }}</div>
+      {% if recipe.categories %}<div class="mt-1 small">Kategorier: {{ recipe.categories }}</div>{% endif %}
+      <div class="mt-1">
+        <span class="badge bg-info">Metod: {{ recipe.method_type }}</span>
+        {% if recipe.base_portions %}<span class="badge bg-secondary">Basportioner: {{ recipe.base_portions }}</span>{% endif %}
+        <span class="badge bg-success">Kopplade: {{ recipe.link_count }}</span>
+      </div>
+    </div>
+    <div class="d-flex flex-column gap-2">
+      <a href="{{ url_for('recipe_edit_form', recipe_id=recipe.id) }}" class="btn btn-outline-primary">Redigera</a>
+      <a href="{{ url_for('recipe_list') }}" class="btn btn-outline-secondary">Lista</a>
+    </div>
+  </div>
+  {% if recipe.source_url %}
+    <div class="alert alert-light border"><strong>Källa:</strong> <a href="{{ recipe.source_url }}" target="_blank" rel="noopener">{{ recipe.source_url }}</a></div>
+  {% endif %}
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <h5 class="fw-bold">Metod / Fritext</h5>
+      {% if recipe.raw_text %}
+        <div class="recipe-raw-text mt-2">
+          {% for para in recipe.raw_text.split('\n\n') %}
+            <p style="white-space:pre-wrap;">{{ para }}</p>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-muted fst-italic">Ingen tekst lagrad ännu.</div>
+      {% endif %}
+      {% if recipe.notes %}
+        <hr>
+        <h6 class="fw-bold">Interna noteringar</h6>
+        <pre class="p-2 bg-light border rounded" style="white-space:pre-wrap;">{{ recipe.notes }}</pre>
+      {% endif %}
+    </div>
+    <div class="col-lg-4">
+      <h6 class="fw-bold">Kopplade rätter</h6>
+      {% if recipe.linked_dishes %}
+        <ul class="list-unstyled small">
+          {% for d in recipe.linked_dishes %}
+            <li><a href="{{ url_for('planning_dish_detail', dish_id=d.id) }}">{{ d.name }}</a></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="text-muted small">Ingen rett kopplad ännu.</div>
+      {% endif %}
+      <hr>
+      <div class="small text-muted">ID: #{{ recipe.id }}</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

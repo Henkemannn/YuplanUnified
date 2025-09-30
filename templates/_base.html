@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Yuplan{% endblock %}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--brand:#2cbf4f;--ink:#111827;--muted:#64748b}
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,sans-serif;margin:0;color:#1f2937;background:#fafafa}
+    header{position:sticky;top:0;background:#fff;border-bottom:1px solid #eee;z-index:10}
+    .wrap{max-width:1080px;margin:auto;padding:16px}
+    nav a{margin-right:12px;text-decoration:none;color:#374151}
+    nav a.active{font-weight:600;color:#111827}
+    .pill{background:#eef9f1;border:1px solid #d5f2de;padding:4px 10px;border-radius:999px;font-size:12px;margin-left:8px}
+    table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}
+    th,td{border-bottom:1px solid #eee;padding:8px 6px;vertical-align:top}
+    th{background:#f8fafc;text-align:left;font-weight:600;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:#475569}
+    h1{font-size:28px;margin:0 0 8px}
+    h2{margin-top:32px;font-size:20px}
+    .muted{color:var(--muted);font-size:14px;margin-top:0}
+    .right{text-align:right;font-variant-numeric:tabular-nums}
+    .btn{display:inline-block;background:var(--brand);color:#fff;padding:8px 12px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px}
+    .grid{display:grid;gap:32px}
+    footer{margin:64px 0 24px;font-size:12px;color:#94a3b8;text-align:center}
+    .badge{display:inline-block;background:#e2e8f0;border-radius:6px;padding:2px 6px;font-size:11px;margin-left:4px}
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <nav>
+      <strong>Yuplan</strong>
+      · <a href="{{ url_for('ui.workspace_ui') }}" class="{% if request.endpoint=='ui.workspace_ui' %}active{% endif %}">Översikt</a>
+      {% if current_user %}<span class="pill">Tenant {{ tenant_id }}</span>{% endif %}
+      <span style="float:right">
+        {% if current_user and current_user.role in ('admin','superuser') %}
+          <a class="btn" href="{{ url_for('export_api.export_notes') }}">Exportera Notes</a>
+          <a class="btn" style="margin-left:8px" href="{{ url_for('export_api.export_tasks') }}">Exportera Tasks</a>
+        {% endif %}
+      </span>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  {% block content %}{% endblock %}
+</main>
+<footer>
+  Yuplan &copy; {{ 2025 }} • Request ID: {{ g.request_id if g.request_id else '' }}
+</footer>
+</body>
+</html>

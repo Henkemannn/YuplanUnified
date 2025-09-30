@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Redigera antal boende – {{ avdelning_namn }}{% endblock %}
+{% block head %}
+<style>
+    .edit-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .edit-header {
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+        color: var(--text-light);
+        padding: 2rem;
+        border-radius: var(--border-radius-lg);
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    .edit-form {
+        background: var(--bg-primary);
+        padding: 2rem;
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow-md);
+        margin-bottom: 2rem;
+    }
+    
+    .section {
+        margin-top: 2rem;
+    }
+    
+    .section h3 {
+        color: var(--primary-color);
+        border-bottom: 2px solid var(--primary-light);
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .schedule-table {
+        background: var(--bg-primary);
+        border-radius: var(--border-radius-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+    
+    .schedule-table .table th {
+        background: var(--primary-color);
+        color: var(--text-light);
+    }
+    
+    .schedule-table .table td {
+        padding: 1rem 0.5rem;
+    }
+    
+    .schedule-table select {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+        background: var(--bg-primary);
+    }
+    
+    .button-bar {
+        display: flex;
+        gap: 1rem;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        margin-top: 2rem;
+    }
+    
+    @media (max-width: 768px) {
+        .button-bar {
+            flex-direction: column;
+        }
+        
+        .schedule-table {
+            overflow-x: auto;
+        }
+        
+        .schedule-table .table {
+            min-width: 600px;
+        }
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="edit-container">
+    <div class="edit-header">
+        <h1><i class="fas fa-users"></i> Redigera antal boende</h1>
+        <p>{{ avdelning_namn }}</p>
+    </div>
+
+    <div class="edit-form">
+        <form method="POST">
+            <div class="form-group" style="display:flex; gap:2rem; align-items:flex-end; flex-wrap:wrap;">
+                <div>
+                    <label for="totalantal" class="form-label">
+                        <i class="fas fa-calculator"></i> Fast (samma) antal boende:
+                    </label>
+                    <select id="totalantal" name="totalantal" class="form-control" style="max-width: 200px;" {% if is_varierat %}data-prev-selected="{{ nuvarande_total }}"{% endif %}>
+                        <option value="" {% if is_varierat %}selected{% endif %}>-- välj antal --</option>
+                        {% for n in range(0, 41) %}
+                            <option value="{{ n }}" {% if not is_varierat and nuvarande_total == n %}selected{% endif %}>{{ n }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-secondary d-block mt-1">Välj ett tal om det ska gälla hela veckan</small>
+                </div>
+                <div style="min-width:220px;">
+                    <div class="form-check" style="margin-top: 2.1rem;">
+                        <input class="form-check-input" type="checkbox" value="1" id="varieratCheck" name="varierat" {% if is_varierat %}checked{% endif %}>
+                        <label class="form-check-label" for="varieratCheck">
+                            <i class="fas fa-random"></i> Varierat antal denna vecka
+                        </label>
+                    </div>
+                    <small class="text-secondary d-block mt-1">Bocka i och sätt antal per dag/måltid nedan</small>
+                </div>
+            </div>
+
+            <div class="section" id="varieratSection">
+                <h3><i class="fas fa-calendar-alt"></i> Varierade antal per dag och måltid</h3>
+                <div class="schedule-table">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th><i class="fas fa-calendar-day"></i> Dag</th>
+                                {% for maltid in maltider %}
+                                    <th><i class="fas fa-utensils"></i> {{ maltid }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for dag in dagar %}
+                                <tr>
+                                    <td><strong>{{ dag }}</strong></td>
+                                    {% for maltid in maltider %}
+                                        <td>
+                                            <select name="{{ dag }}_{{ maltid }}">
+                                                {% for n in range(0, 41) %}
+                                                    <option value="{{ n }}" {% if antal_map.get((dag, maltid), 0) == n %}selected{% endif %}>{{ n }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="button-bar">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i> Spara ändringar
+                </button>
+                <a class="btn btn-secondary" href="{{ url_for('adminpanel', vecka=valt_vecka) }}">
+                    <i class="fas fa-arrow-left"></i> Tillbaka utan att spara
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+function syncVarieratUI(){
+    const check = document.getElementById('varieratCheck');
+    const totalSel = document.getElementById('totalantal');
+    const section = document.getElementById('varieratSection');
+    if(check.checked){
+        // Om vi tidigare hade ett valt totalvärde men nu är varierat: nollställ visningen
+        totalSel.disabled = true;
+        totalSel.selectedIndex = 0; // visa placeholder
+        section.style.opacity = '1';
+    } else {
+        totalSel.disabled = false;
+        section.style.opacity = '0.35';
+    }
+}
+document.addEventListener('DOMContentLoaded', syncVarieratUI);
+document.getElementById('varieratCheck').addEventListener('change', syncVarieratUI);
+</script>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends 'layout.html' %}
+{% block content %}
+<style>
+.hero { padding: 4rem 0 2rem; }
+.hero h1 { font-weight:800; font-size: clamp(2.4rem,4.5vw,3.3rem); letter-spacing:-.5px; }
+.section-title { font-weight:700; margin-top:3rem; margin-bottom:1rem; }
+.value-card { border:1px solid rgba(0,0,0,.07); border-radius: .75rem; padding:1.1rem 1.1rem 1rem; background: #fff; height:100%; box-shadow:0 2px 4px -2px rgba(0,0,0,.08); }
+.value-card h3 { font-size:1.05rem; font-weight:700; }
+.badge-soft { background:#eef4ff; color:#0d47a1; font-weight:600; }
+.gradient-strip { background:linear-gradient(90deg,#0d6efd 0%,#6610f2 60%,#b5179e 100%); height:4px; border-radius:2px; margin: 0 0 2rem; }
+.pitch-lead { font-size:1.18rem; max-width:880px; }
+.cta-box { background:#0d6efd; color:#fff; border-radius: .85rem; padding:2rem 2rem 2.2rem; position:relative; overflow:hidden; }
+.cta-box:before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 70% 30%,rgba(255,255,255,.25),transparent 55%); }
+footer { margin-top:4rem; padding:2rem 0 3rem; font-size:.85rem; color:#666; }
+.logo-glow img { filter: drop-shadow(0 0 6px rgba(13,110,253,.35)); }
+@media (max-width: 700px){ .hero { padding-top:3rem; } }
+</style>
+<div class="hero text-center">
+  <div class="gradient-strip mx-auto" style="max-width:300px"></div>
+  <h1>Smartere kjøkken. Mindre svinn. Roligere drift.</h1>
+  <p class="pitch-lead mx-auto">Yuplan Offshore samlar menyplanering, daglig utførelse og lærende porsjonsstyring i ett grensesnitt. Loggfør service på sekunder – få bedre anbefaling i morgen. Resultat: mindre matsvinn, bedre forutsigbarhet og tryggere kvalitet.</p>
+  <div class="d-flex flex-wrap justify-content-center gap-2 mt-3">
+    <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg px-4">Logg inn</a>
+    <a href="#kontakt" class="btn btn-outline-secondary btn-lg px-4">Book en demo</a>
+    <a href="{{ url_for('coming_soon') }}" class="btn btn-outline-primary btn-lg px-4">Coming&nbsp;Soon</a>
+  </div>
+</div>
+
+<section id="verdier" class="mt-4">
+  <h2 class="section-title text-center">Kjerneverdier</h2>
+  <div class="row g-3 mt-1">
+    <div class="col-md-4 d-flex"><div class="value-card"><h3>Datadrevet porsjon</h3><p>Systemet lærer g/guest fra faktisk praksis og justerer anbefalinger uten at dere må regne.</p></div></div>
+    <div class="col-md-4 d-flex"><div class="value-card"><h3>Redusert svinn</h3><p>Produser riktig – hver dag. Oversikt over produsert, servert og rester gir klar trend.</p></div></div>
+    <div class="col-md-4 d-flex"><div class="value-card"><h3>Operasjonell ro</h3><p>Dag/uke/periode-visning og private prepp-lister fjerner kaos før rush.</p></div></div>
+    <div class="col-md-4 d-flex"><div class="value-card"><h3>Kunnskap bevares</h3><p>Erfaring låses ikke i hodet på én kokk – historikken bygger kollektiv hukommelse.</p></div></div>
+    <div class="col-md-4 d-flex"><div class="value-card"><h3>Integritetsfokus</h3><p>Private notater og oppgaver isoleres – del det profesjonelle, behold det personlige.</p></div></div>
+    <div class="col-md-4 d-flex"><div class="value-card"><h3>Klar for vekst</h3><p>Modulær arkitektur: legg til næring, prognoser eller kommunal integrasjon når det trengs.</p></div></div>
+  </div>
+</section>
+
+<section id="flyt" class="mt-5">
+  <h2 class="section-title text-center">Arbeidsflyt</h2>
+  <div class="row justify-content-center mt-3">
+    <div class="col-lg-9">
+      <ol class="list-group list-group-numbered shadow-sm">
+        <li class="list-group-item">Planlegg meny og koble retter</li>
+        <li class="list-group-item">Forbered dag/uke med prepp- og fryslistene</li>
+        <li class="list-group-item">Produser & server – loggfør på under 30 sek</li>
+        <li class="list-group-item">Systemet lærer porsjonsmønster</li>
+        <li class="list-group-item">Neste anbefaling blir mer presis</li>
+        <li class="list-group-item">Rapporter viser svinn og proteinbalanse</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="differ" class="mt-5">
+  <h2 class="section-title text-center">Hvorfor annerledes?</h2>
+  <div class="row g-3 mt-1">
+    <div class="col-md-6 d-flex"><div class="value-card"><h3>Direkte læringsloop</h3><p>Ingen tunge analyser – logg og gå videre. Resten skjer i bakgrunnen.</p></div></div>
+    <div class="col-md-6 d-flex"><div class="value-card"><h3>Porsjon + protein</h3><p>Ikke bare mengde – også næringsmessig retning for bedre beslutninger.</p></div></div>
+    <div class="col-md-6 d-flex"><div class="value-card"><h3>Fleksibel struktur</h3><p>Private overstyringer uten å ødelegge felles plan.</p></div></div>
+    <div class="col-md-6 d-flex"><div class="value-card"><h3>Rigg-klar</h3><p>Designet for flere lokasjoner eller avdelinger med isolerte datasett.</p></div></div>
+  </div>
+</section>
+
+<section id="kontakt" class="mt-5">
+  <h2 class="section-title text-center">Book en rask gjennomgang</h2>
+  <p class="text-center mb-4">Få en 30-min visning + enkel svinnanalyse basert på to uker.</p>
+  <div class="d-flex justify-content-center">
+    <a href="mailto:kontakt@yusystem.example" class="btn btn-success btn-lg px-5">Kontakt oss</a>
+  </div>
+</section>
+
+<div class="cta-box mt-5">
+  <div class="row align-items-center">
+    <div class="col-lg-8">
+      <h2 class="fw-bold mb-2">Klar for å teste i drift?</h2>
+      <p class="mb-0">Start med én uke. Systemet lærer – dere får rask effekt og tydelig retning.</p>
+    </div>
+    <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
+      <a href="{{ url_for('register') }}" class="btn btn-light btn-lg fw-semibold">Opprett konto</a>
+    </div>
+  </div>
+</div>
+
+<footer class="text-center">
+  © {{ 2025 }} Yuplan Offshore – Operasjonell matintelligens. <br>
+  <span class="text-muted">Prototype / intern evaluering.</span>
+</footer>
+{% endblock %}

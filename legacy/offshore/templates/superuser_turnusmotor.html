@@ -1,0 +1,161 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container py-4" style="max-width:1100px;">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div class="d-flex align-items-center gap-3">
+      <h2 class="fw-bold m-0">Superuser – Turnusmotor</h2>
+      {% if current_rig_name %}
+        <span class="badge text-bg-info">Arbeidsplass: {{ current_rig_name }} (rigg {{ current_rig_id }})</span>
+      {% endif %}
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="{{ url_for('superuser_panel') }}">← Tilbake til Superuser-panel</a>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{% autoescape false %}{{ message }}{% endautoescape %}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <h4 class="card-title">Opprett motor‑mal</h4>
+          <p class="text-muted mb-3">Bygg en fleksibel mal for hvilken rigg som helst. Velg antall kokker, dag-/nattider, hvilke ukedager som har vakter, og startrekkefølge for dag og natt.</p>
+          <form method="post" action="{{ url_for('superuser_motor_create_template') }}" class="row g-2">
+            <div class="col-12">
+              <label class="form-label">Navn</label>
+              <input type="text" name="name" class="form-control" placeholder="Motor V1" value="Motor V1">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Rigg</label>
+              <select name="rig_id" class="form-select" required>
+                <option value="" disabled {% if not current_rig_id %}selected{% endif %}>– Velg rigg –</option>
+                {% for r in rigs %}
+                  <option value="{{ r.id }}" {% if current_rig_id and r.id == current_rig_id %}selected{% endif %}>#{{ r.id }} – {{ r.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Antall kokker</label>
+              <input type="number" name="cooks" class="form-control" min="1" value="6">
+            </div>
+            <div class="col-6"></div>
+
+            <div class="col-6">
+              <label class="form-label">Dagvakt start</label>
+              <input type="time" name="day_start" class="form-control" value="07:00">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Dagvakt slutt</label>
+              <input type="time" name="day_end" class="form-control" value="19:00">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Nattvakt start</label>
+              <input type="time" name="night_start" class="form-control" value="19:00">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Nattvakt slutt</label>
+              <input type="time" name="night_end" class="form-control" value="07:00">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Ukedager – dagvakt</label>
+              <div class="d-flex flex-wrap gap-3">
+                {% set days = [
+                  (0, 'Man'), (1, 'Tir'), (2, 'Ons'), (3, 'Tor'), (4, 'Fre'), (5, 'Lør'), (6, 'Søn')
+                ] %}
+                {% for idx, label in days %}
+                  <label class="form-check d-flex align-items-center gap-2">
+                    <input class="form-check-input" type="checkbox" name="weekdays_day" value="{{ idx }}" checked>
+                    <span class="form-check-label">{{ label }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Ukedager – nattvakt</label>
+              <div class="d-flex flex-wrap gap-3">
+                {% for idx, label in days %}
+                  <label class="form-check d-flex align-items-center gap-2">
+                    <input class="form-check-input" type="checkbox" name="weekdays_night" value="{{ idx }}" checked>
+                    <span class="form-check-label">{{ label }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="col-6">
+              <label class="form-label">Start dag‑kokk (1..N)</label>
+              <input type="number" name="start_day_cook" class="form-control" min="1" value="1">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Start natt‑kokk (1..N)</label>
+              <input type="number" name="start_night_cook" class="form-control" min="1" value="2">
+            </div>
+
+            <div class="col-12 mt-2">
+              <button type="submit" class="btn btn-primary">Opprett mal</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm border-0 h-100">
+        <div class="card-body">
+          <h4 class="card-title">Generer slots fra motor‑mal</h4>
+          <p class="text-muted mb-3">Velg en motor‑mal og et datointervall. Systemet rullerer dag‑ og natt‑kokk hver dag/natt i henhold til malens oppsett.</p>
+          <form method="post" action="{{ url_for('superuser_motor_generate') }}" class="row g-2">
+            <div class="col-12">
+              <label class="form-label">Motor‑mal</label>
+              <select name="template_id" class="form-select" required>
+                <option value="" disabled selected>– Velg mal –</option>
+                {% for t in templates %}
+                  {% set ttype = (t.pattern or {}).get('type') %}
+                  {% if ttype == 'motor_v1' %}
+                    <option value="{{ t.id }}">#{{ t.id }} – {{ t.name }} {% if t.rig_id %}(rigg {{ t.rig_id }}){% endif %}</option>
+                  {% else %}
+                    <option value="{{ t.id }}" disabled>#{{ t.id }} – {{ t.name }} (ikke motor)</option>
+                  {% endif %}
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Rigg for generering</label>
+              <select name="rig_id" class="form-select" required>
+                <option value="" disabled {% if not current_rig_id %}selected{% endif %}>– Velg rigg –</option>
+                {% for r in rigs %}
+                  <option value="{{ r.id }}" {% if current_rig_id and r.id == current_rig_id %}selected{% endif %}>#{{ r.id }} – {{ r.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Startdato</label>
+              <input type="date" name="start_date" class="form-control" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Sluttdato</label>
+              <input type="date" name="end_date" class="form-control" required>
+            </div>
+            <div class="col-12 mt-2">
+              <button type="submit" class="btn btn-success">Generer slots</button>
+            </div>
+          </form>
+
+          <hr class="my-4">
+          <div class="small text-muted">
+            Tips: Etter generering kan du gå til Turnus‑admin for å publisere, repetere sykluser og mappe «Kokk N» → virkelige brukere.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

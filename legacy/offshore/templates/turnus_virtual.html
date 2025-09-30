@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Virtuell vy: {{ role }}</h2>
+<p>Rigg: {{ rig_name }}</p>
+<p><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin_users') }}">Tilbake til brukere</a></p>
+
+{% if items %}
+  <p class="text-muted">Visar kommande hela arbetsperioder (standard {{ limit }} st). Kontakta admin för att ändra standardvärdet.</p>
+  <ul>
+    {% for it in items %}
+      <li>{{ it.start_date }} – {{ it.end_date }}</li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="text-muted">Inga kommande arbetsperioder för denna rollen.</p>
+{% endif %}
+{% endblock %}

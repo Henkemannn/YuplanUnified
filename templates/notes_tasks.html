@@ -1,0 +1,40 @@
+{% extends "_base.html" %}
+{% block title %}Yuplan – Arbetsyta{% endblock %}
+{% block content %}
+<h1>Arbetsyta</h1>
+<p class="muted">Översikt över senaste anteckningar och prep-uppgifter.</p>
+
+<h2>Anteckningar</h2>
+<table>
+  <thead><tr><th>ID</th><th>Text</th><th>Privat</th><th>Skapad</th></tr></thead>
+  <tbody>
+    {% for n in notes %}
+      <tr>
+        <td>{{ n.id }}</td>
+        <td>{{ n.content }}</td>
+        <td>{{ 'Ja' if n.private_flag else 'Nej' }}</td>
+        <td class="right">{{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else '' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4">Inga anteckningar ännu.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Prep-tasks</h2>
+<table>
+  <thead><tr><th>ID</th><th>Uppgift</th><th>Status</th><th>Assignee</th></tr></thead>
+  <tbody>
+    {% for t in tasks %}
+      <tr>
+        <td>{{ t.id }}</td>
+        <td>{{ t.title or t.content }}</td>
+        <td>{{ t.status }}</td>
+        <td>{{ t.assignee_name or '-' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4">Inga uppgifter.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

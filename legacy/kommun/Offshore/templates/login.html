@@ -1,0 +1,38 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="text-center mb-4">
+      <div class="brand-badge logo-glow">
+        <img src="{{ url_for('static', filename='Yuplanlogo_offshore.svg') }}" alt="Yuplan Offshore" loading="lazy" style="height:80px; width:auto;">
+      </div>
+      <div class="mt-2" style="font-size:1.6rem; font-weight:800; letter-spacing:.5px; color:#0d6efd;">Yuplan Offshore</div>
+      <div class="text-muted">Kjøkkenplanlegging gjort enkelt</div>
+    </div>
+    <h1 class="mb-3 text-center section-title" style="color:#0d6efd; font-size:1.6rem;">Logg inn</h1>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} text-center py-2">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  <form method="post" class="d-flex flex-column gap-3">
+      <div class="input-group">
+        <span class="input-group-text bg-white border-end-0"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#0d6efd" viewBox="0 0 16 16"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1H2zm13 2.383-4.708 2.825L15 11.383V5.383zm-.034 7.434-5.966-3.583-5.966 3.583A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.183zM1 11.383l4.708-2.825L1 5.383v6z"/></svg></span>
+        <input name="email" type="email" class="form-control form-control-lg border-start-0" placeholder="E-post" required autofocus>
+      </div>
+      <div class="input-group">
+        <span class="input-group-text bg-white border-end-0"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#0d6efd" viewBox="0 0 16 16"><path d="M8 1a4 4 0 0 1 4 4v2a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2V5a4 4 0 0 1 4-4zm3 4a3 3 0 0 0-6 0v2h6V5zm-7 4v5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z"/></svg></span>
+  <input name="password" type="password" class="form-control form-control-lg border-start-0" placeholder="Passord" required>
+      </div>
+  <button class="btn btn-primary btn-lg mt-2">Logg inn</button>
+  <a href="{{ url_for('admin_login') }}" class="btn btn-outline-danger btn-lg mt-2">Admin</a>
+      <div class="d-flex flex-column gap-1 mt-2">
+        <a class="btn btn-link text-center" href="{{ url_for('register') }}">Opprett konto</a>
+        <a class="btn btn-link text-center text-secondary" href="#">Glemt passord?</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

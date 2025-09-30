@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Inline UI – Notes & Tasks</title>
+  <style>
+    :root { --gap: 12px; --radius: 12px; --pad: 12px; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+    .wrap { display: grid; gap: var(--gap); max-width: 1100px; margin: 0 auto; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+    @media (max-width: 900px){ .row { grid-template-columns: 1fr; } }
+    .card { border: 1px solid #ddd; border-radius: var(--radius); padding: var(--pad); background:#fff; }
+    .toolbar { display: flex; gap: var(--gap); flex-wrap: wrap; }
+    input, textarea, button, select { padding: 8px; border: 1px solid #ccc; border-radius: 10px; font: inherit; }
+    button.primary { border-color: #444; cursor:pointer; }
+    ul.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+    li.item { border: 1px solid #eee; border-radius: 10px; padding: 8px; display: grid; gap: 8px; background:#fafafa; }
+    .rowline { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+    .muted { color: #666; font-size: 0.9em; }
+    .actions { display: flex; gap: 8px; }
+    .pill { padding: 2px 8px; border-radius: 999px; border: 1px solid #ddd; font-size: 0.75rem; background:#f5f5f5; }
+  .pill[aria-busy="true"] { opacity:0.75; position:relative; }
+  .pill .spinner { display:inline-block; width:10px; height:10px; margin-left:4px; vertical-align:middle; }
+  .pill .spinner:after { content:""; display:block; width:100%; height:100%; border:2px solid rgba(255,255,255,0.7); border-top-color:rgba(0,0,0,0.3); border-radius:50%; animation:spin .6s linear infinite; }
+  @media (prefers-reduced-motion: reduce){ .pill .spinner:after { animation:none; } }
+  @keyframes spin { to { transform:rotate(360deg); } }
+    .done { text-decoration: line-through; opacity: 0.7; }
+    /* Toasts */
+    #toast-root { position: fixed; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; max-width: 360px; }
+    .toast { background:#222; color:#fff; padding:10px 14px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.25); font-size:0.85rem; display:grid; gap:6px; position:relative; }
+    .toast[data-level="error"] { background:#b00020; }
+    .toast[data-level="warn"] { background:#915f00; }
+    .toast button { background:rgba(255,255,255,0.12); color:#fff; border:1px solid rgba(255,255,255,0.25); padding:4px 8px; border-radius:6px; cursor:pointer; font:inherit; }
+    .toast button:hover { background:rgba(255,255,255,0.2); }
+    .toast-close { position:absolute; top:4px; right:6px; background:transparent; border:none; color:#fff; font-size:14px; cursor:pointer; }
+    .sr-only { position:absolute; left:-10000px; top:auto; width:1px; height:1px; overflow:hidden; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+  <h1>Inline UI – Notes & Tasks <small id="flag-badge" class="pill" style="font-size:0.7em; vertical-align:middle;">flag?</small></h1>
+    <p class="muted">En enkel referens-UI för snabb testning av API:erna.</p>
+    <div class="row">
+      <section class="card" id="notes-card">
+        <h2>Notes</h2>
+        <div class="toolbar" style="margin-bottom:4px;">
+          <input id="notes-search" placeholder="Filter (text)" style="flex:1" />
+          <button id="notes-clear" type="button">Rensa</button>
+        </div>
+        <div class="toolbar">
+          <textarea id="note-content" placeholder="Skriv en not..." rows="2" style="flex:1"></textarea>
+          <label><input type="checkbox" id="note-private" /> Privat</label>
+          <button class="primary" id="note-create">Skapa</button>
+        </div>
+        <p class="muted" id="notes-empty" hidden>Inga notes ännu.</p>
+        <ul class="list" id="notes-list"></ul>
+      </section>
+
+      <section class="card" id="tasks-card">
+        <h2>Tasks</h2>
+        <div class="toolbar" style="margin-bottom:4px;">
+          <input id="tasks-search" placeholder="Filter (titel)" style="flex:1" />
+          <select id="tasks-status-filter">
+            <option value="">Alla status</option>
+            <option value="todo">todo</option>
+            <option value="doing">doing</option>
+            <option value="blocked">blocked</option>
+            <option value="done">done</option>
+            <option value="cancelled">cancelled</option>
+          </select>
+          <select id="tasks-type-filter">
+            <option value="">Alla typer</option>
+            <option value="prep">prep</option>
+            <option value="freezer">freezer</option>
+            <option value="generic">generic</option>
+          </select>
+          <button id="tasks-clear" type="button">Rensa</button>
+        </div>
+        <div class="toolbar">
+          <input id="task-title" placeholder="Titel" />
+          <select id="task-type">
+            <option value="prep">prep</option>
+            <option value="freezer">freezer</option>
+            <option value="generic">generic</option>
+          </select>
+          <label><input type="checkbox" id="task-private" /> Privat</label>
+          <button class="primary" id="task-create">Skapa</button>
+        </div>
+        <p class="muted" id="tasks-empty" hidden>Inga tasks ännu.</p>
+        <ul class="list" id="tasks-list"></ul>
+      </section>
+    </div>
+  </div>
+  <div id="toast-root" aria-live="assertive" aria-atomic="true"></div>
+  <script>
+    // Try to detect flag status via feature list (best-effort; if endpoint exists)
+    fetch('/features', {headers:{'X-User-Role':'admin'}}).then(r=>r.json()).then(j=>{
+      const b=document.getElementById('flag-badge');
+      if(Array.isArray(j.features) && j.features.includes('inline_ui')) { b.textContent='inline_ui:on'; b.style.background='#d1f5d1'; }
+      else { b.textContent='inline_ui:off'; b.style.background='#f5d1d1'; }
+    }).catch(()=>{ const b=document.getElementById('flag-badge'); b.textContent='inline_ui:?'; });
+  </script>
+  <script src="/static/ui-inline.js"></script>
+</body>
+</html>

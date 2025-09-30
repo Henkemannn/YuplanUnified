@@ -1,0 +1,55 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container" style="max-width:760px;">
+  <div class="card shadow-sm mt-3">
+    <div class="card-body">
+      <h4 class="mb-3 d-flex align-items-center gap-2" style="font-weight:600;">
+        <span>🧰 Planering</span>
+        {% if arbeidsperiod_start %}<span class="badge text-bg-info">Start: {{ arbeidsperiod_start }}</span>{% endif %}
+      </h4>
+      <p class="text-muted small mb-4">Samlad navigasjon til alle planeringsverktøy. Velg hva du vil jobbe med.</p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="list-group small shadow-sm">
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="{{ url_for('week_prep_view', date_s=anchor) }}">
+              <span>📅 Ukens oppgaver</span>
+              <span class="badge rounded-pill bg-secondary">Uke</span>
+            </a>
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="{{ url_for('period_aggregate', date_s=anchor) }}">
+              <span>🧾 14-dagers liste</span>
+              <span class="badge rounded-pill bg-secondary">14d</span>
+            </a>
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="{{ url_for('prep_upcoming') }}">
+              <span>⏭️ Kommende perioder</span>
+              <span class="badge rounded-pill bg-secondary">Perioder</span>
+            </a>
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="{{ url_for('planning_overview') }}">
+              <span>📂 Oversikt per rett</span>
+              <span class="badge rounded-pill bg-secondary">Rett</span>
+            </a>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="list-group small shadow-sm">
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="{{ url_for('day_detail', date_s=today_str) }}">
+              <span>🗓️ Dagens dag</span>
+              <span class="badge rounded-pill bg-primary">I dag</span>
+            </a>
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="{{ url_for('me_calendar') }}">
+              <span>📆 Kalender</span>
+              <span class="badge rounded-pill bg-secondary">År</span>
+            </a>
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+              <span>🔧 Snart: statistikk & fremdrift</span>
+              <span class="badge rounded-pill bg-warning text-dark">Beta</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-4 text-end">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">← Tilbake dashboard</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

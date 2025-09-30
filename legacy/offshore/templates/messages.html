@@ -1,0 +1,108 @@
+{% extends 'layout.html' %}
+{% block title %}Messages{% endblock %}
+{% block content %}
+<div class="container py-3">
+  <h2 class="mb-3">Messages – {{ rig_name }}</h2>
+  <div class="row g-3">
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-header">Bulletins</div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('post_bulletin') }}" class="mb-3">
+            <div class="mb-2">
+              <input class="form-control" name="subject" placeholder="Subject">
+            </div>
+            <div class="mb-2">
+              <textarea class="form-control" name="body" rows="3" placeholder="Write a bulletin to all"></textarea>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">Post bulletin</button>
+          </form>
+          <div class="list-group small">
+            {% for b in bulletins %}
+            <div class="list-group-item">
+              <div class="d-flex justify-content-between">
+                <strong>{{ b['subject'] or 'Bulletin' }}</strong>
+                <span class="text-muted">{{ b['created_at'] }}</span>
+              </div>
+              <div class="text-muted">From: {{ b['from_name'] or 'System' }}</div>
+              <div>{{ b['body'] }}</div>
+            </div>
+            {% else %}
+            <div class="text-muted">No bulletins yet.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-header">Inbox</div>
+        <div class="card-body">
+          <div class="list-group small">
+            {% for m in inbox %}
+            <div class="list-group-item">
+              <div class="d-flex justify-content-between">
+                <strong>{{ m['subject'] or 'Message' }}</strong>
+                <span class="text-muted">{{ m['created_at'] }}</span>
+              </div>
+              <div class="text-muted">From: {{ m['from_name'] or 'System' }}</div>
+              <div>{{ m['body'] }}</div>
+              {% if m['attachment_path'] %}
+                <div class="mt-1"><a href="{{ m['attachment_path'] }}" class="link-primary">Download attachment</a></div>
+              {% endif %}
+            </div>
+            {% else %}
+            <div class="text-muted">No messages yet.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-header">Send direct</div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('send_direct') }}" class="mb-3">
+            <div class="mb-2">
+              <select class="form-select" name="to_user_id" required>
+                <option value="">Select recipient…</option>
+                {% for u in users %}
+                  <option value="{{ u['id'] }}">{{ u['name'] or u['email'] }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-2">
+              <input class="form-control" name="subject" placeholder="Subject">
+            </div>
+            <div class="mb-2">
+              <textarea class="form-control" name="body" rows="3" placeholder="Write a message"></textarea>
+            </div>
+            <button class="btn btn-success w-100" type="submit">Send</button>
+          </form>
+          <h6 class="mt-3">Sent</h6>
+          <div class="list-group small">
+            {% for m in outbox %}
+            <div class="list-group-item">
+              <div class="d-flex justify-content-between">
+                <strong>{{ m['subject'] or 'Message' }}</strong>
+                <span class="text-muted">{{ m['created_at'] }}</span>
+              </div>
+              <div class="text-muted">To: {{ m['to_name'] or 'User' }}</div>
+              {% if m['attachment_path'] %}
+                <div class="mt-1"><a href="{{ m['attachment_path'] }}" class="link-primary">Download attachment</a></div>
+              {% endif %}
+              <div>{{ m['body'] }}</div>
+            </div>
+            {% else %}
+            <div class="text-muted">No sent messages yet.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mt-3">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Back to dashboard</a>
+  </div>
+ </div>
+{% endblock %}

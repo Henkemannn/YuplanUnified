@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>Yuplan – Coming Soon</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Yuplan – en samlad plattform för köksdrift, matsvinn, planering och lärande portionsstyrning. Offshore & Kommun versioner lanseras 2025.">
+<meta name="robots" content="index,follow">
+<meta property="og:title" content="Yuplan – Coming Soon">
+<meta property="og:description" content="Lärande köksplattform: Offshore & Kommun. Mindre svinn, tydligare flyt, bättre beslut.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://yuplan.se/">
+<meta name="theme-color" content="#0d6efd">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><rect rx='24' width='120' height='120' fill='%230d6efd'/><path fill='white' d='M33 34h16l11 25 11-25h16L71 86H57z'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --blue:#0d6efd; --indigo:#6610f2; --magenta:#b5179e; --bg:#f5f7fa; --text:#1d2329; --card:#ffffff; --radius:1.05rem;
+  /* Offshore baseline colors */
+  --offshore-primary:#0d6efd;
+  --offshore-accent:#6610f2;
+  --offshore-bg:#f5f7fa;
+  --offshore-text:#1d2329;
+  /* Kommun (green) palette */
+  --kommun-primary:#4caf50;
+  --kommun-primary-dark:#388e3c;
+  --kommun-accent:#81c784;
+  --kommun-bg:#f4faf5;
+  --kommun-text:#1e261e;
+}
+* { box-sizing:border-box; }
+body { margin:0; font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased; }
+/* Single brand gradient */
+body .logo-bg { background:linear-gradient(135deg,#0d6efd,#6610f2 55%,#b5179e); }
+.hero-wrap { padding: clamp(3.2rem,7vw,5.8rem) 1.2rem 2.4rem; text-align:center; position:relative; overflow:hidden; }
+.gradient-ring { position:absolute; inset:0; background:radial-gradient(circle at 70% 30%,rgba(102,16,242,.15),transparent 60%), radial-gradient(circle at 25% 70%,rgba(13,110,253,.16),transparent 55%); pointer-events:none; }
+.logo-shell { width:128px; height:128px; margin:0 auto 1.4rem; position:relative; }
+.logo-bg { position:absolute; inset:0; background:linear-gradient(135deg,#0d6efd,#6610f2 55%,#b5179e); border-radius:28%; filter: drop-shadow(0 6px 18px rgba(13,110,253,.35)); animation: floaty 6.5s ease-in-out infinite; }
+.logo-inner { position:absolute; inset:8%; background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.38),rgba(255,255,255,0) 70%); mix-blend-mode:overlay; border-radius:24%; }
+/* Contrast plate behind raster logo to ensure visibility regardless of accent gradient */
+.logo-plate { position:absolute; inset:18%; background:rgba(255,255,255,.9); backdrop-filter:blur(2px); border-radius:22%; box-shadow:0 2px 6px rgba(0,0,0,.15); display:flex; align-items:center; justify-content:center; }
+.logo-svg { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+.logo-svg svg { width:65%; height:65%; filter: drop-shadow(0 0 6px rgba(255,255,255,.55)); stroke:rgba(0,0,0,.15); stroke-width:2; paint-order:stroke fill; }
+/* Unified styling for raster/inline logo */
+.logo-svg img.logo-img { width:65%; height:65%; object-fit:contain; image-rendering:-webkit-optimize-contrast; filter: drop-shadow(0 0 6px rgba(255,255,255,.55)); transition:.35s ease; }
+body.dark .logo-svg img.logo-img.logo-invert-dark { filter: invert(1) drop-shadow(0 0 6px rgba(0,0,0,.55)); }
+.shimmer:before { content:""; position:absolute; top:-40%; left:-60%; width:220%; height:180%; background: linear-gradient(115deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.6) 45%,rgba(255,255,255,0) 55%); transform:rotate(8deg); animation: shimmer 6s linear infinite; opacity:.35; }
+@keyframes shimmer { 0% { transform:translateX(-60%) rotate(8deg); } 100% { transform:translateX(10%) rotate(8deg); } }
+@keyframes floaty { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
+.badge-top { font-size:.7rem; font-weight:700; letter-spacing:.7px; display:inline-block; margin-bottom:1rem; background:linear-gradient(90deg,#0d6efd,#6610f2,#b5179e); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.hero-title { font-weight:800; font-size:clamp(2.3rem,5.2vw,3.8rem); line-height:1.07; letter-spacing:-.5px; margin:0 0 1.3rem; }
+.hero-lead { font-size: clamp(1.05rem,1.4vw,1.28rem); max-width: 900px; margin: 0 auto 1.6rem; font-weight:500; }
+.gradient-bar { width:260px; height:6px; margin:1.2rem auto 2.3rem; background:linear-gradient(90deg,#0d6efd,#6610f2 60%,#b5179e); border-radius:4px; box-shadow:0 0 0 5px rgba(13,110,253,.06); }
+.actions { display:flex; flex-wrap:wrap; gap:.9rem; justify-content:center; margin-top:.5rem; }
+.actions a { text-decoration:none; font-weight:600; font-size:.95rem; padding:.85rem 1.35rem; border-radius: 2rem; border:1px solid rgba(13,110,253,.25); background:#fff; color:#0d3a66; transition:.25s; box-shadow:0 2px 8px -3px rgba(0,0,0,.15); }
+.actions a.primary { background:linear-gradient(90deg,#0d6efd,#6610f2); color:#fff; border:none; box-shadow:0 4px 14px -4px rgba(13,110,253,.5); }
+.actions a:hover { transform:translateY(-2px); box-shadow:0 6px 16px -6px rgba(0,0,0,.25); }
+.section { padding: 2.8rem 1.2rem 0; max-width:1180px; margin:0 auto; }
+.sec-title { text-align:center; font-size:1.9rem; font-weight:800; letter-spacing:-.5px; margin:0 0 2.2rem; }
+.grid { display:grid; gap:1.15rem; grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); }
+.card { background:var(--card); border:1px solid rgba(0,0,0,.06); border-radius: var(--radius); padding:1.05rem 1rem .95rem; position:relative; overflow:hidden; box-shadow:0 4px 14px -6px rgba(0,0,0,.09); }
+.card:before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 80% 25%,rgba(13,110,253,.13),transparent 60%); pointer-events:none; }
+.card h3 { font-size:1rem; font-weight:700; margin:.15rem 0 .4rem; }
+.card p { font-size:.82rem; line-height:1.35; margin:0; }
+.pill { display:inline-block; background:#eef4ff; color:#0d47a1; font-weight:600; font-size:.58rem; padding:.35rem .55rem; border-radius:1rem; letter-spacing:.6px; }
+.dual { display:flex; flex-direction:column; gap:1.25rem; margin-top:2.6rem; }
+@media (min-width: 880px){ .dual { flex-direction:row; } }
+.dual-box { flex:1; background:var(--card); border:1px solid rgba(0,0,0,.06); border-radius: var(--radius); padding:1.25rem 1.25rem 1.15rem; position:relative; box-shadow:0 4px 14px -6px rgba(0,0,0,.09); overflow:visible; }
+.dual-box:before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 85% 18%,rgba(102,16,242,.18),transparent 65%); opacity:.85; }
+.dual-box.offshore:before { background:radial-gradient(circle at 85% 18%,rgba(13,110,253,.25),transparent 65%); }
+.dual-badge { position:absolute; top:0; left:0; transform:translate(14px,-50%); background:#0d6efd; color:#fff; font-size:.6rem; padding:.38rem .55rem; font-weight:700; letter-spacing:.65px; border-radius:.45rem; box-shadow:0 2px 6px -1px rgba(13,110,253,.45); }
+.dual-box.kommun .dual-badge { background:#6610f2; }
+.dual-box h4 { font-size:1.02rem; font-weight:700; margin:.4rem 0 .65rem; }
+.dual-box ul { margin:0 0 .6rem; padding-left:1.15rem; }
+.dual-box li { font-size:.78rem; margin-bottom:.32rem; line-height:1.34; }
+.cta-band { margin:3.2rem auto 0; background:linear-gradient(90deg,#0d6efd,#6610f2 60%,#b5179e); border-radius: var(--radius); padding:2.4rem 1.3rem 2.6rem; color:#fff; position:relative; overflow:hidden; box-shadow:0 10px 28px -12px rgba(13,110,253,.55); }
+.cta-band:before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 75% 30%,rgba(255,255,255,.28),transparent 55%); }
+.cta-band h2 { font-weight:800; font-size:clamp(1.7rem,3.2vw,2.45rem); margin:0 0 1rem; letter-spacing:-.5px; }
+.cta-band p { font-size:1.02rem; margin:0 auto 1.15rem; max-width:620px; }
+.cta-band a { background:#fff; color:#0d47a1; font-weight:700; text-decoration:none; padding:.9rem 1.5rem; border-radius:2rem; display:inline-block; box-shadow:0 4px 14px -4px rgba(0,0,0,.35); transition:.25s; }
+.cta-band a:hover { transform:translateY(-3px); }
+.footer { text-align:center; font-size:.75rem; margin:3.2rem 0 2.4rem; color:#4b555e; }
+.sep { height:1px; background:linear-gradient(90deg,transparent,#cfd6dd,transparent); margin:3.1rem auto 2.9rem; width:100%; max-width:1080px; }
+.dark-toggle { position:fixed; right:14px; bottom:14px; background:#fff; border:1px solid rgba(0,0,0,.15); border-radius: 1.4rem; padding:.55rem 1rem; font-size:.7rem; font-weight:600; cursor:pointer; box-shadow:0 4px 14px -6px rgba(0,0,0,.35); }
+.dark body, body.dark { background:#121518; color:#e1e6ea; }
+body.dark .card, body.dark .dual-box { background:#1d2329; border-color:#2a3238; }
+body.dark .pill { background:#243346; color:#8fb9ff; }
+body.dark .dual-box:before { opacity:.4; }
+body.dark .cta-band { box-shadow:none; }
+body.dark .actions a { background:#1d2329; color:#d5dde4; border-color:#2a3742; }
+body.dark .actions a.primary { background:linear-gradient(90deg,#0d6efd,#6610f2); }
+body.dark .footer { color:#7a8590; }
+body.dark .logo-bg { filter: drop-shadow(0 6px 18px rgba(13,110,253,.55)); }
+/* Chef mascot (kockmaskot) */
+.chef-mascot { position:absolute; bottom:12px; left:-160px; width:140px; height:auto; pointer-events:none; animation: chef-walk 46s linear infinite; z-index:5; opacity:.98; }
+.chef-mascot svg { width:100%; height:auto; overflow:visible; }
+.chef-mascot .leg { transform-origin:40% 10%; animation: leg-step 1s ease-in-out infinite; }
+.chef-mascot .leg.back { animation-delay:.5s; opacity:.85; }
+.chef-mascot .arm-front { transform-origin:60% 25%; animation: arm-swing 1s ease-in-out infinite; }
+.chef-mascot .pad-glow { animation: pad-pulse 3.2s ease-in-out infinite; }
+@keyframes chef-walk { 0% { transform:translateX(0); } 95% { transform:translateX(calc(100vw + 320px)); } 100% { transform:translateX(calc(100vw + 320px)); } }
+@keyframes leg-step { 0%,100% { transform:rotate(6deg); } 50% { transform:rotate(-10deg); } }
+@keyframes arm-swing { 0%,100% { transform:rotate(-4deg); } 50% { transform:rotate(8deg); } }
+@keyframes pad-pulse { 0%,100% { opacity:.7; filter:drop-shadow(0 0 4px rgba(102,16,242,.55)); } 50% { opacity:1; filter:drop-shadow(0 0 10px rgba(13,110,253,.75)); } }
+@media (prefers-reduced-motion:reduce) { .chef-mascot { animation:none; left:50%; transform:translateX(-50%); } .chef-mascot .leg, .chef-mascot .arm-front, .chef-mascot .pad-glow { animation:none; } }
+</style>
+<script>
+(function(){
+  try {
+    var a=localStorage.getItem('yuplan_accent');
+    if(a && a!=='blue') document.addEventListener('DOMContentLoaded',()=>document.body.classList.add('accent-'+a));
+    var l=localStorage.getItem('yuplan_lang');
+    if(l) document.documentElement.lang=l;
+  } catch(e){}
+})();
+</script>
+</head>
+<body>
+<div style="position:fixed;top:10px;right:12px;z-index:50;display:flex;gap:.4rem;">
+  <button data-lang="sv" class="lang-btn" style="padding:.45rem .75rem;font-size:.65rem;font-weight:600;border:1px solid #c9d1d9;background:#fff;border-radius:1rem;cursor:pointer;">SV</button>
+  <button data-lang="no" class="lang-btn" style="padding:.45rem .75rem;font-size:.65rem;font-weight:600;border:1px solid #c9d1d9;background:#fff;border-radius:1rem;cursor:pointer;">NO</button>
+  <button data-lang="en" class="lang-btn" style="padding:.45rem .75rem;font-size:.65rem;font-weight:600;border:1px solid #c9d1d9;background:#fff;border-radius:1rem;cursor:pointer;">EN</button>
+</div>
+<!-- Accent chips removed for cleaner mobile hero -->
+<div class="hero-wrap">
+  <div class="gradient-ring"></div>
+  <div class="logo-shell shimmer" data-i18n="logo.alt">
+    <div class="logo-bg"></div>
+    <div class="logo-inner"></div>
+    <div class="logo-plate" aria-hidden="true"></div>
+    <div class="logo-svg" aria-label="Yuplan logotyp" role="img">
+      <div class="temp-logo" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+        <div style="font-weight:800;font-size:1.55rem;letter-spacing:.5px;position:relative;">
+          <span style="background:linear-gradient(90deg,#0d6efd,#6610f2 55%,#b5179e);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 6px rgba(0,0,0,.22));display:inline-block;">Yuplan</span>
+          <span style="position:absolute;inset:0;mix-blend-mode:overlay;background:radial-gradient(circle at 30% 35%,rgba(255,255,255,.55),rgba(255,255,255,0) 70%);pointer-events:none;border-radius:.4rem;filter:blur(.5px);"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <span class="badge-top">YUPLAN</span>
+  <h1 class="hero-title" data-i18n="hero.title">Smartere kök. Mindre svinn.<br/>Tydligare drift.</h1>
+  <p class="hero-lead" data-i18n="hero.lead">Yuplan samlar menyplanering, daglig utførelse och lärande porsjonsstyrning i ett gränssnitt. Byggt för storskaliga kök: <strong>offshore</strong>, <strong>kommunal kost</strong>, <strong>storkök</strong>, <strong>event</strong> & <strong>omsorg</strong>.</p>
+  <div class="gradient-bar"></div>
+  <div class="actions">
+  <a class="primary" data-i18n="cta.primary" href="mailto:info@yuplan.se?subject=Yuplan%20Pilot">Intresse & Pilot</a>
+  <a data-i18n="cta.question" href="mailto:info@yuplan.se?subject=Fråga%20Yuplan">Ställ en fråga</a>
+  </div>
+  <!-- Chef mascot with iPad (inline SVG, accessible description) -->
+  <figure class="chef-mascot" aria-hidden="true">
+    <svg viewBox="0 0 120 160" role="img" focusable="false">
+      <defs>
+        <linearGradient id="g-coat" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="100%" stop-color="#e4e9ef"/>
+        </linearGradient>
+        <linearGradient id="g-hat" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="100%" stop-color="#dce3ea"/>
+        </linearGradient>
+        <linearGradient id="g-plate" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stop-color="#0d6efd"/>
+          <stop offset="100%" stop-color="#6610f2"/>
+        </linearGradient>
+      </defs>
+      <!-- Shadow -->
+      <ellipse cx="58" cy="152" rx="34" ry="8" fill="rgba(0,0,0,.15)" />
+      <!-- Legs -->
+      <g class="leg back">
+        <path d="M56 108 l-8 34 q-1 4 3 4 h16 q3 0 2-3 l-6-35z" fill="#c2c9d1"/>
+      </g>
+      <g class="leg front">
+        <path d="M66 108 l-7 34 q-1 4 3 4 h16 q3 0 2-3 l-6-35z" fill="#d0d7de"/>
+      </g>
+      <!-- Body / coat -->
+      <path d="M48 70 q0-10 10-14 h8 q10 4 10 14 l4 40 q0 4-4 4 H48 q-4 0-4-4z" fill="url(#g-coat)" stroke="#b5bcc4" stroke-width="1"/>
+      <!-- Buttons -->
+      <g fill="#7a8390">
+        <circle cx="62" cy="80" r="2"/><circle cx="62" cy="90" r="2"/><circle cx="62" cy="100" r="2"/><circle cx="62" cy="110" r="2"/>
+      </g>
+      <!-- Arm (back) holding iPad -->
+      <path d="M50 86 q-10 6 -14 4 q-3 -2 -2 -5 q9 1 16 -6 z" fill="#e4e9ef" stroke="#b5bcc4" stroke-width="1"/>
+      <!-- iPad / tablet -->
+      <g class="pad-glow">
+        <rect x="20" y="76" width="28" height="20" rx="3" fill="#111a22" stroke="#4d5b66" stroke-width="1.5"/>
+        <rect x="22.5" y="78.5" width="23" height="15" rx="2" fill="#0d253a"/>
+        <rect x="22.5" y="78.5" width="23" height="15" rx="2" fill="url(#g-plate)" opacity=".15"/>
+        <circle cx="46" cy="86" r="1" fill="#2a3742"/>
+      </g>
+      <!-- Head -->
+      <circle cx="62" cy="54" r="14" fill="#f2d2b8" stroke="#e0bfa2" stroke-width="1"/>
+      <!-- Face minimal -->
+      <circle cx="58" cy="54" r="2.3" fill="#5a4538"/>
+      <circle cx="66" cy="54" r="2.3" fill="#5a4538"/>
+      <path d="M58 60 q4 3 8 0" stroke="#5a4538" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <!-- Hat -->
+      <path d="M48 42 q0-10 14-10 q14 0 14 10 q0 4-2 6 q-1 1-1 3 H51 q0-2-1-3 q-2-2-2-6z" fill="url(#g-hat)" stroke="#c3ccd4" stroke-width="1"/>
+      <rect x="50" y="48" width="24" height="6" rx="2" fill="#ffffff" stroke="#c3ccd4" stroke-width="1"/>
+      <!-- Front arm with slight swing -->
+      <path class="arm-front" d="M74 86 q10 6 14 4 q3 -2 2 -5 q-9 1 -16 -6 z" fill="#e4e9ef" stroke="#b5bcc4" stroke-width="1"/>
+    </svg>
+  </figure>
+</div>
+
+<section class="section" id="kjerne">
+  <h2 class="sec-title" data-i18n="core.title">Kärnkapacitet</h2>
+  <div class="grid">
+  <div class="card" data-i18n-scope="feat1"><span class="pill" data-i18n="label">LÄRANDE</span><h3 data-i18n="title">Automatisk porsjon</h3><p data-i18n="text">Systemet lærer faktisk g/gjest og justerar redan nästa anbefaling.</p></div>
+  <div class="card" data-i18n-scope="feat2"><span class="pill" data-i18n="label">SVINN</span><h3 data-i18n="title">Direkt logging</h3><p data-i18n="text">Produsert, servert, rester – logg på sekunder, se trend utan ekstra jobb.</p></div>
+  <div class="card" data-i18n-scope="feat3"><span class="pill" data-i18n="label">FLYT</span><h3 data-i18n="title">Privat + felles</h3><p data-i18n="text">Personliga prepp-lister & overstyringer bevarar base-menyn ren.</p></div>
+  <div class="card" data-i18n-scope="feat4"><span class="pill" data-i18n="label">FLEKSIBEL</span><h3 data-i18n="title">Utvidbar kjerne</h3><p data-i18n="text">Næring, prognoser og integrasjon klargjort – aktiver ved behov.</p></div>
+  </div>
+  <div class="dual">
+    <div class="dual-box offshore">
+      <span class="dual-badge">OFFSHORE</span>
+  <h4 data-i18n="offshore.title">Yuplan Offshore</h4>
+      <ul>
+  <li data-i18n="offshore.li1">Rotasjonsmeny + daglige overstyringer</li>
+  <li data-i18n="offshore.li2">Lærende porsjonsprofil per kategori</li>
+  <li data-i18n="offshore.li3">Rask service-logging & svinntrend</li>
+  <li data-i18n="offshore.li4">Rigg-isolerte datasett & roller</li>
+      </ul>
+  <p class="small" style="font-size:.72rem; opacity:.8; margin:0;" data-i18n="offshore.note">Designet for stabilitet, repetisjon og sikkerhet i krevende skiftmiljø.</p>
+    </div>
+    <div class="dual-box kommun">
+      <span class="dual-badge">KOMMUN</span>
+  <h4 data-i18n="kommun.title">Yuplan Kommun</h4>
+      <ul>
+  <li data-i18n="kommun.li1">Flersite meny & planstyring</li>
+  <li data-i18n="kommun.li2">Ernæring + allergenfokus</li>
+  <li data-i18n="kommun.li3">Porsjon & svinn pr enhet</li>
+  <li data-i18n="kommun.li4">Tydlig dag/uke struktur</li>
+      </ul>
+  <p class="small" style="font-size:.72rem; opacity:.8; margin:0;" data-i18n="kommun.note">Tilpasset bærekraftsmål, budsjettdrevne prioriteringer og transparens.</p>
+    </div>
+  </div>
+  <div class="sep"></div>
+  <!-- Modular adaptability / workflow section -->
+  <section class="section" id="modular" style="padding-top:1.4rem;">
+    <h2 class="sec-title" data-i18n="mod.title">Modulär uppbyggnad & styrning</h2>
+    <p style="max-width:860px;margin:0 auto 2.1rem;font-size:.95rem;line-height:1.45;" data-i18n="mod.lead">Aktivera bara det ni behöver: starta enkelt med meny + prepp, lägg sedan till svinnlogg, portionsinlärning, näring, beställningsflöden eller fler avdelningar utan migrering.</p>
+    <div class="grid" data-i18n-scope="modc" style="margin-bottom:2.2rem;">
+      <div class="card" data-i18n-scope="c1"><span class="pill" data-i18n="pill">MODUL</span><h3 data-i18n="title">Selektiv aktivering</h3><p data-i18n="text">Kärnan isolerar moduler – slå på när värdet är tydligt, utan att röra historik.</p></div>
+      <div class="card" data-i18n-scope="c2"><span class="pill" data-i18n="pill">MENY</span><h3 data-i18n="title">Bygg & återanvänd</h3><p data-i18n="text">Rotationsveckor, temadagar och lokala överstyrningar utan att skapa kopior.</p></div>
+      <div class="card" data-i18n-scope="c3"><span class="pill" data-i18n="pill">PREPP</span><h3 data-i18n="title">Automatiska listor</h3><p data-i18n="text">Portionslogik + meny genererar dagslistor; privat justering påverkar inte basen.</p></div>
+      <div class="card" data-i18n-scope="c4"><span class="pill" data-i18n="pill">ROLLER</span><h3 data-i18n="title">Avdelningssikt</h3><p data-i18n="text">Kommun: skapa avdelningar med styrd vy: se rätt rätter, lägga beställning, inget brus.</p></div>
+      <div class="card" data-i18n-scope="c5"><span class="pill" data-i18n="pill">SVINN</span><h3 data-i18n="title">Snabb registrering</h3><p data-i18n="text">Producerat/servert/rester → sekundinmatning ger trend & adaptiv portion.</p></div>
+      <div class="card" data-i18n-scope="c6"><span class="pill" data-i18n="pill">API</span><h3 data-i18n="title">Integrationsredo</h3><p data-i18n="text">Struktur för näring, ekonomi & lager från dag 1 – fylls på när ni är redo.</p></div>
+    </div>
+    <div class="mod-flow" style="max-width:980px;margin:0 auto 2.8rem;">
+      <ol style="list-style:none;display:grid;gap:.9rem;padding:0;margin:0;counter-reset:mf;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));">
+        <li style="background:var(--card);border:1px solid rgba(0,0,0,.06);padding:.85rem .9rem;border-radius:.9rem;position:relative;box-shadow:0 3px 10px -6px rgba(0,0,0,.12);" data-i18n="flow.step1"><span style="position:absolute;top:.6rem;right:.7rem;font-size:.55rem;font-weight:600;letter-spacing:.6px;color:#0d6efd;">STEP 1</span><strong>Menystruktur</strong><br>Import / bygg veckor</li>
+        <li style="background:var(--card);border:1px solid rgba(0,0,0,.06);padding:.85rem .9rem;border-radius:.9rem;position:relative;box-shadow:0 3px 10px -6px rgba(0,0,0,.12);" data-i18n="flow.step2"><span style="position:absolute;top:.6rem;right:.7rem;font-size:.55rem;font-weight:600;letter-spacing:.6px;color:#0d6efd;">STEP 2</span><strong>Prepp & privat</strong><br>Dagliga listor + egna noteringar</li>
+        <li style="background:var(--card);border:1px solid rgba(0,0,0,.06);padding:.85rem .9rem;border-radius:.9rem;position:relative;box-shadow:0 3px 10px -6px rgba(0,0,0,.12);" data-i18n="flow.step3"><span style="position:absolute;top:.6rem;right:.7rem;font-size:.55rem;font-weight:600;letter-spacing:.6px;color:#0d6efd;">STEP 3</span><strong>Svinn & service</strong><br>Snabb logg → trendkurva</li>
+        <li style="background:var(--card);border:1px solid rgba(0,0,0,.06);padding:.85rem .9rem;border-radius:.9rem;position:relative;box-shadow:0 3px 10px -6px rgba(0,0,0,.12);" data-i18n="flow.step4"><span style="position:absolute;top:.6rem;right:.7rem;font-size:.55rem;font-weight:600;letter-spacing:.6px;color:#0d6efd;">STEP 4</span><strong>Adaptiv portion</strong><br>Lärande gram/gäst</li>
+        <li style="background:var(--card);border:1px solid rgba(0,0,0,.06);padding:.85rem .9rem;border-radius:.9rem;position:relative;box-shadow:0 3px 10px -6px rgba(0,0,0,.12);" data-i18n="flow.step5"><span style="position:absolute;top:.6rem;right:.7rem;font-size:.55rem;font-weight:600;letter-spacing:.6px;color:#0d6efd;">STEP 5</span><strong>Avdelningar</strong><br>Styrd vy & beställning</li>
+        <li style="background:var(--card);border:1px solid rgba(0,0,0,.06);padding:.85rem .9rem;border-radius:.9rem;position:relative;box-shadow:0 3px 10px -6px rgba(0,0,0,.12);" data-i18n="flow.step6"><span style="position:absolute;top:.6rem;right:.7rem;font-size:.55rem;font-weight:600;letter-spacing:.6px;color:#0d6efd;">STEP 6</span><strong>Integration</strong><br>Näring / ekonomi</li>
+      </ol>
+    </div>
+  </section>
+  <div class="cta-band" id="kontakt">
+  <h2 data-i18n="cta.bandTitle">Klar for å høre mer eller teste i liten pilot?</h2>
+  <p data-i18n="cta.bandText">Vi onboarder et avgrenset antall miljøer for fokusert effekt. Ett kort svar – ingen spam.</p>
+  <a data-i18n="cta.bandButton" href="mailto:info@yuplan.se?subject=Yuplan%20Pilot">Kontakt oss</a>
+  </div>
+  <div class="footer" data-i18n="footer.html">COMING SOON • 2025<br>Har du frågor nu? Maila <a href="mailto:info@yuplan.se" style="color:#0d6efd; font-weight:600; text-decoration:none;">info@yuplan.se</a><br>© 2025 Yuplan – Operasjonell matintelligens.</div>
+</section>
+<button class="dark-toggle" onclick="document.body.classList.toggle('dark'); this.blur();" data-i18n="dark.toggle">Dark / Light</button>
+<script>
+// Simple in-page i18n (no build tools) — text keys mapped to sv/no/en
+const I18N = {
+  sv: {
+    'hero.title': 'Smartare kök. Mindre svinn.<br/>Tydligare drift.',
+    'hero.lead': 'Yuplan samlar menyplanering, dagligt utförande och lärande portionsstyrning i ett gränssnitt. Byggt för storskaliga kök: <strong>offshore</strong>, <strong>kommunal kost</strong>, <strong>storkök</strong>, <strong>event</strong> & <strong>omsorg</strong>.',
+    'chips.intro': 'Användningsområden',
+    'chip.offshore': 'Offshore',
+    'chip.kommun': 'Kommunal',
+    'chip.storkok': 'Storkök',
+    'chip.event': 'Event',
+    'chip.omsorg': 'Omsorg',
+    'cta.primary': 'Intresse & Pilot',
+    'cta.question': 'Ställ en fråga',
+    'core.title': 'Kärnkapacitet',
+    'feat1.label': 'LÄRANDE', 'feat1.title': 'Automatisk portion', 'feat1.text': 'Systemet lär sig verkliga gram per gäst och justerar nästa rekommendation.',
+    'feat2.label': 'SVINN', 'feat2.title': 'Direkt loggning', 'feat2.text': 'Producerat, serverat, rester – logga på sekunder och se trenden utan extra arbete.',
+    'feat3.label': 'FLÖDE', 'feat3.title': 'Privat + delat', 'feat3.text': 'Personliga prepp‑listor och överskrivningar håller basmenyn ren.',
+    'feat4.label': 'FLEXIBEL', 'feat4.title': 'Utbyggbar kärna', 'feat4.text': 'Näring, prognoser och integration redo – aktivera vid behov.',
+    'offshore.title': 'Yuplan Offshore',
+    'offshore.li1': 'Rotationsmeny + dagliga överskrivningar',
+    'offshore.li2': 'Lärande portionsprofil per kategori',
+    'offshore.li3': 'Snabb servicelogging & svinntrend',
+    'offshore.li4': 'Rigg‑isolerade datamängder & roller',
+    'offshore.note': 'Designad för stabilitet, repetitiv drift och säkerhet i krävande skiftmiljö.',
+    'kommun.title': 'Yuplan Kommun',
+    'kommun.li1': 'Fler‑site meny & planstyrning',
+    'kommun.li2': 'Näring + allergenfokus',
+    'kommun.li3': 'Portion & svinn per enhet',
+    'kommun.li4': 'Tydlig dag/vecko‑struktur',
+    'kommun.note': 'Anpassad för hållbarhetsmål, budgetstyrda prioriteringar och transparens.',
+    'cta.bandTitle': 'Redo att höra mer eller testa en liten pilot?',
+    'cta.bandText': 'Vi onboardar ett begränsat antal miljöer för fokuserad effekt. Ett kort svar – ingen spam.',
+    'cta.bandButton': 'Kontakta oss',
+    'footer.html': 'COMING SOON • 2025<br>Frågor redan nu? Maila <a href="mailto:info@yuplan.se" style="color:#0d6efd; font-weight:600; text-decoration:none;">info@yuplan.se</a><br>© 2025 Yuplan – Operativ matintelligens.',
+    'dark.toggle': 'Mörkt / Ljust'
+    , 'mod.title':'Modulär uppbyggnad & styrning'
+    , 'mod.lead':'Aktivera endast det ni behöver: börja med meny + prepp och lägg till svinn, adaptiv portion, näring, beställningsflöden eller avdelningar när nyttan är tydlig.'
+    , 'flow.step1':'Menystruktur – importera / bygg veckor'
+    , 'flow.step2':'Prepp & privat – dagar får listor'
+    , 'flow.step3':'Svinn & service – snabb logg'
+    , 'flow.step4':'Adaptiv portion – lärande gram/gäst'
+    , 'flow.step5':'Avdelningar – styrd vy & beställning'
+    , 'flow.step6':'Integration – näring / ekonomi'
+    , 'modc.c1.pill':'MODUL','modc.c1.title':'Selektiv aktivering','modc.c1.text':'Kärnan isolerar moduler – slå på när värdet är tydligt, utan att röra historik.'
+    , 'modc.c2.pill':'MENY','modc.c2.title':'Bygg & återanvänd','modc.c2.text':'Rotationsveckor, temadagar och lokala överstyrningar utan att skapa kopior.'
+    , 'modc.c3.pill':'PREPP','modc.c3.title':'Automatiska listor','modc.c3.text':'Portionslogik + meny genererar dagslistor; privat justering påverkar inte basen.'
+    , 'modc.c4.pill':'ROLLER','modc.c4.title':'Avdelningssikt','modc.c4.text':'Kommun: avdelningar får styrd vy, lägger beställning, inget brus.'
+    , 'modc.c5.pill':'SVINN','modc.c5.title':'Snabb registrering','modc.c5.text':'Producerat/servert/rester → sekundinmatning ger trend & adaptiv portion.'
+    , 'modc.c6.pill':'API','modc.c6.title':'Integrationsredo','modc.c6.text':'Struktur för näring, ekonomi & lager – fylls på när ni är redo.'
+  },
+  no: {
+    'hero.title': 'Smartere kjøkken. Mindre svinn.<br/>Roligere drift.',
+  'hero.lead': 'Yuplan samler menyplanlegging, daglig utførelse og lærende porsjonsstyring i ett grensesnitt. Bygget for storskala kjøkken: <strong>offshore</strong>, <strong>kommunal</strong>, <strong>storkjøkken</strong>, <strong>event</strong> & <strong>omsorg</strong>.',
+  'chips.intro': 'Bruksområder',
+  'chip.offshore': 'Offshore',
+  'chip.kommun': 'Kommunal',
+  'chip.storkok': 'Storkjøkken',
+  'chip.event': 'Event',
+  'chip.omsorg': 'Omsorg',
+    'cta.primary': 'Interesse & Pilot',
+    'cta.question': 'Still et spørsmål',
+    'core.title': 'Kjernekapasitet',
+    'feat1.label': 'LÆRING', 'feat1.title': 'Automatisk porsjon', 'feat1.text': 'Systemet lærer faktisk g/gjest og justerer neste anbefaling.',
+    'feat2.label': 'SVINN', 'feat2.title': 'Direkte logging', 'feat2.text': 'Produsert, servert, rester – logg på sekunder, se trend uten ekstra arbeid.',
+    'feat3.label': 'FLYT', 'feat3.title': 'Privat + felles', 'feat3.text': 'Personlige prepp-lister & overstyringer bevarer felles grunnmeny.',
+    'feat4.label': 'FLEKSIBEL', 'feat4.title': 'Utvidbar kjerne', 'feat4.text': 'Ernæring, prognoser og integrasjon klare – aktiver ved behov.',
+    'offshore.title': 'Yuplan Offshore',
+    'offshore.li1': 'Rotasjonsmeny + daglige overstyringer',
+    'offshore.li2': 'Lærende porsjonsprofil per kategori',
+    'offshore.li3': 'Rask service-logging & svinntrend',
+    'offshore.li4': 'Rigg-isolerte datasett & roller',
+    'offshore.note': 'Designet for stabilitet, repetisjon og sikker drift i krevende skift.',
+    'kommun.title': 'Yuplan Kommun',
+    'kommun.li1': 'Flersted meny & planstyring',
+    'kommun.li2': 'Ernæring + allergenfokus',
+    'kommun.li3': 'Porsjon & svinn per enhet',
+    'kommun.li4': 'Tydelig dag/uke struktur',
+    'kommun.note': 'Tilpasset bærekraft, budsjett og innsyn.',
+    'cta.bandTitle': 'Klar for å høre mer eller teste en liten pilot?',
+    'cta.bandText': 'Vi onboarder et begrenset antall miljøer for fokusert effekt. Kort svar – ingen spam.',
+    'cta.bandButton': 'Kontakt oss',
+    'footer.html': 'COMING SOON • 2025<br>Har du spørsmål nå? Send e‑post <a href="mailto:info@yuplan.se" style="color:#0d6efd; font-weight:600; text-decoration:none;">info@yuplan.se</a><br>© 2025 Yuplan – Operasjonell matintelligens.',
+    'dark.toggle': 'Mørk / Lys'
+    , 'mod.title':'Modulær oppbygning & styring'
+    , 'mod.lead':'Aktiver bare det dere trenger: start med meny + prepp og legg til svinn, adaptiv porsjon, ernæring, bestillingsflyt eller avdelinger når verdien er klar.'
+    , 'flow.step1':'Menystruktur – importer / bygg uker'
+    , 'flow.step2':'Prepp & privat – dager får lister'
+    , 'flow.step3':'Svinn & service – rask logg'
+    , 'flow.step4':'Adaptiv porsjon – lærende gram/gjest'
+    , 'flow.step5':'Avdelinger – styrt visning & bestilling'
+    , 'flow.step6':'Integrasjon – ernæring / økonomi'
+    , 'modc.c1.pill':'MODUL','modc.c1.title':'Selektiv aktivering','modc.c1.text':'Kjernen isolerer moduler – slå på når verdien er tydelig uten å røre historikk.'
+    , 'modc.c2.pill':'MENY','modc.c2.title':'Bygg & gjenbruk','modc.c2.text':'Rotasjonsuker, temadager og lokale overstyringer uten kopier.'
+    , 'modc.c3.pill':'PREPP','modc.c3.title':'Automatiske lister','modc.c3.text':'Porsjonslogikk + meny genererer dagslister; privat påvirker ikke grunn.'
+    , 'modc.c4.pill':'ROLLER','modc.c4.title':'Avdelingssyn','modc.c4.text':'Kommunal: avdelinger får styrt visning, legger bestilling, minimalt støy.'
+    , 'modc.c5.pill':'SVINN','modc.c5.title':'Rask registrering','modc.c5.text':'Produsert/servert/rester → sekunder inn gir trend & adaptiv porsjon.'
+    , 'modc.c6.pill':'API','modc.c6.title':'Integrasjonsklar','modc.c6.text':'Struktur for ernæring, økonomi & lager når dere er klare.'
+  },
+  en: {
+    'hero.title': 'Smarter kitchens. Less waste.<br/>Calmer operations.',
+  'hero.lead': 'Yuplan unifies menu planning, daily execution and adaptive portion intelligence. Built for scale: <strong>offshore</strong>, <strong>municipal</strong>, <strong>large production</strong>, <strong>event</strong> & <strong>care</strong>.',
+  'chips.intro': 'Use cases',
+  'chip.offshore': 'Offshore',
+  'chip.kommun': 'Municipal',
+  'chip.storkok': 'Large production',
+  'chip.event': 'Event',
+  'chip.omsorg': 'Care',
+    'cta.primary': 'Pilot Interest',
+    'cta.question': 'Ask a question',
+    'core.title': 'Core Capability',
+    'feat1.label': 'LEARNING', 'feat1.title': 'Adaptive portions', 'feat1.text': 'Learns real grams/guest and improves the next recommendation.',
+    'feat2.label': 'WASTE', 'feat2.title': 'Fast logging', 'feat2.text': 'Produced, served, leftovers – seconds to log, trend instantly visible.',
+    'feat3.label': 'FLOW', 'feat3.title': 'Private + shared', 'feat3.text': 'Personal prep lists & overrides keep base menu clean.',
+    'feat4.label': 'FLEXIBLE', 'feat4.title': 'Extensible core', 'feat4.text': 'Nutrition, forecasting and integrations ready when you are.',
+    'offshore.title': 'Yuplan Offshore',
+    'offshore.li1': 'Rotation menu + daily overrides',
+    'offshore.li2': 'Category portion learning',
+    'offshore.li3': 'Rapid service logging & waste trend',
+    'offshore.li4': 'Rig-isolated datasets & roles',
+    'offshore.note': 'Built for stability, repetition and safety in demanding shifts.',
+    'kommun.title': 'Yuplan Municipal',
+    'kommun.li1': 'Multi-site menu & planning',
+    'kommun.li2': 'Nutrition + allergen focus',
+    'kommun.li3': 'Portion & waste per unit',
+    'kommun.li4': 'Clear day/week structure',
+    'kommun.note': 'Aligned with sustainability goals, budgets and transparency.',
+    'cta.bandTitle': 'Ready to learn more or trial a focused pilot?',
+    'cta.bandText': 'We onboard a limited set of environments for clear impact. Quick reply – zero spam.',
+    'cta.bandButton': 'Contact us',
+    'footer.html': 'COMING SOON • 2025<br>Questions already? Email <a href="mailto:info@yuplan.se" style="color:#0d6efd; font-weight:600; text-decoration:none;">info@yuplan.se</a><br>© 2025 Yuplan – Operational food intelligence.',
+    'dark.toggle': 'Dark / Light'
+    , 'mod.title':'Modular activation & control'
+    , 'mod.lead':'Enable only what you need: start with menu + prep then add waste, adaptive portions, nutrition, ordering flows or departments as value emerges.'
+    , 'flow.step1':'Menu structure – import / build weeks'
+    , 'flow.step2':'Prep & private – days get lists'
+    , 'flow.step3':'Waste & service – fast log'
+    , 'flow.step4':'Adaptive portion – learning g/guest'
+    , 'flow.step5':'Departments – scoped view & ordering'
+    , 'flow.step6':'Integration – nutrition / finance'
+    , 'modc.c1.pill':'MODULE','modc.c1.title':'Selective activation','modc.c1.text':'Core isolates modules – switch on when value is clear without touching history.'
+    , 'modc.c2.pill':'MENU','modc.c2.title':'Build & reuse','modc.c2.text':'Rotation weeks, theme days and local overrides – no duplicated copies.'
+    , 'modc.c3.pill':'PREP','modc.c3.title':'Auto task lists','modc.c3.text':'Portion logic + menu generate daily lists; private tweaks don’t pollute base.'
+    , 'modc.c4.pill':'ROLES','modc.c4.title':'Scoped visibility','modc.c4.text':'Municipal: departments see right dishes, place orders, no noise.'
+    , 'modc.c5.pill':'WASTE','modc.c5.title':'Rapid capture','modc.c5.text':'Produced/served/leftovers → seconds in yields trend & adaptive portioning.'
+    , 'modc.c6.pill':'API','modc.c6.title':'Integration ready','modc.c6.text':'Structure for nutrition, finance & inventory when you are ready.'
+  }
+};
+
+function applyLang(lang){
+  const dict = I18N[lang] || I18N.sv;
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.getAttribute('data-i18n');
+    if(dict[key]){
+      if(key.endsWith('.html')){ el.innerHTML = dict[key]; }
+      else { el.innerHTML = dict[key]; }
+    }
+  });
+  document.querySelectorAll('[data-i18n-scope]').forEach(scopeEl=>{
+    const scope = scopeEl.getAttribute('data-i18n-scope');
+    scopeEl.querySelectorAll('[data-i18n]').forEach(el=>{
+      const sub = el.getAttribute('data-i18n');
+      const full = `${scope}.${sub}`;
+      if(dict[full]) el.innerHTML = dict[full];
+    });
+  });
+  localStorage.setItem('yuplan_lang', lang);
+  document.querySelectorAll('.lang-btn').forEach(btn=>{
+    btn.style.opacity = btn.dataset.lang === lang ? '1' : '.55';
+  });
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const saved = localStorage.getItem('yuplan_lang') || 'sv';
+  applyLang(saved);
+  document.querySelectorAll('.lang-btn').forEach(btn=>{
+    btn.addEventListener('click',()=> applyLang(btn.dataset.lang));
+  });
+  // Ensure logo PNG loads; fallback to inline minimal mark if not
+  const lg = document.getElementById('yuplanLogoImg');
+  if(lg){
+    if(lg.complete && lg.naturalWidth===0){ lg.dispatchEvent(new Event('error')); }
+    lg.addEventListener('error',()=>{
+      const fallback = lg.closest('.logo-svg').querySelector('.logo-fallback');
+      if(fallback){ fallback.textContent='Yuplan'; }
+    },{once:true});
+  }
+});
+</script>
+</body>
+</html>

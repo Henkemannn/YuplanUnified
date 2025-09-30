@@ -1,0 +1,42 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0" style="font-weight:700;">Recept & Metoder</h2>
+    <a href="{{ url_for('recipe_new_form') }}" class="btn btn-primary">+ Nytt</a>
+  </div>
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-sm-4"><input class="form-control" name="q" placeholder="Sök titel" value="{{ q }}"></div>
+    <div class="col-sm-3">
+      <select name="filter" class="form-select" onchange="this.form.submit()">
+        <option value="">Alla</option>
+        <option value="missing" {% if filter_missing %}selected{% endif %}>Ej kopplade</option>
+      </select>
+    </div>
+    <div class="col-sm-2"><button class="btn btn-outline-secondary w-100">Filtrera</button></div>
+  </form>
+  {% if recipes|length == 0 %}
+    <div class="alert alert-info">Inga recept funna.</div>
+  {% else %}
+  <div class="recipes-grid">
+    {% for r in recipes %}
+      <article class="recipe-card">
+        <h3><a href="{{ url_for('recipe_detail', recipe_id=r.id) }}">{{ r.title }}</a></h3>
+        <div class="small text-muted">Uppdaterad: {{ r.updated_at[:10] }}{% if r.categories %} • {{ r.categories }}{% endif %}</div>
+        <div class="d-flex gap-2 align-items-center mt-1">
+          {% if r.link_count %}
+            <span class="badge bg-success">{{ r.link_count }} koblet</span>
+          {% else %}
+            <span class="badge bg-warning text-dark">Ej kopplad</span>
+          {% endif %}
+        </div>
+        <div class="mt-2 d-flex gap-2">
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('recipe_detail', recipe_id=r.id) }}">Öppna</a>
+          <a class="btn btn-sm btn-light" href="{{ url_for('recipe_edit_form', recipe_id=r.id) }}">Redigera</a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

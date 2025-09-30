@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h2 class="mb-0">Kommende perioder – planering</h2>
+  <div class="btn-group">
+    <a class="btn btn-sm btn-outline-secondary {% if not has_prev %}disabled{% endif %}" href="{% if has_prev %}{{ url_for('prep_upcoming') }}?offset={{ prev_offset }}{% else %}# {% endif %}">« Forrige</a>
+    <a class="btn btn-sm btn-outline-secondary {% if not has_next %}disabled{% endif %}" href="{% if has_next %}{{ url_for('prep_upcoming') }}?offset={{ next_offset }}{% else %}# {% endif %}">Neste »</a>
+  </div>
+</div>
+<p class="text-muted small">Viser perioder {{ offset+1 }}–{{ offset + upcoming|length }} av totalt {{ total_periods }} ({{ page_size }} per side).</p>
+{% if upcoming and upcoming|length > 0 %}
+  {% for p in upcoming %}
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><strong>Periode:</strong> {{ p.start }} – {{ p.end }}</span>
+        <span class="badge bg-info text-dark">{{ p.menykort|length }} dager</span>
+      </div>
+      <div class="card-body p-2">
+        <div class="table-responsive">
+          <table class="table table-sm mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="width:110px;">Dag</th>
+                <th style="width:110px;">Dato</th>
+                <th class="text-center">Lunsj</th>
+                <th class="text-center">Middag</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for d in p.menykort %}
+              <tr>
+                <td class="small fw-bold">{{ d.weekday }}</td>
+                <td class="small">{{ d.date }}</td>
+                <td class="align-top">
+                  {% if d.lunsj and d.lunsj|length %}
+                    <ul class="small ps-3 mb-0">
+                      {% for it in d.lunsj %}<li>{{ it }}</li>{% endfor %}
+                    </ul>
+                  {% else %}<span class="text-muted small">–</span>{% endif %}
+                </td>
+                <td class="align-top">
+                  {% if d.middag and d.middag|length %}
+                    <ul class="small ps-3 mb-0">
+                      {% for it in d.middag %}<li>{{ it }}</li>{% endfor %}
+                    </ul>
+                  {% else %}<span class="text-muted small">–</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="alert alert-info">Ingen kommende perioder funnet.</div>
+{% endif %}
+<div class="d-flex justify-content-between mt-3">
+  <a class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}" href="{% if has_prev %}{{ url_for('prep_upcoming') }}?offset={{ prev_offset }}{% else %}# {% endif %}">« Forrige</a>
+  <a class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}" href="{% if has_next %}{{ url_for('prep_upcoming') }}?offset={{ next_offset }}{% else %}# {% endif %}">Neste »</a>
+</div>
+{% endblock %}

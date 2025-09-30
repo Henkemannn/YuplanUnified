@@ -1,0 +1,82 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container-fluid" style="max-width:1400px;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4 class="mb-0">Vecka som startar {{ week_start }}</h4>
+      <small class="text-muted">Aggregert prepp & frysplock (privat)</small>
+    </div>
+    <div class="btn-group">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('week_prep_view', date_s=prev_week) }}">◀ Föregående</a>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('week_prep_view', date_s=next_week) }}">Nästa ▶</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('period_aggregate', date_s=anchor_date) }}">Periodlista</a>
+  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('day_detail', date_s=anchor_date) }}">Tillbaka till dag</a>
+    </div>
+  </div>
+  <div class="accordion" id="weekAcc">
+    {% for d in days %}
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="head-{{ d.date }}">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#col-{{ d.date }}" aria-expanded="false">{{ d.weekday }} {{ d.date }}</button>
+        </h2>
+        <div id="col-{{ d.date }}" class="accordion-collapse collapse" data-bs-parent="#weekAcc">
+          <div class="accordion-body">
+            <div class="row g-3">
+              {% for m in d.meals %}
+                <div class="col-md-6">
+                  <div class="card h-100 shadow-sm">
+                    <div class="card-header py-2"><strong class="text-capitalize">{{ m.meal }}</strong></div>
+                    <div class="card-body p-2 small">
+                      {% for c in m.categories %}
+                        <div class="border rounded p-2 mb-2">
+                          <div class="d-flex justify-content-between align-items-start mb-1">
+                            <div><strong>{{ c.category }}</strong>{% if c.overridden %}<span class="badge bg-warning text-dark ms-1" title="Privat override">✳</span>{% endif %}</div>
+                            <div class="text-muted">{{ c.base }}</div>
+                          </div>
+                          <div class="mb-1">{% if c.dish %}<span class="fw-semibold">{{ c.dish }}</span>{% else %}<span class="text-muted">Ingen rett</span>{% endif %}</div>
+                          <div class="row g-2">
+                            <div class="col-6">
+                              <div class="fw-bold mb-1">Prepp</div>
+                              <ul class="list-unstyled mb-1" id="prep-list-{{ d.date }}-{{ m.meal }}-{{ c.category }}">
+                                {% for t in c.tasks %}
+                                  <li data-id="{{ t.id }}" class="toggle-prep {% if t.done %}text-decoration-line-through text-muted{% endif %}" style="cursor:pointer;">{{ t.text }}</li>
+                                {% endfor %}
+                              </ul>
+                              {% if not c.tasks %}<div class="text-muted mb-1">–</div>{% endif %}
+                            </div>
+                            <div class="col-6">
+                              <div class="fw-bold mb-1">Frysplock</div>
+                              <ul class="list-unstyled mb-1" id="frys-list-{{ d.date }}-{{ m.meal }}-{{ c.category }}">
+                                {% for f in c.frys %}
+                                  <li data-id="{{ f.id }}" class="toggle-frys {% if f.done %}text-decoration-line-through text-muted{% endif %}" style="cursor:pointer;">{{ f.item_name }}{% if f.qty %} ({{ f.qty }} {{ f.unit or '' }}){% endif %}</li>
+                                {% endfor %}
+                              </ul>
+                              {% if not c.frys %}<div class="text-muted mb-1">–</div>{% endif %}
+                            </div>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+<script>
+async function togglePrep(id, el){
+  try{const r=await fetch("{{ url_for('prep_tasks_toggle') }}",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});const j=await r.json();if(j.ok){el.classList.toggle('text-decoration-line-through');el.classList.toggle('text-muted');}}
+  catch(e){}
+}
+async function toggleFrys(id, el){
+  try{const r=await fetch("{{ url_for('frys_items_toggle') }}",{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});const j=await r.json();if(j.ok){el.classList.toggle('text-decoration-line-through');el.classList.toggle('text-muted');}}
+  catch(e){}
+}
+for(const el of document.querySelectorAll('.toggle-prep')){ el.addEventListener('click', ()=> togglePrep(el.dataset.id, el)); }
+for(const el of document.querySelectorAll('.toggle-frys')){ el.addEventListener('click', ()=> toggleFrys(el.dataset.id, el)); }
+</script>
+{% endblock %}

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="32" viewBox="0 0 128 32" role="img" aria-label="Yuplan Offshore">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0d6efd"/>
+      <stop offset="50%" stop-color="#6610f2"/>
+      <stop offset="100%" stop-color="#20c997"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="128" height="32" rx="6" fill="#ffffff"/>
+  <circle cx="16" cy="16" r="10" fill="url(#g)"/>
+  <text x="32" y="21" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" font-weight="800" fill="#0d6efd">Yuplan</text>
+</svg>

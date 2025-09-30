@@ -1,0 +1,135 @@
+{% extends 'admin_layout.html' %}
+{% set breadcrumb_current = 'Brukere' %}
+{% block admin_content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">Administrer brukere</h2>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin_dashboard') }}">← Tilbake til Adminpanel</a>
+  </div>
+  {% set rmap = reverse_map|default({}) %}
+  {% set role_list = roles|default(['Kokk 1','Kokk 2','Kokk 3','Kokk 4','Kokk 5','Kokk 6']) %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+  <h5>Brukere (kokker/vikarer/administratorer)</h5>
+      <table class="table table-bordered table-sm">
+        <thead>
+          <tr><th>Navn</th><th>E-post</th><th>Rolle</th><th>Rigg</th><th>Handling</th></tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr id="user-{{ user['id'] }}">
+            <td>
+              {% if edit_user_id and edit_user_id == user['id'] %}
+                <form method="post" class="row g-2 align-items-center">
+                  <input type="hidden" name="update_user_id" value="{{ user['id'] }}">
+                  <div class="col-12 col-md-3"><input class="form-control form-control-sm" name="edit_name" value="{{ user['name'] }}" placeholder="Navn" required></div>
+                  <div class="col-12 col-md-3"><input class="form-control form-control-sm" type="email" name="edit_email" value="{{ user['email'] }}" placeholder="E-post" required></div>
+                  <div class="col-12 col-md-2"><input class="form-control form-control-sm" name="edit_phone" value="{{ user['phone'] or '' }}" placeholder="Telefon"></div>
+                  <div class="col-12 col-md-2">
+                    <select class="form-control form-control-sm" name="edit_role">
+                      <option value="kock" {% if user['role']=='kock' %}selected{% endif %}>Kock</option>
+                      <option value="admin" {% if user['role']=='admin' %}selected{% endif %}>Admin</option>
+                    </select>
+                  </div>
+                  <div class="col-12">
+                    <div class="row g-2">
+                      <div class="col-12 col-md-3"><input class="form-control form-control-sm" name="edit_emergency_contact_name" value="{{ user['emergency_contact_name'] or '' }}" placeholder="Nødkontakt navn"></div>
+                      <div class="col-12 col-md-3"><input class="form-control form-control-sm" name="edit_emergency_contact_phone" value="{{ user['emergency_contact_phone'] or '' }}" placeholder="Nødkontakt telefon"></div>
+                      <div class="col-12 col-md-3"><input class="form-control form-control-sm" name="edit_emergency_contact_relation" value="{{ user['emergency_contact_relation'] or '' }}" placeholder="Relasjon"></div>
+                      <div class="col-12 col-md-3"><input class="form-control form-control-sm" name="edit_notes" value="{{ user['notes'] or '' }}" placeholder="Notater"></div>
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-1"><button class="btn btn-sm btn-primary" type="submit">Lagre</button></div>
+                </form>
+              {% else %}
+                {{ user['name'] }}
+              {% endif %}
+            </td>
+            <td>{{ user['email'] }}</td>
+            <td>{{ user['role'] }}</td>
+            <td>
+              {% set rig = rigs|selectattr('id', 'equalto', user['rig_id'])|first %}
+              {{ rig['name'] if rig else '' }}
+            </td>
+            <td>
+              <div class="mb-1">
+                <form method="post" class="row g-2 align-items-center">
+                  <input type="hidden" name="map_user_id" value="{{ user['id'] }}">
+                  <div class="col-auto">
+                    <select class="form-select form-select-sm" name="virtual_role">
+                      <option value="">— Velg Kokk —</option>
+                      {% for r in role_list %}
+                        <option value="{{ r }}" {% if rmap.get(user['id']) == r %}selected{% endif %}>{{ r }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-auto form-check">
+                    <input class="form-check-input" type="checkbox" name="apply_now" id="apply_now_{{ user['id'] }}" checked>
+                    <label class="form-check-label" for="apply_now_{{ user['id'] }}">Bruk nå</label>
+                  </div>
+                  <div class="col-auto">
+                    <button class="btn btn-sm btn-primary" type="submit">Koble</button>
+                  </div>
+                  {% if rmap.get(user['id']) %}
+                  <div class="col-auto">
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('turnus_virtual_view') }}?role={{ rmap.get(user['id']) }}">Se virtuelt skjema</a>
+                  </div>
+                  {% endif %}
+                </form>
+              </div>
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="delete_user_id" value="{{ user['id'] }}">
+                <button type="submit" class="btn btn-link p-0 m-0 align-baseline" title="Slett bruker" style="color:#dc3545; font-size:1.2rem;">
+                  <span aria-hidden="true">🗑️</span>
+                </button>
+              </form>
+              <form method="post" style="display:inline; margin-left: 6px;">
+                <input type="hidden" name="reset_pw_user_id" value="{{ user['id'] }}">
+                <button type="submit" class="btn btn-link p-0 m-0 align-baseline" title="Generer nytt engangspassord" style="color:#ffc107; font-size:1.2rem;">
+                  <span aria-hidden="true">🔑</span>
+                </button>
+              </form>
+              {% if not edit_user_id or edit_user_id != user['id'] %}
+              <a class="btn btn-link p-0 m-0 align-baseline" title="Rediger" href="{{ url_for('admin_users') }}?edit={{ user['id'] }}" style="font-size:1.2rem; margin-left:6px;">✏️</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5">Ingen brukere registrert.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="mt-4">
+      {% if new_user_info %}
+        <div class="alert alert-info">
+          <strong>Ny bruker opprettet!</strong><br>
+          E-post: <code>{{ new_user_info.email }}</code><br>
+          Rolle: <code>{{ new_user_info.role }}</code><br>
+          Engangspassord: <code>{{ new_user_info.temp_password }}</code><br>
+          <span class="text-danger">Del dette med brukeren – det vises bare én gang!</span>
+        </div>
+      {% endif %}
+  <h5>Opprett ny bruker for denne riggen</h5>
+        {% if error %}
+          <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        <form method="post" class="row g-2">
+          <div class="col-md-3">
+            <input type="text" class="form-control" name="name" placeholder="Navn" required>
+          </div>
+          <div class="col-md-3">
+            <input type="email" class="form-control" name="email" placeholder="E-post" required>
+          </div>
+          <div class="col-md-3">
+            <select class="form-control" name="role" required>
+              <option value="kock">Kock</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <button type="submit" class="btn btn-success w-100">Opprett bruker</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS / tooling
+.DS_Store
+Thumbs.db
+
+# Build / distribution / packaging
+*.egg-info/
+build/
+dist/
+*.egg
+pip-wheel-metadata/
+
+# Coverage / test artifacts
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# Local databases / artifacts
+app.db
+*.sqlite*
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs / temp
+*.log
+logs/
+tmp/
+temp/
+
+# Backups
+*.bak
+*.orig
+*.rej
+
+# Node tooling (if any future UI bits)
+node_modules/
+
+# Generated exports / snapshots
+openapi_snapshot_*.json
+requirements.freeze.txt
+
+# Bundles / archives
+*.bundle
+*.zip
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.env
+
+# Databases
+*.sqlite3
+*.db
+/dev.db
+
+# Alembic cache
+migrations/versions/__pycache__/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

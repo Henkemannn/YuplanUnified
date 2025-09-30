@@ -1,0 +1,12 @@
+<nav class="admin-nav d-flex flex-column gap-1">
+  <a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">🏠 Adminpanel</a>
+  <a href="{{ url_for('admin_menu') }}" class="{% if request.endpoint == 'admin_menu' %}active{% endif %}">🍽️ Ukemeny</a>
+  {% if request.url_rule and '/admin/users' in request.url %}
+    {# ensure active class when on users #}
+  {% endif %}
+  <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint == 'admin_users' %}active{% endif %}">👥 Brukere</a>
+  <a href="{{ url_for('turnus_simple') }}" class="{% if request.endpoint in ['turnus_simple','turnus_simple_build_base','turnus_simple_apply'] %}active{% endif %}">🗓️ Turnus</a>
+  <hr class="my-2">
+  <a href="{{ url_for('dashboard') }}">📊 Dashboard</a>
+  <a href="{{ url_for('logout') }}" class="text-danger">↩︎ Logg ut</a>
+</nav>

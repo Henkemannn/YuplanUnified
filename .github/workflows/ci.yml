@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  lint-type:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies (ruff + mypy only)
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff==0.6.3 mypy==1.11.2
+      - name: Ruff Lint
+        run: |
+          ruff check . --output-format=github || (echo "Ruff found issues" && exit 1)
+      - name: Mypy Type Check
+        run: |
+            mypy .
+
+  openapi-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install minimal deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install openapi-spec-validator==0.7.1 Flask==3.0.3
+      - name: Generate spec via app context
+        run: |
+          python - <<'PY'
+          from core.app_factory import create_app
+          app = create_app({'TESTING': True})
+          with app.app_context():
+              from flask.testing import FlaskClient
+              client: FlaskClient = app.test_client()
+              spec = client.get('/openapi.json', headers={'X-User-Role':'admin','X-Tenant-Id':'1'}).get_json()
+          import json, sys
+          open('openapi.json','w').write(json.dumps(spec, indent=2))
+          print('Wrote openapi.json with top-level keys:', list(spec.keys()))
+          PY
+      - name: Validate OpenAPI spec
+        run: |
+          python - <<'PY'
+          import json
+          import hashlib, os
+          from openapi_spec_validator import validate
+          data = json.load(open('openapi.json'))
+          validate(data)
+          raw = json.dumps(data, sort_keys=True).encode()
+          sha = hashlib.sha256(raw).hexdigest()[:12]
+          paths = len(data.get('paths',{}))
+          schemas = len(data.get('components',{}).get('schemas',{}))
+          summary = f"OpenAPI spec validation succeeded. Paths={paths} Schemas={schemas} SHA={sha}\nArtifact: openapi-spec (openapi.json)"
+          print(summary)
+          with open(os.environ.get('GITHUB_STEP_SUMMARY','/dev/null'),'a') as fh:
+              fh.write('### OpenAPI Summary\n')
+              fh.write(summary+'\n')
+          PY
+      - name: Upload OpenAPI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec
+          path: openapi.json
+          if-no-files-found: error
+
+  test:
+    needs: [lint-type, openapi-validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Show versions
+        run: |
+          python --version
+          pip freeze
+
+      - name: Run migrations
+        env:
+          # Provide empty (or custom) env overrides if your Config.from_env() reads them.
+          DATABASE_URL: sqlite:///ci.db
+        run: |
+          alembic upgrade head
+
+      - name: Run tests
+        env:
+          DATABASE_URL: sqlite:///ci.db
+        run: |
+          pytest -q
+
+      - name: Archive test results (optional placeholder)
+        if: always()
+        run: echo "Add coverage or junit XML export later."
