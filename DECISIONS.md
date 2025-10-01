@@ -54,3 +54,17 @@ Adopted `NewType` for tenant/unit/diet/assignment IDs to:
 
 Migration Plan:
 - Consider applying NewType to additional identifiers (e.g., UserId, MenuId) in future pockets once service layers are strict.
+
+## 2025-10-01 Session persistence on login
+`auth.login()` now stores `user_id`, `role`, `tenant_id` in the Flask session in addition to issuing JWTs.
+- Motivation: Several flows and legacy tests assumed a server-side session, causing sporadic 401s after recent refactors relying on bearer tokens only.
+- Future: Once all tests use bearer-only flows we can optionally gate this behind a config flag.
+
+## 2025-10-01 FeatureRegistry back-compat
+Introduced alias `_flags` referencing the internal enabled set to satisfy older tests/clients poking into a previous internal structure.
+- Primary canonical state remains `_enabled` + `_defs`.
+- `_flags` may be removed in a major version once external usages are migrated.
+
+## 2025-10-01 UP038 policy (runtime vs. type hints)
+Adopted policy: Apply Ruff UP038 (PEP 604 `|` unions) only to annotations. Retain runtime `isinstance(x, (int, float))` tuple patterns for clarity/performance.
+Where Ruff flags these runtime checks, add targeted `# noqa: UP038` comments with rationale.

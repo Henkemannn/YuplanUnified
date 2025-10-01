@@ -43,6 +43,8 @@ class FeatureRegistry:
         base = list(seed) if seed else list(_SEED_FLAGS)
         self._defs: dict[str, FlagDefinition] = {d["name"]: d for d in base}
         self._enabled: set[str] = {d["name"] for d in base}  # all seed flags enabled by default
+        # Backwards compatibility for tests referencing internal _flags (treated as enabled set)
+        self._flags = self._enabled  # type: ignore[attr-defined]
 
     def enabled(self, name: str) -> bool:
         return name in self._enabled and name in self._defs

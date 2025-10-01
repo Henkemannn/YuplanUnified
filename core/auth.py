@@ -102,6 +102,10 @@ def login():
         db.commit()
         if key in store:
             del store[key]
+        # Persist session for tests that rely on cookie-based auth instead of bearer header
+        session["user_id"] = user.id
+        session["role"] = user.role
+        session["tenant_id"] = user.tenant_id
         return jsonify({
             "ok": True,
             "access_token": access,

@@ -151,7 +151,9 @@ def update_task(task_id: int):
             raise NotFoundError("task not found")
         role = session.get("role")
         user_id = session.get("user_id")
-        # Ownership enforcement: user can only modify own tasks (regardless of private flag)
+        # Ownership enforcement:
+        # Tests assert non-owner (cook) cannot update another user's task even if public.
+        # Allow only creator OR admin/superuser.
         if role not in ("admin","superuser") and t.creator_user_id != user_id:
             raise ForbiddenError("forbidden")
         try:

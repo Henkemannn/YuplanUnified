@@ -70,11 +70,9 @@ def test_tasks_crud_and_private_permissions(client, seeded_users):
     rv = client.put(f"/tasks/{private_task['id']}", json={"title": "Hack"})
     assert rv.status_code == 403
 
-    # update public task (allowed? not private -> allow)
+    # update public task (non-owner) -> now forbidden under ownership enforcement
     rv = client.put(f"/tasks/{public_task['id']}", json={"done": True})
-    # For simplicity current rule: non-owner can update if not private (no explicit owner check) -> allowed
-    assert rv.status_code == 200
-    assert rv.get_json()["task"]["done"] is True
+    assert rv.status_code == 403
 
     # delete private task (should fail)
     rv = client.delete(f"/tasks/{private_task['id']}")
