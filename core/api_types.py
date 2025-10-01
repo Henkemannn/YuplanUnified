@@ -1,0 +1,168 @@
+"""Central API response/request type contracts (Pocket 4 groundwork).
+
+Design principles:
+ - Unified ok/error model via Literal True/False.
+ - No Any: explicit TypedDicts & NewType wrappers for identifiers.
+ - Prefer NotRequired over Optional[...]=None when field may be omitted.
+ - Reuse service-layer row types via forward references to avoid heavy imports.
+
+Runtime behavior of endpoints SHOULD NOT depend on these definitions; they
+exist for static analysis (mypy strict pocket rollout).
+"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal, NewType, NotRequired, TypedDict
+
+if TYPE_CHECKING:  # import only for type checking to resolve forward refs
+    from .service_metrics_service import MetricRow, SummaryDayRow  # pragma: no cover
+
+
+# --- Identifier NewTypes ---
+TenantId = NewType("TenantId", int)
+FeatureName = NewType("FeatureName", str)
+UnitId = NewType("UnitId", int)
+DietTypeId = NewType("DietTypeId", int)
+AssignmentId = NewType("AssignmentId", int)
+
+
+# --- Common Envelopes ---
+class OkBase(TypedDict):
+    ok: Literal[True]
+
+
+class ErrorResponse(TypedDict, total=False):
+    ok: Literal[False]
+    error: str
+    message: NotRequired[str]
+
+
+# --- Admin ---
+class TenantSummary(TypedDict, total=False):
+    id: TenantId
+    name: str
+    active: bool
+    kind: NotRequired[str | None]
+    description: NotRequired[str | None]
+    features: list[str]
+
+
+class TenantListResponse(OkBase):
+    tenants: list[TenantSummary]
+
+
+class TenantCreateResponse(OkBase):
+    tenant_id: TenantId
+
+
+class FeatureToggleResponse(OkBase, total=False):
+    tenant_id: TenantId
+    feature: str
+    enabled: bool
+    features: NotRequired[list[str]]
+
+
+# --- Diet ---
+class DietType(TypedDict):
+    id: DietTypeId
+    name: str
+    default_select: bool
+
+
+class DietTypeListResponse(OkBase):
+    diet_types: list[DietType]
+
+
+class DietTypeCreateResponse(OkBase):
+    diet_type_id: DietTypeId
+
+
+class GenericOk(OkBase):
+    pass
+
+
+class UnitSummary(TypedDict):
+    id: UnitId
+    name: str
+
+
+class UnitListResponse(OkBase):
+    units: list[UnitSummary]
+
+
+class Assignment(TypedDict):
+    id: AssignmentId
+    unit_id: UnitId
+    diet_type_id: DietTypeId
+    count: int
+
+
+class AssignmentListResponse(OkBase):
+    unit_id: UnitId
+    assignments: list[Assignment]
+
+
+class AssignmentCreateResponse(OkBase):
+    assignment_id: AssignmentId
+
+
+# --- Service Metrics (referencing service-layer row types) ---
+class MetricsQueryRowsResponse(OkBase):
+    rows: list[MetricRow]  # forward ref; defined in service_metrics_service
+
+
+class MetricsSummaryDayResponse(OkBase):
+    rows: list[SummaryDayRow]  # forward ref
+
+
+class IngestResponse(OkBase, total=False):
+    ingested: NotRequired[int]
+    skipped: NotRequired[int]
+    details: NotRequired[list]
+
+
+# --- Service Recommendation ---
+class RecommendationResponse(TypedDict, total=False):
+    category: str
+    guest_count: int
+    recommended_g_per_guest: float | int
+    total_gram: float | int
+    total_protein: float | None
+    source: str
+    sample_size: int
+    baseline_used: bool
+    history_mean_raw: float | None
+    history_mean_used: float | None
+
+
+__all__ = [
+    # NewTypes
+    "TenantId",
+    "FeatureName",
+    "UnitId",
+    "DietTypeId",
+    "AssignmentId",
+    # Envelopes / errors
+    "OkBase",
+    "ErrorResponse",
+    # Admin
+    "TenantSummary",
+    "TenantListResponse",
+    "TenantCreateResponse",
+    "FeatureToggleResponse",
+    # Diet
+    "DietType",
+    "DietTypeListResponse",
+    "DietTypeCreateResponse",
+    "GenericOk",
+    "UnitSummary",
+    "UnitListResponse",
+    "Assignment",
+    "AssignmentListResponse",
+    "AssignmentCreateResponse",
+    # Metrics
+    "MetricsQueryRowsResponse",
+    "MetricsSummaryDayResponse",
+    "IngestResponse",
+    # Recommendation
+    "RecommendationResponse",
+]

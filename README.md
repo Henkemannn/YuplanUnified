@@ -207,6 +207,14 @@ Pocket 3 (auth & flags hardening):
  - Token payload `AccessTokenPayload` / `RefreshTokenPayload` with explicit required claims & issuer literal.
  - Feature flag registry now typed (`FlagDefinition`, `FlagState`) with safe idempotent `add()` supporting string shorthand.
 
+Pocket 4 (API handlers):
+ - `core.api_types` (central TypedDict contracts, NewType IDs)
+ - `core.admin_api`
+ - `core.diet_api`
+ - `core.service_metrics_api`
+ - `core.service_recommendation_api`
+ - Unified ok/error envelope (`{"ok": False, "error": code, "message"?: str}`) applied consistently.
+
 Expansion workflow (for a new module, e.g. `core.menu_service`):
 1. Remove (or avoid adding) its `ignore_errors` block in `mypy.ini`.
 2. Add a `[mypy-core.menu_service]` section with `strict = True`.

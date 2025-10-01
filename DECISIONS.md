@@ -30,3 +30,27 @@ Modules `core.auth` and `core.feature_flags` moved under `strict = True` in `myp
 - Introduce Redis-backed rate limiter (typed wrapper) for multi-process deployments.
 - Add `percentage` rollout mode with validated int 0-100 field; extend `FlagDefinition` accordingly.
 - Consider extracting JWT logic into a dedicated security module if additional strategies (e.g., mTLS session binding) are added.
+ - Centralize additional domain API contracts as pockets expand.
+
+## 2025-10-01 API Contract Centralization (Pocket 4)
+All public HTTP handler response shapes consolidated into `core/api_types.py`:
+- Use `TypedDict` + `NewType` for ID fields (`TenantId`, `UnitId`, `DietTypeId`, `AssignmentId`) to prevent accidental cross-assignment.
+- Unified envelope: success objects have `ok: True`; errors represented as `{ok: False, error: code, message?: str}`.
+- Optional, non-nullable fields use `NotRequired[...]` instead of `| None` to distinguish absence vs explicit null.
+- Handlers return precise unions (e.g., `TenantListResponse | ErrorResponse`) with minimal `cast()` where constructing dynamic dicts.
+
+Rationale:
+- Single source of truth for client contracts.
+- Eases future strict pockets (handlers remain thin, contracts stable).
+- Reduces ad-hoc dict construction mistakes (missing keys, inconsistent casing).
+
+## 2025-10-01 Literal ok Modeling
+`ok` modeled as `Literal[True]` in success types and `Literal[False]` in `ErrorResponse` to allow mypy to discriminate unions reliably without runtime tag fields.
+
+## 2025-10-01 NewType Identifier Strategy
+Adopted `NewType` for tenant/unit/diet/assignment IDs to:
+- Catch accidental mix-ups (passing a unit id where a diet type id expected) during static analysis.
+- Keep runtime cost nil (NewType erases at runtime) while maintaining clarity.
+
+Migration Plan:
+- Consider applying NewType to additional identifiers (e.g., UserId, MenuId) in future pockets once service layers are strict.

@@ -62,4 +62,8 @@
 	 - Feature flags refactored to typed registry (`FlagDefinition`, `FlagState`, `FlagMode`) with idempotent `add()` supporting string shorthand; `has()` helper for app factory integration.
 	 - Expanded unit tests: JWT edge cases (missing claim, unknown type, bad signature, expired, nbf future, skew boundary) & feature flag registry behaviors (idempotent add, unknown flag error, disable/enable cycle, sorted listing).
 	 - Definition of Done checklist for typing/security PRs documented in README.
+ - Added fourth strict mypy pocket: `core.api_types`, `core.admin_api`, `core.diet_api`, `core.service_metrics_api`, `core.service_recommendation_api`.
+	 - Centralized API contracts in `core/api_types.py` (TypedDict + NewType IDs, unified ok/error envelope).
+	 - Annotated API handlers with precise union return types (Ok vs ErrorResponse) while preserving runtime JSON.
+	 - Added 8 contract smoke tests (happy + error per module) ensuring structural stability.
 
