@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any, TypedDict, Optional, Dict, List, cast
 
 from sqlalchemy import and_, func
 
@@ -9,8 +9,53 @@ from .db import get_session
 from .models import ServiceMetric
 
 
+class IngestRow(TypedDict, total=False):
+    # Raw inbound row (all optional prior to validation)
+    unit_id: int
+    date: str
+    meal: str
+    dish_id: int | None
+    category: str | None
+    guest_count: int | None
+    produced_qty_kg: float | None
+    served_qty_kg: float | None
+    leftover_qty_kg: float | None
+    served_g_per_guest: float | None
+
+
+class IngestResult(TypedDict):
+    ok: bool
+    inserted: int
+    updated: int
+    errors: List[str]
+
+
+class MetricRow(TypedDict):
+    date: str
+    unit_id: int
+    meal: str
+    dish_id: int | None
+    category: str | None
+    guest_count: int | None
+    produced_qty_kg: float | None
+    served_qty_kg: float | None
+    leftover_qty_kg: float | None
+    served_g_per_guest: float | None
+
+
+class SummaryDayRow(TypedDict):
+    date: str
+    unit_id: int
+    meal: str
+    guest_count: int
+    produced_qty_kg: float
+    served_qty_kg: float
+    leftover_qty_kg: float
+    served_g_per_guest: float | None
+
+
 class ServiceMetricsService:
-    def ingest(self, tenant_id: int, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    def ingest(self, tenant_id: int, rows: list[IngestRow]) -> IngestResult:
         db = get_session()
         inserted = 0
         updated = 0
@@ -45,7 +90,7 @@ class ServiceMetricsService:
         finally:
             db.close()
 
-    def query(self, tenant_id: int, filters: dict[str, Any]) -> list[dict[str, Any]]:
+    def query(self, tenant_id: int, filters: dict[str, Any]) -> list[MetricRow]:
         db = get_session()
         try:
             q = db.query(ServiceMetric).filter(ServiceMetric.tenant_id == tenant_id)
@@ -64,7 +109,7 @@ class ServiceMetricsService:
         finally:
             db.close()
 
-    def summary_day(self, tenant_id: int, date_from: date, date_to: date) -> list[dict[str, Any]]:
+    def summary_day(self, tenant_id: int, date_from: date, date_to: date) -> list[SummaryDayRow]:
         db = get_session()
         try:
             q = db.query(
@@ -77,12 +122,12 @@ class ServiceMetricsService:
                 func.sum(ServiceMetric.leftover_qty_kg).label("leftover_qty_kg")
             ).filter(ServiceMetric.tenant_id == tenant_id, ServiceMetric.date >= date_from, ServiceMetric.date <= date_to)
             q = q.group_by(ServiceMetric.date, ServiceMetric.unit_id, ServiceMetric.meal)
-            out = []
+            out: list[SummaryDayRow] = []
             for row in q.all():
                 served_g_per_guest = None
                 if row.guest_count and row.served_qty_kg:
                     served_g_per_guest = (row.served_qty_kg * 1000.0) / row.guest_count
-                out.append({
+                out.append({  # type: ignore[arg-type]
                     "date": row.d.isoformat(),
                     "unit_id": row.unit_id,
                     "meal": row.meal,
@@ -97,16 +142,20 @@ class ServiceMetricsService:
             db.close()
 
     # --- Helpers ---
-    def _normalize_row(self, r: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_row(self, r: IngestRow) -> dict[str, Any]:  # validated normalized dict with concrete python types
         required = ["unit_id","date","meal"]
         for f in required:
             if f not in r:
                 raise ValueError(f"missing field {f}")
+        if "date" not in r:
+            raise ValueError("missing field date")
         try:
             d = self._parse_date(r["date"])
         except Exception:
             # Hide underlying parsing details for a consistent public error
             raise ValueError("invalid date") from None
+        if "meal" not in r:
+            raise ValueError("missing field meal")
         meal = r["meal"]
         if meal not in {"lunch","dinner","evening"}:
             raise ValueError("invalid meal")
@@ -115,23 +164,25 @@ class ServiceMetricsService:
         if dish_id is None and not category:
             raise ValueError("dish_id or category required")
         guest_count = r.get("guest_count")
-        produced = r.get("produced_qty_kg")
-        served = r.get("served_qty_kg")
-        leftover = r.get("leftover_qty_kg")
+        produced = cast(float | int | None, r.get("produced_qty_kg"))
+        served = cast(float | int | None, r.get("served_qty_kg"))
+        leftover = cast(float | int | None, r.get("leftover_qty_kg"))
         for num_field in ["guest_count","produced_qty_kg","served_qty_kg","leftover_qty_kg"]:
-            v = r.get(num_field)
-            if v is not None and v < 0:
+            v_any = r.get(num_field)
+            if isinstance(v_any, (int, float)) and v_any < 0:
                 raise ValueError(f"{num_field} negative")
-        if produced is not None and served is not None and served > produced:
+        if isinstance(produced, (int, float)) and isinstance(served, (int, float)) and served > produced:
             raise ValueError("served > produced")
-        if produced is not None and leftover is not None and leftover > produced:
+        if isinstance(produced, (int, float)) and isinstance(leftover, (int, float)) and leftover > produced:
             raise ValueError("leftover > produced")
         served_g_per_guest = r.get("served_g_per_guest")
-        if served_g_per_guest is None and guest_count and served:
+        if served_g_per_guest is None and isinstance(guest_count, int) and isinstance(served, (int, float)):
             served_g_per_guest = (served * 1000.0) / guest_count if guest_count > 0 else None
+        if "unit_id" not in r:
+            raise ValueError("missing field unit_id")
         return {
             "unit_id": r["unit_id"],
-            "date": d,
+            "date": d,  # date object (model expects date)
             "meal": meal,
             "dish_id": dish_id,
             "category": category,
@@ -145,7 +196,7 @@ class ServiceMetricsService:
     def _parse_date(self, s: str) -> date:
         return date.fromisoformat(s)
 
-    def _row_dict(self, m: ServiceMetric) -> dict[str, Any]:
+    def _row_dict(self, m: ServiceMetric) -> MetricRow:
         return {
             "date": m.date.isoformat(),
             "unit_id": m.unit_id,

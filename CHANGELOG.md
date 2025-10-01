@@ -56,4 +56,5 @@
 - Added PIE & SIM Ruff rule groups; resolved all simplification warnings in core.
 - Added pre-commit hooks (Ruff lint+format, mypy, merge marker guard).
 - README updated with strict pocket workflow and active modules list.
+ - Added second strict mypy pocket: `core.portion_recommendation_service`, `core.menu_service`, `core.service_metrics_service` (TypedDict structures for menu week view & service metrics rows; refined recommendation output typing).
 

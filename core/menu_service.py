@@ -1,9 +1,25 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypedDict, Dict
 
 from .db import get_session
 from .models import Dish, Menu, MenuVariant
+
+
+class _VariantInfo(TypedDict, total=False):
+    dish_id: int | None
+    dish_name: str | None
+
+
+class _DayMealVariants(TypedDict):
+    # variant_type -> variant info
+    # We can't know variant type keys statically (e.g., 'standard', 'veg') so map of str
+    __root__: Dict[str, _VariantInfo]  # marker not accessed directly; used for documentation
+
+
+class WeekView(TypedDict):
+    menu_id: int | None
+    days: Dict[str, Dict[str, Dict[str, _VariantInfo]]]
 
 
 class MenuServiceDB:
@@ -32,7 +48,7 @@ class MenuServiceDB:
         finally:
             db.close()
 
-    def set_variant(self, tenant_id: int, menu_id: int, day: str, meal: str, variant_type: str, dish_id: int | None):
+    def set_variant(self, tenant_id: int, menu_id: int, day: str, meal: str, variant_type: str, dish_id: int | None) -> int:
         day = day.strip()
         meal = meal.strip()
         variant_type = variant_type.strip()
@@ -53,19 +69,19 @@ class MenuServiceDB:
         finally:
             db.close()
 
-    def get_week_view(self, tenant_id: int, week: int, year: int) -> dict[str, Any]:
+    def get_week_view(self, tenant_id: int, week: int, year: int) -> WeekView:
         db = get_session()
         try:
             menu = db.query(Menu).filter_by(tenant_id=tenant_id, week=week, year=year).first()
             if not menu:
-                return {"menu_id": None, "days": {}}
+                return {"menu_id": None, "days": {}}  # type: ignore[return-value]
             variants = db.query(MenuVariant, Dish).join(Dish, Dish.id == MenuVariant.dish_id, isouter=True).filter(MenuVariant.menu_id == menu.id).all()
-            structure: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
+            structure: dict[str, dict[str, dict[str, _VariantInfo]]] = {}
             for mv, dish in variants:
                 structure.setdefault(mv.day, {}).setdefault(mv.meal, {})[mv.variant_type] = {
                     "dish_id": mv.dish_id,
                     "dish_name": dish.name if dish else None
                 }
-            return {"menu_id": menu.id, "days": structure}
+            return {"menu_id": menu.id, "days": structure}  # type: ignore[return-value]
         finally:
             db.close()

@@ -189,11 +189,17 @@ CI mirrors these checks (lint-type workflow). A green `pre-commit run -a` should
 ### Strict Typing Pockets
 We adopt full `strict = True` mypy gradually via “pockets” — a focused set of modules that must remain 0-error under strict settings. This avoids boiling the ocean while guaranteeing steady quality expansion.
 
-Current strict pocket (all `strict = True` in `mypy.ini`):
-- `core.jwt_utils`
-- `core.rate_limit`
-- `core.audit`
-- `core.db`
+Current strict pockets (all `strict = True` in `mypy.ini`):
+Pocket 1 (foundation):
+ - `core.jwt_utils`
+ - `core.rate_limit`
+ - `core.audit`
+ - `core.db`
+
+Pocket 2 (service layer expansion):
+ - `core.portion_recommendation_service`
+ - `core.menu_service`
+ - `core.service_metrics_service`
 
 Expansion workflow (for a new module, e.g. `core.menu_service`):
 1. Remove (or avoid adding) its `ignore_errors` block in `mypy.ini`.
