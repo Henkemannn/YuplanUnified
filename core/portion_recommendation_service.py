@@ -123,27 +123,30 @@ class PortionRecommendationService:
         db = get_session()
         try:
             since = date.today() - timedelta(days=HISTORY_DAYS)
-            q_base = db.query(ServiceMetric).filter(ServiceMetric.tenant_id == inp.tenant_id, ServiceMetric.date >= since)
+            q = db.query(ServiceMetric).filter(
+                ServiceMetric.tenant_id == inp.tenant_id,
+                ServiceMetric.date >= since,
+                ServiceMetric.served_g_per_guest.isnot(None),
+            )
             if inp.unit_id:
-                q_base = q_base.filter(ServiceMetric.unit_id == inp.unit_id)
-            # Dish or category specificity
+                q = q.filter(ServiceMetric.unit_id == inp.unit_id)
             if inp.dish_id is not None:
-                q_base = q_base.filter(ServiceMetric.dish_id == inp.dish_id)
+                q = q.filter(ServiceMetric.dish_id == inp.dish_id)
             elif inp.category is not None:
-                q_base = q_base.filter(ServiceMetric.category == inp.category)
-            # Only include rows with served_g_per_guest existing
-            rows = [r.served_g_per_guest for r in q_base.filter(ServiceMetric.served_g_per_guest.isnot(None)).all()]
-            rows = [r for r in rows if r is not None]
+                q = q.filter(ServiceMetric.category == inp.category)
+            # Collect non-null floats directly
+            rows_raw = q.all()
+            rows: list[float] = [float(r.served_g_per_guest) for r in rows_raw if r.served_g_per_guest is not None]
             sample_size = len(rows)
             if sample_size < MIN_HISTORY_POINTS:
                 return None, sample_size
-            # Trim extremes (10%) if enough points (>5)
             trimmed = rows
             if sample_size >= 5:
                 k = max(1, int(0.1 * sample_size))
-                trimmed = sorted(rows)[k: sample_size - k] if sample_size - 2 * k > 0 else rows
-            mean_val = sum(trimmed) / len(trimmed) if trimmed else None
-            return (mean_val, sample_size)
+                trimmed_sorted = sorted(rows)
+                trimmed = trimmed_sorted[k: sample_size - k] if sample_size - 2 * k > 0 else rows
+            mean_val: float | None = (sum(trimmed) / len(trimmed)) if trimmed else None
+            return mean_val, sample_size
         finally:
             db.close()
 

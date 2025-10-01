@@ -86,7 +86,7 @@ def decode(token: str, *, secret: str, verify_exp: bool = True) -> DecodedToken:
     return payload
 
 
-def issue_token_pair(*, user_id: int, role: str, tenant_id: int, secret: str, access_ttl: int = DEFAULT_ACCESS_TTL, refresh_ttl: int = DEFAULT_REFRESH_TTL) -> tuple[str,str,str]:
+def issue_token_pair(*, user_id: int, role: str, tenant_id: int, secret: str, access_ttl: int = DEFAULT_ACCESS_TTL, refresh_ttl: int = DEFAULT_REFRESH_TTL) -> tuple[str, str, str]:
     jti = generate_jti()
     access = encode({"sub": user_id, "role": role, "tenant_id": tenant_id, "jti": generate_jti(), "type": "access"}, secret=secret, ttl=access_ttl)
     refresh = encode({"sub": user_id, "role": role, "tenant_id": tenant_id, "jti": jti, "type": "refresh"}, secret=secret, ttl=refresh_ttl)

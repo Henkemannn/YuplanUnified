@@ -7,10 +7,12 @@ consistent.
 """
 from __future__ import annotations
 
+from typing import Any
+from sqlalchemy.orm import Session
 from .models import Task, TaskStatusTransition
 
 
-def log_task_status_transition(db, task: Task, old_status: str | None, new_status: str, user_id: int | None):
+def log_task_status_transition(db: Session, task: Task, old_status: str | None, new_status: str, user_id: int | None) -> None:
     """Persist a TaskStatusTransition if there is a real status change.
 
     Parameters:
