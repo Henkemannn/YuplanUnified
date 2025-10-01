@@ -3,19 +3,22 @@ import sys
 
 import pytest
 
-# Ensure project root on path BEFORE importing application modules
+# Path setup before any project imports to satisfy E402
 ROOT = os.path.dirname(__file__)
 PARENT = os.path.abspath(os.path.join(ROOT, ".."))
-if PARENT not in sys.path:
+if PARENT not in sys.path:  # pragma: no cover - environment dependent
     sys.path.insert(0, PARENT)
 
-from core.app_factory import create_app
-from core.db import create_all
-from core.models import Tenant  # ensure model imported for metadata
+def _lazy_imports():  # isolate heavy imports & satisfy lint ordering
+    from core.app_factory import create_app  # noqa: E402
+    from core.db import create_all  # noqa: E402
+    from core.models import Tenant  # noqa: E402
+    return create_app, create_all, Tenant
 
 
 @pytest.fixture(scope="session")
 def app_session(tmp_path_factory):
+    create_app, create_all, Tenant = _lazy_imports()
     db_file = tmp_path_factory.mktemp("db") / "test_app.db"
     url = f"sqlite:///{db_file}"
     app = create_app({"TESTING": True, "SECRET_KEY": "test", "database_url": url, "FORCE_DB_REINIT": True})

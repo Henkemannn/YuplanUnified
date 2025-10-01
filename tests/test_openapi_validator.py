@@ -8,8 +8,10 @@ def test_openapi_validator_passes(client_admin):
 
 
 def test_openapi_invalid_spec_raises():
-    # Missing required info.version; validate should raise an exception for invalid spec
-    with pytest.raises(Exception):
+    # Missing required info.version; validator raises a library-specific error type.
+    # We keep a broad Exception catch for now because openapi-spec-validator versions differ in exception class.
+    # Lint B017 suppressed via per-file ignore.
+    with pytest.raises(Exception):  # noqa: B017
         validate({
             "openapi": "3.0.3",
             "info": {"title": "x"},  # version missing
