@@ -4,10 +4,10 @@ Generates slots exactly per business rules; no templates, no inference.
 """
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import List, Iterable, Optional
-import sqlite3
+from typing import Iterable, List, Optional
 
 
 def _iso(dt: datetime) -> str:

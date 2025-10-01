@@ -1,15 +1,14 @@
-import os
-import sqlite3
-import tempfile
 import pathlib
-import json
-import pytest
+import sqlite3
 
 # Lägg till projektroten i sys.path så att rotation.py hittas
 import sys
-import pathlib
+
+import pytest
+
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 import rotation  # vi monkeypatchar DB_PATH
+
 # Viktigt: app importeras efter att DB_PATH är satt i varje test via fixture
 
 SCHEMA_SQL = """

@@ -1,9 +1,10 @@
 import pytest
 from flask import Flask
+from werkzeug.security import generate_password_hash
+
 from core.app_factory import create_app
 from core.db import get_session
-from core.models import Tenant, User, Task
-from werkzeug.security import generate_password_hash
+from core.models import Tenant, User
 
 ALLOWED = ["blocked","cancelled","doing","done","todo"]  # alphabetical
 
@@ -21,62 +22,62 @@ def seeded_admin():
     try:
         tenant = db.query(Tenant).first()
         if not tenant:
-            tenant = Tenant(name='T1')
+            tenant = Tenant(name="T1")
             db.add(tenant); db.commit(); db.refresh(tenant)
-        admin = db.query(User).filter_by(email='admin_status_ext@example.com').first()
+        admin = db.query(User).filter_by(email="admin_status_ext@example.com").first()
         if not admin:
-            admin = User(tenant_id=tenant.id, email='admin_status_ext@example.com', password_hash=generate_password_hash('pw'), role='admin', unit_id=None)
+            admin = User(tenant_id=tenant.id, email="admin_status_ext@example.com", password_hash=generate_password_hash("pw"), role="admin", unit_id=None)
             db.add(admin); db.commit(); db.refresh(admin)
-        return {'tenant': tenant, 'admin': admin}
+        return {"tenant": tenant, "admin": admin}
     finally:
         db.close()
 
-def login(client, email, password='pw'):
-    return client.post('/auth/login', json={'email': email, 'password': password})
+def login(client, email, password="pw"):
+    return client.post("/auth/login", json={"email": email, "password": password})
 
 
 def test_post_201_and_location(client, seeded_admin):
-    rv = login(client, 'admin_status_ext@example.com'); assert rv.status_code == 200
-    rv = client.post('/tasks/', json={'title': 'A new task'})
+    rv = login(client, "admin_status_ext@example.com"); assert rv.status_code == 200
+    rv = client.post("/tasks/", json={"title": "A new task"})
     assert rv.status_code == 201
-    loc = rv.headers.get('Location')
-    assert loc and loc.startswith('/tasks/')
-    body = rv.get_json(); assert body['task']['status'] == 'todo'
+    loc = rv.headers.get("Location")
+    assert loc and loc.startswith("/tasks/")
+    body = rv.get_json(); assert body["task"]["status"] == "todo"
 
 
 def test_patch_accepts_all_statuses(client, seeded_admin):
-    rv = login(client, 'admin_status_ext@example.com'); assert rv.status_code == 200
+    rv = login(client, "admin_status_ext@example.com"); assert rv.status_code == 200
     # create base
-    rv = client.post('/tasks/', json={'title': 'Base'})
-    task_id = rv.get_json()['task']['id']
+    rv = client.post("/tasks/", json={"title": "Base"})
+    task_id = rv.get_json()["task"]["id"]
     for status in ALLOWED:
-        rv2 = client.put(f'/tasks/{task_id}', json={'status': status})
+        rv2 = client.put(f"/tasks/{task_id}", json={"status": status})
         assert rv2.status_code == 200
-        assert rv2.get_json()['task']['status'] == status
+        assert rv2.get_json()["task"]["status"] == status
 
 
 def test_invalid_status_lists_allowed(client, seeded_admin):
-    rv = login(client, 'admin_status_ext@example.com'); assert rv.status_code == 200
-    rv = client.post('/tasks/', json={'title': 'Base2'})
-    task_id = rv.get_json()['task']['id']
-    rv = client.put(f'/tasks/{task_id}', json={'status': 'inprogress'})
+    rv = login(client, "admin_status_ext@example.com"); assert rv.status_code == 200
+    rv = client.post("/tasks/", json={"title": "Base2"})
+    task_id = rv.get_json()["task"]["id"]
+    rv = client.put(f"/tasks/{task_id}", json={"status": "inprogress"})
     assert rv.status_code == 400
-    msg = rv.get_json()['message'].lower()
+    msg = rv.get_json()["message"].lower()
     # ensure alphabetical allowed list snippet present
     for token in ALLOWED:
         assert token in msg
 
 
 def test_legacy_done_mapping(client, seeded_admin):
-    rv = login(client, 'admin_status_ext@example.com'); assert rv.status_code == 200
-    rv = client.post('/tasks/', json={'title': 'Legacy1', 'done': True})
+    rv = login(client, "admin_status_ext@example.com"); assert rv.status_code == 200
+    rv = client.post("/tasks/", json={"title": "Legacy1", "done": True})
     assert rv.status_code == 201
-    data = rv.get_json()['task']
-    assert data['done'] is True and data['status'] == 'done'
-    task_id = data['id']
+    data = rv.get_json()["task"]
+    assert data["done"] is True and data["status"] == "done"
+    task_id = data["id"]
     # Switch back via status
-    rv2 = client.put(f'/tasks/{task_id}', json={'status': 'todo'})
+    rv2 = client.put(f"/tasks/{task_id}", json={"status": "todo"})
     assert rv2.status_code == 200
-    d2 = rv2.get_json()['task']
-    assert d2['status'] == 'todo' and d2['done'] is False
+    d2 = rv2.get_json()["task"]
+    assert d2["status"] == "todo" and d2["done"] is False
 

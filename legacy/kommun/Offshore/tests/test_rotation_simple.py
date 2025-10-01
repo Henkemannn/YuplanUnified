@@ -1,4 +1,3 @@
-from datetime import datetime
 import sqlite3
 
 import rotation_simple as rs

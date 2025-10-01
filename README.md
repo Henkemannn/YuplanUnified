@@ -201,6 +201,12 @@ Pocket 2 (service layer expansion):
  - `core.menu_service`
  - `core.service_metrics_service`
 
+Pocket 3 (auth & flags hardening):
+ - `core.auth`
+ - `core.feature_flags`
+ - Token payload `AccessTokenPayload` / `RefreshTokenPayload` with explicit required claims & issuer literal.
+ - Feature flag registry now typed (`FlagDefinition`, `FlagState`) with safe idempotent `add()` supporting string shorthand.
+
 Expansion workflow (for a new module, e.g. `core.menu_service`):
 1. Remove (or avoid adding) its `ignore_errors` block in `mypy.ini`.
 2. Add a `[mypy-core.menu_service]` section with `strict = True`.
@@ -216,6 +222,17 @@ Guidelines:
 * If a dependency is untyped and noisy, isolate usage behind a thin, typed wrapper instead of sprinkling `# type: ignore`.
 
 Tracking: Each added pocket should update this list and optionally a CHANGELOG entry under “Internal”.
+
+### Definition of Done (Typing / Quality PRs)
+For any PR expanding strict typing or touching security-critical code:
+1. All modified modules pass `mypy` (0 new errors) and strict pocket modules remain clean.
+2. `ruff check .` introduces no new violations (run with `--fix` locally first).
+3. New data structures expressed via `TypedDict` / `Literal` where shape or finite domain matters.
+4. Negative path tests added for security & edge conditions (e.g., missing JWT claims, expired/nbf, unknown feature flag).
+5. README & CHANGELOG updated when adding/removing a strict pocket or altering token / flag semantics.
+6. PR description lists which pocket(s) affected and summarizes decisions (link or add entry in `DECISIONS.md`).
+7. No unexplained `# type: ignore`; any remaining includes rationale comment.
+8. Fast pocket-only type workflow (GH Action) green before requesting review.
 
 ---
 

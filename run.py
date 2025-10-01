@@ -3,9 +3,10 @@ Usage: python run.py  (reads .env if present)
 Set DEV_CREATE_ALL=1 to auto-create tables (development only).
 """
 from __future__ import annotations
-import os
-from core import create_app  # type: ignore
+
 from dotenv import load_dotenv
+
+from core import create_app  # type: ignore
 
 load_dotenv()
 

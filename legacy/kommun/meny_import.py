@@ -2,9 +2,10 @@
 # Proprietary and confidential. Unauthorized copying, distribution or use is strictly prohibited.
 # Menyimport-funktionalitet för Yuplan
 import re
+from typing import Dict, List, Optional, Tuple
+
 from docx import Document
-import datetime
-from typing import Dict, List, Tuple, Optional
+
 
 class MenyImporter:
     """Hanterar import av menyer från Word-dokument"""
@@ -20,7 +21,7 @@ class MenyImporter:
             # Extrahera all text från dokumentet, splitta alltid på \n
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
-                    for line in paragraph.text.strip().split('\n'):
+                    for line in paragraph.text.strip().split("\n"):
                         if line.strip():
                             content.append(line.strip())
             # Extrahera text från tabeller också
@@ -28,7 +29,7 @@ class MenyImporter:
                 for row in table.rows:
                     for cell in row.cells:
                         if cell.text.strip():
-                            for line in cell.text.strip().split('\n'):
+                            for line in cell.text.strip().split("\n"):
                                 if line.strip():
                                     content.append(line.strip())
             print("DEBUG: Inläst content från docx:")
@@ -36,14 +37,14 @@ class MenyImporter:
                 print(repr(row))
             return self.analyze_multiweek_menu_content(content)
         except Exception as e:
-            return {'error': f'Kunde inte läsa Word-dokument: {str(e)}'}
+            return {"error": f"Kunde inte läsa Word-dokument: {str(e)}"}
     def split_content_by_weeks(self, content: List[str]) -> List[Tuple[int, List[str]]]:
         """Splitta content till [(week_number, [lines...]), ...]"""
         week_patterns = [
-            r'vecka\s*[:\.]?\s*(\d+)',
-            r'v[\.:\s]*(\d+)',
-            r'v\.\s*(\d+)',
-            r'week\s+(\d+)',
+            r"vecka\s*[:\.]?\s*(\d+)",
+            r"v[\.:\s]*(\d+)",
+            r"v\.\s*(\d+)",
+            r"week\s+(\d+)",
         ]
         week_sections = []
         current_week = None
@@ -73,26 +74,26 @@ class MenyImporter:
         week_sections = self.split_content_by_weeks(content)
         if not week_sections:
             return {
-                'success': False,
-                'error': 'Kunde inte hitta något veckonummer i dokumentet. Ange vecka manuellt.'
+                "success": False,
+                "error": "Kunde inte hitta något veckonummer i dokumentet. Ange vecka manuellt."
             }
         all_weeks = {}
         for week_num, week_lines in week_sections:
             daily_menus = self.extract_daily_menus(week_lines)
             all_weeks[week_num] = daily_menus
         return {
-            'weeks': all_weeks,
-            'success': True,
-            'message': f'Framgångsrikt importerade menyer för veckor: {', '.join(str(w) for w in all_weeks.keys())}'
+            "weeks": all_weeks,
+            "success": True,
+            "message": f"Framgångsrikt importerade menyer för veckor: {', '.join(str(w) for w in all_weeks.keys())}"
         }
     
     def detect_week_number(self, content: List[str]) -> Optional[int]:
         """Identifierar veckonummer från menytext, t.ex. 'V.1', 'v1', 'vecka 1'. Returnerar None om inget hittas."""
         week_patterns = [
-            r'vecka\s*[:\.]?\s*(\d+)',
-            r'v[\.:\s]*(\d+)',
-            r'v\.\s*(\d+)',
-            r'week\s+(\d+)',
+            r"vecka\s*[:\.]?\s*(\d+)",
+            r"v[\.:\s]*(\d+)",
+            r"v\.\s*(\d+)",
+            r"week\s+(\d+)",
         ]
         for line in content:
             line_lower = line.lower()
@@ -105,44 +106,44 @@ class MenyImporter:
         return None
     
     def extract_daily_menus(self, content: List[str]) -> Dict[str, Dict[str, str]]:
-        days = ['måndag', 'tisdag', 'onsdag', 'torsdag', 'fredag', 'lördag', 'söndag']
-        day_abbrev = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön']
+        days = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"]
+        day_abbrev = ["mån", "tis", "ons", "tor", "fre", "lör", "sön"]
         menus = {day: {} for day in days}
         current_day = None
         current_menu = {}
         meny_types = [
-            ("Alt1", re.compile(r'^(Alt\s*1:|Alternativ\s*1:|Lunch:)', re.IGNORECASE)),
-            ("Alt2", re.compile(r'^(Alt\s*2:|Alternativ\s*2:)', re.IGNORECASE)),
-            ("Dessert", re.compile(r'^(Dessert:)', re.IGNORECASE)),
-            ("Kväll", re.compile(r'^(Kväll:)', re.IGNORECASE)),
+            ("Alt1", re.compile(r"^(Alt\s*1:|Alternativ\s*1:|Lunch:)", re.IGNORECASE)),
+            ("Alt2", re.compile(r"^(Alt\s*2:|Alternativ\s*2:)", re.IGNORECASE)),
+            ("Dessert", re.compile(r"^(Dessert:)", re.IGNORECASE)),
+            ("Kväll", re.compile(r"^(Kväll:)", re.IGNORECASE)),
         ]
         def normalize_day_line(s):
-            s = s.replace('\u00a0', ' ')
-            s = s.replace('\u200b', '')
-            s = s.replace('\uff1a', ':')
-            s = s.replace('\u0589', ':')
-            s = s.replace('\u2236', ':')
-            s = s.replace('\u02d0', ':')
-            s = s.replace('\u05c3', ':')
-            s = s.replace('\ufe55', ':')
-            s = s.replace('\u003a', ':')
-            s = re.sub(r'\s+', ' ', s)
+            s = s.replace("\u00a0", " ")
+            s = s.replace("\u200b", "")
+            s = s.replace("\uff1a", ":")
+            s = s.replace("\u0589", ":")
+            s = s.replace("\u2236", ":")
+            s = s.replace("\u02d0", ":")
+            s = s.replace("\u05c3", ":")
+            s = s.replace("\ufe55", ":")
+            s = s.replace("\u003a", ":")
+            s = re.sub(r"\s+", " ", s)
             return s.strip().lower()
         norm_days = [normalize_day_line(day) for day in days]
         norm_abbrs = [normalize_day_line(abbr) for abbr in day_abbrev]
         for idx, line in enumerate(content):
             print(f"PARSER DEBUG: Rad {idx}: {repr(line)}")
-            for subline in line.split('\n'):
-                line_stripped = subline.rstrip('\r\n')
+            for subline in line.split("\n"):
+                line_stripped = subline.rstrip("\r\n")
                 line_clean = line_stripped.strip()
                 norm_line = normalize_day_line(line_clean)
                 print(f"  Subrad: {repr(line_clean)} | Normaliserad: {repr(norm_line)}")
                 day_found = None
                 day_match = None
                 for i, norm_day in enumerate(norm_days):
-                    m = re.match(rf'^{re.escape(norm_day)}\s*[:.\-–—]?\s*(.*)$', norm_line)
+                    m = re.match(rf"^{re.escape(norm_day)}\s*[:.\-–—]?\s*(.*)$", norm_line)
                     if not m:
-                        m = re.match(rf'^{re.escape(norm_abbrs[i])}\s*[:.\-–—]?\s*(.*)$', norm_line)
+                        m = re.match(rf"^{re.escape(norm_abbrs[i])}\s*[:.\-–—]?\s*(.*)$", norm_line)
                     if m:
                         day_found = days[i]
                         day_match = m
@@ -154,7 +155,7 @@ class MenyImporter:
                         menus[current_day] = current_menu if current_menu else {}
                     current_day = day_found
                     current_menu = {}
-                    rest = day_match.group(1).strip() if day_match else ''
+                    rest = day_match.group(1).strip() if day_match else ""
                     if rest:
                         line_clean2 = rest
                         found_type = None
@@ -200,15 +201,15 @@ class MenyImporter:
         week_number = self.detect_week_number(content)
         if week_number is None:
             return {
-                'success': False,
-                'error': 'Kunde inte hitta något veckonummer i dokumentet. Ange vecka manuellt.'
+                "success": False,
+                "error": "Kunde inte hitta något veckonummer i dokumentet. Ange vecka manuellt."
             }
         daily_menus = self.extract_daily_menus(content)
         return {
-            'week': week_number,
-            'menus': daily_menus,
-            'success': True,
-            'message': f'Framgångsrikt importerade menyer för vecka {week_number}'
+            "week": week_number,
+            "menus": daily_menus,
+            "success": True,
+            "message": f"Framgångsrikt importerade menyer för vecka {week_number}"
         }
 
 # Hjälpfunktioner för Flask-integration
@@ -220,13 +221,13 @@ def save_imported_menus(conn, week: int, menus: Dict[str, Dict[str, str]]):
 
         # Map full day names to abbreviations
         day_map = {
-            'måndag': 'Mån',
-            'tisdag': 'Tis',
-            'onsdag': 'Ons',
-            'torsdag': 'Tors',
-            'fredag': 'Fre',
-            'lördag': 'Lör',
-            'söndag': 'Sön',
+            "måndag": "Mån",
+            "tisdag": "Tis",
+            "onsdag": "Ons",
+            "torsdag": "Tors",
+            "fredag": "Fre",
+            "lördag": "Lör",
+            "söndag": "Sön",
         }
 
         # Lägg till nya menyer
@@ -236,25 +237,25 @@ def save_imported_menus(conn, week: int, menus: Dict[str, Dict[str, str]]):
             dag_lc = dag.lower()
             # Om dag redan är förkortad, använd den, annars mappa
             dag_abbr = day_map.get(dag_lc, reverse_day_map.get(dag, dag))
-            if menu_data.get('Alt1'):
+            if menu_data.get("Alt1"):
                 conn.execute(
                     "INSERT INTO veckomeny (vecka, dag, alt_typ, menytext) VALUES (?, ?, ?, ?)",
-                    (week, dag_abbr, 'Alt1', menu_data['Alt1'].strip())
+                    (week, dag_abbr, "Alt1", menu_data["Alt1"].strip())
                 )
-            if menu_data.get('Alt2'):
+            if menu_data.get("Alt2"):
                 conn.execute(
                     "INSERT INTO veckomeny (vecka, dag, alt_typ, menytext) VALUES (?, ?, ?, ?)",
-                    (week, dag_abbr, 'Alt2', menu_data['Alt2'].strip())
+                    (week, dag_abbr, "Alt2", menu_data["Alt2"].strip())
                 )
-            if menu_data.get('Dessert'):
+            if menu_data.get("Dessert"):
                 conn.execute(
                     "INSERT INTO veckomeny (vecka, dag, alt_typ, menytext) VALUES (?, ?, ?, ?)",
-                    (week, dag_abbr, 'Dessert', menu_data['Dessert'].strip())
+                    (week, dag_abbr, "Dessert", menu_data["Dessert"].strip())
                 )
-            if menu_data.get('Kväll'):
+            if menu_data.get("Kväll"):
                 conn.execute(
                     "INSERT INTO veckomeny (vecka, dag, alt_typ, menytext) VALUES (?, ?, ?, ?)",
-                    (week, dag_abbr, 'Kväll', menu_data['Kväll'].strip())
+                    (week, dag_abbr, "Kväll", menu_data["Kväll"].strip())
                 )
 
         conn.commit()
@@ -269,15 +270,15 @@ def process_uploaded_menu(file_path: str, db_connection):
     importer = MenyImporter()
     result = importer.parse_word_document(file_path)
     
-    if result.get('success'):
+    if result.get("success"):
         success = save_imported_menus(
             db_connection, 
-            result['week'], 
-            result['menus']
+            result["week"], 
+            result["menus"]
         )
         if success:
-            result['saved'] = True
+            result["saved"] = True
         else:
-            result['error'] = 'Kunde inte spara till databas'
+            result["error"] = "Kunde inte spara till databas"
     
     return result

@@ -6,29 +6,37 @@ Implements a simple 2-week base schedule builder and apply-to-6-cooks flow.
 """
 from __future__ import annotations
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session, flash, send_file
-import json
-import re
-from datetime import datetime, timedelta
-import sqlite3
-import os
-import secrets
-import rotation
-from werkzeug.utils import secure_filename
 import csv
 import io
-import rotation_simple as rs
+import json
+import os
+import secrets
+import sqlite3
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-import time
-import itertools
-from typing import Optional, List, Dict, Any
+
+import rotation
+import rotation_simple as rs
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
+from werkzeug.utils import secure_filename
 
 # Lazy import blueprint after app init later (avoid circular at top) - we'll register after app object creation.
 try:
     from docx import Document  # python-docx for DOCX generation
     try:
-        from docx.shared import Inches, Pt, Cm
+        from docx.shared import Cm, Inches, Pt
     except Exception:
         Inches = Pt = Cm = None
     try:
@@ -46,16 +54,16 @@ except Exception:
 
 app = Flask(__name__)
 # Force template auto-reload even when debug=False so UI edits (dashboard/planning hub) show immediately after restart
-app.config.setdefault('TEMPLATES_AUTO_RELOAD', True)
+app.config.setdefault("TEMPLATES_AUTO_RELOAD", True)
 try:
     app.jinja_env.auto_reload = True
 except Exception:
     pass
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key")
-app.config['DEMO_MODE'] = os.environ.get('DEMO_MODE', '0') == '1'
+app.config["DEMO_MODE"] = os.environ.get("DEMO_MODE", "0") == "1"
 
 def is_demo():
-    return bool(app.config.get('DEMO_MODE'))
+    return bool(app.config.get("DEMO_MODE"))
 """ NOTE:
 Previously the waste/service blueprint was imported & registered here before get_db was defined.
 Because waste.py did `from app import get_db` at module import time, this caused an AttributeError
@@ -107,14 +115,14 @@ def _demo_seed_week(db: sqlite3.Connection):
         except Exception:
             pass
         dishes = [
-            ('Fisk Grateng','fisk'),
-            ('Laks Ovnsbakt','fisk'),
-            ('Biff Stroganoff','kott'),
-            ('Kylling Gryte','kott'),
-            ('Grønnsakssuppe','soppa'),
-            ('Tomatsuppe','soppa'),
-            ('Quinoa Salat','extra'),
-            ('Ovnsbakt Blomkål','extra'),
+            ("Fisk Grateng","fisk"),
+            ("Laks Ovnsbakt","fisk"),
+            ("Biff Stroganoff","kott"),
+            ("Kylling Gryte","kott"),
+            ("Grønnsakssuppe","soppa"),
+            ("Tomatsuppe","soppa"),
+            ("Quinoa Salat","extra"),
+            ("Ovnsbakt Blomkål","extra"),
         ]
         for name, cat in dishes:
             slug = _slugify_dish(name)
@@ -125,9 +133,9 @@ def _demo_seed_week(db: sqlite3.Connection):
         # Map a simple 5-day rotation (menu_index=1)
         try:
             for weekday in range(5):  # Mon-Fri
-                for meal in ('lunsj','middag'):
+                for meal in ("lunsj","middag"):
                     # Pick deterministic dish per category
-                    for cat in ('soppa','fisk','kott','extra'):
+                    for cat in ("soppa","fisk","kott","extra"):
                         row = db.execute("SELECT id FROM dish_catalog WHERE rig_id=? AND LOWER(name) LIKE ? LIMIT 1", (rig_id, f"%{cat[0:3]}%"))
                         drow = row.fetchone()
                         if not drow:
@@ -147,8 +155,8 @@ def _demo_seed_week(db: sqlite3.Connection):
         for day_offset in range(7):
             d = today - timedelta(days=day_offset)
             guest_base = 60 - day_offset*2
-            for meal in ('lunsj','middag'):
-                for cat, base_portion in (('fisk',0.145),('kott',0.165),('soppa',0.20),('extra',0.11)):
+            for meal in ("lunsj","middag"):
+                for cat, base_portion in (("fisk",0.145),("kott",0.165),("soppa",0.20),("extra",0.11)):
                     produced = round(base_portion * guest_base * 1.05, 2)
                     served = round(base_portion * guest_base, 2)
                     leftover = max(0.0, round(produced - served, 2))
@@ -172,25 +180,25 @@ def _demo_guard():
     except Exception:
         pass
     # Anonymize session derived display name
-    if session.get('user_name') and session['user_name'] != 'Demo Bruker':
-        session['user_name'] = 'Demo Bruker'
+    if session.get("user_name") and session["user_name"] != "Demo Bruker":
+        session["user_name"] = "Demo Bruker"
     # Block destructive endpoints (placeholder names, adjust as real endpoints exist)
-    destructive_paths = ('/reset', '/admin/delete', '/superuser', '/run-migration')
+    destructive_paths = ("/reset", "/admin/delete", "/superuser", "/run-migration")
     if request.path.startswith(destructive_paths):
-        return jsonify({'ok': False, 'error': 'Demo-läge: blokkert', 'demo': True}), 403
+        return jsonify({"ok": False, "error": "Demo-läge: blokkert", "demo": True}), 403
     # Fake write responses for unsafe modifications if not explicitly allowed
-    if request.method in ('POST','DELETE','PUT','PATCH'):
+    if request.method in ("POST","DELETE","PUT","PATCH"):
         # Allow login attempts to proceed; block others except service/log which we fake-store
-        if request.path.endswith('/service/log'):
-            return jsonify({'ok': True, 'demo': True, 'note': 'Ingen reell lagring'}), 200
+        if request.path.endswith("/service/log"):
+            return jsonify({"ok": True, "demo": True, "note": "Ingen reell lagring"}), 200
         # Allow /login /register
-        if '/login' in request.path or '/register' in request.path:
+        if "/login" in request.path or "/register" in request.path:
             return None
-        return jsonify({'ok': False, 'error': 'Demo-läge: skriveblokk', 'demo': True}), 403
+        return jsonify({"ok": False, "error": "Demo-läge: skriveblokk", "demo": True}), 403
 
 @app.context_processor
 def inject_demo_flag():
-    return {'DEMO_MODE': is_demo()}
+    return {"DEMO_MODE": is_demo()}
 
 """Marketing landing + health.
 
@@ -201,14 +209,14 @@ made debugging 404 reports harder. We collapse to a single /landing and a
 single '/' route (the canonical one at bottom handling auth redirects).
 """
 
-@app.route('/ping')
+@app.route("/ping")
 def ping():
-    return jsonify({'ok': True, 'msg': 'alive'})
+    return jsonify({"ok": True, "msg": "alive"})
 
 # --- Deferred blueprint registration to avoid circular import timing issues ---
 try:
     from waste import waste_bp  # waste.py can now safely import get_db if needed
-    if not any(bp.url_prefix == '/service' for bp in app.blueprints.values()):  # minimal idempotency guard
+    if not any(bp.url_prefix == "/service" for bp in app.blueprints.values()):  # minimal idempotency guard
         app.register_blueprint(waste_bp)
 except Exception as _bp_err:
     # Surface a hint during testing/debug instead of silent pass
@@ -217,25 +225,25 @@ except Exception as _bp_err:
     except Exception:
         pass
 
-@app.route('/landing')
+@app.route("/landing")
 def landing_page():
-    if session.get('user_id'):
+    if session.get("user_id"):
         try:
-            return redirect(url_for('dashboard'))
+            return redirect(url_for("dashboard"))
         except Exception:
             pass
-    return render_template('landing.html')
+    return render_template("landing.html")
 
-@app.route('/coming-soon')
+@app.route("/coming-soon")
 def coming_soon():
     """Public marketing placeholder for combined Offshore/Kommun offering."""
-    return render_template('coming_soon.html')
+    return render_template("coming_soon.html")
 
-@app.route('/_routes')
+@app.route("/_routes")
 def _list_routes():
     out = []
     for r in app.url_map.iter_rules():
-        r_methods = getattr(r, 'methods', None)
+        r_methods = getattr(r, "methods", None)
         if r_methods:
             try:
                 methods_list = sorted([m for m in r_methods if isinstance(m, str)])
@@ -243,15 +251,15 @@ def _list_routes():
                 methods_list = []
         else:
             methods_list = []
-        out.append({'rule': str(r), 'endpoint': r.endpoint, 'methods': methods_list})
-    return jsonify({'ok': True, 'count': len(out), 'routes': out})
+        out.append({"rule": str(r), "endpoint": r.endpoint, "methods": methods_list})
+    return jsonify({"ok": True, "count": len(out), "routes": out})
 
-@app.route('/clean')
+@app.route("/clean")
 def clean_redirect():
     # Helper for screenshot / presentation mode (adds ?clean=1)
-    if session.get('user_id'):
-        return redirect(url_for('dashboard', clean=1))
-    return redirect(url_for('landing_page', clean=1))
+    if session.get("user_id"):
+        return redirect(url_for("dashboard", clean=1))
+    return redirect(url_for("landing_page", clean=1))
 
 
 # --- Lightweight table ensure helpers (incremental, avoids large refactor now) ---
@@ -316,10 +324,11 @@ def _ensure_prep_tables(db: sqlite3.Connection):
 def _slugify_dish(name: str) -> str:
     if not name:
         return ""
-    import unicodedata, re as _re
-    n = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
+    import re as _re
+    import unicodedata
+    n = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
     n = n.lower()
-    n = _re.sub(r'[^a-z0-9]+', '-', n).strip('-')
+    n = _re.sub(r"[^a-z0-9]+", "-", n).strip("-")
     return n[:120]
 
 
@@ -400,8 +409,8 @@ def _ensure_recipes(db: sqlite3.Connection):
 
 def _normalize_categories(raw: str) -> str:
     if not raw:
-        return ''
-    parts = [p.strip().lower() for p in raw.replace(';', ',').split(',') if p.strip()]
+        return ""
+    parts = [p.strip().lower() for p in raw.replace(";", ",").split(",") if p.strip()]
     # De-duplicate while preserving order
     seen = set()
     ordered = []
@@ -409,143 +418,143 @@ def _normalize_categories(raw: str) -> str:
         if p not in seen:
             seen.add(p)
             ordered.append(p)
-    return ','.join(ordered[:24])  # safety cap
+    return ",".join(ordered[:24])  # safety cap
 
 
-@app.get('/recipes')
+@app.get("/recipes")
 def recipe_list():
-    if not session.get('user_id'):
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
     db = get_db(); _ensure_recipes(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg tilknyttet.', 'warning'); return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
-    q = (request.args.get('q') or '').strip()
-    filter_missing = request.args.get('filter') == 'missing'
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg tilknyttet.", "warning"); return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
+    q = (request.args.get("q") or "").strip()
+    filter_missing = request.args.get("filter") == "missing"
     base_sql = "SELECT r.*, (SELECT COUNT(*) FROM dish_catalog d WHERE d.rig_id=r.rig_id AND d.recipe_id=r.id) AS link_count FROM recipes r WHERE r.rig_id=?"
     params = [rig_id]
     if q:
         base_sql += " AND r.title LIKE ?"
-        params.append(f'%{q}%')
+        params.append(f"%{q}%")
     base_sql += " ORDER BY r.updated_at DESC LIMIT 400"
     rows = db.execute(base_sql, params).fetchall()
-    recs = [dict(id=r['id'], title=r['title'], link_count=r['link_count'], updated_at=r['updated_at'], categories=(r['categories'] or '')) for r in rows]
+    recs = [dict(id=r["id"], title=r["title"], link_count=r["link_count"], updated_at=r["updated_at"], categories=(r["categories"] or "")) for r in rows]
     # If filter=missing, remove those with links
     if filter_missing:
-        recs = [r for r in recs if not r['link_count']]
-    return render_template('recipe_list.html', recipes=recs, q=q, filter_missing=filter_missing)
+        recs = [r for r in recs if not r["link_count"]]
+    return render_template("recipe_list.html", recipes=recs, q=q, filter_missing=filter_missing)
 
 
-@app.get('/recipes/new')
+@app.get("/recipes/new")
 def recipe_new_form():
-    if not session.get('user_id'):
-        return redirect(url_for('login'))
-    return render_template('recipe_form.html', recipe=None)
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+    return render_template("recipe_form.html", recipe=None)
 
 
-@app.post('/recipes/new')
+@app.post("/recipes/new")
 def recipe_new_submit():
-    if not session.get('user_id'):
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
     db = get_db(); _ensure_recipes(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg.', 'warning'); return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
-    title = (request.form.get('title') or '').strip()
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg.", "warning"); return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
+    title = (request.form.get("title") or "").strip()
     if not title:
-        flash('Tittel kreves.', 'danger'); return redirect(url_for('recipe_new_form'))
-    raw_text = (request.form.get('raw_text') or '').strip()
-    source_url = (request.form.get('source_url') or '').strip() or None
-    notes = (request.form.get('notes') or '').strip() or None
-    base_portions = request.form.get('base_portions') or None
+        flash("Tittel kreves.", "danger"); return redirect(url_for("recipe_new_form"))
+    raw_text = (request.form.get("raw_text") or "").strip()
+    source_url = (request.form.get("source_url") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+    base_portions = request.form.get("base_portions") or None
     try:
         base_portions_val = int(base_portions) if base_portions else None
     except Exception:
         base_portions_val = None
-    raw_categories = request.form.get('categories')
-    categories = _normalize_categories(raw_categories) if raw_categories else ''
-    method_type = (request.form.get('method_type') or 'base').strip().lower()
+    raw_categories = request.form.get("categories")
+    categories = _normalize_categories(raw_categories) if raw_categories else ""
+    method_type = (request.form.get("method_type") or "base").strip().lower()
     db.execute("INSERT INTO recipes(rig_id,title,source_url,raw_text,notes,base_portions,categories,method_type) VALUES(?,?,?,?,?,?,?,?)",
                (rig_id, title, source_url, raw_text, notes, base_portions_val, categories, method_type))
-    rid = db.execute('SELECT last_insert_rowid()').fetchone()[0]
+    rid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     db.commit()
-    flash('Recept opprettet.', 'success')
+    flash("Recept opprettet.", "success")
     # Optional immediate dish link
-    link_dish_id = request.form.get('link_dish_id')
+    link_dish_id = request.form.get("link_dish_id")
     if link_dish_id:
         try:
-            db.execute('UPDATE dish_catalog SET recipe_id=? WHERE id=? AND rig_id=?', (rid, int(link_dish_id), rig_id))
+            db.execute("UPDATE dish_catalog SET recipe_id=? WHERE id=? AND rig_id=?", (rid, int(link_dish_id), rig_id))
             db.commit()
         except Exception:
             pass
-    return redirect(url_for('recipe_detail', recipe_id=rid))
+    return redirect(url_for("recipe_detail", recipe_id=rid))
 
 
-@app.get('/recipes/<int:recipe_id>')
+@app.get("/recipes/<int:recipe_id>")
 def recipe_detail(recipe_id: int):
-    if not session.get('user_id'):
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
     db = get_db(); _ensure_recipes(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg.', 'warning'); return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
-    row = db.execute('SELECT *, (SELECT COUNT(*) FROM dish_catalog d WHERE d.rig_id=? AND d.recipe_id=recipes.id) AS link_count FROM recipes WHERE id=? AND rig_id=?', (rig_id, recipe_id, rig_id)).fetchone()
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg.", "warning"); return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
+    row = db.execute("SELECT *, (SELECT COUNT(*) FROM dish_catalog d WHERE d.rig_id=? AND d.recipe_id=recipes.id) AS link_count FROM recipes WHERE id=? AND rig_id=?", (rig_id, recipe_id, rig_id)).fetchone()
     if not row:
-        flash('Recept ikke funnet.', 'warning'); return redirect(url_for('recipe_list'))
-    linked_dishes = db.execute('SELECT id, name FROM dish_catalog WHERE rig_id=? AND recipe_id=? ORDER BY name COLLATE NOCASE', (rig_id, recipe_id)).fetchall()
-    rec = dict(id=row['id'], title=row['title'], source_url=row['source_url'], raw_text=row['raw_text'], notes=row['notes'], base_portions=row['base_portions'], categories=row['categories'] or '', method_type=row['method_type'] or 'base', link_count=row['link_count'], created_at=row['created_at'], updated_at=row['updated_at'], linked_dishes=[dict(id=d['id'], name=d['name']) for d in linked_dishes])
-    return render_template('recipe_detail.html', recipe=rec)
+        flash("Recept ikke funnet.", "warning"); return redirect(url_for("recipe_list"))
+    linked_dishes = db.execute("SELECT id, name FROM dish_catalog WHERE rig_id=? AND recipe_id=? ORDER BY name COLLATE NOCASE", (rig_id, recipe_id)).fetchall()
+    rec = dict(id=row["id"], title=row["title"], source_url=row["source_url"], raw_text=row["raw_text"], notes=row["notes"], base_portions=row["base_portions"], categories=row["categories"] or "", method_type=row["method_type"] or "base", link_count=row["link_count"], created_at=row["created_at"], updated_at=row["updated_at"], linked_dishes=[dict(id=d["id"], name=d["name"]) for d in linked_dishes])
+    return render_template("recipe_detail.html", recipe=rec)
 
 
-@app.get('/recipes/<int:recipe_id>/edit')
+@app.get("/recipes/<int:recipe_id>/edit")
 def recipe_edit_form(recipe_id: int):
-    if not session.get('user_id'):
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
     db = get_db(); _ensure_recipes(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg.', 'warning'); return redirect(url_for('dashboard'))
-    row = db.execute('SELECT * FROM recipes WHERE id=? AND rig_id=?', (recipe_id, user['rig_id'])).fetchone()
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg.", "warning"); return redirect(url_for("dashboard"))
+    row = db.execute("SELECT * FROM recipes WHERE id=? AND rig_id=?", (recipe_id, user["rig_id"])).fetchone()
     if not row:
-        flash('Recept ikke funnet.', 'warning'); return redirect(url_for('recipe_list'))
-    rec = dict(id=row['id'], title=row['title'], source_url=row['source_url'], raw_text=row['raw_text'], notes=row['notes'], base_portions=row['base_portions'], categories=row['categories'] or '', method_type=row['method_type'] or 'base')
-    return render_template('recipe_form.html', recipe=rec)
+        flash("Recept ikke funnet.", "warning"); return redirect(url_for("recipe_list"))
+    rec = dict(id=row["id"], title=row["title"], source_url=row["source_url"], raw_text=row["raw_text"], notes=row["notes"], base_portions=row["base_portions"], categories=row["categories"] or "", method_type=row["method_type"] or "base")
+    return render_template("recipe_form.html", recipe=rec)
 
 
-@app.post('/recipes/<int:recipe_id>/edit')
+@app.post("/recipes/<int:recipe_id>/edit")
 def recipe_edit_submit(recipe_id: int):
-    if not session.get('user_id'):
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
     db = get_db(); _ensure_recipes(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg.', 'warning'); return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
-    row = db.execute('SELECT id FROM recipes WHERE id=? AND rig_id=?', (recipe_id, rig_id)).fetchone()
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg.", "warning"); return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
+    row = db.execute("SELECT id FROM recipes WHERE id=? AND rig_id=?", (recipe_id, rig_id)).fetchone()
     if not row:
-        flash('Recept ikke funnet.', 'warning'); return redirect(url_for('recipe_list'))
-    title = (request.form.get('title') or '').strip()
+        flash("Recept ikke funnet.", "warning"); return redirect(url_for("recipe_list"))
+    title = (request.form.get("title") or "").strip()
     if not title:
-        flash('Tittel kreves.', 'danger'); return redirect(url_for('recipe_edit_form', recipe_id=recipe_id))
-    raw_text = (request.form.get('raw_text') or '').strip()
-    source_url = (request.form.get('source_url') or '').strip() or None
-    notes = (request.form.get('notes') or '').strip() or None
-    base_portions = request.form.get('base_portions') or None
+        flash("Tittel kreves.", "danger"); return redirect(url_for("recipe_edit_form", recipe_id=recipe_id))
+    raw_text = (request.form.get("raw_text") or "").strip()
+    source_url = (request.form.get("source_url") or "").strip() or None
+    notes = (request.form.get("notes") or "").strip() or None
+    base_portions = request.form.get("base_portions") or None
     try:
         base_portions_val = int(base_portions) if base_portions else None
     except Exception:
         base_portions_val = None
-    raw_categories = request.form.get('categories')
-    categories = _normalize_categories(raw_categories) if raw_categories else ''
-    method_type = (request.form.get('method_type') or 'base').strip().lower()
+    raw_categories = request.form.get("categories")
+    categories = _normalize_categories(raw_categories) if raw_categories else ""
+    method_type = (request.form.get("method_type") or "base").strip().lower()
     db.execute("UPDATE recipes SET title=?, source_url=?, raw_text=?, notes=?, base_portions=?, categories=?, method_type=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND rig_id=?",
                (title, source_url, raw_text, notes, base_portions_val, categories, method_type, recipe_id, rig_id))
     db.commit()
-    flash('Recept oppdatert.', 'success')
-    return redirect(url_for('recipe_detail', recipe_id=recipe_id))
+    flash("Recept oppdatert.", "success")
+    return redirect(url_for("recipe_detail", recipe_id=recipe_id))
 
 
 def _load_menu_settings(db: sqlite3.Connection, rig_id: int):
@@ -555,7 +564,7 @@ def _load_menu_settings(db: sqlite3.Connection, rig_id: int):
     start_week = row[0] or 1
     start_index = row[1] or 1
     try:
-        menu_sheets = json.loads(row[2] or '[]')
+        menu_sheets = json.loads(row[2] or "[]")
     except Exception:
         menu_sheets = []
     return start_week, start_index, menu_sheets
@@ -576,13 +585,13 @@ def _norm_category(raw: str):
 
 
 _DAY_NAME_MAP = {
-    'mandag':0,'monday':0,'maandag':0,'må':0,'måndag':0,
-    'tirsdag':1,'tuesday':1,'ti':1,'tisdag':1,
-    'onsdag':2,'wednesday':2,'ons':2,'onsdag':2,
-    'torsdag':3,'thursday':3,'tor':3,'torsdag':3,'thurs':3,
-    'fredag':4,'friday':4,'fre':4,'fredag':4,
-    'lørdag':5,'lordag':5,'lördag':5,'lørdag':5,'saturday':5,'sat':5,
-    'søndag':6,'sondag':6,'söndag':6,'sunday':6,'sun':6
+    "mandag":0,"monday":0,"maandag":0,"må":0,"måndag":0,
+    "tirsdag":1,"tuesday":1,"ti":1,"tisdag":1,
+    "onsdag":2,"wednesday":2,"ons":2,"onsdag":2,
+    "torsdag":3,"thursday":3,"tor":3,"torsdag":3,"thurs":3,
+    "fredag":4,"friday":4,"fre":4,"fredag":4,
+    "lørdag":5,"lordag":5,"lördag":5,"lørdag":5,"saturday":5,"sat":5,
+    "søndag":6,"sondag":6,"söndag":6,"sunday":6,"sun":6
 }
 
 
@@ -599,17 +608,17 @@ def _rebuild_menu_dish_map(db: sqlite3.Connection, rig_id: int):
     start_week, start_index, menu_sheets = _load_menu_settings(db, rig_id)
     if not menu_sheets:
         return
-    sheets_by_uke = {str(sh.get('uke')): sh for sh in menu_sheets}
+    sheets_by_uke = {str(sh.get("uke")): sh for sh in menu_sheets}
     # Insert dishes
     for uke, sheet in sheets_by_uke.items():
-        for meal_key in ('lunsj','middag'):
+        for meal_key in ("lunsj","middag"):
             for it in (sheet.get(meal_key) or []):
-                dag = it.get('dag')
+                dag = it.get("dag")
                 wd = _weekday_from_label(dag)
                 if wd is None:
                     continue
-                cat = _norm_category(it.get('kategori')) or 'extra'
-                dish_name = (it.get('rett') or '').strip()
+                cat = _norm_category(it.get("kategori")) or "extra"
+                dish_name = (it.get("rett") or "").strip()
                 if not dish_name:
                     continue
                 slug = _slugify_dish(dish_name)
@@ -627,7 +636,7 @@ def _rebuild_menu_dish_map(db: sqlite3.Connection, rig_id: int):
                 # uke value may be string like '1' or 'Uke 1' -> extract first int
                 try:
                     import re as _re
-                    m = _re.search(r'(\d+)', str(uke))
+                    m = _re.search(r"(\d+)", str(uke))
                     menu_index = int(m.group(1)) if m else int(uke)
                 except Exception:
                     continue
@@ -682,29 +691,29 @@ def _backfill_task_dish_ids(db: sqlite3.Connection, rig_id: int, user_id: int | 
     for r in rows:
         try:
             from datetime import datetime as _dt
-            dt = _dt.strptime(r['date'], '%Y-%m-%d').date()
+            dt = _dt.strptime(r["date"], "%Y-%m-%d").date()
             m_idx = _menu_index_for_date(dt, _sw, _si)
             wd = dt.weekday()
             maprow = db.execute(
                 "SELECT dish_id FROM menu_dish_map WHERE rig_id=? AND menu_index=? AND weekday=? AND meal=? AND category=?",
-                (rig_id, m_idx, wd, r['meal'], r['category'])
+                (rig_id, m_idx, wd, r["meal"], r["category"])
             ).fetchone()
             if maprow:
-                db.execute("UPDATE prep_tasks_private SET dish_id=? WHERE id=?", (maprow[0], r['id']))
+                db.execute("UPDATE prep_tasks_private SET dish_id=? WHERE id=?", (maprow[0], r["id"]))
         except Exception:
             continue
     for r in frows:
         try:
             from datetime import datetime as _dt
-            dt = _dt.strptime(r['date'], '%Y-%m-%d').date()
+            dt = _dt.strptime(r["date"], "%Y-%m-%d").date()
             m_idx = _menu_index_for_date(dt, _sw, _si)
             wd = dt.weekday()
             maprow = db.execute(
                 "SELECT dish_id FROM menu_dish_map WHERE rig_id=? AND menu_index=? AND weekday=? AND meal=? AND category=?",
-                (rig_id, m_idx, wd, r['meal'], r['category'])
+                (rig_id, m_idx, wd, r["meal"], r["category"])
             ).fetchone()
             if maprow:
-                db.execute("UPDATE frys_items_private SET dish_id=? WHERE id=?", (maprow[0], r['id']))
+                db.execute("UPDATE frys_items_private SET dish_id=? WHERE id=?", (maprow[0], r["id"]))
         except Exception:
             continue
     db.commit()
@@ -748,18 +757,18 @@ def _compute_recipe_coverage(db: sqlite3.Connection, rig_id: int):
         return {"numerator": 0, "denominator": 0, "percent": 0}
 
 
-@app.get('/planning/overview')
+@app.get("/planning/overview")
 def planning_overview():
-    if not session.get('user_id'):
-        flash('Logg inn kreves.', 'warning')
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        flash("Logg inn kreves.", "warning")
+        return redirect(url_for("login"))
     db = get_db()
-    user_id = session['user_id']
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (user_id,)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg tilknyttet.', 'warning')
-        return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
+    user_id = session["user_id"]
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (user_id,)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg tilknyttet.", "warning")
+        return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
     _ensure_prep_tables(db)
     _ensure_dish_catalog(db)
     _rebuild_menu_dish_map(db, rig_id)
@@ -780,31 +789,31 @@ def planning_overview():
         ORDER BY d.name COLLATE NOCASE
         """, (user_id, rig_id, user_id, rig_id, rig_id)
     ).fetchall()
-    dishes = [dict(dish_id=r['dish_id'], name=r['name'], open_prep=r['open_prep'], total_prep=r['total_prep'], open_frys=r['open_frys'], total_frys=r['total_frys']) for r in rows]
-    return render_template('planning_overview.html', dishes=dishes)
+    dishes = [dict(dish_id=r["dish_id"], name=r["name"], open_prep=r["open_prep"], total_prep=r["total_prep"], open_frys=r["open_frys"], total_frys=r["total_frys"]) for r in rows]
+    return render_template("planning_overview.html", dishes=dishes)
 
 
-@app.get('/planning/dish/<int:dish_id>')
+@app.get("/planning/dish/<int:dish_id>")
 def planning_dish_detail(dish_id: int):
     """Detaljvy for en rett: viser alle prepp- og frysplock-linjer knyttet til dish_id for innlogget bruker.
     Viser melding hvis ingen finnes ennå."""
-    if not session.get('user_id'):
-        flash('Logg inn kreves.', 'warning')
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        flash("Logg inn kreves.", "warning")
+        return redirect(url_for("login"))
     db = get_db()
-    user_id = session['user_id']
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (user_id,)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg tilknyttet.', 'warning')
-        return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
+    user_id = session["user_id"]
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (user_id,)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg tilknyttet.", "warning")
+        return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
     # Sikre katalog og backfill slik at dish_id blir populert for nyeste data
     _ensure_prep_tables(db)
     _ensure_dish_catalog(db)
-    dish_row = db.execute('SELECT id, name, rig_id, recipe_id FROM dish_catalog WHERE id=?', (dish_id,)).fetchone()
-    if not dish_row or dish_row['rig_id'] != rig_id:
-        flash('Rett ikke funnet.', 'warning')
-        return redirect(url_for('planning_overview'))
+    dish_row = db.execute("SELECT id, name, rig_id, recipe_id FROM dish_catalog WHERE id=?", (dish_id,)).fetchone()
+    if not dish_row or dish_row["rig_id"] != rig_id:
+        flash("Rett ikke funnet.", "warning")
+        return redirect(url_for("planning_overview"))
     _backfill_task_dish_ids(db, rig_id, user_id=user_id)
     # Hent prepp og frys
     prep_rows = db.execute(
@@ -817,58 +826,58 @@ def planning_dish_detail(dish_id: int):
     ).fetchall()
     # Gruppér
     from collections import OrderedDict
-    groups: 'OrderedDict[str, dict]' = OrderedDict()
+    groups: OrderedDict[str, dict] = OrderedDict()
     def key(date, meal, category):
         return f"{date}|{meal}|{category}"
     for r in prep_rows:
-        k = key(r['date'], r['meal'], r['category'])
+        k = key(r["date"], r["meal"], r["category"])
         if k not in groups:
             groups[k] = {
-                'date': r['date'], 'meal': r['meal'], 'category': r['category'],
-                'prep': [], 'frys': []
+                "date": r["date"], "meal": r["meal"], "category": r["category"],
+                "prep": [], "frys": []
             }
-        groups[k]['prep'].append(dict(id=r['id'], text=r['text'], done=bool(r['done'])))
+        groups[k]["prep"].append(dict(id=r["id"], text=r["text"], done=bool(r["done"])))
     for r in frys_rows:
-        k = key(r['date'], r['meal'], r['category'])
+        k = key(r["date"], r["meal"], r["category"])
         if k not in groups:
             groups[k] = {
-                'date': r['date'], 'meal': r['meal'], 'category': r['category'],
-                'prep': [], 'frys': []
+                "date": r["date"], "meal": r["meal"], "category": r["category"],
+                "prep": [], "frys": []
             }
-        groups[k]['frys'].append(dict(id=r['id'], item_name=r['item_name'], qty=r['qty'], unit=r['unit'], done=bool(r['done'])))
+        groups[k]["frys"].append(dict(id=r["id"], item_name=r["item_name"], qty=r["qty"], unit=r["unit"], done=bool(r["done"])))
     grouped = list(groups.values())
     # Receptinfo
     _ensure_recipes(db)
     recipe = None
-    if dish_row.get('recipe_id'):
-        r = db.execute('SELECT id, title FROM recipes WHERE id=?', (dish_row['recipe_id'],)).fetchone()
+    if dish_row.get("recipe_id"):
+        r = db.execute("SELECT id, title FROM recipes WHERE id=?", (dish_row["recipe_id"],)).fetchone()
         if r:
-            recipe = dict(id=r['id'], title=r['title'])
+            recipe = dict(id=r["id"], title=r["title"])
     # Kandidater (senaste 8 uppdaterade)
-    candidates = db.execute('SELECT id, title FROM recipes WHERE rig_id=? ORDER BY updated_at DESC LIMIT 8', (rig_id,)).fetchall()
-    cand_list = [dict(id=c['id'], title=c['title']) for c in candidates]
-    return render_template('planning_dish_detail.html', dish=dish_row, groups=grouped, has_any=(len(prep_rows)+len(frys_rows))>0, recipe=recipe, candidates=cand_list)
+    candidates = db.execute("SELECT id, title FROM recipes WHERE rig_id=? ORDER BY updated_at DESC LIMIT 8", (rig_id,)).fetchall()
+    cand_list = [dict(id=c["id"], title=c["title"]) for c in candidates]
+    return render_template("planning_dish_detail.html", dish=dish_row, groups=grouped, has_any=(len(prep_rows)+len(frys_rows))>0, recipe=recipe, candidates=cand_list)
 
 
-@app.post('/dish/<int:dish_id>/link_recipe')
+@app.post("/dish/<int:dish_id>/link_recipe")
 def link_recipe_to_dish(dish_id: int):
-    if not session.get('user_id'):
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
     db = get_db(); _ensure_recipes(db); _ensure_dish_catalog(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg.', 'warning'); return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
-    dish = db.execute('SELECT id FROM dish_catalog WHERE id=? AND rig_id=?', (dish_id, rig_id)).fetchone()
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg.", "warning"); return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
+    dish = db.execute("SELECT id FROM dish_catalog WHERE id=? AND rig_id=?", (dish_id, rig_id)).fetchone()
     if not dish:
-        flash('Rett ikke funnet.', 'warning'); return redirect(url_for('planning_overview'))
-    rid = request.form.get('recipe_id') or ''
+        flash("Rett ikke funnet.", "warning"); return redirect(url_for("planning_overview"))
+    rid = request.form.get("recipe_id") or ""
     if not rid.isdigit():
-        flash('Ugyldig recipe id.', 'warning'); return redirect(url_for('planning_dish_detail', dish_id=dish_id))
-    db.execute('UPDATE dish_catalog SET recipe_id=? WHERE id=? AND rig_id=?', (int(rid), dish_id, rig_id))
+        flash("Ugyldig recipe id.", "warning"); return redirect(url_for("planning_dish_detail", dish_id=dish_id))
+    db.execute("UPDATE dish_catalog SET recipe_id=? WHERE id=? AND rig_id=?", (int(rid), dish_id, rig_id))
     db.commit()
-    flash('Recept kopplat.', 'success')
-    return redirect(url_for('planning_dish_detail', dish_id=dish_id))
+    flash("Recept kopplat.", "success")
+    return redirect(url_for("planning_dish_detail", dish_id=dish_id))
 
 
 
@@ -896,27 +905,27 @@ def _build_docx_modern(rig_name: str, dt, lunch_picked, lunch_all, lunch_glu, lu
     hdr = doc.add_table(rows=2, cols=2)
     hdr.autofit = True
     p = hdr.cell(0, 0).paragraphs[0]
-    p.add_run('Place of business: ').bold = True
-    p.add_run(rig_name or '')
+    p.add_run("Place of business: ").bold = True
+    p.add_run(rig_name or "")
     p2 = hdr.cell(0, 1).paragraphs[0]
-    p2.add_run('Date: ').bold = True
-    p2.add_run(dt.strftime('%Y-%m-%d'))
+    p2.add_run("Date: ").bold = True
+    p2.add_run(dt.strftime("%Y-%m-%d"))
     # empty row for spacing
     hdr.cell(1, 0).merge(hdr.cell(1, 1))
-    hdr.cell(1, 0).paragraphs[0].add_run('')
+    hdr.cell(1, 0).paragraphs[0].add_run("")
 
     # Helper to suffix allergens
     def suf(cat: str, alls: dict, glu: dict, nuts: dict) -> str:
-        alg = (alls.get(cat) or '').strip().replace(' ', '')
-        g = (glu.get(cat) or '').strip()
-        n = (nuts.get(cat) or '').strip()
-        if alg and '1' in [x for x in alg.split(',') if x]:
+        alg = (alls.get(cat) or "").strip().replace(" ", "")
+        g = (glu.get(cat) or "").strip()
+        n = (nuts.get(cat) or "").strip()
+        if alg and "1" in [x for x in alg.split(",") if x]:
             if g:
                 alg = alg + f" [gluten: {g}]"
-        if alg and '8' in [x for x in alg.split(',') if x]:
+        if alg and "8" in [x for x in alg.split(",") if x]:
             if n:
                 alg = alg + f" [nuts: {n}]"
-        return f" ({alg})" if alg else ''
+        return f" ({alg})" if alg else ""
 
     # Two-column main table
     t = doc.add_table(rows=2, cols=2)
@@ -925,53 +934,53 @@ def _build_docx_modern(rig_name: str, dt, lunch_picked, lunch_all, lunch_glu, lu
     lc = t.cell(0, 0)
     for label, cat in (("soup of the day:", "soppa"), ("today’s fish:", "fisk"), ("today’s meat:", "kott")):
         para = lc.add_paragraph()
-        r = para.add_run(label + ' ')
+        r = para.add_run(label + " ")
         r.bold = True
-    para.add_run((lunch_picked.get(cat) or '').strip() + suf(cat, lunch_all, lunch_glu, lunch_nuts))
+    para.add_run((lunch_picked.get(cat) or "").strip() + suf(cat, lunch_all, lunch_glu, lunch_nuts))
     # extra
     para = lc.add_paragraph()
-    r = para.add_run('3. dish/green dish: ')
+    r = para.add_run("3. dish/green dish: ")
     r.bold = True
-    para.add_run((lunch_picked.get('extra') or '').strip() + suf('extra', lunch_all, lunch_glu, lunch_nuts))
+    para.add_run((lunch_picked.get("extra") or "").strip() + suf("extra", lunch_all, lunch_glu, lunch_nuts))
 
     # Dinner cell (0,1)
     rc = t.cell(0, 1)
     for label, cat in (("soup of the day:", "soppa"), ("today’s fish:", "fisk"), ("today’s meat:", "kott")):
         para = rc.add_paragraph()
-        r = para.add_run(label + ' ')
+        r = para.add_run(label + " ")
         r.bold = True
-    para.add_run((dinner_picked.get(cat) or '').strip() + suf(cat, dinner_all, dinner_glu, dinner_nuts))
+    para.add_run((dinner_picked.get(cat) or "").strip() + suf(cat, dinner_all, dinner_glu, dinner_nuts))
     # extra
     para = rc.add_paragraph()
-    r = para.add_run('3. dish/green dish: ')
+    r = para.add_run("3. dish/green dish: ")
     r.bold = True
-    para.add_run((dinner_picked.get('extra') or '').strip() + suf('extra', dinner_all, dinner_glu, dinner_nuts))
+    para.add_run((dinner_picked.get("extra") or "").strip() + suf("extra", dinner_all, dinner_glu, dinner_nuts))
 
     # Add a compact allergen legend
     try:
         icons = {
-            '1': '🥖',  # Gluten
-            '2': '🦐',  # Crustaceans
-            '3': '🥚',  # Eggs
-            '4': '🐟',  # Fish
-            '5': '🥜',  # Peanuts
-            '6': '🌱',  # Soybeans
-            '7': '🥛',  # Milk
-            '8': '🌰',  # Nuts
-            '9': '🥬',  # Celery
-            '10': '🌶️', # Mustard
-            '11': '⚪',  # Sesame
-            '12': 'SO₂', # Sulphites
-            '13': '🌼',  # Lupin
-            '14': '🦑',  # Molluscs
+            "1": "🥖",  # Gluten
+            "2": "🦐",  # Crustaceans
+            "3": "🥚",  # Eggs
+            "4": "🐟",  # Fish
+            "5": "🥜",  # Peanuts
+            "6": "🌱",  # Soybeans
+            "7": "🥛",  # Milk
+            "8": "🌰",  # Nuts
+            "9": "🥬",  # Celery
+            "10": "🌶️", # Mustard
+            "11": "⚪",  # Sesame
+            "12": "SO₂", # Sulphites
+            "13": "🌼",  # Lupin
+            "14": "🦑",  # Molluscs
         }
         gluten_sub = ["1A Wheat", "1B Rye", "1C Barley", "1D Oats", "1E Spelt", "1F Kamut", "1G Hybrid strains"]
         nuts_sub = [
             "8A Almonds", "8B Hazelnuts", "8C Walnuts", "8D Cashews",
             "8E Pecans", "8F Brazil nuts", "8G Pistachios", "8H Macadamia"
         ]
-        doc.add_paragraph('')
-        title = doc.add_paragraph('Allergen guide')
+        doc.add_paragraph("")
+        title = doc.add_paragraph("Allergen guide")
         try:
             title.runs[0].bold = True
         except Exception:
@@ -1480,7 +1489,6 @@ def dashboard():
     # Fallback: hvis ingen periode ble valgt (ingen slots bundet) – lag en enkel 14-dagers liste fra i dag
     if not menu_days_period:
         try:
-            from collections import defaultdict as _dd
             day_list = [datetime.now().date() + timedelta(days=i) for i in range(14)]
             # Rebruk enkel rotasjonslogikk hvis vi har menyark
             fallback_days = []
@@ -1552,12 +1560,12 @@ def dashboard():
     try:
         next_period_start = None
         if arbeidsperiod_start:
-            d0 = datetime.strptime(arbeidsperiod_start, '%Y-%m-%d').date()
+            d0 = datetime.strptime(arbeidsperiod_start, "%Y-%m-%d").date()
             today_d = datetime.now().date()
             end_d = d0 + timedelta(days=13)
             if today_d < d0:
                 # Not started yet
-                next_period_start = d0.strftime('%Y-%m-%d')
+                next_period_start = d0.strftime("%Y-%m-%d")
             else:
                 # In progress or finished -> clamp idx
                 if today_d <= end_d:
@@ -1566,43 +1574,43 @@ def dashboard():
                     idx = 13
                 percent = int(((idx+1)/14)*100)
                 if percent < 35:
-                    color_class = 'bg-danger'
+                    color_class = "bg-danger"
                 elif percent < 70:
-                    color_class = 'bg-warning text-dark'
+                    color_class = "bg-warning text-dark"
                 else:
-                    color_class = 'bg-success'
-                period_progress = {'day_index': idx, 'total_days': 14, 'percent': percent, 'color_class': color_class}
+                    color_class = "bg-success"
+                period_progress = {"day_index": idx, "total_days": 14, "percent": percent, "color_class": color_class}
         # Aggregate today's prep/frys tasks for quick glance
-        if session.get('user_id') and user and user.get('id') and rig_id:
-            td_key = datetime.now().strftime('%Y-%m-%d')
+        if session.get("user_id") and user and user.get("id") and rig_id:
+            td_key = datetime.now().strftime("%Y-%m-%d")
             dbh = db  # same connection
-            prep_row = dbh.execute('SELECT COUNT(*) FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND done=0', (user['id'], rig_id, td_key)).fetchone()
-            prep_done_row = dbh.execute('SELECT COUNT(*) FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND done=1', (user['id'], rig_id, td_key)).fetchone()
-            frys_row = dbh.execute('SELECT COUNT(*) FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND done=0', (user['id'], rig_id, td_key)).fetchone()
-            frys_done_row = dbh.execute('SELECT COUNT(*) FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND done=1', (user['id'], rig_id, td_key)).fetchone()
+            prep_row = dbh.execute("SELECT COUNT(*) FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND done=0", (user["id"], rig_id, td_key)).fetchone()
+            prep_done_row = dbh.execute("SELECT COUNT(*) FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND done=1", (user["id"], rig_id, td_key)).fetchone()
+            frys_row = dbh.execute("SELECT COUNT(*) FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND done=0", (user["id"], rig_id, td_key)).fetchone()
+            frys_done_row = dbh.execute("SELECT COUNT(*) FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND done=1", (user["id"], rig_id, td_key)).fetchone()
             today_task_summary = {
-                'prep_open': prep_row[0] if prep_row else 0,
-                'prep_done': prep_done_row[0] if prep_done_row else 0,
-                'frys_open': frys_row[0] if frys_row else 0,
-                'frys_done': frys_done_row[0] if frys_done_row else 0,
-                'date': td_key
+                "prep_open": prep_row[0] if prep_row else 0,
+                "prep_done": prep_done_row[0] if prep_done_row else 0,
+                "frys_open": frys_row[0] if frys_row else 0,
+                "frys_done": frys_done_row[0] if frys_done_row else 0,
+                "date": td_key
             }
         # Add explicit current (today) rotation index for simpler UI label independent of shift logic
         try:
             # Reuse menu_index_for_date if defined in local scope
             from datetime import date as _date
-            if 'menu_index_for_date' in locals():
+            if "menu_index_for_date" in locals():
                 current_menu_week = menu_index_for_date(_date.today())
             else:
                 current_menu_week = None
         except Exception:
             current_menu_week = None
         # Cache banner data in session for global top bar reuse
-        session['current_menu_week'] = current_menu_week
-        session['period_progress'] = period_progress
-        session['next_period_start'] = next_period_start
-        session['today_task_summary'] = today_task_summary
-        session['iso_week'] = datetime.now().isocalendar()[1]
+        session["current_menu_week"] = current_menu_week
+        session["period_progress"] = period_progress
+        session["next_period_start"] = next_period_start
+        session["today_task_summary"] = today_task_summary
+        session["iso_week"] = datetime.now().isocalendar()[1]
     except Exception:
         # Silently ignore any banner/session population errors to not break dashboard
         pass
@@ -1623,11 +1631,11 @@ def dashboard():
     next_shift_menu_idx=locals().get("next_shift_menu_idx"),
     user_menu_anchor_date=locals().get("anchor_user_date"),
         schedule_preview=schedule_preview,
-        today_str=datetime.now().strftime('%Y-%m-%d'),
+        today_str=datetime.now().strftime("%Y-%m-%d"),
         period_progress=period_progress,
         today_task_summary=today_task_summary,
         iso_week=datetime.now().isocalendar()[1],  # ekte ISO uke (1-53)
-        current_menu_week=locals().get('current_menu_week'),
+        current_menu_week=locals().get("current_menu_week"),
         recipe_coverage=_compute_recipe_coverage(db, rig_id) if rig_id else None,
     )
 
@@ -1636,12 +1644,12 @@ def dashboard():
 def inject_global_banner():
     try:
         return {
-            'today_str': datetime.now().strftime('%Y-%m-%d'),
-            'iso_week': session.get('iso_week') or datetime.now().isocalendar()[1],
-            'current_menu_week': session.get('current_menu_week'),
-            'period_progress': session.get('period_progress'),
-            'today_task_summary': session.get('today_task_summary'),
-            'next_period_start': session.get('next_period_start')
+            "today_str": datetime.now().strftime("%Y-%m-%d"),
+            "iso_week": session.get("iso_week") or datetime.now().isocalendar()[1],
+            "current_menu_week": session.get("current_menu_week"),
+            "period_progress": session.get("period_progress"),
+            "today_task_summary": session.get("today_task_summary"),
+            "next_period_start": session.get("next_period_start")
         }
     except Exception:
         return {}
@@ -1698,7 +1706,6 @@ def prep_upcoming():
         """,
         (rig_id, user["id"], today_ts),
     ).fetchall()
-    from collections import defaultdict
     periods = []
     cur = None
     for r in rows:
@@ -2056,45 +2063,45 @@ def me_calendar():
 
 
 # --- Single day drilldown: menu + prepp/frys for dato ---
-@app.get('/day/<date_s>')
+@app.get("/day/<date_s>")
 def day_detail(date_s: str):
     """Viser meny (med private overrides) samt prepp- og frysplocklinjer for gitt dato for innlogget bruker."""
-    if not session.get('user_id'):
-        flash('Logg inn kreves.', 'warning')
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        flash("Logg inn kreves.", "warning")
+        return redirect(url_for("login"))
     # Valider datoformat
     try:
-        dt = datetime.strptime(date_s, '%Y-%m-%d').date()
+        dt = datetime.strptime(date_s, "%Y-%m-%d").date()
     except Exception:
-        flash('Ugyldig dato.', 'warning')
-        return redirect(url_for('me_calendar'))
+        flash("Ugyldig dato.", "warning")
+        return redirect(url_for("me_calendar"))
     db = get_db(); _ensure_prep_tables(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg tilknyttet.', 'warning')
-        return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg tilknyttet.", "warning")
+        return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
     # Hent menyinnstillinger + sheets
-    row = db.execute('SELECT start_week, start_index, menu_json FROM menu_settings WHERE rig_id=?', (rig_id,)).fetchone()
+    row = db.execute("SELECT start_week, start_index, menu_json FROM menu_settings WHERE rig_id=?", (rig_id,)).fetchone()
     if row:
         start_week = int(row[0] or 1); start_index = int(row[1] or 1)
         try:
-            menu_sheets = json.loads(row[2] or '[]')
+            menu_sheets = json.loads(row[2] or "[]")
         except Exception:
             menu_sheets = []
     else:
         start_week = 1; start_index = 1; menu_sheets = []
-    sheets_by_uke = {str(sh.get('uke')): sh for sh in menu_sheets}
-    weekday_no_to_nor = {0: 'Mandag',1:'Tirsdag',2:'Onsdag',3:'Torsdag',4:'Fredag',5:'Lørdag',6:'Søndag'}
+    sheets_by_uke = {str(sh.get("uke")): sh for sh in menu_sheets}
+    weekday_no_to_nor = {0: "Mandag",1:"Tirsdag",2:"Onsdag",3:"Torsdag",4:"Fredag",5:"Lørdag",6:"Søndag"}
     def menu_index_for_date(d):
         iso_year, iso_week, _ = d.isocalendar()
         return ((iso_week - start_week + (start_index - 1)) % 4) + 1
     def _norm_cat(raw: str):
         if not raw: return None
         r = raw.strip().lower()
-        if 'sopp' in r or 'soup' in r: return 'soppa'
-        if 'fisk' in r or 'fish' in r: return 'fisk'
-        if 'kjott' in r or 'kjot' in r or 'kott' in r or 'meat' in r: return 'kott'
+        if "sopp" in r or "soup" in r: return "soppa"
+        if "fisk" in r or "fish" in r: return "fisk"
+        if "kjott" in r or "kjot" in r or "kott" in r or "meat" in r: return "kott"
         return None
     def base_picks(meal_key: str):
         idx = menu_index_for_date(dt)
@@ -2104,53 +2111,53 @@ def day_detail(date_s: str):
         if sh:
             items = (sh.get(meal_key) or [])
             for it in items:
-                if it.get('dag') != dn: continue
-                cat = _norm_cat(it.get('kategori'))
-                if cat in ('soppa','fisk','kott'):
-                    cats[cat].append(it.get('rett') or '')
+                if it.get("dag") != dn: continue
+                cat = _norm_cat(it.get("kategori"))
+                if cat in ("soppa","fisk","kott"):
+                    cats[cat].append(it.get("rett") or "")
                 else:
-                    cats['extra'].append(it.get('rett') or '')
-        return {k: (v[0] if v else '') for k,v in cats.items()}
+                    cats["extra"].append(it.get("rett") or "")
+        return {k: (v[0] if v else "") for k,v in cats.items()}
     def apply_private_overrides(meal_key: str, picks: dict):
-        out = {k: picks.get(k) or '' for k in ['soppa','fisk','kott']}; out['extra'] = ''
+        out = {k: picks.get(k) or "" for k in ["soppa","fisk","kott"]}; out["extra"] = ""
         try:
-            rows_priv = db.execute('SELECT category,dish FROM daily_menu_overrides_private WHERE rig_id=? AND user_id=? AND date=? AND meal=?', (rig_id, user['id'], date_s, meal_key)).fetchall()
+            rows_priv = db.execute("SELECT category,dish FROM daily_menu_overrides_private WHERE rig_id=? AND user_id=? AND date=? AND meal=?", (rig_id, user["id"], date_s, meal_key)).fetchall()
             for r in rows_priv:
                 if r[0] in out and r[1]: out[r[0]] = r[1]
         except Exception:
             pass
         return out
-    base_l = base_picks('lunsj'); base_d = base_picks('middag')
-    picks_l = apply_private_overrides('lunsj', base_l)
-    picks_d = apply_private_overrides('middag', base_d)
+    base_l = base_picks("lunsj"); base_d = base_picks("middag")
+    picks_l = apply_private_overrides("lunsj", base_l)
+    picks_d = apply_private_overrides("middag", base_d)
     # Prep/frys per kategori
     def fetch_tasks(meal, cat):
-        rows = db.execute('SELECT id,text,done FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY done ASC, id ASC', (user['id'], rig_id, date_s, meal, cat)).fetchall()
-        return [dict(id=r['id'], text=r['text'], done=bool(r['done'])) for r in rows]
+        rows = db.execute("SELECT id,text,done FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY done ASC, id ASC", (user["id"], rig_id, date_s, meal, cat)).fetchall()
+        return [dict(id=r["id"], text=r["text"], done=bool(r["done"])) for r in rows]
     def fetch_frys(meal, cat):
-        rows = db.execute('SELECT id,item_name,qty,unit,done FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY done ASC, id ASC', (user['id'], rig_id, date_s, meal, cat)).fetchall()
-        return [dict(id=r['id'], item_name=r['item_name'], qty=r['qty'], unit=r['unit'], done=bool(r['done'])) for r in rows]
-    cat_order = ['soppa','fisk','kott','extra']
+        rows = db.execute("SELECT id,item_name,qty,unit,done FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY done ASC, id ASC", (user["id"], rig_id, date_s, meal, cat)).fetchall()
+        return [dict(id=r["id"], item_name=r["item_name"], qty=r["qty"], unit=r["unit"], done=bool(r["done"])) for r in rows]
+    cat_order = ["soppa","fisk","kott","extra"]
     meals = []
-    for meal_key, picks, base in [('lunsj', picks_l, base_l), ('middag', picks_d, base_d)]:
+    for meal_key, picks, base in [("lunsj", picks_l, base_l), ("middag", picks_d, base_d)]:
         cats = []
         for c in cat_order:
-            dish = picks.get(c) or ''
-            if not dish and c != 'extra':
+            dish = picks.get(c) or ""
+            if not dish and c != "extra":
                 # still include empty categories for consistency
                 pass
             tasks = fetch_tasks(meal_key, c)
             frys_items = fetch_frys(meal_key, c)
             cats.append({
-                'category': c,
-                'dish': dish,
-                'overridden': (dish and dish != (base.get(c) or '')),
-                'base': base.get(c) or '',
-                'tasks': tasks,
-                'frys': frys_items,
+                "category": c,
+                "dish": dish,
+                "overridden": (dish and dish != (base.get(c) or "")),
+                "base": base.get(c) or "",
+                "tasks": tasks,
+                "frys": frys_items,
             })
-        meals.append({'meal': meal_key, 'categories': cats})
-    return render_template('day_detail.html', date=date_s, weekday=weekday_no_to_nor[dt.weekday()], meals=meals)
+        meals.append({"meal": meal_key, "categories": cats})
+    return render_template("day_detail.html", date=date_s, weekday=weekday_no_to_nor[dt.weekday()], meals=meals)
 
 
 # --- Day notes (private) ---
@@ -2170,85 +2177,85 @@ def _ensure_day_notes(db):
     except Exception:
         pass
 
-@app.get('/day/note')
+@app.get("/day/note")
 def day_note_get():
-    if not session.get('user_id'):
-        return jsonify({'ok': False, 'error': 'Auth'}), 401
-    date_s = request.args.get('date','').strip()
+    if not session.get("user_id"):
+        return jsonify({"ok": False, "error": "Auth"}), 401
+    date_s = request.args.get("date","").strip()
     if not date_s:
-        return jsonify({'ok': False, 'error': 'date required'}), 400
+        return jsonify({"ok": False, "error": "date required"}), 400
     db = get_db(); _ensure_day_notes(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        return jsonify({'ok': False, 'error': 'Ingen rigg'}), 400
-    row = db.execute('SELECT note FROM daily_notes_private WHERE rig_id=? AND user_id=? AND date=?', (user['rig_id'], user['id'], date_s)).fetchone()
-    return jsonify({'ok': True, 'note': (row['note'] if row else '')})
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        return jsonify({"ok": False, "error": "Ingen rigg"}), 400
+    row = db.execute("SELECT note FROM daily_notes_private WHERE rig_id=? AND user_id=? AND date=?", (user["rig_id"], user["id"], date_s)).fetchone()
+    return jsonify({"ok": True, "note": (row["note"] if row else "")})
 
-@app.post('/day/note')
+@app.post("/day/note")
 def day_note_set():
-    if not session.get('user_id'):
-        return jsonify({'ok': False, 'error': 'Auth'}), 401
+    if not session.get("user_id"):
+        return jsonify({"ok": False, "error": "Auth"}), 401
     try:
         payload = request.get_json(force=True, silent=True) or {}
     except Exception:
         payload = {}
-    date_s = (payload.get('date') or '').strip()
-    note = (payload.get('note') or '').strip()
+    date_s = (payload.get("date") or "").strip()
+    note = (payload.get("note") or "").strip()
     if not date_s:
-        return jsonify({'ok': False, 'error': 'date required'}), 400
+        return jsonify({"ok": False, "error": "date required"}), 400
     db = get_db(); _ensure_day_notes(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        return jsonify({'ok': False, 'error': 'Ingen rigg'}), 400
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        return jsonify({"ok": False, "error": "Ingen rigg"}), 400
     from datetime import datetime as _dt
-    ts = _dt.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    ts = _dt.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     db.execute(
-        'INSERT INTO daily_notes_private(rig_id,user_id,date,note,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(rig_id,user_id,date) DO UPDATE SET note=excluded.note, updated_at=excluded.updated_at',
-        (user['rig_id'], user['id'], date_s, note, ts)
+        "INSERT INTO daily_notes_private(rig_id,user_id,date,note,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(rig_id,user_id,date) DO UPDATE SET note=excluded.note, updated_at=excluded.updated_at",
+        (user["rig_id"], user["id"], date_s, note, ts)
     )
     db.commit()
-    return jsonify({'ok': True, 'saved_at': ts})
+    return jsonify({"ok": True, "saved_at": ts})
 
 
 # --- Week prep aggregation (private) ---
-@app.get('/week/<date_s>')
+@app.get("/week/<date_s>")
 def week_prep_view(date_s: str):
     """Aggregert veckovy: viser meny (med private overrides) + prepp og frysplock for en uke (mandag-søndag)
     som inneholder gitt dato. Toggle skjer via eksisterende endpoints (prep_tasks_toggle / frys_items_toggle)."""
-    if not session.get('user_id'):
-        flash('Logg inn kreves.', 'warning')
-        return redirect(url_for('login'))
+    if not session.get("user_id"):
+        flash("Logg inn kreves.", "warning")
+        return redirect(url_for("login"))
     try:
-        base_date = datetime.strptime(date_s, '%Y-%m-%d').date()
+        base_date = datetime.strptime(date_s, "%Y-%m-%d").date()
     except Exception:
-        flash('Ugyldig dato.', 'warning')
-        return redirect(url_for('me_calendar'))
+        flash("Ugyldig dato.", "warning")
+        return redirect(url_for("me_calendar"))
     db = get_db(); _ensure_prep_tables(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg tilknyttet.', 'warning')
-        return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg tilknyttet.", "warning")
+        return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
     # Menu settings
-    row = db.execute('SELECT start_week, start_index, menu_json FROM menu_settings WHERE rig_id=?', (rig_id,)).fetchone()
+    row = db.execute("SELECT start_week, start_index, menu_json FROM menu_settings WHERE rig_id=?", (rig_id,)).fetchone()
     if row:
         start_week = int(row[0] or 1); start_index = int(row[1] or 1)
         try:
-            menu_sheets = json.loads(row[2] or '[]')
+            menu_sheets = json.loads(row[2] or "[]")
         except Exception:
             menu_sheets = []
     else:
         start_week = 1; start_index = 1; menu_sheets = []
-    sheets_by_uke = {str(sh.get('uke')): sh for sh in menu_sheets}
-    weekday_no_to_nor = {0: 'Mandag',1:'Tirsdag',2:'Onsdag',3:'Torsdag',4:'Fredag',5:'Lørdag',6:'Søndag'}
+    sheets_by_uke = {str(sh.get("uke")): sh for sh in menu_sheets}
+    weekday_no_to_nor = {0: "Mandag",1:"Tirsdag",2:"Onsdag",3:"Torsdag",4:"Fredag",5:"Lørdag",6:"Søndag"}
     def menu_index_for_date(d):
         iso_year, iso_week, _ = d.isocalendar(); return ((iso_week - start_week + (start_index - 1)) % 4) + 1
     def _norm_cat(raw: str):
         if not raw: return None
         r = raw.strip().lower()
-        if 'sopp' in r or 'soup' in r: return 'soppa'
-        if 'fisk' in r or 'fish' in r: return 'fisk'
-        if 'kjott' in r or 'kjot' in r or 'kott' in r or 'meat' in r: return 'kott'
+        if "sopp" in r or "soup" in r: return "soppa"
+        if "fisk" in r or "fish" in r: return "fisk"
+        if "kjott" in r or "kjot" in r or "kott" in r or "meat" in r: return "kott"
         return None
     def base_picks(day_date, meal_key: str):
         idx = menu_index_for_date(day_date)
@@ -2258,78 +2265,78 @@ def week_prep_view(date_s: str):
         if sh:
             items = (sh.get(meal_key) or [])
             for it in items:
-                if it.get('dag') != dn: continue
-                cat = _norm_cat(it.get('kategori'))
-                if cat in ('soppa','fisk','kott'):
-                    cats[cat].append(it.get('rett') or '')
+                if it.get("dag") != dn: continue
+                cat = _norm_cat(it.get("kategori"))
+                if cat in ("soppa","fisk","kott"):
+                    cats[cat].append(it.get("rett") or "")
                 else:
-                    cats['extra'].append(it.get('rett') or '')
-        return {k: (v[0] if v else '') for k,v in cats.items()}
+                    cats["extra"].append(it.get("rett") or "")
+        return {k: (v[0] if v else "") for k,v in cats.items()}
     def apply_private_overrides(day_key: str, meal_key: str, picks: dict):
-        out = {k: picks.get(k) or '' for k in ['soppa','fisk','kott']}; out['extra'] = ''
+        out = {k: picks.get(k) or "" for k in ["soppa","fisk","kott"]}; out["extra"] = ""
         try:
-            rows_priv = db.execute('SELECT category,dish FROM daily_menu_overrides_private WHERE rig_id=? AND user_id=? AND date=? AND meal=?', (rig_id, user['id'], day_key, meal_key)).fetchall()
+            rows_priv = db.execute("SELECT category,dish FROM daily_menu_overrides_private WHERE rig_id=? AND user_id=? AND date=? AND meal=?", (rig_id, user["id"], day_key, meal_key)).fetchall()
             for r in rows_priv:
                 if r[0] in out and r[1]: out[r[0]] = r[1]
         except Exception:
             pass
         return out
     def fetch_tasks(day_key, meal, cat):
-        rows = db.execute('SELECT id,text,done FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY done ASC, id ASC', (user['id'], rig_id, day_key, meal, cat)).fetchall()
-        return [dict(id=r['id'], text=r['text'], done=bool(r['done'])) for r in rows]
+        rows = db.execute("SELECT id,text,done FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY done ASC, id ASC", (user["id"], rig_id, day_key, meal, cat)).fetchall()
+        return [dict(id=r["id"], text=r["text"], done=bool(r["done"])) for r in rows]
     def fetch_frys(day_key, meal, cat):
-        rows = db.execute('SELECT id,item_name,qty,unit,done FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY done ASC, id ASC', (user['id'], rig_id, day_key, meal, cat)).fetchall()
-        return [dict(id=r['id'], item_name=r['item_name'], qty=r['qty'], unit=r['unit'], done=bool(r['done'])) for r in rows]
+        rows = db.execute("SELECT id,item_name,qty,unit,done FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY done ASC, id ASC", (user["id"], rig_id, day_key, meal, cat)).fetchall()
+        return [dict(id=r["id"], item_name=r["item_name"], qty=r["qty"], unit=r["unit"], done=bool(r["done"])) for r in rows]
     # Compute monday start
     monday = base_date - timedelta(days=base_date.weekday())
     days = []
     for i in range(7):
         dd = monday + timedelta(days=i)
-        day_key = dd.strftime('%Y-%m-%d')
-        base_l = base_picks(dd, 'lunsj'); base_d = base_picks(dd, 'middag')
-        picks_l = apply_private_overrides(day_key, 'lunsj', base_l)
-        picks_d = apply_private_overrides(day_key, 'middag', base_d)
-        cat_order = ['soppa','fisk','kott','extra']
+        day_key = dd.strftime("%Y-%m-%d")
+        base_l = base_picks(dd, "lunsj"); base_d = base_picks(dd, "middag")
+        picks_l = apply_private_overrides(day_key, "lunsj", base_l)
+        picks_d = apply_private_overrides(day_key, "middag", base_d)
+        cat_order = ["soppa","fisk","kott","extra"]
         meals = []
-        for meal_key, picks, base in [('lunsj', picks_l, base_l), ('middag', picks_d, base_d)]:
+        for meal_key, picks, base in [("lunsj", picks_l, base_l), ("middag", picks_d, base_d)]:
             cats = []
             for c in cat_order:
-                dish = picks.get(c) or ''
+                dish = picks.get(c) or ""
                 tasks = fetch_tasks(day_key, meal_key, c)
                 frys_items = fetch_frys(day_key, meal_key, c)
                 cats.append({
-                    'category': c,
-                    'dish': dish,
-                    'overridden': (dish and dish != (base.get(c) or '')),
-                    'base': base.get(c) or '',
-                    'tasks': tasks,
-                    'frys': frys_items,
-                    'day_key': day_key,
-                    'meal': meal_key
+                    "category": c,
+                    "dish": dish,
+                    "overridden": (dish and dish != (base.get(c) or "")),
+                    "base": base.get(c) or "",
+                    "tasks": tasks,
+                    "frys": frys_items,
+                    "day_key": day_key,
+                    "meal": meal_key
                 })
-            meals.append({'meal': meal_key, 'categories': cats})
-        days.append({'date': day_key, 'weekday': weekday_no_to_nor[dd.weekday()], 'meals': meals})
-    prev_week = (monday - timedelta(days=7)).strftime('%Y-%m-%d')
-    next_week = (monday + timedelta(days=7)).strftime('%Y-%m-%d')
-    return render_template('week_prep.html', week_start=monday.strftime('%Y-%m-%d'), days=days, prev_week=prev_week, next_week=next_week, anchor_date=date_s)
+            meals.append({"meal": meal_key, "categories": cats})
+        days.append({"date": day_key, "weekday": weekday_no_to_nor[dd.weekday()], "meals": meals})
+    prev_week = (monday - timedelta(days=7)).strftime("%Y-%m-%d")
+    next_week = (monday + timedelta(days=7)).strftime("%Y-%m-%d")
+    return render_template("week_prep.html", week_start=monday.strftime("%Y-%m-%d"), days=days, prev_week=prev_week, next_week=next_week, anchor_date=date_s)
 
 
-@app.get('/period/<date_s>/aggregate')
+@app.get("/period/<date_s>/aggregate")
 def period_aggregate(date_s: str):
     """Flat aggregat for hele 14-dagers arbeidsperioden som inneholder datoen.
     Henter samme periodelogikk som dashboard: grupper slots til perioder og velger den som inneholder eller kommer etter dato.
     Returnerer to lister (prep_rows, frys_rows) i template med kontekst (dato, ukedag, meal, kategori, dish, tekst)."""
-    if not session.get('user_id'):
-        flash('Logg inn kreves.', 'warning'); return redirect(url_for('login'))
+    if not session.get("user_id"):
+        flash("Logg inn kreves.", "warning"); return redirect(url_for("login"))
     try:
-        anchor_date = datetime.strptime(date_s, '%Y-%m-%d').date()
+        anchor_date = datetime.strptime(date_s, "%Y-%m-%d").date()
     except Exception:
-        flash('Ugyldig dato.', 'warning'); return redirect(url_for('dashboard'))
+        flash("Ugyldig dato.", "warning"); return redirect(url_for("dashboard"))
     db = get_db(); _ensure_prep_tables(db)
-    user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    if not user or not user['rig_id']:
-        flash('Ingen rigg tilknyttet.', 'warning'); return redirect(url_for('dashboard'))
-    rig_id = user['rig_id']
+    user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    if not user or not user["rig_id"]:
+        flash("Ingen rigg tilknyttet.", "warning"); return redirect(url_for("dashboard"))
+    rig_id = user["rig_id"]
     # Hent slots fra i dag minus litt buffer til fremover for å bygge perioder
     all_rows = db.execute(
         """
@@ -2338,56 +2345,56 @@ def period_aggregate(date_s: str):
         INNER JOIN turnus_account_binding tb ON tb.slot_id = ts.id
         WHERE ts.rig_id=? AND tb.user_id=?
         ORDER BY ts.start_ts ASC
-        """, (rig_id, user['id'])
+        """, (rig_id, user["id"])
     ).fetchall()
     def parse_ts(s):
-        try: return datetime.strptime(s, '%Y-%m-%dT%H:%M')
+        try: return datetime.strptime(s, "%Y-%m-%dT%H:%M")
         except Exception: return None
     periods = []
     cur = None
     for r in all_rows:
-        st = parse_ts(r['start_ts']); et = parse_ts(r['end_ts'])
+        st = parse_ts(r["start_ts"]); et = parse_ts(r["end_ts"])
         if not (st and et):
             continue
         if cur is None:
-            cur = {'start': st, 'end': et, 'rows': [r]}
+            cur = {"start": st, "end": et, "rows": [r]}
             continue
-        anchor = cur['start']
+        anchor = cur["start"]
         if st <= anchor + timedelta(days=14, hours=1):
-            cur['rows'].append(r)
-            if et > cur['end']: cur['end'] = et
+            cur["rows"].append(r)
+            if et > cur["end"]: cur["end"] = et
         else:
-            periods.append(cur); cur = {'start': st, 'end': et, 'rows': [r]}
+            periods.append(cur); cur = {"start": st, "end": et, "rows": [r]}
     if cur is not None:
         periods.append(cur)
     chosen = None
     for p in periods:
-        if p['start'].date() <= anchor_date <= p['end'].date():
+        if p["start"].date() <= anchor_date <= p["end"].date():
             chosen = p; break
-        if anchor_date < p['start'].date() and chosen is None:
+        if anchor_date < p["start"].date() and chosen is None:
             chosen = p; break
     if not chosen:
-        flash('Fant ingen periodedata.', 'info'); return render_template('period_aggregate.html', prep_rows=[], frys_rows=[], period_start=None, period_end=None, anchor_date=date_s)
-    d0 = chosen['start'].date(); d1 = d0 + timedelta(days=13)
+        flash("Fant ingen periodedata.", "info"); return render_template("period_aggregate.html", prep_rows=[], frys_rows=[], period_start=None, period_end=None, anchor_date=date_s)
+    d0 = chosen["start"].date(); d1 = d0 + timedelta(days=13)
     # Menyinnstillinger for dish-navn/overrides
-    row = db.execute('SELECT start_week, start_index, menu_json FROM menu_settings WHERE rig_id=?', (rig_id,)).fetchone()
+    row = db.execute("SELECT start_week, start_index, menu_json FROM menu_settings WHERE rig_id=?", (rig_id,)).fetchone()
     if row:
         start_week = int(row[0] or 1); start_index = int(row[1] or 1)
-        try: menu_sheets = json.loads(row[2] or '[]')
+        try: menu_sheets = json.loads(row[2] or "[]")
         except Exception: menu_sheets = []
     else:
         start_week = 1; start_index = 1; menu_sheets = []
-    sheets_by_uke = {str(sh.get('uke')): sh for sh in menu_sheets}
-    weekday_no_to_short = {0:'Ma',1:'Ti',2:'On',3:'To',4:'Fr',5:'Lø',6:'Sø'}
-    weekday_no_to_full = {0:'Mandag',1:'Tirsdag',2:'Onsdag',3:'Torsdag',4:'Fredag',5:'Lørdag',6:'Søndag'}
+    sheets_by_uke = {str(sh.get("uke")): sh for sh in menu_sheets}
+    weekday_no_to_short = {0:"Ma",1:"Ti",2:"On",3:"To",4:"Fr",5:"Lø",6:"Sø"}
+    weekday_no_to_full = {0:"Mandag",1:"Tirsdag",2:"Onsdag",3:"Torsdag",4:"Fredag",5:"Lørdag",6:"Søndag"}
     def menu_index_for_date(d):
         iso_year, iso_week, _ = d.isocalendar(); return ((iso_week - start_week + (start_index - 1)) % 4) + 1
     def _norm_cat(raw: str):
         if not raw: return None
         r = raw.strip().lower()
-        if 'sopp' in r or 'soup' in r: return 'soppa'
-        if 'fisk' in r or 'fish' in r: return 'fisk'
-        if 'kjott' in r or 'kjot' in r or 'kott' in r or 'meat' in r: return 'kott'
+        if "sopp" in r or "soup" in r: return "soppa"
+        if "fisk" in r or "fish" in r: return "fisk"
+        if "kjott" in r or "kjot" in r or "kott" in r or "meat" in r: return "kott"
         return None
     def base_picks(day_date, meal_key: str):
         idx = menu_index_for_date(day_date)
@@ -2396,91 +2403,91 @@ def period_aggregate(date_s: str):
         cats = {"soppa": [], "fisk": [], "kott": [], "extra": []}
         if sh:
             for it in (sh.get(meal_key) or []):
-                if it.get('dag') != dn: continue
-                cat = _norm_cat(it.get('kategori'))
-                if cat in ('soppa','fisk','kott'): cats[cat].append(it.get('rett') or '')
-                else: cats['extra'].append(it.get('rett') or '')
-        return {k:(v[0] if v else '') for k,v in cats.items()}
+                if it.get("dag") != dn: continue
+                cat = _norm_cat(it.get("kategori"))
+                if cat in ("soppa","fisk","kott"): cats[cat].append(it.get("rett") or "")
+                else: cats["extra"].append(it.get("rett") or "")
+        return {k:(v[0] if v else "") for k,v in cats.items()}
     def apply_private_overrides(day_key, meal_key, picks):
-        out = {k: picks.get(k) or '' for k in ['soppa','fisk','kott']}; out['extra']=''
+        out = {k: picks.get(k) or "" for k in ["soppa","fisk","kott"]}; out["extra"]=""
         try:
-            rows_priv = db.execute('SELECT category,dish FROM daily_menu_overrides_private WHERE rig_id=? AND user_id=? AND date=? AND meal=?', (rig_id, user['id'], day_key, meal_key)).fetchall()
+            rows_priv = db.execute("SELECT category,dish FROM daily_menu_overrides_private WHERE rig_id=? AND user_id=? AND date=? AND meal=?", (rig_id, user["id"], day_key, meal_key)).fetchall()
             for r in rows_priv:
                 if r[0] in out and r[1]: out[r[0]] = r[1]
         except Exception: pass
         return out
     prep_rows = []
     frys_rows = []
-    cat_order = ['soppa','fisk','kott','extra']
+    cat_order = ["soppa","fisk","kott","extra"]
     curd = d0
     while curd <= d1:
-        day_key = curd.strftime('%Y-%m-%d')
-        base_l = base_picks(curd, 'lunsj'); base_d = base_picks(curd, 'middag')
-        picks_l = apply_private_overrides(day_key, 'lunsj', base_l)
-        picks_d = apply_private_overrides(day_key, 'middag', base_d)
+        day_key = curd.strftime("%Y-%m-%d")
+        base_l = base_picks(curd, "lunsj"); base_d = base_picks(curd, "middag")
+        picks_l = apply_private_overrides(day_key, "lunsj", base_l)
+        picks_d = apply_private_overrides(day_key, "middag", base_d)
         # Fetch tasks / frys for alle kategorier begge måltider
-        for meal_key, picks, base in [('lunsj', picks_l, base_l), ('middag', picks_d, base_d)]:
+        for meal_key, picks, base in [("lunsj", picks_l, base_l), ("middag", picks_d, base_d)]:
             for c in cat_order:
-                dish = picks.get(c) or ''
+                dish = picks.get(c) or ""
                 # Prep
-                for r in db.execute('SELECT id,text,done FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY id', (user['id'], rig_id, day_key, meal_key, c)).fetchall():
+                for r in db.execute("SELECT id,text,done FROM prep_tasks_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY id", (user["id"], rig_id, day_key, meal_key, c)).fetchall():
                     prep_rows.append({
-                        'id': r['id'], 'date': day_key, 'weekday': weekday_no_to_short[curd.weekday()], 'meal': meal_key,
-                        'category': c, 'dish': dish or (base.get(c) or ''), 'text': r['text'], 'done': bool(r['done'])
+                        "id": r["id"], "date": day_key, "weekday": weekday_no_to_short[curd.weekday()], "meal": meal_key,
+                        "category": c, "dish": dish or (base.get(c) or ""), "text": r["text"], "done": bool(r["done"])
                     })
                 # Frys
-                for r in db.execute('SELECT id,item_name,qty,unit,done FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY id', (user['id'], rig_id, day_key, meal_key, c)).fetchall():
+                for r in db.execute("SELECT id,item_name,qty,unit,done FROM frys_items_private WHERE user_id=? AND rig_id=? AND date=? AND meal=? AND category=? ORDER BY id", (user["id"], rig_id, day_key, meal_key, c)).fetchall():
                     frys_rows.append({
-                        'id': r['id'], 'date': day_key, 'weekday': weekday_no_to_short[curd.weekday()], 'meal': meal_key,
-                        'category': c, 'dish': dish or (base.get(c) or ''), 'item_name': r['item_name'], 'qty': r['qty'], 'unit': r['unit'], 'done': bool(r['done'])
+                        "id": r["id"], "date": day_key, "weekday": weekday_no_to_short[curd.weekday()], "meal": meal_key,
+                        "category": c, "dish": dish or (base.get(c) or ""), "item_name": r["item_name"], "qty": r["qty"], "unit": r["unit"], "done": bool(r["done"])
                     })
         curd += timedelta(days=1)
     # Sort
-    def sort_key_p(x): return (x['date'], x['meal'], {'soppa':0,'fisk':1,'kott':2,'extra':3}.get(x['category'],9), x['id'])
+    def sort_key_p(x): return (x["date"], x["meal"], {"soppa":0,"fisk":1,"kott":2,"extra":3}.get(x["category"],9), x["id"])
     prep_rows.sort(key=sort_key_p)
     frys_rows.sort(key=sort_key_p)
-    return render_template('period_aggregate.html', prep_rows=prep_rows, frys_rows=frys_rows, period_start=d0.strftime('%Y-%m-%d'), period_end=d1.strftime('%Y-%m-%d'), anchor_date=date_s)
+    return render_template("period_aggregate.html", prep_rows=prep_rows, frys_rows=frys_rows, period_start=d0.strftime("%Y-%m-%d"), period_end=d1.strftime("%Y-%m-%d"), anchor_date=date_s)
 
 
 # --- Unified planning hub ---
-@app.get('/planning')
+@app.get("/planning")
 def planning_hub():
-    if not session.get('user_id'):
-        flash('Logg inn kreves.', 'warning'); return redirect(url_for('login'))
-    db = get_db(); user = db.execute('SELECT id, rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    rig_id = user['rig_id'] if user else None
+    if not session.get("user_id"):
+        flash("Logg inn kreves.", "warning"); return redirect(url_for("login"))
+    db = get_db(); user = db.execute("SELECT id, rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    rig_id = user["rig_id"] if user else None
     # Reuse dashboard period detection (lightweight): find arbeidsperiod_start via existing helper logic by calling dashboard core calculation indirectly would be heavy; replicate minimal part.
     arbeidsperiod_start = None
     anchor_user_date = None
     menu_days_period = []
-    today_str = datetime.now().strftime('%Y-%m-%d')
+    today_str = datetime.now().strftime("%Y-%m-%d")
     if rig_id:
         try:
-            today_ts = today_str + 'T00:00'
-            rows = db.execute('''SELECT ts.start_ts, ts.end_ts FROM turnus_slots ts INNER JOIN turnus_account_binding tb ON tb.slot_id=ts.id WHERE ts.rig_id=? AND ts.status='published' AND tb.user_id=? ORDER BY ts.start_ts ASC''', (rig_id, user['id'])).fetchall()
+            today_ts = today_str + "T00:00"
+            rows = db.execute("""SELECT ts.start_ts, ts.end_ts FROM turnus_slots ts INNER JOIN turnus_account_binding tb ON tb.slot_id=ts.id WHERE ts.rig_id=? AND ts.status='published' AND tb.user_id=? ORDER BY ts.start_ts ASC""", (rig_id, user["id"])).fetchall()
             # reuse grouping logic
             periods=[]; cur=None
             for r in rows:
-                st=_parse_ts(r['start_ts']); et=_parse_ts(r['end_ts'])
+                st=_parse_ts(r["start_ts"]); et=_parse_ts(r["end_ts"])
                 if cur is None:
-                    cur={'start':st,'end':et,'rows':[r]}; continue
-                if st <= cur['start'] + timedelta(days=14, hours=1):
-                    cur['rows'].append(r); cur['end']=max(cur['end'], et)
+                    cur={"start":st,"end":et,"rows":[r]}; continue
+                if st <= cur["start"] + timedelta(days=14, hours=1):
+                    cur["rows"].append(r); cur["end"]=max(cur["end"], et)
                 else:
-                    periods.append(cur); cur={'start':st,'end':et,'rows':[r]}
+                    periods.append(cur); cur={"start":st,"end":et,"rows":[r]}
             if cur: periods.append(cur)
             now=datetime.now(); chosen=None
             for p in periods:
-                if p['start'] <= now <= p['end'] or now < p['start']:
+                if p["start"] <= now <= p["end"] or now < p["start"]:
                     chosen=p; break
             if chosen:
-                d0=chosen['start'].date(); arbeidsperiod_start=d0.strftime('%Y-%m-%d')
+                d0=chosen["start"].date(); arbeidsperiod_start=d0.strftime("%Y-%m-%d")
                 # minimal menu_days_period stub (first day only) just for anchor fallback
-                menu_days_period=[{'date': arbeidsperiod_start}]
+                menu_days_period=[{"date": arbeidsperiod_start}]
         except Exception:
             pass
-    anchor = arbeidsperiod_start or anchor_user_date or (menu_days_period[0]['date'] if menu_days_period else today_str)
-    return render_template('planning_hub.html', anchor=anchor, arbeidsperiod_start=arbeidsperiod_start, today_str=today_str)
+    anchor = arbeidsperiod_start or anchor_user_date or (menu_days_period[0]["date"] if menu_days_period else today_str)
+    return render_template("planning_hub.html", anchor=anchor, arbeidsperiod_start=arbeidsperiod_start, today_str=today_str)
 
 
 # --- Recipes (stub) ---
@@ -2588,7 +2595,7 @@ def turnus_simple_apply():
             bound = rotation.apply_virtual_mapping(rig_id)
             if bound:
                 flash(f"Auto-koblet {bound} pass til brukere (virt.kokk → bruker).", "info")
-        except Exception as e:
+        except Exception:
             # Mapping might not be configured yet; it's okay
             pass
         flash(f"Opprettet {created} slots for 6 virtuelle kokker (uker generert: {weeks}).", "success")
@@ -3922,13 +3929,13 @@ def menus_daily_docx():
 
     # Ensure default text for 'extra' when nothing is specified
     DEFAULT_EXTRA = "Varied types of side dishes."
-    if not (lunch_picked.get('extra') or '').strip():
-        lunch_picked['extra'] = DEFAULT_EXTRA
-    if not (dinner_picked.get('extra') or '').strip():
-        dinner_picked['extra'] = DEFAULT_EXTRA
+    if not (lunch_picked.get("extra") or "").strip():
+        lunch_picked["extra"] = DEFAULT_EXTRA
+    if not (dinner_picked.get("extra") or "").strip():
+        dinner_picked["extra"] = DEFAULT_EXTRA
 
     # Always use the modern builder and avoid template/token handling
-    doc = _build_docx_modern(str(rig_name or ''), dt, lunch_picked, lunch_all, lunch_glu, lunch_nuts, dinner_picked, dinner_all, dinner_glu, dinner_nuts)
+    doc = _build_docx_modern(str(rig_name or ""), dt, lunch_picked, lunch_all, lunch_glu, lunch_nuts, dinner_picked, dinner_all, dinner_glu, dinner_nuts)
 
     # No template/token helpers needed for modern builder
 
@@ -3941,7 +3948,7 @@ def menus_daily_docx():
             def _scale_run_fonts(p, scale: float, min_pt: float = 9.0):
                 if not Pt:
                     return
-                for r in getattr(p, 'runs', []) or []:
+                for r in getattr(p, "runs", []) or []:
                     try:
                         f = r.font
                         if f is None:
@@ -3954,12 +3961,12 @@ def menus_daily_docx():
 
             def _scale_container_fonts(obj, scale: float):
                 try:
-                    for p in getattr(obj, 'paragraphs', []) or []:
+                    for p in getattr(obj, "paragraphs", []) or []:
                         _scale_run_fonts(p, scale)
                 except Exception:
                     pass
                 try:
-                    for tbl in getattr(obj, 'tables', []) or []:
+                    for tbl in getattr(obj, "tables", []) or []:
                         for row in tbl.rows:
                             for cell in row.cells:
                                 for p in cell.paragraphs:
@@ -3969,10 +3976,10 @@ def menus_daily_docx():
 
             # Scale document styles (paragraph/character) so text without explicit run sizes also shrinks
             try:
-                if Pt and hasattr(doc, 'styles'):
+                if Pt and hasattr(doc, "styles"):
                     for st in list(doc.styles):
                         try:
-                            fnt = getattr(st, 'font', None)
+                            fnt = getattr(st, "font", None)
                             if fnt is not None and fnt.size is not None:
                                 fnt.size = Pt(max(8.0, float(fnt.size.pt) * scale))
                         except Exception:
@@ -3997,8 +4004,8 @@ def menus_daily_docx():
             _scale_container_fonts(doc, scale)
             try:
                 for sec in doc.sections:
-                    for part in [getattr(sec, 'header', None), getattr(sec, 'first_page_header', None), getattr(sec, 'even_page_header', None),
-                                 getattr(sec, 'footer', None), getattr(sec, 'first_page_footer', None), getattr(sec, 'even_page_footer', None)]:
+                    for part in [getattr(sec, "header", None), getattr(sec, "first_page_header", None), getattr(sec, "even_page_header", None),
+                                 getattr(sec, "footer", None), getattr(sec, "first_page_footer", None), getattr(sec, "even_page_footer", None)]:
                         if part:
                             _scale_container_fonts(part, scale)
             except Exception:
@@ -4128,19 +4135,19 @@ def menus_daily_print():
     dinner_all, dinner_glu, dinner_nuts = read_allergens("middag")
 
     def line(label: str, cat: str, picked: dict[str, str], alls: dict[str, str], glu: dict[str, str], nuts: dict[str, str]) -> str:
-        dish = (picked.get(cat) or '').strip()
-        if cat == 'extra' and not dish:
+        dish = (picked.get(cat) or "").strip()
+        if cat == "extra" and not dish:
             dish = "Varied types of side dishes."
-        alg = (alls.get(cat) or '').strip().replace(' ', '')
-        glu_s = (glu.get(cat) or '').strip()
-        nuts_s = (nuts.get(cat) or '').strip()
-        if alg and '1' in [x for x in alg.split(',') if x]:
+        alg = (alls.get(cat) or "").strip().replace(" ", "")
+        glu_s = (glu.get(cat) or "").strip()
+        nuts_s = (nuts.get(cat) or "").strip()
+        if alg and "1" in [x for x in alg.split(",") if x]:
             if glu_s:
                 alg = alg + f" [gluten: {glu_s}]"
-        if alg and '8' in [x for x in alg.split(',') if x]:
+        if alg and "8" in [x for x in alg.split(",") if x]:
             if nuts_s:
                 alg = alg + f" [nuts: {nuts_s}]"
-        suffix = f" ({alg})" if alg else ''
+        suffix = f" ({alg})" if alg else ""
         return f"{label} {dish}{suffix}" if dish else label
 
     lunch_lines = {
@@ -4159,7 +4166,7 @@ def menus_daily_print():
     return render_template(
         "daily_print.html",
         rig_name=rig_name or "",
-        date_str=dt.strftime('%Y-%m-%d'),
+        date_str=dt.strftime("%Y-%m-%d"),
         lunch_lines=lunch_lines,
         dinner_lines=dinner_lines,
     )
@@ -4533,13 +4540,13 @@ def send_daily_menu_message():
 
     # Ensure default text for 'extra' when nothing is specified
     DEFAULT_EXTRA = "Varied types of side dishes."
-    if not (lunch_picked.get('extra') or '').strip():
-        lunch_picked['extra'] = DEFAULT_EXTRA
-    if not (dinner_picked.get('extra') or '').strip():
-        dinner_picked['extra'] = DEFAULT_EXTRA
+    if not (lunch_picked.get("extra") or "").strip():
+        lunch_picked["extra"] = DEFAULT_EXTRA
+    if not (dinner_picked.get("extra") or "").strip():
+        dinner_picked["extra"] = DEFAULT_EXTRA
 
     # Build DOCX using the same logic as the /menus/daily_docx endpoint
-    doc = _build_docx_modern(str(rig_name or ''), dt, lunch_picked, lunch_all, lunch_glu, lunch_nuts, dinner_picked, dinner_all, dinner_glu, dinner_nuts)
+    doc = _build_docx_modern(str(rig_name or ""), dt, lunch_picked, lunch_all, lunch_glu, lunch_nuts, dinner_picked, dinner_all, dinner_glu, dinner_nuts)
 
     # Save
     out_dir = Path(os.getcwd()) / "uploads" / "daily_menus"
@@ -5138,7 +5145,7 @@ def health():
 def favicon():
     # Serve our SVG as favicon to avoid 404; browsers will follow redirect.
     try:
-        return redirect(url_for('static', filename='Yuplanlogo_offshore.svg'))
+        return redirect(url_for("static", filename="Yuplanlogo_offshore.svg"))
     except Exception:
         # Fallback empty response (no favicon)
         return "", 204
@@ -5157,13 +5164,13 @@ def list_routes():
 
 if __name__ == "__main__":
     import os as _os
-    _port = int(_os.environ.get('PORT') or _os.environ.get('YUPLAN_PORT') or 5000)
+    _port = int(_os.environ.get("PORT") or _os.environ.get("YUPLAN_PORT") or 5000)
     try:
-        interesting = {'/','/landing','/coming-soon','/ping','/login','/dashboard'}
-        print('[yuplan] Starting on port', _port, 'DEMO_MODE=', _os.environ.get('DEMO_MODE')=='1')
+        interesting = {"/","/landing","/coming-soon","/ping","/login","/dashboard"}
+        print("[yuplan] Starting on port", _port, "DEMO_MODE=", _os.environ.get("DEMO_MODE")=="1")
         for r in sorted(app.url_map.iter_rules(), key=lambda x: str(x)):
             if str(r) in interesting:
-                print('   ', f"{r:15} -> {r.endpoint}")
+                print("   ", f"{r:15} -> {r.endpoint}")
     except Exception:
         pass
-    app.run(host='127.0.0.1', port=_port, debug=False, use_reloader=False)
+    app.run(host="127.0.0.1", port=_port, debug=False, use_reloader=False)

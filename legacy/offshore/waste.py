@@ -1,9 +1,12 @@
 from __future__ import annotations
-from flask import Blueprint, request, jsonify, session
-import sqlite3, math
+
+import math
+import sqlite3
 from datetime import datetime
 
-waste_bp = Blueprint('waste', __name__, url_prefix='/service')
+from flask import Blueprint, jsonify, request, session
+
+waste_bp = Blueprint("waste", __name__, url_prefix="/service")
 
 # --- DB helper injection expectation: main app will provide get_db via import ---
 from app import get_db  # circular safe if only used at runtime inside handlers
@@ -16,10 +19,10 @@ def _ensure_baseline_seed(db: sqlite3.Connection, rig_id: int):
         rows = db.execute("SELECT COUNT(*) FROM normative_portion_guidelines").fetchone()[0]
         if rows == 0:
             seeds = [
-                (None, 'soppa', None, 200, 4.0, None, 'system'),
-                (None, 'fisk', 'fish', 160, 22.0, None, 'system'),
-                (None, 'kott', 'meat', 170, 26.0, None, 'system'),
-                (None, 'extra', 'veg', 140, 8.0, None, 'system'),
+                (None, "soppa", None, 200, 4.0, None, "system"),
+                (None, "fisk", "fish", 160, 22.0, None, "system"),
+                (None, "kott", "meat", 170, 26.0, None, "system"),
+                (None, "extra", "veg", 140, 8.0, None, "system"),
             ]
             db.executemany("INSERT INTO normative_portion_guidelines(rig_id, category, protein_source, baseline_g_per_guest, protein_per_100g, valid_from, source) VALUES(?,?,?,?,?,?,?)", seeds)
             db.commit()
@@ -31,12 +34,12 @@ def _get_baseline_portion_g(db: sqlite3.Connection, rig_id: int, dish_row=None, 
     # Priority: dish_nutrition.default_portion_g -> rig guideline -> global guideline -> fallback constants
     try:
         if dish_row is not None:
-            dnut = db.execute("SELECT default_portion_g FROM dish_nutrition WHERE rig_id=? AND dish_id=?", (rig_id, dish_row['id'])).fetchone()
+            dnut = db.execute("SELECT default_portion_g FROM dish_nutrition WHERE rig_id=? AND dish_id=?", (rig_id, dish_row["id"])).fetchone()
             if dnut and dnut[0]:
                 return int(dnut[0])
     except Exception:
         pass
-    cat = (category or (dish_row['category'] if dish_row and 'category' in dish_row.keys() else None) or '').strip().lower()
+    cat = (category or (dish_row["category"] if dish_row and "category" in dish_row.keys() else None) or "").strip().lower()
     if not cat:
         return 160  # neutral fallback
     try:
@@ -50,7 +53,7 @@ def _get_baseline_portion_g(db: sqlite3.Connection, rig_id: int, dish_row=None, 
             return int(row2[0])
     except Exception:
         pass
-    defaults = {'soppa':200,'fisk':160,'kott':170,'extra':140}
+    defaults = {"soppa":200,"fisk":160,"kott":170,"extra":140}
     return defaults.get(cat, 160)
 
 
@@ -92,15 +95,15 @@ def _safety_factor(db: sqlite3.Connection, rig_id: int, dish_id: int | None, cat
 
 
 def _resolve_user_rig(db: sqlite3.Connection):
-    if not session.get('user_id'):
+    if not session.get("user_id"):
         return None
-    row = db.execute('SELECT rig_id FROM users WHERE id=?', (session['user_id'],)).fetchone()
+    row = db.execute("SELECT rig_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
     return row[0] if row and row[0] else None
 
 # --- Stats helpers ---
 def _parse_date(d: str):
     try:
-        return datetime.strptime(d, '%Y-%m-%d').date()
+        return datetime.strptime(d, "%Y-%m-%d").date()
     except Exception:
         return None
 
@@ -109,12 +112,12 @@ def _period_range(base_date_str: str, period: str):
     d = _parse_date(base_date_str)
     if not d:
         return None, None
-    period = (period or 'day').lower()
-    if period == 'week':
+    period = (period or "day").lower()
+    if period == "week":
         # Monday-start week
         start = d - _td(days=d.weekday())
         end = start + _td(days=6)
-    elif period == 'month':
+    elif period == "month":
         start = d.replace(day=1)
         # naive month end
         if start.month == 12:
@@ -133,37 +136,37 @@ def _protein_per_100g(db: sqlite3.Connection, rig_id: int, category: str) -> flo
     except Exception:
         pass
     # fallback rough heuristic
-    defaults = {'fisk':22.0,'kott':26.0,'soppa':4.0,'extra':8.0}
+    defaults = {"fisk":22.0,"kott":26.0,"soppa":4.0,"extra":8.0}
     return defaults.get(category, 10.0)
 
 # --- Endpoints ---
 
-@waste_bp.post('/log')
+@waste_bp.post("/log")
 def log_service_metrics():
-    if not session.get('user_id'):
-        return jsonify({'ok': False, 'error': 'Auth'}), 401
+    if not session.get("user_id"):
+        return jsonify({"ok": False, "error": "Auth"}), 401
     db = get_db()
     rig_id = _resolve_user_rig(db)
     if not rig_id:
-        return jsonify({'ok': False, 'error': 'Ingen rigg'}), 400
+        return jsonify({"ok": False, "error": "Ingen rigg"}), 400
     data = request.get_json(force=True, silent=True) or {}
-    date = (data.get('date') or '').strip()
-    meal = (data.get('meal') or '').strip().lower()
-    guest_count = data.get('guest_count')
-    dishes = data.get('dishes') or []
+    date = (data.get("date") or "").strip()
+    meal = (data.get("meal") or "").strip().lower()
+    guest_count = data.get("guest_count")
+    dishes = data.get("dishes") or []
     if not date or not meal or not isinstance(guest_count, int) or guest_count <= 0:
-        return jsonify({'ok': False, 'error': 'Ugyldig input'}), 400
+        return jsonify({"ok": False, "error": "Ugyldig input"}), 400
     try:
-        datetime.strptime(date, '%Y-%m-%d')
+        datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
-        return jsonify({'ok': False, 'error': 'Dato format'}), 400
+        return jsonify({"ok": False, "error": "Dato format"}), 400
     inserted = []
     for d in dishes:
-        cat = (d.get('category') or '').strip().lower() or None
-        dish_id = d.get('dish_id')
-        produced = d.get('produced_qty_kg')
-        leftover = d.get('leftover_qty_kg')
-        served = d.get('served_qty_kg')
+        cat = (d.get("category") or "").strip().lower() or None
+        dish_id = d.get("dish_id")
+        produced = d.get("produced_qty_kg")
+        leftover = d.get("leftover_qty_kg")
+        served = d.get("served_qty_kg")
         # Derivations
         try:
             produced_f = float(produced) if produced is not None else None
@@ -197,24 +200,24 @@ def log_service_metrics():
             if row:
                 inserted.append(row[0])
         except Exception as e:
-            return jsonify({'ok': False, 'error': f'Feil lagring: {e}'}), 500
+            return jsonify({"ok": False, "error": f"Feil lagring: {e}"}), 500
     db.commit()
-    return jsonify({'ok': True, 'count': len(inserted), 'ids': inserted})
+    return jsonify({"ok": True, "count": len(inserted), "ids": inserted})
 
-@waste_bp.get('/recommendation')
+@waste_bp.get("/recommendation")
 def recommendation():
-    if not session.get('user_id'):
-        return jsonify({'ok': False, 'error': 'Auth'}), 401
+    if not session.get("user_id"):
+        return jsonify({"ok": False, "error": "Auth"}), 401
     db = get_db()
     rig_id = _resolve_user_rig(db)
     if not rig_id:
-        return jsonify({'ok': False, 'error': 'Ingen rigg'}), 400
+        return jsonify({"ok": False, "error": "Ingen rigg"}), 400
     try:
-        guest_count = int(request.args.get('guest_count') or 0)
+        guest_count = int(request.args.get("guest_count") or 0)
     except ValueError:
         guest_count = 0
     if guest_count <= 0:
-        return jsonify({'ok': False, 'error': 'guest_count kreves'}), 400
+        return jsonify({"ok": False, "error": "guest_count kreves"}), 400
     # For nå: finn aktive kategorier ut fra normative baseline (global + rig)
     _ensure_baseline_seed(db, rig_id)
     cats_rows = db.execute("SELECT DISTINCT category FROM normative_portion_guidelines WHERE (rig_id=? OR rig_id IS NULL)", (rig_id,)).fetchall()
@@ -230,31 +233,31 @@ def recommendation():
         sf = _safety_factor(db, rig_id, None, cat)
         recommended_produced_kg = recommended_served_kg * sf
         out.append({
-            'category': cat,
-            'guest_count': guest_count,
-            'empirical_g_per_guest': round(empirical,1),
-            'baseline_g_per_guest': baseline,
-            'blended_g_per_guest': round(portion_g_per_guest,1),
-            'recommended_served_kg': round(recommended_served_kg,2),
-            'safety_factor': sf,
-            'recommended_produced_kg': round(recommended_produced_kg,2),
-            'samples': len(hist)
+            "category": cat,
+            "guest_count": guest_count,
+            "empirical_g_per_guest": round(empirical,1),
+            "baseline_g_per_guest": baseline,
+            "blended_g_per_guest": round(portion_g_per_guest,1),
+            "recommended_served_kg": round(recommended_served_kg,2),
+            "safety_factor": sf,
+            "recommended_produced_kg": round(recommended_produced_kg,2),
+            "samples": len(hist)
         })
-    return jsonify({'ok': True, 'recommendations': out})
+    return jsonify({"ok": True, "recommendations": out})
 
-@waste_bp.get('/stats')
+@waste_bp.get("/stats")
 def stats():
-    if not session.get('user_id'):
-        return jsonify({'ok': False, 'error': 'Auth'}), 401
+    if not session.get("user_id"):
+        return jsonify({"ok": False, "error": "Auth"}), 401
     db = get_db()
     rig_id = _resolve_user_rig(db)
     if not rig_id:
-        return jsonify({'ok': False, 'error': 'Ingen rigg'}), 400
-    date = request.args.get('date') or datetime.utcnow().date().isoformat()
-    period = request.args.get('period') or 'day'
+        return jsonify({"ok": False, "error": "Ingen rigg"}), 400
+    date = request.args.get("date") or datetime.utcnow().date().isoformat()
+    period = request.args.get("period") or "day"
     start, end = _period_range(date, period)
     if not start:
-        return jsonify({'ok': False, 'error': 'Dato format'}), 400
+        return jsonify({"ok": False, "error": "Dato format"}), 400
     _ensure_baseline_seed(db, rig_id)
     # Aggregate per category across interval
     rows = db.execute(
@@ -271,7 +274,7 @@ def stats():
         """, (rig_id, start, end)).fetchall()
     out = []
     for r in rows:
-        cat = r[0] or 'ukjent'
+        cat = r[0] or "ukjent"
         produced = r[2] or 0.0
         served = r[3] or 0.0
         leftover = r[4] or 0.0
@@ -284,17 +287,17 @@ def stats():
         protein100 = _protein_per_100g(db, rig_id, cat)
         protein_served = served * 1000.0 * (protein100/100.0)  # grams protein
         out.append({
-            'category': cat,
-            'interval': {'start': start, 'end': end, 'period': period},
-            'services': services,
-            'produced_kg': round(produced,2),
-            'served_kg': round(served,2),
-            'leftover_kg': round(leftover,2),
-            'empirical_g_per_guest': round(empirical,1),
-            'baseline_g_per_guest': baseline,
-            'blended_g_per_guest': round(blended or baseline,1),
-            'protein_per_100g': protein100,
-            'estimated_protein_served_g': round(protein_served,1),
-            'samples': len(hist)
+            "category": cat,
+            "interval": {"start": start, "end": end, "period": period},
+            "services": services,
+            "produced_kg": round(produced,2),
+            "served_kg": round(served,2),
+            "leftover_kg": round(leftover,2),
+            "empirical_g_per_guest": round(empirical,1),
+            "baseline_g_per_guest": baseline,
+            "blended_g_per_guest": round(blended or baseline,1),
+            "protein_per_100g": protein100,
+            "estimated_protein_served_g": round(protein_served,1),
+            "samples": len(hist)
         })
-    return jsonify({'ok': True, 'stats': out, 'interval': {'start': start, 'end': end, 'period': period}})
+    return jsonify({"ok": True, "stats": out, "interval": {"start": start, "end": end, "period": period}})

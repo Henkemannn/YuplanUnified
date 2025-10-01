@@ -1,4 +1,6 @@
-import sqlite3, pathlib
+import pathlib
+import sqlite3
+
 db = pathlib.Path("app.db")
 conn = sqlite3.connect(db.as_posix())
 cur = conn.cursor()

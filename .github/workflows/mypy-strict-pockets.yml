@@ -1,0 +1,43 @@
+name: mypy-strict-pockets
+
+on:
+  pull_request:
+    paths:
+      - 'core/**'
+      - 'mypy.ini'
+      - '.github/workflows/mypy-strict-pockets.yml'
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  type-check-pockets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Mypy strict pockets
+        run: |
+          echo 'Running strict pocket modules only'
+          # Explicit list to fail fast if config drifts
+          POCKETS=(
+            core/jwt_utils.py
+            core/rate_limit.py
+            core/audit.py
+            core/db.py
+            core/portion_recommendation_service.py
+            core/menu_service.py
+            core/service_metrics_service.py
+            core/auth.py
+            core/feature_flags.py
+          )
+          mypy "${POCKETS[@]}"

@@ -6,13 +6,13 @@
 #
 # OBS: Denna modul rör INTE menydelen.
 
-import sqlite3
-import json
 import csv
-from datetime import datetime, timedelta, date
-from typing import List, Optional, Dict, Any, Iterable
+import json
+import sqlite3
+from collections import Counter
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from collections import Counter, defaultdict
+from typing import Any, Dict, Iterable, List, Optional
 
 DB_PATH = Path("app.db")
 
@@ -203,7 +203,7 @@ def generate_slots_from_motor_template(template_id: int, start_date: str, end_da
     to_insert: List[tuple] = []
     for d in _daterange(d0, d1):
         wd = d.weekday()
-        ds = d.strftime('%Y-%m-%d')
+        ds = d.strftime("%Y-%m-%d")
         if ds in snu_dates:
             # Snudag: roter indekser en ekstra posisjon før generering denne dagen
             day_idx = ((day_idx) % cooks) + 1
@@ -500,7 +500,7 @@ def generate_turnus_for_cooks(
     slots = []
     cook_idx = 0
     for d in days:
-        ds = d.strftime('%Y-%m-%d')
+        ds = d.strftime("%Y-%m-%d")
         if ds in gap_set:
             continue  # Ingen kock denna dag
         if ds in snu_set:
@@ -618,7 +618,7 @@ def apply_virtual_mapping(rig_id: int, start_ts: Optional[str] = None, end_ts: O
 # ---------- CSV-import för turnus ----------
 def _parse_time_to_dt(d: date, t: str) -> datetime:
     """Tolka tider som '07:00', '23:00', '24:00'. 24:00 → 00:00 nästa dag."""
-    hh, mm = [int(x) for x in t.split(":")]
+    hh, mm = (int(x) for x in t.split(":"))
     if hh == 24 and mm == 0:
         # 24:00 → midnatt nästa dag
         return datetime(d.year, d.month, d.day) + timedelta(days=1)
@@ -636,7 +636,7 @@ def import_turnus_csv(csv_path: str, rig_id: int, publish: bool = False) -> int:
     """
     status = "published" if publish else "planned"
     to_insert: List[tuple] = []
-    with open(csv_path, newline='', encoding='utf-8') as f:
+    with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             shift = (row.get("shift") or "").strip().lower()
@@ -698,7 +698,7 @@ def infer_motor_template_from_csv(csv_path: str, cooks: int = 6) -> Dict[str, An
     Returnerar pattern-dict: {"type":"motor_v1","meta":{...}}
     """
     rows = []
-    with open(csv_path, newline='', encoding='utf-8') as f:
+    with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for r in reader:
             shift = (r.get("shift") or "").strip().lower()

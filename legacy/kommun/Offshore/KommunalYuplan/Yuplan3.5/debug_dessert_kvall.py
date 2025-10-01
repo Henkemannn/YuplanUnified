@@ -2,7 +2,7 @@
 # Proprietary and confidential. Unauthorized copying, distribution or use is strictly prohibited.
 import sqlite3
 
-conn = sqlite3.connect('kost.db')
+conn = sqlite3.connect("kost.db")
 c = conn.cursor()
 
 print("Vecka | Dag | Typ     | Menytext")

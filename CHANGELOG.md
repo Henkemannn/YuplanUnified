@@ -57,4 +57,9 @@
 - Added pre-commit hooks (Ruff lint+format, mypy, merge marker guard).
 - README updated with strict pocket workflow and active modules list.
  - Added second strict mypy pocket: `core.portion_recommendation_service`, `core.menu_service`, `core.service_metrics_service` (TypedDict structures for menu week view & service metrics rows; refined recommendation output typing).
+ - Added third strict mypy pocket: `core.auth`, `core.feature_flags`.
+	 - JWT payloads now explicit `AccessTokenPayload` & `RefreshTokenPayload` TypedDicts with claim validation (issuer defaulting, temporal skew handling, strict `type` enum, `nbf` guard).
+	 - Feature flags refactored to typed registry (`FlagDefinition`, `FlagState`, `FlagMode`) with idempotent `add()` supporting string shorthand; `has()` helper for app factory integration.
+	 - Expanded unit tests: JWT edge cases (missing claim, unknown type, bad signature, expired, nbf future, skew boundary) & feature flag registry behaviors (idempotent add, unknown flag error, disable/enable cycle, sorted listing).
+	 - Definition of Done checklist for typing/security PRs documented in README.
 

@@ -1,6 +1,7 @@
 import sys
-from docx import Document
 from pathlib import Path
+
+from docx import Document
 
 
 def summarize(doc_path: Path):
@@ -73,7 +74,7 @@ def main():
         print("...")
     print("Body tables:", len(s["tables"]))
     for t in s["tables"]:
-        max_cols = max((len(r) for r in t['rows']), default=0)
+        max_cols = max((len(r) for r in t["rows"]), default=0)
         print(f"Table {t['index']}: {len(t['rows'])} rows, {max_cols} cols")
         for r in t["rows"][:8]:
             line = " | ".join(f"[{cell['r']},{cell['c']}] {cell['text'][:40]}" for cell in r[:8])

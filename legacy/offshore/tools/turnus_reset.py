@@ -1,7 +1,7 @@
 import argparse
 import sqlite3
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 DB_PATH = Path("app.db")
 
