@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .db import get_session
 from .models import PortionGuideline, ServiceMetric
@@ -19,12 +19,12 @@ HISTORY_WEIGHT = 0.7
 class RecommendationInput:
     tenant_id: int
     unit_id: int
-    category: Optional[str]
-    dish_id: Optional[int]
+    category: str | None
+    dish_id: int | None
     guest_count: int
 
 class PortionRecommendationService:
-    def recommend(self, inp: RecommendationInput) -> Dict[str, Any]:
+    def recommend(self, inp: RecommendationInput) -> dict[str, Any]:
         """Return recommendation object with fields:
         g_per_guest_recommended, total_g, total_kg, protein_total_g (if known), meta
         """
@@ -32,7 +32,7 @@ class PortionRecommendationService:
         history_mean, sample_size = self._history_mean(inp)
         if history_mean is None:
             blended: float = float(baseline)
-            source = 'baseline'
+            source = "baseline"
         else:
             # Dynamic weights: small sample -> closer to baseline
             if sample_size < 5:
@@ -43,7 +43,7 @@ class PortionRecommendationService:
                 w_history = 0.7
             w_base = 1 - w_history
             blended = (w_base * float(baseline)) + (w_history * history_mean)
-            source = 'blended'
+            source = "blended"
         # Apply safety factor
         blended *= SAFETY_FACTOR
         # Round to nearest integer gram
@@ -55,20 +55,20 @@ class PortionRecommendationService:
         if protein_per_100g is not None:
             protein_total_g = (protein_per_100g / 100.0) * total_g
         result = {
-            'ok': True,
-            'g_per_guest': g_per_guest,
-            'total_g': total_g,
-            'total_kg': total_kg,
-            'protein_total_g': protein_total_g,
-            'meta': {
-                'baseline_used': baseline,
-                'history_mean': history_mean,
-                'source': source,
-                'safety_factor': SAFETY_FACTOR,
-                'sample_size': sample_size,
-                'weights': {
-                    'baseline': round(w_base,3) if history_mean is not None else 1.0,
-                    'history': round(w_history,3) if history_mean is not None else 0.0
+            "ok": True,
+            "g_per_guest": g_per_guest,
+            "total_g": total_g,
+            "total_kg": total_kg,
+            "protein_total_g": protein_total_g,
+            "meta": {
+                "baseline_used": baseline,
+                "history_mean": history_mean,
+                "source": source,
+                "safety_factor": SAFETY_FACTOR,
+                "sample_size": sample_size,
+                "weights": {
+                    "baseline": round(w_base,3) if history_mean is not None else 1.0,
+                    "history": round(w_history,3) if history_mean is not None else 0.0
                 }
             }
         }
@@ -87,14 +87,14 @@ class PortionRecommendationService:
     def blended_g_per_guest(self, tenant_id: int, category: str | None, week=None):  # backward compat
         inp = RecommendationInput(tenant_id=tenant_id, unit_id=1, category=category, dish_id=None, guest_count=100)
         rec = self.recommend(inp)
-        meta = rec['meta']
+        meta = rec["meta"]
         return self._BlendedResult(
-            recommended_g_per_guest=rec['g_per_guest'],
-            source=meta['source'],
-            sample_size=meta.get('sample_size', 0),
-            baseline_used=meta['baseline_used'],
-            history_mean_raw=meta['history_mean'],
-            history_mean_used=meta['history_mean'],
+            recommended_g_per_guest=rec["g_per_guest"],
+            source=meta["source"],
+            sample_size=meta.get("sample_size", 0),
+            baseline_used=meta["baseline_used"],
+            history_mean_raw=meta["history_mean"],
+            history_mean_used=meta["history_mean"],
         )
 
     def protein_per_100g(self, tenant_id: int, category: str | None):
@@ -110,7 +110,7 @@ class PortionRecommendationService:
             if inp.category:
                 q = q.filter(PortionGuideline.category == inp.category)
             recs = q.all()
-            best: Optional[int] = None
+            best: int | None = None
             for r in recs:
                 val = r.baseline_g_per_guest
                 if val is None:
@@ -124,7 +124,7 @@ class PortionRecommendationService:
         finally:
             db.close()
 
-    def _history_mean(self, inp: RecommendationInput) -> tuple[Optional[float], int]:
+    def _history_mean(self, inp: RecommendationInput) -> tuple[float | None, int]:
         db = get_session()
         try:
             since = date.today() - timedelta(days=HISTORY_DAYS)
@@ -152,7 +152,7 @@ class PortionRecommendationService:
         finally:
             db.close()
 
-    def _protein_per_100g(self, inp: RecommendationInput) -> Optional[float]:
+    def _protein_per_100g(self, inp: RecommendationInput) -> float | None:
         db = get_session()
         try:
             q = db.query(PortionGuideline).filter(PortionGuideline.tenant_id == inp.tenant_id)
@@ -161,7 +161,7 @@ class PortionRecommendationService:
             if inp.category:
                 q = q.filter(PortionGuideline.category == inp.category)
             recs = q.all()
-            best: Optional[float] = None
+            best: float | None = None
             for r in recs:
                 val = r.protein_per_100g
                 if val is None:

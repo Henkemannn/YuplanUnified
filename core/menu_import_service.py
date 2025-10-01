@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict
-
 from .db import get_session
 from .importers.base import ImportedMenuItem, MenuImportResult
 from .menu_service import MenuServiceDB
@@ -19,7 +17,7 @@ class MenuImportService:
     def __init__(self, menu_service: MenuServiceDB):
         self.menu_service = menu_service
 
-    def apply(self, tenant_id: int, result: MenuImportResult) -> Dict:
+    def apply(self, tenant_id: int, result: MenuImportResult) -> dict:
         summary = []
         db = get_session()
         try:

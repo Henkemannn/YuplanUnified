@@ -42,8 +42,8 @@ from .turnus_api import bp as turnus_api_bp
 
 # Map of module key -> import path:attr blueprint (for dynamic registration)
 MODULE_IMPORTS = {
-    'municipal': 'modules.municipal.views:bp',
-    'offshore': 'modules.offshore.views:bp',
+    "municipal": "modules.municipal.views:bp",
+    "offshore": "modules.offshore.views:bp",
 }
 
 
@@ -73,7 +73,7 @@ def create_app(config_override: dict | None = None) -> Flask:
         from flask import has_request_context
         if not has_request_context():
             return
-        tid = getattr(g, 'tenant_id', None)
+        tid = getattr(g, "tenant_id", None)
         g.tenant_feature_flags = {}
         if not tid:
             return
@@ -85,7 +85,7 @@ def create_app(config_override: dict | None = None) -> Flask:
             db.close()
 
     def feature_enabled(name: str) -> bool:
-        override_val = getattr(g, 'tenant_feature_flags', {}).get(name)
+        override_val = getattr(g, "tenant_feature_flags", {}).get(name)
         if override_val is not None:
             return bool(override_val)
         return bool(feature_registry.enabled(name))
@@ -93,9 +93,9 @@ def create_app(config_override: dict | None = None) -> Flask:
     # --- Error handling ---
     def _json_error(error_code: str, message: str, status: int):
         from flask import jsonify
-        resp = jsonify({'error': error_code, 'message': message})
+        resp = jsonify({"error": error_code, "message": message})
         resp.status_code = status
-        resp.headers['Content-Type'] = 'application/json'
+        resp.headers["Content-Type"] = "application/json"
         return resp
 
     @app.errorhandler(APIError)
@@ -104,84 +104,84 @@ def create_app(config_override: dict | None = None) -> Flask:
 
     @app.errorhandler(404)
     def _h404(_):
-        return _json_error('not_found', 'Resource not found', 404)
+        return _json_error("not_found", "Resource not found", 404)
 
     @app.errorhandler(400)
     def _h400(_):
-        return _json_error('bad_request', 'Bad Request', 400)
+        return _json_error("bad_request", "Bad Request", 400)
 
     @app.errorhandler(401)
     def _h401(_):
-        return _json_error('unauthorized', 'Unauthorized', 401)
+        return _json_error("unauthorized", "Unauthorized", 401)
 
     @app.errorhandler(403)
     def _h403(_):
-        return _json_error('forbidden', 'Forbidden', 403)
+        return _json_error("forbidden", "Forbidden", 403)
 
     @app.errorhandler(409)
     def _h409(_):
-        return _json_error('conflict', 'Conflict', 409)
+        return _json_error("conflict", "Conflict", 409)
 
     @app.errorhandler(Exception)
     def _h500(ex):
         if isinstance(ex, APIError):
             return _handle_api_error(ex)
-        app.logger.exception('Unhandled exception')
-        return _json_error('internal_error', 'Internal Server Error', 500)
+        app.logger.exception("Unhandled exception")
+        return _json_error("internal_error", "Internal Server Error", 500)
 
     # --- Context processor ---
     @app.context_processor
     def inject_ctx():
-        return {'tenant_id': getattr(g, 'tenant_id', None), 'feature_enabled': feature_enabled}
+        return {"tenant_id": getattr(g, "tenant_id", None), "feature_enabled": feature_enabled}
 
     # --- Logging / timing middleware ---
-    log = logging.getLogger('unified')
+    log = logging.getLogger("unified")
     if not log.handlers:
         h = logging.StreamHandler()
-        h.setFormatter(logging.Formatter('%(message)s'))
+        h.setFormatter(logging.Formatter("%(message)s"))
         log.addHandler(h)
     log.setLevel(logging.INFO)
 
     @app.before_request
     def _before_req():
-        if app.config.get('TESTING'):
+        if app.config.get("TESTING"):
             from flask import session
-            role = request.headers.get('X-User-Role')
-            tid = request.headers.get('X-Tenant-Id')
+            role = request.headers.get("X-User-Role")
+            tid = request.headers.get("X-Tenant-Id")
             if role:
-                session['role'] = role
-                session['user_id'] = 1
+                session["role"] = role
+                session["user_id"] = 1
             if tid:
-                session['tenant_id'] = int(tid) if tid.isdigit() else tid
+                session["tenant_id"] = int(tid) if tid.isdigit() else tid
             if tid:
                 g.tenant_id = int(tid) if tid.isdigit() else tid
         g._t0 = time.perf_counter()
-        g.request_id = request.headers.get('X-Request-Id') or str(uuid.uuid4())
+        g.request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
         _load_feature_flags_logic()
 
     @app.after_request
     def _after_req(resp):
         try:
-            dur_ms = int((time.perf_counter() - getattr(g, '_t0', time.perf_counter())) * 1000)
-            resp.headers['X-Request-Id'] = getattr(g, 'request_id', '')
-            resp.headers['X-Request-Duration-ms'] = str(dur_ms)
-            if 'Cache-Control' not in resp.headers:
-                resp.headers['Cache-Control'] = 'no-store'
+            dur_ms = int((time.perf_counter() - getattr(g, "_t0", time.perf_counter())) * 1000)
+            resp.headers["X-Request-Id"] = getattr(g, "request_id", "")
+            resp.headers["X-Request-Duration-ms"] = str(dur_ms)
+            if "Cache-Control" not in resp.headers:
+                resp.headers["Cache-Control"] = "no-store"
             # --- Security Headers ---
             # Content Security Policy (restrict inline except where UI currently relies; can tighten later)
             csp = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
-            resp.headers.setdefault('Content-Security-Policy', csp)
+            resp.headers.setdefault("Content-Security-Policy", csp)
             # Prevent MIME sniffing
-            resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+            resp.headers.setdefault("X-Content-Type-Options", "nosniff")
             # Basic clickjacking protection (frame-ancestors already in CSP)
-            resp.headers.setdefault('X-Frame-Options', 'DENY')
+            resp.headers.setdefault("X-Frame-Options", "DENY")
             # Referrer policy minimal leakage
-            resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+            resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
             # Permissions policy (formerly Feature-Policy) minimal surface
-            resp.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
+            resp.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
             # HSTS only if HTTPS likely (simple heuristic: not in testing and not debug)
-            if not app.config.get('TESTING') and not app.config.get('DEBUG'):
-                resp.headers.setdefault('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
+            if not app.config.get("TESTING") and not app.config.get("DEBUG"):
+                resp.headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
         except Exception:
             pass
         return resp
@@ -242,234 +242,234 @@ def create_app(config_override: dict | None = None) -> Flask:
         ref = MODULE_IMPORTS.get(mod)
         if not ref:
             continue
-        module_path, obj_name = ref.split(':')
+        module_path, obj_name = ref.split(":")
         try:
             m = import_module(module_path)
             bp = getattr(m, obj_name)
             app.register_blueprint(bp)
         except Exception as e:  # pragma: no cover
-            app.logger.exception('Failed loading module %s: %s', mod, e)
+            app.logger.exception("Failed loading module %s: %s", mod, e)
 
     # --- Simple health ---
-    @app.get('/health')
+    @app.get("/health")
     def health():  # pragma: no cover
-        return {'ok': True, 'modules': cfg.default_enabled_modules, 'features': feature_registry.list()}
+        return {"ok": True, "modules": cfg.default_enabled_modules, "features": feature_registry.list()}
 
     # --- OpenAPI Spec Endpoint ---
-    @app.get('/openapi.json')
+    @app.get("/openapi.json")
     def openapi_spec():  # pragma: no cover
         error_schema = {
-            'type': 'object',
-            'required': ['error', 'message'],
-            'properties': {
-                'error': {'type': 'string', 'example': 'validation_error'},
-                'message': {'type': 'string', 'example': 'Invalid input'}
+            "type": "object",
+            "required": ["error", "message"],
+            "properties": {
+                "error": {"type": "string", "example": "validation_error"},
+                "message": {"type": "string", "example": "Invalid input"}
             },
-            'additionalProperties': False
+            "additionalProperties": False
         }
         note_schema = {
-            'type': 'object',
-            'required': ['id', 'content', 'private_flag'],
-            'properties': {
-                'id': {'type': 'integer'},
-                'content': {'type': 'string'},
-                'private_flag': {'type': 'boolean'},
-                'user_id': {'type': 'integer', 'nullable': True},
-                'created_at': {'type': 'string', 'format': 'date-time'},
-                'updated_at': {'type': 'string', 'format': 'date-time', 'nullable': True},
+            "type": "object",
+            "required": ["id", "content", "private_flag"],
+            "properties": {
+                "id": {"type": "integer"},
+                "content": {"type": "string"},
+                "private_flag": {"type": "boolean"},
+                "user_id": {"type": "integer", "nullable": True},
+                "created_at": {"type": "string", "format": "date-time"},
+                "updated_at": {"type": "string", "format": "date-time", "nullable": True},
             }
         }
         task_schema = {
-            'type': 'object',
-            'required': ['id', 'title', 'task_type', 'done'],
-            'properties': {
-                'id': {'type': 'integer'},
-                'title': {'type': 'string'},
-                'task_type': {'type': 'string'},
-                'done': {'type': 'boolean', 'readOnly': True, 'description': 'Derived legacy boolean (status=="done"). Prefer using status for writes.'},
-                'status': {'type': 'string', 'enum': ['todo','doing','blocked','done','cancelled'], 'description': 'Authoritative state. On create/update maps to done=(status==done).'},
-                'menu_id': {'type': 'integer', 'nullable': True},
-                'dish_id': {'type': 'integer', 'nullable': True},
-                'private_flag': {'type': 'boolean'},
-                'assignee_id': {'type': 'integer', 'nullable': True},
-                'creator_user_id': {'type': 'integer', 'nullable': True},
-                'unit_id': {'type': 'integer', 'nullable': True},
-                'created_at': {'type': 'string', 'format': 'date-time'},
-                'updated_at': {'type': 'string', 'format': 'date-time', 'nullable': True},
+            "type": "object",
+            "required": ["id", "title", "task_type", "done"],
+            "properties": {
+                "id": {"type": "integer"},
+                "title": {"type": "string"},
+                "task_type": {"type": "string"},
+                "done": {"type": "boolean", "readOnly": True, "description": 'Derived legacy boolean (status=="done"). Prefer using status for writes.'},
+                "status": {"type": "string", "enum": ["todo","doing","blocked","done","cancelled"], "description": "Authoritative state. On create/update maps to done=(status==done)."},
+                "menu_id": {"type": "integer", "nullable": True},
+                "dish_id": {"type": "integer", "nullable": True},
+                "private_flag": {"type": "boolean"},
+                "assignee_id": {"type": "integer", "nullable": True},
+                "creator_user_id": {"type": "integer", "nullable": True},
+                "unit_id": {"type": "integer", "nullable": True},
+                "created_at": {"type": "string", "format": "date-time"},
+                "updated_at": {"type": "string", "format": "date-time", "nullable": True},
             }
         }
         # Reusable error responses (referenced in tests)
         def err_resp(desc, example):
             return {
-                'description': desc,
-                'content': {
-                    'application/json': {
-                        'schema': {'$ref': '#/components/schemas/Error'},
-                        'examples': {example: {'value': {'error': example, 'message': desc}}}
+                "description": desc,
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/Error"},
+                        "examples": {example: {"value": {"error": example, "message": desc}}}
                     }
                 }
             }
         reusable = {
-            'Error400': err_resp('Bad Request', 'bad_request'),
+            "Error400": err_resp("Bad Request", "bad_request"),
             # Override 401/403 with richer examples below, still keep mapping for legacy references
-            'Error401': {
-                'description': 'Unauthorized',
-                'content': {
-                    'application/json': {
-                        'schema': {'$ref': '#/components/schemas/Error'},
-                        'examples': {
-                            'unauthorized': {
-                                'value': {'error': 'unauthorized', 'message': 'Bearer token missing or invalid'}
+            "Error401": {
+                "description": "Unauthorized",
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/Error"},
+                        "examples": {
+                            "unauthorized": {
+                                "value": {"error": "unauthorized", "message": "Bearer token missing or invalid"}
                             }
                         }
                     }
                 }
             },
-            'Error403': {
-                'description': 'Forbidden',
-                'content': {
-                    'application/json': {
-                        'schema': {
-                            'type': 'object',
-                            'required': ['error','message'],
-                            'properties': {
-                                'error': {'type':'string'},
-                                'message': {'type':'string'},
-                                'required_role': {'type':'string'}
+            "Error403": {
+                "description": "Forbidden",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "required": ["error","message"],
+                            "properties": {
+                                "error": {"type":"string"},
+                                "message": {"type":"string"},
+                                "required_role": {"type":"string"}
                             }
                         },
-                        'examples': {
-                            'forbidden': {
-                                'value': {'error': 'forbidden', 'message': 'Requires role admin', 'required_role': 'admin'}
+                        "examples": {
+                            "forbidden": {
+                                "value": {"error": "forbidden", "message": "Requires role admin", "required_role": "admin"}
                             }
                         }
                     }
                 }
             },
-            'Error404': err_resp('Not Found', 'not_found'),
-            'Error409': err_resp('Conflict', 'conflict'),
-            'Error429': {
-                'description': 'Rate Limited',
-                'headers': {
-                    'Retry-After': {'schema': {'type': 'integer'}, 'description': 'Seconds until new request may succeed'}
+            "Error404": err_resp("Not Found", "not_found"),
+            "Error409": err_resp("Conflict", "conflict"),
+            "Error429": {
+                "description": "Rate Limited",
+                "headers": {
+                    "Retry-After": {"schema": {"type": "integer"}, "description": "Seconds until new request may succeed"}
                 },
-                'content': {
-                    'application/json': {
-                        'schema': {
-                            'type': 'object',
-                            'required': ['error','message'],
-                            'properties': {
-                                'error': {'type':'string'},
-                                'message': {'type':'string'},
-                                'retry_after': {'type':'integer','nullable':True}
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "required": ["error","message"],
+                            "properties": {
+                                "error": {"type":"string"},
+                                "message": {"type":"string"},
+                                "retry_after": {"type":"integer","nullable":True}
                             }
                         },
-                        'examples': {
-                            'rateLimited': {
-                                'value': {'error': 'rate_limited', 'message': 'Too many requests', 'retry_after': 30}
+                        "examples": {
+                            "rateLimited": {
+                                "value": {"error": "rate_limited", "message": "Too many requests", "retry_after": 30}
                             }
                         }
                     }
                 }
             },
-            'Error500': err_resp('Internal Server Error', 'internal_error'),
+            "Error500": err_resp("Internal Server Error", "internal_error"),
         }
         def attach(base: dict, codes: list[str]):
-            r = base.setdefault('responses', {})
+            r = base.setdefault("responses", {})
             for code in codes:
-                ref_name = f"Error{code}" if code in ('400','401','403','404','409','500') else None
+                ref_name = f"Error{code}" if code in ("400","401","403","404","409","500") else None
                 if ref_name and ref_name in reusable:
-                    r.setdefault(code, {'$ref': f"#/components/responses/{ref_name}"})
+                    r.setdefault(code, {"$ref": f"#/components/responses/{ref_name}"})
                 else:  # fallback
-                    r.setdefault(code, {'description': code, 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/Error'}}}})
+                    r.setdefault(code, {"description": code, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}})
             return base
         paths = {
-            '/features': {'get': attach({'tags': ['Features'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'List flags'}}}, ['401', '429', '500'])},
-            '/features/check': {'get': attach({'tags': ['Features'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'Flag state (unknown -> enabled=false)'}}}, ['400', '401', '429', '500'])},
-            '/features/set': {'post': attach({'tags': ['Features'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'Updated flag'}}}, ['400', '401', '429', '500'])},
-            '/admin/feature_flags': {
-                'post': attach({
-                    'tags': ['Features'],
-                    'security': [{'BearerAuth': []}],
-                    'summary': 'Toggle tenant-scoped feature flag',
-                    'requestBody': {
-                        'required': True,
-                        'content': {'application/json': {'schema': {
-                            'type': 'object', 'required': ['name','enabled'],
-                            'properties': {
-                                'name': {'type': 'string'},
-                                'enabled': {'type': 'boolean'},
-                                'tenant_id': {'type': 'integer', 'description': 'Only for superuser'}
+            "/features": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List flags"}}}, ["401", "429", "500"])},
+            "/features/check": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Flag state (unknown -> enabled=false)"}}}, ["400", "401", "429", "500"])},
+            "/features/set": {"post": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Updated flag"}}}, ["400", "401", "429", "500"])},
+            "/admin/feature_flags": {
+                "post": attach({
+                    "tags": ["Features"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "Toggle tenant-scoped feature flag",
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {
+                            "type": "object", "required": ["name","enabled"],
+                            "properties": {
+                                "name": {"type": "string"},
+                                "enabled": {"type": "boolean"},
+                                "tenant_id": {"type": "integer", "description": "Only for superuser"}
                             }
                         }}}
                     },
-                    'responses': {'200': {'description': 'Flag updated'}}
-                }, ['400','401','403','429','500']),
-                'get': attach({
-                    'tags': ['Features'],
-                    'security': [{'BearerAuth': []}],
-                    'summary': 'List tenant-scoped enabled feature flags',
-                    'parameters': [
-                        {'name': 'tenant_id','in':'query','required': False,'schema': {'type':'integer'}, 'description':'Only superuser may specify'}
+                    "responses": {"200": {"description": "Flag updated"}}
+                }, ["400","401","403","429","500"]),
+                "get": attach({
+                    "tags": ["Features"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List tenant-scoped enabled feature flags",
+                    "parameters": [
+                        {"name": "tenant_id","in":"query","required": False,"schema": {"type":"integer"}, "description":"Only superuser may specify"}
                     ],
-                    'responses': {'200': {'description': 'Flags listed'}},
-                }, ['400','401','403','429','500'])
+                    "responses": {"200": {"description": "Flags listed"}},
+                }, ["400","401","403","429","500"])
             },
-            '/notes/': {
-                'get': attach({'tags': ['Notes'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'List notes'}}}, ['400','401','403','500']),
-                'post': attach({'tags': ['Notes'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'Create note'}}}, ['400','401','403','500']),
+            "/notes/": {
+                "get": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List notes"}}}, ["400","401","403","500"]),
+                "post": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Create note"}}}, ["400","401","403","500"]),
             },
-            '/notes/{id}': {
-                'parameters': [
-                    {'name':'id','in':'path','required':True,'schema':{'type':'integer'}}
+            "/notes/{id}": {
+                "parameters": [
+                    {"name":"id","in":"path","required":True,"schema":{"type":"integer"}}
                 ],
-                'put': attach({'tags': ['Notes'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'Update note'}}}, ['400','401','403','404','500']),
-                'delete': attach({'tags': ['Notes'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'Delete note'}}}, ['401','403','404','500']),
+                "put": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Update note"}}}, ["400","401","403","404","500"]),
+                "delete": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete note"}}}, ["401","403","404","500"]),
             },
-            '/tasks/': {
-                'get': attach({'tags': ['Tasks'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'List tasks'}}}, ['400','401','403','500']),
-                'post': attach({
-                    'tags': ['Tasks'],
-                    'security': [{'BearerAuth': []}],
-                    'requestBody': {
-                        'required': True,
-                        'content': {
-                            'application/json': {
-                                'schema': {'$ref': '#/components/schemas/TaskCreate'},
-                                'examples': {
-                                    'createTask': {
-                                        'summary': 'Create prep task (todo)',
-                                        'value': {
-                                            'title': 'Chop onions',
-                                            'task_type': 'prep',
-                                            'status': 'todo',
-                                            'private_flag': False
+            "/tasks/": {
+                "get": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List tasks"}}}, ["400","401","403","500"]),
+                "post": attach({
+                    "tags": ["Tasks"],
+                    "security": [{"BearerAuth": []}],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/TaskCreate"},
+                                "examples": {
+                                    "createTask": {
+                                        "summary": "Create prep task (todo)",
+                                        "value": {
+                                            "title": "Chop onions",
+                                            "task_type": "prep",
+                                            "status": "todo",
+                                            "private_flag": False
                                         }
                                     }
                                 }
                             }
                         }
                     },
-                    'responses': {
-                        '201': {
-                            'description': 'Created task',
-                            'content': {
-                                'application/json': {
-                                    'schema': {'type':'object','properties': {'ok': {'type':'boolean'}, 'task': {'$ref': '#/components/schemas/Task'}}},
-                                    'examples': {
-                                        'createdTask': {
-                                            'summary': 'Task created response',
-                                            'value': {
-                                                'ok': True,
-                                                'task': {
-                                                    'id': 123,
-                                                    'title': 'Chop onions',
-                                                    'task_type': 'prep',
-                                                    'status': 'todo',
-                                                    'done': False,
-                                                    'private_flag': False,
-                                                    'created_at': '2025-09-30T10:00:00Z',
-                                                    'updated_at': '2025-09-30T10:00:00Z'
+                    "responses": {
+                        "201": {
+                            "description": "Created task",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type":"object","properties": {"ok": {"type":"boolean"}, "task": {"$ref": "#/components/schemas/Task"}}},
+                                    "examples": {
+                                        "createdTask": {
+                                            "summary": "Task created response",
+                                            "value": {
+                                                "ok": True,
+                                                "task": {
+                                                    "id": 123,
+                                                    "title": "Chop onions",
+                                                    "task_type": "prep",
+                                                    "status": "todo",
+                                                    "done": False,
+                                                    "private_flag": False,
+                                                    "created_at": "2025-09-30T10:00:00Z",
+                                                    "updated_at": "2025-09-30T10:00:00Z"
                                                 }
                                             }
                                         }
@@ -477,72 +477,72 @@ def create_app(config_override: dict | None = None) -> Flask:
                                 }
                             }
                         },
-                        '400': {
-                            'description': 'Invalid status',
-                            'content': {
-                                'application/json': {
-                                    'schema': {'$ref': '#/components/schemas/Error'},
-                                    'examples': {
-                                        'invalidStatus': {
-                                            'summary': 'Unsupported status value',
-                                            'value': {
-                                                'error': 'validation_error',
-                                                'message': "Invalid status 'inprogress'. Allowed: blocked, cancelled, doing, done, todo."
+                        "400": {
+                            "description": "Invalid status",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Error"},
+                                    "examples": {
+                                        "invalidStatus": {
+                                            "summary": "Unsupported status value",
+                                            "value": {
+                                                "error": "validation_error",
+                                                "message": "Invalid status 'inprogress'. Allowed: blocked, cancelled, doing, done, todo."
                                             }
                                         }
                                     }
                                 }
                             }
                         },
-                        '401': {'$ref': '#/components/responses/Error401'},
-                        '403': {'$ref': '#/components/responses/Error403'},
-                        '429': {'$ref': '#/components/responses/Error429'},
-                        '500': {'$ref': '#/components/responses/Error500'}
+                        "401": {"$ref": "#/components/responses/Error401"},
+                        "403": {"$ref": "#/components/responses/Error403"},
+                        "429": {"$ref": "#/components/responses/Error429"},
+                        "500": {"$ref": "#/components/responses/Error500"}
                     }
                 }, []),
             },
-            '/tasks/{id}': {
-                'parameters': [
-                    {'name':'id','in':'path','required':True,'schema':{'type':'integer'}}
+            "/tasks/{id}": {
+                "parameters": [
+                    {"name":"id","in":"path","required":True,"schema":{"type":"integer"}}
                 ],
-                'get': attach({'tags': ['Tasks'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'Get task'}}}, ['401','403','404','500']),
-                'put': attach({
-                    'tags': ['Tasks'],
-                    'security': [{'BearerAuth': []}],
-                    'requestBody': {
-                        'required': True,
-                        'content': {
-                            'application/json': {
-                                'schema': {'type':'object','properties': {'title': {'type':'string'}, 'status': {'$ref': '#/components/schemas/TaskStatus'}}},
-                                'examples': {
-                                    'updateStatus': {
-                                        'summary': 'Progress task to doing',
-                                        'value': { 'status': 'doing' }
+                "get": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Get task"}}}, ["401","403","404","500"]),
+                "put": attach({
+                    "tags": ["Tasks"],
+                    "security": [{"BearerAuth": []}],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"type":"object","properties": {"title": {"type":"string"}, "status": {"$ref": "#/components/schemas/TaskStatus"}}},
+                                "examples": {
+                                    "updateStatus": {
+                                        "summary": "Progress task to doing",
+                                        "value": { "status": "doing" }
                                     }
                                 }
                             }
                         }
                     },
-                    'responses': {
-                        '200': {
-                            'description': 'Updated task',
-                            'content': {
-                                'application/json': {
-                                    'schema': {'type':'object','properties': {'ok': {'type':'boolean'}, 'task': {'$ref': '#/components/schemas/Task'}}},
-                                    'examples': {
-                                        'updatedTask': {
-                                            'summary': 'Task moved to doing',
-                                            'value': {
-                                                'ok': True,
-                                                'task': {
-                                                    'id': 123,
-                                                    'title': 'Chop onions',
-                                                    'task_type': 'prep',
-                                                    'status': 'doing',
-                                                    'done': False,
-                                                    'private_flag': False,
-                                                    'created_at': '2025-09-30T10:00:00Z',
-                                                    'updated_at': '2025-09-30T10:05:00Z'
+                    "responses": {
+                        "200": {
+                            "description": "Updated task",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type":"object","properties": {"ok": {"type":"boolean"}, "task": {"$ref": "#/components/schemas/Task"}}},
+                                    "examples": {
+                                        "updatedTask": {
+                                            "summary": "Task moved to doing",
+                                            "value": {
+                                                "ok": True,
+                                                "task": {
+                                                    "id": 123,
+                                                    "title": "Chop onions",
+                                                    "task_type": "prep",
+                                                    "status": "doing",
+                                                    "done": False,
+                                                    "private_flag": False,
+                                                    "created_at": "2025-09-30T10:00:00Z",
+                                                    "updated_at": "2025-09-30T10:05:00Z"
                                                 }
                                             }
                                         }
@@ -550,128 +550,128 @@ def create_app(config_override: dict | None = None) -> Flask:
                                 }
                             }
                         },
-                        '400': {
-                            'description': 'Invalid status',
-                            'content': {
-                                'application/json': {
-                                    'schema': {'$ref': '#/components/schemas/Error'},
-                                    'examples': {
-                                        'invalidStatus': {
-                                            'summary': 'Unsupported status value',
-                                            'value': {
-                                                'error': 'validation_error',
-                                                'message': "Invalid status 'inprogress'. Allowed: blocked, cancelled, doing, done, todo."
+                        "400": {
+                            "description": "Invalid status",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Error"},
+                                    "examples": {
+                                        "invalidStatus": {
+                                            "summary": "Unsupported status value",
+                                            "value": {
+                                                "error": "validation_error",
+                                                "message": "Invalid status 'inprogress'. Allowed: blocked, cancelled, doing, done, todo."
                                             }
                                         }
                                     }
                                 }
                             }
                         },
-                        '401': {'$ref': '#/components/responses/Error401'},
-                        '403': {'$ref': '#/components/responses/Error403'},
-                        '404': {'$ref': '#/components/responses/Error404'},
-                        '409': {'$ref': '#/components/responses/Error409'},
-                        '429': {'$ref': '#/components/responses/Error429'},
-                        '500': {'$ref': '#/components/responses/Error500'}
+                        "401": {"$ref": "#/components/responses/Error401"},
+                        "403": {"$ref": "#/components/responses/Error403"},
+                        "404": {"$ref": "#/components/responses/Error404"},
+                        "409": {"$ref": "#/components/responses/Error409"},
+                        "429": {"$ref": "#/components/responses/Error429"},
+                        "500": {"$ref": "#/components/responses/Error500"}
                     }
                 }, []),
-                'delete': attach({'tags': ['Tasks'], 'security': [{'BearerAuth': []}], 'responses': {'200': {'description': 'Delete task'}}}, ['401','403','404','500']),
+                "delete": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete task"}}}, ["401","403","404","500"]),
             },
         }
         spec = {
-            'openapi': '3.0.3',
-            'info': {'title': 'Unified Platform API', 'version': '0.3.0'},
-            'servers': [{'url': '/'}],
-            'tags': [
-                {'name': 'Auth'}, {'name': 'Menus'}, {'name': 'Features'}, {'name': 'System'},
-                {'name': 'Notes'}, {'name': 'Tasks'}
+            "openapi": "3.0.3",
+            "info": {"title": "Unified Platform API", "version": "0.3.0"},
+            "servers": [{"url": "/"}],
+            "tags": [
+                {"name": "Auth"}, {"name": "Menus"}, {"name": "Features"}, {"name": "System"},
+                {"name": "Notes"}, {"name": "Tasks"}
             ],
-            'components': {
-                'securitySchemes': {
-                    'BearerAuth': {
-                        'type': 'http',
-                        'scheme': 'bearer',
-                        'bearerFormat': 'JWT'
+            "components": {
+                "securitySchemes": {
+                    "BearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer",
+                        "bearerFormat": "JWT"
                     }
                 },
-                'schemas': {
-                    'Error': error_schema,
-                    'Note': note_schema,
-                    'NoteCreate': {'type': 'object', 'required': ['content'], 'properties': {'content': {'type': 'string'}, 'private_flag': {'type': 'boolean'}}},
-                    'Task': task_schema,
-                    'TaskCreate': {
-                        'type': 'object',
-                        'required': ['title'],
-                        'properties': {
-                            'title': {'type': 'string'},
-                            'task_type': {'type': 'string'},
-                            'private_flag': {'type': 'boolean'},
-                            'status': {'$ref': '#/components/schemas/TaskStatus'}
+                "schemas": {
+                    "Error": error_schema,
+                    "Note": note_schema,
+                    "NoteCreate": {"type": "object", "required": ["content"], "properties": {"content": {"type": "string"}, "private_flag": {"type": "boolean"}}},
+                    "Task": task_schema,
+                    "TaskCreate": {
+                        "type": "object",
+                        "required": ["title"],
+                        "properties": {
+                            "title": {"type": "string"},
+                            "task_type": {"type": "string"},
+                            "private_flag": {"type": "boolean"},
+                            "status": {"$ref": "#/components/schemas/TaskStatus"}
                         }
                     },
-                    'TaskStatus': {'type': 'string', 'enum': ['todo', 'doing', 'blocked', 'done', 'cancelled']},
+                    "TaskStatus": {"type": "string", "enum": ["todo", "doing", "blocked", "done", "cancelled"]},
                 },
-                'responses': reusable,
+                "responses": reusable,
             },
-            'paths': paths,
+            "paths": paths,
         }
         return spec
 
     # --- Feature flag management endpoints (regression restore) ---
     from .rate_limit import RateLimitExceeded, allow, rate_limited_response
 
-    @app.get('/features')
-    @require_roles('admin','superuser')
+    @app.get("/features")
+    @require_roles("admin","superuser")
     def list_features():  # pragma: no cover
-        tid = getattr(g, 'tenant_id', None)
+        tid = getattr(g, "tenant_id", None)
         try:
-            allow(tid, session.get('user_id'), 'feature_flags_admin', 30, testing=app.config.get('TESTING', False))
+            allow(tid, session.get("user_id"), "feature_flags_admin", 30, testing=app.config.get("TESTING", False))
         except RateLimitExceeded:
             return rate_limited_response()
         return {
-            'ok': True,
-            'tenant_id': tid,
-            'overrides': getattr(g, 'tenant_feature_flags', {}),
-            'available': feature_registry.list(),
+            "ok": True,
+            "tenant_id": tid,
+            "overrides": getattr(g, "tenant_feature_flags", {}),
+            "available": feature_registry.list(),
         }
 
-    @app.get('/features/check')
-    @require_roles('admin','superuser')
+    @app.get("/features/check")
+    @require_roles("admin","superuser")
     def check_feature():  # pragma: no cover
-        name = (request.args.get('name') or '').strip()
+        name = (request.args.get("name") or "").strip()
         if not name:
-            return jsonify({'ok': False, 'error': 'name required'}), 400
-        tid = getattr(g, 'tenant_id', None)
+            return jsonify({"ok": False, "error": "name required"}), 400
+        tid = getattr(g, "tenant_id", None)
         if tid is None:
-            return jsonify({'ok': False, 'error': 'tenant required'}), 400
+            return jsonify({"ok": False, "error": "tenant required"}), 400
         try:
-            allow(tid, session.get('user_id'), 'feature_flags_admin', 60, testing=app.config.get('TESTING', False))
+            allow(tid, session.get("user_id"), "feature_flags_admin", 60, testing=app.config.get("TESTING", False))
         except RateLimitExceeded:
             return rate_limited_response()
         db = get_session()
         try:
             rec = db.query(TenantFeatureFlag.enabled).filter(TenantFeatureFlag.tenant_id == tid, TenantFeatureFlag.name == name).first()
             if rec is not None:
-                return {'ok': True, 'name': name, 'enabled': bool(rec[0])}
-            return {'ok': True, 'name': name, 'enabled': False}
+                return {"ok": True, "name": name, "enabled": bool(rec[0])}
+            return {"ok": True, "name": name, "enabled": False}
         finally:
             db.close()
 
-    @app.post('/features/set')
-    @require_roles('admin','superuser')
+    @app.post("/features/set")
+    @require_roles("admin","superuser")
     def set_feature():  # pragma: no cover
         data = request.get_json(silent=True) or {}
-        name = (data.get('name') or '').strip()
+        name = (data.get("name") or "").strip()
         if not name:
-            return jsonify({'ok': False, 'error': 'name required'}), 400
+            return jsonify({"ok": False, "error": "name required"}), 400
         if name not in feature_registry.list():
             feature_registry.add(name)
-        enabled = bool(data.get('enabled'))
-        tid = getattr(g, 'tenant_id', None)
+        enabled = bool(data.get("enabled"))
+        tid = getattr(g, "tenant_id", None)
         if not tid:
-            return jsonify({'ok': False, 'error': 'tenant required'}), 400
+            return jsonify({"ok": False, "error": "tenant required"}), 400
         try:
-            allow(tid, session.get('user_id'), 'feature_flags_admin', 20, testing=app.config.get('TESTING', False))
+            allow(tid, session.get("user_id"), "feature_flags_admin", 20, testing=app.config.get("TESTING", False))
         except RateLimitExceeded:
             return rate_limited_response()
         db = get_session()
@@ -683,11 +683,11 @@ def create_app(config_override: dict | None = None) -> Flask:
             else:
                 rec.enabled = enabled
             db.commit()
-            if hasattr(g, 'tenant_feature_flags'):
+            if hasattr(g, "tenant_feature_flags"):
                 g.tenant_feature_flags[name] = enabled
         finally:
             db.close()
-        return {'ok': True, 'name': name, 'enabled': enabled}
+        return {"ok": True, "name": name, "enabled": enabled}
 
     # --- Bootstrap superuser if env provides credentials ---
     with app.app_context():  # pragma: no cover (simple bootstrap)

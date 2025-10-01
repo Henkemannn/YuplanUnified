@@ -22,7 +22,7 @@ def log_task_status_transition(db, task: Task, old_status: str | None, new_statu
     """
     # Normalize fallbacks
     if old_status is None:
-        old_status = getattr(task, 'status', 'done' if getattr(task, 'done', False) else 'todo')
+        old_status = getattr(task, "status", "done" if getattr(task, "done", False) else "todo")
     if new_status is None or old_status == new_status:  # defensive or no-op
         return
     db.add(TaskStatusTransition(task_id=task.id, from_status=old_status, to_status=new_status, changed_by_user_id=user_id))

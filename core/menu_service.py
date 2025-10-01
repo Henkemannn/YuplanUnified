@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from .db import get_session
 from .models import Dish, Menu, MenuVariant
@@ -53,14 +53,14 @@ class MenuServiceDB:
         finally:
             db.close()
 
-    def get_week_view(self, tenant_id: int, week: int, year: int) -> Dict[str, Any]:
+    def get_week_view(self, tenant_id: int, week: int, year: int) -> dict[str, Any]:
         db = get_session()
         try:
             menu = db.query(Menu).filter_by(tenant_id=tenant_id, week=week, year=year).first()
             if not menu:
                 return {"menu_id": None, "days": {}}
             variants = db.query(MenuVariant, Dish).join(Dish, Dish.id == MenuVariant.dish_id, isouter=True).filter(MenuVariant.menu_id == menu.id).all()
-            structure: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
+            structure: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
             for mv, dish in variants:
                 structure.setdefault(mv.day, {}).setdefault(mv.meal, {})[mv.variant_type] = {
                     "dish_id": mv.dish_id,

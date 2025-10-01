@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import List, Optional
 
 from sqlalchemy import func  # noqa: F401 (may be used later for aggregation optimisations)
 
@@ -52,11 +51,11 @@ class BlendedResult:
     source: str  # baseline|blended
     sample_size: int
     baseline_used: int
-    history_mean_raw: Optional[float]
-    history_mean_used: Optional[float]
+    history_mean_raw: float | None
+    history_mean_used: float | None
 
 class PortionService:
-    def blended_g_per_guest(self, tenant_id: int, category: str, week: Optional[int] = None) -> BlendedResult:
+    def blended_g_per_guest(self, tenant_id: int, category: str, week: int | None = None) -> BlendedResult:
         """Return a recommended grams-per-guest value.
 
         Steps:
@@ -81,7 +80,7 @@ class PortionService:
         sample_size = len(history_values)
         if sample_size == 0:
             recommended = int(round(baseline * SAFETY_FACTOR))
-            return BlendedResult(recommended, 'baseline', 0, baseline, None, None)
+            return BlendedResult(recommended, "baseline", 0, baseline, None, None)
 
         # Untrimmed raw mean (always computed when we have data for transparency)
         raw_mean = sum(history_values) / sample_size
@@ -97,7 +96,7 @@ class PortionService:
         blended *= SAFETY_FACTOR
         return BlendedResult(
             int(round(blended)),
-            'blended',
+            "blended",
             sample_size,
             baseline,
             raw_mean,
@@ -115,7 +114,7 @@ class PortionService:
         finally:
             db.close()
 
-    def _history_values(self, tenant_id: int, category: str) -> List[float]:
+    def _history_values(self, tenant_id: int, category: str) -> list[float]:
         db = get_session()
         try:
             since = date.today() - timedelta(days=RECENT_DAYS)
@@ -126,7 +125,7 @@ class PortionService:
         finally:
             db.close()
 
-    def _trimmed_mean(self, values: List[float], frac: float) -> float:
+    def _trimmed_mean(self, values: list[float], frac: float) -> float:
         if not values:
             return 0.0
         n = len(values)
@@ -136,7 +135,7 @@ class PortionService:
         trimmed = values[trim:n-trim]
         return sum(trimmed) / len(trimmed)
 
-    def protein_per_100g(self, tenant_id: int, category: str) -> Optional[float]:
+    def protein_per_100g(self, tenant_id: int, category: str) -> float | None:
         db = get_session()
         try:
             row = db.query(PortionGuideline).filter(PortionGuideline.tenant_id == tenant_id, PortionGuideline.category == category).first()

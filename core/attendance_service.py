@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict
+from typing import Any
 
 from .db import get_session
 from .models import Attendance
@@ -17,7 +17,7 @@ class AttendanceService:
     def __init__(self):
         pass
 
-    def set_attendance(self, unit_id: int, day_date: date, meal: str, count: int, origin: str = 'manual') -> int:
+    def set_attendance(self, unit_id: int, day_date: date, meal: str, count: int, origin: str = "manual") -> int:
         meal = meal.strip()
         db = get_session()
         try:
@@ -34,18 +34,18 @@ class AttendanceService:
         finally:
             db.close()
 
-    def summary(self, unit_id: int, start: date, end: date) -> Dict[str, Any]:
+    def summary(self, unit_id: int, start: date, end: date) -> dict[str, Any]:
         db = get_session()
         try:
             q = db.query(Attendance).filter(Attendance.unit_id==unit_id, Attendance.date>=start, Attendance.date<=end)
             items = []
             for a in q.order_by(Attendance.date, Attendance.meal).all():
                 items.append({
-                    'date': a.date.isoformat(),
-                    'meal': a.meal,
-                    'count': a.count,
-                    'origin': a.origin
+                    "date": a.date.isoformat(),
+                    "meal": a.meal,
+                    "count": a.count,
+                    "origin": a.origin
                 })
-            return {'unit_id': unit_id, 'items': items}
+            return {"unit_id": unit_id, "items": items}
         finally:
             db.close()

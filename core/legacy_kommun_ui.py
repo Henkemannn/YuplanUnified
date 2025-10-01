@@ -19,40 +19,40 @@ from .db import get_session
 from .models import DietaryType, Unit, UnitDietAssignment
 
 bp = Blueprint(
-    'legacy_kommun_ui',
+    "legacy_kommun_ui",
     __name__,
-    url_prefix='/kommun',
-    template_folder='../legacy/kommun/templates',
-    static_folder='../legacy/kommun/static'
+    url_prefix="/kommun",
+    template_folder="../legacy/kommun/templates",
+    static_folder="../legacy/kommun/static"
 )
 
 class AvdRow:
-    __slots__ = ('id','namn','boende_antal','kopplade_kosttyper','kopplade_antal','faktaruta')
+    __slots__ = ("id","namn","boende_antal","kopplade_kosttyper","kopplade_antal","faktaruta")
     def __init__(self, u: Unit):
         self.id = u.id
         self.namn = u.name
         self.boende_antal = u.default_attendance or 0
         self.kopplade_kosttyper = set()
         self.kopplade_antal = {}
-        self.faktaruta = ''
+        self.faktaruta = ""
 
 def _unit_row(u: Unit):
     return AvdRow(u)
 
 def _diet_row(d: DietaryType):
-    return type('Kost', (), {
-        'id': d.id,
-        'namn': d.name,
-        'formarkeras': d.default_select
+    return type("Kost", (), {
+        "id": d.id,
+        "namn": d.name,
+        "formarkeras": d.default_select
     })()
 
-@bp.route('/admin')
-@require_roles('superuser','admin')
+@bp.route("/admin")
+@require_roles("superuser","admin")
 def adminpanel():
-    tenant_id = session.get('tenant_id')
+    tenant_id = session.get("tenant_id")
     if not tenant_id:
-        return redirect(url_for('demo.login'))  # fallback
-    vecka = int(date.today().strftime('%W')) or 1
+        return redirect(url_for("demo.login"))  # fallback
+    vecka = int(date.today().strftime("%W")) or 1
     db = get_session()
     try:
         units = db.query(Unit).filter(Unit.tenant_id==tenant_id).all()
@@ -70,7 +70,7 @@ def adminpanel():
     kosttyper = [_diet_row(d) for d in diets]
     # Template expects a bunch of context names; supply minimal
     return render_template(
-        'adminpanel.html',
+        "adminpanel.html",
         valt_vecka=vecka,
         avdelningar=avdelningar,
         kosttyper=kosttyper,
@@ -78,8 +78,8 @@ def adminpanel():
         meny_alt1={}, meny_alt2={}, meny_dessert={}, meny_kvall={}, meny_text_map={},
     )
 
-@bp.route('/admin/import', methods=['GET','POST'])
-@require_roles('superuser','admin','cook')
+@bp.route("/admin/import", methods=["GET","POST"])
+@require_roles("superuser","admin","cook")
 def admin_import():
         # Simple page that posts to unified import endpoint
         html = """
@@ -92,33 +92,33 @@ def admin_import():
             <p class='mt-3 text-muted'>DOCX (kommun) eller XLSX (offshore). Tenant hämtas från session.</p>
         </div>
         """
-        return render_template('base.html', content=html)
+        return render_template("base.html", content=html)
 
 # --- Placeholder routes referenced by templates (to be implemented properly later) ---
 
-@bp.route('/meny_avdelning_admin')
-@require_roles('superuser','admin')
+@bp.route("/meny_avdelning_admin")
+@require_roles("superuser","admin")
 def meny_avdelning_admin():
     # TODO: implement detailed per-unit menu editing view
-    return redirect(url_for('legacy_kommun_ui.adminpanel'))
+    return redirect(url_for("legacy_kommun_ui.adminpanel"))
 
 # Alias endpoints (legacy templates call url_for('meny_avdelning_admin'))
-bp.add_url_rule('/meny_avdelning_admin_alias', endpoint='meny_avdelning_admin', view_func=meny_avdelning_admin)
+bp.add_url_rule("/meny_avdelning_admin_alias", endpoint="meny_avdelning_admin", view_func=meny_avdelning_admin)
 
-@bp.route('/veckovy')
-@require_roles('superuser','admin')
+@bp.route("/veckovy")
+@require_roles("superuser","admin")
 def veckovy():
     # TODO: implement week summary view reuse unified menu_service
-    return redirect(url_for('legacy_kommun_ui.adminpanel'))
+    return redirect(url_for("legacy_kommun_ui.adminpanel"))
 
-@bp.route('/rapport', methods=['GET','POST'])
-@require_roles('superuser','admin')
+@bp.route("/rapport", methods=["GET","POST"])
+@require_roles("superuser","admin")
 def rapport():
     # TODO: implement reporting mapped to unified attendance/service metrics
-    return redirect(url_for('legacy_kommun_ui.adminpanel'))
+    return redirect(url_for("legacy_kommun_ui.adminpanel"))
 
-@bp.route('/redigera_boende')
-@require_roles('superuser','admin')
+@bp.route("/redigera_boende")
+@require_roles("superuser","admin")
 def redigera_boende():
     # TODO: implement editing of per-day attendance (maps to Attendance model)
-    return redirect(url_for('legacy_kommun_ui.adminpanel'))
+    return redirect(url_for("legacy_kommun_ui.adminpanel"))

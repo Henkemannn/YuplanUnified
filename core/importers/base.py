@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Protocol
+from typing import Protocol
 
 
 # Canonical normalized item
@@ -11,20 +11,20 @@ class ImportedMenuItem:
     meal: str         # lunch|dinner|evening (future: breakfast?)
     variant_type: str # main|alt1|alt2|dessert|evening
     dish_name: str
-    category: Optional[str] = None
-    source_labels: List[str] = field(default_factory=list)
+    category: str | None = None
+    source_labels: list[str] = field(default_factory=list)
 
 @dataclass
 class WeekImport:
     year: int
     week: int
-    items: List[ImportedMenuItem]
+    items: list[ImportedMenuItem]
 
 @dataclass
 class MenuImportResult:
-    weeks: List[WeekImport]
-    warnings: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    weeks: list[WeekImport]
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 class MenuImporter(Protocol):
     """Importer protocol. Each importer should:
@@ -37,27 +37,27 @@ class MenuImporter(Protocol):
 # Utilities
 _day_map = {
     # Swedish (full)
-    'måndag': 'monday',
-    'tisdag': 'tuesday',
-    'onsdag': 'wednesday',
-    'torsdag': 'thursday',
-    'fredag': 'friday',
-    'lördag': 'saturday',
-    'söndag': 'sunday',
+    "måndag": "monday",
+    "tisdag": "tuesday",
+    "onsdag": "wednesday",
+    "torsdag": "thursday",
+    "fredag": "friday",
+    "lördag": "saturday",
+    "söndag": "sunday",
     # Swedish (abbrev)
-    'mån': 'monday',
-    'tis': 'tuesday',
-    'ons': 'wednesday',
-    'tor': 'thursday',
-    'fre': 'friday',
-    'lör': 'saturday',
-    'sön': 'sunday',
+    "mån": "monday",
+    "tis": "tuesday",
+    "ons": "wednesday",
+    "tor": "thursday",
+    "fre": "friday",
+    "lör": "saturday",
+    "sön": "sunday",
     # Norwegian
-    'mandag': 'monday',
-    'tirsdag': 'tuesday',
+    "mandag": "monday",
+    "tirsdag": "tuesday",
     # (onsdag, torsdag, fredag already covered above with same spelling)
-    'lørdag': 'saturday',
-    'søndag': 'sunday',
+    "lørdag": "saturday",
+    "søndag": "sunday",
 }
 
 def normalize_day(token: str) -> str | None:

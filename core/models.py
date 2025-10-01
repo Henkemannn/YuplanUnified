@@ -128,7 +128,7 @@ class Task(Base):
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"))
     task_type: Mapped[str] = mapped_column(String(30))  # prep / freezer / generic
     title: Mapped[str] = mapped_column(String(200))
-    status: Mapped[str] = mapped_column(String(20), default='todo')  # todo|doing|blocked|done|cancelled
+    status: Mapped[str] = mapped_column(String(20), default="todo")  # todo|doing|blocked|done|cancelled
     done: Mapped[bool] = mapped_column(Boolean, default=False)
     menu_id: Mapped[int | None] = mapped_column(ForeignKey("menus.id"), nullable=True)
     dish_id: Mapped[int | None] = mapped_column(ForeignKey("dishes.id"), nullable=True)

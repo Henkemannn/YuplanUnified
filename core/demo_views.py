@@ -15,7 +15,7 @@ from flask import (
 from .db import get_session
 from .models import User
 
-bp = Blueprint('demo', __name__)
+bp = Blueprint("demo", __name__)
 
 BASE_HTML = """
 <!doctype html>
@@ -47,14 +47,14 @@ BASE_HTML = """
 """
 
 
-@bp.route('/')
+@bp.route("/")
 def index():
-    if not session.get('user_id'):
-        return redirect(url_for('demo.login'))
+    if not session.get("user_id"):
+        return redirect(url_for("demo.login"))
     today = date.today()
-    week = int(today.strftime('%W')) or 1
+    week = int(today.strftime("%W")) or 1
     year = today.year
-    tenant_id = session.get('tenant_id')
+    tenant_id = session.get("tenant_id")
     svc = current_app.menu_service  # type: ignore[attr-defined]
     week_view = svc.get_week_view(tenant_id, week, year)
     inner = """
@@ -91,13 +91,13 @@ def index():
     return render_template_string(BASE_HTML, content=inner, week=week, year=year, tenant_id=tenant_id, week_view=week_view)
 
 
-@bp.route('/login', methods=['GET','POST'])
+@bp.route("/login", methods=["GET","POST"])
 def login():
-    if request.method == 'POST':
-        email = request.form.get('email','').strip().lower()
-        password = request.form.get('password','')
+    if request.method == "POST":
+        email = request.form.get("email","").strip().lower()
+        password = request.form.get("password","")
         if not email or not password:
-            error = 'Fyll i båda fälten.'
+            error = "Fyll i båda fälten."
         else:
             # Direkt DB-kontroll (enkel demo, ingen rate limiting etc.)
             db = get_session()
@@ -105,13 +105,13 @@ def login():
                 user = db.query(User).filter(User.email == email).first()
                 from werkzeug.security import check_password_hash
                 if not user or not check_password_hash(user.password_hash, password):
-                    error = 'Fel inloggning'
+                    error = "Fel inloggning"
                 else:
-                    session['user_id'] = user.id
-                    session['role'] = user.role
-                    session['tenant_id'] = user.tenant_id
-                    session['unit_id'] = user.unit_id
-                    return redirect(url_for('demo.index'))
+                    session["user_id"] = user.id
+                    session["role"] = user.role
+                    session["tenant_id"] = user.tenant_id
+                    session["unit_id"] = user.unit_id
+                    return redirect(url_for("demo.index"))
             finally:
                 db.close()
         inner = """

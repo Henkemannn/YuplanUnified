@@ -34,8 +34,8 @@ def docs_index():  # pragma: no cover simple UI
     # We reuse feature_enabled context processor if available.
   try:
     from flask import current_app
-    feature_fn = current_app.jinja_env.globals.get('feature_enabled')
-    if feature_fn and callable(feature_fn) and not feature_fn('openapi_ui'):
+    feature_fn = current_app.jinja_env.globals.get("feature_enabled")
+    if feature_fn and callable(feature_fn) and not feature_fn("openapi_ui"):
       abort(404)
   except Exception:  # pragma: no cover - defensive
     pass

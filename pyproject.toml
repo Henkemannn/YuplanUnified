@@ -1,8 +1,10 @@
 [tool.ruff]
 line-length = 100
-# Initial baseline: enforce only errors, flakes, and import sorting.
-# We will re-introduce the broader sets (B,UP,Q,PIE,...) incrementellt efter att koden är grön.
-select = ["E","F","I"]
+target-version = "py311"
+
+[tool.ruff.lint]
+# Initial baseline broadened: add bugbear (B), pyupgrade (UP) and quotes (Q) now that base is green.
+select = ["E","F","I","B","UP","Q"]
 ignore = [
   # Temporarily ignore line length (can be enabled later by removing E501 here & adding a formatting step)
   "E501"
@@ -15,19 +17,29 @@ exclude = [
   "core/templates"
 ]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["core", "modules"]
 combine-as-imports = true
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 # Allow __init__ files to re-export without usage
 "__init__.py" = ["F401"]
 # Alembic env and versions often have unused imports / naming differing from style
 "migrations/env.py" = ["E402", "F401", "F403"]
 "migrations/versions/*.py" = ["E402", "F401", "F403"]
+# Legacy/offshore and legacy tooling scripts: tolerate style violations for now (batch cleanup later)
+"legacy/**" = ["E701", "E702", "E402"]
+# Tests: temporarily ignore mass semicolon/colon multi-statement style to focus on functional code improvements first
+"tests/**" = ["E701", "E702"]
 
 [tool.ruff.format]
 quote-style = "preserve"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.ruff.lint.flake8-quotes]
+# Enforce double quotes consistently to reduce noisy Q000 violations.
+inline-quotes = "double"
+multiline-quotes = "double"
+docstring-quotes = "double"

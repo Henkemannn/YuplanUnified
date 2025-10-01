@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import List
-
 from .base import MenuImporter, MenuImportResult
 
 
 class CompositeMenuImporter:
-    def __init__(self, importers: List[MenuImporter]):
+    def __init__(self, importers: list[MenuImporter]):
         self.importers = importers
 
     def parse(self, file_bytes: bytes, filename: str, mimetype: str | None) -> MenuImportResult:

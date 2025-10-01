@@ -1,5 +1,11 @@
 # Yuplan Unified Platform (Scaffold)
 
+<p align="left">
+  <img alt="Ruff" src="https://img.shields.io/badge/Ruff-E,F,I,B,UP,Q-success?logo=python&logoColor=white" />
+  <img alt="Mypy" src="https://img.shields.io/badge/Mypy-0%20errors-brightgreen" />
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.11-blue" />
+</p>
+
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
 
 ## Vision
@@ -104,7 +110,7 @@ Guidelines:
 Quality gates are being phased in. Keep the repo green (no new warnings) and avoid expanding ignore lists.
 
 ### Ruff (Python Linter)
-Baseline rule selection is intentionally small for first adoption: `E` (errors), `F` (pyflakes), `I` (import sorting). Configuration lives in `pyproject.toml` under `[tool.ruff]`.
+Current active rule sets: `E` (errors), `F` (pyflakes), `I` (imports), `B` (bugbear), `UP` (pyupgrade), `Q` (quotes). Configuration lives in `pyproject.toml` under `[tool.ruff.lint]`.
 
 Common commands:
 ```
@@ -113,8 +119,9 @@ ruff check . --fix          # apply safe autofixes
 ruff check core/ modules/   # scope to changed paths
 ```
 Guidelines:
-* Do not add per-file ignores unless absolutely required; prefer fixing code.
-* When broadening rules (future), do it in small batches with separate commits.
+* Prefer fixing code over adding ignores. Temporary bulk ignores live only for legacy and tests (multi-statement cleanup phase).
+* Broaden rules in small batches (already completed Phase 1: added B, UP, Q). Document each expansion in CHANGELOG.
+* Keep core and modules free of `B904`, `B007`, `E402`, unused-variable violations (currently clean).
 
 ### Mypy (Type Checking)
 Early adoption uses a staged approach: critical core modules are type-checked; legacy / peripheral paths are temporarily silenced with `ignore_errors = True` entries in `mypy.ini`.
@@ -146,8 +153,8 @@ PR Checklist (developer self-check):
 ### Future Tightening (Roadmap)
 | Phase | Action | Notes |
 |-------|--------|-------|
-| 1 | Add Ruff rules: `B` (bugbear), `UP` (pyupgrade) | Autofix + small manual changes |
-| 2 | Add style/clarity sets: `Q` (quotes), `PIE`, `SIM` | Only after noise triage |
+| 1 | (Done) Add Ruff rules: `B` (bugbear), `UP` (pyupgrade) | Landed with minor manual fixes |
+| 2 | (Done) Add `Q` (quotes); future: `PIE`, `SIM` | Enabled; ~legacy/test cleanup pending |
 | 3 | Remove one ignore_errors block per sprint | Track delta in PR description |
 | 4 | Enable `warn-return-any` globally | Should reach near-zero prior |
 | 5 | Turn on `strict = True` for core/* gradually | Start with auth & rate limiting |

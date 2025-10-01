@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .db import get_session
 from .models import TenantMetadata
 
 
 class TenantMetadataService:
-    def get(self, tenant_id: int) -> Dict[str, Any] | None:
+    def get(self, tenant_id: int) -> dict[str, Any] | None:
         db = get_session()
         try:
             row = db.query(TenantMetadata).filter_by(tenant_id=tenant_id).first()
@@ -17,7 +17,7 @@ class TenantMetadataService:
         finally:
             db.close()
 
-    def upsert(self, tenant_id: int, kind: Optional[str], description: Optional[str]) -> None:
+    def upsert(self, tenant_id: int, kind: str | None, description: str | None) -> None:
         db = get_session()
         try:
             row = db.query(TenantMetadata).filter_by(tenant_id=tenant_id).first()

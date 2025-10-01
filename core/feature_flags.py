@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Set
 
 
 @dataclass
@@ -11,7 +10,7 @@ class FeatureRegistry:
     Later this will query database (tenant_feature_flags table) but for now
     it's a simple allow-all for core + module-implied features.
     """
-    _flags: Set[str] = None  # type: ignore
+    _flags: set[str] = None  # type: ignore
 
     def __post_init__(self):
         if self._flags is None:
