@@ -50,3 +50,10 @@
 - Established v0.3.1 tag as stable starting point before broadening lint rule set.
 - Next steps: expand Ruff rules, add badges, document example type error remediation, phase out ignore blocks in `mypy.ini`.
 
+## [Unreleased]
+### Internal / Code Quality
+- Introduced first strict mypy pocket (`core.jwt_utils`, `core.rate_limit`, `core.audit`, `core.db`) with `strict = True` enforcement.
+- Added PIE & SIM Ruff rule groups; resolved all simplification warnings in core.
+- Added pre-commit hooks (Ruff lint+format, mypy, merge marker guard).
+- README updated with strict pocket workflow and active modules list.
+

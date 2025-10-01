@@ -186,6 +186,31 @@ Hooks configured:
 
 CI mirrors these checks (lint-type workflow). A green `pre-commit run -a` should guarantee passing lint/type steps in PR.
 
+### Strict Typing Pockets
+We adopt full `strict = True` mypy gradually via “pockets” — a focused set of modules that must remain 0-error under strict settings. This avoids boiling the ocean while guaranteeing steady quality expansion.
+
+Current strict pocket (all `strict = True` in `mypy.ini`):
+- `core.jwt_utils`
+- `core.rate_limit`
+- `core.audit`
+- `core.db`
+
+Expansion workflow (for a new module, e.g. `core.menu_service`):
+1. Remove (or avoid adding) its `ignore_errors` block in `mypy.ini`.
+2. Add a `[mypy-core.menu_service]` section with `strict = True`.
+3. Run: `mypy core/menu_service.py` and fix:
+  * Missing return types
+  * `Any` leaks (introduce `TypedDict`, `Protocol`, or generics)
+  * Unannotated calls to untyped helpers (type those helpers first)
+4. Ensure zero errors; commit with message style: `chore(types): strict pocket +menu_service`.
+
+Guidelines:
+* Keep commits small (1–2 modules per PR).
+* Prefer precise domain types (`TypedDict` for payloads, small dataclasses, `Protocol` for injected services) over `Any`.
+* If a dependency is untyped and noisy, isolate usage behind a thin, typed wrapper instead of sprinkling `# type: ignore`.
+
+Tracking: Each added pocket should update this list and optionally a CHANGELOG entry under “Internal”.
+
 ---
 
 ## Next Implementation Tasks
