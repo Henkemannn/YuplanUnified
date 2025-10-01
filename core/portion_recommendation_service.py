@@ -35,12 +35,7 @@ class PortionRecommendationService:
             source = "baseline"
         else:
             # Dynamic weights: small sample -> closer to baseline
-            if sample_size < 5:
-                # For small samples choose lighter history weight 0.2 => 441 outcome
-                w_history = 0.2
-            else:
-                # For larger history sets rely more on history (0.7) -> 494 outcome
-                w_history = 0.7
+            w_history = 0.2 if sample_size < 5 else 0.7
             w_base = 1 - w_history
             blended = (w_base * float(baseline)) + (w_history * history_mean)
             source = "blended"

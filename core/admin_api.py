@@ -107,10 +107,7 @@ def tenant_feature_flag_toggle():
     if not name:
         return jsonify({"error":"validation_error","message":"name empty"}), 400
     role = session.get("role")
-    if role == "superuser":
-        target_tenant_id = data.get("tenant_id")
-    else:
-        target_tenant_id = session.get("tenant_id")
+    target_tenant_id = data.get("tenant_id") if role == "superuser" else session.get("tenant_id")
     if not target_tenant_id:
         return jsonify({"error":"validation_error","message":"tenant context missing"}), 400
     try:

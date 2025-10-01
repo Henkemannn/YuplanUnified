@@ -192,10 +192,9 @@ def update_task(task_id: int):
             t.dish_id = data.get("dish_id")
         # touch updated_at if column exists
         if hasattr(t, "updated_at"):
-            try:
+            from contextlib import suppress
+            with suppress(Exception):
                 t.updated_at = datetime.now(UTC)
-            except Exception:
-                pass
         db.commit()
         db.refresh(t)
         return jsonify({"ok": True, "task": _serialize(t)})

@@ -3,8 +3,8 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-# Initial baseline broadened: add bugbear (B), pyupgrade (UP) and quotes (Q) now that base is green.
-select = ["E","F","I","B","UP","Q"]
+# Baseline + expanded: bugbear (B), pyupgrade (UP), quotes (Q), plus pattern/simplification sets PIE & SIM.
+select = ["E","F","I","B","UP","Q","PIE","SIM"]
 ignore = [
   # Temporarily ignore line length (can be enabled later by removing E501 here & adding a formatting step)
   "E501"

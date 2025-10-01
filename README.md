@@ -170,6 +170,22 @@ PR Checklist (developer self-check):
 
 If you add dependencies that affect typing (e.g., new third-party libs), ensure stub packages are installed (`types-<package>` where needed) or add precise `TypedDict` / `Protocol` shims locally.
 
+### Pre-commit Hooks
+Install and run the automated hooks locally before pushing:
+
+```
+pip install pre-commit
+pre-commit install
+pre-commit run -a
+```
+
+Hooks configured:
+* `ruff` (with `--fix`) + `ruff-format`
+* `mypy` (scoped to `core` and `modules`)
+* Merge conflict marker guard
+
+CI mirrors these checks (lint-type workflow). A green `pre-commit run -a` should guarantee passing lint/type steps in PR.
+
 ---
 
 ## Next Implementation Tasks

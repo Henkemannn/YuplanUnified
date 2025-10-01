@@ -1,0 +1,24 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.1  # pin exact
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        args: ["--fix"]
+      - id: ruff-format
+        name: ruff (format)
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        name: mypy (core & modules)
+        additional_dependencies: []
+        args: ["core", "modules"]
+        pass_filenames: false
+  - repo: local
+    hooks:
+      - id: forbid-merge-markers
+        name: Forbid merge conflict markers
+        entry: bash -c 'if grep -R "^[<=>]\{7\}" -n .; then echo "Merge conflict markers found"; exit 1; fi'
+        language: system
+        pass_filenames: false

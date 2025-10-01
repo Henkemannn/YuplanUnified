@@ -46,7 +46,7 @@ class ExcelMenuImporter(MenuImporter):
         current_day = None
         # Lunch
         for i in range(len(df)):
-            day_cell = df.iat[i,0] if 0 < df.shape[1] else None
+            day_cell = df.iat[i,0] if df.shape[1] > 0 else None
             day = str(day_cell).strip() if day_cell is not None and str(day_cell).strip() else ""
             if day in _DAYS_NO:
                 current_day = day
@@ -64,6 +64,4 @@ class ExcelMenuImporter(MenuImporter):
         if day not in _DAYS_NO:
             return False
         d = str(dish).strip()
-        if not d or d.lower().startswith(("navn:","oppskriftsreferanse","kategori:","kommentar")):
-            return False
-        return True
+        return not (not d or d.lower().startswith(("navn:","oppskriftsreferanse","kategori:","kommentar")))

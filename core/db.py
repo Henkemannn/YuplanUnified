@@ -3,6 +3,7 @@ Later can be expanded with per-request session handling middleware.
 """
 from __future__ import annotations
 
+from contextlib import suppress
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -24,10 +25,8 @@ def init_engine(database_url: str, force: bool = False):
         _engine.dispose()
         _engine = create_engine(database_url, future=True, echo=False)
         if _SessionFactory is not None:
-            try:
+            with suppress(Exception):  # pragma: no cover
                 _SessionFactory.remove()
-            except Exception:  # pragma: no cover
-                pass
         _SessionFactory = scoped_session(sessionmaker(bind=_engine, autoflush=False, autocommit=False))
     return _engine
 
