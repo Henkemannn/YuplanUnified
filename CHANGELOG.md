@@ -31,3 +31,22 @@
 - Notes & Tasks basic CRUD + inline UI.
 - UI enhancements: status pill, spinner styling, toast dedupe.
 - CI publishes `openapi.json` artifact & summary.
+
+## [0.3.1] - 2025-10-01 (Typing Wave 2 & Tooling Baseline)
+### Internal / Code Quality
+- Achieved mypy clean state (0 errors) across core runtime and active module services.
+- Introduced TypedDict for JWT decode payload (`DecodedToken`) eliminating `Any` return.
+- Refactored DB engine init to remove unreachable branches; clarified force re-init semantics.
+- Normalized service return types (menu, diet, attendance, portion, turnus) with explicit annotations & assertions.
+- Removed legacy `# type: ignore` comments where no longer needed; added minimal helper for dynamic `menu_service` attribute resolution.
+- Refactored portion recommendation selection loops to reduce false positive unreachable warnings.
+
+### Lint / Static Analysis
+- Ruff baseline locked to `E,F,I` (errors, pyflakes, import sorting) – all passing.
+- Planned next rule expansion: `B`, `UP`, `Q` (pending).
+- Added Developer Tooling README section (usage of `ruff check` & staged mypy adoption strategy).
+
+### Developer Notes
+- Established v0.3.1 tag as stable starting point before broadening lint rule set.
+- Next steps: expand Ruff rules, add badges, document example type error remediation, phase out ignore blocks in `mypy.ini`.
+
