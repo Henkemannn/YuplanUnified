@@ -6,6 +6,7 @@ from flask import Blueprint, current_app, jsonify, request, session
 
 from core.auth import require_roles
 
+from . import metrics as metrics_mod
 from .api_types import (
     ErrorResponse,
     FeatureToggleResponse,
@@ -15,11 +16,17 @@ from .api_types import (
 )
 from .db import get_session
 from .feature_service import FeatureService
+from .http_limits import limit as http_limit
+from .limit_registry import (
+    delete_override,
+    get_limit,
+    list_default_names,
+    list_tenant_names,
+    set_override,
+)
 from .models import Tenant, TenantFeatureFlag, TenantMetadata
-from .pagination import parse_page_params, make_page_response
-from .limit_registry import list_default_names, list_tenant_names, get_limit
-from .limit_registry import set_override, delete_override
-from . import metrics as metrics_mod
+from .pagination import make_page_response, parse_page_params
+
 try:  # audit optional robustness
     from . import audit as _audit_mod  # type: ignore
     def _emit_audit(event_name: str, **fields):  # indirection layer for monkeypatch friendliness
@@ -27,7 +34,6 @@ try:  # audit optional robustness
 except Exception:  # pragma: no cover
     def _emit_audit(event_name: str, **fields):  # type: ignore[unused-ignore]
         return None
-from typing import cast as _cast, Literal
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -246,6 +252,12 @@ def list_effective_limits():  # type: ignore[return-value]
 
 @bp.post("/limits")
 @require_roles("admin")
+@http_limit(
+    name="admin_limits_write",
+    key_func=lambda : f"{session.get('tenant_id')}:{session.get('user_id')}",  # type: ignore[arg-type]
+    feature_flag="rate_limit_admin_limits_write",
+    use_registry=True,
+)
 def upsert_limit():  # type: ignore[return-value]
     from flask import session
     data = request.get_json(silent=True) or {}
@@ -260,12 +272,13 @@ def upsert_limit():  # type: ignore[return-value]
     except Exception:
         return jsonify({"ok": False, "error": "bad_request", "message": "invalid tenant_id"}), 400
     try:
-        q = int(quota); p = int(per_seconds)
+        q = int(quota)
+        p = int(per_seconds)
     except Exception:
         return jsonify({"ok": False, "error": "bad_request", "message": "invalid quota/per_seconds"}), 400
     # clamp via registry helper
     ld_before, src_before = get_limit(tid, str(name))
-    new_ld = set_override(tid, str(name), q, p)
+    set_override(tid, str(name), q, p)
     ld_after, src_after = get_limit(tid, str(name))
     updated = not (ld_before == ld_after and src_before == src_after)
     metrics_mod.increment("admin.limits.upsert", {
@@ -274,7 +287,8 @@ def upsert_limit():  # type: ignore[return-value]
         "updated": "true" if updated else "false",
         "actor_role": str(session.get("role")),
     })
-    try:  # audit must not break response
+    from contextlib import suppress as _suppress
+    with _suppress(Exception):  # pragma: no cover - audit non-critical
         _emit_audit(
             "limits_upsert",
             tenant_id=tid,
@@ -285,13 +299,17 @@ def upsert_limit():  # type: ignore[return-value]
             actor_user_id=session.get("user_id"),  # type: ignore[arg-type]
             actor_role=session.get("role"),        # type: ignore[arg-type]
         )
-    except Exception:  # pragma: no cover
-        pass
     return jsonify({"ok": True, "item": {"tenant_id": tid, "name": str(name), "quota": ld_after["quota"], "per_seconds": ld_after["per_seconds"], "source": src_after}, "updated": updated})
 
 
 @bp.delete("/limits")
 @require_roles("admin")
+@http_limit(
+    name="admin_limits_write",
+    key_func=lambda : f"{session.get('tenant_id')}:{session.get('user_id')}",  # type: ignore[arg-type]
+    feature_flag="rate_limit_admin_limits_write",
+    use_registry=True,
+)
 def delete_limit():  # type: ignore[return-value]
     from flask import session
     data = request.get_json(silent=True) or {}
@@ -310,7 +328,8 @@ def delete_limit():  # type: ignore[return-value]
         "removed": "true" if removed else "false",
         "actor_role": str(session.get("role")),
     })
-    try:  # audit must not break response
+    from contextlib import suppress as _suppress
+    with _suppress(Exception):  # pragma: no cover - audit non-critical
         _emit_audit(
             "limits_delete",
             tenant_id=tid,
@@ -319,6 +338,4 @@ def delete_limit():  # type: ignore[return-value]
             actor_user_id=session.get("user_id"),  # type: ignore[arg-type]
             actor_role=session.get("role"),        # type: ignore[arg-type]
         )
-    except Exception:  # pragma: no cover
-        pass
     return jsonify({"ok": True, "removed": removed})

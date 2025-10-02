@@ -97,6 +97,25 @@ Default: OFF (no rate limiting applied).
 
 When ON for a tenant:
 * Limit: 5 requests per rolling fixed window of 60 seconds per `(tenant_id:user_id)` bucket.
+#### Feature Flag: `rate_limit_admin_limits_write`
+Controls optional rate limiting of admin limit mutation endpoints (`POST /admin/limits`, `DELETE /admin/limits`).
+
+Default: OFF (no throttling). When enabled for a tenant:
+* Default quota: 10 requests per 60s window (registry key `admin_limits_write`).
+* Per-tenant override supported via `FEATURE_LIMITS_JSON` using key `tenant:<id>:admin_limits_write`.
+* Registry global override via `FEATURE_LIMITS_DEFAULTS_JSON` key `admin_limits_write`.
+* Exceeding quota yields HTTP 429 with JSON:
+  ```json
+  {"ok": false, "error": "rate_limited", "message": "Rate limit exceeded for admin_limits_write", "retry_after": 42, "limit": "admin_limits_write"}
+  ```
+* Metrics emitted: `rate_limit.hit` (tags: name=admin_limits_write, outcome=allow|block, window=60) and `rate_limit.lookup` (source=fallback|default|tenant).
+
+Enable for a pilot tenant via:
+```
+POST /admin/feature_flags
+{"name": "rate_limit_admin_limits_write", "enabled": true}
+```
+
 * Exceeding the quota results in HTTP 429 with JSON body:
   ```json
   {"ok": false, "error": "rate_limited", "message": "Rate limit exceeded for export_notes_csv", "retry_after": 37, "limit": "export_notes_csv"}
@@ -293,6 +312,7 @@ Current registry (secure by default – unknown flags are False):
 - module.municipal, module.offshore
 - turnus, waste.metrics, prep.tasks, freezer.tasks, messaging
 - export.docx, import.docx
+- rate_limit_admin_limits_write (flag-gated admin limits write throttle)
 - openapi_ui (enables Swagger UI at /docs/)
 
 ## Design Principles

@@ -78,6 +78,8 @@
 - Next steps: expand Ruff rules, add badges, document example type error remediation, phase out ignore blocks in `mypy.ini`.
 
 ## [Unreleased]
+### Added
+- Admin write endpoints (/admin/limits POST/DELETE): optional flag-gated rate limit (`rate_limit_admin_limits_write`) default OFF; registry default `admin_limits_write` = 10 per 60s.
 ### Internal / Code Quality
 - Introduced first strict mypy pocket (`core.jwt_utils`, `core.rate_limit`, `core.audit`, `core.db`) with `strict = True` enforcement.
 - Added PIE & SIM Ruff rule groups; resolved all simplification warnings in core.

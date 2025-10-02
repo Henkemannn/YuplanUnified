@@ -163,9 +163,14 @@ def create_app(config_override: dict | None = None) -> Flask:
             from flask import session
             role = request.headers.get("X-User-Role")
             tid = request.headers.get("X-Tenant-Id")
+            uid = request.headers.get("X-User-Id")
             if role:
                 session["role"] = role
-                session["user_id"] = 1
+                # Allow override of user id for isolation tests
+                if uid and uid.isdigit():
+                    session["user_id"] = int(uid)
+                else:
+                    session["user_id"] = 1
             if tid:
                 session["tenant_id"] = int(tid) if tid.isdigit() else tid
             if tid:
