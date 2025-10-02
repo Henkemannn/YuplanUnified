@@ -514,6 +514,30 @@ def create_app(config_override: dict | None = None) -> Flask:
                         "403": {"$ref": "#/components/responses/Error403"}
                     },
                     "security": [{"BearerAuth": []}]
+                },
+                "post": {
+                    "summary": "Create or update tenant override",
+                    "tags": ["admin"],
+                    "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LimitUpsertRequest"}}}},
+                    "responses": {
+                        "200": {"description": "Upserted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LimitMutationResponse"}}}},
+                        "400": {"$ref": "#/components/responses/Error400"},
+                        "401": {"$ref": "#/components/responses/Error401"},
+                        "403": {"$ref": "#/components/responses/Error403"}
+                    },
+                    "security": [{"BearerAuth": []}]
+                },
+                "delete": {
+                    "summary": "Delete tenant override",
+                    "tags": ["admin"],
+                    "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LimitDeleteRequest"}}}},
+                    "responses": {
+                        "200": {"description": "Deleted (idempotent)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LimitMutationResponse"}}}},
+                        "400": {"$ref": "#/components/responses/Error400"},
+                        "401": {"$ref": "#/components/responses/Error401"},
+                        "403": {"$ref": "#/components/responses/Error403"}
+                    },
+                    "security": [{"BearerAuth": []}]
                 }
             },
         }
@@ -536,6 +560,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "PageResponse_Tasks": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/Task"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
                     "LimitView": {"type": "object", "required": ["name","quota","per_seconds","source"], "properties": {"name": {"type": "string"}, "quota": {"type": "integer"}, "per_seconds": {"type": "integer"}, "source": {"type": "string", "enum": ["tenant","default","fallback"]}, "tenant_id": {"type": "integer", "nullable": True}}},
                     "PageResponse_LimitView": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/LimitView"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
+                    "LimitUpsertRequest": {"type": "object", "required": ["tenant_id","name","quota","per_seconds"], "properties": {"tenant_id": {"type": "integer"}, "name": {"type": "string"}, "quota": {"type": "integer"}, "per_seconds": {"type": "integer"}}},
+                    "LimitDeleteRequest": {"type": "object", "required": ["tenant_id","name"], "properties": {"tenant_id": {"type": "integer"}, "name": {"type": "string"}}},
+                    "LimitMutationResponse": {"type": "object", "required": ["ok"], "properties": {"ok": {"type": "boolean"}, "item": {"$ref": "#/components/schemas/LimitView"}, "updated": {"type": "boolean"}, "removed": {"type": "boolean"}}},
                     "ImportRow": {"type": "object", "required": ["title","description","priority"], "properties": {"title": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "integer"}}},
                     "ImportOkResponse": {"type": "object", "required": ["ok","rows","meta"], "properties": {"ok": {"type": "boolean", "enum": [True]}, "rows": {"type": "array", "items": {"$ref": "#/components/schemas/ImportRow"}}, "meta": {"type": "object", "required": ["count"], "properties": {"count": {"type": "integer"}, "dry_run": {"type": "boolean", "description": "Present and true when request used ?dry_run=1"}}}}},
                     "ImportErrorResponse": {"type": "object", "required": ["ok","error","message"], "properties": {"ok": {"type": "boolean", "enum": [False]}, "error": {"type": "string", "enum": ["invalid","unsupported","rate_limited"]}, "message": {"type": "string"}, "retry_after": {"type": "integer","nullable": True}, "limit": {"type": "string","nullable": True}}},

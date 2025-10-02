@@ -131,4 +131,15 @@ def list_tenant_names(tenant_id: int) -> list[str]:
     names = [k.split(":",2)[2] for k in _tenant_limits.keys() if k.startswith(prefix)]
     return sorted(set(names))
 
-__all__ += ["list_default_names","list_tenant_names"]
+def set_override(tenant_id: int, name: str, quota: int, per_seconds: int) -> LimitDefinition:
+    """Create or update a tenant-specific override (clamped)."""
+    ld = _clamp(quota, per_seconds)
+    _tenant_limits[f"tenant:{tenant_id}:{name}"] = ld
+    return ld
+
+def delete_override(tenant_id: int, name: str) -> bool:
+    """Delete a tenant override; return True if existed."""
+    key = f"tenant:{tenant_id}:{name}"
+    return _tenant_limits.pop(key, None) is not None
+
+__all__ += ["list_default_names","list_tenant_names","set_override","delete_override"]

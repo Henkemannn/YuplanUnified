@@ -163,6 +163,24 @@ class LimitView(TypedDict, total=False):
     tenant_id: NotRequired[int]
 
 
+class LimitUpsertRequest(TypedDict, total=False):
+    tenant_id: int
+    name: str
+    quota: int
+    per_seconds: int
+
+
+class LimitDeleteRequest(TypedDict, total=False):
+    tenant_id: int
+    name: str
+
+
+class LimitMutationResponse(OkBase, total=False):
+    item: NotRequired[LimitView]
+    updated: NotRequired[bool]
+    removed: NotRequired[bool]
+
+
 # --- Service Recommendation ---
 class RecommendationResponse(TypedDict, total=False):
     category: str
@@ -218,4 +236,7 @@ __all__ = [
     # Recommendation
     "RecommendationResponse",
     "LimitView",
+    "LimitUpsertRequest",
+    "LimitDeleteRequest",
+    "LimitMutationResponse",
 ]

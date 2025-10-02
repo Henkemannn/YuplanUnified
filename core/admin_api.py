@@ -18,6 +18,7 @@ from .feature_service import FeatureService
 from .models import Tenant, TenantFeatureFlag, TenantMetadata
 from .pagination import parse_page_params, make_page_response
 from .limit_registry import list_default_names, list_tenant_names, get_limit
+from .limit_registry import set_override, delete_override
 from typing import cast as _cast, Literal
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -233,3 +234,51 @@ def list_effective_limits():  # type: ignore[return-value]
     start = (page_req["page"] - 1) * page_req["size"]
     page_slice = items[start:start + page_req["size"]]
     return jsonify(make_page_response(page_slice, page_req, total))
+
+
+@bp.post("/limits")
+@require_roles("admin")
+def upsert_limit():  # type: ignore[return-value]
+    from flask import session
+    data = request.get_json(silent=True) or {}
+    tenant_id = data.get("tenant_id") or session.get("tenant_id")
+    name = data.get("name")
+    quota = data.get("quota")
+    per_seconds = data.get("per_seconds") or data.get("per")
+    if tenant_id is None or name is None or quota is None or per_seconds is None:
+        return jsonify({"ok": False, "error": "bad_request", "message": "tenant_id,name,quota,per_seconds required"}), 400
+    try:
+        tid = int(tenant_id)
+    except Exception:
+        return jsonify({"ok": False, "error": "bad_request", "message": "invalid tenant_id"}), 400
+    try:
+        q = int(quota); p = int(per_seconds)
+    except Exception:
+        return jsonify({"ok": False, "error": "bad_request", "message": "invalid quota/per_seconds"}), 400
+    # clamp via registry helper
+    ld_before, src_before = get_limit(tid, str(name))
+    new_ld = set_override(tid, str(name), q, p)
+    ld_after, src_after = get_limit(tid, str(name))
+    updated = not (ld_before == ld_after and src_before == src_after)
+    return jsonify({
+        "ok": True,
+        "item": {"tenant_id": tid, "name": str(name), "quota": ld_after["quota"], "per_seconds": ld_after["per_seconds"], "source": src_after},
+        "updated": updated,
+    })
+
+
+@bp.delete("/limits")
+@require_roles("admin")
+def delete_limit():  # type: ignore[return-value]
+    from flask import session
+    data = request.get_json(silent=True) or {}
+    tenant_id = data.get("tenant_id") or session.get("tenant_id")
+    name = data.get("name")
+    if tenant_id is None or name is None:
+        return jsonify({"ok": False, "error": "bad_request", "message": "tenant_id,name required"}), 400
+    try:
+        tid = int(tenant_id)
+    except Exception:
+        return jsonify({"ok": False, "error": "bad_request", "message": "invalid tenant_id"}), 400
+    removed = delete_override(tid, str(name))
+    return jsonify({"ok": True, "removed": removed})

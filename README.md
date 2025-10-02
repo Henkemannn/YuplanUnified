@@ -443,6 +443,27 @@ Svar:
 
 Användningsfall: felsöka oväntade 429-svar, verifiera rollout av nya limits, samt revision av overrides.
 
+### Admin write endpoints (overrides)
+
+Skapa/uppdatera eller ta bort tenant-specifika overrides:
+
+| Method | Path | Body | Effekt |
+|--------|------|------|--------|
+| POST | `/admin/limits` | `{tenant_id,name,quota,per_seconds}` | Upsert override (clamp: quota≥1, 1≤per_seconds≤86400) |
+| DELETE | `/admin/limits` | `{tenant_id,name}` | Idempotent borttagning av override |
+
+Svar (POST):
+```jsonc
+{ "ok": true, "item": {"tenant_id": 7, "name": "export_csv", "quota": 12, "per_seconds": 60, "source": "tenant"}, "updated": true }
+```
+
+Svar (DELETE):
+```jsonc
+{ "ok": true, "removed": true }
+```
+
+Validering returnerar `400` vid saknade fält eller ogiltiga tal. Idempotent delete (`removed=false` när override saknas). Endast `admin` (eller `superuser` om roller utökas) har rättighet.
+
 ## Import API
 Three editor/admin protected endpoints allow structured ingestion of task-like rows:
 
