@@ -9,12 +9,16 @@ from core.auth import require_roles
 from .api_types import (
     ErrorResponse,
     FeatureToggleResponse,
+    LimitView,
     TenantCreateResponse,
     TenantListResponse,
 )
 from .db import get_session
 from .feature_service import FeatureService
 from .models import Tenant, TenantFeatureFlag, TenantMetadata
+from .pagination import parse_page_params, make_page_response
+from .limit_registry import list_default_names, list_tenant_names, get_limit
+from typing import cast as _cast, Literal
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -170,3 +174,62 @@ def list_legacy_cook_tenants() -> TenantListResponse | ErrorResponse:  # pragma:
         return cast(TenantListResponse, {"ok": True, "tenants": out})
     finally:
         db.close()
+
+
+@bp.get("/limits")
+@require_roles("admin")
+def list_effective_limits():  # type: ignore[return-value]
+    """List effective rate limits.
+
+    Query params:
+      tenant_id: if provided, include tenant overrides; else list only defaults.
+      name: filter to a single limit name; if not found and tenant provided, return fallback only when name explicitly requested.
+      page,size: standard pagination.
+    """
+    args = request.args
+    page_req = parse_page_params(dict(args))
+    tenant_q = args.get("tenant_id")
+    name_filter = args.get("name")
+    tenant_id: int | None = None
+    if tenant_q:
+        try:
+            tenant_id = int(tenant_q)
+        except Exception:
+            return jsonify({"ok": False, "error": "bad_request", "message": "invalid tenant_id"}), 400
+    items: list[LimitView] = []
+    names: list[str]
+    if tenant_id is None:
+        # defaults only
+        names = list_default_names()
+        if name_filter:
+            names = [n for n in names if n == name_filter]
+        for n in names:
+            ld, src = get_limit(0, n)
+            if src == "fallback":  # shouldn't happen without filter, skip noise
+                continue
+            assert src in ("tenant","default","fallback")
+            items.append({"name": n, "quota": ld["quota"], "per_seconds": ld["per_seconds"], "source": src})
+    else:
+        # union defaults + tenant overrides
+        union_names = set(list_default_names()) | set(list_tenant_names(tenant_id))
+        if name_filter:
+            if name_filter in union_names:
+                union_names = {name_filter}
+            else:
+                # explicit name not present → allow fallback single row
+                ld, src = get_limit(tenant_id, name_filter)
+                if src == "fallback":
+                    assert src in ("tenant","default","fallback")
+                    items.append({"name": name_filter, "quota": ld["quota"], "per_seconds": ld["per_seconds"], "source": src, "tenant_id": tenant_id})
+                return jsonify(make_page_response(items, page_req, len(items)))
+        for n in sorted(union_names):
+            ld, src = get_limit(tenant_id, n)
+            if src == "fallback":
+                continue  # hide fallback noise in union listing
+            assert src in ("tenant","default","fallback")
+            row: LimitView = {"name": n, "quota": ld["quota"], "per_seconds": ld["per_seconds"], "source": src, "tenant_id": tenant_id}
+            items.append(row)
+    total = len(items)
+    start = (page_req["page"] - 1) * page_req["size"]
+    page_slice = items[start:start + page_req["size"]]
+    return jsonify(make_page_response(page_slice, page_req, total))

@@ -497,6 +497,25 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "security": [{"BearerAuth": []}]
                 }
             },
+            "/admin/limits": {
+                "get": {
+                    "summary": "Inspect effective rate limits (admin)",
+                    "tags": ["admin"],
+                    "parameters": [
+                        {"name": "tenant_id", "in": "query", "required": False, "schema": {"type": "integer"}, "description": "If provided include tenant overrides; omit to list only defaults"},
+                        {"name": "name", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter to a single limit name; if absent but tenant_id supplied returns union of defaults + overrides"},
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+                    ],
+                    "responses": {
+                        "200": {"description": "Paged limits", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PageResponse_LimitView"}}}},
+                        "400": {"$ref": "#/components/responses/Error400"},
+                        "401": {"$ref": "#/components/responses/Error401"},
+                        "403": {"$ref": "#/components/responses/Error403"}
+                    },
+                    "security": [{"BearerAuth": []}]
+                }
+            },
         }
         spec = {
             "openapi": "3.0.3",
@@ -515,6 +534,8 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "PageMeta": {"type": "object", "required": ["page","size","total","pages"], "properties": {"page": {"type": "integer"}, "size": {"type": "integer"}, "total": {"type": "integer"}, "pages": {"type": "integer"}}},
                     "PageResponse_Notes": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/Note"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
                     "PageResponse_Tasks": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/Task"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
+                    "LimitView": {"type": "object", "required": ["name","quota","per_seconds","source"], "properties": {"name": {"type": "string"}, "quota": {"type": "integer"}, "per_seconds": {"type": "integer"}, "source": {"type": "string", "enum": ["tenant","default","fallback"]}, "tenant_id": {"type": "integer", "nullable": True}}},
+                    "PageResponse_LimitView": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/LimitView"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
                     "ImportRow": {"type": "object", "required": ["title","description","priority"], "properties": {"title": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "integer"}}},
                     "ImportOkResponse": {"type": "object", "required": ["ok","rows","meta"], "properties": {"ok": {"type": "boolean", "enum": [True]}, "rows": {"type": "array", "items": {"$ref": "#/components/schemas/ImportRow"}}, "meta": {"type": "object", "required": ["count"], "properties": {"count": {"type": "integer"}, "dry_run": {"type": "boolean", "description": "Present and true when request used ?dry_run=1"}}}}},
                     "ImportErrorResponse": {"type": "object", "required": ["ok","error","message"], "properties": {"ok": {"type": "boolean", "enum": [False]}, "error": {"type": "string", "enum": ["invalid","unsupported","rate_limited"]}, "message": {"type": "string"}, "retry_after": {"type": "integer","nullable": True}, "limit": {"type": "string","nullable": True}}},

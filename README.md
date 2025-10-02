@@ -418,6 +418,31 @@ def export_notes_csv(): ...
 **Telemetri**
 Varje uppslag skickar `rate_limit.lookup` med taggen `source=tenant|default|fallback`.
 
+### Admin inspection endpoint `/admin/limits`
+
+Ger insyn i effektiva gränser.
+
+Query-parametrar:
+- `tenant_id` (int, optional): Om satt returneras union av globala defaults och tenant overrides. Utan `tenant_id` visas endast globala defaults.
+- `name` (str, optional): Filtrerar till ett specifikt limit-namn. Om kombinerat med `tenant_id` och namnet saknas i både overrides och defaults exponeras en rad med `source=fallback` (för att visa vilken fallback som skulle gälla). Utan träff och utan `tenant_id` returneras tom lista (fallback brus filtreras bort).
+- `page`, `size`: Standardpaginering.
+
+Svar:
+```jsonc
+{
+  "ok": true,
+  "items": [ { "name": "export_csv", "quota": 5, "per_seconds": 60, "source": "default" } ],
+  "meta": { "page": 1, "size": 20, "total": 1, "pages": 1 }
+}
+```
+
+`source` värden:
+- `tenant`: Explicit override för given tenant
+- `default`: Global default
+- `fallback`: Safe baseline (visas endast vid explicit name-filter + tenant_id när inga andra träffar finns)
+
+Användningsfall: felsöka oväntade 429-svar, verifiera rollout av nya limits, samt revision av overrides.
+
 ## Import API
 Three editor/admin protected endpoints allow structured ingestion of task-like rows:
 

@@ -121,3 +121,14 @@ __all__ = [
     "refresh",
     "load_from_env",
 ]
+
+# Listing helpers for inspection (not performance critical)
+def list_default_names() -> list[str]:
+    return sorted({k for k in _default_limits.keys()})
+
+def list_tenant_names(tenant_id: int) -> list[str]:
+    prefix = f"tenant:{tenant_id}:"
+    names = [k.split(":",2)[2] for k in _tenant_limits.keys() if k.startswith(prefix)]
+    return sorted(set(names))
+
+__all__ += ["list_default_names","list_tenant_names"]

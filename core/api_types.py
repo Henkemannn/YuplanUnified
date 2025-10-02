@@ -154,6 +154,14 @@ class IngestResponse(OkBase, total=False):
     skipped: NotRequired[int]
     details: NotRequired[list]
 
+# --- Limits Inspection ---
+class LimitView(TypedDict, total=False):
+    name: str
+    quota: int
+    per_seconds: int
+    source: Literal["tenant","default","fallback"]
+    tenant_id: NotRequired[int]
+
 
 # --- Service Recommendation ---
 class RecommendationResponse(TypedDict, total=False):
@@ -209,4 +217,5 @@ __all__ = [
     "IngestResponse",
     # Recommendation
     "RecommendationResponse",
+    "LimitView",
 ]
