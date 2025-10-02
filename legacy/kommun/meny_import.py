@@ -2,7 +2,6 @@
 # Proprietary and confidential. Unauthorized copying, distribution or use is strictly prohibited.
 # Menyimport-funktionalitet för Yuplan
 import re
-from typing import Dict, List, Optional, Tuple
 
 from docx import Document
 
@@ -13,7 +12,7 @@ class MenyImporter:
     def __init__(self):
         pass
         
-    def parse_word_document(self, file_path: str) -> Dict:
+    def parse_word_document(self, file_path: str) -> dict:
         """Läser Word-dokument och extraherar menyinformation för flera veckor"""
         try:
             doc = Document(file_path)
@@ -38,7 +37,7 @@ class MenyImporter:
             return self.analyze_multiweek_menu_content(content)
         except Exception as e:
             return {"error": f"Kunde inte läsa Word-dokument: {str(e)}"}
-    def split_content_by_weeks(self, content: List[str]) -> List[Tuple[int, List[str]]]:
+    def split_content_by_weeks(self, content: list[str]) -> list[tuple[int, list[str]]]:
         """Splitta content till [(week_number, [lines...]), ...]"""
         week_patterns = [
             r"vecka\s*[:\.]?\s*(\d+)",
@@ -69,7 +68,7 @@ class MenyImporter:
             week_sections.append((current_week, current_lines))
         return week_sections
 
-    def analyze_multiweek_menu_content(self, content: List[str]) -> Dict:
+    def analyze_multiweek_menu_content(self, content: list[str]) -> dict:
         """Analysera menyinnehåll för flera veckor"""
         week_sections = self.split_content_by_weeks(content)
         if not week_sections:
@@ -84,10 +83,10 @@ class MenyImporter:
         return {
             "weeks": all_weeks,
             "success": True,
-            "message": f"Framgångsrikt importerade menyer för veckor: {', '.join(str(w) for w in all_weeks.keys())}"
+            "message": f"Framgångsrikt importerade menyer för veckor: {', '.join(str(w) for w in all_weeks)}"
         }
     
-    def detect_week_number(self, content: List[str]) -> Optional[int]:
+    def detect_week_number(self, content: list[str]) -> int | None:
         """Identifierar veckonummer från menytext, t.ex. 'V.1', 'v1', 'vecka 1'. Returnerar None om inget hittas."""
         week_patterns = [
             r"vecka\s*[:\.]?\s*(\d+)",
@@ -105,7 +104,7 @@ class MenyImporter:
                         return week_num
         return None
     
-    def extract_daily_menus(self, content: List[str]) -> Dict[str, Dict[str, str]]:
+    def extract_daily_menus(self, content: list[str]) -> dict[str, dict[str, str]]:
         days = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"]
         day_abbrev = ["mån", "tis", "ons", "tor", "fre", "lör", "sön"]
         menus = {day: {} for day in days}
@@ -196,7 +195,7 @@ class MenyImporter:
             menus[current_day] = current_menu if current_menu else {}
         return {day: menus.get(day, {}) for day in days}
     
-    def analyze_menu_content(self, content: List[str]) -> Dict:
+    def analyze_menu_content(self, content: list[str]) -> dict:
         """Huvudfunktion som analyserar menyinnehåll"""
         week_number = self.detect_week_number(content)
         if week_number is None:
@@ -213,7 +212,7 @@ class MenyImporter:
         }
 
 # Hjälpfunktioner för Flask-integration
-def save_imported_menus(conn, week: int, menus: Dict[str, Dict[str, str]]):
+def save_imported_menus(conn, week: int, menus: dict[str, dict[str, str]]):
     """Sparar importerade menyer till databasen"""
     try:
         # Ta bort befintliga menyer för veckan

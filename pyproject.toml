@@ -32,6 +32,7 @@ combine-as-imports = true
 # Tests: temporarily ignore mass semicolon/colon multi-statement style to focus on functional code improvements first
 "tests/**" = ["E701", "E702"]
 "tests/test_openapi_validator.py" = ["B017"]
+"scripts/*.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "preserve"

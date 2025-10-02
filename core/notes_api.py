@@ -1,18 +1,26 @@
+"""Notes API with pagination.
+
+Replaces legacy role checks with `app_authz.require_roles`; enforces tenant scoping.
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
 from flask import Blueprint, jsonify, request, session
+from .deprecation import apply_deprecation
 
-from .auth import require_roles
+from .app_authz import AuthzError, require_roles
 from .db import get_session
-from .errors import ForbiddenError, NotFoundError, ValidationError
+from .errors import NotFoundError, ValidationError
 from .models import Note
+from .pagination import make_page_response, parse_page_params
+from .roles import RoleLike
 
 bp = Blueprint("notes_api", __name__, url_prefix="/notes")
 
-SAFE_READ_ROLES = ("superuser","admin","cook","unit_portal")
-WRITE_ROLES = ("superuser","admin","cook","unit_portal")  # adjust if needed later
+SAFE_READ_ROLES: tuple[RoleLike, RoleLike, RoleLike, RoleLike] = ("superuser","admin","cook","unit_portal")
+WRITE_ROLES: tuple[RoleLike, RoleLike, RoleLike, RoleLike] = ("superuser","admin","cook","unit_portal")  # legacy; canonical mapping applied in require_roles
 
 
 def _tenant_id():
@@ -33,24 +41,35 @@ def _serialize(note: Note):
     }
 
 @bp.get("/")
-@require_roles(*SAFE_READ_ROLES)
+@require_roles("superuser","admin","cook","unit_portal")
 def list_notes():
     tid = _tenant_id()
+    page_req = parse_page_params(dict(request.args))
     db = get_session()
     try:
-        # Private notes are only visible to author or admins/superuser
         user_id = session.get("user_id")
         role = session.get("role")
-        q = db.query(Note).filter(Note.tenant_id == tid)
+        base_q = db.query(Note).filter(Note.tenant_id == tid)
         if role not in ("admin","superuser"):
-            q = q.filter((~Note.private_flag) | (Note.user_id == user_id))  # type: ignore
-        notes = q.order_by(Note.created_at.desc()).limit(500).all()
-        return jsonify({"ok": True, "notes": [_serialize(n) for n in notes]})
+            base_q = base_q.filter((~Note.private_flag) | (Note.user_id == user_id))  # type: ignore
+        # Stable deterministic ordering: created_at DESC, id DESC
+        q = base_q.order_by(Note.created_at.desc(), Note.id.desc())
+        total = q.count()
+        start = (page_req["page"] - 1) * page_req["size"]
+        items = q.offset(start).limit(page_req["size"]).all()
+        resp = make_page_response([_serialize(n) for n in items], page_req, total)
+        # Backwards compatibility: old clients/tests expect 'notes' list instead of 'items'
+        if "items" in resp and "notes" not in resp:
+            resp["notes"] = resp["items"]  # type: ignore[index]
+        response = jsonify(resp)
+        if "notes" in resp:
+            apply_deprecation(response, aliases=["notes"], endpoint="notes")
+        return response
     finally:
         db.close()
 
 @bp.post("/")
-@require_roles(*WRITE_ROLES)
+@require_roles("superuser","admin","cook","unit_portal")
 def create_note():
     tid = _tenant_id()
     data = request.get_json(silent=True) or {}
@@ -69,7 +88,7 @@ def create_note():
         db.close()
 
 @bp.put("/<int:note_id>")
-@require_roles(*WRITE_ROLES)
+@require_roles("superuser","admin","cook","unit_portal")
 def update_note(note_id: int):
     tid = _tenant_id()
     db = get_session()
@@ -79,7 +98,8 @@ def update_note(note_id: int):
             raise NotFoundError("note not found")
         role = session.get("role")
         if note.user_id != session.get("user_id") and role not in ("admin","superuser"):
-            raise ForbiddenError("forbidden")
+            # Ownership required unless elevated.
+            raise AuthzError("forbidden", required="admin")
         data = request.get_json(silent=True) or {}
         if "content" in data:
             content = (data.get("content") or "").strip()
@@ -97,7 +117,7 @@ def update_note(note_id: int):
         db.close()
 
 @bp.delete("/<int:note_id>")
-@require_roles(*WRITE_ROLES)
+@require_roles("superuser","admin","cook","unit_portal")
 def delete_note(note_id: int):
     tid = _tenant_id()
     db = get_session()
@@ -107,7 +127,7 @@ def delete_note(note_id: int):
             raise NotFoundError("note not found")
         role = session.get("role")
         if note.user_id != session.get("user_id") and role not in ("admin","superuser"):
-            raise ForbiddenError("forbidden")
+            raise AuthzError("forbidden", required="admin")
         db.delete(note)
         db.commit()
         return jsonify({"ok": True})

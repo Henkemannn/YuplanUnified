@@ -22,7 +22,9 @@ from importlib import import_module
 from flask import Flask, g, jsonify, request, session
 
 from .admin_api import bp as admin_api_bp
-from .auth import bp as auth_bp, ensure_bootstrap_superuser, require_roles
+from .app_authz import require_roles
+from .app_errors import register_error_handlers
+from .auth import bp as auth_bp, ensure_bootstrap_superuser
 from .config import Config
 from .db import get_session, init_engine
 from .diet_api import bp as diet_api_bp
@@ -32,6 +34,8 @@ from .feature_flags import FeatureRegistry
 from .import_api import bp as import_api_bp
 from .inline_ui import inline_ui_bp
 from .menu_api import bp as menu_api_bp
+from .metrics import set_metrics
+from .metrics_logging import LoggingMetrics
 from .models import TenantFeatureFlag
 from .notes_api import bp as notes_bp
 from .openapi_ui import bp as openapi_ui_bp
@@ -64,6 +68,15 @@ def create_app(config_override: dict | None = None) -> Flask:
     # --- DB setup ---
     init_engine(cfg.database_url)
 
+    # --- Metrics backend wiring ---
+    backend = app.config.get("METRICS_BACKEND") or cfg.__dict__.get("metrics_backend") or "noop"
+    if backend == "log":  # minimal logging adapter
+        try:
+            set_metrics(LoggingMetrics())
+            app.logger.info("Metrics backend initialized: log")
+        except Exception:  # pragma: no cover
+            app.logger.exception("Failed to initialize logging metrics backend; falling back to noop")
+
     # --- Feature flags ---
     feature_registry = FeatureRegistry()
     # Expose for tests manipulating registry directly
@@ -91,9 +104,11 @@ def create_app(config_override: dict | None = None) -> Flask:
         return bool(feature_registry.enabled(name))
 
     # --- Error handling ---
+    # New centralized error handlers (Pocket 6). Existing specific handlers retained below for backward compatibility.
+    register_error_handlers(app)
     def _json_error(error_code: str, message: str, status: int):
         from flask import jsonify
-        resp = jsonify({"error": error_code, "message": message})
+        resp = jsonify({"ok": False, "error": error_code, "message": message})
         resp.status_code = status
         resp.headers["Content-Type"] = "application/json"
         return resp
@@ -250,10 +265,7 @@ def create_app(config_override: dict | None = None) -> Flask:
         except Exception as e:  # pragma: no cover
             app.logger.exception("Failed loading module %s: %s", mod, e)
 
-    # --- Simple health ---
-    @app.get("/health")
-    def health():  # pragma: no cover
-        return {"ok": True, "modules": cfg.default_enabled_modules, "features": feature_registry.list()}
+    # --- Error handling --- (centralized via register_error_handlers in app_errors)
 
     # --- OpenAPI Spec Endpoint ---
     @app.get("/openapi.json")
@@ -383,10 +395,11 @@ def create_app(config_override: dict | None = None) -> Flask:
                 else:  # fallback
                     r.setdefault(code, {"description": code, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}})
             return base
+
         paths = {
-            "/features": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List flags"}}}, ["401", "429", "500"])},
-            "/features/check": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Flag state (unknown -> enabled=false)"}}}, ["400", "401", "429", "500"])},
-            "/features/set": {"post": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Updated flag"}}}, ["400", "401", "429", "500"])},
+            "/features": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List flags"}}}, ["401","429","500"])},
+            "/features/check": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Flag state (unknown -> enabled=false)"}}}, ["400","401","429","500"])},
+            "/features/set": {"post": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Updated flag"}}}, ["400","401","429","500"])},
             "/admin/feature_flags": {
                 "post": attach({
                     "tags": ["Features"],
@@ -416,166 +429,63 @@ def create_app(config_override: dict | None = None) -> Flask:
                 }, ["400","401","403","429","500"])
             },
             "/notes/": {
-                "get": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List notes"}}}, ["400","401","403","500"]),
+                "get": attach({
+                    "tags": ["Notes"],
+                    "security": [{"BearerAuth": []}],
+                    "parameters": [
+                        {"name": "page", "in": "query", "schema": {"type": "integer", "minimum": 1}, "required": False},
+                        {"name": "size", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100}, "required": False},
+                        {"name": "sort", "in": "query", "schema": {"type": "string"}, "required": False},
+                        {"name": "order", "in": "query", "schema": {"type": "string", "enum": ["asc","desc"]}, "required": False},
+                    ],
+                    "responses": {"200": {"description": "Paged notes list", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PageResponse_Notes"}}}}}
+                }, ["400","401","403","500"]),
                 "post": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Create note"}}}, ["400","401","403","500"]),
             },
             "/notes/{id}": {
-                "parameters": [
-                    {"name":"id","in":"path","required":True,"schema":{"type":"integer"}}
-                ],
+                "parameters": [{"name":"id","in":"path","required":True,"schema":{"type":"integer"}}],
                 "put": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Update note"}}}, ["400","401","403","404","500"]),
                 "delete": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete note"}}}, ["401","403","404","500"]),
             },
             "/tasks/": {
-                "get": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List tasks"}}}, ["400","401","403","500"]),
+                "get": attach({
+                    "tags": ["Tasks"],
+                    "security": [{"BearerAuth": []}],
+                    "parameters": [
+                        {"name": "page", "in": "query", "schema": {"type": "integer", "minimum": 1}, "required": False},
+                        {"name": "size", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100}, "required": False},
+                        {"name": "sort", "in": "query", "schema": {"type": "string"}, "required": False},
+                        {"name": "order", "in": "query", "schema": {"type": "string", "enum": ["asc","desc"]}, "required": False},
+                    ],
+                    "responses": {"200": {"description": "Paged tasks list", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PageResponse_Tasks"}}}}}
+                }, ["400","401","403","500"]),
                 "post": attach({
                     "tags": ["Tasks"],
                     "security": [{"BearerAuth": []}],
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": {"$ref": "#/components/schemas/TaskCreate"},
-                                "examples": {
-                                    "createTask": {
-                                        "summary": "Create prep task (todo)",
-                                        "value": {
-                                            "title": "Chop onions",
-                                            "task_type": "prep",
-                                            "status": "todo",
-                                            "private_flag": False
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "responses": {
-                        "201": {
-                            "description": "Created task",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"type":"object","properties": {"ok": {"type":"boolean"}, "task": {"$ref": "#/components/schemas/Task"}}},
-                                    "examples": {
-                                        "createdTask": {
-                                            "summary": "Task created response",
-                                            "value": {
-                                                "ok": True,
-                                                "task": {
-                                                    "id": 123,
-                                                    "title": "Chop onions",
-                                                    "task_type": "prep",
-                                                    "status": "todo",
-                                                    "done": False,
-                                                    "private_flag": False,
-                                                    "created_at": "2025-09-30T10:00:00Z",
-                                                    "updated_at": "2025-09-30T10:00:00Z"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        "400": {
-                            "description": "Invalid status",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"$ref": "#/components/schemas/Error"},
-                                    "examples": {
-                                        "invalidStatus": {
-                                            "summary": "Unsupported status value",
-                                            "value": {
-                                                "error": "validation_error",
-                                                "message": "Invalid status 'inprogress'. Allowed: blocked, cancelled, doing, done, todo."
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        "401": {"$ref": "#/components/responses/Error401"},
-                        "403": {"$ref": "#/components/responses/Error403"},
-                        "429": {"$ref": "#/components/responses/Error429"},
-                        "500": {"$ref": "#/components/responses/Error500"}
-                    }
-                }, []),
+                    "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TaskCreate"}}}},
+                    "responses": {"201": {"description": "Created task"}}
+                }, ["400","401","403","429","500"]),
             },
             "/tasks/{id}": {
-                "parameters": [
-                    {"name":"id","in":"path","required":True,"schema":{"type":"integer"}}
-                ],
+                "parameters": [{"name":"id","in":"path","required":True,"schema":{"type":"integer"}}],
                 "get": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Get task"}}}, ["401","403","404","500"]),
-                "put": attach({
-                    "tags": ["Tasks"],
-                    "security": [{"BearerAuth": []}],
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": {"type":"object","properties": {"title": {"type":"string"}, "status": {"$ref": "#/components/schemas/TaskStatus"}}},
-                                "examples": {
-                                    "updateStatus": {
-                                        "summary": "Progress task to doing",
-                                        "value": { "status": "doing" }
-                                    }
-                                }
-                            }
-                        }
-                    },
+                "put": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Update task"}}}, ["400","401","403","404","409","500"]),
+                "delete": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete task"}}}, ["401","403","404","500"]),
+            },
+            "/admin/flags/legacy-cook": {
+                "get": {
+                    "summary": "List tenants with allow_legacy_cook_create enabled",
+                    "tags": ["admin", "feature-flags"],
                     "responses": {
                         "200": {
-                            "description": "Updated task",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"type":"object","properties": {"ok": {"type":"boolean"}, "task": {"$ref": "#/components/schemas/Task"}}},
-                                    "examples": {
-                                        "updatedTask": {
-                                            "summary": "Task moved to doing",
-                                            "value": {
-                                                "ok": True,
-                                                "task": {
-                                                    "id": 123,
-                                                    "title": "Chop onions",
-                                                    "task_type": "prep",
-                                                    "status": "doing",
-                                                    "done": False,
-                                                    "private_flag": False,
-                                                    "created_at": "2025-09-30T10:00:00Z",
-                                                    "updated_at": "2025-09-30T10:05:00Z"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        "400": {
-                            "description": "Invalid status",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"$ref": "#/components/schemas/Error"},
-                                    "examples": {
-                                        "invalidStatus": {
-                                            "summary": "Unsupported status value",
-                                            "value": {
-                                                "error": "validation_error",
-                                                "message": "Invalid status 'inprogress'. Allowed: blocked, cancelled, doing, done, todo."
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            "description": "Tenants with flag enabled",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TenantListResponse"}}}
                         },
                         "401": {"$ref": "#/components/responses/Error401"},
-                        "403": {"$ref": "#/components/responses/Error403"},
-                        "404": {"$ref": "#/components/responses/Error404"},
-                        "409": {"$ref": "#/components/responses/Error409"},
-                        "429": {"$ref": "#/components/responses/Error429"},
-                        "500": {"$ref": "#/components/responses/Error500"}
-                    }
-                }, []),
-                "delete": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete task"}}}, ["401","403","404","500"]),
+                        "403": {"$ref": "#/components/responses/Error403"}
+                    },
+                    "security": [{"BearerAuth": []}]
+                }
             },
         }
         spec = {
@@ -588,32 +498,79 @@ def create_app(config_override: dict | None = None) -> Flask:
             ],
             "components": {
                 "securitySchemes": {
-                    "BearerAuth": {
-                        "type": "http",
-                        "scheme": "bearer",
-                        "bearerFormat": "JWT"
-                    }
+                    "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
                 },
                 "schemas": {
                     "Error": error_schema,
+                    "PageMeta": {"type": "object", "required": ["page","size","total","pages"], "properties": {"page": {"type": "integer"}, "size": {"type": "integer"}, "total": {"type": "integer"}, "pages": {"type": "integer"}}},
+                    "PageResponse_Notes": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/Note"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
+                    "PageResponse_Tasks": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/Task"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
+                    "ImportRow": {"type": "object", "required": ["title","description","priority"], "properties": {"title": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "integer"}}},
+                    "ImportOkResponse": {"type": "object", "required": ["ok","rows","meta"], "properties": {"ok": {"type": "boolean", "enum": [True]}, "rows": {"type": "array", "items": {"$ref": "#/components/schemas/ImportRow"}}, "meta": {"type": "object", "required": ["count"], "properties": {"count": {"type": "integer"}, "dry_run": {"type": "boolean", "description": "Present and true when request used ?dry_run=1"}}}}},
+                    "ImportErrorResponse": {"type": "object", "required": ["ok","error","message"], "properties": {"ok": {"type": "boolean", "enum": [False]}, "error": {"type": "string", "enum": ["invalid","unsupported","rate_limited"]}, "message": {"type": "string"}, "retry_after": {"type": "integer","nullable": True}, "limit": {"type": "string","nullable": True}}},
                     "Note": note_schema,
                     "NoteCreate": {"type": "object", "required": ["content"], "properties": {"content": {"type": "string"}, "private_flag": {"type": "boolean"}}},
                     "Task": task_schema,
-                    "TaskCreate": {
-                        "type": "object",
-                        "required": ["title"],
-                        "properties": {
-                            "title": {"type": "string"},
-                            "task_type": {"type": "string"},
-                            "private_flag": {"type": "boolean"},
-                            "status": {"$ref": "#/components/schemas/TaskStatus"}
-                        }
-                    },
-                    "TaskStatus": {"type": "string", "enum": ["todo", "doing", "blocked", "done", "cancelled"]},
+                    "TaskCreate": {"type": "object", "required": ["title"], "properties": {"title": {"type": "string"}, "task_type": {"type": "string"}, "private_flag": {"type": "boolean"}, "status": {"$ref": "#/components/schemas/TaskStatus"}}},
+                    "TaskStatus": {"type": "string", "enum": ["todo","doing","blocked","done","cancelled"]},
+                    "TenantSummary": {"type": "object", "required": ["id","name","active","features"], "properties": {"id": {"type":"integer"}, "name": {"type":"string"}, "active": {"type":"boolean"}, "features": {"type":"array", "items": {"type":"string"}}, "kind": {"type":"string","nullable":True}, "description": {"type":"string","nullable":True}}},
+                    "TenantListResponse": {"type": "object", "required": ["ok","tenants"], "properties": {"ok": {"type":"boolean"}, "tenants": {"type":"array", "items": {"$ref": "#/components/schemas/TenantSummary"}}}},
                 },
                 "responses": reusable,
             },
             "paths": paths,
+        }
+        # Inject Import API paths
+        spec["paths"]["/import/csv"] = {
+            "post": {
+                "summary": "Import CSV file",
+                "requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}}}},
+                "responses": {
+                    "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}}}},
+                    "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "415": {"description": "Unsupported", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                },
+            }
+        }
+        spec["paths"]["/import/docx"] = {
+            "post": {
+                "summary": "Import DOCX table",
+                "requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}}}},
+                "responses": {
+                    "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}}}},
+                    "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "415": {"description": "Unsupported", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                },
+            }
+        }
+        spec["paths"]["/import/xlsx"] = {
+            "post": {
+                "summary": "Import XLSX spreadsheet",
+                "requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}}}},
+                "responses": {
+                    "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}}}},
+                    "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "415": {"description": "Unsupported", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                },
+            }
+        }
+        spec["paths"]["/import/menu"] = {
+            "post": {
+                "summary": "Import weekly menu (dry-run supported)",
+                "parameters": [
+                    {"name": "dry_run", "in": "query", "required": False, "schema": {"type": "boolean", "default": False}, "description": "If true (1) perform validation + diff only (no persistence)"}
+                ],
+                "requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}}}},
+                "responses": {
+                    "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}, "examples": {"dryRun": {"value": {"ok": True, "rows": [{"title": "Soup", "description": "Tomato", "priority": 1}], "meta": {"count": 1, "dry_run": True}}}}}}},
+                    "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "415": {"description": "Unsupported", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                },
+            }
         }
         return spec
 
@@ -621,7 +578,7 @@ def create_app(config_override: dict | None = None) -> Flask:
     from .rate_limit import RateLimitExceeded, allow, rate_limited_response
 
     @app.get("/features")
-    @require_roles("admin","superuser")
+    @require_roles("admin")
     def list_features():  # pragma: no cover
         tid = getattr(g, "tenant_id", None)
         try:
@@ -636,7 +593,7 @@ def create_app(config_override: dict | None = None) -> Flask:
         }
 
     @app.get("/features/check")
-    @require_roles("admin","superuser")
+    @require_roles("admin")
     def check_feature():  # pragma: no cover
         name = (request.args.get("name") or "").strip()
         if not name:
@@ -658,7 +615,7 @@ def create_app(config_override: dict | None = None) -> Flask:
             db.close()
 
     @app.post("/features/set")
-    @require_roles("admin","superuser")
+    @require_roles("admin")
     def set_feature():  # pragma: no cover
         data = request.get_json(silent=True) or {}
         name = (data.get("name") or "").strip()
@@ -692,5 +649,27 @@ def create_app(config_override: dict | None = None) -> Flask:
     # --- Bootstrap superuser if env provides credentials ---
     with app.app_context():  # pragma: no cover (simple bootstrap)
         ensure_bootstrap_superuser()
+
+    # --- Guard test endpoints (P6.2) ---
+    @app.get("/_guard/editor")
+    @require_roles("editor")
+    def _guard_editor():  # pragma: no cover - exercised in dedicated tests
+        return {"ok": True, "guard": "editor"}
+
+    @app.get("/_guard/admin")
+    @require_roles("admin")
+    def _guard_admin():  # pragma: no cover - exercised in dedicated tests
+        return {"ok": True, "guard": "admin"}
+
+    # --- Test / demonstration rate limit endpoint (Pocket 7) ---
+    try:
+        from .http_limits import limit
+
+        @app.get("/_limit/test")
+        @limit("test_endpoint", quota=3, per_seconds=60)
+        def _limit_test():  # pragma: no cover - will be covered in new rate limit tests
+            return {"ok": True, "limited": False}
+    except Exception:  # pragma: no cover
+        pass
 
     return app

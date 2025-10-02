@@ -36,7 +36,7 @@ def auth_superuser(client, app):
 def test_diet_type_crud_and_feature_toggle(tmp_path):
     app = make_app(tmp_path, name="diet")
     with app.test_client() as client:
-        tenant_id = auth_superuser(client, app)
+        auth_superuser(client, app)
         # Create tenant via admin API (with modules triggers feature seeding) - reuse existing superuser context
         rv = client.post("/admin/tenants", json={
             "name": "MunicipalX","modules":["municipal"],"admin_email":"a@b.c","admin_password":"pw"
@@ -64,12 +64,12 @@ def test_diet_type_crud_and_feature_toggle(tmp_path):
         assert rv.status_code==200
         rv = client.get("/diet/types")
         types = rv.get_json()["diet_types"]
-        assert any(t["id"]==diet_id and t["name"]=="Glutenfri Uppd" and t["default_select"]==False for t in types)
+        assert any(t["id"]==diet_id and t["name"]=="Glutenfri Uppd" and (not t["default_select"]) for t in types)
         # Delete
-        rv = client.delete(f"/diet/types/{diet_id}")
-        assert rv.status_code==200
-        rv = client.get("/diet/types")
-        assert diet_id not in [t["id"] for t in rv.get_json()["diet_types"]]
+    rv = client.delete(f"/diet/types/{diet_id}")
+    assert rv.status_code==200
+    rv = client.get("/diet/types")
+    assert diet_id not in [t["id"] for t in rv.get_json()["diet_types"]]
 
 def test_service_metrics_ingest_and_summary(tmp_path):
     app = make_app(tmp_path, name="metrics")
@@ -106,4 +106,4 @@ def test_service_metrics_ingest_and_summary(tmp_path):
         summ = rv.get_json()["rows"]
         assert len(summ)==1  # grouped by meal/unit/date
         row = summ[0]
-        assert row["produced_qty_kg"]==7.0 and row["served_qty_kg"]==5.7 and row["leftover_qty_kg"]==1.5
+    assert row["produced_qty_kg"]==7.0 and row["served_qty_kg"]==5.7 and row["leftover_qty_kg"]==1.5

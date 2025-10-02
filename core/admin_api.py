@@ -131,3 +131,42 @@ def tenant_feature_flags_list() -> FeatureToggleResponse | ErrorResponse:
         return cast(FeatureToggleResponse, {"ok": True, "tenant_id": tid, "features": [f.name for f in feats]})
     finally:
         db.close()
+
+
+# --- Legacy cook flag usage listing ---
+@bp.get("/flags/legacy-cook")
+@require_roles("admin")
+def list_legacy_cook_tenants() -> TenantListResponse | ErrorResponse:  # pragma: no cover (covered via dedicated tests)
+    """Return tenants where 'allow_legacy_cook_create' flag is enabled.
+
+    Implementation notes:
+    * We filter directly on TenantFeatureFlag for efficiency.
+    * Returns standard TenantListResponse shape (subset of fields + features list).
+    * Only admin/superuser (via require_roles) may access.
+    """
+    FLAG_NAME = "allow_legacy_cook_create"
+    db = get_session()
+    try:
+        # Query tenants having the flag enabled
+        rows = (
+            db.query(Tenant)
+            .join(TenantFeatureFlag, TenantFeatureFlag.tenant_id == Tenant.id)
+            .filter(TenantFeatureFlag.name == FLAG_NAME, TenantFeatureFlag.enabled.is_(True))
+            .all()
+        )
+        out: list[dict[str, object]] = []
+        for t in rows:
+            feats_enabled = (
+                db.query(TenantFeatureFlag.name)
+                .filter_by(tenant_id=t.id, enabled=True)
+                .all()
+            )
+            out.append({
+                "id": t.id,
+                "name": t.name,
+                "active": t.active,
+                "features": [f[0] for f in feats_enabled],
+            })
+        return cast(TenantListResponse, {"ok": True, "tenants": out})
+    finally:
+        db.close()

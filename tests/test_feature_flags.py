@@ -10,7 +10,7 @@ def app(client_admin):
 
 
 def test_feature_flag_flow(client_admin):
-    app = client_admin.application
+    # app variable unused; rely on client_admin directly
     # Ensure registry contains a sample flag
     flag_name = "experimental_ui"
 
@@ -37,7 +37,8 @@ def test_feature_flag_flow(client_admin):
 def test_feature_flag_requires_tenant(client_admin, client_no_tenant):
     # No tenant context should fail setting a flag
     resp = client_no_tenant.post("/features/set", json={"name": "abc", "enabled": True}, headers={"X-User-Role":"admin"})
-    assert resp.status_code == 400
+    # Updated expectation: with role but no tenant, session considered incomplete -> 401
+    assert resp.status_code == 401
 
 
 def test_feature_flag_permissions(client_user):

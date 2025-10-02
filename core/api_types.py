@@ -23,17 +23,52 @@ FeatureName = NewType("FeatureName", str)
 UnitId = NewType("UnitId", int)
 DietTypeId = NewType("DietTypeId", int)
 AssignmentId = NewType("AssignmentId", int)
+TaskId = NewType("TaskId", int)
 
-
-# --- Common Envelopes ---
+## Envelopes
 class OkBase(TypedDict):
     ok: Literal[True]
-
 
 class ErrorResponse(TypedDict, total=False):
     ok: Literal[False]
     error: str
     message: NotRequired[str]
+
+# --- Tasks ---
+TaskStatus = Literal["todo", "doing", "blocked", "done", "cancelled"]
+
+class TaskSummary(TypedDict, total=False):
+    id: TaskId
+    title: str
+    status: TaskStatus
+    owner: TenantId | int
+    assignee: NotRequired[str]
+    due: NotRequired[str]
+
+class TaskListResponse(OkBase):
+    tasks: list[TaskSummary]
+
+class TaskCreateRequest(TypedDict, total=False):
+    title: str
+    assignee: NotRequired[str]
+    due: NotRequired[str]
+    status: NotRequired[TaskStatus]
+    done: NotRequired[bool]
+
+class TaskCreateResponse(OkBase, total=False):
+    task_id: TaskId
+    task: NotRequired[dict]
+    location: NotRequired[str]
+
+class TaskUpdateRequest(TypedDict, total=False):
+    status: NotRequired[TaskStatus]
+    assignee: NotRequired[str]
+    title: NotRequired[str]
+    due: NotRequired[str]
+
+class TaskUpdateResponse(OkBase, total=False):
+    updated: bool
+    task: NotRequired[dict]
 
 
 # --- Admin ---
@@ -141,6 +176,7 @@ __all__ = [
     "UnitId",
     "DietTypeId",
     "AssignmentId",
+    "TaskId",
     # Envelopes / errors
     "OkBase",
     "ErrorResponse",
@@ -159,6 +195,14 @@ __all__ = [
     "Assignment",
     "AssignmentListResponse",
     "AssignmentCreateResponse",
+    # Tasks
+    "TaskStatus",
+    "TaskSummary",
+    "TaskListResponse",
+    "TaskCreateRequest",
+    "TaskCreateResponse",
+    "TaskUpdateRequest",
+    "TaskUpdateResponse",
     # Metrics
     "MetricsQueryRowsResponse",
     "MetricsSummaryDayResponse",

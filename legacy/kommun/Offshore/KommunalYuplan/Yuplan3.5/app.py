@@ -435,9 +435,7 @@ def menyval():
             # Om det finns menytext för veckan, kolla om det finns val för alla dagar (Alt2 eller Alt1)
             valda_dagar = set()
             for dag in dagar:
-                if dag in alt2_markerade:
-                    valda_dagar.add(dag)
-                elif dag in dagar_med_meny:
+                if dag in alt2_markerade or dag in dagar_med_meny:
                     valda_dagar.add(dag)
             status = "Färdigvalda" if len(valda_dagar) == 7 else "Ej färdigvalda"
             markerade = valda_dagar

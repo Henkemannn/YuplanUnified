@@ -16,7 +16,6 @@ class RateLimitExceeded(Exception):
         self.bucket = bucket
         self.limit = limit
 
-from typing import Any, Dict
 
 def rate_limited_response(retry_after: int | None = None):  # lightweight central helper
     from flask import jsonify

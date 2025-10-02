@@ -3600,7 +3600,7 @@ def turnus_create_real_cooks():
 
     created = 0
     ensured_ids: list[int] = []
-    for name, email in zip(names, emails):
+    for name, email in zip(names, emails, strict=False):
         row = db.execute("SELECT id, rig_id FROM users WHERE email=?", (email,)).fetchone()
         if row:
             uid = row["id"]

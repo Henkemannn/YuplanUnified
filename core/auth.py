@@ -49,8 +49,8 @@ def require_roles(*roles: str):
                 return _json_error("auth required", 401)
             user_role = session.get("role")
             if roles and user_role not in roles:
-                # Provide which role(s) required in message
-                return jsonify({"error":"forbidden","message": f"required role in {roles}"}), 403
+                # Provide which role(s) required in message with ok False envelope
+                return jsonify({"ok": False, "error":"forbidden","message": f"required role in {roles}"}), 403
             return fn(*args, **kwargs)
         return wrapper
     return decorator

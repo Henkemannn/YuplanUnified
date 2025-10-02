@@ -47,3 +47,10 @@ def client_user(app_session):
 def client_no_tenant(app_session):
     c = app_session.test_client()
     return c
+
+@pytest.fixture
+def client(client_admin):
+    """Alias fixture expected by some tests (e.g., OpenAPI tests) mapping to admin client.
+    Keeps backward compatibility with existing role-based fixtures while avoiding duplication.
+    """
+    return client_admin

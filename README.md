@@ -90,6 +90,34 @@ unified_platform/
   - `bom=1` — prepend UTF-8 BOM for Excel
 * Streaming uses generator + `yield_per` for low memory footprint.
 
+#### Feature Flag: `rate_limit_export`
+The export endpoints have an optional opt-in rate limit controlled per tenant via the `rate_limit_export` feature flag.
+
+Default: OFF (no rate limiting applied).
+
+When ON for a tenant:
+* Limit: 5 requests per rolling fixed window of 60 seconds per `(tenant_id:user_id)` bucket.
+* Exceeding the quota results in HTTP 429 with JSON body:
+  ```json
+  {"ok": false, "error": "rate_limited", "message": "Rate limit exceeded for export_notes_csv", "retry_after": 37, "limit": "export_notes_csv"}
+  ```
+  and header `Retry-After: <seconds>`.
+
+Enable via Admin API (role editor/admin allowed to manage flags):
+```
+POST /admin/feature_flags
+{"name": "rate_limit_export", "enabled": true}
+```
+Disable:
+```
+POST /admin/feature_flags
+{"name": "rate_limit_export", "enabled": false}
+```
+Operational Guidance:
+1. Turn flag ON for a pilot tenant; observe `rate_limit.hit` metrics (tags: name, outcome, window).
+2. Adjust quota in code if needed (central decorator parameter) before broad enablement.
+3. Keep flag OFF for high-volume reporting tenants until validated.
+
 ### Continuous Integration (CI)
 The repository includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs on pushes and pull requests targeting `main` / `master`.
 
@@ -214,6 +242,8 @@ Pocket 4 (API handlers):
  - `core.service_metrics_api`
  - `core.service_recommendation_api`
  - Unified ok/error envelope (`{"ok": False, "error": code, "message"?: str}`) applied consistently.
+ 
+ Pocket 5 (current): Tasks API + new tasks service (strict) – adds Task* contracts, unified error envelope (`ok: False` on errors).
 
 Expansion workflow (for a new module, e.g. `core.menu_service`):
 1. Remove (or avoid adding) its `ignore_errors` block in `mypy.ini`.
@@ -328,6 +358,77 @@ Minimal How-To:
 
 Refer to `/openapi.json` examples for concrete request/response bodies.
 
+## Pagination
+List endpoints now return a unified pagination envelope:
+
+```jsonc
+{
+  "ok": true,
+  "items": [...],
+  "meta": { "page": 1, "size": 20, "total": 137, "pages": 7 }
+}
+```
+
+Query params:
+| Name | Default | Min | Max | Notes |
+|------|---------|-----|-----|-------|
+| `page` | 1 | 1 | - | 1-based index |
+| `size` | 20 | 1 | 100 | >100 is clamped to 100 |
+| `sort` | (none) | - | - | Reserved for future field sorting |
+| `order` | `asc` | - | - | `asc`/`desc`; ignored until `sort` is enabled |
+
+Stable ordering (current implementation) uses `created_at DESC, id DESC` internally to avoid duplication or gaps when new rows arrive between pages. Invalid numeric inputs produce a `400` error envelope (`{"ok": false, "error": "bad_request", ...}`). Invalid `order` values fallback to `asc`.
+
+Future extensions may add cursor-based pagination once datasets grow large; current offset approach is sufficient for MVP scale.
+
+Deprecation (alias keys): Responses still include legacy `notes` / `tasks` top-level arrays for backward compatibility, but these are marked with deprecation headers (`Deprecation: true`, `Sunset: Wed, 01 Jan 2026 00:00:00 GMT`). Clients should migrate to `items` before the sunset date.
+
+Centralization (2025-10-02): Deprecation headers are now applied via `core.deprecation.apply_deprecation`, which sets RFC 8594-compliant `Deprecation`, `Sunset`, `Link` (rel="deprecation") plus an explicit `X-Deprecated-Alias` header enumerating emitted legacy keys. A telemetry metric `deprecation.alias.emitted` (tags: `endpoint`, `aliases`) is incremented to track client migration velocity. Removing aliases after the sunset simply becomes a one-line change (stop passing alias list) with observability to ensure low residual usage first.
+
+## Import API
+Three editor/admin protected endpoints allow structured ingestion of task-like rows:
+
+| Method | Path | Format | Notes |
+|--------|------|--------|-------|
+| POST | `/import/csv` | CSV | Always available. Validates header row must contain `title,description,priority`. Returns 415 if file extension/MIME not clearly CSV. |
+| POST | `/import/docx` | DOCX table | Optional (python-docx). 415 Unsupported if library absent. First table only; header row inferred from first table row. |
+| POST | `/import/xlsx` | XLSX sheet | Optional (openpyxl). 415 Unsupported if library absent. First worksheet only. |
+
+Response on success:
+```jsonc
+{
+  "ok": true,
+  "rows": [ { "title": "A", "description": "Alpha", "priority": 1 } ],
+  "meta": { "count": 1 }
+}
+```
+
+Error envelope examples:
+```jsonc
+// Unsupported format (e.g. DOCX not installed)
+{ "ok": false, "error": "unsupported", "message": "docx import not available" }
+// Validation failure (missing required column)
+{ "ok": false, "error": "invalid", "message": "Missing required column priority" }
+// Rate limited (flag enabled + quota exceeded)
+{ "ok": false, "error": "rate_limited", "message": "Too many requests" }
+```
+
+Rate Limiting (opt-in): set `FEATURE_FLAGS.rate_limit_import = true` (test config) to enforce a fixed 60s window (5/min when forced via `X-Force-Rate-Limit` headers in tests). Absent flag => unlimited.
+
+OpenAPI schemas: `ImportRow`, `ImportOkResponse`, `ImportErrorResponse` with `error` enum: `invalid | unsupported | rate_limited`.
+
+Implementation Notes:
+1. CSV path performs lightweight extension/MIME gating (future: sniff magic bytes for stronger validation).
+2. Optional DOCX/XLSX parsers are wrapped in try/except at import time; endpoints short-circuit with 415 when unavailable.
+3. Validation + normalization centralized in `core/importers/validate.py` (raises `ImportValidationError`).
+4. Strict typing enforced via pocket entry `[mypy-core.import_api] strict = True`.
+
+Future Enhancements:
+* Per-tenant import quotas (flag & DB overrides similar to export limits).
+* Row-level error reporting array (currently aggregated in exception message for brevity).
+* Streaming large file parsing (chunked CSV reader) once >5MB cap is revisited.
+
+
 ### Status Endpoint Notes
 `POST /tasks/` returns **201 Created** with a `Location: /tasks/{id}` header and body `{ ok, task }`.
 Clients SHOULD treat `status` as authoritative and ignore `done` for writes.
@@ -396,6 +497,26 @@ curl http://localhost:5000/admin/feature_flags -b cookie.txt
 ```
 
 ## OpenAPI & CI Validation
+\n+## Metrics (Lightweight Instrumentation)
+The platform includes a minimal metrics abstraction (`core.metrics`) with a noop default and an optional logging backend.
+
+Activate logging backend (emits INFO lines via logger `metrics`):
+```
+set METRICS_BACKEND=log  # Windows PowerShell: $env:METRICS_BACKEND="log"
+python run.py
+```
+
+Example log line when a legacy cook creates a task (fallback path):
+```
+metric name=tasks.create.legacy_cook tags={'tenant_id': '1', 'user_id': '1', 'role': 'cook', 'canonical': 'viewer'}
+```
+
+Backend selection:
+- noop (default) — no overhead.
+- log — structured-ish single line per increment, safe for dev / staging.
+
+Custom backends can be added by implementing the `Metrics` protocol and calling `set_metrics()` during app startup.
+
 The API specification is served at `/openapi.json`. CI runs a dedicated validation job to ensure spec conformance. You can locally sanity-check it:
 ```bash
 python - <<'PY'

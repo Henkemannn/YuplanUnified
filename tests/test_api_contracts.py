@@ -1,4 +1,3 @@
-import pytest
 
 # These tests assert shape (happy/error) for newly strict API modules.
 

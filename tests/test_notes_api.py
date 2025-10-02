@@ -1,3 +1,5 @@
+from contextlib import suppress
+
 import pytest
 from flask import Flask
 from werkzeug.security import generate_password_hash
@@ -21,10 +23,8 @@ def seeded_users():
     db = get_session()
     try:
         # Ensure schema exists (in case migrations not executed in test context)
-        try:
+        with suppress(Exception):
             create_all()
-        except Exception:
-            pass
         tenant = db.query(Tenant).first()
         if not tenant:
             tenant = Tenant(name="T1")

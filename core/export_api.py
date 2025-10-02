@@ -6,13 +6,16 @@ from io import StringIO
 
 from flask import Blueprint, Response, request, session, stream_with_context
 
-from .auth import require_roles
+"""Replace legacy role checks with core.app_authz.require_roles(RoleLike); remove manual 401/403 returns; rely on exceptions. Keep runtime responses unchanged (central handlers)."""
+
+from .app_authz import require_roles
 from .db import get_session
 from .models import Note, Task
+from .http_limits import limit
 
 bp = Blueprint("export_api", __name__, url_prefix="/export")
 
-ADMIN_ROLES = ("superuser","admin")
+ADMIN_ROLES = ("editor","admin")  # editor or admin can export; adapter maps legacy roles
 
 def _tenant_id() -> int:
     tid = session.get("tenant_id")
@@ -51,7 +54,8 @@ def _csv_response(name: str, rows_iterable):
     )
 
 @bp.get("/notes.csv")
-@require_roles(*ADMIN_ROLES)
+@require_roles("editor","admin")
+@limit(name="export_notes_csv", quota=5, per_seconds=60, feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
 def export_notes():
     tid = _tenant_id()
     db = get_session()
@@ -73,7 +77,8 @@ def export_notes():
         db.close()
 
 @bp.get("/tasks.csv")
-@require_roles(*ADMIN_ROLES)
+@require_roles("editor","admin")
+@limit(name="export_tasks_csv", quota=5, per_seconds=60, feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
 def export_tasks():
     tid = _tenant_id()
     db = get_session()

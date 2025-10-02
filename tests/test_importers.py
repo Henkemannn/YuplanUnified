@@ -10,9 +10,9 @@ from core.importers.excel_importer import ExcelMenuImporter
 def make_docx(lines):
     buf = io.BytesIO()
     doc = Document()
-    for l in lines:
+    for line in lines:
         p = doc.add_paragraph()
-        p.add_run(l)
+        p.add_run(line)
     doc.save(buf)
     return buf.getvalue()
 

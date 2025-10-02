@@ -72,7 +72,15 @@ def test_refresh_rotation(client):
 
 
 def test_rbac_ownership_and_admin_override(client):
-    # userA creates a task
+    # enable flag via admin API first
+    admin_login = login(client, "admin@example.com")
+    access_admin = admin_login["access_token"]
+    client.post(
+        "/admin/feature_flags",
+        json={"name": "allow_legacy_cook_create", "enabled": True},
+        headers={"Authorization": f"Bearer {access_admin}", "X-Tenant-Id": "1"},
+    )
+    # userA (cook) creates a task
     a = login(client, "a@example.com")
     accessA = a["access_token"]
     create = client.post("/tasks/", json={"title":"Owned by A","status":"todo"}, headers={"Authorization": f"Bearer {accessA}", "X-Tenant-Id":"1"})
@@ -102,12 +110,12 @@ def test_rate_limits_tasks_and_features(client):
     access = d["access_token"]
     # hit tasks create 4 times -> expect 429 on last
     codes = []
-    for i in range(4):
-        r = client.post("/tasks/", json={"title":f"T{i}","status":"todo"}, headers={"Authorization": f"Bearer {access}", "X-Tenant-Id":"1","X-Force-Rate-Limit":"1"})
+    for _ in range(4):
+        r = client.post("/tasks/", json={"title":f"T{_}","status":"todo"}, headers={"Authorization": f"Bearer {access}", "X-Tenant-Id":"1","X-Force-Rate-Limit":"1"})
         codes.append(r.status_code)
     assert 429 in codes
     # feature flag set spam
-    for i in range(4):
+    for _ in range(4):
         r = client.post("/features/set", json={"name":"inline_ui","enabled":True}, headers={"Authorization": f"Bearer {access}", "X-Tenant-Id":"1","X-Force-Rate-Limit":"1"})
     # last should or one of them be 429
     assert any(c == 429 for c in [r.status_code])

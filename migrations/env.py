@@ -1,11 +1,14 @@
 from __future__ import annotations
+
+import os
+import sys
 from logging.config import fileConfig
+
 from alembic import context
 from sqlalchemy import engine_from_config, pool
-import os, sys
 
 # Include core models
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from core.config import Config  # type: ignore
 from core.models import Base  # type: ignore
 
@@ -13,9 +16,9 @@ from core.models import Base  # type: ignore
 config = context.config
 
 # Override URL from env (if provided)
-db_url = os.getenv('DATABASE_URL')
+db_url = os.getenv("DATABASE_URL")
 if db_url:
-    config.set_main_option('sqlalchemy.url', db_url)
+    config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
 if config.config_file_name:
@@ -33,7 +36,7 @@ def run_migrations_offline():
 def run_migrations_online():
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
-        prefix='sqlalchemy.',
+        prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:

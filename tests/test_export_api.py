@@ -1,3 +1,5 @@
+from contextlib import suppress
+
 import pytest
 from flask import Flask
 from werkzeug.security import generate_password_hash
@@ -21,10 +23,8 @@ def client(app: Flask):
 @pytest.fixture()
 def seeded(client):
     # Ensure tables (if using clean SQLite file)
-    try:
+    with suppress(Exception):
         create_all()
-    except Exception:
-        pass
     db = get_session()
     try:
         tenant = db.query(Tenant).first()
