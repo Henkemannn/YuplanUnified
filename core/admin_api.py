@@ -19,6 +19,7 @@ from .models import Tenant, TenantFeatureFlag, TenantMetadata
 from .pagination import parse_page_params, make_page_response
 from .limit_registry import list_default_names, list_tenant_names, get_limit
 from .limit_registry import set_override, delete_override
+from . import metrics as metrics_mod
 from typing import cast as _cast, Literal
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -260,11 +261,13 @@ def upsert_limit():  # type: ignore[return-value]
     new_ld = set_override(tid, str(name), q, p)
     ld_after, src_after = get_limit(tid, str(name))
     updated = not (ld_before == ld_after and src_before == src_after)
-    return jsonify({
-        "ok": True,
-        "item": {"tenant_id": tid, "name": str(name), "quota": ld_after["quota"], "per_seconds": ld_after["per_seconds"], "source": src_after},
-        "updated": updated,
+    metrics_mod.increment("admin.limits.upsert", {
+        "tenant_id": str(tid),
+        "name": str(name),
+        "updated": "true" if updated else "false",
+        "actor_role": str(session.get("role")) if "session" in globals() else "unknown",
     })
+    return jsonify({"ok": True, "item": {"tenant_id": tid, "name": str(name), "quota": ld_after["quota"], "per_seconds": ld_after["per_seconds"], "source": src_after}, "updated": updated})
 
 
 @bp.delete("/limits")
@@ -281,4 +284,10 @@ def delete_limit():  # type: ignore[return-value]
     except Exception:
         return jsonify({"ok": False, "error": "bad_request", "message": "invalid tenant_id"}), 400
     removed = delete_override(tid, str(name))
+    metrics_mod.increment("admin.limits.delete", {
+        "tenant_id": str(tid),
+        "name": str(name),
+        "removed": "true" if removed else "false",
+        "actor_role": str(session.get("role")) if "session" in globals() else "unknown",
+    })
     return jsonify({"ok": True, "removed": removed})
