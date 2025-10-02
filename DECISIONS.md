@@ -303,6 +303,14 @@ Rationale:
 Follow-ups:
 - Extend helper to optionally accept structured deprecation reasons and planned removal version.
 - Add sampling guard if emission rate becomes high across many endpoints.
+
+### 2025-10-02: Per-tenant rate-limit registry
+- **Motiv:** Konfigurerbara kvoter per tenant/limit utan kodändring.
+- **Resolution order:** tenant override → global default → safe fallback.
+- **Clamp/caps:** `quota ≥ 1`, `1 ≤ per_seconds ≤ 86400`.
+- **Precedens:** Explicit `quota/per_seconds` i dekorator **överstyr** registry.
+- **Telemetri:** `rate_limit.lookup {name, source}` för driftinsikt.
+- **Rollout:** Export-endpoints använder registry bakom `rate_limit_export` (flagga).
 	4. Opt-out (N+28d → N+56d): auto-disable fallback for tenants with 0 events in prior 30d; first blocked attempt logs info with guidance.
 	5. Removal (≥ N+56d): remove fallback branch + tests; update CHANGELOG, README, OpenAPI examples if needed.
 

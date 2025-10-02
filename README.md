@@ -385,6 +385,39 @@ Deprecation (alias keys): Responses still include legacy `notes` / `tasks` top-l
 
 Centralization (2025-10-02): Deprecation headers are now applied via `core.deprecation.apply_deprecation`, which sets RFC 8594-compliant `Deprecation`, `Sunset`, `Link` (rel="deprecation") plus an explicit `X-Deprecated-Alias` header enumerating emitted legacy keys. A telemetry metric `deprecation.alias.emitted` (tags: `endpoint`, `aliases`) is incremented to track client migration velocity. Removing aliases after the sunset simply becomes a one-line change (stop passing alias list) with observability to ensure low residual usage first.
 
+## Rate-limit registry (per tenant)
+
+Yuplan kan läsa kvotinställningar per **tenant** och **limit-namn** från konfig.
+Resolution order:
+1) Tenant override: `FEATURE_LIMITS_JSON` nycklar `tenant:<id>:<name>`
+2) Globala defaults: `FEATURE_LIMITS_DEFAULTS_JSON` nycklar `<name>`
+3) Safe fallback: `quota=5`, `per_seconds=60`
+
+**Schema (JSON):**
+- `quota` (int ≥ 1)
+- `per_seconds` (int 1–86400)
+
+**Exempel**
+```json
+FEATURE_LIMITS_JSON='{
+  "tenant:42:export_csv": {"quota": 10, "per_seconds": 60}
+}'
+FEATURE_LIMITS_DEFAULTS_JSON='{
+  "export_csv": {"quota": 5, "per_seconds": 60}
+}'
+```
+
+**Användning i kod**
+Dekoratorn hämtar registry-värden när quota/per_seconds inte anges:
+
+```python
+@limit(name="export_csv", key_func=user_bucket, feature_flag="rate_limit_export", use_registry=True)
+def export_notes_csv(): ...
+```
+
+**Telemetri**
+Varje uppslag skickar `rate_limit.lookup` med taggen `source=tenant|default|fallback`.
+
 ## Import API
 Three editor/admin protected endpoints allow structured ingestion of task-like rows:
 

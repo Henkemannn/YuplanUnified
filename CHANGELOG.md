@@ -114,3 +114,10 @@
 	- Telemetry metric: `deprecation.alias.emitted{endpoint,aliases}` for monitoring removal readiness.
 	- Consumers should migrate to `items` before the sunset date; alias removal tracked in DECISIONS.
 
+### Rate Limiting
+- Added per-tenant rate-limit registry (`core.limit_registry`) with resolution order tenant override → global default → fallback (5/60).
+- Environment configuration: `FEATURE_LIMITS_JSON` (tenant:<id>:<name>) and `FEATURE_LIMITS_DEFAULTS_JSON` (global defaults).
+- Decorator `@limit` now supports implicit lookup when `quota`/`per_seconds` omitted (`use_registry=True`).
+- Metric `rate_limit.lookup{name,source}` emitted for each lookup (source ∈ tenant|default|fallback).
+- Export endpoints now fetch quotas from registry (still gated by `rate_limit_export` flag).
+
