@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, session
 
 from core.auth import require_roles
 
@@ -20,6 +20,13 @@ from .pagination import parse_page_params, make_page_response
 from .limit_registry import list_default_names, list_tenant_names, get_limit
 from .limit_registry import set_override, delete_override
 from . import metrics as metrics_mod
+try:  # audit optional robustness
+    from . import audit as _audit_mod  # type: ignore
+    def _emit_audit(event_name: str, **fields):  # indirection layer for monkeypatch friendliness
+        _audit_mod.log_event(event_name, **fields)  # type: ignore[attr-defined]
+except Exception:  # pragma: no cover
+    def _emit_audit(event_name: str, **fields):  # type: ignore[unused-ignore]
+        return None
 from typing import cast as _cast, Literal
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -243,7 +250,7 @@ def upsert_limit():  # type: ignore[return-value]
     from flask import session
     data = request.get_json(silent=True) or {}
     tenant_id = data.get("tenant_id") or session.get("tenant_id")
-    name = data.get("name")
+    name = data.get("name")  # limit identifier
     quota = data.get("quota")
     per_seconds = data.get("per_seconds") or data.get("per")
     if tenant_id is None or name is None or quota is None or per_seconds is None:
@@ -265,8 +272,21 @@ def upsert_limit():  # type: ignore[return-value]
         "tenant_id": str(tid),
         "name": str(name),
         "updated": "true" if updated else "false",
-        "actor_role": str(session.get("role")) if "session" in globals() else "unknown",
+        "actor_role": str(session.get("role")),
     })
+    try:  # audit must not break response
+        _emit_audit(
+            "limits_upsert",
+            tenant_id=tid,
+            limit_name=str(name),
+            quota=ld_after["quota"],
+            per_seconds=ld_after["per_seconds"],
+            updated=updated,
+            actor_user_id=session.get("user_id"),  # type: ignore[arg-type]
+            actor_role=session.get("role"),        # type: ignore[arg-type]
+        )
+    except Exception:  # pragma: no cover
+        pass
     return jsonify({"ok": True, "item": {"tenant_id": tid, "name": str(name), "quota": ld_after["quota"], "per_seconds": ld_after["per_seconds"], "source": src_after}, "updated": updated})
 
 
@@ -276,7 +296,7 @@ def delete_limit():  # type: ignore[return-value]
     from flask import session
     data = request.get_json(silent=True) or {}
     tenant_id = data.get("tenant_id") or session.get("tenant_id")
-    name = data.get("name")
+    name = data.get("name")  # limit identifier
     if tenant_id is None or name is None:
         return jsonify({"ok": False, "error": "bad_request", "message": "tenant_id,name required"}), 400
     try:
@@ -288,6 +308,17 @@ def delete_limit():  # type: ignore[return-value]
         "tenant_id": str(tid),
         "name": str(name),
         "removed": "true" if removed else "false",
-        "actor_role": str(session.get("role")) if "session" in globals() else "unknown",
+        "actor_role": str(session.get("role")),
     })
+    try:  # audit must not break response
+        _emit_audit(
+            "limits_delete",
+            tenant_id=tid,
+            limit_name=str(name),
+            removed=removed,
+            actor_user_id=session.get("user_id"),  # type: ignore[arg-type]
+            actor_role=session.get("role"),        # type: ignore[arg-type]
+        )
+    except Exception:  # pragma: no cover
+        pass
     return jsonify({"ok": True, "removed": removed})

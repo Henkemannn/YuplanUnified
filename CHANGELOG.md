@@ -122,4 +122,5 @@
 - Export endpoints now fetch quotas from registry (still gated by `rate_limit_export` flag).
 - Added admin inspection endpoint `/admin/limits` returning paginated effective limits (defaults only or union with tenant overrides). Supports `tenant_id`, `name` filters and exposes `source` (tenant|default|fallback); fallback only shown for explicit name filter misses.
 - Added write endpoints: `POST /admin/limits` (upsert tenant override) and `DELETE /admin/limits` (idempotent removal). Clamps quota/per_seconds, returns mutation envelope with `updated` or `removed` flags.
+- Added audit logging for admin limits mutations (`limits_upsert`, `limits_delete`) capturing tenant_id, name, quota/per_seconds (upsert), updated/removed flag, actor_user_id, actor_role.
 

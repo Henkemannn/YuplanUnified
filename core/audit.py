@@ -11,6 +11,16 @@ from sqlalchemy.orm import Session
 
 from .models import Task, TaskStatusTransition
 
+def log_event(name: str, **fields) -> None:
+    """Generic audit event sink (placeholder).
+
+    Currently a no-op (extend to persist or emit structured logs). Tests monkeypatch this.
+    """
+    # Intentionally no persistence yet.
+    return None
+
+__all__ = ["log_task_status_transition", "log_event"]
+
 
 def log_task_status_transition(db: Session, task: Task, old_status: str | None, new_status: str, user_id: int | None) -> None:
     """Persist a TaskStatusTransition if there is a real status change.
