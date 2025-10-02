@@ -265,6 +265,16 @@ def create_app(config_override: dict | None = None) -> Flask:
         except Exception as e:  # pragma: no cover
             app.logger.exception("Failed loading module %s: %s", mod, e)
 
+    # Load rate limit registry (optional env JSON)
+    try:
+        from .limit_registry import load_from_env as _load_limits
+        overrides = app.config.get("FEATURE_LIMITS_JSON")
+        defaults = app.config.get("FEATURE_LIMITS_DEFAULTS_JSON")
+        if overrides or defaults:
+            _load_limits(overrides, defaults)
+    except Exception:  # pragma: no cover
+        pass
+
     # --- Error handling --- (centralized via register_error_handlers in app_errors)
 
     # --- OpenAPI Spec Endpoint ---

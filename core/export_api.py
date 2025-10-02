@@ -55,7 +55,7 @@ def _csv_response(name: str, rows_iterable):
 
 @bp.get("/notes.csv")
 @require_roles("editor","admin")
-@limit(name="export_notes_csv", quota=5, per_seconds=60, feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
+@limit(name="export_notes_csv", feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
 def export_notes():
     tid = _tenant_id()
     db = get_session()
@@ -78,7 +78,7 @@ def export_notes():
 
 @bp.get("/tasks.csv")
 @require_roles("editor","admin")
-@limit(name="export_tasks_csv", quota=5, per_seconds=60, feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
+@limit(name="export_tasks_csv", feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
 def export_tasks():
     tid = _tenant_id()
     db = get_session()
