@@ -1,9 +1,8 @@
-import time
 from flask import Flask
 
-from core.app_factory import create_app
 import core.rate_limiter as rl
 from core import metrics as metrics_mod
+from core.app_factory import create_app
 
 
 def _client(quota=3, per=60, backend="memory"):
@@ -17,7 +16,7 @@ def _client(quota=3, per=60, backend="memory"):
 
 def test_within_quota_allows():
     c = _client()
-    for i in range(3):
+    for _i in range(3):
         r = c.get("/_limit/test")
         assert r.status_code == 200, r.get_json()
     # 4th should 429 (quota=3)
@@ -39,11 +38,11 @@ def test_window_reset(monkeypatch):
     orig_time = rl_mod.time.time
     def fake_time():
         return orig_time() + 61
-    monkeypatch.setattr(rl_mod.time, 'time', fake_time)
+    monkeypatch.setattr(rl_mod.time, "time", fake_time)
     try:
         assert c.get("/_limit/test").status_code == 200
     finally:
-        monkeypatch.setattr(rl_mod.time, 'time', orig_time)
+        monkeypatch.setattr(rl_mod.time, "time", orig_time)
 
 
 def test_retry_after_positive():
@@ -64,7 +63,7 @@ def test_metrics_allow_and_block(monkeypatch):
     monkeypatch.setattr(metrics_mod, "_metrics", TestMetrics())
     c = _client()
     # 5 requests => 3 allow then we expect blocks after quota
-    for i in range(5):
+    for _i in range(5):
         c.get("/_limit/test")
     allow_hits = [e for e in events if e[0] == "rate_limit.hit" and e[1].get("outcome") == "allow"]
     block_hits = [e for e in events if e[0] == "rate_limit.hit" and e[1].get("outcome") == "block"]

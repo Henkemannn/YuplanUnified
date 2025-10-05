@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core import metrics as metrics_mod
 
+
 def _login_viewer(client):
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
@@ -10,7 +11,7 @@ def _login_viewer(client):
 
 
 def test_notes_alias_has_deprecation_headers(client):
-    from typing import Mapping
+    from collections.abc import Mapping
     class _Rec:
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict[str, str]]] = []
@@ -29,7 +30,7 @@ def test_notes_alias_has_deprecation_headers(client):
 
 
 def test_tasks_alias_has_deprecation_headers(client):
-    from typing import Mapping
+    from collections.abc import Mapping
     class _Rec:
         def __init__(self) -> None:
             self.calls: list[tuple[str, dict[str, str]]] = []

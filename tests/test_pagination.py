@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.pagination import parse_page_params, paginate_sequence, PageRequest
+from core.pagination import PageRequest, paginate_sequence, parse_page_params
 
 
 def test_pagination_defaults():

@@ -22,44 +22,82 @@ Thread-safety: simple module-level dicts; acceptable for current single-process 
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from json import loads
-from typing import Any, Dict, Mapping, MutableMapping, Tuple, TypedDict
+from typing import Any, Literal, TypedDict
+
+try:  # Python <3.11 fallback
+    from typing import NotRequired  # type: ignore
+except Exception:  # pragma: no cover
+    from typing import NotRequired  # type: ignore
 
 from . import metrics as metrics_mod
 
-class LimitDefinition(TypedDict):
-    quota: int
-    per_seconds: int
 
-_TenantMap = Dict[str, LimitDefinition]
-_DefaultMap = Dict[str, LimitDefinition]
+class LimitDefinition(TypedDict, total=False):
+        """Definition of a rate limit window.
+
+        Fields:
+            quota: number of events per period (required)
+            per_seconds: length of window (required)
+            burst: token bucket capacity (optional, defaults to quota when using token bucket)
+            strategy: limiting algorithm ("fixed" or "token_bucket"). Optional so existing env JSON without it still parses.
+        """
+        quota: int
+        per_seconds: int
+        burst: NotRequired[int]
+        strategy: NotRequired[Literal["fixed", "token_bucket"]]
+
+_TenantMap = dict[str, LimitDefinition]
+_DefaultMap = dict[str, LimitDefinition]
 
 _tenant_limits: _TenantMap = {}
 _default_limits: _DefaultMap = {}
 
-_FALLBACK: LimitDefinition = {"quota": 5, "per_seconds": 60}
+_FALLBACK_QUOTA = 5
+_FALLBACK_PER = 60
+_FALLBACK_BURST = 5
+_FALLBACK: LimitDefinition = {"quota": _FALLBACK_QUOTA, "per_seconds": _FALLBACK_PER, "burst": _FALLBACK_BURST}
 _MAX_WINDOW = 86400
 
 
-def _clamp(q: Any, p: Any) -> LimitDefinition:
+def _clamp(q: Any, p: Any, b: Any | None = None, strategy: Any | None = None) -> LimitDefinition:
     try:
         quota = int(q)
     except Exception:
-        quota = _FALLBACK["quota"]
+        quota = _FALLBACK_QUOTA
     if quota < 1:
         quota = 1
     try:
         per = int(p)
     except Exception:
-        per = _FALLBACK["per_seconds"]
+        per = _FALLBACK_PER
     if per < 1:
         per = 1
     if per > _MAX_WINDOW:
         per = _MAX_WINDOW
-    return {"quota": quota, "per_seconds": per}
+    burst: int
+    if b is None:
+        burst = quota
+    else:
+        try:
+            burst = int(b)
+        except Exception:
+            burst = quota
+    if burst < quota:
+        burst = quota  # capacity must be >= steady quota
+    strat_val: Literal["fixed", "token_bucket"] | None = None
+    if isinstance(strategy, str):
+        s = strategy.strip().lower()
+        if s in ("fixed", "token_bucket"):
+            strat_val = s  # type: ignore[assignment]
+    result: LimitDefinition = {"quota": quota, "per_seconds": per, "burst": burst}
+    if strat_val:
+        result["strategy"] = strat_val
+    return result
 
 
-def parse_limits(raw: str | Mapping[str, Any]) -> Tuple[_TenantMap, _DefaultMap]:
+def parse_limits(raw: str | Mapping[str, Any]) -> tuple[_TenantMap, _DefaultMap]:
     if isinstance(raw, str):
         try:
             data = loads(raw or "{}")
@@ -74,7 +112,9 @@ def parse_limits(raw: str | Mapping[str, Any]) -> Tuple[_TenantMap, _DefaultMap]
             continue
         quota = v.get("quota")
         per = v.get("per") or v.get("per_seconds")
-        ld = _clamp(quota, per)
+        burst = v.get("burst")
+        strat = v.get("strategy")
+        ld = _clamp(quota, per, burst, strat)
         if k.startswith("tenant:"):
             tenant[k] = ld
         else:
@@ -93,15 +133,17 @@ def load_from_env(overrides_raw: Any, defaults_raw: Any) -> None:
     tenant_map.update(d_over)  # unlikely
     default_map.update(t_def)
     default_map.update(d_def)
-    _tenant_limits.clear(); _tenant_limits.update(tenant_map)
-    _default_limits.clear(); _default_limits.update(default_map)
+    _tenant_limits.clear()
+    _tenant_limits.update(tenant_map)
+    _default_limits.clear()
+    _default_limits.update(default_map)
 
 
 def refresh(overrides_raw: Any, defaults_raw: Any) -> None:
     load_from_env(overrides_raw, defaults_raw)
 
 
-def get_limit(tenant_id: int, name: str) -> Tuple[LimitDefinition, str]:
+def get_limit(tenant_id: int, name: str) -> tuple[LimitDefinition, str]:
     t_key = f"tenant:{tenant_id}:{name}"
     if t_key in _tenant_limits:
         ld = _tenant_limits[t_key]
@@ -124,11 +166,11 @@ __all__ = [
 
 # Listing helpers for inspection (not performance critical)
 def list_default_names() -> list[str]:
-    return sorted({k for k in _default_limits.keys()})
+    return sorted({k for k in _default_limits})
 
 def list_tenant_names(tenant_id: int) -> list[str]:
     prefix = f"tenant:{tenant_id}:"
-    names = [k.split(":",2)[2] for k in _tenant_limits.keys() if k.startswith(prefix)]
+    names = [k.split(":", 2)[2] for k in _tenant_limits if k.startswith(prefix)]
     return sorted(set(names))
 
 def set_override(tenant_id: int, name: str, quota: int, per_seconds: int) -> LimitDefinition:

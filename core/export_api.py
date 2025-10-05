@@ -1,3 +1,9 @@
+"""Export endpoints (CSV) with unified role enforcement & rate limiting.
+
+Replaces legacy inline auth checks with `require_roles`; relies on central
+error handlers for 401/403. Streaming CSV responses for notes/tasks.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -6,12 +12,10 @@ from io import StringIO
 
 from flask import Blueprint, Response, request, session, stream_with_context
 
-"""Replace legacy role checks with core.app_authz.require_roles(RoleLike); remove manual 401/403 returns; rely on exceptions. Keep runtime responses unchanged (central handlers)."""
-
 from .app_authz import require_roles
 from .db import get_session
-from .models import Note, Task
 from .http_limits import limit
+from .models import Note, Task
 
 bp = Blueprint("export_api", __name__, url_prefix="/export")
 

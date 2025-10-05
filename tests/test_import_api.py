@@ -1,6 +1,5 @@
 import io
 import json
-import os
 from typing import Any
 
 import pytest
@@ -11,7 +10,7 @@ from core.app_factory import create_app
 CSV_MINIMAL = b"title,description,priority\nA,Alpha,1\nB,Beta,2\n"
 CSV_MISSING_COL = b"title,description\nOnly,Two\n"
 CSV_EMPTY = b"title,description,priority\n"
-CSV_UNICODE = "title,description,priority\nÅngström,Smörgås,3\n".encode("utf-8")
+CSV_UNICODE = "title,description,priority\nÅngström,Smörgås,3\n".encode()
 
 
 def _app(flags: dict[str, bool] | None = None) -> Flask:
@@ -142,7 +141,6 @@ def test_import_unsupported_mime_415():
             try:
                 import docx  # noqa: F401
                 # If docx exists we intentionally send bad content to trigger invalid vs unsupported
-                pass
             except Exception:
                 # Without docx installed docx endpoint returns 415
                 resp2 = client.post("/import/docx", data=data, content_type="multipart/form-data")

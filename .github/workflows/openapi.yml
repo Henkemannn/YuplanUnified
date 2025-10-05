@@ -1,0 +1,322 @@
+name: OpenAPI
+
+on:
+  push:
+    paths:
+      - 'openapi.json'
+      - 'openapi/**'
+      - 'tests/test_openapi_**.py'
+      - '.github/workflows/openapi.yml'
+      - '**/openapi*.py'
+      - '**/*openapi*'
+  pull_request:
+    paths:
+      - 'openapi.json'
+      - 'openapi/**'
+      - 'tests/test_openapi_**.py'
+      - '.github/workflows/openapi.yml'
+      - '**/openapi*.py'
+      - '**/*openapi*'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-spectral-${{ hashFiles('.spectral.yaml') }}
+          restore-keys: |
+            npm-${{ runner.os }}-spectral-
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install openapi-spec-validator requests
+
+      - name: Install Spectral (OpenAPI linter)
+        run: npm install -g @stoplight/spectral-cli
+
+      - name: Start app
+        env:
+          FLASK_ENV: production
+        run: |
+          # Byt startkommando om ni använder något annat än run.py
+          nohup python run.py >/tmp/app.log 2>&1 &
+          echo $! > /tmp/app.pid
+
+      - name: Wait for app
+        run: |
+          for i in {1..90}; do
+            if curl -fsS http://127.0.0.1:5000/health || curl -fsS http://127.0.0.1:5000/; then
+              echo "App is up"
+              exit 0
+            fi
+            echo "Waiting for app..."
+            sleep 1
+          done
+          echo "App did not start in time" >&2
+          exit 1
+
+      - name: Fetch OpenAPI spec
+        run: |
+          curl -fsS http://127.0.0.1:5000/openapi.json > openapi.json
+          test -s openapi.json
+
+      - name: Normalize current spec
+        run: |
+          if command -v jq >/dev/null 2>&1; then
+            jq -S . openapi.json > /tmp/openapi.sorted.json
+          else
+            python -c "import json,sys;spec=json.load(open('openapi.json','r',encoding='utf-8'));open('/tmp/openapi.sorted.json','w',encoding='utf-8').write(json.dumps(spec,sort_keys=True,ensure_ascii=False,indent=2))"
+          fi
+
+      - name: Semantic diff vs baseline
+        run: |
+          if [ ! -f specs/openapi.baseline.json ]; then
+            echo "ERROR: Missing baseline specs/openapi.baseline.json" >&2
+            echo "Create it locally with:" >&2
+            echo "  curl -fsS http://127.0.0.1:5000/openapi.json | jq -S . > specs/openapi.baseline.json" >&2
+            echo "Commit the baseline in the same PR." >&2
+            exit 1
+          fi
+          python scripts/openapi_diff.py specs/openapi.baseline.json /tmp/openapi.sorted.json \
+            --report /tmp/openapi-diff.txt \
+            --json-report /tmp/openapi-diff.json
+
+      - name: Generate changelog snippet (from JSON diff)
+        run: |
+          python scripts/changelog_from_diff.py /tmp/openapi-diff.json /tmp/openapi-changelog.md
+
+      - name: Build API status badge (markdown)
+        run: |
+          status=$(jq -r '.status' /tmp/openapi-diff.json)
+          adds=$(jq '.additions | length' /tmp/openapi-diff.json)
+          if [ "$status" = "ok" ] && [ "$adds" -gt 0 ]; then
+            badge="[![API](https://img.shields.io/badge/api-changed-yellow)](./)"
+          elif [ "$status" = "ok" ]; then
+            badge="[![API](https://img.shields.io/badge/api-stable-success)](./)"
+          else
+            badge="[![API](https://img.shields.io/badge/api-breaking-red)](./)"
+          fi
+          printf "%s\n" "$badge" > /tmp/api-badge.md
+
+      - name: Upload OpenAPI extras
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-extras
+          path: |
+            /tmp/openapi-changelog.md
+            /tmp/api-badge.md
+
+      - name: Decide if PR comment is needed
+        if: ${{ github.event_name == 'pull_request' }}
+        id: decide
+        run: |
+          status=$(jq -r '.status' /tmp/openapi-diff.json)
+          adds=$(jq '.additions | length' /tmp/openapi-diff.json)
+          if [ "$status" = "ok" ] && [ "$adds" -eq 0 ]; then
+            echo "needed=false" >> $GITHUB_OUTPUT
+          else
+            echo "needed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build PR comment (markdown)
+        if: ${{ github.event_name == 'pull_request' && steps.decide.outputs.needed == 'true' }}
+        run: |
+          status=$(jq -r '.status' /tmp/openapi-diff.json)
+          adds=$(jq '.additions | length' /tmp/openapi-diff.json)
+          brk=$(jq '.breaking | length' /tmp/openapi-diff.json)
+          if [ "$status" = "ok" ] && [ "$adds" -gt 0 ]; then
+            emoji="🟡"
+          elif [ "$status" = "ok" ]; then
+            emoji="✅"
+          else
+            emoji="❌"
+          fi
+
+          limit=20
+
+          {
+            echo "<!-- openapi-diff-comment -->"
+            echo "### ${emoji} OpenAPI diff status: **${status^^}**"
+            echo
+            echo "**Breaking:** ${brk} • **Additions:** ${adds}"
+            echo
+            echo "> **Legend:** ✅ = no breaking changes · ❌ = breaking changes · 🟡 additions present"
+            echo
+            echo "<details><summary>Breaking changes (${brk})</summary>"
+            if [ "$brk" -gt 0 ]; then
+              jq -r --argjson L "$limit" '.breaking | .[:$L][] | "• \(. )"' /tmp/openapi-diff.json
+              if [ "$brk" -gt "$limit" ]; then
+                echo "…and $((brk - limit)) more (see artifact)."
+              fi
+            else
+              echo "_None_"
+            fi
+            echo "</details>"
+            echo
+            if [ "$adds" -gt 0 ]; then
+              echo "<details><summary>Additions (${adds})</summary>"
+              jq -r --argjson L "$limit" '.additions | .[:$L][] | "• \(. )"' /tmp/openapi-diff.json
+              if [ "$adds" -gt "$limit" ]; then
+                echo "…and $((adds - limit)) more (see artifact)."
+              fi
+              echo "</details>"
+              echo
+            fi
+            echo "_Artifacts:_ \`openapi-diff/openapi-diff.json\` + \`openapi-diff/openapi-diff.txt\`"
+          } > /tmp/openapi-comment.md
+
+      - name: Post/Update PR comment (OpenAPI diff)
+        if: ${{ github.event_name == 'pull_request' && steps.decide.outputs.needed == 'true' }}
+        uses: actions/github-script@v7
+        with:
+            script: |
+              const fs = require('fs');
+              const marker = '<!-- openapi-diff-comment -->';
+              const body = fs.readFileSync('/tmp/openapi-comment.md', 'utf8');
+              const {context, github, core} = require('@actions/github');
+              const {owner, repo} = context.repo;
+              const issue_number = context.issue.number;
+              const {data: comments} = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+              const existing = comments.find(c => (c.body || '').startsWith(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+                core.info('Updated existing OpenAPI diff comment.');
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number, body });
+                core.info('Created new OpenAPI diff comment.');
+              }
+
+      - name: Compute PR label
+        if: ${{ github.event_name == 'pull_request' }}
+        id: label_decision
+        run: |
+          status=$(jq -r '.status' /tmp/openapi-diff.json)
+            adds=$(jq '.additions | length' /tmp/openapi-diff.json)
+            if [ "$status" != "ok" ]; then
+              echo "label=api:breaking" >> $GITHUB_OUTPUT
+            elif [ "$adds" -gt 0 ]; then
+              echo "label=api:changed" >> $GITHUB_OUTPUT
+            else
+              echo "label=api:stable" >> $GITHUB_OUTPUT
+            fi
+
+      - name: Ensure labels exist
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const wanted = [
+              {name: 'api:breaking', color: 'd73a4a', description: 'Breaking OpenAPI change'},
+              {name: 'api:changed',  color: 'fbca04', description: 'Non-breaking OpenAPI additions'},
+              {name: 'api:stable',   color: '0e8a16', description: 'No OpenAPI changes'}
+            ];
+            const {owner, repo} = context.repo;
+            const existing = await github.paginate(github.rest.issues.listLabelsForRepo, {owner, repo, per_page: 100});
+            const have = new Set(existing.map(l => l.name));
+            for (const w of wanted) {
+              if (!have.has(w.name)) {
+                try {
+                  await github.rest.issues.createLabel({owner, repo, name: w.name, color: w.color, description: w.description});
+                } catch (e) {
+                  core.warning(`Could not create label ${w.name}: ${e.message}`);
+                }
+              }
+            }
+
+      - name: Apply PR labels (skip api:stable)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const wanted = '${{ steps.label_decision.outputs.label }}'; // api:breaking | api:changed | api:stable
+            const ours = ['api:breaking','api:changed','api:stable'];
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const {data: pr} = await github.rest.pulls.get({owner, repo, pull_number: issue_number});
+            const current = new Set(pr.labels.map(l => (typeof l === 'string' ? l : l.name)));
+            // Remove any existing api:* labels first
+            for (const n of [...current]) {
+              if (ours.includes(n)) {
+                await github.rest.issues.removeLabel({owner, repo, issue_number, name: n}).catch(() => {});
+              }
+            }
+            if (wanted === 'api:stable') {
+              core.info('Stable diff: no api:* label applied.');
+              return;
+            }
+            try {
+              await github.rest.issues.addLabels({owner, repo, issue_number, labels: [wanted]});
+              core.info(`Applied label: ${wanted}`);
+            } catch (e) {
+              core.warning(`Could not apply label ${wanted}: ${e.message}`);
+            }
+
+      - name: Upload semantic diff artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-diff
+          path: |
+            /tmp/openapi-diff.txt
+            /tmp/openapi-diff.json
+
+      - name: Lint OpenAPI (Spectral)
+        run: spectral lint openapi.json
+      - name: "Smoke: POST /import/menu (JSON)"
+        run: |
+          cat > /tmp/menu.json <<'JSON'
+          {"items":[{"name":"Spaghetti Bolognese"}]}
+          JSON
+          # Förväntar 2xx; -f gör att curl failar vid 4xx/5xx
+          curl -fsS -X POST http://127.0.0.1:5000/import/menu \
+            -H 'Content-Type: application/json' \
+            --data @/tmp/menu.json \
+            -o /tmp/smoke.json
+          test -s /tmp/smoke.json
+
+      - name: Run OpenAPI tests
+        run: pytest -q tests/test_openapi_*.py
+
+      - name: Upload OpenAPI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi.json
+          path: openapi.json
+
+      - name: Debug logs on failure
+        if: failure()
+        run: |
+          echo "---- app.log ----"
+          tail -n +200 /tmp/app.log || true
+
+      - name: Stop app
+        if: always()
+        run: |
+          kill "$(cat /tmp/app.pid)" || true

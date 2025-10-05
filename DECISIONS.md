@@ -343,24 +343,41 @@ Follow-ups:
 	- Update CHANGELOG & README (Metrics section) to reflect removal.
 	- Add migration note if any stored configs (flags) cleaned up.
 
-	### 2025-10-01 Flag Gate Activation (`allow_legacy_cook_create`)
-	Decision: Do not wait for full 14d observation; enforce canonical policy immediately and make legacy cook allowance opt-in via per-tenant feature flag `allow_legacy_cook_create`.
+### 2025-10-01 Flag Gate Activation (`allow_legacy_cook_create`)
+Decision: Do not wait for full 14d observation; enforce canonical policy immediately and make legacy cook allowance opt-in via per-tenant feature flag `allow_legacy_cook_create`.
 
-	Details:
-	- Default: False (legacy cook blocked like canonical viewer).
-	- When True for a tenant: legacy cook path re-enabled (metric + optional warn logic still active).
-	- Applies only to raw role `cook`; canonical viewer without raw cook remains forbidden.
-	- Metrics: Still emits `tasks.create.legacy_cook` (with `deprecated=soon` tag if warn phase enabled).
+Details:
+- Default: False (legacy cook blocked like canonical viewer).
+- When True for a tenant: legacy cook path re-enabled (metric + optional warn logic still active).
+- Applies only to raw role `cook`; canonical viewer without raw cook remains forbidden.
+- Metrics: Still emits `tasks.create.legacy_cook` (with `deprecated=soon` tag if warn phase enabled).
 
-	Rationale:
-	- Eliminates uncertainty window; prevents accidental reliance in production tenants.
-	- Aligns with principle of explicit opt-in for compatibility quirks.
-	- Simplifies eventual removal (tenants either migrated or explicitly flagged).
+Rationale:
+- Eliminates uncertainty window; prevents accidental reliance in production tenants.
+- Aligns with principle of explicit opt-in for compatibility quirks.
+- Simplifies eventual removal (tenants either migrated or explicitly flagged).
 
-	Testing Impact:
-	- Updated cook-allow tests now enable flag explicitly.
-	- Added negative test ensuring cook blocked without flag.
+Testing Impact:
+- Updated cook-allow tests now enable flag explicitly.
+- Added negative test ensuring cook blocked without flag.
 
-	Follow-ups:
-	- Track flag usage; once zero active tenants for fixed window, proceed to removal phase directly.
+Follow-ups:
+- Track flag usage; once zero active tenants for fixed window, proceed to removal phase directly.
+
+## 2025-10-02: Import CSV – tom fil (compat 200)
+Decision: Tom CSV / header-only svarar 200 OK med ok: true, rows: [], meta.count: 0.
+
+Context: Äldre testflöde och klienter förväntar 200 även när inga rader finns. Striktare policy (400) hade brutit dessa.
+
+Alternatives:
+- 400 Bad Request – strikt validering (avvisat nu)
+- Flag-styrt beteende – ev. senare
+
+Consequences:
+- Bakåtkompatibelt; klienter kan använda meta.count==0 för att särskilja.
+- Möjlighet kvarstår att införa strikt variant bakom feature flag.
+
+Notes:
+- OpenAPI speglar kontraktet; meta.format dokumenterat.
+- 415 för icke-stöd / mismatch MIME/extension oförändrat.
 

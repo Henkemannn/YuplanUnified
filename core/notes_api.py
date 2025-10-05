@@ -8,10 +8,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from flask import Blueprint, jsonify, request, session
-from .deprecation import apply_deprecation
 
 from .app_authz import AuthzError, require_roles
 from .db import get_session
+from .deprecation import apply_deprecation
 from .errors import NotFoundError, ValidationError
 from .models import Note
 from .pagination import make_page_response, parse_page_params

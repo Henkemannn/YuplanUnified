@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from .rate_limiter import RateLimiter
 
+
 class NoopRateLimiter(RateLimiter):  # type: ignore[misc]
     def allow(self, key: str, quota: int, per_seconds: int) -> bool:  # noqa: D401
         return True

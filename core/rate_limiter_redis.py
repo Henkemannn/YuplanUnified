@@ -1,19 +1,17 @@
 """Implement fixed-window limiter using Redis INCR+EXPIRE (set EXPIRE when INCR==1). Provide retry_after via TTL. Handle connection errors by raising a specific BackendInitError."""
 from __future__ import annotations
 
-import time
-from typing import Final
-
 try:
     import redis  # type: ignore
-except Exception as e:  # pragma: no cover
+except Exception:  # pragma: no cover
     redis = None  # type: ignore
 
 from .rate_limiter import RateLimiter, window_start
 
+
 class RedisRateLimiter(RateLimiter):  # type: ignore[misc]
     _PREFIX: str
-    _client: "redis.Redis"  # type: ignore[name-defined]
+    _client: redis.Redis  # type: ignore[name-defined]
     def __init__(self, url: str, prefix: str) -> None:
         if redis is None:
             raise RuntimeError("redis library not available")

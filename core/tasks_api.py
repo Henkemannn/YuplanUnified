@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from flask import Blueprint, Response, current_app, g, jsonify, request, session, url_for
-from .deprecation import apply_deprecation
 
 from .api_types import (
     TaskCreateRequest,
@@ -22,6 +21,7 @@ from .app_authz import AuthzError, require_roles
 from .app_sessions import require_session
 from .audit import log_task_status_transition
 from .db import get_session
+from .deprecation import apply_deprecation
 from .deprecation_warn import should_warn, warn_phase_enabled
 from .errors import NotFoundError, ValidationError
 from .metrics import increment

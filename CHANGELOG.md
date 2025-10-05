@@ -13,12 +13,23 @@
  - Metrics: `rate_limit.hit` (tags: name, outcome, window) instrumentation in decorator.
  - Feature flag `rate_limit_export` (opt-in per tenant) gating export CSV rate limits (5/minute per tenant:user).
  - 429 error envelope now includes `retry_after` and `limit` fields when raised by rate limiter.
+ - Audit persistence (AuditEvent model + migration) and listing endpoint `GET /admin/audit` (paged, filters: tenant_id, event, from/to inclusive, q text search) with `X-Request-Id` response header.
+ - Structured request logging including `request_id` correlated with audit events.
+ - OpenAPI: Added `AuditView`, `PageResponse_AuditView` schemas and refined query parameter docs & header component for `X-Request-Id`.
+ - CLI: `scripts/audit_retention_cleanup.py` for retention purge (`--days`, `--dry-run`).
+ - Token Bucket limiter (memory + Redis) with per-limit `strategy` and optional `burst` in registry.
+ - Redis token bucket tests (skip automatically if Redis unavailable).
+- Import API: enhetliga svarstyper `ImportOkResponse | ImportErrorResponse` i OpenAPI.
+- Import API: `meta.format` ( "csv" | "docx" | "xlsx" ) och förtydligad `415 Unsupported Media Type`-beskrivning ("unsupported or mismatched content-type/extension").
+- Docs: markdownlint konfiguration + GitHub Action; Ruff exkluderar nu *.md.
 
 ### Changed
 - SQLAlchemy 2.x: ersatt `Query.get()` med `Session.get()` i core-moduler.
 - RBAC/ägarskap: konsekvent `403` vid roll/tenant-missmatch (404 enbart för verklig frånvaro).
 - 403 error body now enriched with `required_role`; legacy inline error handlers removed in favor of centralized `core.app_errors`.
 - Tasks create: Added legacy `cook` fallback (canonical viewer blocked; raw role `cook` still allowed create). Decorator widened + in-function guard emitting `required_role: editor` for pure canonical viewers.
+ - Documented Retry-After precision (ceil seconds, min 1) unified across fixed and token bucket strategies.
+- Import CSV: tom fil/header-only är bakåtkompatibelt `200` med `ok: true`, `rows: []`, `meta.count: 0` (tidigare strikt plan föreslog 400).
 
 ### Tests
 - Tasks: 13 + extra edge-tester (create/list, not_found, isolation, role, bad type, legacy done mapping).
@@ -108,6 +119,7 @@
 - Added `/import/menu` endpoint (dry-run diff) documented in OpenAPI with `dry_run` query parameter and `meta.dry_run` boolean.
 - Extended `ImportOkResponse.meta` schema to include optional `dry_run` property.
 - Added OpenAPI test coverage for new path & schema.
+- Hardened `core.import_api` under strict mypy: unified error envelope helper `_error()`, removed ad-hoc `jsonify` duplicates, eliminated invalid `# type: ignore` usages, added precise typings for normalization pipeline and rate limit gate.
 
 ### Deprecations
 - Centralized deprecation header emission via `core.deprecation.apply_deprecation`.
@@ -118,6 +130,9 @@
 
 ### Rate Limiting
 - Added per-tenant rate-limit registry (`core.limit_registry`) with resolution order tenant override → global default → fallback (5/60).
+ - Audit persistence (AuditEvent model + migration) and listing endpoint `GET /admin/audit` (paged, filters: tenant_id, event, from/to inclusive, q text search) with `X-Request-Id` response header.
+ - Structured request logging including `request_id` correlated with audit events.
+ - OpenAPI: Added `AuditView`, `PageResponse_AuditView` schemas and refined query parameter docs & header component for `X-Request-Id`.
 - Environment configuration: `FEATURE_LIMITS_JSON` (tenant:<id>:<name>) and `FEATURE_LIMITS_DEFAULTS_JSON` (global defaults).
 - Decorator `@limit` now supports implicit lookup when `quota`/`per_seconds` omitted (`use_registry=True`).
 - Metric `rate_limit.lookup{name,source}` emitted for each lookup (source ∈ tenant|default|fallback).

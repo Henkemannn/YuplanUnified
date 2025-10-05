@@ -1,8 +1,6 @@
 import json
 from typing import Any
 
-import pytest
-
 from flask import Flask
 
 from core.app_factory import create_app
@@ -15,20 +13,20 @@ def _get_spec(client) -> dict[str, Any]:
 
 
 def test_openapi_contains_pagination_components():
-    app: Flask = create_app({'TESTING': True, 'FEATURE_FLAGS': {'openapi_ui': True}})
+    app: Flask = create_app({"TESTING": True, "FEATURE_FLAGS": {"openapi_ui": True}})
     with app.test_client() as client:
         spec = _get_spec(client)
         comps = spec.get("components", {}).get("schemas", {})
         assert "PageMeta" in comps, "PageMeta component missing"
         # Allow either pluralization style for flexibility but require tasks & notes specific
-        found_tasks = any(k.startswith("PageResponse_Tasks") for k in comps.keys()) or "PageResponse_Tasks" in comps
-        found_notes = any(k.startswith("PageResponse_Notes") for k in comps.keys()) or "PageResponse_Notes" in comps
+        found_tasks = any(k.startswith("PageResponse_Tasks") for k in comps) or "PageResponse_Tasks" in comps
+        found_notes = any(k.startswith("PageResponse_Notes") for k in comps) or "PageResponse_Notes" in comps
         assert found_tasks, "PageResponse_Tasks component missing"
         assert found_notes, "PageResponse_Notes component missing"
 
 
 def test_openapi_tasks_and_notes_have_query_params():
-    app: Flask = create_app({'TESTING': True, 'FEATURE_FLAGS': {'openapi_ui': True}})
+    app: Flask = create_app({"TESTING": True, "FEATURE_FLAGS": {"openapi_ui": True}})
     with app.test_client() as client:
         spec = _get_spec(client)
         paths = spec.get("paths", {})

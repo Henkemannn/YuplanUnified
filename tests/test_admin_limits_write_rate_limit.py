@@ -35,7 +35,10 @@ def seed_registry_default():
 def make_client(flag_on: bool = False, tenant_id: int = 1):
     # Ensure fresh memory limiter instance each test invocation
     _rl._test_reset()
-    app = create_app({"TESTING": True})
+    base_cfg = {"TESTING": True}
+    app = create_app(base_cfg)
+    if flag_on:
+        app.config["FEATURE_FLAGS"] = {"rate_limit_admin_limits_write": True}
     seed_registry_default()
     if flag_on:
         enable_flag(app, tenant_id, "rate_limit_admin_limits_write")

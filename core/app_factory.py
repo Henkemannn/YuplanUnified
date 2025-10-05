@@ -22,6 +22,7 @@ from importlib import import_module
 from flask import Flask, g, jsonify, request, session
 
 from .admin_api import bp as admin_api_bp
+from .admin_audit_api import bp as admin_audit_bp
 from .app_authz import require_roles
 from .app_errors import register_error_handlers
 from .auth import bp as auth_bp, ensure_bootstrap_superuser
@@ -183,25 +184,32 @@ def create_app(config_override: dict | None = None) -> Flask:
     def _after_req(resp):
         try:
             dur_ms = int((time.perf_counter() - getattr(g, "_t0", time.perf_counter())) * 1000)
-            resp.headers["X-Request-Id"] = getattr(g, "request_id", "")
+            rid = getattr(g, "request_id", str(uuid.uuid4()))
+            resp.headers["X-Request-Id"] = rid
             resp.headers["X-Request-Duration-ms"] = str(dur_ms)
             if "Cache-Control" not in resp.headers:
                 resp.headers["Cache-Control"] = "no-store"
-            # --- Security Headers ---
-            # Content Security Policy (restrict inline except where UI currently relies; can tighten later)
             csp = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
             resp.headers.setdefault("Content-Security-Policy", csp)
-            # Prevent MIME sniffing
             resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-            # Basic clickjacking protection (frame-ancestors already in CSP)
             resp.headers.setdefault("X-Frame-Options", "DENY")
-            # Referrer policy minimal leakage
             resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-            # Permissions policy (formerly Feature-Policy) minimal surface
             resp.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
-            # HSTS only if HTTPS likely (simple heuristic: not in testing and not debug)
             if not app.config.get("TESTING") and not app.config.get("DEBUG"):
                 resp.headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+            # Structured log line
+            try:
+                log.info({
+                    "request_id": rid,
+                    "tenant_id": getattr(g, "tenant_id", None),
+                    "user_id": session.get("user_id"),
+                    "method": request.method,
+                    "path": request.path,
+                    "status": resp.status_code,
+                    "duration_ms": dur_ms,
+                })
+            except Exception:
+                pass
         except Exception:
             pass
         return resp
@@ -254,6 +262,7 @@ def create_app(config_override: dict | None = None) -> Flask:
     app.register_blueprint(diet_api_bp)
     app.register_blueprint(turnus_api_bp)
     app.register_blueprint(admin_api_bp)
+    app.register_blueprint(admin_audit_bp)
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
 
@@ -388,7 +397,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                             "properties": {
                                 "error": {"type":"string"},
                                 "message": {"type":"string"},
-                                "retry_after": {"type":"integer","nullable":True}
+                                "retry_after": {"type":"integer","nullable":True, "description": "Ceiled seconds until next permitted attempt (min 1 when present)"}
                             }
                         },
                         "examples": {
@@ -545,6 +554,47 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "security": [{"BearerAuth": []}]
                 }
             },
+            "/admin/audit": {
+                "get": {
+                    "summary": "List audit events (paged, newest first)",
+                    "tags": ["admin"],
+                    "parameters": [
+                        {"name": "tenant_id", "in": "query", "schema": {"type": "integer"}},
+                        {"name": "event", "in": "query", "schema": {"type": "string"}},
+                        {"name": "from", "in": "query", "description": "Inclusive lower bound (RFC3339).", "schema": {"type": "string", "format": "date-time"}},
+                        {"name": "to", "in": "query", "description": "Inclusive upper bound (RFC3339).", "schema": {"type": "string", "format": "date-time"}},
+                        {"name": "q", "in": "query", "description": "Case-insensitive substring match on payload (stringified).", "schema": {"type": "string"}},
+                        {"name": "page", "in": "query", "schema": {"type": "integer", "minimum": 1, "default": 1}},
+                        {"name": "size", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}},
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Paged audit events (descending ts)",
+                            "headers": {"X-Request-Id": {"$ref": "#/components/headers/X-Request-Id"}},
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/PageResponse_AuditView"},
+                                    "examples": {
+                                        "sample": {
+                                            "value": {
+                                                "ok": True,
+                                                "items": [
+                                                    {"id": 2, "ts": "2025-10-05T12:02:00Z", "tenant_id": 5, "actor_user_id": 10, "actor_role": "admin", "event": "limits_upsert", "payload": {"limit_name": "exp", "quota": 9}, "request_id": "f3a2b1f8-2e0e-4b12-9f4c-5c28a6a0c3a1"},
+                                                    {"id": 1, "ts": "2025-10-05T12:00:00Z", "tenant_id": 5, "actor_user_id": 10, "actor_role": "admin", "event": "limits_delete", "payload": {"limit_name": "exp"}, "request_id": "f3a2b1f8-2e0e-4b12-9f4c-5c28a6a0c3a1"}
+                                                ],
+                                                "meta": {"page": 1, "size": 20, "total": 2, "pages": 1}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "401": {"$ref": "#/components/responses/Error401"},
+                        "403": {"$ref": "#/components/responses/Error403"}
+                    },
+                    "security": [{"BearerAuth": []}]
+                }
+            },
         }
         spec = {
             "openapi": "3.0.3",
@@ -569,8 +619,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "LimitDeleteRequest": {"type": "object", "required": ["tenant_id","name"], "properties": {"tenant_id": {"type": "integer"}, "name": {"type": "string"}}},
                     "LimitMutationResponse": {"type": "object", "required": ["ok"], "properties": {"ok": {"type": "boolean"}, "item": {"$ref": "#/components/schemas/LimitView"}, "updated": {"type": "boolean"}, "removed": {"type": "boolean"}}},
                     "ImportRow": {"type": "object", "required": ["title","description","priority"], "properties": {"title": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "integer"}}},
-                    "ImportOkResponse": {"type": "object", "required": ["ok","rows","meta"], "properties": {"ok": {"type": "boolean", "enum": [True]}, "rows": {"type": "array", "items": {"$ref": "#/components/schemas/ImportRow"}}, "meta": {"type": "object", "required": ["count"], "properties": {"count": {"type": "integer"}, "dry_run": {"type": "boolean", "description": "Present and true when request used ?dry_run=1"}}}}},
+                    "ImportOkResponse": {"type": "object", "required": ["ok","rows","meta"], "properties": {"ok": {"type": "boolean", "enum": [True]}, "rows": {"type": "array", "items": {"$ref": "#/components/schemas/ImportRow"}}, "meta": {"type": "object", "required": ["count"], "properties": {"count": {"type": "integer"}, "dry_run": {"type": "boolean", "description": "Present and true when request used ?dry_run=1"}, "format": {"type": "string", "enum": ["csv","docx","xlsx","menu"], "description": "Detected import format"}}, "additionalProperties": False}, "dry_run": {"type": "boolean", "description": "Legacy alias (deprecated); prefer meta.dry_run"}, "diff": {"type": "array", "items": {"type": "object"}, "description": "Menu dry-run diff entries (menu only)"}}, "additionalProperties": False},
                     "ImportErrorResponse": {"type": "object", "required": ["ok","error","message"], "properties": {"ok": {"type": "boolean", "enum": [False]}, "error": {"type": "string", "enum": ["invalid","unsupported","rate_limited"]}, "message": {"type": "string"}, "retry_after": {"type": "integer","nullable": True}, "limit": {"type": "string","nullable": True}}},
+                    "ImportMenuRequest": {"type": "object", "required": ["items"], "properties": {"items": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}}}},
                     "Note": note_schema,
                     "NoteCreate": {"type": "object", "required": ["content"], "properties": {"content": {"type": "string"}, "private_flag": {"type": "boolean"}}},
                     "Task": task_schema,
@@ -578,10 +629,23 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "TaskStatus": {"type": "string", "enum": ["todo","doing","blocked","done","cancelled"]},
                     "TenantSummary": {"type": "object", "required": ["id","name","active","features"], "properties": {"id": {"type":"integer"}, "name": {"type":"string"}, "active": {"type":"boolean"}, "features": {"type":"array", "items": {"type":"string"}}, "kind": {"type":"string","nullable":True}, "description": {"type":"string","nullable":True}}},
                     "TenantListResponse": {"type": "object", "required": ["ok","tenants"], "properties": {"ok": {"type":"boolean"}, "tenants": {"type":"array", "items": {"$ref": "#/components/schemas/TenantSummary"}}}},
+                    "AuditView": {"type": "object", "properties": {"id": {"type": "integer"}, "ts": {"type": "string", "format": "date-time"}, "tenant_id": {"type": "integer", "nullable": True}, "actor_user_id": {"type": "integer", "nullable": True}, "actor_role": {"type": "string"}, "event": {"type": "string"}, "payload": {"type": "object", "additionalProperties": True}, "request_id": {"type": "string"}}},
+                    "PageResponse_AuditView": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/AuditView"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
+                },
+                "headers": {
+                    "X-Request-Id": {
+                        "description": "Echoed from request or generated by server; useful for log correlation.",
+                        "schema": {"type": "string"},
+                        "example": "f3a2b1f8-2e0e-4b12-9f4c-5c28a6a0c3a1"
+                    }
                 },
                 "responses": reusable,
             },
             "paths": paths,
+        }
+        # Standard 415 component (Unsupported Media Type)
+        spec.setdefault("components", {}).setdefault("responses", {})["UnsupportedMediaType"] = {
+            "description": "Unsupported Media Type"
         }
         # Inject Import API paths
         spec["paths"]["/import/csv"] = {
@@ -591,7 +655,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "responses": {
                     "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}}}},
                     "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
-                    "415": {"description": "Unsupported", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "415": {"$ref": "#/components/responses/UnsupportedMediaType"},
                     "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
                 },
             }
@@ -603,7 +667,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "responses": {
                     "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}}}},
                     "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
-                    "415": {"description": "Unsupported", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "415": {"$ref": "#/components/responses/UnsupportedMediaType"},
                     "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
                 },
             }
@@ -615,7 +679,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "responses": {
                     "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}}}},
                     "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
-                    "415": {"description": "Unsupported", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "415": {"$ref": "#/components/responses/UnsupportedMediaType"},
                     "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
                 },
             }
@@ -626,11 +690,22 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "parameters": [
                     {"name": "dry_run", "in": "query", "required": False, "schema": {"type": "boolean", "default": False}, "description": "If true (1) perform validation + diff only (no persistence)"}
                 ],
-                "requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}}}},
+                "requestBody": {"required": True, "content": {
+                    "multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}},
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/ImportMenuRequest"},
+                        "examples": {
+                            "minimal": {
+                                "summary": "Minimal valid payload",
+                                "value": {"items": [{"name": "Spaghetti Bolognese"}]}
+                            }
+                        }
+                    }
+                }},
                 "responses": {
-                    "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}, "examples": {"dryRun": {"value": {"ok": True, "rows": [{"title": "Soup", "description": "Tomato", "priority": 1}], "meta": {"count": 1, "dry_run": True}}}}}}},
+                    "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}, "examples": {"dryRun": {"value": {"ok": True, "rows": [{"title": "Soup", "description": "Tomato", "priority": 1}], "meta": {"count": 1, "dry_run": True, "format": "menu"}, "dry_run": True}}}}}},
                     "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
-                    "415": {"description": "Unsupported", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "415": {"$ref": "#/components/responses/UnsupportedMediaType"},
                     "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
                 },
             }

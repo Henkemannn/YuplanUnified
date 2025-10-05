@@ -1,5 +1,9 @@
 # Yuplan Unified Platform (Scaffold)
 
+[![CI](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml)
+[![OpenAPI](https://github.com/Henkemannn/YuplanUnified/actions/workflows/openapi.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/openapi.yml)
+[![markdownlint](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml)
+
 <p align="left">
   <img alt="Ruff" src="https://img.shields.io/badge/Ruff-E,F,I,B,UP,Q-success?logo=python&logoColor=white" />
   <img alt="Mypy" src="https://img.shields.io/badge/Mypy-0%20errors-brightgreen" />
@@ -7,6 +11,22 @@
 </p>
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
+
+## Versioning & Release
+We follow Semantic Versioning (SemVer):
+* MAJOR (`X.y.z`): Any breaking OpenAPI change (as detected by semantic diff rules) or removal of previously documented behavior.
+* MINOR (`x.Y.z`): Backwards-compatible additions (new paths/operations/properties/content-types, optional fields, enum expansions).
+* PATCH (`x.y.Z`): Bug fixes & non-contract internal changes.
+
+Baseline policy: `specs/openapi.baseline.json` is hard-enforced in CI (must exist – not auto-created). Update it only in the same PR as intentional contract changes. For the beta freeze we will tag the baseline at `v1.0.0-beta`.
+
+Beta readiness checklist: see `docs/v1.0-beta-checklist.md` (all items must be ✅ before cutting the beta tag).
+
+Legend (API diff status): ✅ no breaking · 🟡 additions only · ❌ breaking.
+
+Release workflow: automatically produces OpenAPI diff artifacts (`openapi-diff.txt`, `openapi-diff.json`), a changelog snippet, and a badge snippet. The release action can fall back to generating these live (`force_fallback` input) if artifacts are missing.
+
+After `v1.0.0-beta`: Further additive changes bump MINOR; any breaking change requires a MAJOR plan (`2.0.0`) unless explicitly deferred pre-GA.
 
 ## Vision
 Provide a Core domain (Menus, Diets, Attendance, Users, Tenants) with optional modules activated per customer (turnus scheduling, waste metrics, prep/freezer tasks, messaging, alt1/alt2 workflow, etc.). Superusers can enable modules on demand.
@@ -28,7 +48,7 @@ unified_platform/
 ```
 
 ## Quick Start (Dev)
-1. Create virtualenv & install deps:
+1. Create virtualenv & install deps (or use `make install` / `Install-Deps`):
    ```
    python -m venv .venv
    .venv\Scripts\activate  # Windows
@@ -40,9 +60,13 @@ unified_platform/
    alembic upgrade head
    ```
 4. Start app:
-   ```
-   python run.py
-   ```
+  ```
+  python run.py
+  # or
+  make dev
+  # or PowerShell
+  ./scripts/dev.ps1; Start-App
+  ```
 5. Visit http://localhost:5000/health
 
 ### Notes on Migrations
@@ -97,6 +121,7 @@ Default: OFF (no rate limiting applied).
 
 When ON for a tenant:
 * Limit: 5 requests per rolling fixed window of 60 seconds per `(tenant_id:user_id)` bucket.
+* Token Bucket: Export endpoints are configured with token bucket defaults (burst = quota) via `FEATURE_LIMITS_DEFAULTS_JSON`; fairness on bursts while preserving same average rate.
 #### Feature Flag: `rate_limit_admin_limits_write`
 Controls optional rate limiting of admin limit mutation endpoints (`POST /admin/limits`, `DELETE /admin/limits`).
 
@@ -137,6 +162,42 @@ Operational Guidance:
 2. Adjust quota in code if needed (central decorator parameter) before broad enablement.
 3. Keep flag OFF for high-volume reporting tenants until validated.
 
+### Token Bucket (fair limits, burst support)
+
+Utöver fixed window stöds token bucket per limit via registry:
+
+- `quota`: målhastighet (tokens per `per_seconds`)
+- `per_seconds`: påfyllningsintervall
+- `burst` (valfritt): kapacitet; default = `quota`
+- `strategy`: `"token_bucket"` eller `"fixed"` (default via env/global)
+
+Exempel (defaults via env):
+```json
+FEATURE_LIMITS_DEFAULTS_JSON='{
+  "export_csv": {"quota": 5, "per_seconds": 60, "burst": 5, "strategy": "token_bucket"}
+}'
+```
+
+#### Retry-After semantik
+
+Svar vid block inkluderar header `Retry-After` och JSON-fält `retry_after`.
+
+Precision: heltal i sekunder, avrundat uppåt (ceil). Minst 1.
+
+Gäller både fixed och token_bucket.
+
+#### Metrics
+
+`rate_limit.lookup` taggar: `name`, `source=tenant|default|fallback`, `strategy=fixed|token_bucket`
+
+`rate_limit.hit` taggar: `name`, `outcome=allow|block`, `window` (sekunder), `strategy`.
+
+#### Redis-backend
+
+Token bucket finns för memory (test/dev) och Redis (prod).
+
+Tester för Redis skip:ar automatiskt om Redis inte är tillgängligt.
+
 ### Continuous Integration (CI)
 The repository includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs on pushes and pull requests targeting `main` / `master`.
 
@@ -154,6 +215,7 @@ Guidelines:
 * Consider adding coverage / linting (ruff, mypy) in future steps.
 
 ## Developer Tooling: Linting & Typing
+See also consumer integration guidance in `docs/CONSUMERS.md` and the developer convenience targets below.
 Quality gates are being phased in. Keep the repo green (no new warnings) and avoid expanding ignore lists.
 
 ### Ruff (Python Linter)
@@ -214,6 +276,26 @@ PR Checklist (developer self-check):
 | Lint autofix | `ruff check . --fix` |
 | Type check (core) | `mypy core modules` |
 | Both (approx CI) | Run lint then type commands above |
+| Fetch OpenAPI (Makefile) | `make openapi` |
+| Smoke test menu import | `make smoke` |
+| Full local CI pass | `make ci` |
+
+### Makefile & PowerShell Helpers
+For POSIX systems a `Makefile` provides shortcuts: `make install dev test lint openapi smoke ci`.
+
+For Windows PowerShell use the script `scripts/dev.ps1`:
+```
+./scripts/dev.ps1; Install-Deps; Start-App
+./scripts/dev.ps1; Lint-App; Test-App
+./scripts/dev.ps1; Fetch-OpenAPI; Smoke
+```
+
+### API Consumers Guide
+Client developers should start with `docs/CONSUMERS.md` (base URL, auth, error model, rate limit handling, contract stability rules, example import flow).
+
+### Contributing
+
+Ruff körs inte på Markdown-filer. För dokumentationslint använder vi markdownlint (se `.markdownlint.json` och GitHub Action `markdownlint`).
 
 If you add dependencies that affect typing (e.g., new third-party libs), ensure stub packages are installed (`types-<package>` where needed) or add precise `TypedDict` / `Protocol` shims locally.
 
@@ -334,6 +416,59 @@ POST /features/set { "name": "openapi_ui", "enabled": true }
 
 The OpenAPI spec is currently a hand-maintained subset; extend `openapi.json` generation in `core/app_factory.py` for new endpoints.
 See docs/ for full architecture, data model, migration plan, module definitions, roadmap, deployment guidance.
+
+### OpenAPI Baseline & Semantic Diff
+To guard against accidental breaking API changes, CI enforces a committed baseline at `specs/openapi.baseline.json` (HARD policy – build fails if missing) and performs a semantic diff:
+
+Rules treated as breaking (CI fail):
+* Removing a path
+* Removing an operation (method) from an existing path
+* Removing a response status code for an operation
+* Removing a request body or narrowing its content-types
+* Removing a response content-type
+* Schema changes that remove properties, remove enum values, add new required properties, change `$ref`, change type
+
+Additions (new paths, operations, responses, request bodies) are allowed and reported as non-breaking.
+
+Workflow behavior:
+* Step normalizes current spec (sorted JSON) then compares to baseline via `scripts/openapi_diff.py`.
+* Missing baseline now fails the workflow (no silent auto-create). This prevents accidental drift being “blessed” implicitly.
+* Subsequent breaking diffs cause exit code 1 and fail the job.
+
+Breakage rules (treated as breaking and fail the job):
+
+* Removal of paths, operations, responses, request bodies
+* Removal of response or request content-types (content-type narrowing)
+* Enum value removals
+* Property removals or new required properties
+* Type or $ref changes
+* `format` changes (any change, considered narrowing)
+* Array: `minItems` increase, `maxItems` decrease
+* String: introduction or increase of `minLength`, decrease or introduction of `maxLength`, addition or change of `pattern`
+
+Widenings allowed (examples): removing `pattern`, increasing `maxLength`, decreasing `minLength`, adding new optional properties, adding enum values, adding new paths/operations/responses/content-types.
+
+Updating the baseline intentionally:
+1. Implement your API change and update spec generation.
+2. Regenerate spec locally:
+  ```bash
+  curl -fsS http://127.0.0.1:5000/openapi.json | jq -S . > specs/openapi.baseline.json
+  ```
+  (Without `jq` you can pretty-print using Python: `python -c "import json,sys;import urllib.request as u;spec=json.load(u.urlopen('http://127.0.0.1:5000/openapi.json'));open('specs/openapi.baseline.json','w',encoding='utf-8').write(json.dumps(spec,sort_keys=True,ensure_ascii=False,indent=2))"`)
+3. Commit the updated baseline in the same PR as the change with a clear message (e.g. `chore(openapi): update baseline for new /foo endpoints`). Provide a brief rationale if any breaking flags were accepted (rare – implies version negotiation or major bump).
+
+**Artifacts:** CI laddar upp både en mänskligt läsbar diff (`openapi-diff.txt`) och en maskinläsbar JSON (`openapi-diff.json`). Den senare kan användas av PR-botar eller dashboards för att automatiskt kommentera breaking/additive förändringar.
+
+**PR Labels:** Pull Requests får automatiskt label `api:breaking` vid breaking ändringar eller `api:changed` vid enbart additions. Stabil diff (`ok` utan additions) ger ingen `api:*` label alls (renare label-lista).
+
+**Legend:** ✅ no breaking · 🟡 additions only · ❌ breaking
+
+**Release-hjälp:** CI producerar ytterligare artefakter:
+* `openapi-extras/openapi-changelog.md` – färdig sektion att klistra in högst upp i `CHANGELOG.md` vid release.
+* `openapi-extras/api-badge.md` – en badge-rad som kan läggas till i README eller PR-beskrivning för att signalera aktuell API-status.
+
+Semantic diff script location: `scripts/openapi_diff.py` (pure stdlib, no dependencies). Extend it for deeper checks (e.g. minItems tightening) if needed.
+
 
 ## Error Model
 All API error responses share a compact, stable JSON envelope:
@@ -462,6 +597,102 @@ Svar:
 - `fallback`: Safe baseline (visas endast vid explicit name-filter + tenant_id när inga andra träffar finns)
 
 Användningsfall: felsöka oväntade 429-svar, verifiera rollout av nya limits, samt revision av overrides.
+
+### Audit Persistence & Listing
+
+Audit-händelser skrivs persistenta i tabellen `audit_events` via `core.audit.log_event` (kallas av admin-limit write endpoints m.fl.).
+
+Minimalt fältset per event:
+| Field | Typ | Beskrivning |
+|-------|-----|-------------|
+| ts | datetime (UTC) | Tidsstämpel för event (servergenererad). |
+| tenant_id | int? | Tillhörande tenant (kan vara null för globala händelser). |
+| actor_user_id | int? | Användar-id (om session finns). |
+| actor_role | str | Normaliserad roll (admin, viewer, etc). |
+| event | str | Event-nyckel (t.ex. `limits_upsert`). |
+| payload | object? | Godtycklig JSON (limit_name, quota, diffs etc). |
+| request_id | str? | Korrelations-id (kopplas även till structured log). |
+
+Endpoint (admin-roll krävs):
+```
+GET /admin/audit
+```
+Query-parametrar (alla optional):
+| Param | Typ | Default | Notering |
+|-------|-----|---------|----------|
+| tenant_id | int | - | Filtrera på tenant. |
+| event | string | - | Filtrera exakt event-namn. |
+| from | RFC3339 datetime | - | Inklusiv nedre gräns (ts >= from). |
+| to | RFC3339 datetime | - | Inklusiv övre gräns (ts <= to). |
+| q | string | - | Case-insensitive partial match mot serialiserat payload. |
+| page | int | 1 | Standardpaginering. |
+| size | int | 20 | Max 100 (clamp). |
+
+Svar (PageResponse<AuditView>):
+```jsonc
+{
+  "ok": true,
+  "items": [
+    { "id": 12, "ts": "2025-10-05T12:02:00Z", "tenant_id": 5, "actor_role": "admin", "event": "limits_upsert", "payload": {"limit_name": "exp", "quota": 9}, "request_id": "..." }
+  ],
+  "meta": { "page": 1, "size": 20, "total": 137, "pages": 7 }
+}
+```
+Headers: `X-Request-Id` (echo eller genererad) för log-korrelation.
+
+Retention:
+* Konfig via env `AUDIT_RETENTION_DAYS` (default 90) – purge-funktion finns i `AuditRepo.purge_older_than(days)` (schemalägg extern körning/cron).
+* Indexering: `(tenant_id, ts)` och `(event, ts)` för filter + tidsintervall.
+
+Structured Logging:
+* Varje HTTP-respons loggas med JSON-linje: `{request_id, tenant_id, user_id, method, path, status, duration_ms}`.
+* `request_id` kopplas till audit events för end-to-end spårbarhet.
+
+Exempel flow:
+1. Admin gör `POST /admin/limits` → audit event `limits_upsert` skrivs.
+2. `GET /admin/audit?event=limits_upsert` listar händelsen.
+3. Support använder `X-Request-Id` för att hitta motsvarande access-logg.
+
+Observability:
+* Eventvolym och retention övervakas separat (TODO: framtida metrics `audit.insert.count`).
+* Fel vid skrivning fångas tyst (audit ska ej stoppa primär kodväg) – logga separat i framtida hårdare läge.
+
+### Operations: Audit Retention CLI
+
+Ett enkelt skript för att manuellt eller via cron städa gamla audit events.
+
+Körning:
+```
+python scripts/audit_retention_cleanup.py --days 90 --dry-run
+python scripts/audit_retention_cleanup.py --days 90
+```
+
+Argument:
+| Flag | Beskrivning |
+|------|-------------|
+| `--days <int>` | Retention-fönster i dagar (default `AUDIT_RETENTION_DAYS` eller 90). |
+| `--dry-run` | Räknar kandidater utan att radera. |
+
+Output exempel:
+```
+[DRY-RUN] would delete 42 audit events older than 2025-07-07T12:34:56.123456+00:00
+deleted 42 audit events older than 2025-07-07T12:34:56.123456+00:00
+```
+
+Exit codes:
+| Kod | Betydelse |
+|-----|-----------|
+| 0 | OK / lyckad körning |
+| 1 | Oväntat fel (exception) |
+| 2 | Ogiltigt argument (t.ex. `--days < 1`) |
+
+Cron-exempel (daglig 02:15 UTC):
+```
+15 2 * * * /usr/bin/python /opt/app/scripts/audit_retention_cleanup.py --days 90 >> /var/log/app/audit_retention.log 2>&1
+```
+
+Rekommendation: Kör med `--dry-run` först i staging och kontrollera volym innan första riktiga purge i prod.
+
 
 ### Admin write endpoints (overrides)
 

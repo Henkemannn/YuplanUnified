@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import os
 from typing import Any
 
 from flask import Flask
@@ -8,7 +8,6 @@ from flask import Flask
 from core.app_factory import create_app
 from core.limit_registry import refresh
 from core.rate_limiter import _test_reset
-import os
 
 
 def _app(overrides: dict[str, Any] | str | None = None, defaults: dict[str, Any] | str | None = None) -> Flask:
@@ -63,7 +62,7 @@ def test_export_uses_default_when_no_tenant_entry(monkeypatch):
     monkeypatch.setattr(metrics_mod, "increment", rec)
     with app.test_client() as client:
         _seed_session(client)
-        for i in range(3):
+        for _i in range(3):
             r = client.get("/export/tasks.csv")
             assert r.status_code == 200
             _ = r.get_data()
@@ -83,7 +82,7 @@ def test_lookup_metrics_emitted(monkeypatch):
     with app.test_client() as client:
         _seed_session(client)
         # fallback path
-    r = client.get("/export/notes.csv")
-    assert r.status_code == 200
-    _ = r.get_data()
+        r = client.get("/export/notes.csv")
+        assert r.status_code == 200
+        _ = r.get_data()
     assert any(e[0]=="rate_limit.lookup" for e in events)

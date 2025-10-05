@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import json
-from core.limit_registry import parse_limits, get_limit, refresh, load_from_env
+from core.limit_registry import get_limit, refresh
 
 
 def test_tenant_override_beats_default():

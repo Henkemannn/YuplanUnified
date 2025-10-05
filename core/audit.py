@@ -7,17 +7,30 @@ consistent.
 """
 from __future__ import annotations
 
+from flask import g, has_request_context, session as _session
 from sqlalchemy.orm import Session
 
+from .audit_repo import AuditRepo
 from .models import Task, TaskStatusTransition
 
-def log_event(name: str, **fields) -> None:
-    """Generic audit event sink (placeholder).
 
-    Currently a no-op (extend to persist or emit structured logs). Tests monkeypatch this.
+def log_event(name: str, **fields) -> None:
+    """Persist generic audit event.
+
+    Fields accepted are free-form; tenant_id / actor context inferred when present.
+    Fails silently (non-critical path).
     """
-    # Intentionally no persistence yet.
-    return None
+    try:
+        tenant_id = fields.get("tenant_id")
+        if tenant_id is None and has_request_context():
+            tenant_id = getattr(g, "tenant_id", None) or _session.get("tenant_id")
+        actor_user_id = fields.get("actor_user_id") or (_session.get("user_id") if has_request_context() else None)
+        actor_role = fields.get("actor_role") or (_session.get("role") if has_request_context() else None)
+        request_id = getattr(g, "request_id", None) if has_request_context() else None
+        payload = {k: v for k, v in fields.items() if k not in {"tenant_id", "actor_user_id", "actor_role"}}
+        AuditRepo().insert(event=name, tenant_id=tenant_id, actor_user_id=actor_user_id, actor_role=str(actor_role) if actor_role else None, payload=payload, request_id=request_id)
+    except Exception:  # pragma: no cover
+        return None
 
 __all__ = ["log_task_status_transition", "log_event"]
 

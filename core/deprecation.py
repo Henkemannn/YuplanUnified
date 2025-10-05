@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Iterable
 import os
+from collections.abc import Iterable
+
 from flask import Response
+
 from .metrics import increment
 
 DEFAULT_SUNSET = os.getenv("DEPRECATION_NOTES_TASKS_SUNSET", "Wed, 01 Jan 2026 00:00:00 GMT")
@@ -20,7 +22,7 @@ def apply_deprecation(resp: Response, *, aliases: Iterable[str], endpoint: str,
     alias_list = ",".join(aliases)
     resp.headers["Deprecation"] = "true"
     resp.headers["Sunset"] = sunset_hdr
-    resp.headers["Link"] = f"<{url_hdr}>; rel=\"deprecation\""
+    resp.headers["Link"] = f'<{url_hdr}>; rel="deprecation"'
     resp.headers["X-Deprecated-Alias"] = alias_list
     try:  # pragma: no cover - defensive: metric backend may be noop/misconfigured
         increment("deprecation.alias.emitted", {"endpoint": endpoint, "aliases": alias_list})

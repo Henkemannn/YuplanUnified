@@ -195,6 +195,26 @@ class RecommendationResponse(TypedDict, total=False):
     history_mean_used: float | None
 
 
+# --- Import API ---
+class ImportMeta(TypedDict, total=False):
+    count: int
+    dry_run: NotRequired[bool]
+    format: NotRequired[Literal["csv", "docx", "xlsx", "menu"]]
+
+
+class ImportOkResponse(OkBase, total=False):
+    rows: list[dict[str, str]]
+    meta: ImportMeta
+    # Legacy alias (sunset TBD)
+    dry_run: NotRequired[bool]
+
+
+class ImportErrorResponse(TypedDict, total=False):
+    ok: Literal[False]
+    error: str
+    message: NotRequired[str]
+
+
 __all__ = [
     # NewTypes
     "TenantId",
@@ -239,4 +259,8 @@ __all__ = [
     "LimitUpsertRequest",
     "LimitDeleteRequest",
     "LimitMutationResponse",
+    # Import
+    "ImportMeta",
+    "ImportOkResponse",
+    "ImportErrorResponse",
 ]

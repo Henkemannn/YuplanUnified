@@ -4,8 +4,8 @@ import io
 
 import pytest
 
-from core.importers.xlsx_importer import parse_xlsx, UnsupportedFormatError
-from core.importers.validate import validate_and_normalize, ImportValidationError
+from core.importers.validate import ImportValidationError, validate_and_normalize
+from core.importers.xlsx_importer import UnsupportedFormatError, parse_xlsx
 
 try:  # pragma: no cover - optional dependency
     import openpyxl  # type: ignore
