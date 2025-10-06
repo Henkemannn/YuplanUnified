@@ -89,3 +89,25 @@ PRs include an OpenAPI diff comment (✅ / 🟡 / ❌) + labels (`api:breaking` 
 ## Support
 Contact: `henrikjonsson031@gmail.com` (or the address specified in README).
 Please include: endpoint, `X-Request-Id` (response header), UTC timestamp, minimal reproduction payload.
+
+## Handling RFC 7807 problems
+
+Clients SHOULD:
+1. Branch on HTTP `status` (e.g. 401 → re-auth, 403 → permission UI, 429 → backoff).
+2. Display `detail` when safe (validation issues) but avoid exposing raw internal error messages.
+3. For validation (422) map `errors.<field>[]` to form field helpers / inline messages.
+4. Log `type`, `status`, and `instance` (correlate with server logs via `request_id`).
+5. Treat unknown `type` values as generic error (fallback UI) while still logging.
+
+Pseudocode:
+```ts
+if (resp.status === 422 && body.errors) {
+  for (const [field, msgs] of Object.entries(body.errors)) {
+    showFieldError(field, msgs.join("; "));
+  }
+} else if (resp.status === 429) {
+  scheduleRetry(resp.headers['Retry-After']);
+} else if (resp.status >= 500) {
+  toast("Temporary server issue. Please retry.");
+}
+```

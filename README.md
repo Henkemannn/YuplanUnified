@@ -31,6 +31,33 @@ After `v1.0.0-beta`: Further additive changes bump MINOR; any breaking change re
 
 For the exact steps, see **[RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md)**.
 
+## Deprecation policy
+
+We avoid breaking changes. When removal or incompatible changes are required we follow an announce–deprecate–sunset cycle:
+
+### Marking
+* HTTP headers on deprecated endpoints:
+  * `Deprecation: true` (or an ISO date per RFC 8594)
+  * `Sunset: <http-date>` (date support ends)
+  * `Link: <https://api.example.com/docs/migrations/XYZ>; rel="sunset"`
+* `Warning: 299 api.example.com "Deprecated: will be removed on YYYY-MM-DD"`
+* CHANGELOG entry under Unreleased + release notes.
+* During deprecation window the API status badge will normally show `changed` (yellow) if additive shims are present.
+
+### Timelines (minimum)
+* Response shape additive (new optional fields): no grace needed.
+* Field removals: ≥ 90 days.
+* Endpoint removal / contract-breaking change: ≥ 180 days.
+
+### Communication
+* Versioned docs page with migration examples.
+* For enterprise / partners: outbound email (contact list) at announce + 30d before sunset.
+
+### Versioning
+* If an immediate incompatible change is unavoidable: bump MAJOR and/or ship a new path or versioned media type; prefer feature flag–guarded behavior until consumers migrate.
+
+---
+
 ## Vision
 Provide a Core domain (Menus, Diets, Attendance, Users, Tenants) with optional modules activated per customer (turnus scheduling, waste metrics, prep/freezer tasks, messaging, alt1/alt2 workflow, etc.). Superusers can enable modules on demand.
 
@@ -484,6 +511,71 @@ Semantic diff script location: `scripts/openapi_diff.py` (pure stdlib, no depend
 
 
 ## Error Model
+## Error model (RFC 7807)
+
+In parallel with the compact legacy envelope we support (and will migrate fully to) RFC 7807 problem details using media type `application/problem+json`.
+
+Fields:
+- `type` (string, URI) – Stable identifier for the problem category.
+- `title` (string) – Short, human stable headline.
+- `status` (number) – HTTP status code.
+- `detail` (string) – Human-readable description of this specific occurrence.
+- `instance` (string, URI, optional) – Correlates this occurrence (mirrors `request_id`).
+- `errors` (object, optional) – Field specific validation errors: `{ "field": ["msg1", "msg2"] }`.
+
+Problem type registry (initial set):
+
+| type | title | http status | when used |
+|------|-------|------------:|-----------|
+| `about:blank` | Standard HTTP error | varies | Fallback
+| `https://api.example.com/problems/validation` | Validation failed | 400 / 422 | Invalid payload / parameter
+| `https://api.example.com/problems/unauthorized` | Unauthorized | 401 | Missing / bad token
+| `https://api.example.com/problems/forbidden` | Forbidden | 403 | Lacking permission / role
+| `https://api.example.com/problems/not-found` | Resource not found | 404 | Entity missing
+| `https://api.example.com/problems/unsupported-media-type` | Unsupported media type | 415 | Wrong `Content-Type`
+| `https://api.example.com/problems/rate-limited` | Rate limit exceeded | 429 | Too many requests
+| `https://api.example.com/problems/internal` | Internal error | 500 | Unexpected error
+
+HTTP Headers:
+* Always: `Content-Type: application/problem+json`
+* On 429: include `Retry-After` + any relevant `X-RateLimit-*` headers.
+
+Examples:
+
+Validation (422):
+```json
+{
+  "type": "https://api.example.com/problems/validation",
+  "title": "Validation failed",
+  "status": 422,
+  "detail": "title must not be empty",
+  "errors": {"title": ["must not be empty", "min length is 1"]}
+}
+```
+Unsupported media (415):
+```json
+{
+  "type": "https://api.example.com/problems/unsupported-media-type",
+  "title": "Unsupported media type",
+  "status": 415,
+  "detail": "Expected Content-Type application/json"
+}
+```
+Rate limited (429):
+```json
+{
+  "type": "https://api.example.com/problems/rate-limited",
+  "title": "Rate limit exceeded",
+  "status": 429,
+  "detail": "Try again later"
+}
+```
+
+Implementation notes:
+* `title` derived from the registered problem type (not user input).
+* `detail` is request-specific and safe to show to end user (no stack traces / secrets).
+* `instance` should correlate with logs (`request_id`) for support.
+
 All API error responses share a compact, stable JSON envelope:
 
 ```json
