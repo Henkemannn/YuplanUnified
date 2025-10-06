@@ -36,6 +36,21 @@ pip-audit
 ```
 (*Valfritt:* vi kan lägga till en `.pre-commit-config.yaml` hook senare.)
 
+## Pre-commit
+Installera hooks lokalt:
+```bash
+pip install pre-commit
+pre-commit install
+```
+Kör alla hooks manuellt:
+```bash
+pre-commit run --all-files
+```
+Kör pip-audit manuellt (manual stage):
+```bash
+pre-commit run pip-audit --all-files
+```
+
 ## Versioning & Release
 We follow Semantic Versioning (SemVer):
 * MAJOR (`X.y.z`): Any breaking OpenAPI change (as detected by semantic diff rules) or removal of previously documented behavior.
