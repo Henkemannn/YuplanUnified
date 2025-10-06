@@ -101,10 +101,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: pip-audit (soft gate)
+      - name: pip-audit
         run: |
           pip install pip-audit
-          pip-audit || true  # TODO: enforce later by removing '|| true'
+          pip-audit
 
       - name: Docs soft check (problems catalog)
         run: |

@@ -27,6 +27,14 @@ This repository scaffold is the starting point for merging the Municipal (Kommun
   ```
 * Breaking changes cause non‑zero exit in diff script; baseline must be updated intentionally in same PR.
 
+## Pre-commit (lokalt)
+Kör snabb säkerhetskontroll innan commit:
+```bash
+pip install pip-audit
+pip-audit
+```
+(*Valfritt:* vi kan lägga till en `.pre-commit-config.yaml` hook senare.)
+
 ## Versioning & Release
 We follow Semantic Versioning (SemVer):
 * MAJOR (`X.y.z`): Any breaking OpenAPI change (as detected by semantic diff rules) or removal of previously documented behavior.

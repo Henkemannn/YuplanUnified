@@ -111,3 +111,5 @@ if (resp.status === 422 && body.errors) {
   toast("Temporary server issue. Please retry.");
 }
 ```
+
+Se även: `docs/problems.md` för alla problemtyper och exempel.
