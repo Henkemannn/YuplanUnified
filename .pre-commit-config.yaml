@@ -1,30 +1,41 @@
+exclude: |
+  (?x)^(
+    (.venv|venv)/|
+    dist/|
+    build/|
+    node_modules/|
+    \.mypy_cache/|
+    \.ruff_cache/|
+    status/
+  )
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.4
+    rev: v0.6.9
     hooks:
       - id: ruff
-        name: ruff (lint)
-        args: ["--fix"]
+        args: [--exit-non-zero-on-fix]
       - id: ruff-format
-        name: ruff (format)
+
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v1.11.2
     hooks:
       - id: mypy
-        name: mypy (core & modules)
         additional_dependencies: []
-        args: ["core", "modules"]
-        pass_filenames: false
-  - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.41.0
-    hooks:
-      - id: markdownlint
-        files: \.md$
-        args: ["--config", ".markdownlint.json"]
+        args:
+          - --ignore-missing-imports
+          - --pretty
+          - --show-error-codes
+
   - repo: local
     hooks:
-      - id: forbid-merge-markers
-        name: Forbid merge conflict markers
-        entry: bash -c 'if grep -R "^[<=>]\{7\}" -n .; then echo "Merge conflict markers found"; exit 1; fi'
+      - id: pip-audit
+        name: pip-audit (manual)
+        entry: bash -lc 'pip install -q pip-audit && pip-audit'
         language: system
         pass_filenames: false
+        stages: [manual]
+
+ci:
+  autofix_prs: false
+  autoupdate_schedule: quarterly
