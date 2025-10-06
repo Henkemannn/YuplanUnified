@@ -14,6 +14,19 @@
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
 
+## Quick reference (OpenAPI)
+* PowerShell helpers: `./scripts/dev.ps1; Invoke-OpenAPIWorkflow` fetches spec, semantic diff, optional spectral lint, focused tests.
+* Fetch only: `./scripts/dev.ps1; Get-OpenAPISpec` writes `openapi.json` (badge workflow in CI consumes semantic diff artifacts).
+* Local Python fetch (fallback /docs/openapi.json):
+  ```
+  python fetch_openapi_local.py --base-url http://localhost:5000 --output openapi.json
+  ```
+* Diff vs baseline manually:
+  ```
+  python scripts/openapi_diff.py specs/openapi.baseline.json openapi.json --report openapi-diff.txt
+  ```
+* Breaking changes cause non‑zero exit in diff script; baseline must be updated intentionally in same PR.
+
 ## Versioning & Release
 We follow Semantic Versioning (SemVer):
 * MAJOR (`X.y.z`): Any breaking OpenAPI change (as detected by semantic diff rules) or removal of previously documented behavior.
