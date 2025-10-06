@@ -304,6 +304,31 @@ jobs:
       - name: Run OpenAPI tests
         run: pytest -q tests/test_openapi_*.py
 
+      - name: Write API status JSON
+        run: |
+          mkdir -p status
+          jq -n --arg s "$(jq -r '.status' /tmp/openapi-diff.json)" \
+                --argjson br "$(jq '.breaking | length' /tmp/openapi-diff.json)" \
+                --argjson ad "$(jq '.additions | length' /tmp/openapi-diff.json)" \
+                '{
+                  schemaVersion: 1,
+                  label: "api",
+                  message: ( $s == "ok" and $ad > 0 ) ? "changed" : ( $s == "ok" ? "stable" : "breaking" ),
+                  color:    ( $s == "ok" and $ad > 0 ) ? "yellow"  : ( $s == "ok" ? "success" : "red" ),
+                  namedLogo: "openapi",
+                  cacheSeconds: 300,
+                  meta: { status: $s, breaking: $br, additions: $ad }
+                }' > status/api_status.json
+
+      - name: Commit API status badge data
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs(badge): update API status badge"
+          file_pattern: status/api_status.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload OpenAPI artifact
         uses: actions/upload-artifact@v4
         with:
