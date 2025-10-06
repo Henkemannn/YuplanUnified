@@ -14,6 +14,9 @@ jobs:
   analyze:
     name: Analyze (Python)
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write  # allow uploading SARIF results
+      contents: read          # minimal additional permission
     steps:
       - name: Checkout
         uses: actions/checkout@v4
