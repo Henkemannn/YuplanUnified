@@ -18,6 +18,36 @@
 2. **Endpoint Drilldown**: per route p95/p99, 5xx %, recent deploy markers
 3. **Dependencies**: DB p95 & errors, connection pool usage; External HTTP p95/error rate
 
+### Import dashboards
+An initial vendor‑agnostic starter file lives at `observability/dashboards.json`.
+
+Steps:
+1. Import / load the JSON in your metrics UI (Grafana / custom) mapping metric names:
+	- Histogram: `api.request_latency_ms`
+	- Counter: `api.requests`
+	- HTTP status counter: (e.g. `http_requests_total{status="..."}`) or OTLP equivalent with `status_code` label
+2. Adjust selectors for `service.name` and `deployment.environment` variables (defaults: `api`, `prod`).
+3. Set alert ideas:
+	- p95 latency: >300ms (read) / >500ms (write) sustained 5–10m
+	- 5xx rate: >1% over 5m
+	- 429 rate: >5% over 10m (investigate throttling fairness)
+4. Tune thresholds per panel to match real baseline before enforcing strict paging.
+5. Commit any stack‑specific transformations (e.g. rename labels) in a copy if needed.
+
+### Alerts examples
+Pseudo rules (adjust for tooling syntax):
+```
+# Latency (read endpoints) page
+IF p95(api.request_latency_ms{route_type="read",service.name="api"}) > 600ms FOR 10m THEN page
+
+# 5xx rate warn → page
+IF (rate(http_requests_total{status=~"5..",service.name="api"}[5m]) / rate(http_requests_total{service.name="api"}[5m])) * 100 > 1 FOR 5m THEN page
+
+# 429 spike investigation (no immediate page)
+IF (rate(http_requests_total{status="429",service.name="api"}[10m]) / rate(http_requests_total{service.name="api"}[10m])) * 100 > 5 FOR 10m THEN create ticket
+```
+
+
 ## Alerting Thresholds (initial)
 | Signal | Warn | Page |
 |--------|------|------|
