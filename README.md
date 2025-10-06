@@ -3,6 +3,7 @@
 [![CI](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml)
 [![OpenAPI](https://github.com/Henkemannn/YuplanUnified/actions/workflows/openapi.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/openapi.yml)
 [![markdownlint](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml)
+[![CodeQL](https://github.com/Henkemannn/YuplanUnified/actions/workflows/codeql.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/codeql.yml)
 [![API](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Henkemannn/YuplanUnified/master/status/api_status.json)](./)
 
 <p align="left">
