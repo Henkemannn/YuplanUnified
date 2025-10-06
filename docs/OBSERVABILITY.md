@@ -83,3 +83,34 @@ IF (rate(http_requests_total{status="429",service.name="api"}[10m]) / rate(http_
 - Add histogram metrics for body size distribution.
 - Emit percentiles via OpenTelemetry exporter.
 - Synthetic canaries hitting critical endpoints every minute.
+
+## Domain Event Telemetry (Pilot)
+
+During pilot we expose a lightweight counter `yuplan.events_total` (labels: `action`, optional `avdelning`, optional `maltid`) for coarse activity insight without adding DB load. Current instrumented action:
+
+| action | Description | Labels used |
+|--------|-------------|-------------|
+| `registrering` | User-facing creation action (currently mapped to note creation placeholder) | `avdelning` (if session unit), `maltid` (reserved) |
+
+### Panels Added
+Two starter panels appended to `observability/dashboards.json`:
+
+1. `Registreringar per minut` – 1m rate of `yuplan.events_total{action="registrering"}` (short-term spikes).
+2. `Registreringar per avdelning (24h)` – Top 5 increase over 24h grouped by `avdelning`.
+
+### PromQL Examples
+```
+# 1m rate (events/min)
+sum(rate(yuplan_events_total{action="registrering",service.name="api"}[1m])) * 60
+
+# Top 5 avdelning last 24h
+topk(5, sum by (avdelning)(increase(yuplan_events_total{action="registrering",service.name="api"}[24h])))
+```
+
+### Export / Overhead
+- Counter increments only when OTEL SDK is present; otherwise functions are no-ops.
+- No cardinality explosion expected (bounded set of avdelningar; ensure names are normalized and limited in pilot).
+
+### Future
+- Add real domain events (attendance_submit, meal_log, task_complete).
+- Derive daily cohorts and funnel metrics in separate analytical pipeline.

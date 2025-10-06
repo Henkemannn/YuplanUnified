@@ -16,6 +16,7 @@ from .errors import NotFoundError, ValidationError
 from .models import Note
 from .pagination import make_page_response, parse_page_params
 from .roles import RoleLike
+from .telemetry import track_event  # optional metrics no-op if unavailable
 
 bp = Blueprint("notes_api", __name__, url_prefix="/notes")
 
@@ -83,6 +84,9 @@ def create_note():
         db.add(note)
         db.commit()
         db.refresh(note)
+        # Telemetry: treat note creation as a 'registrering' style event for pilot visibility.
+        avd_name = session.get("unit_name") or session.get("avdelning")  # legacy fallback keys if present
+        track_event("registrering", avdelning=str(avd_name) if avd_name else None, maltid=None)
         return jsonify({"ok": True, "note": _serialize(note)})
     finally:
         db.close()

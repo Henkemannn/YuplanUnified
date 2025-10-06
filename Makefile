@@ -48,3 +48,27 @@ ready:
 
 clean:
 	rm -f openapi.json
+
+# --- Release helpers ---
+SHELL := /bin/bash
+VERSION_FILE := VERSION
+
+.PHONY: check-clean
+check-clean:
+	@test -z "$$(git status --porcelain)" || { echo "Working tree not clean"; exit 1; }
+
+.PHONY: release-major release-minor release-patch
+release-major: KIND=major
+release-minor: KIND=minor
+release-patch: KIND=patch
+
+release-major release-minor release-patch: check-clean
+	@set -e; \
+	new="$$( $(PY) tools/bump_version.py $(KIND) )"; \
+	echo "New version: $$new"; \
+	git add $(VERSION_FILE); \
+	git commit -m "chore(release): bump version to $$new"; \
+	git tag "v$$new"; \
+	git push; \
+	git push --tags; \
+	echo "Tag v$$new pushed. Release workflow will run." 

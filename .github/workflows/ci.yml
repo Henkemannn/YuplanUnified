@@ -181,3 +181,38 @@ jobs:
       - name: Archive test results (optional placeholder)
         if: always()
         run: echo "Add coverage or junit XML export later."
+
+  test-csrf-matrix:
+    name: tests (csrf matrix)
+    needs: [lint-type, openapi-validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        strict: [false, true]
+    env:
+      STRICT_CSRF_IN_TESTS: ${{ matrix.strict }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run tests (matrix)
+        run: |
+          if [ "${{ matrix.strict }}" = "true" ]; then
+            echo 'STRICT MODE: excluding csrf_legacy tests';
+            pytest -m "not csrf_legacy" -q;
+          else
+            echo 'NON-STRICT MODE: full suite';
+            pytest -q;
+          fi
+      - name: Matrix summary
+        if: always()
+        run: echo "CSRF matrix strict=${{ matrix.strict }} finished" >> $GITHUB_STEP_SUMMARY

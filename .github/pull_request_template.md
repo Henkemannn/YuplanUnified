@@ -1,37 +1,52 @@
 ## Ändringar
 Kort sammanfattning av vad PR:en gör. Lista gärna moduler / filer med större påverkan.
+﻿# Beskrivning
+<!-- Kort vad som ändras och varför -->
 
-## Strict Typing / Pocket
-- [ ] Berör strikt ficka (lista):
-- [ ] Nya moduler under `strict = True`
-- [ ] Inga nya mypy-fel / `Any`-läckor
+## Typ av ändring
+- [ ] Feature
+- [ ] Bugfix
+- [ ] Docs
+- [ ] Security/Hardening
+- [ ] CI/CD
+- [ ] Other
 
-## Kvalitetsportar
-- [ ] `ruff check .` grön (inga nya varningar)
-- [ ] `mypy` grön för berörda paths
-- [ ] Tester körda lokalt (`pytest -q`)
-- [ ] Uppdaterad README vid ändrad ficklista / arkitektur
-- [ ] Uppdaterad CHANGELOG (Unreleased) vid interna förbättringar
-- [ ] `DECISIONS.md` uppdaterad (vid nya mönster / policybeslut)
+## Checklista (måste vara ✓ innan merge)
+**Kvalitet**
+- [ ] Tests gröna lokalt
+- [ ] Pre-commit (ruff/mypy) körd: `pre-commit run --all-files`
+- [ ] Täcker nya/ändrade kodvägar med tester
+- [ ] Coverage ej försämrad märkbart
 
-## Säkerhet / Risk
-- Påverkar auth / tokens? Beskriv risk & mitigering.
-- Nya externa beroenden? Motivera.
-- Datamodell migration? Länka Alembic-revision.
+**Säkerhet**
+- [ ] CodeQL grönt i PR
+- [ ] `pip-audit` (CI) = **0** kända sårbarheter
+- [ ] Inga hemligheter i diffen (secrets scanning)
 
-## Test
-Beskriv nya testfall och varför de räcker. Edge cases täckta? Negativa scenarier?
+**Observability**
+- [ ] OTEL-metrics/loggar rimliga för nya vägar
+- [ ] Dashboards/alerts påverkas ej negativt (eller uppdaterade vid behov)
 
-## Manuell Verifiering (om relevant)
-Lista korta manuella steg du kört (curl, UI, etc.).
+**API & Docs**
+- [ ] RFC7807 följs för fel
+- [ ] OpenAPI uppdaterad vid kontraktsförändring
+- [ ] README/SECURITY/OBSERVABILITY uppdaterad vid behov
+- [ ] Problems-katalogen (**docs/problems.md**) uppdaterad om nya problemtyper
 
-## Riskbedömning
-| Aspekt | Bedömning | Kommentar |
-|--------|-----------|-----------|
-| Auth / Security | låg / medel / hög | |
-| Databas Migration | låg / medel / hög | |
-| Prestanda | låg / medel / hög | |
-| Underhåll / Komplext | låg / medel / hög | |
+**Frontier (om tillämpligt)**
+- [ ] CSRF: skrivande endpoints accepterar **double-submit** + Origin-kontroll
+- [ ] CORS: ingen ny wildcard; allowlist uppdaterad vid behov
+- [ ] Rate limit: 429 + `Retry-After` korrekt
+
+## GA-relaterat (bockas i release-PRs)
+- [ ] Länk till **RELEASE_NOTES_vX.Y.Z.md**
+- [ ] **GA_CHECKLIST.md** genomgång (Pre-release, Security, Observability, Docs, QA)
+- [ ] Badge/metadata uppdaterad vid behov
+
+## Test & verifikation
+<!-- Hur verifierades ändringen? Lägg gärna med manuell testnotering / screenshots -->
 
 ## Övrigt
-Övriga noter eller uppföljningspunkter.
+<!-- Risker, rollbacks, migrations, mm. -->
+
+Commit

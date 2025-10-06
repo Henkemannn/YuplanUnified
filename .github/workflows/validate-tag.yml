@@ -1,0 +1,23 @@
+name: Validate Tag Matches VERSION
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions: read-all
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify tag equals VERSION
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          FILE_VER="$(tr -d '\r\n' < VERSION)"
+          if [ "v${FILE_VER}" != "${TAG}" ]; then
+            echo "::error title=Tag mismatch::Tag ${TAG} != v${FILE_VER} (from VERSION)"
+            exit 1
+          fi
+          echo "Tag matches VERSION: v${FILE_VER}"

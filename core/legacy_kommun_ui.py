@@ -10,9 +10,11 @@ immediate schema coupling. We will progressively enable actions mapped to unifie
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
-from flask import Blueprint, redirect, render_template, session, url_for
+from flask import Blueprint, redirect, render_template, session, url_for, Response, request
+import hashlib, json
+from email.utils import formatdate
 
 from .auth import require_roles
 from .db import get_session
@@ -25,6 +27,23 @@ bp = Blueprint(
     template_folder="../legacy/kommun/templates",
     static_folder="../legacy/kommun/static"
 )
+
+
+# --- Shared lightweight HTTP caching helpers (ETag + optional Last-Modified) ---
+def _etag_headers(etag_hex: str, *, last_modified_dt: datetime | None = None, vary_accept: bool = False):
+    headers = {
+        "ETag": f'"{etag_hex}"',  # quoted per RFC 7232
+        "Cache-Control": "private, max-age=60, must-revalidate",
+        "Vary": "Accept-Encoding" + (", Accept" if vary_accept else ""),
+    }
+    if last_modified_dt is not None:
+        headers["Last-Modified"] = formatdate(last_modified_dt.timestamp(), usegmt=True)
+    return headers
+
+
+def _if_none_match_matches(etag_hex: str) -> bool:
+    inm = request.headers.get("If-None-Match")
+    return inm is not None and inm.strip() == f'"{etag_hex}"'
 
 class AvdRow:
     __slots__ = ("id","namn","boende_antal","kopplade_kosttyper","kopplade_antal","faktaruta")
@@ -108,14 +127,48 @@ bp.add_url_rule("/meny_avdelning_admin_alias", endpoint="meny_avdelning_admin", 
 @bp.route("/veckovy")
 @require_roles("superuser","admin")
 def veckovy():
-    # TODO: implement week summary view reuse unified menu_service
-    return redirect(url_for("legacy_kommun_ui.adminpanel"))
+    # Placeholder implementation now returns a trivial HTML snippet to enable caching semantics.
+    vecka = int(date.today().strftime("%W")) or 1
+    avdelning = "all"
+    # The legacy template calls url_for('veckovy', ...); to remain compatible, add
+    # a transient endpoint alias if not already present.
+    if "veckovy" not in bp.deferred_functions:  # not a robust check but avoids duplicates
+        try:  # pragma: no cover - defensive
+            bp.add_url_rule("/veckovy_alias", endpoint="veckovy", view_func=veckovy)  # type: ignore
+        except Exception:
+            pass
+    # Minimal HTML to avoid deep legacy template dependencies (which expect un-namespaced endpoint names)
+    html = f"""<html><head><title>Veckovy {vecka}</title></head>
+    <body><h1>Veckovy vecka {vecka}</h1><p>Avdelning: {avdelning}</p></body></html>"""
+    body_bytes = html.encode("utf-8")
+    etag_hex = hashlib.sha256(
+        b"veckovy:" + str(vecka).encode() + b":" + str(avdelning).encode() + b":" + body_bytes
+    ).hexdigest()
+    if _if_none_match_matches(etag_hex):
+        return Response(status=304, headers=_etag_headers(etag_hex, vary_accept=True))
+    resp = Response(body_bytes, mimetype="text/html; charset=utf-8")
+    for k, v in _etag_headers(etag_hex, vary_accept=True).items():
+        resp.headers[k] = v
+    return resp
 
 @bp.route("/rapport", methods=["GET","POST"])
 @require_roles("superuser","admin")
 def rapport():
-    # TODO: implement reporting mapped to unified attendance/service metrics
-    return redirect(url_for("legacy_kommun_ui.adminpanel"))
+    # Placeholder JSON report payload to enable ETag caching. Replace rapport_data collection later.
+    vecka = int(date.today().strftime("%W")) or 1
+    avdelning = "all"
+    rapport_data = {"summary": "placeholder", "rows": []}
+    payload = {"vecka": vecka, "avdelning": avdelning, "data": rapport_data}
+    body_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    etag_hex = hashlib.sha256(
+        b"rapport:" + str(vecka).encode() + b":" + str(avdelning).encode() + b":" + body_bytes
+    ).hexdigest()
+    if _if_none_match_matches(etag_hex):
+        return Response(status=304, headers=_etag_headers(etag_hex))
+    resp = Response(body_bytes, mimetype="application/json")
+    for k, v in _etag_headers(etag_hex).items():
+        resp.headers[k] = v
+    return resp
 
 @bp.route("/redigera_boende")
 @require_roles("superuser","admin")

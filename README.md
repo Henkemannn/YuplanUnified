@@ -6,6 +6,7 @@
 [![CodeQL](https://github.com/Henkemannn/YuplanUnified/actions/workflows/codeql.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/codeql.yml)
 [![API](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Henkemannn/YuplanUnified/master/status/api_status.json)](./)
 [![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Henkemannn/YuplanUnified/master/status/coverage-badge.json)](./)
+[![GA](https://img.shields.io/badge/GA-v1.0.0-green)](RELEASE_NOTES_v1.0.0.md)
 
 <p align="left">
   <img alt="Ruff" src="https://img.shields.io/badge/Ruff-E,F,I,B,UP,Q-success?logo=python&logoColor=white" />
@@ -68,6 +69,22 @@ Release workflow: automatically produces OpenAPI diff artifacts (`openapi-diff.t
 After `v1.0.0-beta`: Further additive changes bump MINOR; any breaking change requires a MAJOR plan (`2.0.0`) unless explicitly deferred pre-GA.
 
 For the exact steps, see **[RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md)**.
+
+### Release helper
+PowerShell (Windows):
+```powershell
+pwsh -File tools/release.ps1 -Kind patch   # or minor / major
+```
+Make (macOS/Linux):
+```bash
+make release-patch    # or make release-minor / make release-major
+```
+This will:
+1. Ensure working tree clean
+2. Bump version via `tools/bump_version.py`
+3. Commit "chore(release): bump version to X.Y.Z"
+4. Tag `vX.Y.Z` and push (unless `-NoPush` used in PowerShell)
+5. Trigger `.github/workflows/release.yml` which builds the GitHub Release body from notes or template.
 
 ## Deprecation policy
 

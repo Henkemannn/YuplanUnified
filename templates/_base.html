@@ -48,7 +48,11 @@
   {% block content %}{% endblock %}
 </main>
 <footer>
-  Yuplan &copy; {{ 2025 }} • Request ID: {{ g.request_id if g.request_id else '' }}
+  Yuplan &copy; {{ 2025 }} • Request ID: <span id="reqid">{{ g.request_id if g.request_id else '' }}</span>
+  <button style="margin-left:8px;font-size:11px;padding:4px 8px;border:1px solid #cbd5e1;background:#f1f5f9;border-radius:6px;cursor:pointer" onclick="(function(){const id=document.getElementById('reqid').innerText.trim(); if(!id)return; navigator.clipboard.writeText('ReqID:'+id); const btn=this; const old=btn.innerText; btn.innerText='Kopierad'; setTimeout(()=>btn.innerText=old,1500);}).call(this)">Kopiera supportinfo</button>
+  {% if has_role('admin','superuser') %}
+    <a style="margin-left:12px;font-size:11px;text-decoration:none;border:1px solid #cbd5e1;padding:4px 8px;border-radius:6px;background:#eef2ff;color:#1e3a8a" href="{{ url_for('support.support_home').replace('/admin/support/', '/admin/support/ui') }}" target="_blank" rel="noopener">Support</a>
+  {% endif %}
 </footer>
 </body>
 </html>

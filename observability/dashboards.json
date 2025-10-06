@@ -64,6 +64,26 @@
       ],
       "queryHint": "# PromQL: sum(rate(api_requests_total{service=\"$service.name\",environment=\"$deployment.environment\"}[5m]))\n# OTLP: SELECT rate_sum(api.requests, 5m) WHERE service.name=$service.name AND deployment.environment=$deployment.environment",
       "notes": "Capacity planning: watch for sustained elevation vs baseline; adjust thresholds for scale." 
+    },
+    {
+      "id": "registrering_rate_1m",
+      "title": "Registreringar per minut",
+      "metric": "yuplan.events_total",
+      "stat": "rate_per_minute",
+      "window": "1m",
+      "yUnit": "events/min",
+      "queryHint": "# PromQL: sum(rate(yuplan_events_total{action=\"registrering\",service=\"$service.name\",environment=\"$deployment.environment\"}[1m]))",
+      "notes": "Shows short-term activity bursts for registration events (action=registrering)."
+    },
+    {
+      "id": "registrering_top_avd_24h",
+      "title": "Registreringar per avdelning (24h)",
+      "metric": "yuplan.events_total",
+      "stat": "increase_24h",
+      "window": "24h",
+      "yUnit": "count",
+      "queryHint": "# PromQL: topk(5, sum by (avdelning)(increase(yuplan_events_total{action=\"registrering\",service=\"$service.name\",environment=\"$deployment.environment\"}[24h])))",
+      "notes": "Top 5 departments by registration volume last 24h."
     }
   ],
   "notes": "This is a vendor-agnostic starter layout. Map metric names and label keys to your stack (Prometheus, Grafana Cloud, OTLP backend, etc.)."

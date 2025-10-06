@@ -54,6 +54,67 @@ We use a CVSS v3.1 inspired severity mapping. If exploitability is low and there
 | pip-audit Workflow | Identifies vulnerable dependencies. |
 | Release Readiness Script | Ensures baseline, tests, lint, diff status before tagging. |
 
+---
+
+# Technical Security Controls
+
+## JWT Authentication
+Access & refresh tokens are HMAC signed (HS256) with support for secret rotation via `JWT_SECRETS`. Enforced claims and rejection reasons:
+
+| Claim / Check | Behavior | Rejection Reason |
+|---------------|----------|------------------|
+| alg | Only HS256 (RS256 placeholder accepted for future) | `alg` |
+| kid | Required for RS256 flow / rotation hint | `kid` |
+| iss | Must match `JWT_ISSUER` (default `yuplan`) | `iss` |
+| aud | Must include `JWT_AUDIENCE` | `aud` |
+| exp | Expired beyond leeway -> reject | `exp` (message `token expired`) |
+| nbf | Future beyond leeway -> reject | `nbf` (message `token not yet valid`) |
+| iat (future) | If > now + leeway -> reject | `iat_future` |
+| max age | If access iat older than `JWT_MAX_AGE_SECONDS` | `max_age` |
+| revocation (refresh) | Stale JTI | `revoked` |
+
+Other rejection reasons: `malformed`, `bad_header`, `bad_signature`, `bad_payload`, `type`, and each missing claim name.
+
+Metric: `security.jwt_rejected_total{reason=*}` increments for every decode failure.
+
+## CSRF Protection
+Production (TESTING=False) uses a double-submit token (`csrf_token` cookie + `X-CSRF-Token` header) OR strict same-origin check for mutating methods. Safe methods (GET/HEAD/OPTIONS) are always allowed. Exempt prefixes: `/auth/`, `/metrics`.
+
+In test mode we currently bypass enforcement unless `STRICT_CSRF_IN_TESTS=1`, allowing incremental hardening. CSRF denials return RFC7807 problem+json with `detail` in {`csrf_missing`,`csrf_mismatch`,`origin_mismatch`}.
+
+Metric: `security.csrf_blocked_total{reason=missing|mismatch|origin}`.
+
+## Cookie Policy
+| Cookie | Secure (prod) | HttpOnly | SameSite | Notes |
+|--------|---------------|----------|----------|-------|
+| Session | Yes | Yes | Lax | Framework-managed (Flask config) |
+| csrf_token | Yes (prod) | No | Strict | Readable for double-submit, not an auth secret |
+
+In DEBUG/TESTING we relax the Secure flag for local HTTP convenience.
+
+## 405 Mapping
+`MethodNotAllowed (405)` mapped to 404 envelope for compatibility. Metric: `http.405_mapped_to_404_total{method=*}`; warning log emitted with path & method.
+
+## Rate Limiting & 429
+Brute-force login and certain admin/feature endpoints enforce per-user / per-tenant limits. 429 responses include `Retry-After` header and JSON body with `retry_after` seconds. Tests ensure header is numeric and > 0.
+
+## Security Headers (automatic)
+`Strict-Transport-Security`, `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`. Set idempotently.
+
+## Observability Summary
+| Metric | Labels | Description |
+|--------|--------|-------------|
+| security.jwt_rejected_total | reason | JWT decode failures by reason |
+| security.csrf_blocked_total | reason | CSRF denials |
+| http.405_mapped_to_404_total | method | 405 responses mapped to 404 |
+
+All metrics are best-effort; if OpenTelemetry is absent they silently no-op.
+
+## Future Work
+- Full RS256 issuance & JWKS endpoint
+- Strict CSRF enabled by default in tests once legacy fixtures refactored
+- Additional audit logging export (structured) for JWT & CSRF denials
+
 ## Dependencies (pip-audit)
 Before each release:
 1. Run `pip-audit --strict` locally (or `make ready` if integrated later).
