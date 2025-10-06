@@ -576,6 +576,8 @@ Implementation notes:
 * `detail` is request-specific and safe to show to end user (no stack traces / secrets).
 * `instance` should correlate with logs (`request_id`) for support.
 
+See also: `docs/problems.md` for the full problem type catalog with examples and client handling tips.
+
 All API error responses share a compact, stable JSON envelope:
 
 ```json

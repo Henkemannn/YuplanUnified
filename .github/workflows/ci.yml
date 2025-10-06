@@ -106,6 +106,13 @@ jobs:
           pip install pip-audit
           pip-audit || true  # TODO: enforce later by removing '|| true'
 
+      - name: Docs soft check (problems catalog)
+        run: |
+          if [ ! -f docs/problems.md ]; then echo 'docs/problems.md missing'; exit 1; fi
+          grep -q 'Problem Types' docs/problems.md || (echo 'Missing header Problem Types' && exit 1)
+          grep -qi 'validation failed' docs/problems.md || (echo 'Missing validation example' && exit 1)
+          echo 'problems.md present with expected markers'
+
       - name: Show versions
         run: |
           python --version
