@@ -4,6 +4,7 @@ Later can be expanded with per-request session handling middleware.
 from __future__ import annotations
 
 from contextlib import suppress
+
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, scoped_session, sessionmaker

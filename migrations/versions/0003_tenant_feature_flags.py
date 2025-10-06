@@ -6,8 +6,8 @@ Create Date: 2025-09-29
 """
 from __future__ import annotations
 
-revision = '0003_tenant_feature_flags'
-down_revision = '0001_init'
+revision = "0003_tenant_feature_flags"
+down_revision = "0001_init"
 branch_labels = None
 depends_on = None
 

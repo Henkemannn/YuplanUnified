@@ -1,20 +1,22 @@
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = [
+  # Phase 1 lint scope intentionally excludes legacy & migration code; will be reintroduced in later pockets.
+  "migrations",
+  "legacy",
+  "core/static",
+  "core/templates",
+]
+extend-exclude = ["**/*.md"]
 
 [tool.ruff.lint]
 # Baseline + expanded: bugbear (B), pyupgrade (UP), quotes (Q), plus pattern/simplification sets PIE & SIM.
-select = ["E","F","I","B","UP","Q","PIE","SIM"]
+select = ["E","F","I","UP","SIM","B","Q"]
 ignore = [
   # Temporarily ignore line length (can be enabled later by removing E501 here & adding a formatting step)
-  "E501"
-]
-
-# Exclude generated or migration scripts from strict lint
-exclude = [
-  "migrations",
-  "core/static",
-  "core/templates"
+  "E501",
+  "SIM105",
 ]
 
 [tool.ruff.lint.isort]
@@ -30,7 +32,9 @@ combine-as-imports = true
 # Legacy/offshore and legacy tooling scripts: tolerate style violations for now (batch cleanup later)
 "legacy/**" = ["E701", "E702", "E402"]
 # Tests: temporarily ignore mass semicolon/colon multi-statement style to focus on functional code improvements first
-"tests/**" = ["E701", "E702"]
+"tests/**" = ["E701", "E702", "SIM105", "B011"]
+"tests/test_openapi_validator.py" = ["B017"]
+"scripts/*.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "preserve"

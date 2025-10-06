@@ -1,4 +1,6 @@
-import sqlite3, pathlib, sys
+import pathlib
+import sqlite3
+import sys
 
 DB = pathlib.Path("app.db")
 MIG = pathlib.Path("migrations/001_menu_fix.sql")
@@ -9,7 +11,7 @@ if not MIG.exists():
     print("Hittar inte migrations/001_menu_fix.sql.")
     sys.exit(1)
 conn = sqlite3.connect(DB.as_posix())
-with open(MIG, "r", encoding="utf-8") as f:
+with open(MIG, encoding="utf-8") as f:
     sql = f.read()
     conn.executescript(sql)
 conn.commit()

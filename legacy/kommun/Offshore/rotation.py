@@ -6,13 +6,14 @@
 #
 # OBS: Denna modul rör INTE menydelen.
 
-import sqlite3
-import json
 import csv
-from datetime import datetime, timedelta, date
-from typing import List, Optional, Dict, Any, Iterable
+import json
+import sqlite3
+from collections import Counter
+from collections.abc import Iterable
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from collections import Counter, defaultdict
+from typing import Any
 
 DB_PATH = Path("app.db")
 
@@ -76,7 +77,7 @@ def _daterange(d0: date, d1: date) -> Iterable[date]:
         cur = cur + timedelta(days=1)
 
 # ---------- Templates ----------
-def create_template(name: str, pattern: Dict[str, Any], rig_id: Optional[int] = None, is_active: bool = True) -> int:
+def create_template(name: str, pattern: dict[str, Any], rig_id: int | None = None, is_active: bool = True) -> int:
     """
     Skapa en template.
     pattern: JSON-struktur, ex:
@@ -97,10 +98,10 @@ def create_template(name: str, pattern: Dict[str, Any], rig_id: Optional[int] = 
         )
     return cur.lastrowid if cur.lastrowid is not None else -1
 
-def update_template(template_id: int, *, name: Optional[str] = None,
-                    pattern: Optional[Dict[str, Any]] = None,
-                    rig_id: Optional[int] = None,
-                    is_active: Optional[bool] = None) -> None:
+def update_template(template_id: int, *, name: str | None = None,
+                    pattern: dict[str, Any] | None = None,
+                    rig_id: int | None = None,
+                    is_active: bool | None = None) -> None:
     fields = []
     values = []
     if name is not None:
@@ -128,7 +129,7 @@ def set_template_active(template_id: int, active: bool) -> None:
             (1 if active else 0, template_id)
         )
 
-def get_template(template_id: int) -> Optional[Dict[str, Any]]:
+def get_template(template_id: int) -> dict[str, Any] | None:
     with _conn() as conn:
         cur = conn.execute("SELECT * FROM turnus_templates WHERE id = ?", (template_id,))
         row = cur.fetchone()
@@ -138,10 +139,10 @@ def get_template(template_id: int) -> Optional[Dict[str, Any]]:
         d["pattern"] = json.loads(d.pop("pattern_json") or "{}")
         return d
 
-def list_templates(rig_id: Optional[int] = None, active_only: bool = False) -> List[Dict[str, Any]]:
+def list_templates(rig_id: int | None = None, active_only: bool = False) -> list[dict[str, Any]]:
     q = "SELECT * FROM turnus_templates"
     where = []
-    params: List[Any] = []
+    params: list[Any] = []
     if rig_id is not None:
         where.append("rig_id = ?")
         params.append(rig_id)
@@ -159,7 +160,7 @@ def list_templates(rig_id: Optional[int] = None, active_only: bool = False) -> L
             out.append(d)
         return out
 
-def generate_slots_from_motor_template(template_id: int, start_date: str, end_date: str, rig_id_override: Optional[int] = None) -> int:
+def generate_slots_from_motor_template(template_id: int, start_date: str, end_date: str, rig_id_override: int | None = None) -> int:
     """
     Motor V1: pattern_json structure:
     {
@@ -200,10 +201,10 @@ def generate_slots_from_motor_template(template_id: int, start_date: str, end_da
 
     d0 = _parse_date(start_date)
     d1 = _parse_date(end_date)
-    to_insert: List[tuple] = []
+    to_insert: list[tuple] = []
     for d in _daterange(d0, d1):
         wd = d.weekday()
-        ds = d.strftime('%Y-%m-%d')
+        ds = d.strftime("%Y-%m-%d")
         if ds in snu_dates:
             # Snudag: roter indekser en ekstra posisjon før generering denne dagen
             day_idx = ((day_idx) % cooks) + 1
@@ -242,7 +243,7 @@ def generate_slots_from_motor_template(template_id: int, start_date: str, end_da
         return conn.total_changes
 
 # ---------- Slots ----------
-def generate_slots_from_template(template_id: int, start_date: str, end_date: str, rig_id_override: Optional[int] = None) -> int:
+def generate_slots_from_template(template_id: int, start_date: str, end_date: str, rig_id_override: int | None = None) -> int:
     """
     Generera slots från en template över ett datumintervall (inklusive end_date).
     Returnerar antal skapade slots.
@@ -262,7 +263,7 @@ def generate_slots_from_template(template_id: int, start_date: str, end_date: st
     d0 = _parse_date(start_date)
     d1 = _parse_date(end_date)
 
-    to_insert: List[tuple] = []
+    to_insert: list[tuple] = []
     for d in _daterange(d0, d1):
         wd = (d.weekday())  # måndag=0..söndag=6 (matchar vårt antagande)
         # matcha alla regler för veckodagen
@@ -303,14 +304,14 @@ def generate_slots_from_template(template_id: int, start_date: str, end_date: st
         return conn.total_changes
 
 def list_slots(*,
-               template_id: Optional[int] = None,
-               rig_id: Optional[int] = None,
-               status: Optional[str] = None,
-               from_ts: Optional[str] = None,
-               to_ts: Optional[str] = None) -> List[Dict[str, Any]]:
+               template_id: int | None = None,
+               rig_id: int | None = None,
+               status: str | None = None,
+               from_ts: str | None = None,
+               to_ts: str | None = None) -> list[dict[str, Any]]:
     q = "SELECT * FROM turnus_slots"
     where = []
-    params: List[Any] = []
+    params: list[Any] = []
     if template_id is not None:
         where.append("template_id = ?")
         params.append(template_id)
@@ -395,7 +396,7 @@ def clone_slots_interval(
                 total_created += conn.total_changes
     return total_created
 
-def publish_slots(slot_ids: List[int]) -> int:
+def publish_slots(slot_ids: list[int]) -> int:
     if not slot_ids:
         return 0
     placeholders = ",".join("?" for _ in slot_ids)
@@ -406,7 +407,7 @@ def publish_slots(slot_ids: List[int]) -> int:
         )
         return conn.total_changes
 
-def delete_slots(slot_ids: List[int]) -> int:
+def delete_slots(slot_ids: list[int]) -> int:
     if not slot_ids:
         return 0
     placeholders = ",".join("?" for _ in slot_ids)
@@ -418,7 +419,7 @@ def delete_slots(slot_ids: List[int]) -> int:
         return conn.total_changes
 
 # ---------- Binding (user ↔ slot) ----------
-def bind_user_to_slot(slot_id: int, user_id: int, notes: Optional[str] = None) -> None:
+def bind_user_to_slot(slot_id: int, user_id: int, notes: str | None = None) -> None:
     """
     Unik binding per slot (enligt schema UNIQUE(slot_id)).
     Om det redan finns en binding för slot: ta bort den först och skapa ny.
@@ -437,7 +438,7 @@ def unbind_user_from_slot(slot_id: int) -> int:
         return conn.total_changes
 
 # ---------- Query för preview & view ----------
-def preview(rig_id: int, start_ts: str, end_ts: str) -> List[Dict[str, Any]]:
+def preview(rig_id: int, start_ts: str, end_ts: str) -> list[dict[str, Any]]:
         """
         Hämtar slots (alla status) i intervallet för en rigg.
         Används för /turnus/preview i Steg 6.
@@ -456,7 +457,7 @@ ORDER BY s.start_ts ASC
                 rows = conn.execute(q, (rig_id, end_ts, start_ts)).fetchall()
                 return [dict(r) for r in rows]
 
-def view(rig_id: int, start_ts: str, end_ts: str) -> List[Dict[str, Any]]:
+def view(rig_id: int, start_ts: str, end_ts: str) -> list[dict[str, Any]]:
     """
     Hämtar endast publicerade slots i intervallet för en rigg.
     Används för /turnus/view i Steg 6.
@@ -480,8 +481,8 @@ def generate_turnus_for_cooks(
     start_date: str,
     end_date: str,
     cook_names: list,
-    snu_days: Optional[List[str]] = None,
-    gap_days: Optional[List[str]] = None
+    snu_days: list[str] | None = None,
+    gap_days: list[str] | None = None
 ) -> int:
     """
     Genererar och skriver hela turnusen för 6 kockar till databasen.
@@ -500,7 +501,7 @@ def generate_turnus_for_cooks(
     slots = []
     cook_idx = 0
     for d in days:
-        ds = d.strftime('%Y-%m-%d')
+        ds = d.strftime("%Y-%m-%d")
         if ds in gap_set:
             continue  # Ingen kock denna dag
         if ds in snu_set:
@@ -531,7 +532,7 @@ def generate_turnus_for_cooks(
         return conn.total_changes
 
 # ---------- Virtuell kock-mapping ----------
-def _normalize_virtual_label(cook_label: str) -> Optional[str]:
+def _normalize_virtual_label(cook_label: str) -> str | None:
     """
     Försök tolka 'Kock 1' / 'Kokk 1' / 'kokk 1' → 'Kokk 1'.
     Returnerar None om ingen siffra hittas.
@@ -549,7 +550,7 @@ def _normalize_virtual_label(cook_label: str) -> Optional[str]:
         return None
     return f"Kokk {n}"
 
-def set_virtual_mapping(rig_id: int, mapping: Dict[str, int]) -> None:
+def set_virtual_mapping(rig_id: int, mapping: dict[str, int]) -> None:
     """
     Sätt global mapping för virtuell kocklabel → user_id per rigg.
     mapping: { 'Kokk 1': user_id, ..., 'Kokk 6': user_id }
@@ -568,12 +569,12 @@ def set_virtual_mapping(rig_id: int, mapping: Dict[str, int]) -> None:
                 (rig_id, norm, uid)
             )
 
-def get_virtual_mapping(rig_id: int) -> Dict[str, int]:
+def get_virtual_mapping(rig_id: int) -> dict[str, int]:
     with _conn() as conn:
         rows = conn.execute("SELECT label, user_id FROM turnus_virtual_map WHERE rig_id = ?", (rig_id,)).fetchall()
         return {r["label"]: r["user_id"] for r in rows}
 
-def apply_virtual_mapping(rig_id: int, start_ts: Optional[str] = None, end_ts: Optional[str] = None) -> int:
+def apply_virtual_mapping(rig_id: int, start_ts: str | None = None, end_ts: str | None = None) -> int:
     """
     Skapa bindings för slots utan binding baserat på global mapping (label → user).
     Returnerar antal skapade bindings.
@@ -582,7 +583,7 @@ def apply_virtual_mapping(rig_id: int, start_ts: Optional[str] = None, end_ts: O
     if not mapping:
         return 0
     where = ["rig_id = ?"]
-    params: List[Any] = [rig_id]
+    params: list[Any] = [rig_id]
     if start_ts:
         where.append("start_ts >= ?")
         params.append(start_ts)
@@ -618,7 +619,7 @@ def apply_virtual_mapping(rig_id: int, start_ts: Optional[str] = None, end_ts: O
 # ---------- CSV-import för turnus ----------
 def _parse_time_to_dt(d: date, t: str) -> datetime:
     """Tolka tider som '07:00', '23:00', '24:00'. 24:00 → 00:00 nästa dag."""
-    hh, mm = [int(x) for x in t.split(":")]
+    hh, mm = (int(x) for x in t.split(":"))
     if hh == 24 and mm == 0:
         # 24:00 → midnatt nästa dag
         return datetime(d.year, d.month, d.day) + timedelta(days=1)
@@ -635,8 +636,8 @@ def import_turnus_csv(csv_path: str, rig_id: int, publish: bool = False) -> int:
     Returnerar antal skapade slots.
     """
     status = "published" if publish else "planned"
-    to_insert: List[tuple] = []
-    with open(csv_path, newline='', encoding='utf-8') as f:
+    to_insert: list[tuple] = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             shift = (row.get("shift") or "").strip().lower()
@@ -688,7 +689,7 @@ def import_turnus_csv(csv_path: str, rig_id: int, publish: bool = False) -> int:
         return conn.total_changes
 
 
-def infer_motor_template_from_csv(csv_path: str, cooks: int = 6) -> Dict[str, Any]:
+def infer_motor_template_from_csv(csv_path: str, cooks: int = 6) -> dict[str, Any]:
     """
     Läs ett exempel-CSV (dag/natt) och försök härleda en motor_v1 pattern:
     - weekdays_day / weekdays_night från vilka veckodagar som förekommer
@@ -698,7 +699,7 @@ def infer_motor_template_from_csv(csv_path: str, cooks: int = 6) -> Dict[str, An
     Returnerar pattern-dict: {"type":"motor_v1","meta":{...}}
     """
     rows = []
-    with open(csv_path, newline='', encoding='utf-8') as f:
+    with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for r in reader:
             shift = (r.get("shift") or "").strip().lower()
@@ -752,7 +753,7 @@ def infer_motor_template_from_csv(csv_path: str, cooks: int = 6) -> Dict[str, An
         (st, et), _ = counter.most_common(1)[0]
         return {"start": st or default_start, "end": et or default_end}
 
-    meta: Dict[str, Any] = {
+    meta: dict[str, Any] = {
         "cooks": cooks,
         "day_time": most_common_time(day_times, "07:00", "19:00"),
         "night_time": most_common_time(night_times, "19:00", "07:00"),
@@ -825,7 +826,7 @@ def generate_turnus_6cook_simple(
             week2_days = [block_start + timedelta(days=7 + i) for i in range(7)]
 
             # Hjälp: hitta fredag (weekday==4) i respektive vecka
-            def week_friday(days: List[date]) -> Optional[date]:
+            def week_friday(days: list[date]) -> date | None:
                 for d in days:
                     if d.weekday() == 4:
                         return d
@@ -835,7 +836,7 @@ def generate_turnus_6cook_simple(
             fri2 = week_friday(week2_days)
 
             # Insert helper med dubblettskontroll
-            def insert_slot(day: date, st: str, et: str, note_extra: Optional[str] = None):
+            def insert_slot(day: date, st: str, et: str, note_extra: str | None = None):
                 start_dt = _parse_time_to_dt(day, st)
                 end_dt = _parse_time_to_dt(day, et)
                 if end_dt <= start_dt:

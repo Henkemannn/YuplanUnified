@@ -1,5 +1,6 @@
 import rotation
 
+
 def test_template_and_slot_generation(tmp_db_path):
     # Skapa template: vardagar dagpass, helg nattpass
     tmpl_id = rotation.create_template(

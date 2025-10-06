@@ -1,91 +1,149 @@
 import pytest
 from flask import Flask
-from core.app_factory import create_app
-from core.db import get_session
-from core.models import Tenant, User, Task
-from werkzeug.security import generate_password_hash
 
-@pytest.fixture()
+from core.app_factory import create_app
+
+
+@pytest.fixture(scope="module")
 def app():
-    app = create_app({"TESTING": True, "SECRET_KEY": "test"})
-    return app
+    return create_app({"TESTING": True, "SECRET_KEY": "test"})
+
 
 @pytest.fixture()
 def client(app: Flask):
     return app.test_client()
 
+
 @pytest.fixture()
-def seeded_users():
-    db = get_session()
-    try:
-        tenant = db.query(Tenant).first()
-        if not tenant:
-            tenant = Tenant(name='T1')
-            db.add(tenant); db.commit(); db.refresh(tenant)
-        admin = User(tenant_id=tenant.id, email='admin2@example.com', password_hash=generate_password_hash('pw'), role='admin', unit_id=None)
-        cook = User(tenant_id=tenant.id, email='cook2@example.com', password_hash=generate_password_hash('pw'), role='cook', unit_id=None)
-        db.add_all([admin, cook]); db.commit(); db.refresh(admin); db.refresh(cook)
-        return {'tenant': tenant, 'admin': admin, 'cook': cook}
-    finally:
-        db.close()
-
-def login(client, email, password='pw'):
-    return client.post('/auth/login', json={'email': email, 'password': password})
+def auth_session(client):
+    """Lightweight helper to set session-like context.
+    Assumes app uses cookie-based session; we simulate via test client context.
+    """
+    def _login(role: str = "admin", tenant_id: int = 1, user_id: int = 100):
+        with client.session_transaction() as sess:  # type: ignore[attr-defined]
+            sess["role"] = role
+            sess["tenant_id"] = tenant_id
+            sess["user_id"] = user_id
+    return _login
 
 
-def test_tasks_crud_and_private_permissions(client, seeded_users):
-    # login as admin
-    rv = login(client, 'admin2@example.com')
-    assert rv.status_code == 200
-    # create public task
-    rv = client.post('/tasks/', json={'title': 'Chop onions', 'task_type': 'prep'})
-    assert rv.status_code == 201
-    public_task = rv.get_json()['task']
-    # create private task
-    rv = client.post('/tasks/', json={'title': 'Secret marinade', 'private_flag': True})
-    assert rv.status_code == 201
-    private_task = rv.get_json()['task']
+# GIVEN: authenticated session for tenant 1, role "admin"
+# WHEN: creating a task with title
+# THEN: TaskCreateResponse shape with ok True and int task_id
+def test_create_task_happy(client, auth_session):
+    auth_session(role="admin", tenant_id=1, user_id=101)
+    resp = client.post("/tasks/", json={"title": "Prep menu", "assignee": "alice"})
+    assert resp.status_code in (200, 201)
+    body = resp.get_json()
+    assert body["ok"] is True
+    assert isinstance(body.get("task_id"), int)
 
-    # list tasks as admin -> see both
-    rv = client.get('/tasks/')
-    data = rv.get_json()
-    ids = {t['id'] for t in data['tasks']}
-    assert public_task['id'] in ids and private_task['id'] in ids
 
-    # logout and login as cook
-    client.post('/auth/logout')
-    rv = login(client, 'cook2@example.com')
-    assert rv.status_code == 200
+# GIVEN: at least one task exists in tenant 1
+# WHEN: listing tasks
+# THEN: TaskListResponse and contains TaskSummary fields
+def test_list_tasks_happy(client, auth_session):
+    auth_session(role="admin", tenant_id=1, user_id=102)
+    client.post("/tasks/", json={"title": "Inventory"})
+    resp = client.get("/tasks/")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is True
+    tasks = body.get("tasks")
+    assert isinstance(tasks, list) and tasks
+    t = tasks[0]
+    for key in ("id", "title", "status", "owner"):
+        assert key in t
 
-    # list tasks as non-owner cook (should not see private)
-    rv = client.get('/tasks/')
-    data = rv.get_json()
-    ids = {t['id'] for t in data['tasks']}
-    assert public_task['id'] in ids
-    assert private_task['id'] not in ids
 
-    # attempt update private task (should fail)
-    rv = client.put(f"/tasks/{private_task['id']}", json={'title': 'Hack'})
-    assert rv.status_code == 403
+# GIVEN: missing title
+# WHEN: creating task without title
+# THEN: ErrorResponse
+def test_create_task_missing_title(client, auth_session):
+    auth_session(role="admin", tenant_id=1, user_id=103)
+    resp = client.post("/tasks/", json={})
+    assert resp.status_code in (400, 422)
+    body = resp.get_json()
+    assert body["ok"] is False and "error" in body
 
-    # update public task (allowed? not private -> allow)
-    rv = client.put(f"/tasks/{public_task['id']}", json={'done': True})
-    # For simplicity current rule: non-owner can update if not private (no explicit owner check) -> allowed
-    assert rv.status_code == 200
-    assert rv.get_json()['task']['done'] is True
 
-    # delete private task (should fail)
-    rv = client.delete(f"/tasks/{private_task['id']}")
-    assert rv.status_code == 403
+# GIVEN: a valid task
+# WHEN: updating with invalid status
+# THEN: ErrorResponse 400/422
+@pytest.mark.parametrize("bad", ["", "invalid", "TODO", None])
+def test_update_task_invalid_status(client, auth_session, bad):
+    auth_session(role="admin", tenant_id=1, user_id=104)
+    tid = client.post("/tasks/", json={"title": "X"}).get_json()["task_id"]
+    resp = client.patch(f"/tasks/{tid}", json={"status": bad})
+    assert resp.status_code in (400, 422)
+    body = resp.get_json()
+    assert body["ok"] is False
 
-    # login back as admin and delete
-    client.post('/auth/logout')
-    rv = login(client, 'admin2@example.com')
-    assert rv.status_code == 200
-    rv = client.delete(f"/tasks/{public_task['id']}")
-    assert rv.status_code == 200
-    # ensure deletion
-    rv = client.get('/tasks/')
-    ids_after = {t['id'] for t in rv.get_json()['tasks']}
-    assert public_task['id'] not in ids_after
+
+# GIVEN: task belongs to tenant 1
+# WHEN: user from tenant 999 tries to update
+# THEN: 403
+def test_update_task_wrong_tenant_forbidden(client, auth_session):
+    auth_session(role="admin", tenant_id=1, user_id=105)
+    tid = client.post("/tasks/", json={"title": "X"}).get_json()["task_id"]
+    # switch tenant context
+    auth_session(role="admin", tenant_id=999, user_id=9999)
+    resp = client.patch(f"/tasks/{tid}", json={"status": "doing"})
+    assert resp.status_code == 403
+    body = resp.get_json()
+    assert body["ok"] is False
+
+
+# GIVEN: viewer role lacks permission
+# WHEN: viewer tries to update task
+# THEN: 403
+def test_update_task_role_forbidden(client, auth_session):
+    auth_session(role="admin", tenant_id=1, user_id=106)
+    tid = client.post("/tasks/", json={"title": "Y"}).get_json()["task_id"]
+    auth_session(role="viewer", tenant_id=1, user_id=200)
+    resp = client.patch(f"/tasks/{tid}", json={"status": "done"})
+    assert resp.status_code == 403
+    body = resp.get_json()
+    assert body["ok"] is False
+
+
+# NEW: unknown task id returns not_found envelope
+def test_update_unknown_task_not_found(client, auth_session):
+    auth_session(role="admin", tenant_id=1, user_id=300)
+    resp = client.patch("/tasks/999999", json={"status": "done"})
+    assert resp.status_code == 404
+    body = resp.get_json()
+    assert body["ok"] is False and body.get("error") == "not_found"
+
+
+# NEW: tenant isolation list (tenant B cannot see tenant A tasks)
+def test_list_tenant_isolation(client, auth_session):
+    auth_session(role="admin", tenant_id=10, user_id=400)
+    client.post("/tasks/", json={"title": "A-only"})
+    auth_session(role="admin", tenant_id=11, user_id=401)
+    resp = client.get("/tasks/")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is True
+    titles = {t["title"] for t in body.get("tasks", [])}
+    assert "A-only" not in titles
+
+
+# NEW: role create forbidden (viewer cannot POST)
+def test_create_task_role_forbidden(client, auth_session):
+    auth_session(role="viewer", tenant_id=1, user_id=500)
+    resp = client.post("/tasks/", json={"title": "Z"})
+    assert resp.status_code == 403
+    body = resp.get_json()
+    assert body["ok"] is False and body.get("error") == "forbidden"
+
+
+# NEW: bad status type (int) -> validation error
+def test_update_task_bad_status_type(client, auth_session):
+    auth_session(role="admin", tenant_id=1, user_id=600)
+    tid = client.post("/tasks/", json={"title": "TypeTest"}).get_json()["task_id"]
+    resp = client.patch(f"/tasks/{tid}", json={"status": 123})
+    assert resp.status_code in (400, 422)
+    body = resp.get_json()
+    assert body["ok"] is False
 

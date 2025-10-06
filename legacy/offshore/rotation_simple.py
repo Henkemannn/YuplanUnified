@@ -4,10 +4,10 @@ Generates slots exactly per business rules; no templates, no inference.
 """
 from __future__ import annotations
 
+import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import List, Iterable, Optional
-import sqlite3
 
 
 def _iso(dt: datetime) -> str:
@@ -19,14 +19,14 @@ class Slot:
     start_ts: str   # "YYYY-MM-DDTHH:MM"
     end_ts: str     # "YYYY-MM-DDTHH:MM"
     role: str       # e.g., "Kokk 1"
-    note: Optional[str] = None
+    note: str | None = None
 
 
 def _parse_date(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()
 
 
-def generate_two_week_block_for_cook(start_friday: str, cook_label: str) -> List[Slot]:
+def generate_two_week_block_for_cook(start_friday: str, cook_label: str) -> list[Slot]:
     """
     Genererar EXAKT 14 dagar enligt reglerna:
     - Dag 1 (fre): 09–15 (snu_till_natt), 23–07 (natt)
@@ -36,7 +36,7 @@ def generate_two_week_block_for_cook(start_friday: str, cook_label: str) -> List
     Retur: list[Slot]
     """
     start = _parse_date(start_friday)
-    out: List[Slot] = []
+    out: list[Slot] = []
     # Dag 1
     d1 = start
     out.append(Slot(_iso(datetime(d1.year, d1.month, d1.day, 9, 0)), _iso(datetime(d1.year, d1.month, d1.day, 15, 0)), cook_label, "snu_till_natt"))
@@ -58,7 +58,7 @@ def generate_two_week_block_for_cook(start_friday: str, cook_label: str) -> List
     return out
 
 
-def generate_baseline_schedule_6_cooks(start_friday: str, weeks: int = 6) -> List[Slot]:
+def generate_baseline_schedule_6_cooks(start_friday: str, weeks: int = 6) -> list[Slot]:
     """
     Kedjar 6 kockar (Kokk 1..6) – varje vecka startar ett nytt 14-dagars block för nästa kock.
     - start_friday + 7*w = start för kock n (n = w%6 + 1)
@@ -66,7 +66,7 @@ def generate_baseline_schedule_6_cooks(start_friday: str, weeks: int = 6) -> Lis
     Retur: list[Slot]
     """
     base = _parse_date(start_friday)
-    all_slots: List[Slot] = []
+    all_slots: list[Slot] = []
     for w in range(weeks):
         cook_n = (w % 6) + 1
         cook_label = f"Kokk {cook_n}"

@@ -1,0 +1,111 @@
+name: Release OpenAPI Changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch to commit CHANGELOG update to'
+        required: true
+        default: 'main'
+      commit_message:
+        description: 'Commit message'
+        required: true
+        default: 'docs(changelog): prepend OpenAPI changes snippet'
+      force_fallback:
+        description: 'Force local generation (skip artifact download)'
+        required: false
+        default: 'false'
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_branch || github.ref_name }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # 1) Try to download existing extras artifact (non-fatal on failure)
+      - name: Download OpenAPI extras artifact
+        id: download_extras
+        if: ${{ github.event.inputs.force_fallback != 'true' }}
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: openapi.yml
+          workflow_conclusion: success
+          branch: ${{ github.event.inputs.target_branch || 'main' }}
+          name: openapi-extras
+          path: /tmp/openapi-extras
+
+      - name: Decide artifact vs fallback
+        id: route
+        run: |
+          if [ -s /tmp/openapi-extras/openapi-changelog.md ]; then
+            echo "path=artifact" >> $GITHUB_OUTPUT
+            echo "Using artifact from previous OpenAPI run."
+          else
+            echo "path=fallback" >> $GITHUB_OUTPUT
+            echo "OpenAPI extras artifact saknas – kommer att generera changelog lokalt."
+          fi
+
+      # 2) Fallback path: generate changelog locally if artifact missing
+      - name: "Fallback: generate changelog on-the-fly"
+        if: steps.route.outputs.path == 'fallback'
+        env:
+          FLASK_ENV: production
+        run: |
+          echo "OpenAPI extras artifact saknas – genererar changelog lokalt."
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install openapi-spec-validator requests
+          nohup python run.py >/tmp/app.log 2>&1 &
+          echo $! > /tmp/app.pid
+          for i in {1..90}; do
+            if curl -fsS http://127.0.0.1:5000/health || curl -fsS http://127.0.0.1:5000/; then
+              echo "App is up"; break; fi; sleep 1; done
+          curl -fsS http://127.0.0.1:5000/openapi.json > /tmp/openapi.json
+          if command -v jq >/dev/null 2>&1; then jq -S . /tmp/openapi.json > /tmp/openapi.sorted.json; else python -c "import json,sys;spec=json.load(open('/tmp/openapi.json','r',encoding='utf-8'));open('/tmp/openapi.sorted.json','w',encoding='utf-8').write(json.dumps(spec,sort_keys=True,ensure_ascii=False,indent=2))"; fi
+          python scripts/openapi_diff.py specs/openapi.baseline.json /tmp/openapi.sorted.json --json-report /tmp/openapi-diff.json || true
+          python scripts/changelog_from_diff.py /tmp/openapi-diff.json /tmp/openapi-changelog.md
+          kill "$(cat /tmp/app.pid)" || true
+
+      # 3) Prepare snippet (from artifact if present, else fallback)
+      - name: Prepare snippet
+        run: |
+          if [ "${{ steps.route.outputs.path }}" = "artifact" ]; then
+            SNIPPET=/tmp/openapi-extras/openapi-changelog.md
+          else
+            SNIPPET=/tmp/openapi-changelog.md
+          fi
+          test -s "$SNIPPET" || (echo "Ingen changelog-snut hittades" && exit 1)
+          touch CHANGELOG.md
+          cp CHANGELOG.md /tmp/CHANGELOG.prev || true
+          cat "$SNIPPET" /tmp/CHANGELOG.prev > CHANGELOG.md
+          echo "Using snippet: $SNIPPET (route=${{ steps.route.outputs.path }})"
+
+      - name: Set commit message
+        id: msg
+        run: |
+          if [ -n "${{ github.event.inputs.commit_message }}" ]; then
+            echo "message=${{ github.event.inputs.commit_message }}" >> $GITHUB_OUTPUT
+          else
+            echo "message=docs(changelog): prepend OpenAPI changes snippet" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit CHANGELOG
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: ${{ steps.msg.outputs.message }}
+          branch: ${{ github.event.inputs.target_branch || github.ref_name }}
+          file_pattern: CHANGELOG.md

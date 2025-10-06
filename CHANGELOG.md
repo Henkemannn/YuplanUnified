@@ -1,3 +1,41 @@
+## Unreleased
+
+### Added
+- Strict Pocket 5: Tasks API & service under `--strict`.
+- Unified error envelope repo-brett: `{ "ok": false, "error", "message?" }`.
+- Tasks: `PATCH /tasks/{id}` (behåller `PUT` tills vidare).
+- Full OpenAPI spec restored (`/openapi.json`) covering features, notes, tasks & admin feature flags + validation test (`tests/test_openapi_full.py`).
+- Metrics: `tasks.create.legacy_cook` instrumentation (no-op backend by default) capturing tenant_id/user_id/role/canonical.
+- Metrics: Logging backend (`METRICS_BACKEND=log`) enabling INFO-level emission of metric increments.
+ - Plan: Legacy cook task creation fallback slated for deprecation (observation phase active; see DECISIONS for thresholds & phases).
+ - Flag: `allow_legacy_cook_create` introduced (default False) gating former legacy cook task create fallback.
+ - Pocket 7: Rate limiting infrastructure (Protocol + memory/redis backends, fixed-window helper, @limit decorator).
+ - Metrics: `rate_limit.hit` (tags: name, outcome, window) instrumentation in decorator.
+ - Feature flag `rate_limit_export` (opt-in per tenant) gating export CSV rate limits (5/minute per tenant:user).
+ - 429 error envelope now includes `retry_after` and `limit` fields when raised by rate limiter.
+ - Audit persistence (AuditEvent model + migration) and listing endpoint `GET /admin/audit` (paged, filters: tenant_id, event, from/to inclusive, q text search) with `X-Request-Id` response header.
+ - Structured request logging including `request_id` correlated with audit events.
+ - OpenAPI: Added `AuditView`, `PageResponse_AuditView` schemas and refined query parameter docs & header component for `X-Request-Id`.
+ - CLI: `scripts/audit_retention_cleanup.py` for retention purge (`--days`, `--dry-run`).
+ - Token Bucket limiter (memory + Redis) with per-limit `strategy` and optional `burst` in registry.
+ - Redis token bucket tests (skip automatically if Redis unavailable).
+- Import API: enhetliga svarstyper `ImportOkResponse | ImportErrorResponse` i OpenAPI.
+- Import API: `meta.format` ( "csv" | "docx" | "xlsx" ) och förtydligad `415 Unsupported Media Type`-beskrivning ("unsupported or mismatched content-type/extension").
+- Docs: markdownlint konfiguration + GitHub Action; Ruff exkluderar nu *.md.
+
+### Changed
+- SQLAlchemy 2.x: ersatt `Query.get()` med `Session.get()` i core-moduler.
+- RBAC/ägarskap: konsekvent `403` vid roll/tenant-missmatch (404 enbart för verklig frånvaro).
+- 403 error body now enriched with `required_role`; legacy inline error handlers removed in favor of centralized `core.app_errors`.
+- Tasks create: Added legacy `cook` fallback (canonical viewer blocked; raw role `cook` still allowed create). Decorator widened + in-function guard emitting `required_role: editor` for pure canonical viewers.
+ - Documented Retry-After precision (ceil seconds, min 1) unified across fixed and token bucket strategies.
+- Import CSV: tom fil/header-only är bakåtkompatibelt `200` med `ok: true`, `rows: []`, `meta.count: 0` (tidigare strikt plan föreslog 400).
+
+### Tests
+- Tasks: 13 + extra edge-tester (create/list, not_found, isolation, role, bad type, legacy done mapping).
+
+### Notes
+- TaskStatus utökad: `"todo" | "doing" | "blocked" | "done" | "cancelled"`.
 # Changelog
 
 ## [0.3.0] - 2025-09-30 (Auth Hardening & Security)
@@ -51,10 +89,55 @@
 - Next steps: expand Ruff rules, add badges, document example type error remediation, phase out ignore blocks in `mypy.ini`.
 
 ## [Unreleased]
+### Added
+- Admin write endpoints (/admin/limits POST/DELETE): optional flag-gated rate limit (`rate_limit_admin_limits_write`) default OFF; registry default `admin_limits_write` = 10 per 60s.
 ### Internal / Code Quality
 - Introduced first strict mypy pocket (`core.jwt_utils`, `core.rate_limit`, `core.audit`, `core.db`) with `strict = True` enforcement.
 - Added PIE & SIM Ruff rule groups; resolved all simplification warnings in core.
 - Added pre-commit hooks (Ruff lint+format, mypy, merge marker guard).
 - README updated with strict pocket workflow and active modules list.
  - Added second strict mypy pocket: `core.portion_recommendation_service`, `core.menu_service`, `core.service_metrics_service` (TypedDict structures for menu week view & service metrics rows; refined recommendation output typing).
+ - Added third strict mypy pocket: `core.auth`, `core.feature_flags`.
+	 - JWT payloads now explicit `AccessTokenPayload` & `RefreshTokenPayload` TypedDicts with claim validation (issuer defaulting, temporal skew handling, strict `type` enum, `nbf` guard).
+	 - Feature flags refactored to typed registry (`FlagDefinition`, `FlagState`, `FlagMode`) with idempotent `add()` supporting string shorthand; `has()` helper for app factory integration.
+	 - Expanded unit tests: JWT edge cases (missing claim, unknown type, bad signature, expired, nbf future, skew boundary) & feature flag registry behaviors (idempotent add, unknown flag error, disable/enable cycle, sorted listing).
+	 - Definition of Done checklist for typing/security PRs documented in README.
+ - Added fourth strict mypy pocket: `core.api_types`, `core.admin_api`, `core.diet_api`, `core.service_metrics_api`, `core.service_recommendation_api`.
+	 - Centralized API contracts in `core/api_types.py` (TypedDict + NewType IDs, unified ok/error envelope).
+	 - Annotated API handlers with precise union return types (Ok vs ErrorResponse) while preserving runtime JSON.
+	 - Added 8 contract smoke tests (happy + error per module) ensuring structural stability.
+
+### Importers (Pocket 8)
+- Added `core/importers` package with strict typing pocket (CSV & DOCX table ingest).
+- New modules: `base_types` (RawRow dict, NormalizedRow TypedDict, structured ErrorDetail & exceptions), `csv_importer`, `docx_table_importer`, `validate` (schema & value validation).
+- Validation: missing column, empty required value, invalid int, unexpected extra column (all aggregated into `ImportValidationError`).
+- Tests: CSV (happy, blank lines, missing column, empty value, invalid int, unicode, extra column) and DOCX (happy, empty table, missing required, library-missing fallback) with skip if `python-docx` absent.
+- mypy: Enabled `strict = True` for `core.importers.*` (excluding legacy `docx_importer` kept under ignore for now) and removed dynamic TypedDict workaround by using `dict[str,str]`.
+- Lint: Importer modules pass expanded Ruff rules (imports, UP, B, SIM, PIE) with modern typing (PEP 604 unions).
+- Pagination: Introduced unified `PageResponse` envelope for `/tasks/` and `/notes/` list endpoints with `meta {page,size,total,pages}` and query params `page,size,sort,order` (size capped at 100; defaults page=1,size=20).
+### Import API Enhancements
+- Added `/import/menu` endpoint (dry-run diff) documented in OpenAPI with `dry_run` query parameter and `meta.dry_run` boolean.
+- Extended `ImportOkResponse.meta` schema to include optional `dry_run` property.
+- Added OpenAPI test coverage for new path & schema.
+- Hardened `core.import_api` under strict mypy: unified error envelope helper `_error()`, removed ad-hoc `jsonify` duplicates, eliminated invalid `# type: ignore` usages, added precise typings for normalization pipeline and rate limit gate.
+
+### Deprecations
+- Centralized deprecation header emission via `core.deprecation.apply_deprecation`.
+- Added RFC 8594 headers for legacy alias keys `notes` and `tasks` (pagination responses now primary via `items`).
+	- Headers: `Deprecation: true`, `Sunset: Wed, 01 Jan 2026 00:00:00 GMT`, `Link: <https://example.com/docs/deprecations#notes-tasks-alias>; rel="deprecation"`, and `X-Deprecated-Alias: <comma-list>`.
+	- Telemetry metric: `deprecation.alias.emitted{endpoint,aliases}` for monitoring removal readiness.
+	- Consumers should migrate to `items` before the sunset date; alias removal tracked in DECISIONS.
+
+### Rate Limiting
+- Added per-tenant rate-limit registry (`core.limit_registry`) with resolution order tenant override → global default → fallback (5/60).
+ - Audit persistence (AuditEvent model + migration) and listing endpoint `GET /admin/audit` (paged, filters: tenant_id, event, from/to inclusive, q text search) with `X-Request-Id` response header.
+ - Structured request logging including `request_id` correlated with audit events.
+ - OpenAPI: Added `AuditView`, `PageResponse_AuditView` schemas and refined query parameter docs & header component for `X-Request-Id`.
+- Environment configuration: `FEATURE_LIMITS_JSON` (tenant:<id>:<name>) and `FEATURE_LIMITS_DEFAULTS_JSON` (global defaults).
+- Decorator `@limit` now supports implicit lookup when `quota`/`per_seconds` omitted (`use_registry=True`).
+- Metric `rate_limit.lookup{name,source}` emitted for each lookup (source ∈ tenant|default|fallback).
+- Export endpoints now fetch quotas from registry (still gated by `rate_limit_export` flag).
+- Added admin inspection endpoint `/admin/limits` returning paginated effective limits (defaults only or union with tenant overrides). Supports `tenant_id`, `name` filters and exposes `source` (tenant|default|fallback); fallback only shown for explicit name filter misses.
+- Added write endpoints: `POST /admin/limits` (upsert tenant override) and `DELETE /admin/limits` (idempotent removal). Clamps quota/per_seconds, returns mutation envelope with `updated` or `removed` flags.
+- Added audit logging for admin limits mutations (`limits_upsert`, `limits_delete`) capturing tenant_id, name, quota/per_seconds (upsert), updated/removed flag, actor_user_id, actor_role.
 

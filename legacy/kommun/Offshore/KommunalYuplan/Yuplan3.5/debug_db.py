@@ -2,7 +2,7 @@
 # Proprietary and confidential. Unauthorized copying, distribution or use is strictly prohibited.
 import sqlite3
 
-conn = sqlite3.connect('kost.db')
+conn = sqlite3.connect("kost.db")
 cursor = conn.cursor()
 
 # Kontrollera om tabellen finns
@@ -25,7 +25,7 @@ try:
             print(f"  {row}")
     else:
         print("Tabellen finns inte - skapar den nu...")
-        cursor.execute('''
+        cursor.execute("""
             CREATE TABLE veckomeny (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 vecka INTEGER NOT NULL,
@@ -33,16 +33,16 @@ try:
                 alt_typ TEXT NOT NULL,
                 menytext TEXT NOT NULL
             )
-        ''')
+        """)
         
         # Lägg till testdata
         test_data = [
-            (1, 'måndag', 'Alt1', 'Köttbullar med potatismos och lingonsylt'),
-            (1, 'måndag', 'Alt2', 'Vegetarisk lasagne med sallad'),
-            (1, 'tisdag', 'Alt1', 'Fiskgratäng med kokt potatis'),
-            (1, 'tisdag', 'Alt2', 'Kikärtscurry med ris'),
-            (1, 'onsdag', 'Alt1', 'Kyckling med ris och grönsaker'),
-            (1, 'onsdag', 'Alt2', 'Pastasallad med tomat och mozzarella'),
+            (1, "måndag", "Alt1", "Köttbullar med potatismos och lingonsylt"),
+            (1, "måndag", "Alt2", "Vegetarisk lasagne med sallad"),
+            (1, "tisdag", "Alt1", "Fiskgratäng med kokt potatis"),
+            (1, "tisdag", "Alt2", "Kikärtscurry med ris"),
+            (1, "onsdag", "Alt1", "Kyckling med ris och grönsaker"),
+            (1, "onsdag", "Alt2", "Pastasallad med tomat och mozzarella"),
         ]
         
         for data in test_data:

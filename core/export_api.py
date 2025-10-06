@@ -1,3 +1,9 @@
+"""Export endpoints (CSV) with unified role enforcement & rate limiting.
+
+Replaces legacy inline auth checks with `require_roles`; relies on central
+error handlers for 401/403. Streaming CSV responses for notes/tasks.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -6,13 +12,14 @@ from io import StringIO
 
 from flask import Blueprint, Response, request, session, stream_with_context
 
-from .auth import require_roles
+from .app_authz import require_roles
 from .db import get_session
+from .http_limits import limit
 from .models import Note, Task
 
 bp = Blueprint("export_api", __name__, url_prefix="/export")
 
-ADMIN_ROLES = ("superuser","admin")
+ADMIN_ROLES = ("editor","admin")  # editor or admin can export; adapter maps legacy roles
 
 def _tenant_id() -> int:
     tid = session.get("tenant_id")
@@ -51,7 +58,8 @@ def _csv_response(name: str, rows_iterable):
     )
 
 @bp.get("/notes.csv")
-@require_roles(*ADMIN_ROLES)
+@require_roles("editor","admin")
+@limit(name="export_notes_csv", feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
 def export_notes():
     tid = _tenant_id()
     db = get_session()
@@ -73,7 +81,8 @@ def export_notes():
         db.close()
 
 @bp.get("/tasks.csv")
-@require_roles(*ADMIN_ROLES)
+@require_roles("editor","admin")
+@limit(name="export_tasks_csv", feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
 def export_tasks():
     tid = _tenant_id()
     db = get_session()

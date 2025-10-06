@@ -1,5 +1,9 @@
 # Yuplan Unified Platform (Scaffold)
 
+[![CI](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml)
+[![OpenAPI](https://github.com/Henkemannn/YuplanUnified/actions/workflows/openapi.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/openapi.yml)
+[![markdownlint](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml)
+
 <p align="left">
   <img alt="Ruff" src="https://img.shields.io/badge/Ruff-E,F,I,B,UP,Q-success?logo=python&logoColor=white" />
   <img alt="Mypy" src="https://img.shields.io/badge/Mypy-0%20errors-brightgreen" />
@@ -7,6 +11,24 @@
 </p>
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
+
+## Versioning & Release
+We follow Semantic Versioning (SemVer):
+* MAJOR (`X.y.z`): Any breaking OpenAPI change (as detected by semantic diff rules) or removal of previously documented behavior.
+* MINOR (`x.Y.z`): Backwards-compatible additions (new paths/operations/properties/content-types, optional fields, enum expansions).
+* PATCH (`x.y.Z`): Bug fixes & non-contract internal changes.
+
+Baseline policy: `specs/openapi.baseline.json` is hard-enforced in CI (must exist – not auto-created). Update it only in the same PR as intentional contract changes. For the beta freeze we will tag the baseline at `v1.0.0-beta`.
+
+Beta readiness checklist: see `docs/v1.0-beta-checklist.md` (all items must be ✅ before cutting the beta tag).
+
+Legend (API diff status): ✅ no breaking · 🟡 additions only · ❌ breaking.
+
+Release workflow: automatically produces OpenAPI diff artifacts (`openapi-diff.txt`, `openapi-diff.json`), a changelog snippet, and a badge snippet. The release action can fall back to generating these live (`force_fallback` input) if artifacts are missing.
+
+After `v1.0.0-beta`: Further additive changes bump MINOR; any breaking change requires a MAJOR plan (`2.0.0`) unless explicitly deferred pre-GA.
+
+For the exact steps, see **[RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md)**.
 
 ## Vision
 Provide a Core domain (Menus, Diets, Attendance, Users, Tenants) with optional modules activated per customer (turnus scheduling, waste metrics, prep/freezer tasks, messaging, alt1/alt2 workflow, etc.). Superusers can enable modules on demand.
@@ -28,7 +50,7 @@ unified_platform/
 ```
 
 ## Quick Start (Dev)
-1. Create virtualenv & install deps:
+1. Create virtualenv & install deps (or use `make install` / `Install-Deps`):
    ```
    python -m venv .venv
    .venv\Scripts\activate  # Windows
@@ -40,9 +62,13 @@ unified_platform/
    alembic upgrade head
    ```
 4. Start app:
-   ```
-   python run.py
-   ```
+  ```
+  python run.py
+  # or
+  make dev
+  # or PowerShell
+  ./scripts/dev.ps1; Start-App
+  ```
 5. Visit http://localhost:5000/health
 
 ### Notes on Migrations
@@ -90,6 +116,90 @@ unified_platform/
   - `bom=1` — prepend UTF-8 BOM for Excel
 * Streaming uses generator + `yield_per` for low memory footprint.
 
+#### Feature Flag: `rate_limit_export`
+The export endpoints have an optional opt-in rate limit controlled per tenant via the `rate_limit_export` feature flag.
+
+Default: OFF (no rate limiting applied).
+
+When ON for a tenant:
+* Limit: 5 requests per rolling fixed window of 60 seconds per `(tenant_id:user_id)` bucket.
+* Token Bucket: Export endpoints are configured with token bucket defaults (burst = quota) via `FEATURE_LIMITS_DEFAULTS_JSON`; fairness on bursts while preserving same average rate.
+#### Feature Flag: `rate_limit_admin_limits_write`
+Controls optional rate limiting of admin limit mutation endpoints (`POST /admin/limits`, `DELETE /admin/limits`).
+
+Default: OFF (no throttling). When enabled for a tenant:
+* Default quota: 10 requests per 60s window (registry key `admin_limits_write`).
+* Per-tenant override supported via `FEATURE_LIMITS_JSON` using key `tenant:<id>:admin_limits_write`.
+* Registry global override via `FEATURE_LIMITS_DEFAULTS_JSON` key `admin_limits_write`.
+* Exceeding quota yields HTTP 429 with JSON:
+  ```json
+  {"ok": false, "error": "rate_limited", "message": "Rate limit exceeded for admin_limits_write", "retry_after": 42, "limit": "admin_limits_write"}
+  ```
+* Metrics emitted: `rate_limit.hit` (tags: name=admin_limits_write, outcome=allow|block, window=60) and `rate_limit.lookup` (source=fallback|default|tenant).
+
+Enable for a pilot tenant via:
+```
+POST /admin/feature_flags
+{"name": "rate_limit_admin_limits_write", "enabled": true}
+```
+
+* Exceeding the quota results in HTTP 429 with JSON body:
+  ```json
+  {"ok": false, "error": "rate_limited", "message": "Rate limit exceeded for export_notes_csv", "retry_after": 37, "limit": "export_notes_csv"}
+  ```
+  and header `Retry-After: <seconds>`.
+
+Enable via Admin API (role editor/admin allowed to manage flags):
+```
+POST /admin/feature_flags
+{"name": "rate_limit_export", "enabled": true}
+```
+Disable:
+```
+POST /admin/feature_flags
+{"name": "rate_limit_export", "enabled": false}
+```
+Operational Guidance:
+1. Turn flag ON for a pilot tenant; observe `rate_limit.hit` metrics (tags: name, outcome, window).
+2. Adjust quota in code if needed (central decorator parameter) before broad enablement.
+3. Keep flag OFF for high-volume reporting tenants until validated.
+
+### Token Bucket (fair limits, burst support)
+
+Utöver fixed window stöds token bucket per limit via registry:
+
+- `quota`: målhastighet (tokens per `per_seconds`)
+- `per_seconds`: påfyllningsintervall
+- `burst` (valfritt): kapacitet; default = `quota`
+- `strategy`: `"token_bucket"` eller `"fixed"` (default via env/global)
+
+Exempel (defaults via env):
+```json
+FEATURE_LIMITS_DEFAULTS_JSON='{
+  "export_csv": {"quota": 5, "per_seconds": 60, "burst": 5, "strategy": "token_bucket"}
+}'
+```
+
+#### Retry-After semantik
+
+Svar vid block inkluderar header `Retry-After` och JSON-fält `retry_after`.
+
+Precision: heltal i sekunder, avrundat uppåt (ceil). Minst 1.
+
+Gäller både fixed och token_bucket.
+
+#### Metrics
+
+`rate_limit.lookup` taggar: `name`, `source=tenant|default|fallback`, `strategy=fixed|token_bucket`
+
+`rate_limit.hit` taggar: `name`, `outcome=allow|block`, `window` (sekunder), `strategy`.
+
+#### Redis-backend
+
+Token bucket finns för memory (test/dev) och Redis (prod).
+
+Tester för Redis skip:ar automatiskt om Redis inte är tillgängligt.
+
 ### Continuous Integration (CI)
 The repository includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs on pushes and pull requests targeting `main` / `master`.
 
@@ -107,6 +217,7 @@ Guidelines:
 * Consider adding coverage / linting (ruff, mypy) in future steps.
 
 ## Developer Tooling: Linting & Typing
+See also consumer integration guidance in `docs/CONSUMERS.md` and the developer convenience targets below.
 Quality gates are being phased in. Keep the repo green (no new warnings) and avoid expanding ignore lists.
 
 ### Ruff (Python Linter)
@@ -167,6 +278,28 @@ PR Checklist (developer self-check):
 | Lint autofix | `ruff check . --fix` |
 | Type check (core) | `mypy core modules` |
 | Both (approx CI) | Run lint then type commands above |
+| Fetch OpenAPI (Makefile) | `make openapi` |
+| Smoke test menu import | `make smoke` |
+| Full local CI pass | `make ci` |
+| Release readiness | `make ready` |
+
+### Makefile & PowerShell Helpers
+For POSIX systems a `Makefile` provides shortcuts: `make install dev test lint openapi smoke ci`.
+
+For Windows PowerShell use the script `scripts/dev.ps1`:
+```
+./scripts/dev.ps1; Install-Deps; Start-App
+./scripts/dev.ps1; Lint-App; Test-App
+./scripts/dev.ps1; Fetch-OpenAPI; Smoke
+./scripts/dev.ps1; python scripts/check_release_ready.py  # release readiness
+```
+
+### API Consumers Guide
+Client developers should start with `docs/CONSUMERS.md` (base URL, auth, error model, rate limit handling, contract stability rules, example import flow).
+
+### Contributing
+
+Ruff körs inte på Markdown-filer. För dokumentationslint använder vi markdownlint (se `.markdownlint.json` och GitHub Action `markdownlint`).
 
 If you add dependencies that affect typing (e.g., new third-party libs), ensure stub packages are installed (`types-<package>` where needed) or add precise `TypedDict` / `Protocol` shims locally.
 
@@ -186,6 +319,14 @@ Hooks configured:
 
 CI mirrors these checks (lint-type workflow). A green `pre-commit run -a` should guarantee passing lint/type steps in PR.
 
+### Release Readiness (Local Gate)
+Before tagging a beta/GA release run:
+```
+make openapi   # ensure fresh spec
+make ready     # format+lint+tests+spectral (if installed)+semantic diff+checklist
+```
+The script fails fast if baseline missing, breaking diff detected, or checklist has open items.
+
 ### Strict Typing Pockets
 We adopt full `strict = True` mypy gradually via “pockets” — a focused set of modules that must remain 0-error under strict settings. This avoids boiling the ocean while guaranteeing steady quality expansion.
 
@@ -200,6 +341,22 @@ Pocket 2 (service layer expansion):
  - `core.portion_recommendation_service`
  - `core.menu_service`
  - `core.service_metrics_service`
+
+Pocket 3 (auth & flags hardening):
+ - `core.auth`
+ - `core.feature_flags`
+ - Token payload `AccessTokenPayload` / `RefreshTokenPayload` with explicit required claims & issuer literal.
+ - Feature flag registry now typed (`FlagDefinition`, `FlagState`) with safe idempotent `add()` supporting string shorthand.
+
+Pocket 4 (API handlers):
+ - `core.api_types` (central TypedDict contracts, NewType IDs)
+ - `core.admin_api`
+ - `core.diet_api`
+ - `core.service_metrics_api`
+ - `core.service_recommendation_api`
+ - Unified ok/error envelope (`{"ok": False, "error": code, "message"?: str}`) applied consistently.
+ 
+ Pocket 5 (current): Tasks API + new tasks service (strict) – adds Task* contracts, unified error envelope (`ok: False` on errors).
 
 Expansion workflow (for a new module, e.g. `core.menu_service`):
 1. Remove (or avoid adding) its `ignore_errors` block in `mypy.ini`.
@@ -216,6 +373,17 @@ Guidelines:
 * If a dependency is untyped and noisy, isolate usage behind a thin, typed wrapper instead of sprinkling `# type: ignore`.
 
 Tracking: Each added pocket should update this list and optionally a CHANGELOG entry under “Internal”.
+
+### Definition of Done (Typing / Quality PRs)
+For any PR expanding strict typing or touching security-critical code:
+1. All modified modules pass `mypy` (0 new errors) and strict pocket modules remain clean.
+2. `ruff check .` introduces no new violations (run with `--fix` locally first).
+3. New data structures expressed via `TypedDict` / `Literal` where shape or finite domain matters.
+4. Negative path tests added for security & edge conditions (e.g., missing JWT claims, expired/nbf, unknown feature flag).
+5. README & CHANGELOG updated when adding/removing a strict pocket or altering token / flag semantics.
+6. PR description lists which pocket(s) affected and summarizes decisions (link or add entry in `DECISIONS.md`).
+7. No unexplained `# type: ignore`; any remaining includes rationale comment.
+8. Fast pocket-only type workflow (GH Action) green before requesting review.
 
 ---
 
@@ -238,6 +406,7 @@ Current registry (secure by default – unknown flags are False):
 - module.municipal, module.offshore
 - turnus, waste.metrics, prep.tasks, freezer.tasks, messaging
 - export.docx, import.docx
+- rate_limit_admin_limits_write (flag-gated admin limits write throttle)
 - openapi_ui (enables Swagger UI at /docs/)
 
 ## Design Principles
@@ -259,6 +428,59 @@ POST /features/set { "name": "openapi_ui", "enabled": true }
 
 The OpenAPI spec is currently a hand-maintained subset; extend `openapi.json` generation in `core/app_factory.py` for new endpoints.
 See docs/ for full architecture, data model, migration plan, module definitions, roadmap, deployment guidance.
+
+### OpenAPI Baseline & Semantic Diff
+To guard against accidental breaking API changes, CI enforces a committed baseline at `specs/openapi.baseline.json` (HARD policy – build fails if missing) and performs a semantic diff:
+
+Rules treated as breaking (CI fail):
+* Removing a path
+* Removing an operation (method) from an existing path
+* Removing a response status code for an operation
+* Removing a request body or narrowing its content-types
+* Removing a response content-type
+* Schema changes that remove properties, remove enum values, add new required properties, change `$ref`, change type
+
+Additions (new paths, operations, responses, request bodies) are allowed and reported as non-breaking.
+
+Workflow behavior:
+* Step normalizes current spec (sorted JSON) then compares to baseline via `scripts/openapi_diff.py`.
+* Missing baseline now fails the workflow (no silent auto-create). This prevents accidental drift being “blessed” implicitly.
+* Subsequent breaking diffs cause exit code 1 and fail the job.
+
+Breakage rules (treated as breaking and fail the job):
+
+* Removal of paths, operations, responses, request bodies
+* Removal of response or request content-types (content-type narrowing)
+* Enum value removals
+* Property removals or new required properties
+* Type or $ref changes
+* `format` changes (any change, considered narrowing)
+* Array: `minItems` increase, `maxItems` decrease
+* String: introduction or increase of `minLength`, decrease or introduction of `maxLength`, addition or change of `pattern`
+
+Widenings allowed (examples): removing `pattern`, increasing `maxLength`, decreasing `minLength`, adding new optional properties, adding enum values, adding new paths/operations/responses/content-types.
+
+Updating the baseline intentionally:
+1. Implement your API change and update spec generation.
+2. Regenerate spec locally:
+  ```bash
+  curl -fsS http://127.0.0.1:5000/openapi.json | jq -S . > specs/openapi.baseline.json
+  ```
+  (Without `jq` you can pretty-print using Python: `python -c "import json,sys;import urllib.request as u;spec=json.load(u.urlopen('http://127.0.0.1:5000/openapi.json'));open('specs/openapi.baseline.json','w',encoding='utf-8').write(json.dumps(spec,sort_keys=True,ensure_ascii=False,indent=2))"`)
+3. Commit the updated baseline in the same PR as the change with a clear message (e.g. `chore(openapi): update baseline for new /foo endpoints`). Provide a brief rationale if any breaking flags were accepted (rare – implies version negotiation or major bump).
+
+**Artifacts:** CI laddar upp både en mänskligt läsbar diff (`openapi-diff.txt`) och en maskinläsbar JSON (`openapi-diff.json`). Den senare kan användas av PR-botar eller dashboards för att automatiskt kommentera breaking/additive förändringar.
+
+**PR Labels:** Pull Requests får automatiskt label `api:breaking` vid breaking ändringar eller `api:changed` vid enbart additions. Stabil diff (`ok` utan additions) ger ingen `api:*` label alls (renare label-lista).
+
+**Legend:** ✅ no breaking · 🟡 additions only · ❌ breaking
+
+**Release-hjälp:** CI producerar ytterligare artefakter:
+* `openapi-extras/openapi-changelog.md` – färdig sektion att klistra in högst upp i `CHANGELOG.md` vid release.
+* `openapi-extras/api-badge.md` – en badge-rad som kan läggas till i README eller PR-beskrivning för att signalera aktuell API-status.
+
+Semantic diff script location: `scripts/openapi_diff.py` (pure stdlib, no dependencies). Extend it for deeper checks (e.g. minItems tightening) if needed.
+
 
 ## Error Model
 All API error responses share a compact, stable JSON envelope:
@@ -302,6 +524,252 @@ Minimal How-To:
 * Inspect status in list responses under `task.status`; ignore `task.done` except for backward compatibility.
 
 Refer to `/openapi.json` examples for concrete request/response bodies.
+
+## Pagination
+List endpoints now return a unified pagination envelope:
+
+```jsonc
+{
+  "ok": true,
+  "items": [...],
+  "meta": { "page": 1, "size": 20, "total": 137, "pages": 7 }
+}
+```
+
+Query params:
+| Name | Default | Min | Max | Notes |
+|------|---------|-----|-----|-------|
+| `page` | 1 | 1 | - | 1-based index |
+| `size` | 20 | 1 | 100 | >100 is clamped to 100 |
+| `sort` | (none) | - | - | Reserved for future field sorting |
+| `order` | `asc` | - | - | `asc`/`desc`; ignored until `sort` is enabled |
+
+Stable ordering (current implementation) uses `created_at DESC, id DESC` internally to avoid duplication or gaps when new rows arrive between pages. Invalid numeric inputs produce a `400` error envelope (`{"ok": false, "error": "bad_request", ...}`). Invalid `order` values fallback to `asc`.
+
+Future extensions may add cursor-based pagination once datasets grow large; current offset approach is sufficient for MVP scale.
+
+Deprecation (alias keys): Responses still include legacy `notes` / `tasks` top-level arrays for backward compatibility, but these are marked with deprecation headers (`Deprecation: true`, `Sunset: Wed, 01 Jan 2026 00:00:00 GMT`). Clients should migrate to `items` before the sunset date.
+
+Centralization (2025-10-02): Deprecation headers are now applied via `core.deprecation.apply_deprecation`, which sets RFC 8594-compliant `Deprecation`, `Sunset`, `Link` (rel="deprecation") plus an explicit `X-Deprecated-Alias` header enumerating emitted legacy keys. A telemetry metric `deprecation.alias.emitted` (tags: `endpoint`, `aliases`) is incremented to track client migration velocity. Removing aliases after the sunset simply becomes a one-line change (stop passing alias list) with observability to ensure low residual usage first.
+
+## Rate-limit registry (per tenant)
+
+Yuplan kan läsa kvotinställningar per **tenant** och **limit-namn** från konfig.
+Resolution order:
+1) Tenant override: `FEATURE_LIMITS_JSON` nycklar `tenant:<id>:<name>`
+2) Globala defaults: `FEATURE_LIMITS_DEFAULTS_JSON` nycklar `<name>`
+3) Safe fallback: `quota=5`, `per_seconds=60`
+
+**Schema (JSON):**
+- `quota` (int ≥ 1)
+- `per_seconds` (int 1–86400)
+
+**Exempel**
+```json
+FEATURE_LIMITS_JSON='{
+  "tenant:42:export_csv": {"quota": 10, "per_seconds": 60}
+}'
+FEATURE_LIMITS_DEFAULTS_JSON='{
+  "export_csv": {"quota": 5, "per_seconds": 60}
+}'
+```
+
+**Användning i kod**
+Dekoratorn hämtar registry-värden när quota/per_seconds inte anges:
+
+```python
+@limit(name="export_csv", key_func=user_bucket, feature_flag="rate_limit_export", use_registry=True)
+def export_notes_csv(): ...
+```
+
+**Telemetri**
+Varje uppslag skickar `rate_limit.lookup` med taggen `source=tenant|default|fallback`.
+
+### Admin inspection endpoint `/admin/limits`
+
+Ger insyn i effektiva gränser.
+
+Query-parametrar:
+- `tenant_id` (int, optional): Om satt returneras union av globala defaults och tenant overrides. Utan `tenant_id` visas endast globala defaults.
+- `name` (str, optional): Filtrerar till ett specifikt limit-namn. Om kombinerat med `tenant_id` och namnet saknas i både overrides och defaults exponeras en rad med `source=fallback` (för att visa vilken fallback som skulle gälla). Utan träff och utan `tenant_id` returneras tom lista (fallback brus filtreras bort).
+- `page`, `size`: Standardpaginering.
+
+Svar:
+```jsonc
+{
+  "ok": true,
+  "items": [ { "name": "export_csv", "quota": 5, "per_seconds": 60, "source": "default" } ],
+  "meta": { "page": 1, "size": 20, "total": 1, "pages": 1 }
+}
+```
+
+`source` värden:
+- `tenant`: Explicit override för given tenant
+- `default`: Global default
+- `fallback`: Safe baseline (visas endast vid explicit name-filter + tenant_id när inga andra träffar finns)
+
+Användningsfall: felsöka oväntade 429-svar, verifiera rollout av nya limits, samt revision av overrides.
+
+### Audit Persistence & Listing
+
+Audit-händelser skrivs persistenta i tabellen `audit_events` via `core.audit.log_event` (kallas av admin-limit write endpoints m.fl.).
+
+Minimalt fältset per event:
+| Field | Typ | Beskrivning |
+|-------|-----|-------------|
+| ts | datetime (UTC) | Tidsstämpel för event (servergenererad). |
+| tenant_id | int? | Tillhörande tenant (kan vara null för globala händelser). |
+| actor_user_id | int? | Användar-id (om session finns). |
+| actor_role | str | Normaliserad roll (admin, viewer, etc). |
+| event | str | Event-nyckel (t.ex. `limits_upsert`). |
+| payload | object? | Godtycklig JSON (limit_name, quota, diffs etc). |
+| request_id | str? | Korrelations-id (kopplas även till structured log). |
+
+Endpoint (admin-roll krävs):
+```
+GET /admin/audit
+```
+Query-parametrar (alla optional):
+| Param | Typ | Default | Notering |
+|-------|-----|---------|----------|
+| tenant_id | int | - | Filtrera på tenant. |
+| event | string | - | Filtrera exakt event-namn. |
+| from | RFC3339 datetime | - | Inklusiv nedre gräns (ts >= from). |
+| to | RFC3339 datetime | - | Inklusiv övre gräns (ts <= to). |
+| q | string | - | Case-insensitive partial match mot serialiserat payload. |
+| page | int | 1 | Standardpaginering. |
+| size | int | 20 | Max 100 (clamp). |
+
+Svar (PageResponse<AuditView>):
+```jsonc
+{
+  "ok": true,
+  "items": [
+    { "id": 12, "ts": "2025-10-05T12:02:00Z", "tenant_id": 5, "actor_role": "admin", "event": "limits_upsert", "payload": {"limit_name": "exp", "quota": 9}, "request_id": "..." }
+  ],
+  "meta": { "page": 1, "size": 20, "total": 137, "pages": 7 }
+}
+```
+Headers: `X-Request-Id` (echo eller genererad) för log-korrelation.
+
+Retention:
+* Konfig via env `AUDIT_RETENTION_DAYS` (default 90) – purge-funktion finns i `AuditRepo.purge_older_than(days)` (schemalägg extern körning/cron).
+* Indexering: `(tenant_id, ts)` och `(event, ts)` för filter + tidsintervall.
+
+Structured Logging:
+* Varje HTTP-respons loggas med JSON-linje: `{request_id, tenant_id, user_id, method, path, status, duration_ms}`.
+* `request_id` kopplas till audit events för end-to-end spårbarhet.
+
+Exempel flow:
+1. Admin gör `POST /admin/limits` → audit event `limits_upsert` skrivs.
+2. `GET /admin/audit?event=limits_upsert` listar händelsen.
+3. Support använder `X-Request-Id` för att hitta motsvarande access-logg.
+
+Observability:
+* Eventvolym och retention övervakas separat (TODO: framtida metrics `audit.insert.count`).
+* Fel vid skrivning fångas tyst (audit ska ej stoppa primär kodväg) – logga separat i framtida hårdare läge.
+
+### Operations: Audit Retention CLI
+
+Ett enkelt skript för att manuellt eller via cron städa gamla audit events.
+
+Körning:
+```
+python scripts/audit_retention_cleanup.py --days 90 --dry-run
+python scripts/audit_retention_cleanup.py --days 90
+```
+
+Argument:
+| Flag | Beskrivning |
+|------|-------------|
+| `--days <int>` | Retention-fönster i dagar (default `AUDIT_RETENTION_DAYS` eller 90). |
+| `--dry-run` | Räknar kandidater utan att radera. |
+
+Output exempel:
+```
+[DRY-RUN] would delete 42 audit events older than 2025-07-07T12:34:56.123456+00:00
+deleted 42 audit events older than 2025-07-07T12:34:56.123456+00:00
+```
+
+Exit codes:
+| Kod | Betydelse |
+|-----|-----------|
+| 0 | OK / lyckad körning |
+| 1 | Oväntat fel (exception) |
+| 2 | Ogiltigt argument (t.ex. `--days < 1`) |
+
+Cron-exempel (daglig 02:15 UTC):
+```
+15 2 * * * /usr/bin/python /opt/app/scripts/audit_retention_cleanup.py --days 90 >> /var/log/app/audit_retention.log 2>&1
+```
+
+Rekommendation: Kör med `--dry-run` först i staging och kontrollera volym innan första riktiga purge i prod.
+
+
+### Admin write endpoints (overrides)
+
+Skapa/uppdatera eller ta bort tenant-specifika overrides:
+
+| Method | Path | Body | Effekt |
+|--------|------|------|--------|
+| POST | `/admin/limits` | `{tenant_id,name,quota,per_seconds}` | Upsert override (clamp: quota≥1, 1≤per_seconds≤86400) |
+| DELETE | `/admin/limits` | `{tenant_id,name}` | Idempotent borttagning av override |
+
+Svar (POST):
+```jsonc
+{ "ok": true, "item": {"tenant_id": 7, "name": "export_csv", "quota": 12, "per_seconds": 60, "source": "tenant"}, "updated": true }
+```
+
+Svar (DELETE):
+```jsonc
+{ "ok": true, "removed": true }
+```
+
+Validering returnerar `400` vid saknade fält eller ogiltiga tal. Idempotent delete (`removed=false` när override saknas). Endast `admin` (eller `superuser` om roller utökas) har rättighet.
+
+## Import API
+Three editor/admin protected endpoints allow structured ingestion of task-like rows:
+
+| Method | Path | Format | Notes |
+|--------|------|--------|-------|
+| POST | `/import/csv` | CSV | Always available. Validates header row must contain `title,description,priority`. Returns 415 if file extension/MIME not clearly CSV. |
+| POST | `/import/docx` | DOCX table | Optional (python-docx). 415 Unsupported if library absent. First table only; header row inferred from first table row. |
+| POST | `/import/xlsx` | XLSX sheet | Optional (openpyxl). 415 Unsupported if library absent. First worksheet only. |
+
+Response on success:
+```jsonc
+{
+  "ok": true,
+  "rows": [ { "title": "A", "description": "Alpha", "priority": 1 } ],
+  "meta": { "count": 1 }
+}
+```
+
+Error envelope examples:
+```jsonc
+// Unsupported format (e.g. DOCX not installed)
+{ "ok": false, "error": "unsupported", "message": "docx import not available" }
+// Validation failure (missing required column)
+{ "ok": false, "error": "invalid", "message": "Missing required column priority" }
+// Rate limited (flag enabled + quota exceeded)
+{ "ok": false, "error": "rate_limited", "message": "Too many requests" }
+```
+
+Rate Limiting (opt-in): set `FEATURE_FLAGS.rate_limit_import = true` (test config) to enforce a fixed 60s window (5/min when forced via `X-Force-Rate-Limit` headers in tests). Absent flag => unlimited.
+
+OpenAPI schemas: `ImportRow`, `ImportOkResponse`, `ImportErrorResponse` with `error` enum: `invalid | unsupported | rate_limited`.
+
+Implementation Notes:
+1. CSV path performs lightweight extension/MIME gating (future: sniff magic bytes for stronger validation).
+2. Optional DOCX/XLSX parsers are wrapped in try/except at import time; endpoints short-circuit with 415 when unavailable.
+3. Validation + normalization centralized in `core/importers/validate.py` (raises `ImportValidationError`).
+4. Strict typing enforced via pocket entry `[mypy-core.import_api] strict = True`.
+
+Future Enhancements:
+* Per-tenant import quotas (flag & DB overrides similar to export limits).
+* Row-level error reporting array (currently aggregated in exception message for brevity).
+* Streaming large file parsing (chunked CSV reader) once >5MB cap is revisited.
+
 
 ### Status Endpoint Notes
 `POST /tasks/` returns **201 Created** with a `Location: /tasks/{id}` header and body `{ ok, task }`.
@@ -371,6 +839,26 @@ curl http://localhost:5000/admin/feature_flags -b cookie.txt
 ```
 
 ## OpenAPI & CI Validation
+\n+## Metrics (Lightweight Instrumentation)
+The platform includes a minimal metrics abstraction (`core.metrics`) with a noop default and an optional logging backend.
+
+Activate logging backend (emits INFO lines via logger `metrics`):
+```
+set METRICS_BACKEND=log  # Windows PowerShell: $env:METRICS_BACKEND="log"
+python run.py
+```
+
+Example log line when a legacy cook creates a task (fallback path):
+```
+metric name=tasks.create.legacy_cook tags={'tenant_id': '1', 'user_id': '1', 'role': 'cook', 'canonical': 'viewer'}
+```
+
+Backend selection:
+- noop (default) — no overhead.
+- log — structured-ish single line per increment, safe for dev / staging.
+
+Custom backends can be added by implementing the `Metrics` protocol and calling `set_metrics()` during app startup.
+
 The API specification is served at `/openapi.json`. CI runs a dedicated validation job to ensure spec conformance. You can locally sanity-check it:
 ```bash
 python - <<'PY'

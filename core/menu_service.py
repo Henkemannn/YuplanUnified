@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypedDict, Dict
+from typing import TypedDict
 
 from .db import get_session
 from .models import Dish, Menu, MenuVariant
@@ -14,12 +14,12 @@ class _VariantInfo(TypedDict, total=False):
 class _DayMealVariants(TypedDict):
     # variant_type -> variant info
     # We can't know variant type keys statically (e.g., 'standard', 'veg') so map of str
-    __root__: Dict[str, _VariantInfo]  # marker not accessed directly; used for documentation
+    __root__: dict[str, _VariantInfo]  # marker not accessed directly; used for documentation
 
 
 class WeekView(TypedDict):
     menu_id: int | None
-    days: Dict[str, Dict[str, Dict[str, _VariantInfo]]]
+    days: dict[str, dict[str, dict[str, _VariantInfo]]]
 
 
 class MenuServiceDB:
