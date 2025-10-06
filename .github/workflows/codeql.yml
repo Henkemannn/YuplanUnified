@@ -1,0 +1,32 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  schedule:
+    - cron: "0 3 * * 1"  # varje måndag 03:00 UTC
+
+permissions: read-all
+
+jobs:
+  analyze:
+    name: Analyze (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          # Custom queries can be added here via 'queries:' if needed later
+
+      # Python kräver normalt ingen build för CodeQL
+      # - name: Autobuild
+      #   uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
