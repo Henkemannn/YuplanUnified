@@ -6,7 +6,7 @@ PY ?= python
 PORT ?= 5000
 HOST ?= 127.0.0.1
 
-.PHONY: install dev test lint format spectral openapi smoke ci clean
+.PHONY: install dev test lint format spectral openapi smoke ci ready clean
 
 install:
 	$(PY) -m pip install --upgrade pip
@@ -42,6 +42,9 @@ smoke:
 	test -s /tmp/smoke.json && echo "smoke ok"
 
 ci: lint test openapi spectral smoke
+
+ready:
+	$(PY) scripts/check_release_ready.py
 
 clean:
 	rm -f openapi.json

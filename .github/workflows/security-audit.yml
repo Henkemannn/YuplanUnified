@@ -1,0 +1,46 @@
+name: Security Audit
+
+on:
+  push:
+    paths:
+      - 'requirements.txt'
+      - 'requirements-*.txt'
+      - '.github/workflows/security-audit.yml'
+  pull_request:
+    paths:
+      - 'requirements.txt'
+      - 'requirements-*.txt'
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install pip-audit
+
+      - name: Run pip-audit (fail on vulnerability)
+        run: |
+          pip-audit -r requirements.txt -f json -o /tmp/pip-audit.json || (echo "Vulnerabilities found" && exit 1)
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit
+          path: /tmp/pip-audit.json

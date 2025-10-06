@@ -279,6 +279,7 @@ PR Checklist (developer self-check):
 | Fetch OpenAPI (Makefile) | `make openapi` |
 | Smoke test menu import | `make smoke` |
 | Full local CI pass | `make ci` |
+| Release readiness | `make ready` |
 
 ### Makefile & PowerShell Helpers
 For POSIX systems a `Makefile` provides shortcuts: `make install dev test lint openapi smoke ci`.
@@ -288,6 +289,7 @@ For Windows PowerShell use the script `scripts/dev.ps1`:
 ./scripts/dev.ps1; Install-Deps; Start-App
 ./scripts/dev.ps1; Lint-App; Test-App
 ./scripts/dev.ps1; Fetch-OpenAPI; Smoke
+./scripts/dev.ps1; python scripts/check_release_ready.py  # release readiness
 ```
 
 ### API Consumers Guide
@@ -314,6 +316,14 @@ Hooks configured:
 * Merge conflict marker guard
 
 CI mirrors these checks (lint-type workflow). A green `pre-commit run -a` should guarantee passing lint/type steps in PR.
+
+### Release Readiness (Local Gate)
+Before tagging a beta/GA release run:
+```
+make openapi   # ensure fresh spec
+make ready     # format+lint+tests+spectral (if installed)+semantic diff+checklist
+```
+The script fails fast if baseline missing, breaking diff detected, or checklist has open items.
 
 ### Strict Typing Pockets
 We adopt full `strict = True` mypy gradually via “pockets” — a focused set of modules that must remain 0-error under strict settings. This avoids boiling the ocean while guaranteeing steady quality expansion.
