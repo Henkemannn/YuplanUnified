@@ -129,7 +129,49 @@ jobs:
         env:
           DATABASE_URL: sqlite:///ci.db
         run: |
-          pytest -q
+          pip install pytest-cov
+          pytest --cov=core --cov=modules --cov-report xml:coverage.xml --cov-report term-missing -q
+
+      - name: Generate coverage badge json
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET, json, os
+          tree = ET.parse('coverage.xml')
+          root = tree.getroot()
+          # Cobertura: line-rate attribute
+          line_rate = float(root.get('line-rate', '0'))
+          pct = round(line_rate * 100, 1)
+          color = 'red'
+            
+          if pct >= 90: color = 'green'
+          elif pct >= 80: color = 'yellow'
+          elif pct >= 70: color = 'orange'
+          badge = {"schemaVersion":1,"label":"coverage","message":f"{pct}%","color":color}
+          os.makedirs('status', exist_ok=True)
+          with open('status/coverage-badge.json','w') as f: json.dump(badge,f)
+          print('Coverage badge written with', pct, '%')
+          PY
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.xml
+            status/coverage-badge.json
+          if-no-files-found: error
+
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py -o sbom.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+            name: cyclonedx-sbom
+            path: sbom.json
+            if-no-files-found: error
 
       - name: Archive test results (optional placeholder)
         if: always()

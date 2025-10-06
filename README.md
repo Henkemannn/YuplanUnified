@@ -5,6 +5,7 @@
 [![markdownlint](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml)
 [![CodeQL](https://github.com/Henkemannn/YuplanUnified/actions/workflows/codeql.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/codeql.yml)
 [![API](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Henkemannn/YuplanUnified/master/status/api_status.json)](./)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Henkemannn/YuplanUnified/master/status/coverage-badge.json)](./)
 
 <p align="left">
   <img alt="Ruff" src="https://img.shields.io/badge/Ruff-E,F,I,B,UP,Q-success?logo=python&logoColor=white" />
