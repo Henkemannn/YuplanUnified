@@ -6,8 +6,8 @@ OTEL SDK isn't installed so local/dev environments incur zero friction.
 """
 from __future__ import annotations
 
-from typing import Any, Dict
 from collections import Counter
+from typing import Any
 
 try:  # pragma: no cover - optional dependency
     from opentelemetry.metrics import get_meter  # type: ignore
@@ -39,7 +39,7 @@ def track_event(action: str, *, avdelning: str | None = None, maltid: str | None
     # Mirror to local counter irrespective of OTEL availability
     LOCAL_EVENTS[action] += 1
     if _EVENTS:
-        labels: Dict[str, Any] = {"action": action}
+        labels: dict[str, Any] = {"action": action}
         if avdelning:
             labels["avdelning"] = avdelning
         if maltid:

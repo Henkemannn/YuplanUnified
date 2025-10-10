@@ -1,8 +1,8 @@
 import time
+
 import pytest
 
-from core.jwt_utils import issue_token_pair, decode, JWTError
-from core.jwt_utils import encode
+from core.jwt_utils import JWTError, decode, issue_token_pair
 
 
 def _make_hs(secret="s1"):
@@ -44,7 +44,10 @@ def test_jwt_rotation_accepts_old_and_new(secrets):
 ])
 def test_jwt_claim_failures(claim, mutate, secrets):
     secret = secrets[0]
-    import json, base64, hmac, hashlib
+    import hashlib
+    import hmac
+    import json
+
     from core.jwt_utils import _b64url  # type: ignore
     now = int(time.time())
     payload = {"sub":1,"role":"admin","tenant_id":1,"jti":"x","type":"access","iss":"yuplan","iat":now,"exp":now+600,"aud":"api"}
@@ -53,7 +56,6 @@ def test_jwt_claim_failures(claim, mutate, secrets):
     header_b = _b64url(json.dumps(header,separators=(",",":")).encode())
     body_b = _b64url(json.dumps(payload,separators=(",",":")).encode())
     sig = hmac.new(secret.encode(), f"{header_b}.{body_b}".encode(), hashlib.sha256).digest()
-    import base64 as b64
     token = f"{header_b}.{body_b}.{_b64url(sig)}"
     with pytest.raises(JWTError):
         decode(token, secret=secret, secrets_list=[], issuer="yuplan", audience="api", leeway=60, max_age=43200)

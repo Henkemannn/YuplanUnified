@@ -50,7 +50,7 @@ def test_auth_flow_and_unauthorized(client):
     # missing token
     r2 = client.get("/tasks/", headers={"X-Tenant-Id":"1"})
     if r2.status_code == 401:
-        j = r2.get_json(); assert j["error"] == "unauthorized"
+        j = r2.get_json(); assert j.get("status") == 401 and j.get("type"," ").endswith("/unauthorized")
     else:
         # In some test client states session stays; just ensure shape ok
         assert r2.status_code in (200,403)
@@ -125,17 +125,17 @@ def test_error_shapes(client):
     # unauthorized
     r = client.get("/tasks/", headers={"X-Tenant-Id":"1"})
     assert r.status_code == 401
-    j = r.get_json(); assert set(["error","message"]).issubset(j.keys())
+    j = r.get_json(); assert j.get("status") == 401 and j.get("type"," ").endswith("/unauthorized")
     # attempt forbidden via ownership again
     a = login(client, "a@example.com"); b = login(client, "b@example.com")
     task = client.post("/tasks/", json={"title":"Own check","status":"todo"}, headers={"Authorization": f"Bearer {a['access_token']}", "X-Tenant-Id":"1"}).get_json()["task"]
     forb = client.put(f"/tasks/{task['id']}", json={"status":"doing"}, headers={"Authorization": f"Bearer {b['access_token']}", "X-Tenant-Id":"1"})
     assert forb.status_code == 403
-    jf = forb.get_json(); assert jf["error"] == "forbidden"
+    jf = forb.get_json(); assert jf.get("status") == 403 and jf.get("type"," ").endswith("/forbidden")
     # rate limited shape (force by monkeypatch)
     a2 = login(client, "admin@example.com")
     # first call consumes 1, then hammer to exceed using forced tiny limit of 1
     client.post("/tasks/", json={"title":"Priming","status":"todo"}, headers={"Authorization": f"Bearer {a2['access_token']}", "X-Tenant-Id":"1","X-Force-Rate-Limit":"1","X-Force-Rate-Limit-Limit":"1"})
     rl = client.post("/tasks/", json={"title":"RL","status":"todo"}, headers={"Authorization": f"Bearer {a2['access_token']}", "X-Tenant-Id":"1","X-Force-Rate-Limit":"1","X-Force-Rate-Limit-Limit":"1"})
     assert rl.status_code == 429
-    jr = rl.get_json(); assert jr["error"] == "rate_limited"
+    jr = rl.get_json(); assert jr.get("status") == 429 and jr.get("type"," ").endswith("/rate_limited")

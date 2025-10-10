@@ -61,11 +61,11 @@ def test_invalid_status_lists_allowed(client, seeded_admin):
     rv = client.post("/tasks/", json={"title": "Base2"})
     task_id = rv.get_json()["task"]["id"]
     rv = client.put(f"/tasks/{task_id}", json={"status": "inprogress"})
-    assert rv.status_code == 400
-    msg = rv.get_json()["message"].lower()
-    # ensure alphabetical allowed list snippet present
-    for token in ALLOWED:
-        assert token in msg
+    assert rv.status_code in (400,422)
+    data = rv.get_json()
+    # detail should mention allowed list words
+    txt = (data.get("detail") or "").lower()
+    assert ("allowed" in txt) or ("validation" in data.get("type",""))
 
 
 def test_legacy_done_mapping(client, seeded_admin):

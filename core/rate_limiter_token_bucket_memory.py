@@ -30,7 +30,7 @@ class _Bucket:
     tokens: float
     last_refill: float
 
-class MemoryTokenBucketRateLimiter(RateLimiter):  # type: ignore[misc]
+class MemoryTokenBucketRateLimiter(RateLimiter):
     def __init__(self, now_func: TimeFn | None = None) -> None:
         self._buckets: dict[str, _Bucket] = {}
         self._now: TimeFn = now_func or time.time

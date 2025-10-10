@@ -82,6 +82,6 @@ def test_tasks_pagination_invalid_size():
     _login(client)
     resp = client.get("/tasks/?size=0")
     assert resp.status_code == 400
+    body = resp.get_json(); assert body.get("status") == 400 and body.get("type"," ").endswith("/bad_request")
     data: dict[str, Any] = json.loads(resp.data)
-    assert data.get("ok") is False
-    assert data.get("error") == "invalid"
+    assert data.get("status") == 400

@@ -8,6 +8,7 @@ from __future__ import annotations
 import collections
 import logging
 import time
+
 from flask import g, has_request_context, request
 
 LOG_BUFFER: collections.deque[dict] = collections.deque(maxlen=500)

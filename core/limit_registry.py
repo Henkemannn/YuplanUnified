@@ -24,12 +24,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from json import loads
-from typing import Any, Literal, TypedDict
-
-try:  # Python <3.11 fallback
-    from typing import NotRequired  # type: ignore
-except Exception:  # pragma: no cover
-    from typing import NotRequired  # type: ignore
+from typing import Any, Literal, NotRequired, TypedDict
 
 from . import metrics as metrics_mod
 

@@ -9,7 +9,7 @@ def test_openapi_security_elements():
     comps = spec.get("components", {})
     assert "securitySchemes" in comps and "BearerAuth" in comps["securitySchemes"]
     responses = comps.get("responses", {})
-    for r in ("Error401","Error403","Error429"):
+    for r in ("Problem401","Problem403","Problem429"):
         assert r in responses, f"Missing reusable response {r}"
     # Check protected paths have security arrays
     for path, item in spec.get("paths", {}).items():

@@ -18,34 +18,37 @@ import logging
 import time
 import uuid
 from importlib import import_module
+from typing import Any
 
 from flask import Flask, g, jsonify, request, session
+from werkzeug.wrappers.response import Response
 
 from .admin_api import bp as admin_api_bp
 from .admin_audit_api import bp as admin_audit_bp
 from .app_authz import require_roles
-from .app_errors import register_error_handlers
+
+# Legacy JSON error handler removed in ADR-003 sweep
 from .auth import bp as auth_bp, ensure_bootstrap_superuser
 from .config import Config
 from .db import get_session, init_engine
 from .diet_api import bp as diet_api_bp
-from .errors import APIError
+from .errors import APIError, register_error_handlers as register_domain_handlers
 from .export_api import bp as export_bp
 from .feature_flags import FeatureRegistry
 from .import_api import bp as import_api_bp
 from .inline_ui import inline_ui_bp
+from .logging_setup import install_support_log_handler
 from .menu_api import bp as menu_api_bp
 from .metrics import set_metrics
 from .metrics_logging import LoggingMetrics
 from .models import TenantFeatureFlag
 from .notes_api import bp as notes_bp
 from .openapi_ui import bp as openapi_ui_bp
+from .security import init_security
 from .service_metrics_api import bp as metrics_api_bp
 from .service_recommendation_api import bp as service_recommendation_bp
 from .tasks_api import bp as tasks_bp
 from .turnus_api import bp as turnus_api_bp
-from .security import init_security
-from .logging_setup import install_support_log_handler
 
 # Map of module key -> import path:attr blueprint (for dynamic registration)
 MODULE_IMPORTS = {
@@ -54,9 +57,8 @@ MODULE_IMPORTS = {
 }
 
 
-def create_app(config_override: dict | None = None) -> Flask:
+def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app = Flask(__name__)
-
     # --- Configuration ---
     cfg = Config.from_env()
     if config_override:
@@ -67,6 +69,7 @@ def create_app(config_override: dict | None = None) -> Flask:
             if k.isupper():
                 app.config[k] = v
     app.config.update(cfg.to_flask_dict())
+    # ProblemDetails is canonical now (ADR-003). No problem-only flag propagation.
 
     # --- DB setup ---
     init_engine(cfg.database_url)
@@ -75,7 +78,7 @@ def create_app(config_override: dict | None = None) -> Flask:
     init_security(app)
 
     # --- Metrics backend wiring ---
-    backend = app.config.get("METRICS_BACKEND") or cfg.__dict__.get("metrics_backend") or "noop"
+    backend = app.config.get("METRICS_BACKEND") or getattr(cfg, "metrics_backend", None) or "noop"
     if backend == "log":  # minimal logging adapter
         try:
             set_metrics(LoggingMetrics())
@@ -88,7 +91,7 @@ def create_app(config_override: dict | None = None) -> Flask:
     # Expose for tests manipulating registry directly
     app.feature_registry = feature_registry  # type: ignore[attr-defined]
 
-    def _load_feature_flags_logic():
+    def _load_feature_flags_logic() -> None:
         from flask import has_request_context
         if not has_request_context():
             return
@@ -109,8 +112,9 @@ def create_app(config_override: dict | None = None) -> Flask:
             return bool(override_val)
         return bool(feature_registry.enabled(name))
 
+
     @app.context_processor
-    def inject_role_helpers():  # pragma: no cover - template helper
+    def inject_role_helpers() -> dict[str, Any]:  # pragma: no cover - template helper
         from flask import session as _session
         def has_role(*roles: str) -> bool:
             # roles may be stored as single 'role' or list 'roles'
@@ -120,26 +124,48 @@ def create_app(config_override: dict | None = None) -> Flask:
         return {"has_role": has_role}
 
     # --- Error handling ---
-    # New centralized error handlers (Pocket 6). Existing specific handlers retained below for backward compatibility.
-    register_error_handlers(app)
-    def _json_error(error_code: str, message: str, status: int):
-        from flask import jsonify
-        resp = jsonify({"ok": False, "error": error_code, "message": message})
-        resp.status_code = status
-        resp.headers["Content-Type"] = "application/json"
-        return resp
+    # Register RFC7807 problem handlers globally (ADR-003)
+    try:
+        register_domain_handlers(app)
+    except Exception:  # pragma: no cover
+        app.logger.warning("Failed to register domain problem handlers", exc_info=True)
+
+    # Map legacy APIError to RFC7807 responses
+    from .http_errors import (
+        bad_request as _problem_bad_request,
+        conflict as _problem_conflict,
+        forbidden as _problem_forbidden,
+        internal_server_error as _problem_ise,
+        not_found as _problem_not_found,
+        unauthorized as _problem_unauthorized,
+    )
 
     @app.errorhandler(APIError)
-    def _handle_api_error(ex: APIError):
-        return _json_error(ex.error_code, ex.message, ex.status_code)
+    def _handle_api_error(ex: APIError) -> Response:
+        status = int(getattr(ex, "status_code", 400) or 400)
+        raw_detail: Any = getattr(ex, "message", None)
+        detail: str = str(raw_detail) if raw_detail is not None else str(getattr(ex, "error_code", "bad_request"))
+        if status == 401:
+            return _problem_unauthorized(detail)
+        if status == 403:
+            return _problem_forbidden(detail)
+        if status == 404:
+            return _problem_not_found(detail)
+        if status == 409:
+            return _problem_conflict(detail)
+        if status >= 500:
+            return _problem_ise()
+        return _problem_bad_request(detail)
 
     @app.errorhandler(404)
-    def _h404(_):
-        return _json_error("not_found", "Resource not found", 404)
+    def _h404(_: Any) -> Response:
+        return _problem_not_found("not_found")
 
-    # Map MethodNotAllowed (405) to not_found envelope for consistency with tests expecting 404 on unknown routes
+    # Map MethodNotAllowed (405) to 404 Problem for consistency with tests expecting 404 on unknown routes
     try:
         from werkzeug.exceptions import MethodNotAllowed
+
+        from .http_errors import not_found as _problem_not_found
         try:  # optional OTEL metrics
             from opentelemetry import metrics  # type: ignore
             _http_meter = metrics.get_meter("yuplan.http")  # type: ignore
@@ -149,47 +175,61 @@ def create_app(config_override: dict | None = None) -> Flask:
                 unit="1",
             )
         except Exception:  # pragma: no cover
-            _m_405 = None  # type: ignore
+            _m_405 = None
 
         @app.errorhandler(MethodNotAllowed)  # type: ignore[arg-type]
-        def _h405(ex):  # pragma: no cover - exercised in failing 404 test
+        def _h405(ex: Exception) -> Response:  # pragma: no cover - exercised in failing 404 test
             app.logger.warning("Mapping 405 to 404", extra={"path": request.path, "method": request.method})
             if _m_405:
                 try:
-                    _m_405.add(1, {"method": request.method})  # type: ignore
+                    _m_405.add(1, {"method": request.method})
                 except Exception:
                     pass
-            return _json_error("not_found", "Resource not found", 404)
+            return _problem_not_found("method_not_allowed")
     except Exception:  # pragma: no cover
         pass
 
-    @app.errorhandler(400)
-    def _h400(_):
-        return _json_error("bad_request", "Bad Request", 400)
-
-    @app.errorhandler(401)
-    def _h401(_):
-        return _json_error("unauthorized", "Unauthorized", 401)
-
-    @app.errorhandler(403)
-    def _h403(_):
-        return _json_error("forbidden", "Forbidden", 403)
-
-    @app.errorhandler(409)
-    def _h409(_):
-        return _json_error("conflict", "Conflict", 409)
-
     @app.errorhandler(Exception)
-    def _h500(ex):
-        if isinstance(ex, APIError):
-            return _handle_api_error(ex)
-        app.logger.exception("Unhandled exception")
-        return _json_error("internal_error", "Internal Server Error", 500)
+    def _h500(ex: Exception) -> Response:
+        # Always return problem+json and record incident
+        from .audit_events import record_audit_event
+        from .http_errors import internal_server_error
+        app.logger.exception("Unhandled exception (problem mode)")
+        resp = internal_server_error()
+        try:
+            payload = resp.get_json() or {}
+            if isinstance(payload, dict):
+                record_audit_event("incident", incident_id=payload.get("incident_id"))
+                record_audit_event("problem_response", status=payload.get("status"), type=payload.get("type"))
+        except Exception:
+            pass
+        return resp
 
     # --- Context processor ---
     @app.context_processor
-    def inject_ctx():
-        return {"tenant_id": getattr(g, "tenant_id", None), "feature_enabled": feature_enabled}
+    def inject_ctx() -> dict[str, Any]:
+        # expose csrf token helper if strict flag active
+        def csrf_token() -> str:  # pragma: no cover - template helper
+            try:
+                if getattr(g, "features", {}).get("strict_csrf"):
+                    from .csrf import generate_token
+                    return generate_token()
+            except Exception:
+                return ""
+            return ""
+
+        def csrf_token_input() -> str:  # pragma: no cover - template helper
+            tok = csrf_token()
+            if not tok:
+                return ""
+            return f'<input type="hidden" name="csrf_token" value="{tok}">'  # nosec B704
+
+        return {
+            "tenant_id": getattr(g, "tenant_id", None),
+            "feature_enabled": feature_enabled,
+            "csrf_token": csrf_token(),
+            "csrf_token_input": csrf_token_input,
+        }
 
     # --- Logging / timing middleware ---
     log = logging.getLogger("unified")
@@ -200,7 +240,7 @@ def create_app(config_override: dict | None = None) -> Flask:
     log.setLevel(logging.INFO)
 
     @app.before_request
-    def _before_req():
+    def _before_req() -> Response | None:
         if app.config.get("TESTING"):
             from flask import session
             role = request.headers.get("X-User-Role")
@@ -217,12 +257,34 @@ def create_app(config_override: dict | None = None) -> Flask:
                 session["tenant_id"] = int(tid) if tid.isdigit() else tid
             if tid:
                 g.tenant_id = int(tid) if tid.isdigit() else tid
+        # Apply impersonation (may override tenant context)
+        try:
+            from .impersonation import apply_impersonation  # local import to avoid cycles
+            apply_impersonation()
+        except Exception:  # pragma: no cover - defensive
+            app.logger.warning("Failed to apply impersonation", exc_info=True)
         g._t0 = time.perf_counter()
         g.request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
         _load_feature_flags_logic()
+        # Strict CSRF (after header role injection so tests & role logic available)
+        feats = getattr(g, "features", None)
+        if feats is None:
+            g.features = {}
+        env_on = bool(app.config.get("YUPLAN_STRICT_CSRF"))
+        g.features["strict_csrf_env"] = env_on
+        g.features["strict_csrf"] = env_on
+        if env_on:
+            try:
+                from .csrf import before_request as _csrf_before
+                resp = _csrf_before()
+                if resp is not None:
+                    return resp
+            except Exception:  # pragma: no cover
+                app.logger.warning("Strict CSRF hook failed", exc_info=True)
+        return None
 
     @app.after_request
-    def _after_req(resp):
+    def _after_req(resp: Response) -> Response:
         try:
             dur_ms = int((time.perf_counter() - getattr(g, "_t0", time.perf_counter())) * 1000)
             rid = getattr(g, "request_id", str(uuid.uuid4()))
@@ -298,6 +360,11 @@ def create_app(config_override: dict | None = None) -> Flask:
     app.register_blueprint(admin_audit_bp)
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
+    try:
+        from .superuser_impersonation_api import bp as superuser_impersonation_bp
+        app.register_blueprint(superuser_impersonation_bp)
+    except Exception:  # pragma: no cover
+        app.logger.warning("Failed to register superuser impersonation blueprint", exc_info=True)
     # Support diagnostics blueprint
     try:
         from .support import bp as support_bp  # type: ignore
@@ -343,16 +410,7 @@ def create_app(config_override: dict | None = None) -> Flask:
 
     # --- OpenAPI Spec Endpoint ---
     @app.get("/openapi.json")
-    def openapi_spec():  # pragma: no cover
-        error_schema = {
-            "type": "object",
-            "required": ["error", "message"],
-            "properties": {
-                "error": {"type": "string", "example": "validation_error"},
-                "message": {"type": "string", "example": "Invalid input"}
-            },
-            "additionalProperties": False
-        }
+    def openapi_spec() -> dict[str, Any]:  # pragma: no cover
         note_schema = {
             "type": "object",
             "required": ["id", "content", "private_flag"],
@@ -384,98 +442,19 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "updated_at": {"type": "string", "format": "date-time", "nullable": True},
             }
         }
-        # Reusable error responses (referenced in tests)
-        def err_resp(desc, example):
-            return {
-                "description": desc,
-                "content": {
-                    "application/json": {
-                        "schema": {"$ref": "#/components/schemas/Error"},
-                        "examples": {example: {"value": {"error": example, "message": desc}}}
-                    }
-                }
-            }
-        reusable = {
-            "Error400": err_resp("Bad Request", "bad_request"),
-            # Override 401/403 with richer examples below, still keep mapping for legacy references
-            "Error401": {
-                "description": "Unauthorized",
-                "content": {
-                    "application/json": {
-                        "schema": {"$ref": "#/components/schemas/Error"},
-                        "examples": {
-                            "unauthorized": {
-                                "value": {"error": "unauthorized", "message": "Bearer token missing or invalid"}
-                            }
-                        }
-                    }
-                }
-            },
-            "Error403": {
-                "description": "Forbidden",
-                "content": {
-                    "application/json": {
-                        "schema": {
-                            "type": "object",
-                            "required": ["error","message"],
-                            "properties": {
-                                "error": {"type":"string"},
-                                "message": {"type":"string"},
-                                "required_role": {"type":"string"}
-                            }
-                        },
-                        "examples": {
-                            "forbidden": {
-                                "value": {"error": "forbidden", "message": "Requires role admin", "required_role": "admin"}
-                            }
-                        }
-                    }
-                }
-            },
-            "Error404": err_resp("Not Found", "not_found"),
-            "Error409": err_resp("Conflict", "conflict"),
-            "Error429": {
-                "description": "Rate Limited",
-                "headers": {
-                    "Retry-After": {"schema": {"type": "integer"}, "description": "Seconds until new request may succeed"}
-                },
-                "content": {
-                    "application/json": {
-                        "schema": {
-                            "type": "object",
-                            "required": ["error","message"],
-                            "properties": {
-                                "error": {"type":"string"},
-                                "message": {"type":"string"},
-                                "retry_after": {"type":"integer","nullable":True, "description": "Ceiled seconds until next permitted attempt (min 1 when present)"}
-                            }
-                        },
-                        "examples": {
-                            "rateLimited": {
-                                "value": {"error": "rate_limited", "message": "Too many requests", "retry_after": 30}
-                            }
-                        }
-                    }
-                }
-            },
-            "Error500": err_resp("Internal Server Error", "internal_error"),
-        }
-        def attach(base: dict, codes: list[str]):
-            r = base.setdefault("responses", {})
+        # Legacy ErrorXXX components removed per ADR-003; keep only ProblemDetails components below
+        def attach_problem(base: dict[str, Any], codes: list[str]) -> dict[str, Any]:
+            r: dict[str, Any] = base.setdefault("responses", {})  # type: ignore[assignment]
             for code in codes:
-                ref_name = f"Error{code}" if code in ("400","401","403","404","409","500") else None
-                if ref_name and ref_name in reusable:
-                    r.setdefault(code, {"$ref": f"#/components/responses/{ref_name}"})
-                else:  # fallback
-                    r.setdefault(code, {"description": code, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}})
+                r.setdefault(code, {"$ref": f"#/components/responses/Problem{code}"})
             return base
 
         paths = {
-            "/features": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List flags"}}}, ["401","429","500"])},
-            "/features/check": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Flag state (unknown -> enabled=false)"}}}, ["400","401","429","500"])},
-            "/features/set": {"post": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Updated flag"}}}, ["400","401","429","500"])},
+            "/features": {"get": attach_problem({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List flags"}}}, ["401","429","500"])},
+            "/features/check": {"get": attach_problem({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Flag state (unknown -> enabled=false)"}}}, ["400","401","429","500"])},
+            "/features/set": {"post": attach_problem({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Updated flag"}}}, ["400","401","429","500"])},
             "/admin/feature_flags": {
-                "post": attach({
+                "post": attach_problem({
                     "tags": ["Features"],
                     "security": [{"BearerAuth": []}],
                     "summary": "Toggle tenant-scoped feature flag",
@@ -492,7 +471,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     },
                     "responses": {"200": {"description": "Flag updated"}}
                 }, ["400","401","403","429","500"]),
-                "get": attach({
+                "get": attach_problem({
                     "tags": ["Features"],
                     "security": [{"BearerAuth": []}],
                     "summary": "List tenant-scoped enabled feature flags",
@@ -500,10 +479,10 @@ def create_app(config_override: dict | None = None) -> Flask:
                         {"name": "tenant_id","in":"query","required": False,"schema": {"type":"integer"}, "description":"Only superuser may specify"}
                     ],
                     "responses": {"200": {"description": "Flags listed"}},
-                }, ["400","401","403","429","500"])
+                }, ["400","401","403","429","500"]) 
             },
             "/notes/": {
-                "get": attach({
+                "get": attach_problem({
                     "tags": ["Notes"],
                     "security": [{"BearerAuth": []}],
                     "parameters": [
@@ -514,15 +493,15 @@ def create_app(config_override: dict | None = None) -> Flask:
                     ],
                     "responses": {"200": {"description": "Paged notes list", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PageResponse_Notes"}}}}}
                 }, ["400","401","403","500"]),
-                "post": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Create note"}}}, ["400","401","403","500"]),
+                "post": attach_problem({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Create note"}}}, ["400","401","403","500"]),
             },
             "/notes/{id}": {
                 "parameters": [{"name":"id","in":"path","required":True,"schema":{"type":"integer"}}],
-                "put": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Update note"}}}, ["400","401","403","404","500"]),
-                "delete": attach({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete note"}}}, ["401","403","404","500"]),
+                "put": attach_problem({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Update note"}}}, ["400","401","403","404","500"]),
+                "delete": attach_problem({"tags": ["Notes"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete note"}}}, ["401","403","404","500"]),
             },
             "/tasks/": {
-                "get": attach({
+                "get": attach_problem({
                     "tags": ["Tasks"],
                     "security": [{"BearerAuth": []}],
                     "parameters": [
@@ -533,7 +512,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     ],
                     "responses": {"200": {"description": "Paged tasks list", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PageResponse_Tasks"}}}}}
                 }, ["400","401","403","500"]),
-                "post": attach({
+                "post": attach_problem({
                     "tags": ["Tasks"],
                     "security": [{"BearerAuth": []}],
                     "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TaskCreate"}}}},
@@ -542,9 +521,10 @@ def create_app(config_override: dict | None = None) -> Flask:
             },
             "/tasks/{id}": {
                 "parameters": [{"name":"id","in":"path","required":True,"schema":{"type":"integer"}}],
-                "get": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Get task"}}}, ["401","403","404","500"]),
-                "put": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Update task"}}}, ["400","401","403","404","409","500"]),
-                "delete": attach({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete task"}}}, ["401","403","404","500"]),
+                "get": attach_problem({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Get task"}}}, ["401","403","404","500"]),
+                "put": attach_problem({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Update task"}}}, ["400","401","403","404","409","500"]),
+                "delete": attach_problem({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete task"}}}, ["401","403","404","500"]),
+                    "/features/set": {"post": attach_problem({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Updated flag"}}}, ["400","401","429","500"])},
             },
             "/admin/flags/legacy-cook": {
                 "get": {
@@ -555,8 +535,8 @@ def create_app(config_override: dict | None = None) -> Flask:
                             "description": "Tenants with flag enabled",
                             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/TenantListResponse"}}}
                         },
-                        "401": {"$ref": "#/components/responses/Error401"},
-                        "403": {"$ref": "#/components/responses/Error403"}
+                        "401": {"$ref": "#/components/responses/Problem401"},
+                        "403": {"$ref": "#/components/responses/Problem403"}
                     },
                     "security": [{"BearerAuth": []}]
                 }
@@ -573,9 +553,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                     ],
                     "responses": {
                         "200": {"description": "Paged limits", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/PageResponse_LimitView"}}}},
-                        "400": {"$ref": "#/components/responses/Error400"},
-                        "401": {"$ref": "#/components/responses/Error401"},
-                        "403": {"$ref": "#/components/responses/Error403"}
+                        "400": {"$ref": "#/components/responses/Problem400"},
+                        "401": {"$ref": "#/components/responses/Problem401"},
+                        "403": {"$ref": "#/components/responses/Problem403"}
                     },
                     "security": [{"BearerAuth": []}]
                 },
@@ -585,9 +565,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LimitUpsertRequest"}}}},
                     "responses": {
                         "200": {"description": "Upserted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LimitMutationResponse"}}}},
-                        "400": {"$ref": "#/components/responses/Error400"},
-                        "401": {"$ref": "#/components/responses/Error401"},
-                        "403": {"$ref": "#/components/responses/Error403"}
+                        "400": {"$ref": "#/components/responses/Problem400"},
+                        "401": {"$ref": "#/components/responses/Problem401"},
+                        "403": {"$ref": "#/components/responses/Problem403"}
                     },
                     "security": [{"BearerAuth": []}]
                 },
@@ -597,9 +577,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "requestBody": {"required": True, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LimitDeleteRequest"}}}},
                     "responses": {
                         "200": {"description": "Deleted (idempotent)", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LimitMutationResponse"}}}},
-                        "400": {"$ref": "#/components/responses/Error400"},
-                        "401": {"$ref": "#/components/responses/Error401"},
-                        "403": {"$ref": "#/components/responses/Error403"}
+                        "400": {"$ref": "#/components/responses/Problem400"},
+                        "401": {"$ref": "#/components/responses/Problem401"},
+                        "403": {"$ref": "#/components/responses/Problem403"}
                     },
                     "security": [{"BearerAuth": []}]
                 }
@@ -639,16 +619,105 @@ def create_app(config_override: dict | None = None) -> Flask:
                                 }
                             }
                         },
-                        "401": {"$ref": "#/components/responses/Error401"},
-                        "403": {"$ref": "#/components/responses/Error403"}
+                        "401": {"$ref": "#/components/responses/Problem401"},
+                        "403": {"$ref": "#/components/responses/Problem403"}
                     },
                     "security": [{"BearerAuth": []}]
                 }
             },
         }
+        # --- ProblemDetails (pilot) ---
+        problem_details_schema = {
+            "type": "object",
+            "required": ["type","title","status","detail"],
+            "properties": {
+                "type": {"type": "string", "format": "uri"},
+                "title": {"type": "string"},
+                "status": {"type": "integer"},
+                "detail": {"type": "string"},
+                "instance": {"type": "string", "format": "uri", "nullable": True},
+                "request_id": {"type": "string", "description": "Correlation id echoed as X-Request-Id header"},
+                "incident_id": {"type": "string", "description": "Present only for 500 errors to correlate logs", "nullable": True},
+                "errors": {"type": "array", "items": {"type": "object"}, "description": "Validation issues (422)"},
+                "retry_after": {"type": "integer", "description": "Rate limit reset seconds (429)", "nullable": True},
+            },
+            "additionalProperties": True,
+            "description": "RFC7807 Problem Details (pilot). Extended with request_id, incident_id, errors[]"
+        }
+        problem_responses = {
+            code: {
+                "description": f"Problem {code}",
+                "headers": {"X-Request-Id": {"$ref": "#/components/headers/X-Request-Id"}},
+                "content": {
+                    "application/problem+json": {
+                        "schema": {"$ref": "#/components/schemas/ProblemDetails"},
+                        "examples": {}
+                    }
+                }
+            } for code in ["400","401","403","404","409","422","429","500"]
+        }
+        # Populate representative examples (401, 422, 500 mandatory; others minimal)
+        problem_responses["401"]["content"]["application/problem+json"]["examples"]["unauthorized"] = {
+            "value": {
+                "type": "https://example.com/errors/unauthorized",
+                "title": "Unauthorized",
+                "status": 401,
+                "detail": "unauthorized",
+                "request_id": "11111111-1111-1111-1111-111111111111"
+            }
+        }
+        # Auth-specific variant showing WWW-Authenticate
+        problem_responses["401"]["headers"] = {**problem_responses["401"].get("headers", {}), "WWW-Authenticate": {"schema": {"type": "string"}, "description": "Auth challenge (Bearer)"}}
+        problem_responses["401"]["content"]["application/problem+json"]["examples"]["invalid_token"] = {
+            "value": {
+                "type": "https://example.com/errors/unauthorized",
+                "title": "Unauthorized",
+                "status": 401,
+                "detail": "invalid_token",
+                "request_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+            }
+        }
+        problem_responses["422"]["content"]["application/problem+json"]["examples"]["validation"] = {
+            "value": {
+                "type": "https://example.com/errors/validation_error",
+                "title": "Unprocessable Entity",
+                "status": 422,
+                "detail": "validation_error",
+                "errors": [{"field": "name", "message": "required"}],
+                "request_id": "22222222-2222-2222-2222-222222222222"
+            }
+        }
+        # 429 example with retry_after
+        problem_responses["429"]["content"]["application/problem+json"] = problem_responses["429"]["content"].get("application/problem+json", {"schema": {"$ref": "#/components/schemas/ProblemDetails"}})
+        problem_responses["429"]["content"]["application/problem+json"]["examples"] = {
+            "limited": {
+                "value": {
+                    "type": "https://example.com/errors/rate_limited",
+                    "title": "Too Many Requests",
+                    "status": 429,
+                    "detail": "rate_limited",
+                    "retry_after": 30,
+                    "request_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                }
+            }
+        }
+        problem_responses["500"]["content"]["application/problem+json"]["examples"]["incident"] = {
+            "value": {
+                "type": "https://example.com/errors/internal_error",
+                "title": "Internal Server Error",
+                "status": 500,
+                "detail": "internal_error",
+                "incident_id": "33333333-3333-3333-3333-333333333333",
+                "request_id": "33333333-3333-3333-3333-333333333333"
+            }
+        }
         spec = {
             "openapi": "3.0.3",
-            "info": {"title": "Unified Platform API", "version": "0.3.0"},
+            "info": {
+                "title": "Unified Platform API",
+                "version": "0.3.0",
+                "description": "Problem Details (RFC7807) is the canonical error format across all endpoints. Legacy ErrorXXX components have been removed per ADR-003."
+            },
             "servers": [{"url": "/"}],
             "tags": [
                 {"name": "Auth"}, {"name": "Menus"}, {"name": "Features"}, {"name": "System"},
@@ -659,7 +728,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
                 },
                 "schemas": {
-                    "Error": error_schema,
+                    "ProblemDetails": problem_details_schema,
                     "PageMeta": {"type": "object", "required": ["page","size","total","pages"], "properties": {"page": {"type": "integer"}, "size": {"type": "integer"}, "total": {"type": "integer"}, "pages": {"type": "integer"}}},
                     "PageResponse_Notes": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/Note"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
                     "PageResponse_Tasks": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/Task"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
@@ -689,10 +758,23 @@ def create_app(config_override: dict | None = None) -> Flask:
                         "example": "f3a2b1f8-2e0e-4b12-9f4c-5c28a6a0c3a1"
                     }
                 },
-                "responses": reusable,
+                "responses": {},
             },
             "paths": paths,
         }
+        # Attach Problem responses under components.responses with short names (Problem400..)
+        for code, meta in problem_responses.items():
+            spec["components"]["responses"][f"Problem{code}"] = meta
+
+        # Ensure all operations include Problem responses where applicable
+        for _p, methods in spec["paths"].items():
+            for method, op in methods.items():
+                if method.lower() not in ("get","post","put","delete","patch","options","head"):
+                    continue
+                responses = op.get("responses", {})
+                for ensure_code in ["400","401","403","404","409","422","429","500"]:
+                    if ensure_code not in responses:
+                        responses[ensure_code] = {"$ref": f"#/components/responses/Problem{ensure_code}"}
         # Standard 415 component (Unsupported Media Type)
         spec.setdefault("components", {}).setdefault("responses", {})["UnsupportedMediaType"] = {
             "description": "Unsupported Media Type"
@@ -704,9 +786,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}}}},
                 "responses": {
                     "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}}}},
-                    "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "400": {"$ref": "#/components/responses/Problem400"},
                     "415": {"$ref": "#/components/responses/UnsupportedMediaType"},
-                    "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "429": {"$ref": "#/components/responses/Problem429"},
                 },
             }
         }
@@ -716,9 +798,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}}}},
                 "responses": {
                     "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}}}},
-                    "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "400": {"$ref": "#/components/responses/Problem400"},
                     "415": {"$ref": "#/components/responses/UnsupportedMediaType"},
-                    "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "429": {"$ref": "#/components/responses/Problem429"},
                 },
             }
         }
@@ -728,9 +810,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "requestBody": {"required": True, "content": {"multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {"file": {"type": "string", "format": "binary"}}}}}},
                 "responses": {
                     "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}}}},
-                    "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "400": {"$ref": "#/components/responses/Problem400"},
                     "415": {"$ref": "#/components/responses/UnsupportedMediaType"},
-                    "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "429": {"$ref": "#/components/responses/Problem429"},
                 },
             }
         }
@@ -754,9 +836,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                 }},
                 "responses": {
                     "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportOkResponse"}, "examples": {"dryRun": {"value": {"ok": True, "rows": [{"title": "Soup", "description": "Tomato", "priority": 1}], "meta": {"count": 1, "dry_run": True, "format": "menu"}, "dry_run": True}}}}}},
-                    "400": {"description": "Invalid", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "400": {"$ref": "#/components/responses/Problem400"},
                     "415": {"$ref": "#/components/responses/UnsupportedMediaType"},
-                    "429": {"description": "Rate limited", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportErrorResponse"}}}},
+                    "429": {"$ref": "#/components/responses/Problem429"},
                 },
             }
         }
@@ -767,7 +849,7 @@ def create_app(config_override: dict | None = None) -> Flask:
 
     @app.get("/features")
     @require_roles("admin")
-    def list_features():  # pragma: no cover
+    def list_features() -> dict[str, Any]:  # pragma: no cover
         tid = getattr(g, "tenant_id", None)
         try:
             allow(tid, session.get("user_id"), "feature_flags_admin", 30, testing=app.config.get("TESTING", False))
@@ -782,7 +864,7 @@ def create_app(config_override: dict | None = None) -> Flask:
 
     @app.get("/features/check")
     @require_roles("admin")
-    def check_feature():  # pragma: no cover
+    def check_feature() -> dict[str, Any] | tuple[dict[str, Any], int]:  # pragma: no cover
         name = (request.args.get("name") or "").strip()
         if not name:
             return jsonify({"ok": False, "error": "name required"}), 400
@@ -804,7 +886,7 @@ def create_app(config_override: dict | None = None) -> Flask:
 
     @app.post("/features/set")
     @require_roles("admin")
-    def set_feature():  # pragma: no cover
+    def set_feature() -> dict[str, Any] | tuple[dict[str, Any], int]:  # pragma: no cover
         data = request.get_json(silent=True) or {}
         name = (data.get("name") or "").strip()
         if not name:
@@ -841,13 +923,43 @@ def create_app(config_override: dict | None = None) -> Flask:
     # --- Guard test endpoints (P6.2) ---
     @app.get("/_guard/editor")
     @require_roles("editor")
-    def _guard_editor():  # pragma: no cover - exercised in dedicated tests
+    def _guard_editor() -> dict[str, Any]:  # pragma: no cover - exercised in dedicated tests
         return {"ok": True, "guard": "editor"}
 
     @app.get("/_guard/admin")
     @require_roles("admin")
-    def _guard_admin():  # pragma: no cover - exercised in dedicated tests
+    def _guard_admin() -> dict[str, Any]:  # pragma: no cover - exercised in dedicated tests
         return {"ok": True, "guard": "admin"}
+
+    # --- Test-only boom endpoint for incident simulation ---
+    if app.config.get("TESTING"):
+        @app.get("/_test/boom")
+        def _test_boom() -> dict[str, Any]:  # pragma: no cover - only used in problem 500 tests
+            raise RuntimeError("boom")
+        # Test-only endpoints to simulate 429 without relying on limiter backends
+        from .rate_limiter import (
+            RateLimitError as _TestRateLimitError,  # local import to avoid prod path impact
+        )
+
+        @app.get("/_test/limit_legacy")
+        def _test_limit_legacy() -> Response:  # pragma: no cover - exercised in contract tests
+            # Non-pilot path -> legacy envelope with Retry-After header
+            try:
+                raise _TestRateLimitError("Rate limit exceeded for test_legacy", retry_after=7, limit="test_legacy")
+            except _TestRateLimitError as ex:  # legacy contract handler inline
+                from flask import jsonify as _json
+                retry = int(getattr(ex, "retry_after", 1) or 1)
+                payload = {"ok": False, "error": "rate_limited", "message": str(ex), "retry_after": retry, "limit": getattr(ex, "limit", None) or "none"}
+                resp = _json(payload)
+                resp.status_code = 429
+                resp.headers["Retry-After"] = str(retry)
+                resp.mimetype = "application/json"
+                return resp
+
+        @app.get("/diet/_test/limit_pilot")
+        def _test_limit_pilot() -> None:  # pragma: no cover - exercised in contract tests
+            # Pilot path -> ProblemDetails with retry_after
+            raise _TestRateLimitError("Rate limit exceeded for test_pilot", retry_after=9, limit="test_pilot")
 
     # --- Test / demonstration rate limit endpoint (Pocket 7) ---
     try:
@@ -855,7 +967,7 @@ def create_app(config_override: dict | None = None) -> Flask:
 
         @app.get("/_limit/test")
         @limit("test_endpoint", quota=3, per_seconds=60)
-        def _limit_test():  # pragma: no cover - will be covered in new rate limit tests
+        def _limit_test() -> dict[str, Any]:  # pragma: no cover - will be covered in new rate limit tests
             return {"ok": True, "limited": False}
     except Exception:  # pragma: no cover
         pass

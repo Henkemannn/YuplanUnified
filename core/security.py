@@ -14,16 +14,18 @@ CSRF Policy:
 """
 from __future__ import annotations
 
-import secrets
-from typing import Iterable
 import os
-try:  # optional dependency
-    from opentelemetry import metrics  # type: ignore
+import secrets
+from importlib import import_module
+from typing import Any
+
+# Optional dependency: import via importlib to avoid static resolver errors
+try:  # pragma: no cover - if OTEL not installed or disabled
+    metrics: Any = import_module("opentelemetry.metrics")
 except Exception:  # pragma: no cover
-    metrics = None  # type: ignore
+    metrics = None
 
-from flask import Flask, request, make_response, g
-
+from flask import Flask, g, make_response, request
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
@@ -34,7 +36,7 @@ TEST_EXEMPT = PROD_EXEMPT | {"/import/", "/admin/tenants", "/admin/features/togg
 _CSRF_COUNTERS = {"missing": 0, "mismatch": 0, "origin": 0}
 if metrics:
     try:
-        _meter = metrics.get_meter(__name__)  # type: ignore
+        _meter = metrics.get_meter(__name__)
         _csrf_blocked_counter = _meter.create_counter(
             name="security.csrf_blocked_total",
             description="Count of blocked CSRF-modifying requests by reason",
@@ -57,7 +59,7 @@ def _is_exempt(path: str, method: str, testing: bool) -> bool:
     return any(path.startswith(p) for p in base)
 
 def _problem_forbidden(reason: str, instance: str | None = None):  # RFC7807 minimal
-    from flask import jsonify, g
+    from flask import g, jsonify
     rid = getattr(g, "request_id", None)
     payload = {
         "type": "https://example.com/problems/forbidden",
@@ -185,7 +187,6 @@ def init_security(app: Flask):
     @app.route("/", methods=["OPTIONS"], defaults={"path": ""})
     @app.route("/<path:path>", methods=["OPTIONS"])
     def _cors_preflight(path=""):  # pragma: no cover - simple
-        from flask import make_response
         resp = make_response("")
         return _validate_cors(app, resp)
 

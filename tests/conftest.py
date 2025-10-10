@@ -106,6 +106,10 @@ def client_user(app_session):
     return app_session.test_client()
 
 @pytest.fixture
+def client_superuser(app_session):
+    return app_session.test_client()
+
+@pytest.fixture
 def client_no_tenant(app_session):
     c = app_session.test_client()
     return c

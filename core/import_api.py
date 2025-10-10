@@ -64,7 +64,8 @@ def _rate_limited(kind: str) -> Any | None:
 
 
 def _file_from_request() -> FileStorage | None:
-    return cast("FileStorage | None", request.files.get("file"))
+    fs = request.files.get("file")
+    return cast(FileStorage | None, fs)
 
 
 def _file_to_bytes(fs: FileStorage) -> bytes:

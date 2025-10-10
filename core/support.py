@@ -6,10 +6,13 @@ Exposes:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from flask import Blueprint, jsonify, request, current_app
+from datetime import UTC, datetime
 
-from .auth import require_roles
+from flask import Blueprint, current_app, jsonify, request
+
+from .app_authz import require_roles
+from .audit_events import record_audit_event
+from .http_errors import not_found, unprocessable_entity
 from .logging_setup import LOG_BUFFER
 from .telemetry import LOCAL_EVENTS
 
@@ -17,9 +20,9 @@ bp = Blueprint("support", __name__, url_prefix="/admin/support")
 
 
 @bp.get("/")
-@require_roles("admin", "superuser")
+@require_roles("superuser")
 def support_home():
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     # Copy recent warnings snapshot (avoid reference issues)
     recent = list(LOG_BUFFER)[-50:]
     data = {
@@ -33,17 +36,36 @@ def support_home():
 
 
 @bp.get("/lookup")
-@require_roles("admin", "superuser")
+@require_roles("superuser")
 def support_lookup():
     rid = request.args.get("request_id", "").strip()
+    # Always ProblemDetails: 422 with errors[] if missing request_id
     if not rid:
-        return jsonify({"error": "missing request_id"}), 400
+        resp = unprocessable_entity([{"field": "request_id", "msg": "required"}])
+        try:
+            record_audit_event("problem_response", status=422, type="validation_error", path=request.path)
+        except Exception:
+            pass
+        return resp
     hits = [r for r in LOG_BUFFER if r.get("request_id") == rid]
-    return jsonify({"request_id": rid, "hits": hits}), 200
+    return jsonify({"ok": True, "request_id": rid, "hits": hits}), 200
+
+@bp.get("/ticket/<string:rid>")
+@require_roles("superuser")
+def support_ticket(rid: str):
+    hits = [r for r in LOG_BUFFER if r.get("request_id") == rid]
+    if not hits:
+        resp = not_found("ticket_not_found")
+        try:
+            record_audit_event("problem_response", status=404, type="not_found", path=request.path)
+        except Exception:
+            pass
+        return resp
+    return jsonify({"ok": True, "request_id": rid, "hits": hits}), 200
 
 
 @bp.get("/ui")
-@require_roles("admin", "superuser")
+@require_roles("superuser")
 def support_ui():  # pragma: no cover - simple HTML shell
         return (
                 """<!doctype html><meta charset='utf-8'>

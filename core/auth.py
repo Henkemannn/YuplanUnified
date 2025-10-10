@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from functools import wraps
 
-from flask import Blueprint, current_app, jsonify, request, session, make_response
+from flask import Blueprint, current_app, jsonify, make_response, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_session
@@ -18,6 +18,8 @@ from .jwt_utils import (
     select_signing_secret,
 )
 from .models import Tenant, User
+
+# Legacy error envelopes are used for auth endpoints to preserve compatibility with tests/clients.
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 

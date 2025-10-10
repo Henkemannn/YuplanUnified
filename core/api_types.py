@@ -207,6 +207,8 @@ class ImportOkResponse(OkBase, total=False):
     meta: ImportMeta
     # Legacy alias (sunset TBD)
     dry_run: NotRequired[bool]
+    # Menu import dry-run diff entries (free-form objects)
+    diff: NotRequired[list[dict[str, object]]]
 
 
 class ImportErrorResponse(TypedDict, total=False):

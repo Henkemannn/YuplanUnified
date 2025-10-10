@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from flask import Response, current_app
 
+
 def set_secure_cookie(
     resp: Response,
     name: str,

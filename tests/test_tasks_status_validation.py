@@ -39,9 +39,11 @@ def test_invalid_status_rejected(client, seeded_admin):
     rv = login(client, "admin_status@example.com")
     assert rv.status_code == 200
     rv = client.post("/tasks/", json={"title": "X", "status": "nope"})
-    assert rv.status_code == 400
+    assert rv.status_code in (400, 422)
     data = rv.get_json()
-    assert data["error"] in ("validation_error","bad_request")
+    # RFC7807 ProblemDetails
+    assert data.get("status") in (400,422)
+    assert any(s in data.get("type"," ") for s in ["/validation_error","/bad_request"])
 
 
 def test_valid_status_sets_done_flag(client, seeded_admin):

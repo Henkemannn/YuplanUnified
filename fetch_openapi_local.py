@@ -8,16 +8,16 @@ Tries /openapi.json then /docs/openapi.json.
 Exit code 0 on success, 1 on failure.
 """
 from __future__ import annotations
+
 import argparse
 import json
 import sys
-import urllib.request
 import urllib.error
-from typing import Tuple
+import urllib.request
 
 FALLBACK_PATHS = ["/openapi.json", "/docs/openapi.json"]
 
-def fetch_spec(base_url: str, timeout: float) -> Tuple[str, dict]:
+def fetch_spec(base_url: str, timeout: float) -> tuple[str, dict]:
     errors = []
     for path in FALLBACK_PATHS:
         url = base_url.rstrip("/") + path

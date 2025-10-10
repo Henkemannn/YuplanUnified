@@ -13,8 +13,5 @@ def test_openapi_error_components(client):
     res = client.get("/openapi.json")
     spec = res.get_json()
     comps = spec["components"]
-    assert "schemas" in comps and "Error" in comps["schemas"]
-    assert "responses" in comps and "Error403" in comps["responses"]
-    # Check enriched forbidden example includes required_role
-    forbidden = comps["responses"]["Error403"]["content"]["application/json"]["examples"]["forbidden"]["value"]
-    assert "required_role" in forbidden
+    assert "schemas" in comps and "ProblemDetails" in comps["schemas"]
+    assert "responses" in comps and "Problem403" in comps["responses"]

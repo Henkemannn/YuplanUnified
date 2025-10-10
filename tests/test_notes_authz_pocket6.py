@@ -20,4 +20,4 @@ def test_notes_requires_session(client_no_tenant):
     r = client_no_tenant.get("/notes/")
     assert r.status_code == 401
     body = r.get_json()
-    assert body["ok"] is False and body["error"] == "unauthorized"
+    assert body.get("status") == 401 and body.get("type"," ").endswith("/unauthorized")

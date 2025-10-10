@@ -1,7 +1,7 @@
-import types
 import pytest
 
 from core.telemetry import track_event
+
 
 class DummyCounter:
     def __init__(self):

@@ -1,0 +1,64 @@
+name: ADR Lint
+
+on:
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  adr-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate ADR filenames
+        run: |
+          shopt -s nullglob
+          files=(adr/ADR-*.md)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No ADR files found. Skipping."
+            exit 0
+          fi
+          bad=0
+          ids=()
+          for f in "${files[@]}"; do
+            base=$(basename "$f")
+            if [[ ! "$base" =~ ^ADR-[0-9]{3}-.+\.md$ ]]; then
+              echo "Invalid ADR filename: $base (expected ADR-XXX-short-description.md)"
+              bad=1
+            else
+              num=${base:4:3}
+              ids+=("$num")
+            fi
+          done
+          if [ $bad -ne 0 ]; then
+            exit 1
+          fi
+          # Check uniqueness and sequence
+          sorted=$(printf "%s\n" "${ids[@]}" | sort)
+          unique=$(printf "%s\n" "$sorted" | uniq)
+          if [ "$(echo "$sorted" | wc -l)" -ne "$(echo "$unique" | wc -l)" ]; then
+            echo "Duplicate ADR numbers detected:"
+            printf "%s\n" "$sorted" | uniq -d
+            exit 1
+          fi
+          first=$(echo "$sorted" | head -n1)
+          last=$(echo "$sorted" | tail -n1)
+          count=$(echo "$sorted" | wc -l)
+          # Convert to ints, allow leading zeros
+          first_i=$((10#$first))
+          last_i=$((10#$last))
+          expected=$((last_i - first_i + 1))
+          if [ "$expected" -ne "$count" ]; then
+            echo "ADR numbers are not sequential without gaps (first=$first last=$last count=$count)"
+            exit 1
+          fi
+
+      - name: Validate ADR index includes latest
+        run: |
+          latest=$(ls adr/ADR-*.md | sed -E 's#.*/ADR-([0-9]{3})-.*#\1#' | sort | tail -n1)
+          title=$(grep -m1 "^# ADR-$latest" adr/ADR-$latest-*.md | sed -E 's/^# ADR-[0-9]{3}:? *//')
+          if ! grep -q "\[$title\](./ADR-$latest-" adr/README.md; then
+            echo "ADR index missing latest ADR-$latest ($title)"
+            exit 1
+          fi

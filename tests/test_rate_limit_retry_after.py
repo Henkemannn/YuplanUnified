@@ -1,4 +1,3 @@
-import itertools
 from core import create_app
 
 

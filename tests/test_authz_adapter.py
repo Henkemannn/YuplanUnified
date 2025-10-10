@@ -42,7 +42,7 @@ def test_cook_maps_to_viewer_forbidden_features(client):
     r = client.get("/features", headers={"Authorization": f"Bearer {token}", "X-Tenant-Id":"1"})
     assert r.status_code in (401,403)
     if r.status_code == 403:
-        j = r.get_json(); assert j["error"] == "forbidden"; assert j.get("required_role") in ("admin","superuser","editor")
+        j = r.get_json(); assert j.get("status") == 403 and j.get("type"," ").endswith("/forbidden"); assert j.get("required_role") in ("admin","superuser","editor")
 
 
 def test_unit_portal_maps_to_editor_partial_access(client):

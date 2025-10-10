@@ -23,12 +23,10 @@ def test_features_paths_documented_methods(client_admin):
     assert "unknown -> enabled=false" in (get_obj.get("responses", {}).get("200", {}).get("description",""))
 
 
-def test_error_schema_exact_fields(client_admin):
+def test_problem_schema_fields(client_admin):
     spec = client_admin.get("/openapi.json", headers={"X-User-Role":"admin","X-Tenant-Id":"1"}).get_json()
-    err = spec["components"]["schemas"]["Error"]
-    assert set(err["required"]) == {"error","message"}
-    assert set(err["properties"].keys()) == {"error","message"}
-    assert err.get("additionalProperties") is False
+    pd = spec["components"]["schemas"]["ProblemDetails"]
+    assert all(k in pd["properties"] for k in ("type","title","status","detail","request_id"))
 
 
 def test_paths_reference_error_responses(client_admin):

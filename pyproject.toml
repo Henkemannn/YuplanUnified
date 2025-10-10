@@ -47,3 +47,13 @@ line-ending = "auto"
 inline-quotes = "double"
 multiline-quotes = "double"
 docstring-quotes = "double"
+
+[tool.mypy]
+# Target runtime is Python 3.11, even if CI/dev may use newer interpreters.
+python_version = "3.11"
+# Allow third-party packages without type stubs to pass for RC.
+ignore_missing_imports = true
+# Keep config clean by warning on unused ignores added during triage.
+warn_unused_ignores = true
+# Enable strict Optional handling; other strict flags can come later post-RC.
+strict_optional = true

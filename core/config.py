@@ -15,6 +15,9 @@ class Config:
     jwt_audience: str = "api"
     jwt_max_age_seconds: int = 43200  # 12h
     jwt_leeway_seconds: int = 60
+    impersonation_max_age_seconds: int = 900  # 15 minutes default
+    strict_csrf_env: bool = False
+    problem_only: bool = True  # deprecated by ADR-003 (kept for backward compat, unused)
 
     @classmethod
     def from_env(cls) -> Config:
@@ -33,6 +36,9 @@ class Config:
             jwt_audience=os.getenv("JWT_AUDIENCE", "api"),
             jwt_max_age_seconds=int(os.getenv("JWT_MAX_AGE_SECONDS", "43200")),
             jwt_leeway_seconds=int(os.getenv("JWT_LEEWAY_SECONDS", "60")),
+            impersonation_max_age_seconds=int(os.getenv("IMPERSONATION_MAX_AGE_SECONDS", "900")),
+            strict_csrf_env=bool(int(os.getenv("YUPLAN_STRICT_CSRF", "0"))),
+            problem_only=True,
         )
 
     def override(self, d: dict):
@@ -52,6 +58,9 @@ class Config:
             "JWT_AUDIENCE": self.jwt_audience,
             "JWT_MAX_AGE_SECONDS": self.jwt_max_age_seconds,
             "JWT_LEEWAY_SECONDS": self.jwt_leeway_seconds,
+            "IMPERSONATION_MAX_AGE_SECONDS": self.impersonation_max_age_seconds,
+            "YUPLAN_STRICT_CSRF": self.strict_csrf_env,
+            # ProblemDetails is always on; legacy flag removed (ADR-003)
             "STRICT_CSRF_IN_TESTS": bool(int(os.getenv("STRICT_CSRF_IN_TESTS", "0"))),
             # Harden session cookie defaults (still allow override in tests)
             "SESSION_COOKIE_HTTPONLY": True,

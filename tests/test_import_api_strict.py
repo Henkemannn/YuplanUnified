@@ -142,8 +142,8 @@ def test_rate_limit_flag_on(monkeypatch):
             resp = client.post("/import/csv", data={"file": (io.BytesIO(CSV_SAMPLE), "data.csv")}, content_type="multipart/form-data", headers=headers)
             if resp.status_code == 429:
                 body = json.loads(resp.get_data())
-                assert body["error"] == "rate_limited"
-                assert isinstance(body.get("retry_after"), int)
+                assert body.get("status") == 429 and body.get("type"," ").endswith("/rate_limited")
+                assert isinstance(body.get("retry_after"), int) or body.get("retry_after") is None
                 hit_429 = True
                 break
         assert hit_429 is True

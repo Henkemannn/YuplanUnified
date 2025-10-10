@@ -73,8 +73,11 @@ def test_write_limit_flag_on_enforce():
     blocked = do_post(c, 1, 1)
     assert blocked.status_code == 429, blocked.get_data()
     body = blocked.get_json()
-    assert body["error"] == "rate_limited"
-    assert body["limit"] == "admin_limits_write"
+    # RFC7807 ProblemDetails
+    assert body["type"].endswith("/rate_limited")
+    assert body["status"] == 429
+    assert body.get("detail") in ("rate_limited","Too many requests","Too Many Requests")
+    assert body.get("limit") == "admin_limits_write"
     assert "retry_after" in body
     assert int(blocked.headers.get("Retry-After", "0")) >= 0
 

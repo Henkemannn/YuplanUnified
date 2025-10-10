@@ -44,7 +44,7 @@ class FeatureRegistry:
         self._defs: dict[str, FlagDefinition] = {d["name"]: d for d in base}
         self._enabled: set[str] = {d["name"] for d in base}  # all seed flags enabled by default
         # Backwards compatibility for tests referencing internal _flags (treated as enabled set)
-        self._flags = self._enabled  # type: ignore[attr-defined]
+        self._flags: set[str] = self._enabled
 
     def enabled(self, name: str) -> bool:
         return name in self._enabled and name in self._defs
@@ -60,7 +60,7 @@ class FeatureRegistry:
         accidental silent mode changes without explicit migration.
         """
         if isinstance(definition, str):
-            definition = {"name": definition, "mode": "simple"}  # type: ignore[assignment]
+            definition = {"name": definition, "mode": "simple"}
         name = definition["name"].strip()
         if not name:
             raise ValueError("flag name empty")

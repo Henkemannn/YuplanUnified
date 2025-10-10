@@ -127,7 +127,7 @@ class ServiceMetricsService:
                 served_g_per_guest = None
                 if row.guest_count and row.served_qty_kg:
                     served_g_per_guest = (row.served_qty_kg * 1000.0) / row.guest_count
-                out.append({  # type: ignore[arg-type]
+                out.append({
                     "date": row.d.isoformat(),
                     "unit_id": row.unit_id,
                     "meal": row.meal,

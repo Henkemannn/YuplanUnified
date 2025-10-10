@@ -163,6 +163,6 @@ def test_import_rate_limit_flag_on_off():
                 success += 1
             if resp.status_code == 429:
                 payload = json.loads(resp.data)
-                assert payload["error"] == "rate_limited"
+                assert payload.get("status") == 429 and payload.get("type"," ").endswith("/rate_limited")
                 break
         assert success <= 5

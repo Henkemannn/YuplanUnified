@@ -1,5 +1,6 @@
 from core import create_app
 
+
 def test_csrf_cookie_flags_prod():
     app = create_app({"TESTING": False, "SECRET_KEY": "x"})
     client = app.test_client()

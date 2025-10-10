@@ -23,7 +23,7 @@ def test_within_quota_allows():
     r = c.get("/_limit/test")
     assert r.status_code == 429
     data = r.get_json()
-    assert data["error"] == "rate_limited"
+    assert data.get("status") == 429 and data.get("type"," ").endswith("/rate_limited")
     assert "retry_after" in data
 
 

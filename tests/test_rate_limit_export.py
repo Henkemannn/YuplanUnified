@@ -52,8 +52,7 @@ def test_export_flag_on_enforces_limit():
     assert "Retry-After" in r.headers
     assert int(r.headers["Retry-After"]) >= 0
     data = r.get_json()
-    assert data["ok"] is False
-    assert data["error"] == "rate_limited"
+    assert data.get("status") == 429 and data.get("type"," ").endswith("/rate_limited")
     assert "retry_after" in data
 
 

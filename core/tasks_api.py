@@ -23,7 +23,7 @@ from .audit import log_task_status_transition
 from .db import get_session
 from .deprecation import apply_deprecation
 from .deprecation_warn import should_warn, warn_phase_enabled
-from .errors import NotFoundError, ValidationError
+from .errors import APIError, NotFoundError
 from .metrics import increment
 from .models import Task
 from .pagination import make_page_response, parse_page_params
@@ -214,13 +214,15 @@ def update_task(task_id: int) -> TaskUpdateResponse | Response:
         if "title" in data:
             title = (data.get("title") or "").strip()
             if not title:
-                raise ValidationError("title required")
+                # Legacy tests expect 400 bad_request for invalid input here
+                raise APIError("title required", error="bad_request", status=400)
             t.title = title
         if "status" in data:
             status = data.get("status")
             if status not in ALLOWED_STATUS:
                 allowed_list = ", ".join(sorted(ALLOWED_STATUS))
-                raise ValidationError(f"Invalid status '{status}'. Allowed: {allowed_list}.")
+                # Raise 400 with detailed message containing allowed list (tests assert tokens present)
+                raise APIError(f"Invalid status '{status}'. Allowed: {allowed_list}.", error="bad_request", status=400)
             old_status = getattr(t, "status", "done" if t.done else "todo")
             t.done = (status == "done")
             if hasattr(t, "status"):
