@@ -602,6 +602,10 @@ Breakage rules (treated as breaking and fail the job):
 
 Widenings allowed (examples): removing `pattern`, increasing `maxLength`, decreasing `minLength`, adding new optional properties, adding enum values, adding new paths/operations/responses/content-types.
 
+## 🔐 Confidentiality Notice
+Yuplan är proprietär mjukvara. © 2025 Henrik Jonsson — All Rights Reserved.
+All kod, dokumentation och data tillhör Henrik Jonsson. Obehörig användning är förbjuden.
+
 ## Strict typing pockets (RC1)
 
 The goal for RC1 is to keep noise low while ensuring core reliability. “Strict: Yes” means `mypy --strict` (or equivalent config) passes for that module; “No” means temporarily relaxed while we iterate.

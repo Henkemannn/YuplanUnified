@@ -57,6 +57,14 @@ requirements.freeze.txt
 # Bundles / archives
 *.bundle
 *.zip
+# Sensitive / secrets
+.env
+.env.*
+secrets.*
+credentials.*
+
+# Coverage dir
+coverage/
 # Python
 __pycache__/
 *.pyc
