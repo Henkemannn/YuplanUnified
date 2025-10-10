@@ -1,3 +1,45 @@
+## Problem Details (RFC7807) — Full Adoption
+
+What
+- All endpoints now return RFC7807 Problem Details for error responses (4xx/5xx).
+
+Behavior
+- Content type: application/problem+json
+- Required fields: type, title, status, detail
+- Extensions: request_id (always), incident_id (500), errors[] (422), retry_after (429), required_role (403 when applicable)
+
+Request correlation
+- X-Request-Id header is echoed as payload.request_id in problem responses.
+
+Examples
+- 401 Unauthorized
+  - type: https://example.com/errors/unauthorized
+  - title: Unauthorized
+  - status: 401
+  - detail: unauthorized
+  - request_id: 11111111-1111-1111-1111-111111111111
+- 422 Validation
+  - type: https://example.com/errors/validation_error
+  - title: Unprocessable Entity
+  - status: 422
+  - detail: validation_error
+  - errors: [{"field": "name", "message": "required"}]
+  - request_id: 22222222-2222-2222-2222-222222222222
+- 429 Too Many Requests
+  - type: https://example.com/errors/rate_limited
+  - title: Too Many Requests
+  - status: 429
+  - detail: rate_limited
+  - retry_after: 30
+  - limit: tasks_mutations
+  - headers: Retry-After: 30
+- 500 Incident
+  - type: https://example.com/errors/internal_error
+  - title: Internal Server Error
+  - status: 500
+  - detail: internal_error
+  - incident_id: 33333333-3333-3333-3333-333333333333
+  - request_id: 33333333-3333-3333-3333-333333333333
 # Yuplan Unified Platform (Scaffold)
 
 [![CI](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml)
@@ -69,6 +111,18 @@ Release workflow: automatically produces OpenAPI diff artifacts (`openapi-diff.t
 After `v1.0.0-beta`: Further additive changes bump MINOR; any breaking change requires a MAJOR plan (`2.0.0`) unless explicitly deferred pre-GA.
 
 For the exact steps, see **[RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md)**.
+
+### Feature Flag: Strict CSRF
+An opt-in stricter CSRF enforcement layer can be enabled with environment variable `YUPLAN_STRICT_CSRF=1`.
+
+When active:
+* A per-session token is generated and exposed to templates and JS (meta tag `csrf-token`).
+* Mutating requests under selected prefixes (`/diet/`, `/superuser/impersonate/`) MUST include `X-CSRF-Token` header or form field `csrf_token`.
+* Failures return RFC7807 problem+json (`csrf_missing` or `csrf_invalid`).
+* A lightweight fetch wrapper (`/static/js/http.js`) auto-injects the header in the UI.
+* Prefix list expands gradually as tests migrate.
+
+Disable by omitting or setting the variable to `0` (legacy protections remain in place).
 
 ### Release helper
 PowerShell (Windows):
@@ -214,10 +268,7 @@ Default: OFF (no throttling). When enabled for a tenant:
 * Default quota: 10 requests per 60s window (registry key `admin_limits_write`).
 * Per-tenant override supported via `FEATURE_LIMITS_JSON` using key `tenant:<id>:admin_limits_write`.
 * Registry global override via `FEATURE_LIMITS_DEFAULTS_JSON` key `admin_limits_write`.
-* Exceeding quota yields HTTP 429 with JSON:
-  ```json
-  {"ok": false, "error": "rate_limited", "message": "Rate limit exceeded for admin_limits_write", "retry_after": 42, "limit": "admin_limits_write"}
-  ```
+* Exceeding quota yields HTTP 429 ProblemDetails (application/problem+json) with fields: status=429, type=/rate_limited, retry_after, limit and header Retry-After.
 * Metrics emitted: `rate_limit.hit` (tags: name=admin_limits_write, outcome=allow|block, window=60) and `rate_limit.lookup` (source=fallback|default|tenant).
 
 Enable for a pilot tenant via:
@@ -226,11 +277,7 @@ POST /admin/feature_flags
 {"name": "rate_limit_admin_limits_write", "enabled": true}
 ```
 
-* Exceeding the quota results in HTTP 429 with JSON body:
-  ```json
-  {"ok": false, "error": "rate_limited", "message": "Rate limit exceeded for export_notes_csv", "retry_after": 37, "limit": "export_notes_csv"}
-  ```
-  and header `Retry-After: <seconds>`.
+* Exceeding the quota results in HTTP 429 ProblemDetails and header `Retry-After: <seconds>`.
 
 Enable via Admin API (role editor/admin allowed to manage flags):
 ```
@@ -337,6 +384,15 @@ Phasing plan:
 
 ### CI Integration
 The lint / type gate runs in a dedicated workflow: `.github/workflows/lint-type.yml` (Ruff first, then Mypy). The general test workflow remains in `.github/workflows/ci.yml`.
+
+## Architecture Decisions
+
+- See ADR index: `adr/README.md`
+
+Current ADRs:
+- ADR-001: Global 429 Standardization — `adr/ADR-001-global-429-standardization.md`
+- ADR-002: Strict CSRF Rollout — `adr/ADR-002-strict-csrf-rollout.md`
+- ADR-003: Full RFC7807 Adoption and Legacy Error Retirement — `adr/ADR-003-full-rfc7807-adoption.md`
 
 PR Checklist (developer self-check):
 1. `ruff check .` passes with no new violations.
@@ -1070,3 +1126,9 @@ Proprietary & Confidential. All rights reserved.
 
 ---
 Generated scaffold intended for iterative build with AI assistance (Copilot). Follow the roadmap phases to implement functionality safely.
+
+Add a section linking to the idea bank
+💡 New Ideas
+
+Concept sketches and early features are kept in new_ideas/
+.

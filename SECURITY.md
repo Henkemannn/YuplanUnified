@@ -53,8 +53,12 @@ We use a CVSS v3.1 inspired severity mapping. If exploitability is low and there
 | Pre-commit Hooks | Lint + type guard before code lands. |
 | pip-audit Workflow | Identifies vulnerable dependencies. |
 | Release Readiness Script | Ensures baseline, tests, lint, diff status before tagging. |
+| Error Hygiene | All 4xx/5xx errors use RFC7807 Problem Details. 429 always sets `Retry-After` header and includes `retry_after` (and `limit` when applicable). See ADR-001 and ADR-003. |
 
 ---
+
+## Governance
+All future security and protocol decisions must be captured as an ADR and referenced by ID in relevant docs and PRs (e.g., "See ADR-001"). See the ADR index at `adr/README.md`. For CSRF posture and rollout specifics, see ADR-002.
 
 # Technical Security Controls
 
@@ -78,11 +82,23 @@ Other rejection reasons: `malformed`, `bad_header`, `bad_signature`, `bad_payloa
 Metric: `security.jwt_rejected_total{reason=*}` increments for every decode failure.
 
 ## CSRF Protection
+See ADR-002 (Strict CSRF Rollout) for the governance decision and migration plan.
 Production (TESTING=False) uses a double-submit token (`csrf_token` cookie + `X-CSRF-Token` header) OR strict same-origin check for mutating methods. Safe methods (GET/HEAD/OPTIONS) are always allowed. Exempt prefixes: `/auth/`, `/metrics`.
 
 In test mode we currently bypass enforcement unless `STRICT_CSRF_IN_TESTS=1`, allowing incremental hardening. CSRF denials return RFC7807 problem+json with `detail` in {`csrf_missing`,`csrf_mismatch`,`origin_mismatch`}.
 
 Metric: `security.csrf_blocked_total{reason=missing|mismatch|origin}`.
+
+### Strict CSRF (Flag-Gated Migration)
+An additional stricter layer can be enabled via env flag `YUPLAN_STRICT_CSRF=1` which activates a new middleware (`core/csrf.py`) *in addition to* legacy protections. Characteristics:
+* Enforced only for selected prefixes initially: `/diet/`, `/superuser/impersonate/` (mutating methods).
+* Per-session token stored in server session (rotated every 24h) and injected into templates as meta `<meta name="csrf-token" ...>` and helper `csrf_token_input()` for forms.
+* Accepted via header `X-CSRF-Token` (preferred) or form field `csrf_token`.
+* Failures return RFC7807 with types:
+  * `https://example.com/problems/csrf_missing` (detail `csrf_missing`)
+  * `https://example.com/problems/csrf_invalid` (detail `csrf_invalid`)
+* JavaScript helper (`/static/js/http.js`) automatically attaches the token to mutating `fetch()` requests.
+* Designed for incremental expansion of `ENFORCED_PREFIXES` after test coverage migration.
 
 ## Cookie Policy
 | Cookie | Secure (prod) | HttpOnly | SameSite | Notes |
@@ -107,6 +123,34 @@ Brute-force login and certain admin/feature endpoints enforce per-user / per-ten
 | security.jwt_rejected_total | reason | JWT decode failures by reason |
 | security.csrf_blocked_total | reason | CSRF denials |
 | http.405_mapped_to_404_total | method | 405 responses mapped to 404 |
+| audit.impersonation_start/stop/auto_expire (OTEL span) | action | Impersonation lifecycle (spans only if OTEL present) |
+
+### Superuser Impersonation
+Purpose: enforce principle-of-least-privilege. A `superuser` MUST impersonate a tenant admin context before performing write operations that mutate tenant-scoped data. Reads may still be direct depending on future policy.
+
+Lifecycle:
+1. POST `/superuser/impersonate/start` with `{tenant_id, reason}`
+2. Request session stores: `tenant_id`, `reason`, `started_at`, `expires_at` (`IMPERSONATION_MAX_AGE_SECONDS`, default 900s), `admin_user_id`, snapshot of original roles.
+3. Each request applies impersonation (before_request) promoting effective roles to include `admin` and overriding `g.tenant_id`.
+4. Expiry: if `expires_at` passed the state auto-expires (cleared) and an audit event `impersonation_auto_expire` is recorded.
+5. Manual stop: POST `/superuser/impersonate/stop` → audit event `impersonation_stop`.
+
+Audit Events (in-memory buffer; future persistence):
+- `impersonation_start` (actor_user_id, tenant_id, reason, expires_at)
+- `impersonation_stop` (actor_user_id, tenant_id)
+- `impersonation_auto_expire` (actor_user_id, tenant_id, started_at)
+
+Problem Types (RFC7807):
+- `https://example.com/problems/impersonation-required` with `detail: impersonation_required` when a superuser attempts a protected write without active impersonation.
+- Generic forbidden retains `https://example.com/problems/forbidden` for legacy CSRF issues.
+- Future: `https://example.com/problems/impersonation-expired` if we surface explicit expired state feedback instead of silent clearing.
+
+UI: Active impersonation banner (orange) shows tenant, remaining seconds, reason, and Stop button; disappears automatically on expiry or stop.
+
+Configuration:
+- `IMPERSONATION_MAX_AGE_SECONDS` (env; default 900) – hard upper bound for a session; requires re-affirmation after expiry.
+
+Security Rationale: forces deliberate escalation with auditable reason, constrains blast radius (time + scope), and provides operator visibility in support tooling.
 
 All metrics are best-effort; if OpenTelemetry is absent they silently no-op.
 
@@ -154,6 +198,9 @@ Remove `issues: write` unless actually posting issues. For PR comments use `pull
 * 429 responses include `Retry-After` for polite backoff.
 * Metrics: `rate_limit.hit` (`allow|block`) and `rate_limit.lookup` sources to monitor systemic pressure.
 * Adjust per-tenant limits under feature flags for burst containment.
+
+## RFC7807 Scope
+Problem Details (RFC7807) is now canonical across all endpoints (401/403/404/409/422/429/500). `WWW-Authenticate` is included for 401 when appropriate. See ADR-003 for the adoption decision.
 
 ## Data Handling (PII / Telemetry)
 | Aspect | Approach |

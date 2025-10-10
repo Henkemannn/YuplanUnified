@@ -1,4 +1,26 @@
+## [Unreleased]
+- Pilot scope clarification: Auth endpoints remain on legacy envelopes during the ProblemDetails pilot. Migration to ProblemDetails for auth will occur in a later sweep once clients/tests are updated.
+- Legacy 429 responses now include `retry_after` (JSON) and `Retry-After` (header), and when available a `limit` field indicating the symbolic rate limit name. This applies to non-pilot endpoints; pilot endpoints continue to emit RFC7807 with `retry_after`.
+ - Docs: Add Global 429 Standardization guide (`docs/429-standardization.md`).
+ - Docs: Add ADR-002 Strict CSRF Rollout (`adr/ADR-002-strict-csrf-rollout.md`).
+ - Docs: Add ADR-003 Full RFC7807 Adoption (`adr/ADR-003-full-rfc7807-adoption.md`).
+
+### Added
+- RFC7807 ProblemDetails pilot (flag `YUPLAN_PROBLEM_ONLY=1` by default)
+
+### Changed
+- Non-pilot 403 legacy envelopes now include `required_role` consistently
+
+### Docs
+- README and SECURITY updated with pilot scope, examples, and rollout plan
+
+### CI
+- Gate ensuring pilot endpoints emit `application/problem+json` when flag enabled
 ## Unreleased
+
+### Features
+- feat(core): RFC7807 full adoption — all endpoints return ProblemDetails. Standardized 429 includes `Retry-After` header and `retry_after` body field; 401/403 carry appropriate details, 422 includes `errors[]`, and 500 emits `incident_id`.
+
 
 ### Added
 - Strict Pocket 5: Tasks API & service under `--strict`.
