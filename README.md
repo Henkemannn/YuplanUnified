@@ -599,6 +599,30 @@ Breakage rules (treated as breaking and fail the job):
 
 Widenings allowed (examples): removing `pattern`, increasing `maxLength`, decreasing `minLength`, adding new optional properties, adding enum values, adding new paths/operations/responses/content-types.
 
+## Strict typing pockets (RC1)
+
+The goal for RC1 is to keep noise low while ensuring core reliability. “Strict: Yes” means `mypy --strict` (or equivalent config) passes for that module; “No” means temporarily relaxed while we iterate.
+
+| Module                       | Strict | Notes                                                     |
+|-----------------------------|:------:|-----------------------------------------------------------|
+| `core.errors`               |  Yes   | Central error types and helpers.                          |
+| `core.http_errors`          |  Yes   | RFC7807 mapping; kept small and well-typed.               |
+| `core.csrf`                 |  Yes   | Token utilities; decorator noise silenced as needed.      |
+| `core.app_factory`          |  Yes   | Return types for app/blueprints typed.                    |
+| `core.rate_limit`           |  Yes   | Public API typed; helpers annotated.                      |
+| `core.limit_registry`       |  Yes   | Registry generics constrained.                            |
+| `core.audit_events`         |  Yes   | Event dataclasses/TypedDicts locked down.                 |
+| `core.audit_repo`           |  Yes   | Narrow I/O surface; typed repository methods.             |
+| `core.jwt_utils`            |  Yes   | (From earlier pocket)                                     |
+| `core.db`                   |  Yes   | (From earlier pocket)                                     |
+| `core.*_api`                |   No   | RC1 noise bucket—gradual re-enable post-RC.               |
+| `core.ui_blueprint`         |   No   | DTO/view-model churn; enable after endpoints stabilize.   |
+| `legacy/*`                  |   No   | Excluded in RC1.                                          |
+| `importers/*`               |   No   | Deferred; high change rate.                               |
+| `telemetry/*`               |   No   | Deferred; pending event schema freeze.                    |
+
+Re-enable plan (post-RC): reintroduce modules one at a time; prefer `TypedDict`/`Protocol` facades over deep refactors; keep diffs small.
+
 Updating the baseline intentionally:
 1. Implement your API change and update spec generation.
 2. Regenerate spec locally:
