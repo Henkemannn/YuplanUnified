@@ -163,3 +163,14 @@
 - Added write endpoints: `POST /admin/limits` (upsert tenant override) and `DELETE /admin/limits` (idempotent removal). Clamps quota/per_seconds, returns mutation envelope with `updated` or `removed` flags.
 - Added audit logging for admin limits mutations (`limits_upsert`, `limits_delete`) capturing tenant_id, name, quota/per_seconds (upsert), updated/removed flag, actor_user_id, actor_role.
 
+## [1.0.0] — 2025-10-10
+### Added
+- README: “Strict typing pockets (RC1)” section.
+- GA checklist template (`docs/GA_CHECKLIST_ISSUE.md`).
+
+### Changed
+- Standardized RFC7807 documentation and verification guidance.
+
+### Fixed
+- Ruff auto-fixes applied ahead of RC tag.
+
