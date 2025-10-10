@@ -71,7 +71,7 @@ def diff_enums(old_enum: list[Any] | None, new_enum: list[Any] | None) -> tuple[
     return removed, added
 
 
-def diff_schemas(ctx: str, base_schema: dict, new_schema: dict) -> list[str]:  # type: ignore[override]
+def diff_schemas(ctx: str, base_schema: dict, new_schema: dict) -> list[str]:
     brk: list[str] = []
 
     base_ref = base_schema.get("$ref")

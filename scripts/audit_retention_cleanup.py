@@ -39,7 +39,10 @@ def count_before(cutoff: datetime) -> int:
     from core.models import AuditEvent
     db = get_session()
     try:
-        return db.execute(select(func.count()).select_from(AuditEvent).where(AuditEvent.ts < cutoff)).scalar_one()  # type: ignore[no-any-return]
+        result = db.execute(
+            select(func.count()).select_from(AuditEvent).where(AuditEvent.ts < cutoff)
+        ).scalar_one()
+        return int(result)
     finally:
         db.close()
 

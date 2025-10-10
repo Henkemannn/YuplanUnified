@@ -1163,3 +1163,19 @@ Add a section linking to the idea bank
 
 Concept sketches and early features are kept in new_ideas/
 .
+
+## Secrets & privacy
+
+### Superuser password (local/CI)
+The script `scripts/set_superuser.py` no longer contains a hardcoded password. It requires the environment variable `YUPLAN_SUPERUSER_PASSWORD` to be set.
+
+- Local (PowerShell):
+  - `$env:YUPLAN_SUPERUSER_PASSWORD = "<strong password>"`
+  - `python scripts/set_superuser.py`
+
+- CI (GitHub Actions):
+  - Add a repository secret named `YUPLAN_SUPERUSER_PASSWORD` and expose it to jobs that need to seed the superuser.
+  - Example step:
+    - `env: { YUPLAN_SUPERUSER_PASSWORD: ${{ secrets.YUPLAN_SUPERUSER_PASSWORD }} }`
+
+Important: Never commit secrets. `.gitignore` already ignores `.env*`, `secrets.*`, and `credentials.*` files.

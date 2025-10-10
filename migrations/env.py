@@ -9,8 +9,8 @@ from sqlalchemy import engine_from_config, pool
 
 # Include core models
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from core.config import Config  # type: ignore
-from core.models import Base  # type: ignore
+from core.config import Config
+from core.models import Base
 
 # this is the Alembic Config object
 config = context.config

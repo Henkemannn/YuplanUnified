@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dotenv import load_dotenv
 
-from core import create_app  # type: ignore
+from core import create_app
 
 load_dotenv()
 

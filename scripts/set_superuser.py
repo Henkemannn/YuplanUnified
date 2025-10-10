@@ -2,7 +2,7 @@
 
 Usage: python scripts/set_superuser.py
 
-NOTE: Contains a plaintext password per explicit user request. Remove or edit after use.
+Reads password from environment variable YUPLAN_SUPERUSER_PASSWORD (no hardcoded fallback).
 """
 import os
 import sys
@@ -19,17 +19,23 @@ from core.db import get_session, init_engine
 from core.models import Tenant, User
 
 TARGET_EMAIL = "info@yuplan.se"
-TARGET_PASSWORD = "G0teb0rg031"  # Plaintext by user instruction
+ENV_VAR = "YUPLAN_SUPERUSER_PASSWORD"
 
 def main():
     cfg = Config.from_env()
     init_engine(cfg.database_url)
     db = get_session()
     try:
+        password = os.environ.get(ENV_VAR)
+        if not password:
+            sys.stderr.write(
+                f"[ERROR] Missing env var {ENV_VAR}. Set it securely and retry.\n"
+            )
+            sys.exit(1)
         # Ensure at least one tenant exists
         tenant = db.query(Tenant).first()
         if not tenant:
-            tenant = Tenant(name="Primary")  # type: ignore
+            tenant = Tenant(name="Primary")
             db.add(tenant)
             db.flush()
 
@@ -40,7 +46,7 @@ def main():
 
         if user:
             user.email = TARGET_EMAIL.lower()
-            user.password_hash = generate_password_hash(TARGET_PASSWORD)
+            user.password_hash = generate_password_hash(password)
             user.role = "superuser"
             user.tenant_id = tenant.id
             action = "updated"
@@ -48,7 +54,7 @@ def main():
             user = User(
                 tenant_id=tenant.id,
                 email=TARGET_EMAIL.lower(),
-                password_hash=generate_password_hash(TARGET_PASSWORD),
+                password_hash=generate_password_hash(password),
                 role="superuser",
                 unit_id=None
             )

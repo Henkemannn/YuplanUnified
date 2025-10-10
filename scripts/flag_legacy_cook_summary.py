@@ -28,9 +28,9 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from core.config import Config  # type: ignore
-from core.db import get_session, init_engine  # type: ignore
-from core.models import Tenant, TenantFeatureFlag  # type: ignore
+from core.config import Config
+from core.db import get_session, init_engine
+from core.models import Tenant, TenantFeatureFlag
 
 FLAG_NAME = "allow_legacy_cook_create"
 
