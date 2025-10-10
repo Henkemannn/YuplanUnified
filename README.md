@@ -58,6 +58,9 @@ Examples
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
 
+## Contributing
+See CONTRIBUTING.md for branching, PR, and quality gates. Use the GitHub Issue templates for GA checklist and roadmap kickoff from the New Issue menu.
+
 ## Quick reference (OpenAPI)
 * PowerShell helpers: `./scripts/dev.ps1; Invoke-OpenAPIWorkflow` fetches spec, semantic diff, optional spectral lint, focused tests.
 * Fetch only: `./scripts/dev.ps1; Get-OpenAPISpec` writes `openapi.json` (badge workflow in CI consumes semantic diff artifacts).
