@@ -524,7 +524,6 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 "get": attach_problem({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Get task"}}}, ["401","403","404","500"]),
                 "put": attach_problem({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Update task"}}}, ["400","401","403","404","409","500"]),
                 "delete": attach_problem({"tags": ["Tasks"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Delete task"}}}, ["401","403","404","500"]),
-                    "/features/set": {"post": attach_problem({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Updated flag"}}}, ["400","401","429","500"])},
             },
             "/admin/flags/legacy-cook": {
                 "get": {

@@ -1,0 +1,8 @@
+{
+  // Prefer standard rules, but relax some for long docs and headings
+  "MD013": false,             // line length
+  "MD033": false,             // inline HTML allowed (badges, details)
+  "MD041": false,             // first line heading (some docs start with badges)
+  "MD024": { "allow_different_nesting": true },
+  "MD046": { "style": "fenced" }
+}
