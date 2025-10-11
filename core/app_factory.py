@@ -411,10 +411,19 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     # --- OpenAPI Spec Endpoint ---
     @app.get("/health")
     def health() -> dict[str, Any]:
+        try:
+            # list() returns dicts with name/enabled/mode; expose enabled feature names for quick glance
+            enabled_feature_names = sorted([f["name"] for f in feature_registry.list() if f.get("enabled")])
+        except Exception:
+            # Fallback to internal set if present (backward compat)
+            try:
+                enabled_feature_names = sorted(getattr(feature_registry, "_flags", set()))  # type: ignore[arg-type]
+            except Exception:
+                enabled_feature_names = []
         return {
             "status": "ok",
             "modules": list(cfg.default_enabled_modules),
-            "features": sorted(feature_registry._flags.keys()),  # type: ignore[attr-defined]
+            "features": enabled_feature_names,
         }
 
     @app.get("/openapi.json")

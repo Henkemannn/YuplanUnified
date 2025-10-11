@@ -259,16 +259,59 @@ def me():
 
 # --- Bootstrap Superuser Utility ---
 def ensure_bootstrap_superuser():
+    """Create a bootstrap superuser in development when env vars are provided.
+
+    Behavior:
+    - Requires SUPERUSER_EMAIL and SUPERUSER_PASSWORD.
+    - If tables are missing and DEV_CREATE_ALL/YUPLAN_DEV_CREATE_ALL is set to 1, auto-create schema.
+    - If DB isn't ready or tables are missing and auto-create isn't enabled, skip silently.
+    This avoids crashing app startup on a fresh environment.
+    """
     email = os.getenv("SUPERUSER_EMAIL")
     password = os.getenv("SUPERUSER_PASSWORD")
     if not email or not password:
         return
-    db = get_session()
+
+    auto_create = os.getenv("DEV_CREATE_ALL", "0") == "1" or os.getenv("YUPLAN_DEV_CREATE_ALL", "0") == "1"
+
     try:
-        has_user = db.query(User).first()
+        db = get_session()
+    except Exception:
+        # DB session factory not initialized yet
+        return
+
+    try:
+        # Ensure schema exists when allowed in dev
+        if auto_create:
+            try:
+                from .db import create_all as _create_all  # local import to avoid cycles
+                _create_all()
+            except Exception:
+                # Non-fatal; continue and let the next step decide
+                pass
+
+        # Check that required tables exist; if not, skip (or they were just created)
+        try:
+            from sqlalchemy import inspect as _sa_inspect  # type: ignore
+            inspector = _sa_inspect(db.bind)
+            has_users = inspector.has_table("users")
+            has_tenants = inspector.has_table("tenants")
+            if not (has_users and has_tenants):
+                return
+        except Exception:
+            # If inspection fails (e.g., driver-specific), best effort: try a safe query and catch
+            pass
+
+        # Proceed only if there are no users
+        try:
+            has_user = db.query(User).first()
+        except Exception:
+            # Likely missing tables; nothing to do
+            return
         if has_user:
             return
-        # Create tenant
+
+        # Create tenant and superuser
         tenant = Tenant(name="Primary")
         db.add(tenant)
         db.flush()
@@ -276,6 +319,9 @@ def ensure_bootstrap_superuser():
         user = User(tenant_id=tenant.id, email=email.lower(), password_hash=pw_hash, role="superuser", unit_id=None)
         db.add(user)
         db.commit()
-        current_app.logger.info("Bootstrap superuser created: %s", email)
+        try:
+            current_app.logger.info("Bootstrap superuser created: %s", email)
+        except Exception:
+            pass
     finally:
         db.close()
