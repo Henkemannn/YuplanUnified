@@ -409,6 +409,14 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         app.logger.warning("Failed to install support log handler", exc_info=True)
 
     # --- OpenAPI Spec Endpoint ---
+    @app.get("/health")
+    def health() -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "modules": list(cfg.default_enabled_modules),
+            "features": sorted(feature_registry._flags.keys()),  # type: ignore[attr-defined]
+        }
+
     @app.get("/openapi.json")
     def openapi_spec() -> dict[str, Any]:  # pragma: no cover
         note_schema = {
