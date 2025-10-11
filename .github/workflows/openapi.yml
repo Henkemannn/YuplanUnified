@@ -63,6 +63,7 @@ jobs:
       - name: Start app
         env:
           FLASK_ENV: production
+          DATABASE_URL: sqlite:///ci_openapi_workflow.db
         run: |
           # Byt startkommando om ni använder något annat än run.py
           nohup python run.py >/tmp/app.log 2>&1 &
@@ -83,6 +84,7 @@ jobs:
 
       - name: Fetch OpenAPI spec
         run: |
+          set -x
           curl -fsS http://127.0.0.1:5000/openapi.json > openapi.json
           test -s openapi.json
 

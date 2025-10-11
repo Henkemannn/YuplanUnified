@@ -30,9 +30,10 @@ jobs:
           python --version
           ruff --version
           mypy --version
+          python -m pip freeze | sed -n '1,120p'
 
       - name: Ruff Lint
-        run: ruff check .
+        run: python -m ruff check .
 
       - name: Mypy Type Check
-        run: mypy --config-file mypy.ini .
+        run: python -m mypy --show-traceback --config-file mypy.ini .
