@@ -40,11 +40,14 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-      - name: Install minimal deps
+      - name: Install dependencies for spec generation
         run: |
           python -m pip install --upgrade pip
-          pip install openapi-spec-validator==0.7.1 Flask==3.0.3
+          pip install -r requirements.txt || true
+          pip install openapi-spec-validator==0.7.1
       - name: Generate spec via app context
+        env:
+          DATABASE_URL: sqlite:///ci_openapi.db
         run: |
           python - <<'PY'
           from core.app_factory import create_app
