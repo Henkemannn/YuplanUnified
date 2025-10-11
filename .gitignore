@@ -53,6 +53,9 @@ node_modules/
 # Generated exports / snapshots
 openapi_snapshot_*.json
 requirements.freeze.txt
+specs/openapi.current.json
+specs/openapi.diff.txt
+specs/openapi.diff.json
 
 # Bundles / archives
 *.bundle
