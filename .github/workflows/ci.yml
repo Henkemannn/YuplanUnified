@@ -65,18 +65,23 @@ jobs:
           python - <<'PY'
           import json
           import hashlib, os
-          from openapi_spec_validator import validate
-          data = json.load(open('openapi.json'))
-          validate(data)
+          try:
+              # Prefer validate_spec for 0.7.x API
+              from openapi_spec_validator import validate_spec as _validate
+          except Exception:
+              # Fallback for older versions
+              from openapi_spec_validator import validate as _validate
+          data = json.load(open('openapi.json', 'r', encoding='utf-8'))
+          _validate(data)
           raw = json.dumps(data, sort_keys=True).encode()
           sha = hashlib.sha256(raw).hexdigest()[:12]
-          paths = len(data.get('paths',{}))
-          schemas = len(data.get('components',{}).get('schemas',{}))
-          summary = f"OpenAPI spec validation succeeded. Paths={paths} Schemas={schemas} SHA={sha}\nArtifact: openapi-spec (openapi.json)"
+          paths = len(data.get('paths', {}))
+          schemas = len(data.get('components', {}).get('schemas', {}))
+          summary = f"OpenAPI spec validation succeeded. Paths={paths} Schemas={schemas} SHA={sha}"
           print(summary)
-          with open(os.environ.get('GITHUB_STEP_SUMMARY','/dev/null'),'a') as fh:
+          with open(os.environ.get('GITHUB_STEP_SUMMARY','/dev/null'), 'a', encoding='utf-8') as fh:
               fh.write('### OpenAPI Summary\n')
-              fh.write(summary+'\n')
+              fh.write(summary + '\n')
           PY
       - name: Upload OpenAPI artifact
         uses: actions/upload-artifact@v4
