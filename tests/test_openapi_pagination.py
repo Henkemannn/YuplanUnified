@@ -19,8 +19,12 @@ def test_openapi_contains_pagination_components():
         comps = spec.get("components", {}).get("schemas", {})
         assert "PageMeta" in comps, "PageMeta component missing"
         # Allow either pluralization style for flexibility but require tasks & notes specific
-        found_tasks = any(k.startswith("PageResponse_Tasks") for k in comps) or "PageResponse_Tasks" in comps
-        found_notes = any(k.startswith("PageResponse_Notes") for k in comps) or "PageResponse_Notes" in comps
+        found_tasks = (
+            any(k.startswith("PageResponse_Tasks") for k in comps) or "PageResponse_Tasks" in comps
+        )
+        found_notes = (
+            any(k.startswith("PageResponse_Notes") for k in comps) or "PageResponse_Notes" in comps
+        )
         assert found_tasks, "PageResponse_Tasks component missing"
         assert found_notes, "PageResponse_Notes component missing"
 

@@ -7,12 +7,13 @@ from typing import Protocol
 # Canonical normalized item
 @dataclass
 class ImportedMenuItem:
-    day: str          # monday..sunday (lowercase english)
-    meal: str         # lunch|dinner|evening (future: breakfast?)
-    variant_type: str # main|alt1|alt2|dessert|evening
+    day: str  # monday..sunday (lowercase english)
+    meal: str  # lunch|dinner|evening (future: breakfast?)
+    variant_type: str  # main|alt1|alt2|dessert|evening
     dish_name: str
     category: str | None = None
     source_labels: list[str] = field(default_factory=list)
+
 
 @dataclass
 class WeekImport:
@@ -20,19 +21,23 @@ class WeekImport:
     week: int
     items: list[ImportedMenuItem]
 
+
 @dataclass
 class MenuImportResult:
     weeks: list[WeekImport]
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
+
 class MenuImporter(Protocol):
     """Importer protocol. Each importer should:
     - can_handle(...) quick sniff
     - parse(...) return MenuImportResult (may contain multiple weeks)
     """
+
     def can_handle(self, filename: str, mimetype: str | None, first_bytes: bytes) -> bool: ...
     def parse(self, file_bytes: bytes, filename: str) -> MenuImportResult: ...
+
 
 # Utilities
 _day_map = {
@@ -60,8 +65,10 @@ _day_map = {
     "søndag": "sunday",
 }
 
+
 def normalize_day(token: str) -> str | None:
     t = token.strip().lower()
     return _day_map.get(t)
+
 
 DEFAULT_YEAR_PROVIDER = None  # placeholder; could inject current year

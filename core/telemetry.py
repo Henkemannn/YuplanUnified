@@ -4,6 +4,7 @@ Provides an optional OpenTelemetry counter ``yuplan.events_total`` capturing
 domain-level events (e.g., registrering). Gracefully degrades to no-op when
 OTEL SDK isn't installed so local/dev environments incur zero friction.
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -11,6 +12,7 @@ from typing import Any
 
 try:  # pragma: no cover - optional dependency
     from opentelemetry.metrics import get_meter  # type: ignore
+
     _METER = get_meter("yuplan.app")
     _EVENTS = _METER.create_counter(
         name="yuplan.events_total",

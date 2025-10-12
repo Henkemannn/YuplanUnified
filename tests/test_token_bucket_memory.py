@@ -1,12 +1,13 @@
-
 from core.rate_limiter_token_bucket_memory import MemoryTokenBucketRateLimiter
 
 
 class FakeClock:
     def __init__(self, start: float = 0.0):
         self._t = start
+
     def time(self) -> float:  # mimic time.time
         return self._t
+
     def advance(self, sec: float) -> None:
         self._t += sec
 

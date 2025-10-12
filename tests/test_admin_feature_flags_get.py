@@ -11,9 +11,11 @@ from core.models import Tenant, TenantFeatureFlag, User
 def app():
     return create_app({"TESTING": True, "SECRET_KEY": "test"})
 
+
 @pytest.fixture()
 def client(app: Flask):
     return app.test_client()
+
 
 @pytest.fixture()
 def tenants_and_users():
@@ -22,26 +24,40 @@ def tenants_and_users():
         tenants = db.query(Tenant).all()
         if len(tenants) < 2:
             while len(tenants) < 2:
-                t = Tenant(name=f"T{len(tenants)+1}")
-                db.add(t); db.commit(); db.refresh(t)
+                t = Tenant(name=f"T{len(tenants) + 1}")
+                db.add(t)
+                db.commit()
+                db.refresh(t)
                 tenants.append(t)
         t1, t2 = tenants[:2]
+
         def ensure(email, role, tenant_id):
             u = db.query(User).filter_by(email=email).first()
             if not u:
-                u = User(tenant_id=tenant_id, email=email, password_hash=generate_password_hash("pw"), role=role, unit_id=None)
-                db.add(u); db.commit(); db.refresh(u)
+                u = User(
+                    tenant_id=tenant_id,
+                    email=email,
+                    password_hash=generate_password_hash("pw"),
+                    role=role,
+                    unit_id=None,
+                )
+                db.add(u)
+                db.commit()
+                db.refresh(u)
             return u
-        su = ensure("root2@example.com","superuser", t1.id)
-        admin1 = ensure("admin_t1b@example.com","admin", t1.id)
-        admin2 = ensure("admin_t2b@example.com","admin", t2.id)
+
+        su = ensure("root2@example.com", "superuser", t1.id)
+        admin1 = ensure("admin_t1b@example.com", "admin", t1.id)
+        admin2 = ensure("admin_t2b@example.com", "admin", t2.id)
         # Seed one flag for tenant2 directly
         flag = db.query(TenantFeatureFlag).filter_by(tenant_id=t2.id, name="inline_ui").first()
         if not flag:
-            db.add(TenantFeatureFlag(tenant_id=t2.id, name="inline_ui", enabled=True)); db.commit()
+            db.add(TenantFeatureFlag(tenant_id=t2.id, name="inline_ui", enabled=True))
+            db.commit()
         return {"t1": t1.id, "t2": t2.id, "su": su, "admin1": admin1, "admin2": admin2}
     finally:
         db.close()
+
 
 def login(client, email, password="pw"):
     return client.post("/auth/login", json={"email": email, "password": password})

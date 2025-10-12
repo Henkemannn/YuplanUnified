@@ -2,7 +2,13 @@ from core import create_app
 
 
 def test_rate_limit_sets_retry_after():
-    app = create_app({"TESTING": True, "SECRET_KEY": "x", "AUTH_RATE_LIMIT": {"window_sec": 300, "max_failures": 3, "lock_sec": 60}})
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "x",
+            "AUTH_RATE_LIMIT": {"window_sec": 300, "max_failures": 3, "lock_sec": 60},
+        }
+    )
     client = app.test_client()
     # trigger failures until lock
     for _ in range(3):

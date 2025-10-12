@@ -3,6 +3,7 @@
 Keeps legacy APIError classes (minimal) for backward compatibility while
 introducing DomainError / ValidationError for problem+json mode.
 """
+
 from __future__ import annotations
 
 import traceback
@@ -34,7 +35,10 @@ from .rate_limiter import RateLimitError
 class APIError(Exception):
     status_code = 400
     error_code = "bad_request"
-    def __init__(self, message: str | None = None, *, error: str | None = None, status: int | None = None):
+
+    def __init__(
+        self, message: str | None = None, *, error: str | None = None, status: int | None = None
+    ):
         super().__init__(message or self.error_code)
         if error:
             self.error_code = error
@@ -42,9 +46,11 @@ class APIError(Exception):
             self.status_code = status
         self.message = message or self.error_code
 
+
 class LegacyValidationError(APIError):  # renamed to avoid clash
     status_code = 400
     error_code = "validation_error"
+
 
 # ---- New Domain Errors ----
 class DomainError(Exception):
@@ -55,15 +61,18 @@ class DomainError(Exception):
         self.extra = extra
         super().__init__(self.detail)
 
+
 class ValidationError(DomainError):
     def __init__(self, errors: Any, detail: str = "validation_error", **extra: Any):
         super().__init__(422, "validation_error", detail, errors=errors, **extra)
         self.errors = errors
 
+
 # ---- Legacy shim exceptions expected by older blueprints/tests ----
 class NotFoundError(APIError):  # pragma: no cover (thin shim)
     status_code = 404
     error_code = "not_found"
+
 
 # Preserve original ValidationError import path expectation
 LegacyValidationErrorAlias = LegacyValidationError
@@ -78,6 +87,7 @@ _STATUS_HELPERS: dict[int, Callable[..., Response]] = {
     429: too_many_requests,
 }
 
+
 def _emit_problem(resp_payload: dict[str, Any]) -> None:
     try:
         record_audit_event(
@@ -91,6 +101,7 @@ def _emit_problem(resp_payload: dict[str, Any]) -> None:
         )
     except Exception:
         pass
+
 
 def register_error_handlers(app: Any) -> None:  # pragma: no cover - integration path
     from werkzeug.exceptions import HTTPException
@@ -115,7 +126,11 @@ def register_error_handlers(app: Any) -> None:  # pragma: no cover - integration
     def _h_domain(err: DomainError) -> Response:
         helper = _STATUS_HELPERS.get(err.status)
         if err.status == 422:
-            resp = unprocessable_entity(err.extra.get("errors") or getattr(err, "errors", []), detail=err.detail, **{k:v for k,v in err.extra.items() if k != "errors"})
+            resp = unprocessable_entity(
+                err.extra.get("errors") or getattr(err, "errors", []),
+                detail=err.detail,
+                **{k: v for k, v in err.extra.items() if k != "errors"},
+            )
         elif helper:
             resp = helper(detail=err.detail, **err.extra)
         else:
@@ -144,7 +159,9 @@ def register_error_handlers(app: Any) -> None:  # pragma: no cover - integration
         resp = too_many_requests(detail="rate_limited", retry_after=retry_after, limit=limit)
         payload = resp.get_json()
         try:
-            record_audit_event("problem_response", status=429, type=payload.get("type"), path=request.path)
+            record_audit_event(
+                "problem_response", status=429, type=payload.get("type"), path=request.path
+            )
         except Exception:
             pass
         return resp
@@ -159,16 +176,34 @@ def register_error_handlers(app: Any) -> None:  # pragma: no cover - integration
     @app.errorhandler(Exception)
     def _h_exception(ex: Exception) -> Response:
         incident_id = str(uuid.uuid4())
-        app.logger.error("Unhandled exception incident_id=%s path=%s\n%s", incident_id, request.path, traceback.format_exc())
+        app.logger.error(
+            "Unhandled exception incident_id=%s path=%s\n%s",
+            incident_id,
+            request.path,
+            traceback.format_exc(),
+        )
         resp = internal_server_error(incident_id=incident_id)
         payload = resp.get_json()
         try:
-            record_audit_event("incident", actor_user_id=None, tenant_id=None, incident_id=incident_id, path=request.path)
+            record_audit_event(
+                "incident",
+                actor_user_id=None,
+                tenant_id=None,
+                incident_id=incident_id,
+                path=request.path,
+            )
             _emit_problem(payload)
         except Exception:
             pass
         return resp
 
+
 __all__ = [
-    "APIError","DomainError","ValidationError","LegacyValidationError","NotFoundError","LegacyValidationErrorAlias","register_error_handlers"
+    "APIError",
+    "DomainError",
+    "ValidationError",
+    "LegacyValidationError",
+    "NotFoundError",
+    "LegacyValidationErrorAlias",
+    "register_error_handlers",
 ]

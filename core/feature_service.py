@@ -8,13 +8,19 @@ from .db import get_session
 from .models import Tenant, TenantFeatureFlag, User
 
 MODULE_FEATURE_MAP = {
-    "municipal": [
-        "module.municipal", "menus", "diet", "attendance"
-    ],
+    "municipal": ["module.municipal", "menus", "diet", "attendance"],
     "offshore": [
-        "module.offshore", "menus", "attendance", "turnus", "waste.metrics", "prep.tasks", "freezer.tasks", "messaging"
-    ]
+        "module.offshore",
+        "menus",
+        "attendance",
+        "turnus",
+        "waste.metrics",
+        "prep.tasks",
+        "freezer.tasks",
+        "messaging",
+    ],
 }
+
 
 class FeatureService:
     def list(self, tenant_id: int) -> list[str]:
@@ -54,7 +60,9 @@ class FeatureService:
             for f in feats:
                 self.enable(tenant_id, f)
 
-    def create_tenant_with_admin(self, name: str, modules: Sequence[str], admin_email: str, admin_password: str) -> int:
+    def create_tenant_with_admin(
+        self, name: str, modules: Sequence[str], admin_email: str, admin_password: str
+    ) -> int:
         db = get_session()
         try:
             tenant = Tenant(name=name)
@@ -67,7 +75,13 @@ class FeatureService:
                     db.add(TenantFeatureFlag(tenant_id=tenant.id, name=f, enabled=True))
             # Create admin user
             pw_hash = generate_password_hash(admin_password)
-            user = User(tenant_id=tenant.id, email=admin_email.lower(), password_hash=pw_hash, role="admin", unit_id=None)
+            user = User(
+                tenant_id=tenant.id,
+                email=admin_email.lower(),
+                password_hash=pw_hash,
+                role="admin",
+                unit_id=None,
+            )
             db.add(user)
             db.commit()
             return tenant.id

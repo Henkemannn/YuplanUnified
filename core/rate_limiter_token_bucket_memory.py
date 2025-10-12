@@ -15,6 +15,7 @@ Burst capacity defaults to quota if not explicitly provided to allow a full wind
 
 Time function is injectable for deterministic tests.
 """
+
 from __future__ import annotations
 
 import time
@@ -25,10 +26,12 @@ from .rate_limiter import RateLimiter
 
 TimeFn = Callable[[], float]
 
+
 @dataclass
 class _Bucket:
     tokens: float
     last_refill: float
+
 
 class MemoryTokenBucketRateLimiter(RateLimiter):
     def __init__(self, now_func: TimeFn | None = None) -> None:
@@ -39,7 +42,9 @@ class MemoryTokenBucketRateLimiter(RateLimiter):
     # To integrate minimally we allow callers to encode capacity inside key name when needed, but for HTTP integration
     # we will adapt code to provide a token-bucket specific path. For initial scaffold we accept standard signature
     # and treat quota as both steady rate and capacity; later integration layer will pass burst via a prefixed key.
-    def allow(self, key: str, quota: int, per_seconds: int) -> bool:  # uses quota as both rate & capacity
+    def allow(
+        self, key: str, quota: int, per_seconds: int
+    ) -> bool:  # uses quota as both rate & capacity
         capacity = quota
         refill_rate = quota / per_seconds  # tokens per second
         now = self._now()
@@ -67,5 +72,6 @@ class MemoryTokenBucketRateLimiter(RateLimiter):
         # For memory backend tests we will embed rate info into key as key|quota|per, but keep simple fallback for now.
         # Without rate info, fall back to 1 second.
         return 1
+
 
 __all__ = ["MemoryTokenBucketRateLimiter"]

@@ -86,13 +86,18 @@ def test_import_docx_happy_or_skip():
             pytest.skip("python-docx not installed")
         # Build a minimal DOCX with a table matching expected columns
         from docx import Document  # type: ignore
+
         buf = io.BytesIO()
         doc = Document()
         table = doc.add_table(rows=1, cols=3)
         hdr = table.rows[0].cells
-        hdr[0].text = "title"; hdr[1].text = "description"; hdr[2].text = "priority"
+        hdr[0].text = "title"
+        hdr[1].text = "description"
+        hdr[2].text = "priority"
         row = table.add_row().cells
-        row[0].text = "R1"; row[1].text = "Desc"; row[2].text = "5"
+        row[0].text = "R1"
+        row[1].text = "Desc"
+        row[2].text = "5"
         doc.save(buf)
         buf.seek(0)
         data = {"file": (buf, "table.docx")}
@@ -112,10 +117,11 @@ def test_import_xlsx_happy_200():
         except Exception:
             pytest.skip("openpyxl not installed")
         from openpyxl import Workbook  # type: ignore
+
         wb = Workbook()
         ws = wb.active
-        ws.append(["title","description","priority"])
-        ws.append(["X","DescX",7])
+        ws.append(["title", "description", "priority"])
+        ws.append(["X", "DescX", 7])
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -158,11 +164,15 @@ def test_import_rate_limit_flag_on_off():
         success = 0
         for i in range(6):
             data = {"file": (io.BytesIO(CSV_MINIMAL), f"d{i}.csv")}
-            resp = client.post("/import/csv", data=data, content_type="multipart/form-data", headers=headers)
+            resp = client.post(
+                "/import/csv", data=data, content_type="multipart/form-data", headers=headers
+            )
             if resp.status_code == 200:
                 success += 1
             if resp.status_code == 429:
                 payload = json.loads(resp.data)
-                assert payload.get("status") == 429 and payload.get("type"," ").endswith("/rate_limited")
+                assert payload.get("status") == 429 and payload.get("type", " ").endswith(
+                    "/rate_limited"
+                )
                 break
         assert success <= 5

@@ -23,12 +23,15 @@ NOTE: For simplicity we still sign using HMAC (HS256) internally for issued toke
 Future: swap to real RSA keypair management and JWKS fetcher.
 """
 
+
 class JWTError(Exception):
     pass
+
 
 # Optional OpenTelemetry metrics (best-effort; no hard dependency)
 try:  # pragma: no cover
     from opentelemetry import metrics  # type: ignore
+
     _jwt_meter = metrics.get_meter("yuplan.security")  # type: ignore
     _jwt_rejected_counter = _jwt_meter.create_counter(
         name="security.jwt_rejected_total",
@@ -38,12 +41,14 @@ try:  # pragma: no cover
 except Exception:  # pragma: no cover
     _jwt_rejected_counter = None  # type: ignore
 
+
 def _inc_jwt_rejected(reason: str):  # pragma: no cover - simple helper
     if _jwt_rejected_counter:
         try:
             _jwt_rejected_counter.add(1, {"reason": reason})  # type: ignore
         except Exception:
             pass
+
 
 DEFAULT_ACCESS_TTL = 600  # 10 min
 DEFAULT_REFRESH_TTL = 1209600  # 14 days
@@ -52,22 +57,28 @@ SKEW_SECS = 30
 ALG_HS256 = "HS256"
 ALG_RS256 = "RS256"
 
+
 def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
 
 def _b64url_decode(data: str) -> bytes:
     pad = "=" * (-len(data) % 4)
     return base64.urlsafe_b64decode(data + pad)
 
+
 def _sign(msg: bytes, secret: str) -> str:
     sig = hmac.new(secret.encode(), msg, hashlib.sha256).digest()
     return _b64url(sig)
+
 
 def generate_jti() -> str:
     return secrets.token_hex(16)
 
 
-def encode(payload: dict[str, Any], *, secret: str, ttl: int, kid: str | None = None, alg: str = ALG_HS256) -> str:
+def encode(
+    payload: dict[str, Any], *, secret: str, ttl: int, kid: str | None = None, alg: str = ALG_HS256
+) -> str:
     now = int(time.time())
     header = {"alg": alg, "typ": "JWT"}
     if kid:
@@ -75,8 +86,8 @@ def encode(payload: dict[str, Any], *, secret: str, ttl: int, kid: str | None = 
     pl = payload.copy()
     pl.setdefault("iat", now)
     pl.setdefault("exp", now + ttl)
-    header_b = _b64url(json.dumps(header, separators=(",",":")).encode())
-    payload_b = _b64url(json.dumps(pl, separators=(",",":")).encode())
+    header_b = _b64url(json.dumps(header, separators=(",", ":")).encode())
+    payload_b = _b64url(json.dumps(pl, separators=(",", ":")).encode())
     msg = f"{header_b}.{payload_b}".encode()
     # Only HS256 signing supported locally; RS256 tokens assumed externally minted.
     if alg != ALG_HS256:
@@ -86,6 +97,7 @@ def encode(payload: dict[str, Any], *, secret: str, ttl: int, kid: str | None = 
 
 
 Issuer = Literal["yuplan"]
+
 
 class AccessTokenPayload(TypedDict):
     sub: int
@@ -97,6 +109,7 @@ class AccessTokenPayload(TypedDict):
     type: Literal["access"]
     iss: Issuer
 
+
 class RefreshTokenPayload(TypedDict):
     sub: int
     role: str
@@ -107,6 +120,7 @@ class RefreshTokenPayload(TypedDict):
     type: Literal["refresh"]
     iss: Issuer
 
+
 DecodedToken = AccessTokenPayload | RefreshTokenPayload
 
 
@@ -115,6 +129,7 @@ JWTPublicKey = dict[str, Any]  # placeholder for future RSA public key structure
 # Simple in-memory JWKS cache: kid -> key (HS shared secret or RSA pub placeholder)
 _JWKS_CACHE: dict[str, tuple[JWTPublicKey, float]] = {}
 _JWKS_TTL = 300  # seconds
+
 
 def _get_key_for_kid(kid: str, *, secrets: list[str] | None) -> str | None:
     # For now we map kid to index into secrets list (kid == str(index) or direct match)
@@ -132,6 +147,7 @@ def _get_key_for_kid(kid: str, *, secrets: list[str] | None) -> str | None:
     except Exception:
         pass
     return None
+
 
 def decode(
     token: str,
@@ -205,6 +221,7 @@ def decode(
     if token_type not in ("access", "refresh"):
         _inc_jwt_rejected("type")
         raise JWTError("unknown token type")
+
     # Validate required claims and types
     def _req(key: str, t: type) -> Any:
         if key not in raw:
@@ -215,6 +232,7 @@ def decode(
             _inc_jwt_rejected(key)
             raise JWTError(f"bad claim type {key}")
         return val
+
     sub = _req("sub", int)
     role = _req("role", str)
     tenant_id = _req("tenant_id", int)
@@ -266,15 +284,63 @@ def decode(
         _inc_jwt_rejected("revoked")
         raise JWTError("revoked")
     if token_type == "access":
-        return AccessTokenPayload(sub=sub, role=role, tenant_id=tenant_id, jti=jti, iat=iat, exp=exp, iss=iss_val, type="access")
-    return RefreshTokenPayload(sub=sub, role=role, tenant_id=tenant_id, jti=jti, iat=iat, exp=exp, iss=iss_val, type="refresh")
+        return AccessTokenPayload(
+            sub=sub,
+            role=role,
+            tenant_id=tenant_id,
+            jti=jti,
+            iat=iat,
+            exp=exp,
+            iss=iss_val,
+            type="access",
+        )
+    return RefreshTokenPayload(
+        sub=sub,
+        role=role,
+        tenant_id=tenant_id,
+        jti=jti,
+        iat=iat,
+        exp=exp,
+        iss=iss_val,
+        type="refresh",
+    )
 
 
-def issue_token_pair(*, user_id: int, role: str, tenant_id: int, secret: str, access_ttl: int = DEFAULT_ACCESS_TTL, refresh_ttl: int = DEFAULT_REFRESH_TTL, kid: str | None = None, audience: str = "api") -> tuple[str, str, str]:
+def issue_token_pair(
+    *,
+    user_id: int,
+    role: str,
+    tenant_id: int,
+    secret: str,
+    access_ttl: int = DEFAULT_ACCESS_TTL,
+    refresh_ttl: int = DEFAULT_REFRESH_TTL,
+    kid: str | None = None,
+    audience: str = "api",
+) -> tuple[str, str, str]:
     jti = generate_jti()
     now = int(time.time())
-    access_payload: dict[str, Any] = {"sub": user_id, "role": role, "tenant_id": tenant_id, "jti": generate_jti(), "type": "access", "iss": "yuplan", "aud": audience, "iat": now, "exp": now + access_ttl}
-    refresh_payload: dict[str, Any] = {"sub": user_id, "role": role, "tenant_id": tenant_id, "jti": jti, "type": "refresh", "iss": "yuplan", "aud": audience, "iat": now, "exp": now + refresh_ttl}
+    access_payload: dict[str, Any] = {
+        "sub": user_id,
+        "role": role,
+        "tenant_id": tenant_id,
+        "jti": generate_jti(),
+        "type": "access",
+        "iss": "yuplan",
+        "aud": audience,
+        "iat": now,
+        "exp": now + access_ttl,
+    }
+    refresh_payload: dict[str, Any] = {
+        "sub": user_id,
+        "role": role,
+        "tenant_id": tenant_id,
+        "jti": jti,
+        "type": "refresh",
+        "iss": "yuplan",
+        "aud": audience,
+        "iat": now,
+        "exp": now + refresh_ttl,
+    }
     # Derive kid from secret stable hash prefix for rotation signalling if not provided
     derived_kid = kid or hashlib.sha256(secret.encode()).hexdigest()[:8]
     access_token = encode(access_payload, secret=secret, ttl=access_ttl, kid=derived_kid)

@@ -9,17 +9,22 @@ from core.auth import require_roles  # moved to top to satisfy E402
 if TYPE_CHECKING:  # import only for typing to avoid circular
     from core.menu_service import MenuServiceDB
 
+
 class HasMenuService(Protocol):
     menu_service: MenuServiceDB
 
+
 def _menu_service() -> MenuServiceDB:
     from core.menu_service import MenuServiceDB  # local import to avoid cycle
+
     svc = getattr(current_app, "menu_service", None)
     if not isinstance(svc, MenuServiceDB):  # pragma: no cover
         raise RuntimeError("menu_service not bound to app")
     return svc
 
+
 bp = Blueprint("municipal", __name__, url_prefix="/municipal")
+
 
 @bp.get("/ping")
 def ping():  # pragma: no cover
@@ -27,7 +32,7 @@ def ping():  # pragma: no cover
 
 
 @bp.get("/menu/week")
-@require_roles("superuser","admin","unit_portal","cook")
+@require_roles("superuser", "admin", "unit_portal", "cook")
 def get_menu_week():
     try:
         week = int(request.args.get("week", ""))
@@ -44,7 +49,7 @@ def get_menu_week():
 
 
 @bp.post("/menu/variant")
-@require_roles("superuser","admin","cook")
+@require_roles("superuser", "admin", "cook")
 def set_menu_variant():
     payload = request.get_json(silent=True) or {}
     required = ["week", "year", "day", "meal", "variant_type"]

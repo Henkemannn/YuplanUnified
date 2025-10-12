@@ -12,9 +12,11 @@ def app():
     app = create_app({"TESTING": True})
     yield app
 
+
 @pytest.fixture()
 def client(app):
     return app.test_client()
+
 
 def test_problem_error_shape(client):
     # Trigger an error and expect RFC7807 problem+json
@@ -26,5 +28,5 @@ def test_problem_error_shape(client):
     assert resp.status_code in (400, 401, 403, 422)
     assert resp.mimetype == "application/problem+json"
     data = resp.get_json()
-    assert data.get("status") in (400,401,403,422)
+    assert data.get("status") in (400, 401, 403, 422)
     assert data.get("type", "").startswith("https://example.com/errors/")

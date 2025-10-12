@@ -45,6 +45,7 @@ TRIM_FRACTION = 0.1
 # mean only affects the internal history_mean_used value.
 # --------------------------------------------------------------------------------------
 
+
 @dataclass
 class BlendedResult:
     recommended_g_per_guest: int
@@ -54,8 +55,11 @@ class BlendedResult:
     history_mean_raw: float | None
     history_mean_used: float | None
 
+
 class PortionService:
-    def blended_g_per_guest(self, tenant_id: int, category: str, week: int | None = None) -> BlendedResult:
+    def blended_g_per_guest(
+        self, tenant_id: int, category: str, week: int | None = None
+    ) -> BlendedResult:
         """Return a recommended grams-per-guest value.
 
         Steps:
@@ -107,7 +111,13 @@ class PortionService:
     def _baseline(self, tenant_id: int, category: str) -> int:
         db = get_session()
         try:
-            row: PortionGuideline | None = db.query(PortionGuideline).filter(PortionGuideline.tenant_id == tenant_id, PortionGuideline.category == category).first()
+            row: PortionGuideline | None = (
+                db.query(PortionGuideline)
+                .filter(
+                    PortionGuideline.tenant_id == tenant_id, PortionGuideline.category == category
+                )
+                .first()
+            )
             if row is not None and row.baseline_g_per_guest is not None:
                 return int(row.baseline_g_per_guest)
             return 300
@@ -118,7 +128,12 @@ class PortionService:
         db = get_session()
         try:
             since = date.today() - timedelta(days=RECENT_DAYS)
-            q = db.query(ServiceMetric.served_g_per_guest).filter(ServiceMetric.tenant_id == tenant_id, ServiceMetric.category == category, ServiceMetric.date >= since, ServiceMetric.served_g_per_guest.isnot(None))
+            q = db.query(ServiceMetric.served_g_per_guest).filter(
+                ServiceMetric.tenant_id == tenant_id,
+                ServiceMetric.category == category,
+                ServiceMetric.date >= since,
+                ServiceMetric.served_g_per_guest.isnot(None),
+            )
             values = [float(v[0]) for v in q.all() if v[0] is not None]
             values.sort()
             return values
@@ -130,15 +145,21 @@ class PortionService:
             return 0.0
         n = len(values)
         trim = int(n * frac)
-        if trim*2 >= n:  # not enough to trim
+        if trim * 2 >= n:  # not enough to trim
             return sum(values) / n
-        trimmed = values[trim:n-trim]
+        trimmed = values[trim : n - trim]
         return sum(trimmed) / len(trimmed)
 
     def protein_per_100g(self, tenant_id: int, category: str) -> float | None:
         db = get_session()
         try:
-            row = db.query(PortionGuideline).filter(PortionGuideline.tenant_id == tenant_id, PortionGuideline.category == category).first()
+            row = (
+                db.query(PortionGuideline)
+                .filter(
+                    PortionGuideline.tenant_id == tenant_id, PortionGuideline.category == category
+                )
+                .first()
+            )
             if row and row.protein_per_100g is not None:
                 return float(row.protein_per_100g)
             return None

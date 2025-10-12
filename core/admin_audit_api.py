@@ -10,6 +10,7 @@ from .pagination import make_page_response, parse_page_params
 
 bp = Blueprint("admin_audit", __name__, url_prefix="/admin")
 
+
 @bp.get("/audit")
 @require_roles("admin")
 def list_audit_events():  # type: ignore[return-value]

@@ -28,7 +28,11 @@ def test_csv_happy_meta_format():
     app = _app()
     with app.test_client() as client:
         _login(client)
-        resp = client.post("/import/csv", data={"file": (io.BytesIO(CSV_SAMPLE), "data.csv")}, content_type="multipart/form-data")
+        resp = client.post(
+            "/import/csv",
+            data={"file": (io.BytesIO(CSV_SAMPLE), "data.csv")},
+            content_type="multipart/form-data",
+        )
         body = json.loads(resp.get_data())
         assert resp.status_code == 200
         assert body["ok"] is True
@@ -40,7 +44,11 @@ def test_csv_empty_returns_200_zero_count():
     app = _app()
     with app.test_client() as client:
         _login(client)
-        resp = client.post("/import/csv", data={"file": (io.BytesIO(CSV_EMPTY), "empty.csv")}, content_type="multipart/form-data")
+        resp = client.post(
+            "/import/csv",
+            data={"file": (io.BytesIO(CSV_EMPTY), "empty.csv")},
+            content_type="multipart/form-data",
+        )
         body = json.loads(resp.get_data())
         assert resp.status_code == 200
         assert body["ok"] is True
@@ -53,10 +61,18 @@ def test_csv_bad_mime_415():
     with app.test_client() as client:
         _login(client)
         # Force mismatched mimetype by overriding content_type
-        resp = client.post("/import/csv", data={"file": (io.BytesIO(CSV_SAMPLE), "data.csv")}, content_type="multipart/form-data; boundary=123")
+        resp = client.post(
+            "/import/csv",
+            data={"file": (io.BytesIO(CSV_SAMPLE), "data.csv")},
+            content_type="multipart/form-data; boundary=123",
+        )
         # Our endpoint relies primarily on extension; to simulate unsupported we call docx endpoint
         if resp.status_code == 200:
-            resp2 = client.post("/import/docx", data={"file": (io.BytesIO(CSV_SAMPLE), "data.csv")}, content_type="multipart/form-data")
+            resp2 = client.post(
+                "/import/docx",
+                data={"file": (io.BytesIO(CSV_SAMPLE), "data.csv")},
+                content_type="multipart/form-data",
+            )
             if resp2.status_code != 415:
                 pytest.skip("DOCX importer available or mismatch not triggering 415")
         else:
@@ -72,15 +88,23 @@ def test_docx_happy_or_skip():
         except Exception:
             pytest.skip("python-docx not installed")
         from docx import Document  # type: ignore
+
         buf = io.BytesIO()
         doc = Document()
         table = doc.add_table(rows=1, cols=3)
         hdr = table.rows[0].cells
-        hdr[0].text = "title"; hdr[1].text = "description"; hdr[2].text = "priority"
+        hdr[0].text = "title"
+        hdr[1].text = "description"
+        hdr[2].text = "priority"
         row = table.add_row().cells
-        row[0].text = "R1"; row[1].text = "Desc"; row[2].text = "5"
-        doc.save(buf); buf.seek(0)
-        resp = client.post("/import/docx", data={"file": (buf, "table.docx")}, content_type="multipart/form-data")
+        row[0].text = "R1"
+        row[1].text = "Desc"
+        row[2].text = "5"
+        doc.save(buf)
+        buf.seek(0)
+        resp = client.post(
+            "/import/docx", data={"file": (buf, "table.docx")}, content_type="multipart/form-data"
+        )
         body = json.loads(resp.get_data()) if resp.status_code == 200 else {}
         if resp.status_code == 200:
             assert body["meta"]["format"] == "docx"
@@ -95,11 +119,17 @@ def test_xlsx_happy_or_skip():
         except Exception:
             pytest.skip("openpyxl not installed")
         from openpyxl import Workbook  # type: ignore
-        wb = Workbook(); ws = wb.active
-        ws.append(["title","description","priority"])
-        ws.append(["X","DescX",7])
-        buf = io.BytesIO(); wb.save(buf); buf.seek(0)
-        resp = client.post("/import/xlsx", data={"file": (buf, "data.xlsx")}, content_type="multipart/form-data")
+
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["title", "description", "priority"])
+        ws.append(["X", "DescX", 7])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        resp = client.post(
+            "/import/xlsx", data={"file": (buf, "data.xlsx")}, content_type="multipart/form-data"
+        )
         body = json.loads(resp.get_data()) if resp.status_code == 200 else {}
         if resp.status_code == 200:
             assert body["meta"]["format"] == "xlsx"
@@ -109,15 +139,34 @@ def test_menu_dry_run_meta_and_alias(monkeypatch):
     app = _app()
     with app.test_client() as client:
         _login(client)
+
         class DummyImporter:
             def parse(self, data, filename, mime):
                 class Week:
                     def __init__(self):
-                        self.items = [type("I", (), {"day":"mon","meal":"lunch","variant_type":"alt1","dish_name":"Stew"})()]
-                return type("R", (), {"weeks":[Week()]})()
+                        self.items = [
+                            type(
+                                "I",
+                                (),
+                                {
+                                    "day": "mon",
+                                    "meal": "lunch",
+                                    "variant_type": "alt1",
+                                    "dish_name": "Stew",
+                                },
+                            )()
+                        ]
+
+                return type("R", (), {"weeks": [Week()]})()
+
         import core.import_api as mod
+
         monkeypatch.setattr(mod, "_importer", DummyImporter())
-        resp = client.post("/import/menu?dry_run=1", data={"file": (io.BytesIO(b"x"), "menu.xlsx")}, content_type="multipart/form-data")
+        resp = client.post(
+            "/import/menu?dry_run=1",
+            data={"file": (io.BytesIO(b"x"), "menu.xlsx")},
+            content_type="multipart/form-data",
+        )
         body = json.loads(resp.get_data())
         assert resp.status_code == 200
         assert body["meta"]["dry_run"] is True
@@ -128,7 +177,11 @@ def test_unsupported_pdf_415():
     app = _app()
     with app.test_client() as client:
         _login(client)
-        resp = client.post("/import/docx", data={"file": (io.BytesIO(b"%PDF-1.4"), "file.pdf")}, content_type="multipart/form-data")
+        resp = client.post(
+            "/import/docx",
+            data={"file": (io.BytesIO(b"%PDF-1.4"), "file.pdf")},
+            content_type="multipart/form-data",
+        )
         assert resp.status_code in (415, 400)
 
 
@@ -139,10 +192,15 @@ def test_rate_limit_flag_on(monkeypatch):
         headers = {"X-Force-Rate-Limit": "1", "X-Force-Rate-Limit-Limit": "3"}
         hit_429 = False
         for _ in range(10):
-            resp = client.post("/import/csv", data={"file": (io.BytesIO(CSV_SAMPLE), "data.csv")}, content_type="multipart/form-data", headers=headers)
+            resp = client.post(
+                "/import/csv",
+                data={"file": (io.BytesIO(CSV_SAMPLE), "data.csv")},
+                content_type="multipart/form-data",
+                headers=headers,
+            )
             if resp.status_code == 429:
                 body = json.loads(resp.get_data())
-                assert body.get("status") == 429 and body.get("type"," ").endswith("/rate_limited")
+                assert body.get("status") == 429 and body.get("type", " ").endswith("/rate_limited")
                 assert isinstance(body.get("retry_after"), int) or body.get("retry_after") is None
                 hit_429 = True
                 break

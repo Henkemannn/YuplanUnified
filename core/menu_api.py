@@ -9,8 +9,9 @@ from .models import Dish
 
 bp = Blueprint("menu_api", __name__, url_prefix="/menu")
 
+
 @bp.get("/week")
-@require_roles("superuser","admin","cook")
+@require_roles("superuser", "admin", "cook")
 def get_week():
     tenant_id = session.get("tenant_id")
     if not tenant_id:
@@ -23,14 +24,15 @@ def get_week():
     view = svc.get_week_view(tenant_id, week, year)
     return {"ok": True, "menu": view}
 
+
 @bp.post("/variant/set")
-@require_roles("superuser","admin","cook")
+@require_roles("superuser", "admin", "cook")
 def set_variant():
     tenant_id = session.get("tenant_id")
     if not tenant_id:
         return jsonify({"ok": False, "error": "no tenant"}), 400
     data = request.get_json(silent=True) or {}
-    required = ["week","year","day","meal","variant_type"]
+    required = ["week", "year", "day", "meal", "variant_type"]
     for r in required:
         if r not in data:
             return jsonify({"ok": False, "error": f"missing {r}"}), 400

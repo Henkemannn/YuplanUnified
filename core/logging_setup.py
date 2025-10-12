@@ -3,6 +3,7 @@
 Captures WARN+ log records with associated request_id (if request context) into
 an in-memory deque for quick troubleshooting without external log aggregation.
 """
+
 from __future__ import annotations
 
 import collections
@@ -22,13 +23,15 @@ class SupportLogHandler(logging.Handler):  # pragma: no cover - simple container
         except Exception:
             rid = "-"
             path = "-"
-        LOG_BUFFER.append({
-            "ts": time.time(),
-            "level": record.levelname,
-            "msg": self.format(record),
-            "request_id": rid,
-            "path": path,
-        })
+        LOG_BUFFER.append(
+            {
+                "ts": time.time(),
+                "level": record.levelname,
+                "msg": self.format(record),
+                "request_id": rid,
+                "path": path,
+            }
+        )
 
 
 def install_support_log_handler() -> None:

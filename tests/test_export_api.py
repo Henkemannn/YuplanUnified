@@ -30,19 +30,58 @@ def seeded(client):
         tenant = db.query(Tenant).first()
         if not tenant:
             tenant = Tenant(name="ExportT")
-            db.add(tenant); db.commit(); db.refresh(tenant)
+            db.add(tenant)
+            db.commit()
+            db.refresh(tenant)
         # Clean possible previous runs
-        db.query(Note).delete(); db.query(Task).delete(); db.query(User).filter(User.email.in_(["exp_admin@example.com","exp_cook@example.com"])).delete(); db.commit()
-        admin = User(tenant_id=tenant.id, email="exp_admin@example.com", password_hash=generate_password_hash("pw"), role="admin", unit_id=None)
-        cook = User(tenant_id=tenant.id, email="exp_cook@example.com", password_hash=generate_password_hash("pw"), role="cook", unit_id=None)
-        db.add_all([admin, cook]); db.commit(); db.refresh(admin); db.refresh(cook)
+        db.query(Note).delete()
+        db.query(Task).delete()
+        db.query(User).filter(
+            User.email.in_(["exp_admin@example.com", "exp_cook@example.com"])
+        ).delete()
+        db.commit()
+        admin = User(
+            tenant_id=tenant.id,
+            email="exp_admin@example.com",
+            password_hash=generate_password_hash("pw"),
+            role="admin",
+            unit_id=None,
+        )
+        cook = User(
+            tenant_id=tenant.id,
+            email="exp_cook@example.com",
+            password_hash=generate_password_hash("pw"),
+            role="cook",
+            unit_id=None,
+        )
+        db.add_all([admin, cook])
+        db.commit()
+        db.refresh(admin)
+        db.refresh(cook)
         # Seed some data
         n1 = Note(tenant_id=tenant.id, user_id=admin.id, content="Public Note", private_flag=False)
         n2 = Note(tenant_id=tenant.id, user_id=admin.id, content="Privat Note", private_flag=True)
-        db.add_all([n1, n2]); db.commit()
-        t1 = Task(tenant_id=tenant.id, unit_id=None, task_type="prep", title="Hacka lök", done=False, private_flag=False)
-        t2 = Task(tenant_id=tenant.id, unit_id=None, task_type="prep", title="Privat staging", done=True, private_flag=True, creator_user_id=admin.id)
-        db.add_all([t1, t2]); db.commit()
+        db.add_all([n1, n2])
+        db.commit()
+        t1 = Task(
+            tenant_id=tenant.id,
+            unit_id=None,
+            task_type="prep",
+            title="Hacka lök",
+            done=False,
+            private_flag=False,
+        )
+        t2 = Task(
+            tenant_id=tenant.id,
+            unit_id=None,
+            task_type="prep",
+            title="Privat staging",
+            done=True,
+            private_flag=True,
+            creator_user_id=admin.id,
+        )
+        db.add_all([t1, t2])
+        db.commit()
         # Return primitive IDs to avoid DetachedInstance issues once session closed
         return {"tenant_id": tenant.id, "admin_id": admin.id, "cook_id": cook.id}
     finally:
@@ -89,7 +128,14 @@ def test_export_streaming_large(client, seeded):
     db = get_session()
     try:
         for i in range(5):
-            db.add(Note(tenant_id=seeded["tenant_id"], user_id=seeded["admin_id"], content=f"Extra {i}", private_flag=False))
+            db.add(
+                Note(
+                    tenant_id=seeded["tenant_id"],
+                    user_id=seeded["admin_id"],
+                    content=f"Extra {i}",
+                    private_flag=False,
+                )
+            )
         db.commit()
     finally:
         db.close()

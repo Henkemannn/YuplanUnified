@@ -19,13 +19,15 @@ from .models import Note, Task
 
 bp = Blueprint("export_api", __name__, url_prefix="/export")
 
-ADMIN_ROLES = ("editor","admin")  # editor or admin can export; adapter maps legacy roles
+ADMIN_ROLES = ("editor", "admin")  # editor or admin can export; adapter maps legacy roles
+
 
 def _tenant_id() -> int:
     tid = session.get("tenant_id")
     if not tid:
         raise ValueError("tenant missing")
     return int(tid)
+
 
 def _csv_response(name: str, rows_iterable):
     sep = request.args.get("sep") or ","  # allow ?sep=; for regional Excel
@@ -53,20 +55,26 @@ def _csv_response(name: str, rows_iterable):
         mimetype="text/csv; charset=utf-8",
         headers={
             "Cache-Control": "no-store",
-            "Content-Disposition": f'attachment; filename="{name}_{ts}.csv"'
-        }
+            "Content-Disposition": f'attachment; filename="{name}_{ts}.csv"',
+        },
     )
 
+
 @bp.get("/notes.csv")
-@require_roles("editor","admin")
-@limit(name="export_notes_csv", feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
+@require_roles("editor", "admin")
+@limit(
+    name="export_notes_csv",
+    feature_flag="rate_limit_export",
+    key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}",
+)
 def export_notes():
     tid = _tenant_id()
     db = get_session()
     try:
         q = db.query(Note).filter(Note.tenant_id == tid).order_by(Note.created_at.asc())
+
         def rows():
-            yield ["id","created_at","updated_at","user_id","private_flag","content"]
+            yield ["id", "created_at", "updated_at", "user_id", "private_flag", "content"]
             for n in q.yield_per(200):
                 yield [
                     str(n.id),
@@ -74,37 +82,56 @@ def export_notes():
                     n.updated_at.isoformat() if n.updated_at else "",
                     str(n.user_id),
                     "1" if n.private_flag else "0",
-                    (n.content or "").replace("\n"," ").strip(),
+                    (n.content or "").replace("\n", " ").strip(),
                 ]
+
         return _csv_response("notes", rows())
     finally:
         db.close()
 
+
 @bp.get("/tasks.csv")
-@require_roles("editor","admin")
-@limit(name="export_tasks_csv", feature_flag="rate_limit_export", key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}")
+@require_roles("editor", "admin")
+@limit(
+    name="export_tasks_csv",
+    feature_flag="rate_limit_export",
+    key_func=lambda: f"tenant:{session.get('tenant_id')}:{session.get('user_id')}",
+)
 def export_tasks():
     tid = _tenant_id()
     db = get_session()
     try:
         q = db.query(Task).filter(Task.tenant_id == tid).order_by(Task.id.asc())
+
         def rows():
-            yield ["id","created_at","updated_at","done","private_flag","assignee_id","creator_user_id","menu_id","dish_id","content"]
+            yield [
+                "id",
+                "created_at",
+                "updated_at",
+                "done",
+                "private_flag",
+                "assignee_id",
+                "creator_user_id",
+                "menu_id",
+                "dish_id",
+                "content",
+            ]
             for t in q.yield_per(200):
-                c_at = getattr(t,"created_at",None)
-                u_at = getattr(t,"updated_at",None)
+                c_at = getattr(t, "created_at", None)
+                u_at = getattr(t, "updated_at", None)
                 yield [
                     str(t.id),
                     c_at.isoformat() if c_at else "",
                     u_at.isoformat() if u_at else "",
-                    "1" if getattr(t,"done",False) else "0",
-                    "1" if getattr(t,"private_flag",False) else "0",
-                    str(getattr(t,"assignee_id", "") or ""),
-                    str(getattr(t,"creator_user_id", "") or ""),
-                    str(getattr(t,"menu_id","") or ""),
-                    str(getattr(t,"dish_id","") or ""),
-                    (getattr(t,"content","") or "").replace("\n"," ").strip()
+                    "1" if getattr(t, "done", False) else "0",
+                    "1" if getattr(t, "private_flag", False) else "0",
+                    str(getattr(t, "assignee_id", "") or ""),
+                    str(getattr(t, "creator_user_id", "") or ""),
+                    str(getattr(t, "menu_id", "") or ""),
+                    str(getattr(t, "dish_id", "") or ""),
+                    (getattr(t, "content", "") or "").replace("\n", " ").strip(),
                 ]
+
         return _csv_response("tasks", rows())
     finally:
         db.close()

@@ -4,6 +4,7 @@ Usage: python scripts/set_superuser.py
 
 Reads password from environment variable YUPLAN_SUPERUSER_PASSWORD (no hardcoded fallback).
 """
+
 import os
 import sys
 
@@ -21,6 +22,7 @@ from core.models import Tenant, User
 TARGET_EMAIL = "info@yuplan.se"
 ENV_VAR = "YUPLAN_SUPERUSER_PASSWORD"
 
+
 def main():
     cfg = Config.from_env()
     init_engine(cfg.database_url)
@@ -28,9 +30,7 @@ def main():
     try:
         password = os.environ.get(ENV_VAR)
         if not password:
-            sys.stderr.write(
-                f"[ERROR] Missing env var {ENV_VAR}. Set it securely and retry.\n"
-            )
+            sys.stderr.write(f"[ERROR] Missing env var {ENV_VAR}. Set it securely and retry.\n")
             sys.exit(1)
         # Ensure at least one tenant exists
         tenant = db.query(Tenant).first()
@@ -56,7 +56,7 @@ def main():
                 email=TARGET_EMAIL.lower(),
                 password_hash=generate_password_hash(password),
                 role="superuser",
-                unit_id=None
+                unit_id=None,
             )
             db.add(user)
             action = "created"
@@ -64,6 +64,7 @@ def main():
         print(f"Superuser {action}: id={user.id} email={user.email}")
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     main()

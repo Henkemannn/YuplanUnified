@@ -21,33 +21,41 @@ from .impersonation import get_impersonation
 
 bp = Blueprint("diet", __name__, url_prefix="/diet")
 
+
 @bp.get("/types")
-@require_roles("superuser","admin","unit_portal","cook")
+@require_roles("superuser", "admin", "unit_portal", "cook")
 def list_diet_types() -> DietTypeListResponse | ErrorResponse:
     from flask import session
+
     tenant_id = session.get("tenant_id")
     if not tenant_id:
         return jsonify({"ok": False, "error": "no tenant context"}), 400  # type: ignore[return-value]
     svc: DietService = current_app.diet_service  # type: ignore[attr-defined]
     return cast(DietTypeListResponse, {"ok": True, "diet_types": svc.list_diet_types(tenant_id)})
 
+
 @bp.get("/units")
-@require_roles("superuser","admin","unit_portal","cook")
+@require_roles("superuser", "admin", "unit_portal", "cook")
 def list_units() -> UnitListResponse | ErrorResponse:
     from flask import session
+
     tenant_id = session.get("tenant_id")
     if not tenant_id:
         return jsonify({"ok": False, "error": "no tenant context"}), 400  # type: ignore[return-value]
     svc: DietService = current_app.diet_service  # type: ignore[attr-defined]
     return cast(UnitListResponse, {"ok": True, "units": svc.list_units(tenant_id)})
 
+
 @bp.post("/types")
-@require_roles("admin","superuser")
+@require_roles("admin", "superuser")
 def create_diet_type() -> DietTypeCreateResponse | ErrorResponse:
     tenant_id = session.get("tenant_id")
     # Superuser must impersonate for write
     if session.get("role") == "superuser" and not get_impersonation():
-        return forbidden("impersonation_required", problem_type="https://example.com/problems/impersonation-required")  # type: ignore[return-value]
+        return forbidden(
+            "impersonation_required",
+            problem_type="https://example.com/problems/impersonation-required",
+        )  # type: ignore[return-value]
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     default_select = bool(data.get("default_select"))
@@ -56,17 +64,22 @@ def create_diet_type() -> DietTypeCreateResponse | ErrorResponse:
     if not name:
         # Legacy contract expects 400 with unified envelope for missing required field here
         from flask import jsonify as _json
+
         return _json({"ok": False, "error": "bad_request", "message": "missing name"}), 400  # type: ignore[return-value]
     svc: DietService = current_app.diet_service  # type: ignore[attr-defined]
     new_id = svc.create_diet_type(tenant_id, name, default_select)
     return cast(DietTypeCreateResponse, {"ok": True, "diet_type_id": new_id})
 
+
 @bp.post("/types/<int:diet_type_id>")
-@require_roles("admin","superuser")
+@require_roles("admin", "superuser")
 def update_diet_type(diet_type_id: int) -> GenericOk | ErrorResponse:
     tenant_id = session.get("tenant_id")
     if session.get("role") == "superuser" and not get_impersonation():
-        return forbidden("impersonation_required", problem_type="https://example.com/problems/impersonation-required")  # type: ignore[return-value]
+        return forbidden(
+            "impersonation_required",
+            problem_type="https://example.com/problems/impersonation-required",
+        )  # type: ignore[return-value]
     data = request.get_json(silent=True) or {}
     name = data.get("name")
     default_select = data.get("default_select")
@@ -78,12 +91,16 @@ def update_diet_type(diet_type_id: int) -> GenericOk | ErrorResponse:
         return not_found("diet_type_not_found")  # type: ignore[return-value]
     return cast(GenericOk, {"ok": True})
 
+
 @bp.delete("/types/<int:diet_type_id>")
-@require_roles("admin","superuser")
+@require_roles("admin", "superuser")
 def delete_diet_type(diet_type_id: int) -> GenericOk | ErrorResponse:
     tenant_id = session.get("tenant_id")
     if session.get("role") == "superuser" and not get_impersonation():
-        return forbidden("impersonation_required", problem_type="https://example.com/problems/impersonation-required")  # type: ignore[return-value]
+        return forbidden(
+            "impersonation_required",
+            problem_type="https://example.com/problems/impersonation-required",
+        )  # type: ignore[return-value]
     if not tenant_id:
         return bad_request("no_tenant_context")  # type: ignore[return-value]
     svc: DietService = current_app.diet_service  # type: ignore[attr-defined]
@@ -92,8 +109,9 @@ def delete_diet_type(diet_type_id: int) -> GenericOk | ErrorResponse:
         return not_found("diet_type_not_found")  # type: ignore[return-value]
     return cast(GenericOk, {"ok": True})
 
+
 @bp.get("/assignments")
-@require_roles("superuser","admin","unit_portal","cook")
+@require_roles("superuser", "admin", "unit_portal", "cook")
 def get_assignments() -> AssignmentListResponse | ErrorResponse:
     unit_id = request.args.get("unit")
     if not unit_id:
@@ -106,11 +124,12 @@ def get_assignments() -> AssignmentListResponse | ErrorResponse:
     data = svc.list_assignments(uid)
     return cast(AssignmentListResponse, {"ok": True, "unit_id": uid, "assignments": data})
 
+
 @bp.post("/assignments")
-@require_roles("admin","superuser","unit_portal")
+@require_roles("admin", "superuser", "unit_portal")
 def post_assignment() -> AssignmentCreateResponse | ErrorResponse:
     payload = request.get_json(silent=True) or {}
-    for field in ["unit_id","diet_type_id","count"]:
+    for field in ["unit_id", "diet_type_id", "count"]:
         if field not in payload:
             return unprocessable_entity([{"field": field, "msg": "required"}])  # type: ignore[return-value]
     try:
@@ -123,8 +142,9 @@ def post_assignment() -> AssignmentCreateResponse | ErrorResponse:
     assignment_id = svc.set_assignment(unit_id, diet_type_id, count)
     return cast(AssignmentCreateResponse, {"ok": True, "assignment_id": assignment_id})
 
+
 @bp.delete("/assignments/<int:assignment_id>")
-@require_roles("admin","superuser","unit_portal")
+@require_roles("admin", "superuser", "unit_portal")
 def delete_assignment(assignment_id: int) -> GenericOk | ErrorResponse:
     svc: DietService = current_app.diet_service  # type: ignore[attr-defined]
     ok = svc.delete_assignment(assignment_id)

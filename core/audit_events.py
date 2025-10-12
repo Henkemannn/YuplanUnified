@@ -4,6 +4,7 @@ Currently stores events in an in-memory list (process local) and optionally emit
 OpenTelemetry spans if OTEL is available. This is intentionally minimal; future
 iterations can persist to DB or external sink.
 """
+
 from __future__ import annotations
 
 import time
@@ -18,6 +19,7 @@ except Exception:  # pragma: no cover
 _AUDIT_BUFFER: list[dict[str, Any]] = []
 _MAX_BUFFER = 500
 
+
 @dataclass
 class AuditEvent:
     ts: int
@@ -27,10 +29,12 @@ class AuditEvent:
     meta: dict[str, Any] | None = None
 
 
-def record_audit_event(action: str, actor_user_id: int | None = None, tenant_id: int | None = None, **meta: Any) -> AuditEvent:
+def record_audit_event(
+    action: str, actor_user_id: int | None = None, tenant_id: int | None = None, **meta: Any
+) -> AuditEvent:
     ev = AuditEvent(int(time.time()), action, actor_user_id, tenant_id, meta or None)
     if len(_AUDIT_BUFFER) >= _MAX_BUFFER:
-        del _AUDIT_BUFFER[0: max(50, _MAX_BUFFER // 10)]  # drop oldest slice
+        del _AUDIT_BUFFER[0 : max(50, _MAX_BUFFER // 10)]  # drop oldest slice
     _AUDIT_BUFFER.append(asdict(ev))
     if trace is not None:  # pragma: no cover - OTEL optional
         try:

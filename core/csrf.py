@@ -7,6 +7,7 @@ Design:
 - Selective blueprint roll-out: we start by enforcing only for diet_api and superuser_impersonation endpoints.
 - Failing validation returns RFC7807 problem+json using helpers in http_errors.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -43,6 +44,7 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 def _problem_missing() -> Response:
     return _forbidden("csrf_missing", problem_type="https://example.com/problems/csrf_missing")
 
+
 def _problem_invalid() -> Response:
     return _forbidden("csrf_invalid", problem_type="https://example.com/problems/csrf_invalid")
 
@@ -67,6 +69,7 @@ def validate_token() -> bool:
     try:
         if session.get("role") == "superuser" and path.startswith("/diet/"):
             from .impersonation import get_impersonation  # local import
+
             if not get_impersonation():
                 return True
     except Exception:  # pragma: no cover
@@ -91,8 +94,13 @@ def csrf_protect(fn: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(fn)
     def wrapper(*a: Any, **kw: Any) -> Any:
         if not validate_token():
-            return _problem_invalid() if request.headers.get(HEADER_NAME) or request.form.get(FORM_FIELD) else _problem_missing()
+            return (
+                _problem_invalid()
+                if request.headers.get(HEADER_NAME) or request.form.get(FORM_FIELD)
+                else _problem_missing()
+            )
         return fn(*a, **kw)
+
     return wrapper
 
 
@@ -109,8 +117,13 @@ def before_request() -> Response | None:  # to be registered only when flag acti
         return None
     if not validate_token():
         # Distinguish missing vs invalid
-        return _problem_invalid() if (request.headers.get(HEADER_NAME) or request.form.get(FORM_FIELD)) else _problem_missing()
+        return (
+            _problem_invalid()
+            if (request.headers.get(HEADER_NAME) or request.form.get(FORM_FIELD))
+            else _problem_missing()
+        )
     return None
+
 
 __all__ = [
     "generate_token",

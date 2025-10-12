@@ -32,8 +32,12 @@ def test_double_submit_token_allows():
     # provide both cookie and header
     # Use /auth/login (prod exempt) to isolate double-submit success path; even if creds invalid,
     # CSRF layer should not block when tokens match.
-    r = client.post("/auth/login", json={"email": "a@b", "password": "pw"}, headers={header_name: token},
-                    environ_overrides={"HTTP_COOKIE": f"{cookie_name}={token}"})
+    r = client.post(
+        "/auth/login",
+        json={"email": "a@b", "password": "pw"},
+        headers={header_name: token},
+        environ_overrides={"HTTP_COOKIE": f"{cookie_name}={token}"},
+    )
     # Auth may still fail (RBAC) but CSRF layer should pass through; expect 400/401/403/200 range not csrf_* detail
     assert r.status_code in {200, 400, 401}  # should not be CSRF 403
     if r.status_code == 401:
@@ -76,4 +80,3 @@ def test_prod_exempt_paths_require_token_for_write():
     if r_auth.status_code == 403:
         # If we ever see a 403 ensure not CSRF (should not happen ideally)
         assert "csrf_" not in r_auth.get_data(as_text=True)
-

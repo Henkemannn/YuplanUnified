@@ -12,6 +12,7 @@ Lua responsibilities:
 
 Retry-after ms = ceil((1 - tokens)/refill_rate) * 1000.
 """
+
 from __future__ import annotations
 
 import time
@@ -72,28 +73,30 @@ redis.call('SET', key, string.format('%f:%d', tokens, last_ms), 'PX', per_ms)
 return {allowed, string.format('%f', tokens), retry_after_ms}
 """
 
+
 class RedisTokenBucketRateLimiter(RateLimiter):  # type: ignore[misc]
-  def __init__(self, url: str, prefix: str, now_ms_fn: Callable[[], int] | None = None) -> None:
-    if redis is None:
-      raise RuntimeError("redis library not available")
-    self._client = redis.Redis.from_url(url, decode_responses=True)
-    self._prefix = f"{prefix}tb:"
-    self._script = self._client.register_script(_LUA)
-    self._now_ms = now_ms_fn or (lambda: int(time.time() * 1000))
+    def __init__(self, url: str, prefix: str, now_ms_fn: Callable[[], int] | None = None) -> None:
+        if redis is None:
+            raise RuntimeError("redis library not available")
+        self._client = redis.Redis.from_url(url, decode_responses=True)
+        self._prefix = f"{prefix}tb:"
+        self._script = self._client.register_script(_LUA)
+        self._now_ms = now_ms_fn or (lambda: int(time.time() * 1000))
 
-  def _rk(self, logical_key: str) -> str:
-    return f"{self._prefix}{logical_key}"
+    def _rk(self, logical_key: str) -> str:
+        return f"{self._prefix}{logical_key}"
 
-  def allow(self, key: str, quota: int, per_seconds: int) -> bool:
-    capacity = quota
-    now_ms = self._now_ms()
-    per_ms = per_seconds * 1000
-    refill_rate = quota  # tokens per second
-    result = self._script(keys=[self._rk(key)], args=[now_ms, capacity, refill_rate, per_ms])  # type: ignore[arg-type]
-    allowed = int(result[0]) == 1
-    return allowed
+    def allow(self, key: str, quota: int, per_seconds: int) -> bool:
+        capacity = quota
+        now_ms = self._now_ms()
+        per_ms = per_seconds * 1000
+        refill_rate = quota  # tokens per second
+        result = self._script(keys=[self._rk(key)], args=[now_ms, capacity, refill_rate, per_ms])  # type: ignore[arg-type]
+        allowed = int(result[0]) == 1
+        return allowed
 
-  def retry_after(self, key: str, per_seconds: int) -> int:
-    return 1
+    def retry_after(self, key: str, per_seconds: int) -> int:
+        return 1
+
 
 __all__ = ["RedisTokenBucketRateLimiter"]

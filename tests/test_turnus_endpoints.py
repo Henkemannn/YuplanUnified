@@ -9,12 +9,22 @@ from core.models import Tenant, Unit, User
 
 def _bootstrap_admin(db):
     import uuid
+
     t = Tenant(name="TurnusT_" + uuid.uuid4().hex[:5])
-    db.add(t); db.flush()
+    db.add(t)
+    db.flush()
     unit = Unit(tenant_id=t.id, name="U1")
-    db.add(unit); db.flush()
-    user = User(tenant_id=t.id, email=f"admin_{uuid.uuid4().hex[:6]}@ex.com", password_hash=generate_password_hash("pw"), role="admin", unit_id=unit.id)
-    db.add(user); db.commit()
+    db.add(unit)
+    db.flush()
+    user = User(
+        tenant_id=t.id,
+        email=f"admin_{uuid.uuid4().hex[:6]}@ex.com",
+        password_hash=generate_password_hash("pw"),
+        role="admin",
+        unit_id=unit.id,
+    )
+    db.add(user)
+    db.commit()
     return t, user, unit
 
 
@@ -47,18 +57,40 @@ def test_turnus_templates_and_import_and_query():
     payload = {
         "template_id": tpl_id,
         "shifts": [
-            {"unit_id": unit_id, "start_ts": start0.isoformat(timespec="minutes"), "end_ts": (start0 + timedelta(hours=4)).isoformat(timespec="minutes"), "role": "cook"},
-            {"unit_id": unit_id, "start_ts": (start0 + timedelta(hours=5)).isoformat(timespec="minutes"), "end_ts": (start0 + timedelta(hours=9)).isoformat(timespec="minutes"), "role": "cook"},
-            {"unit_id": unit_id, "start_ts": start0.isoformat(timespec="minutes"), "end_ts": (start0 + timedelta(hours=4)).isoformat(timespec="minutes"), "role": "cook"},  # duplicate
-            {"unit_id": unit_id, "start_ts": (start0 + timedelta(hours=10)).isoformat(timespec="minutes"), "end_ts": (start0 + timedelta(hours=9)).isoformat(timespec="minutes"), "role": "cook"},  # invalid
-        ]
+            {
+                "unit_id": unit_id,
+                "start_ts": start0.isoformat(timespec="minutes"),
+                "end_ts": (start0 + timedelta(hours=4)).isoformat(timespec="minutes"),
+                "role": "cook",
+            },
+            {
+                "unit_id": unit_id,
+                "start_ts": (start0 + timedelta(hours=5)).isoformat(timespec="minutes"),
+                "end_ts": (start0 + timedelta(hours=9)).isoformat(timespec="minutes"),
+                "role": "cook",
+            },
+            {
+                "unit_id": unit_id,
+                "start_ts": start0.isoformat(timespec="minutes"),
+                "end_ts": (start0 + timedelta(hours=4)).isoformat(timespec="minutes"),
+                "role": "cook",
+            },  # duplicate
+            {
+                "unit_id": unit_id,
+                "start_ts": (start0 + timedelta(hours=10)).isoformat(timespec="minutes"),
+                "end_ts": (start0 + timedelta(hours=9)).isoformat(timespec="minutes"),
+                "role": "cook",
+            },  # invalid
+        ],
     }
     r = client.post("/turnus/import", json=payload)
     data = r.get_json()
     if data["inserted"] != 2 or data["skipped"] != 2:
         print("DEBUG import result", data)
         # fetch slots directly
-        r_slots_dbg = client.get("/turnus/slots", query_string={"from": "2025-10-01", "to": "2025-10-01"})
+        r_slots_dbg = client.get(
+            "/turnus/slots", query_string={"from": "2025-10-01", "to": "2025-10-01"}
+        )
         print("DEBUG slots", r_slots_dbg.get_json())
     assert data["inserted"] == 2
     assert data["skipped"] == 2
@@ -68,8 +100,12 @@ def test_turnus_templates_and_import_and_query():
     slots = r.get_json()
     assert len(slots) == 2
     # Filter by role
-    r = client.get("/turnus/slots", query_string={"from": "2025-10-01", "to": "2025-10-01", "role": "cook"})
+    r = client.get(
+        "/turnus/slots", query_string={"from": "2025-10-01", "to": "2025-10-01", "role": "cook"}
+    )
     assert len(r.get_json()) == 2
     # Filter non-existent role
-    r = client.get("/turnus/slots", query_string={"from": "2025-10-01", "to": "2025-10-01", "role": "driver"})
+    r = client.get(
+        "/turnus/slots", query_string={"from": "2025-10-01", "to": "2025-10-01", "role": "driver"}
+    )
     assert r.get_json() == []

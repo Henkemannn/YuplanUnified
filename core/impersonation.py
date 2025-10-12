@@ -5,6 +5,7 @@ effective tenant context for the request becomes the impersonated tenant and
 RBAC can treat the superuser as an admin for operational endpoints. A later
 iteration can enforce time limits + audit persistence.
 """
+
 from __future__ import annotations
 
 import time

@@ -1,6 +1,7 @@
 """Database engine + session management.
 Later can be expanded with per-request session handling middleware.
 """
+
 from __future__ import annotations
 
 from contextlib import suppress
@@ -20,7 +21,9 @@ def init_engine(database_url: str, force: bool = False) -> Engine:
     global _engine, _SessionFactory
     if _engine is None:
         _engine = create_engine(database_url, future=True, echo=False)
-        _SessionFactory = scoped_session(sessionmaker(bind=_engine, autoflush=False, autocommit=False))
+        _SessionFactory = scoped_session(
+            sessionmaker(bind=_engine, autoflush=False, autocommit=False)
+        )
         return _engine
     if force:
         _engine.dispose()
@@ -28,7 +31,9 @@ def init_engine(database_url: str, force: bool = False) -> Engine:
         if _SessionFactory is not None:
             with suppress(Exception):  # pragma: no cover
                 _SessionFactory.remove()
-        _SessionFactory = scoped_session(sessionmaker(bind=_engine, autoflush=False, autocommit=False))
+        _SessionFactory = scoped_session(
+            sessionmaker(bind=_engine, autoflush=False, autocommit=False)
+        )
     return _engine
 
 
@@ -38,7 +43,9 @@ def get_session() -> Session:  # to be used inside request handlers (later integ
     return _SessionFactory()
 
 
-def create_all() -> None:  # dev helper ONLY for fresh ephemeral DBs (tests, scratch). Use Alembic in normal flows.
+def create_all() -> (
+    None
+):  # dev helper ONLY for fresh ephemeral DBs (tests, scratch). Use Alembic in normal flows.
     if _engine is None:
         raise RuntimeError("Engine not initialized")
     Base.metadata.create_all(_engine)

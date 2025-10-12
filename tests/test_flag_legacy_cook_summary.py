@@ -19,7 +19,10 @@ def _setup(db_url: str):
         # Tenants
         t1 = Tenant(name="CLIT1")
         t2 = Tenant(name="CLIT2")
-        db.add_all([t1, t2]); db.commit(); db.refresh(t1); db.refresh(t2)
+        db.add_all([t1, t2])
+        db.commit()
+        db.refresh(t1)
+        db.refresh(t2)
         # Enable flag on t1 only
         db.add(TenantFeatureFlag(tenant_id=t1.id, name=FLAG_NAME, enabled=True))
         db.commit()

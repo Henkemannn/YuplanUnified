@@ -24,10 +24,23 @@ def test_menu_dry_run_true_sets_meta_flag(monkeypatch):
         def parse(self, data, filename, mime):
             class Week:
                 def __init__(self):
-                    self.items = [type("I", (), {"day":"monday","meal":"lunch","variant_type":"alt1","dish_name":"Stew"})()]
-            return type("R", (), {"weeks":[Week()]})()
+                    self.items = [
+                        type(
+                            "I",
+                            (),
+                            {
+                                "day": "monday",
+                                "meal": "lunch",
+                                "variant_type": "alt1",
+                                "dish_name": "Stew",
+                            },
+                        )()
+                    ]
+
+            return type("R", (), {"weeks": [Week()]})()
 
     import core.import_api as import_api_mod
+
     monkeypatch.setattr(import_api_mod, "_importer", DummyImporter())
 
     with app.test_client() as client:
@@ -44,6 +57,7 @@ def test_menu_dry_run_true_sets_meta_flag(monkeypatch):
 def test_menu_unsupported_mime_415(monkeypatch):
     app: Flask = _app()
     import core.import_api as import_api_mod
+
     monkeypatch.setattr(import_api_mod, "_importer", None)
     with app.test_client() as client:
         _login(client)

@@ -15,6 +15,7 @@ Assumptions:
  - Flag is tenant-scoped in TenantFeatureFlag rows
  - Safe read-only query
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,6 +35,7 @@ from core.models import Tenant, TenantFeatureFlag
 
 FLAG_NAME = "allow_legacy_cook_create"
 
+
 @dataclass
 class TenantFlagRow:
     id: int
@@ -49,13 +51,17 @@ def load_rows() -> list[TenantFlagRow]:
         # Preload flags for only relevant flag to avoid cartesian expansion
         flag_map: dict[int, bool] = {
             r.tenant_id: True
-            for r in db.query(TenantFeatureFlag).filter(
-                TenantFeatureFlag.name == FLAG_NAME, TenantFeatureFlag.enabled.is_(True)
-            ).all()
+            for r in db.query(TenantFeatureFlag)
+            .filter(TenantFeatureFlag.name == FLAG_NAME, TenantFeatureFlag.enabled.is_(True))
+            .all()
         }
         out: list[TenantFlagRow] = []
         for t in tenants:
-            out.append(TenantFlagRow(id=t.id, name=t.name, active=t.active, enabled=flag_map.get(t.id, False)))
+            out.append(
+                TenantFlagRow(
+                    id=t.id, name=t.name, active=t.active, enabled=flag_map.get(t.id, False)
+                )
+            )
         return out
     finally:
         db.close()
@@ -69,11 +75,13 @@ def fmt_table(rows: list[TenantFlagRow]) -> str:
     name_w = max(len("name"), max(len(r.name) for r in rows))
     active_w = len("active")
     enabled_w = len("legacy_flag")
-    header = f"{ 'id'.ljust(id_w) }  { 'name'.ljust(name_w) }  {'active'.ljust(active_w)}  {'legacy_flag'.ljust(enabled_w)}"
-    sep = f"{'-'*id_w}  {'-'*name_w}  {'-'*active_w}  {'-'*enabled_w}"
+    header = f"{'id'.ljust(id_w)}  {'name'.ljust(name_w)}  {'active'.ljust(active_w)}  {'legacy_flag'.ljust(enabled_w)}"
+    sep = f"{'-' * id_w}  {'-' * name_w}  {'-' * active_w}  {'-' * enabled_w}"
     lines = [header, sep]
     for r in rows:
-        lines.append(f"{str(r.id).ljust(id_w)}  {r.name.ljust(name_w)}  {str(r.active).ljust(active_w)}  {str(r.enabled).ljust(enabled_w)}")
+        lines.append(
+            f"{str(r.id).ljust(id_w)}  {r.name.ljust(name_w)}  {str(r.active).ljust(active_w)}  {str(r.enabled).ljust(enabled_w)}"
+        )
     enabled_count = sum(1 for r in rows if r.enabled)
     lines.append("")
     lines.append(f"Total tenants: {len(rows)}  Enabled: {enabled_count}")
@@ -82,7 +90,9 @@ def fmt_table(rows: list[TenantFlagRow]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Summarize legacy cook flag usage")
-    parser.add_argument("--format", choices=["table", "json"], default="table", help="Output format")
+    parser.add_argument(
+        "--format", choices=["table", "json"], default="table", help="Output format"
+    )
     args = parser.parse_args(argv)
 
     cfg = Config.from_env()

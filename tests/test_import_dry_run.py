@@ -10,9 +10,17 @@ from core.models import Dish, Menu, MenuVariant, Tenant, User
 
 def _bootstrap(db):
     t = Tenant(name="ImpT_" + uuid.uuid4().hex[:6])
-    db.add(t); db.flush()
-    u = User(tenant_id=t.id, email=f"admin_{uuid.uuid4().hex[:6]}@ex.com", password_hash=generate_password_hash("pw"), role="admin", unit_id=None)
-    db.add(u); db.commit()
+    db.add(t)
+    db.flush()
+    u = User(
+        tenant_id=t.id,
+        email=f"admin_{uuid.uuid4().hex[:6]}@ex.com",
+        password_hash=generate_password_hash("pw"),
+        role="admin",
+        unit_id=None,
+    )
+    db.add(u)
+    db.commit()
     return t, u
 
 
@@ -23,6 +31,7 @@ def _login(client, email):
 
 def test_menu_import_dry_run(monkeypatch, tmp_path):
     from core import db as core_db  # type: ignore
+
     core_db._engine = None  # type: ignore
     core_db._SessionFactory = None  # type: ignore
     db_file = tmp_path / "dryrun.db"
@@ -30,6 +39,7 @@ def test_menu_import_dry_run(monkeypatch, tmp_path):
     app = create_app({"database_url": db_url, "secret_key": "x"})
     engine = core_db.init_engine(db_url)  # type: ignore
     from core.models import Base
+
     Base.metadata.create_all(engine)
     from core.importers.base import ImportedMenuItem, MenuImportResult, WeekImport
 
@@ -43,13 +53,22 @@ def test_menu_import_dry_run(monkeypatch, tmp_path):
     class DummyImporter:
         def parse(self, data, filename, mime):
             items = [
-                ImportedMenuItem(day="monday", meal="lunch", variant_type="alt1", dish_name="Chili"),
-                ImportedMenuItem(day="monday", meal="lunch", variant_type="alt2", dish_name="Pasta"),
-                ImportedMenuItem(day="tuesday", meal="lunch", variant_type="alt1", dish_name="Chili"),
+                ImportedMenuItem(
+                    day="monday", meal="lunch", variant_type="alt1", dish_name="Chili"
+                ),
+                ImportedMenuItem(
+                    day="monday", meal="lunch", variant_type="alt2", dish_name="Pasta"
+                ),
+                ImportedMenuItem(
+                    day="tuesday", meal="lunch", variant_type="alt1", dish_name="Chili"
+                ),
             ]
-            return MenuImportResult(weeks=[WeekImport(week=40, year=2025, items=items)], errors=[], warnings=[])
+            return MenuImportResult(
+                weeks=[WeekImport(week=40, year=2025, items=items)], errors=[], warnings=[]
+            )
 
     import core.import_api as import_api_mod
+
     import_api_mod._importer = DummyImporter()
 
     data = io.BytesIO(b"placeholder")
@@ -60,9 +79,9 @@ def test_menu_import_dry_run(monkeypatch, tmp_path):
     diff = body["diff"]
     assert len(diff) == 3
     actions = {(d["day"], d["variant_type"]): d["variant_action"] for d in diff}
-    assert actions[("monday","alt1")] == "create"
-    assert actions[("monday","alt2")] == "create"
-    assert actions[("tuesday","alt1")] == "create"
+    assert actions[("monday", "alt1")] == "create"
+    assert actions[("monday", "alt2")] == "create"
+    assert actions[("tuesday", "alt1")] == "create"
 
     db2 = get_session()
     try:

@@ -8,6 +8,7 @@ First target: expose /kommun/admin (adminpanel) using unified models:
 Write-only adapter: initial version is READ-ONLY (no POST persistence yet) to avoid
 immediate schema coupling. We will progressively enable actions mapped to unified services.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -26,12 +27,14 @@ bp = Blueprint(
     __name__,
     url_prefix="/kommun",
     template_folder="../legacy/kommun/templates",
-    static_folder="../legacy/kommun/static"
+    static_folder="../legacy/kommun/static",
 )
 
 
 # --- Shared lightweight HTTP caching helpers (ETag + optional Last-Modified) ---
-def _etag_headers(etag_hex: str, *, last_modified_dt: datetime | None = None, vary_accept: bool = False):
+def _etag_headers(
+    etag_hex: str, *, last_modified_dt: datetime | None = None, vary_accept: bool = False
+):
     headers = {
         "ETag": f'"{etag_hex}"',  # quoted per RFC 7232
         "Cache-Control": "private, max-age=60, must-revalidate",
@@ -46,8 +49,10 @@ def _if_none_match_matches(etag_hex: str) -> bool:
     inm = request.headers.get("If-None-Match")
     return inm is not None and inm.strip() == f'"{etag_hex}"'
 
+
 class AvdRow:
-    __slots__ = ("id","namn","boende_antal","kopplade_kosttyper","kopplade_antal","faktaruta")
+    __slots__ = ("id", "namn", "boende_antal", "kopplade_kosttyper", "kopplade_antal", "faktaruta")
+
     def __init__(self, u: Unit):
         self.id = u.id
         self.namn = u.name
@@ -56,18 +61,17 @@ class AvdRow:
         self.kopplade_antal = {}
         self.faktaruta = ""
 
+
 def _unit_row(u: Unit):
     return AvdRow(u)
 
+
 def _diet_row(d: DietaryType):
-    return type("Kost", (), {
-        "id": d.id,
-        "namn": d.name,
-        "formarkeras": d.default_select
-    })()
+    return type("Kost", (), {"id": d.id, "namn": d.name, "formarkeras": d.default_select})()
+
 
 @bp.route("/admin")
-@require_roles("superuser","admin")
+@require_roles("superuser", "admin")
 def adminpanel():
     tenant_id = session.get("tenant_id")
     if not tenant_id:
@@ -75,8 +79,8 @@ def adminpanel():
     vecka = int(date.today().strftime("%W")) or 1
     db = get_session()
     try:
-        units = db.query(Unit).filter(Unit.tenant_id==tenant_id).all()
-        diets = db.query(DietaryType).filter(DietaryType.tenant_id==tenant_id).all()
+        units = db.query(Unit).filter(Unit.tenant_id == tenant_id).all()
+        diets = db.query(DietaryType).filter(DietaryType.tenant_id == tenant_id).all()
         assigns = db.query(UnitDietAssignment).all()
     finally:
         db.close()
@@ -95,14 +99,19 @@ def adminpanel():
         avdelningar=avdelningar,
         kosttyper=kosttyper,
         # The full template has conditional sections; we feed placeholders
-        meny_alt1={}, meny_alt2={}, meny_dessert={}, meny_kvall={}, meny_text_map={},
+        meny_alt1={},
+        meny_alt2={},
+        meny_dessert={},
+        meny_kvall={},
+        meny_text_map={},
     )
 
-@bp.route("/admin/import", methods=["GET","POST"])
-@require_roles("superuser","admin","cook")
+
+@bp.route("/admin/import", methods=["GET", "POST"])
+@require_roles("superuser", "admin", "cook")
 def admin_import():
-        # Simple page that posts to unified import endpoint
-        html = """
+    # Simple page that posts to unified import endpoint
+    html = """
         <div class='container'>
             <h1>Importera meny</h1>
             <form method='post' action='/import/menu' enctype='multipart/form-data'>
@@ -112,21 +121,27 @@ def admin_import():
             <p class='mt-3 text-muted'>DOCX (kommun) eller XLSX (offshore). Tenant hämtas från session.</p>
         </div>
         """
-        return render_template("base.html", content=html)
+    return render_template("base.html", content=html)
+
 
 # --- Placeholder routes referenced by templates (to be implemented properly later) ---
 
+
 @bp.route("/meny_avdelning_admin")
-@require_roles("superuser","admin")
+@require_roles("superuser", "admin")
 def meny_avdelning_admin():
     # TODO: implement detailed per-unit menu editing view
     return redirect(url_for("legacy_kommun_ui.adminpanel"))
 
+
 # Alias endpoints (legacy templates call url_for('meny_avdelning_admin'))
-bp.add_url_rule("/meny_avdelning_admin_alias", endpoint="meny_avdelning_admin", view_func=meny_avdelning_admin)
+bp.add_url_rule(
+    "/meny_avdelning_admin_alias", endpoint="meny_avdelning_admin", view_func=meny_avdelning_admin
+)
+
 
 @bp.route("/veckovy")
-@require_roles("superuser","admin")
+@require_roles("superuser", "admin")
 def veckovy():
     # Placeholder implementation now returns a trivial HTML snippet to enable caching semantics.
     vecka = int(date.today().strftime("%W")) or 1
@@ -152,8 +167,9 @@ def veckovy():
         resp.headers[k] = v
     return resp
 
-@bp.route("/rapport", methods=["GET","POST"])
-@require_roles("superuser","admin")
+
+@bp.route("/rapport", methods=["GET", "POST"])
+@require_roles("superuser", "admin")
 def rapport():
     # Placeholder JSON report payload to enable ETag caching. Replace rapport_data collection later.
     vecka = int(date.today().strftime("%W")) or 1
@@ -171,8 +187,9 @@ def rapport():
         resp.headers[k] = v
     return resp
 
+
 @bp.route("/redigera_boende")
-@require_roles("superuser","admin")
+@require_roles("superuser", "admin")
 def redigera_boende():
     # TODO: implement editing of per-day attendance (maps to Attendance model)
     return redirect(url_for("legacy_kommun_ui.adminpanel"))

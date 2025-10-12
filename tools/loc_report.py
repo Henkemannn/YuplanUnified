@@ -5,6 +5,7 @@ import subprocess
 # Collect tracked files
 files = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
 
+
 # Helper to read file safely
 def read_lines(fp: str):
     try:
@@ -12,6 +13,7 @@ def read_lines(fp: str):
             return f.readlines()
     except Exception:
         return []
+
 
 py_files = [f for f in files if f.endswith(".py")]
 
@@ -22,7 +24,11 @@ categories = {
     "tools_py": [f for f in py_files if f.startswith("tools/")],
     "workflows_yml": [f for f in files if f.startswith(".github/workflows/")],
     "html_templates": [f for f in files if f.startswith("templates/") or f.endswith(".html")],
-    "docs_md": [f for f in files if (f.startswith("docs/") or f.endswith(".md")) and not f.startswith(".github/")],
+    "docs_md": [
+        f
+        for f in files
+        if (f.startswith("docs/") or f.endswith(".md")) and not f.startswith(".github/")
+    ],
 }
 
 # Count function
@@ -39,11 +45,7 @@ for key, flist in categories.items():
             code += sum(1 for line in lines if not comment_re.match(line))
         else:
             code += sum(1 for line in lines if line.strip())
-    report[key] = {
-        "files": len(flist),
-        "lines_total": total,
-        "lines_code_est": code
-    }
+    report[key] = {"files": len(flist), "lines_total": total, "lines_code_est": code}
 
 # Totals
 all_total = 0
@@ -61,7 +63,7 @@ report["summary"] = {
     "total_lines": all_total,
     "estimated_code_lines": all_code,
     "python_files": len(py_files),
-    "python_total_lines": sum(len(read_lines(f)) for f in py_files)
+    "python_total_lines": sum(len(read_lines(f)) for f in py_files),
 }
 
 print(json.dumps(report, indent=2))

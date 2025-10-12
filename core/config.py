@@ -8,9 +8,13 @@ from dataclasses import dataclass, field
 class Config:
     secret_key: str = "change-me"
     database_url: str = "sqlite:///dev.db"
-    default_enabled_modules: list[str] = field(default_factory=lambda: ["municipal"])  # order matters for overrides
+    default_enabled_modules: list[str] = field(
+        default_factory=lambda: ["municipal"]
+    )  # order matters for overrides
     cors_allowed_origins: list[str] = field(default_factory=list)
-    jwt_secrets: list[str] = field(default_factory=list)  # first element used for signing; all accepted for verification
+    jwt_secrets: list[str] = field(
+        default_factory=list
+    )  # first element used for signing; all accepted for verification
     jwt_issuer: str = "yuplan"
     jwt_audience: str = "api"
     jwt_max_age_seconds: int = 43200  # 12h

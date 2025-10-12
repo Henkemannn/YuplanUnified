@@ -12,19 +12,26 @@ def app():
     app = create_app({"TESTING": True})
     yield app
 
+
 @pytest.fixture()
 def client(app):
     return app.test_client()
 
+
 # Helpers
+
 
 def _auth_headers():
     # For pilot diet endpoints we may not require auth for certain operations; adjust if needed.
     return {}
 
-@pytest.mark.parametrize("path,status,expect_type", [
-    ("/diet/api/v1/items?id=999999", 404, "not_found"),  # assuming not found path variant
-])
+
+@pytest.mark.parametrize(
+    "path,status,expect_type",
+    [
+        ("/diet/api/v1/items?id=999999", 404, "not_found"),  # assuming not found path variant
+    ],
+)
 @pytest.mark.skip(reason="Placeholder param set; refine according to actual diet endpoints")
 def test_placeholder(client, path, status, expect_type):
     resp = client.get(path, headers=_auth_headers())
@@ -82,7 +89,7 @@ def test_audit_events_recorded(client, app):
     # Generate an incident 500
     client.get("/_test/boom")
     from core.audit_events import _AUDIT_BUFFER
+
     kinds = {e.get("action") for e in _AUDIT_BUFFER}
     assert "problem_response" in kinds, f"Audit buffer missing problem_response events: {kinds}"
     assert "incident" in kinds, f"Audit buffer missing incident events: {kinds}"
-

@@ -30,7 +30,9 @@ def _build_docx(headers: list[str], rows: list[list[str]]) -> bytes:
 
 @pytest.mark.skipif(docx is None, reason="python-docx not installed")
 def test_docx_happy():
-    data = _build_docx(["title", "description", "priority"], [["A", "Alpha", "1"], ["B", "Beta", "2"]])
+    data = _build_docx(
+        ["title", "description", "priority"], [["A", "Alpha", "1"], ["B", "Beta", "2"]]
+    )
     result = parse_docx(data)
     assert result.headers == ["title", "description", "priority"]
     normalized = validate_and_normalize(result.rows)

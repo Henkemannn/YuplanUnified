@@ -83,7 +83,7 @@ def test_admin_limits_invalid_tenant_id():
 
 def test_admin_limits_pagination():
     # Provide several defaults to test pagination slice stability
-    defaults = {f"limit{i}": {"quota": 5+i, "per": 60} for i in range(15)}
+    defaults = {f"limit{i}": {"quota": 5 + i, "per": 60} for i in range(15)}
     app = _make_app(defaults=defaults)
     c = app.test_client()
     rv = c.get("/admin/limits?page=2&size=5", headers={"X-User-Role": "admin"})

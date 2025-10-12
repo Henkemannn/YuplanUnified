@@ -8,6 +8,7 @@ from .impersonation import get_impersonation, start_impersonation, stop_imperson
 
 bp = Blueprint("superuser_impersonation", __name__, url_prefix="/superuser/impersonate")
 
+
 @bp.post("/start")
 @require_roles("superuser")
 def impersonate_start():
@@ -19,9 +20,10 @@ def impersonate_start():
     try:
         tenant_id = int(tenant_id)
     except ValueError:
-        return unprocessable_entity([{"field":"tenant_id","msg":"invalid_int"}])
+        return unprocessable_entity([{"field": "tenant_id", "msg": "invalid_int"}])
     start_impersonation(tenant_id, reason)
     return {"ok": True, "impersonating": tenant_id}
+
 
 @bp.post("/stop")
 @require_roles("superuser")

@@ -18,6 +18,7 @@ __all__ = [
 
 # ---- Contracts -----------------------------------------------------------------
 
+
 class PageRequest(TypedDict):
     page: int  # 1-based
     size: int
@@ -77,6 +78,7 @@ def parse_page_params(args: dict[str, str | None]) -> PageRequest:
 
     # Narrow type to Literal after normalization for mypy strict pocket
     from typing import cast
+
     order = cast(Literal["asc", "desc"], order_raw)
 
     return PageRequest(page=page, size=size, sort=sort, order=order)

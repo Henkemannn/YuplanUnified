@@ -6,6 +6,7 @@ Usage:
   python tools/bump_version.py patch --current 1.2.3
 Writes/updates VERSION file and prints new version to stdout.
 """
+
 import argparse
 import pathlib
 import re

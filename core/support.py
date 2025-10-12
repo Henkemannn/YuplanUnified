@@ -4,6 +4,7 @@ Exposes:
  - GET /admin/support/ : Basic environment info, top events, recent warnings.
  - GET /admin/support/lookup?request_id=... : Filter ring buffer by request ID.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -43,12 +44,15 @@ def support_lookup():
     if not rid:
         resp = unprocessable_entity([{"field": "request_id", "msg": "required"}])
         try:
-            record_audit_event("problem_response", status=422, type="validation_error", path=request.path)
+            record_audit_event(
+                "problem_response", status=422, type="validation_error", path=request.path
+            )
         except Exception:
             pass
         return resp
     hits = [r for r in LOG_BUFFER if r.get("request_id") == rid]
     return jsonify({"ok": True, "request_id": rid, "hits": hits}), 200
+
 
 @bp.get("/ticket/<string:rid>")
 @require_roles("superuser")
@@ -67,8 +71,8 @@ def support_ticket(rid: str):
 @bp.get("/ui")
 @require_roles("superuser")
 def support_ui():  # pragma: no cover - simple HTML shell
-        return (
-                """<!doctype html><meta charset='utf-8'>
+    return (
+        """<!doctype html><meta charset='utf-8'>
 <title>Yuplan Support</title>
 <style>body{font-family:system-ui,sans-serif;padding:16px;max-width:1100px;margin:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px;font-size:12px}th{background:#f1f5f9;text-align:left}h1{margin-top:0}code{background:#f1f5f9;padding:2px 4px;border-radius:4px}#meta{white-space:pre;background:#0f172a;color:#f1f5f9;padding:8px;border-radius:6px;font-size:12px;overflow:auto}button{cursor:pointer}</style>
 <h1>Yuplan Support</h1>
@@ -97,9 +101,9 @@ load();
 setInterval(()=>{try{load();}catch(e){}},15000);
 </script>
 """,
-                200,
-                {"Content-Type": "text/html; charset=utf-8"},
-        )
+        200,
+        {"Content-Type": "text/html; charset=utf-8"},
+    )
 
 
 __all__ = ["bp"]

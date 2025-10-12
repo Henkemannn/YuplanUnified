@@ -30,7 +30,9 @@ def _build_wb(headers: list[str], rows: list[list[str]]):
 
 @pytest.mark.skipif(openpyxl is None, reason="openpyxl not installed")
 def test_xlsx_happy():
-    data = _build_wb(["title", "description", "priority"], [["A", "Alpha", "1"], ["B", "Beta", "2"]])
+    data = _build_wb(
+        ["title", "description", "priority"], [["A", "Alpha", "1"], ["B", "Beta", "2"]]
+    )
     result = parse_xlsx(data)
     assert result.headers == ["title", "description", "priority"]
     norm = validate_and_normalize(result.rows)

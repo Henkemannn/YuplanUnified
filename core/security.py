@@ -12,6 +12,7 @@ CSRF Policy:
  - Production exemptions minimal; test adds legacy endpoints to avoid mass fixture rewrite.
  - Returns RFC7807 problem+json on denial with reason in `detail`.
 """
+
 from __future__ import annotations
 
 import os
@@ -31,7 +32,13 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 # Exemption prefix sets (directories). Ending slash required for clarity.
 PROD_EXEMPT = {"/auth/", "/metrics"}  # /metrics covers both /metrics/ingest & /metrics/query
-TEST_EXEMPT = PROD_EXEMPT | {"/import/", "/admin/tenants", "/admin/features/toggle", "/admin/feature_flags", "/diet/"}
+TEST_EXEMPT = PROD_EXEMPT | {
+    "/import/",
+    "/admin/tenants",
+    "/admin/features/toggle",
+    "/admin/feature_flags",
+    "/diet/",
+}
 
 _CSRF_COUNTERS = {"missing": 0, "mismatch": 0, "origin": 0}
 if metrics:
@@ -47,9 +54,11 @@ if metrics:
 else:  # pragma: no cover
     _csrf_blocked_counter = None
 
+
 def _is_testing(app: Flask) -> bool:
     # Honor explicit TESTING or detect pytest runtime.
     return bool(app.config.get("TESTING") or os.getenv("PYTEST_CURRENT_TEST"))
+
 
 def _is_exempt(path: str, method: str, testing: bool) -> bool:
     if method in SAFE_METHODS:
@@ -58,8 +67,10 @@ def _is_exempt(path: str, method: str, testing: bool) -> bool:
     # Normalize: ensure trailing slash check by adding slash to path if directory-like
     return any(path.startswith(p) for p in base)
 
+
 def _problem_forbidden(reason: str, instance: str | None = None):  # RFC7807 minimal
     from flask import g, jsonify
+
     rid = getattr(g, "request_id", None)
     payload = {
         "type": "https://example.com/problems/forbidden",
@@ -168,18 +179,23 @@ def init_security(app: Flask):
         resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         resp.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
         if not app.config.get("TESTING") and not app.config.get("DEBUG"):
-            resp.headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+            resp.headers.setdefault(
+                "Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload"
+            )
         # Basic CSP if absent (leave original if already set by main app)
         resp.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+            "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
         )
         # Secure cookie flags: rely on Flask's session cookie config; set CSRF cookie if new
         if hasattr(g, "_new_csrf_token"):
             from .cookies import set_secure_cookie
+
             cookie_name = app.config.get("CSRF_COOKIE_NAME", "csrf_token")
             # Non-HttpOnly, Strict for double-submit pattern
-            set_secure_cookie(resp, cookie_name, g._new_csrf_token, httponly=False, samesite="Strict")
+            set_secure_cookie(
+                resp, cookie_name, g._new_csrf_token, httponly=False, samesite="Strict"
+            )
         # Apply CORS last
         return _validate_cors(app, resp)
 

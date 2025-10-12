@@ -14,6 +14,7 @@ class MenuImportService:
     - Set variants
     Returns stats per week.
     """
+
     def __init__(self, menu_service: MenuServiceDB):
         self.menu_service = menu_service
 
@@ -25,7 +26,9 @@ class MenuImportService:
                 created = 0
                 updated = 0
                 skipped = 0
-                menu = self.menu_service.create_or_get_menu(tenant_id, week_block.week, week_block.year)
+                menu = self.menu_service.create_or_get_menu(
+                    tenant_id, week_block.week, week_block.year
+                )
                 # Preload existing variants map
                 existing_map = self._existing_variant_map(db, menu.id)
                 for item in week_block.items:
@@ -39,21 +42,26 @@ class MenuImportService:
                         created += 1
                     else:
                         updated += 1
-                    self.menu_service.set_variant(tenant_id, menu.id, item.day, item.meal, item.variant_type, dish_id)
-                summary.append({
-                    "week": week_block.week,
-                    "year": week_block.year,
-                    "created": created,
-                    "updated": updated,
-                    "skipped": skipped,
-                    "total": len(week_block.items)
-                })
+                    self.menu_service.set_variant(
+                        tenant_id, menu.id, item.day, item.meal, item.variant_type, dish_id
+                    )
+                summary.append(
+                    {
+                        "week": week_block.week,
+                        "year": week_block.year,
+                        "created": created,
+                        "updated": updated,
+                        "skipped": skipped,
+                        "total": len(week_block.items),
+                    }
+                )
             return {"weeks": summary, "warnings": result.warnings, "errors": result.errors}
         finally:
             db.close()
 
     def _existing_variant_map(self, db, menu_id: int):
         from .models import MenuVariant
+
         rows = db.query(MenuVariant).filter_by(menu_id=menu_id).all()
         return {(r.day, r.meal, r.variant_type): r.dish_id for r in rows}
 

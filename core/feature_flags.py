@@ -5,15 +5,18 @@ from typing import Literal, TypedDict
 
 FlagMode = Literal["simple"]  # future: "percentage", "gradual", etc.
 
+
 class FlagDefinition(TypedDict):
     name: str
     mode: FlagMode
     # For future modes we can append optional numeric fields (e.g. rollout_percent)
 
+
 class FlagState(TypedDict):
     name: str
     enabled: bool
     mode: FlagMode
+
 
 _SEED_FLAGS: tuple[FlagDefinition, ...] = (
     {"name": "menus", "mode": "simple"},
@@ -31,6 +34,7 @@ _SEED_FLAGS: tuple[FlagDefinition, ...] = (
     {"name": "openapi_ui", "mode": "simple"},
     {"name": "inline_ui", "mode": "simple"},
 )
+
 
 class FeatureRegistry:
     """Minimal in-memory flag registry with typed definitions.

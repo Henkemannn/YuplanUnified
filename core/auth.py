@@ -28,6 +28,7 @@ _RATE_LIMIT_STORE: dict[str, dict[str, float | int]] = {}
 
 # --- Helpers ---
 
+
 def _json_error(msg: str, code: int = 400):
     return jsonify({"error": msg, "message": msg}), code
 
@@ -36,12 +37,12 @@ def require_roles(*roles: str):
     def decorator(fn: Callable):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            auth_header = request.headers.get("Authorization","")
-            primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET","dev-secret"))
+            auth_header = request.headers.get("Authorization", "")
+            primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
             secrets_list = current_app.config.get("JWT_SECRETS") or []
             # Always prefer bearer header if present (stateless override of session)
             if auth_header.lower().startswith("bearer "):
-                token = auth_header.split(None,1)[1].strip()
+                token = auth_header.split(None, 1)[1].strip()
                 cfg = current_app.config
                 try:
                     payload = jwt_decode(
@@ -67,20 +68,27 @@ def require_roles(*roles: str):
                 # Debug aid for test harness: log mismatch context when TESTING to diagnose unexpected 403s
                 if current_app.config.get("TESTING"):
                     try:
-                        current_app.logger.info({
-                            "auth_debug": True,
-                            "where": "require_roles",
-                            "expected_any_of": roles,
-                            "session_role": user_role,
-                            "session_keys": list(session.keys()),
-                        })
+                        current_app.logger.info(
+                            {
+                                "auth_debug": True,
+                                "where": "require_roles",
+                                "expected_any_of": roles,
+                                "session_role": user_role,
+                                "session_keys": list(session.keys()),
+                            }
+                        )
                     except Exception:
                         pass
                 # Provide which role(s) required in message with ok False envelope
-                return jsonify({"ok": False, "error":"forbidden","message": f"required role in {roles}"}), 403
+                return jsonify(
+                    {"ok": False, "error": "forbidden", "message": f"required role in {roles}"}
+                ), 403
             return fn(*args, **kwargs)
+
         return wrapper
+
     return decorator
+
 
 # --- Routes ---
 @bp.post("/login")
@@ -91,7 +99,9 @@ def login():
     if not email or not password:
         return _json_error("missing credentials", 400)
     # Rate limiting (simple in-memory). Key by email + remote addr.
-    rl_cfg = current_app.config.get("AUTH_RATE_LIMIT", {"window_sec": 300, "max_failures": 5, "lock_sec": 600})
+    rl_cfg = current_app.config.get(
+        "AUTH_RATE_LIMIT", {"window_sec": 300, "max_failures": 5, "lock_sec": 600}
+    )
     window_sec = rl_cfg.get("window_sec", 300)
     max_failures = rl_cfg.get("max_failures", 5)
     lock_sec = rl_cfg.get("lock_sec", 600)
@@ -121,12 +131,14 @@ def login():
             rec["failures"] += 1
             if rec["failures"] >= max_failures:
                 rec["lock_until"] = now + lock_sec
-                resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
+                resp = make_response(
+                    jsonify({"error": "rate_limited", "message": "rate_limited"}), 429
+                )
                 resp.headers["Retry-After"] = str(lock_sec)
                 return resp
             return _json_error("invalid credentials", 401)
         secrets_list = current_app.config.get("JWT_SECRETS") or []
-        primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET","dev-secret"))
+        primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
         signing_secret = select_signing_secret(primary, secrets_list)
         access, refresh, refresh_jti = issue_token_pair(
             user_id=user.id,
@@ -150,30 +162,37 @@ def login():
         csrf_token = request.cookies.get(csrf_cookie_name)
         if not csrf_token:
             import secrets
+
             csrf_token = secrets.token_hex(16)
-        resp = make_response(jsonify({
-            "ok": True,
-            "access_token": access,
-            "refresh_token": refresh,
-            "token_type": "Bearer",
-            "expires_in": DEFAULT_ACCESS_TTL,
-            "csrf_token": csrf_token,
-        }))
+        resp = make_response(
+            jsonify(
+                {
+                    "ok": True,
+                    "access_token": access,
+                    "refresh_token": refresh,
+                    "token_type": "Bearer",
+                    "expires_in": DEFAULT_ACCESS_TTL,
+                    "csrf_token": csrf_token,
+                }
+            )
+        )
         from .cookies import set_secure_cookie
+
         set_secure_cookie(resp, csrf_cookie_name, csrf_token, httponly=False, samesite="Strict")
         return resp
     finally:
         db.close()
 
+
 @bp.post("/logout")
 def logout():
     # Accept refresh token or Authorization header, invalidate stored jti
-    primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET","dev-secret"))
+    primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
     secrets_list = current_app.config.get("JWT_SECRETS") or []
     token = None
-    auth = request.headers.get("Authorization","")
+    auth = request.headers.get("Authorization", "")
     if auth.lower().startswith("bearer "):
-        token = auth.split(None,1)[1].strip()
+        token = auth.split(None, 1)[1].strip()
     body = request.get_json(silent=True) or {}
     token = token or body.get("refresh_token") or body.get("token")
     if not token:
@@ -194,9 +213,10 @@ def logout():
         db.close()
     return jsonify({"ok": True})
 
+
 @bp.post("/refresh")
 def refresh():
-    primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET","dev-secret"))
+    primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
     secrets_list = current_app.config.get("JWT_SECRETS") or []
     data = request.get_json(silent=True) or {}
     token = data.get("refresh_token")
@@ -217,26 +237,40 @@ def refresh():
             return _json_error("invalid token", 401)
         # rotate
         signing_secret = select_signing_secret(primary, secrets_list)
-        access, new_refresh, new_jti = issue_token_pair(user_id=user.id, role=user.role, tenant_id=user.tenant_id, secret=signing_secret,
-                                                        access_ttl=current_app.config.get("JWT_ACCESS_TTL", DEFAULT_ACCESS_TTL),
-                                                        refresh_ttl=current_app.config.get("JWT_REFRESH_TTL", DEFAULT_REFRESH_TTL))
+        access, new_refresh, new_jti = issue_token_pair(
+            user_id=user.id,
+            role=user.role,
+            tenant_id=user.tenant_id,
+            secret=signing_secret,
+            access_ttl=current_app.config.get("JWT_ACCESS_TTL", DEFAULT_ACCESS_TTL),
+            refresh_ttl=current_app.config.get("JWT_REFRESH_TTL", DEFAULT_REFRESH_TTL),
+        )
         user.refresh_token_jti = new_jti
         db.commit()
-        return jsonify({"ok": True, "access_token": access, "refresh_token": new_refresh, "token_type": "Bearer", "expires_in": DEFAULT_ACCESS_TTL})
+        return jsonify(
+            {
+                "ok": True,
+                "access_token": access,
+                "refresh_token": new_refresh,
+                "token_type": "Bearer",
+                "expires_in": DEFAULT_ACCESS_TTL,
+            }
+        )
     finally:
         db.close()
+
 
 @bp.get("/me")
 def me():
     # Prefer bearer token if supplied (stateless); fallback to session.
-    primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET","dev-secret"))
+    primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
     secrets_list = current_app.config.get("JWT_SECRETS") or []
-    auth = request.headers.get("Authorization","")
+    auth = request.headers.get("Authorization", "")
     user_id = None
     role = None
     tenant_id = None
     if auth.lower().startswith("bearer "):
-        token = auth.split(None,1)[1].strip()
+        token = auth.split(None, 1)[1].strip()
         try:
             payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
             user_id = payload.get("sub")
@@ -250,12 +284,15 @@ def me():
         tenant_id = session.get("tenant_id")
     if not user_id:
         return _json_error("auth required", 401)
-    return jsonify({
-        "ok": True,
-        "user_id": user_id,
-        "role": role,
-        "tenant_id": tenant_id,
-    })
+    return jsonify(
+        {
+            "ok": True,
+            "user_id": user_id,
+            "role": role,
+            "tenant_id": tenant_id,
+        }
+    )
+
 
 # --- Bootstrap Superuser Utility ---
 def ensure_bootstrap_superuser():
@@ -272,7 +309,9 @@ def ensure_bootstrap_superuser():
     if not email or not password:
         return
 
-    auto_create = os.getenv("DEV_CREATE_ALL", "0") == "1" or os.getenv("YUPLAN_DEV_CREATE_ALL", "0") == "1"
+    auto_create = (
+        os.getenv("DEV_CREATE_ALL", "0") == "1" or os.getenv("YUPLAN_DEV_CREATE_ALL", "0") == "1"
+    )
 
     try:
         db = get_session()
@@ -285,6 +324,7 @@ def ensure_bootstrap_superuser():
         if auto_create:
             try:
                 from .db import create_all as _create_all  # local import to avoid cycles
+
                 _create_all()
             except Exception:
                 # Non-fatal; continue and let the next step decide
@@ -293,6 +333,7 @@ def ensure_bootstrap_superuser():
         # Check that required tables exist; if not, skip (or they were just created)
         try:
             from sqlalchemy import inspect as _sa_inspect  # type: ignore
+
             inspector = _sa_inspect(db.bind)
             has_users = inspector.has_table("users")
             has_tenants = inspector.has_table("tenants")
@@ -316,7 +357,13 @@ def ensure_bootstrap_superuser():
         db.add(tenant)
         db.flush()
         pw_hash = generate_password_hash(password)
-        user = User(tenant_id=tenant.id, email=email.lower(), password_hash=pw_hash, role="superuser", unit_id=None)
+        user = User(
+            tenant_id=tenant.id,
+            email=email.lower(),
+            password_hash=pw_hash,
+            role="superuser",
+            unit_id=None,
+        )
         db.add(user)
         db.commit()
         try:

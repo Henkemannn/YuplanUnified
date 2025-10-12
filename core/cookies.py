@@ -28,4 +28,5 @@ def set_secure_cookie(
         path=path,
     )
 
+
 __all__ = ["set_secure_cookie"]

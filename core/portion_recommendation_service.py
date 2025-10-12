@@ -15,6 +15,7 @@ BASELINE_DEFAULT = 400  # grams per guest fallback (aligned with tests expecting
 BASELINE_WEIGHT = 0.3
 HISTORY_WEIGHT = 0.7
 
+
 @dataclass
 class RecommendationInput:
     tenant_id: int
@@ -22,6 +23,7 @@ class RecommendationInput:
     category: str | None
     dish_id: int | None
     guest_count: int
+
 
 class PortionRecommendationService:
     def recommend(self, inp: RecommendationInput) -> dict[str, Any]:
@@ -62,16 +64,24 @@ class PortionRecommendationService:
                 "safety_factor": SAFETY_FACTOR,
                 "sample_size": sample_size,
                 "weights": {
-                    "baseline": round(w_base,3) if history_mean is not None else 1.0,
-                    "history": round(w_history,3) if history_mean is not None else 0.0
-                }
-            }
+                    "baseline": round(w_base, 3) if history_mean is not None else 1.0,
+                    "history": round(w_history, 3) if history_mean is not None else 0.0,
+                },
+            },
         }
         return result
 
     # Adapter methods expected by legacy API route (tests reference fields)
     class _BlendedResult:
-        def __init__(self, recommended_g_per_guest: int, source: str, sample_size: int, baseline_used: int, history_mean_raw: float | None, history_mean_used: float | None):
+        def __init__(
+            self,
+            recommended_g_per_guest: int,
+            source: str,
+            sample_size: int,
+            baseline_used: int,
+            history_mean_raw: float | None,
+            history_mean_used: float | None,
+        ):
             self.recommended_g_per_guest = recommended_g_per_guest
             self.source = source
             self.sample_size = sample_size
@@ -79,8 +89,12 @@ class PortionRecommendationService:
             self.history_mean_raw = history_mean_raw
             self.history_mean_used = history_mean_used
 
-    def blended_g_per_guest(self, tenant_id: int, category: str | None, week=None):  # backward compat
-        inp = RecommendationInput(tenant_id=tenant_id, unit_id=1, category=category, dish_id=None, guest_count=100)
+    def blended_g_per_guest(
+        self, tenant_id: int, category: str | None, week=None
+    ):  # backward compat
+        inp = RecommendationInput(
+            tenant_id=tenant_id, unit_id=1, category=category, dish_id=None, guest_count=100
+        )
         rec = self.recommend(inp)
         meta = rec["meta"]
         return self._BlendedResult(
@@ -93,7 +107,9 @@ class PortionRecommendationService:
         )
 
     def protein_per_100g(self, tenant_id: int, category: str | None):
-        inp = RecommendationInput(tenant_id=tenant_id, unit_id=1, category=category, dish_id=None, guest_count=100)
+        inp = RecommendationInput(
+            tenant_id=tenant_id, unit_id=1, category=category, dish_id=None, guest_count=100
+        )
         return self._protein_per_100g(inp)
 
     def _baseline(self, inp: RecommendationInput) -> int:
@@ -101,7 +117,9 @@ class PortionRecommendationService:
         try:
             q = db.query(PortionGuideline).filter(PortionGuideline.tenant_id == inp.tenant_id)
             if inp.unit_id:
-                q = q.filter((PortionGuideline.unit_id == inp.unit_id) | (PortionGuideline.unit_id.is_(None)))
+                q = q.filter(
+                    (PortionGuideline.unit_id == inp.unit_id) | (PortionGuideline.unit_id.is_(None))
+                )
             if inp.category:
                 q = q.filter(PortionGuideline.category == inp.category)
             recs = q.all()
@@ -136,7 +154,9 @@ class PortionRecommendationService:
                 q = q.filter(ServiceMetric.category == inp.category)
             # Collect non-null floats directly
             rows_raw = q.all()
-            rows: list[float] = [float(r.served_g_per_guest) for r in rows_raw if r.served_g_per_guest is not None]
+            rows: list[float] = [
+                float(r.served_g_per_guest) for r in rows_raw if r.served_g_per_guest is not None
+            ]
             sample_size = len(rows)
             if sample_size < MIN_HISTORY_POINTS:
                 return None, sample_size
@@ -144,7 +164,7 @@ class PortionRecommendationService:
             if sample_size >= 5:
                 k = max(1, int(0.1 * sample_size))
                 trimmed_sorted = sorted(rows)
-                trimmed = trimmed_sorted[k: sample_size - k] if sample_size - 2 * k > 0 else rows
+                trimmed = trimmed_sorted[k : sample_size - k] if sample_size - 2 * k > 0 else rows
             mean_val: float | None = (sum(trimmed) / len(trimmed)) if trimmed else None
             return mean_val, sample_size
         finally:
@@ -155,7 +175,9 @@ class PortionRecommendationService:
         try:
             q = db.query(PortionGuideline).filter(PortionGuideline.tenant_id == inp.tenant_id)
             if inp.unit_id:
-                q = q.filter((PortionGuideline.unit_id == inp.unit_id) | (PortionGuideline.unit_id.is_(None)))
+                q = q.filter(
+                    (PortionGuideline.unit_id == inp.unit_id) | (PortionGuideline.unit_id.is_(None))
+                )
             if inp.category:
                 q = q.filter(PortionGuideline.category == inp.category)
             recs = q.all()

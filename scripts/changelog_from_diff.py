@@ -6,6 +6,7 @@ Usage:
 
 Exits 0 on success, 2 on usage error.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,7 +46,7 @@ def main(argv: list[str]) -> int:  # noqa: D401
     breaking_block = "**Breaking**\n\n" + bullets(breaking)
     additions_block = "\n**Additions**\n\n" + bullets(additions)
     md = TEMPLATE.format(
-    date=datetime.now(tz=UTC).strftime("%Y-%m-%d"),  # UTC datestamp
+        date=datetime.now(tz=UTC).strftime("%Y-%m-%d"),  # UTC datestamp
         status=status.upper(),
         n_breaking=len(breaking),
         n_additions=len(additions),
