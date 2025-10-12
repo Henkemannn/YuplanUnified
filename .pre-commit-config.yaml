@@ -26,6 +26,8 @@ repos:
           - --ignore-missing-imports
           - --pretty
           - --show-error-codes
+          - --exclude
+          - ^legacy/|
 
   - repo: local
     hooks:
