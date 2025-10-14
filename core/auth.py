@@ -173,6 +173,8 @@ def login():
                     "token_type": "Bearer",
                     "expires_in": DEFAULT_ACCESS_TTL,
                     "csrf_token": csrf_token,
+                    "role": user.role,
+                    "tenant_id": user.tenant_id,
                 }
             )
         )
@@ -333,41 +335,44 @@ def ensure_bootstrap_superuser():
         # Check that required tables exist; if not, skip (or they were just created)
         try:
             from sqlalchemy import inspect as _sa_inspect  # type: ignore
-
-            inspector = _sa_inspect(db.bind)
-            has_users = inspector.has_table("users")
-            has_tenants = inspector.has_table("tenants")
-            if not (has_users and has_tenants):
-                return
+            if db.bind is not None:  # guard for static typing
+                inspector = _sa_inspect(db.bind)
+                has_users = getattr(inspector, "has_table", lambda *_: False)("users")
+                has_tenants = getattr(inspector, "has_table", lambda *_: False)("tenants")
+                if not (has_users and has_tenants):
+                    return
         except Exception:
-            # If inspection fails (e.g., driver-specific), best effort: try a safe query and catch
+            # Best-effort: ignore introspection problems
             pass
 
-        # Proceed only if there are no users
-        try:
-            has_user = db.query(User).first()
-        except Exception:
-            # Likely missing tables; nothing to do
-            return
-        if has_user:
-            return
+        # Ensure there is at least one tenant (Primary). Create if missing.
+        tenant = db.query(Tenant).first()
+        if not tenant:
+            tenant = Tenant(name="Primary")
+            db.add(tenant)
+            db.flush()
 
-        # Create tenant and superuser
-        tenant = Tenant(name="Primary")
-        db.add(tenant)
-        db.flush()
+        # Upsert the configured superuser by email. Always ensure role/password.
+        su_email = email.lower()
+        user = db.query(User).filter(User.email == su_email).first()
         pw_hash = generate_password_hash(password)
-        user = User(
-            tenant_id=tenant.id,
-            email=email.lower(),
-            password_hash=pw_hash,
-            role="superuser",
-            unit_id=None,
-        )
-        db.add(user)
+        if user:
+            user.password_hash = pw_hash
+            user.role = "superuser"
+            if not getattr(user, "tenant_id", None):
+                user.tenant_id = tenant.id
+        else:
+            user = User(
+                tenant_id=tenant.id,
+                email=su_email,
+                password_hash=pw_hash,
+                role="superuser",
+                unit_id=None,
+            )
+            db.add(user)
         db.commit()
         try:
-            current_app.logger.info("Bootstrap superuser created: %s", email)
+            current_app.logger.info("Bootstrap superuser ensured: %s", email)
         except Exception:
             pass
     finally:

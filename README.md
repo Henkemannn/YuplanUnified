@@ -58,6 +58,13 @@ Examples
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
 
+## Inline UI — Theme & Brand
+Our inline login UI uses design tokens for light/dark mode and per-tenant brand accents. See docs for how to toggle and persist preferences (localStorage keys `yu_mode` and `yu_brand`) and how to consume the alert helpers and focus ring:
+
+- docs/ui/design_tokens.md
+
+Tip: In development you can switch theme/brand via the header toggle on /ui/login. The tokens are brand-agnostic for semantic statuses (success/info/warn/error) and honor reduced-motion.
+
 ## Contributing
 See CONTRIBUTING.md for branching, PR, and quality gates. Use the GitHub Issue templates for GA checklist and roadmap kickoff from the New Issue menu.
 
@@ -172,6 +179,77 @@ We avoid breaking changes. When removal or incompatible changes are required we 
 
 ## Vision
 Provide a Core domain (Menus, Diets, Attendance, Users, Tenants) with optional modules activated per customer (turnus scheduling, waste metrics, prep/freezer tasks, messaging, alt1/alt2 workflow, etc.). Superusers can enable modules on demand.
+
+## Superuser API (RC1)
+
+Alla endpoints är guardade (`role=superuser`) och returnerar JSON med `Cache-Control: no-store`. Fel följer **RFC7807**.
+
+### GET `/api/superuser/summary`
+Sammanfattning för KPI-kort (globala värden).
+
+Exempel:
+```json
+{
+  "tenants_total": 12,
+  "modules_active": 8,
+  "feature_flags_on": 31,
+  "ts": "2025-10-14T09:30:00Z"
+}
+```
+
+### GET `/api/superuser/events?limit=20&after_id=<id>`
+Senaste händelser från audit-logg. `badge` sätts via heuristik (TENANT / FLAG / USER / fallback GEN).
+
+Exempel:
+```json
+{
+  "items": [
+    { "id": "evt_101", "kind": "TENANT_CREATED", "title": "Tenant ACME skapad", "ts": "2025-10-14T08:55:10Z", "badge": "TENANT" }
+  ],
+  "next_after_id": "evt_100"
+}
+```
+
+### GET `/api/superuser/health`
+Enkel systemhälsa.
+
+Exempel:
+```json
+{ "api":"OK","db":"OK","queue":"OK","ts":"2025-10-14T09:30:00Z" }
+```
+
+### Frontendkoppling
+
+* KPI: fylls av `/api/superuser/summary` in i `[data-kpi-value]` på respektive kort.
+* Events: renderar lista eller visar tomt state (`#events-empty`) om inga items.
+* Health: badges uppdateras vid `#health-api`, `#health-db`, `#health-queue`.
+
+Säkerhet: Alla svar är `no-store`. POST/ändringar (t.ex. toggle flag) kommer kräva CSRF-token (returneras vid `/auth/login`).
+
+### Event-heuristik (titlar & badges)
+Titelregler:
+* TENANT_CREATED  → "Tenant skapad – {name} skapad"
+* TENANT_UPDATED  → "Tenant uppdaterad – {name} uppdaterad"
+* FLAG_TOGGLED    → "Flagga ändrad – {flag} på|av"
+* MODULE_INSTALLED → "Modul installerad – {module} installerad"
+* MODULE_ENABLED  → "Modul aktiverad – {module} aktiverad"
+* fallback        → "Händelse – {KIND}"
+
+Badge-regler:
+* `^TENANT_`  → TENANT
+* `^MODULE_`  → MODUL
+* `FLAG` i kind eller payload → FLAG
+* annars → INFO
+
+### KPI-datakällor (framtida)
+Nuvarande implementation använder config / existerande tabeller. Planerade "riktiga" källor:
+* `tenants_total`: `SELECT COUNT(*) FROM tenants WHERE deleted_at IS NULL;` (kolumn kan tillkomma)
+* `modules_active` (global): `SELECT COUNT(*) FROM modules WHERE enabled=TRUE;`
+* `modules_active` (per-tenant agg): `SELECT COUNT(DISTINCT module_id) FROM tenant_modules WHERE enabled=TRUE;`
+* `feature_flags_on`: `SELECT COUNT(*) FROM feature_flags WHERE enabled=TRUE;` (eller effektivt antal med overrides)
+
+Prestanda: Håll svarstid < 500 ms. Lättviktig cache (5s) i minnet används redan för summary utan att exponera cache till klient (`no-store`).
+
 
 ## Structure
 ```
@@ -411,6 +489,55 @@ PR Checklist (developer self-check):
 | 3 | Remove one ignore_errors block per sprint | Track delta in PR description |
 | 4 | Enable `warn-return-any` globally | Should reach near-zero prior |
 | 5 | Turn on `strict = True` for core/* gradually | Start with auth & rate limiting |
+
+## Screens (översikt)
+
+### `/ui/login` — Superuser Login
+
+```
++--------------------------------------------------+
+| Superuser Login                                  |
+| [E-post ______________________ ]                 |
+| [Lösenord _______________] [Visa] (Caps hint)    |
+| [ Logga in ⟳spinner ] [Solid] [Outline] [Soft]   |
+| Theme: (Light •) (Dark)  Brand: (Teal • Ocean Emerald)
+| Felruta (Problem Details) — visas endast vid fel |
++--------------------------------------------------+
+```
+
+**Nyckelpunkter:** Problem Details-felruta (role="alert", aria-live), fokusflytt, spinner/loading, brand & theme-toggles (persist: `yu_brand`, `yu_mode`), reduced-motion-respekt.
+
+---
+
+### `/superuser/dashboard` — Översikt (skelett)
+
+```
++--------------------------------------------------+
+| Nav: Översikt | Tenants | Moduler | Flags | Audit |
+|--------------------------------------------------|
+| KPI: Tenants | Aktiva moduler | Feature flags     |
+| Quick Actions: [Skapa tenant] [Visa Flags] ...    |
+| Senaste händelser (empty state / lista)           |
+| Systemhälsa: [API OK][DB OK][Queue OK]            |
+| Dev Theme Preview: Brand + Mode toggles (DEV)     |
++--------------------------------------------------+
+```
+
+**Nyckelpunkter:** Guardad för superuser (annars redirect till login), tabbbar sidomeny (`aria-current="page"`), H1 får fokus, KPI + actions + events + health, dev-panel för brand/mode.
+
+---
+
+### `/workspace` — Referens-UI (Notes & Tasks)
+
+```
++--------------------------------------------------+
+| Notes (filter, create, privat-flag)              |
+| Tasks (filter status/typ, lista, create)         |
+| Roller styr synlighet (superuser/admin ser mer)  |
++--------------------------------------------------+
+```
+
+**Nyckelpunkter:** Snabb smoke-yta, rollbaserade vyer, enkel testmiljö.
 | 6 | Introduce runtime type enforcement (optional) | Pydantic / dataclasses where helpful |
 
 ### Quick Reference
