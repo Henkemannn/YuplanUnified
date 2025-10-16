@@ -10,8 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       E2E_BASE_URL: http://127.0.0.1:5000
-      SUPERUSER_EMAIL: ${{ secrets.SUPERUSER_EMAIL }}
-      SUPERUSER_PASSWORD: ${{ secrets.SUPERUSER_PASSWORD }}
+      # Use repo secrets if present, else fallback to known test defaults
+      SUPERUSER_EMAIL: ${{ secrets.SUPERUSER_EMAIL || 'admin@example.com' }}
+      SUPERUSER_PASSWORD: ${{ secrets.SUPERUSER_PASSWORD || 'Passw0rd!' }}
       DEV_CREATE_ALL: "1"          # auto-create schema in CI for demo login
       FLASK_ENV: development        # allow DEBUG-like behavior
     steps:
@@ -45,6 +46,19 @@ jobs:
             sleep 1
           done
           echo "Server not responding" && exit 1
+      - name: Seed/Ensure superuser exists
+        env:
+          SUPERUSER_EMAIL: ${{ env.SUPERUSER_EMAIL }}
+          SUPERUSER_PASSWORD: ${{ env.SUPERUSER_PASSWORD }}
+        run: |
+          # The app does this on startup if env vars are set, but re-run explicitly to be safe
+          python - << 'PY'
+          import os
+          os.environ.setdefault('DEV_CREATE_ALL','1')
+          from core.auth import ensure_bootstrap_superuser
+          ensure_bootstrap_superuser()
+          print('Bootstrap superuser invoked')
+          PY
       - name: Run e2e tests
         run: |
           cd e2e
