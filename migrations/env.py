@@ -34,8 +34,9 @@ def run_migrations_offline():
 
 
 def run_migrations_online():
+    section = config.get_section(config.config_ini_section) or {}
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section),
+        section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

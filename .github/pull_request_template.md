@@ -1,3 +1,58 @@
+<!-- Suggested title: Superuser UI RC1: tokens, login, dashboard + e2e -->
+
+## Summary
+
+Superuser UI RC1: tokens (light/dark + ocean/emerald), login (Problem Details, a11y),
+dashboard-skelett + kopplad data (KPI, events, health).
+
+E2E i CI (Playwright) + test‑isolering för feature flags.
+
+## Changes
+
+- superuser_api: GET /summary, GET /events, GET /health (no‑store, RFC7807, superuser‑guard)
+- dashboard.html/js: render KPI/events/health; quick actions till /tenants/new, /feature-flags, /audit
+- login: a11y/fel‑UX; redirect beroende på roll
+- CI: e2e.yml, retries + artifacts
+- Bootstrap: ensure_bootstrap_superuser uppdaterar/skapare superuser idempotent
+
+## How to test
+
+1) Seed superuser (env: SUPERUSER_EMAIL/SUPERUSER_PASSWORD). Aktivera inline_ui.
+2) /ui/login → felruta & fokusflöde → logga in → redirect /superuser/dashboard.
+3) Verifiera: KPI ≠ “—”, events (lista eller tomt state), health‑badges OK.
+
+## Acceptance
+
+- [ ] KPI visar riktiga tal inom ~500ms (mock OK)
+- [ ] Events visar lista eller tomt state korrekt
+- [ ] Health‑badges visar OK/FAIL
+- [ ] E2E Playwright gröna
+
+## Security/guards
+
+- [ ] Superuser‑guard på alla `/api/superuser/*`
+- [ ] Feature‑flag guard dokumenterad (test‑only remove, prod no‑op)
+- [ ] Inga inline JS/CSS; CSP fortsatt grön
+- [ ] Cache‑Control: no‑store på känsliga endpoints
+
+## Artifacts
+
+- Actions: Playwright report/trace/video som artifacts
+
+## Follow‑ups (create issues post‑merge)
+
+- E2E för health‑badges & events med data
+- POST flaggtoggle m/ CSRF + audit
+- Konsolidera `require_roles` (auth vs app_authz)
+- Riktiga källor för `modules_active` på sikt
+
+## PR checklist
+
+- [ ] README + `docs/architecture` uppdaterade (API + flöde)
+- [ ] CHANGELOG-post med UI/API + e2e
+- [ ] CI grönt (unit + e2e)
+- [ ] Secrets/creds inte hårdkodade
+- [ ] Screenshots upplagda: `/ui/login` (light/dark, ocean/emerald) + dashboard (en av varje räcker)
 ## Ändringar
 Kort sammanfattning av vad PR:en gör. Lista gärna moduler / filer med större påverkan.
 ﻿# Beskrivning

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="sv" data-mode="{{ ui_theme|default('dark') }}" data-brand="{{ ui_brand|default('teal') }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'">
+  <title>{% block title %}Unified Platform{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('inline_ui.static', filename='ui/tokens.css') }}">
+  {% block head_extra %}{% endblock %}
+  <style>
+    /* Minimal page framing if needed by children */
+    body { margin: 0; background: var(--yu-color-bg); color: var(--yu-color-text); }
+  </style>
+  
+</head>
+<body>
+  <header class="yu-row" style="justify-content: space-between; padding: 12px 16px;">
+    <a href="/" class="yu-logo yu-no-underline" aria-label="Unified Platform startsida">
+      <img src="{{ url_for('inline_ui.static', filename='ui/logo.svg') }}" alt="Unified Platform" width="28" height="28" />
+      <span>Unified Platform</span>
+    </a>
+    <div class="yu-row" style="gap: var(--yu-space-3);">
+      <div class="yu-row" role="group" aria-label="Tema">
+        <button id="theme-light" class="yu-btn yu-btn--soft yu-btn--sm" aria-pressed="{{ 'true' if ui_theme=='light' else 'false' }}">Ljus</button>
+        <button id="theme-dark" class="yu-btn yu-btn--soft yu-btn--sm" aria-pressed="{{ 'true' if ui_theme!='light' else 'false' }}">Mörk</button>
+      </div>
+      <div class="yu-row" role="group" aria-label="Färgtema">
+        <button id="brand-teal" class="yu-btn yu-btn--soft yu-btn--sm" aria-pressed="{{ 'true' if ui_brand=='teal' else 'false' }}">Teal</button>
+        <button id="brand-ocean" class="yu-btn yu-btn--soft yu-btn--sm" aria-pressed="{{ 'true' if ui_brand=='ocean' else 'false' }}">Ocean</button>
+        <button id="brand-emerald" class="yu-btn yu-btn--soft yu-btn--sm" aria-pressed="{{ 'true' if ui_brand=='emerald' else 'false' }}">Emerald</button>
+      </div>
+    </div>
+  </header>
+
+  {% block content %}{% endblock %}
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

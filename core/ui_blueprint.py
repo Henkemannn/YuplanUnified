@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, session
+from flask import Blueprint, render_template, session, redirect, url_for, current_app
 
 from .auth import require_roles
 from .db import get_session
@@ -53,3 +53,38 @@ def workspace_ui():
         return render_template("ui/notes_tasks.html", notes=notes, tasks=tasks_view)
     finally:
         db.close()
+
+
+@ui_bp.get("/superuser/dashboard")
+def superuser_dashboard():
+    # UI-friendly guard: redirect unauthenticated/non-superuser to login instead of JSON envelope
+    if not session.get("user_id") or session.get("role") != "superuser":
+        try:
+            return redirect(url_for("inline_ui.login_page"))
+        except Exception:
+            return redirect("/ui/login")
+    # Render skeleton only, no API calls
+    return render_template(
+        "superuser/dashboard.html",
+        ui_theme=(session.get("ui_theme") or None),
+        ui_brand=(session.get("ui_brand") or None),
+        dev=(current_app.config.get("DEBUG") or current_app.config.get("ENV") == "development"),
+    )
+
+
+@ui_bp.get("/tenants/new")
+@require_roles("superuser")
+def tenant_new_placeholder():  # lightweight placeholder
+    return render_template("superuser/tenant_new.html")
+
+
+@ui_bp.get("/feature-flags")
+@require_roles("superuser")
+def feature_flags_placeholder():
+    return render_template("superuser/feature_flags.html")
+
+
+@ui_bp.get("/audit")
+@require_roles("superuser")
+def audit_placeholder():
+    return render_template("superuser/audit.html")

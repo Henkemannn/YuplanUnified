@@ -242,11 +242,31 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 return ""
             return f'<input type="hidden" name="csrf_token" value="{tok}">'  # nosec B704
 
+        # Determine default UI theme/brand by tenant kind (if available)
+        ui_theme = "light"
+        ui_brand = "teal"
+        try:
+            tid = getattr(g, "tenant_id", None)
+            if tid and getattr(app, "tenant_metadata_service", None):
+                svc = app.tenant_metadata_service  # type: ignore[attr-defined]
+                meta = svc.get(int(tid)) if isinstance(tid, int) else None
+                kind = (meta or {}).get("kind") if meta else None
+                if kind == "offshore":
+                    ui_brand = "ocean"
+                    ui_theme = "dark"
+                elif kind in ("municipal", "kommun", "kommunal"):
+                    ui_brand = "emerald"
+                    ui_theme = "light"
+        except Exception:
+            pass
+
         return {
             "tenant_id": getattr(g, "tenant_id", None),
             "feature_enabled": feature_enabled,
             "csrf_token": csrf_token(),
             "csrf_token_input": csrf_token_input,
+            "ui_theme": ui_theme,
+            "ui_brand": ui_brand,
         }
 
     # --- Logging / timing middleware ---
@@ -328,6 +348,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 )
             except Exception:
                 pass
+            try:
+                # Log and clear any temporary feature flag disables requested by tests via registry._flags.remove()
+                if app.config.get("TESTING") and getattr(feature_registry, "_temp_disabled", None):
+                    try:
+                        app.logger.info({"test_temp_flags_off": sorted(feature_registry._temp_disabled)})  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                feature_registry._clear_temp()  # type: ignore[attr-defined]
+            except Exception:
+                pass
         except Exception:
             pass
         return resp
@@ -390,6 +420,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
     app.register_blueprint(ui_bp)
+    # Superuser dashboard data API
+    try:
+        from .superuser_api import bp as superuser_api_bp  # type: ignore
+
+        app.register_blueprint(superuser_api_bp)
+    except Exception:  # pragma: no cover
+        app.logger.warning("Superuser API blueprint not loaded", exc_info=True)
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 

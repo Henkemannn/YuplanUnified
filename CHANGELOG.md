@@ -174,3 +174,19 @@
 ### Fixed
 - Ruff auto-fixes applied ahead of RC tag.
 
+### UI / Inline UI (Pending Release)
+#### Added
+- Design tokens (Light/Dark) + brand-teman (Teal, Ocean, Emerald) med AA-kontrast och fokus-styles.
+- Superuser Login med Problem Details, spinner, toggles (theme/brand), Caps Lock-hint, reduced motion.
+- Superuser Dashboard (skelett): sidomeny, KPI-kort, Quick Actions, Events (empty state), Systemhälsa, dev Theme Preview.
+- Workspace referens-UI för Notes/Tasks (smoke-ytor).
+- Playwright e2e-svit + GitHub Actions-jobb (e2e.yml) med artifacts (report/trace/video).
+
+#### Changed
+- `/auth/login` svarar nu även med `role`, `tenant_id`; frontend redirect beroende på roll.
+- Superuser inkluderad i Tasks API READ/WRITE.
+- Feature flag test-isolation guard + logging; `_flags.remove(name)` tillåten endast i test/dev.
+
+#### Fixed
+- Fokusflöde och aria-live på login-fel; stabil toggle-persistens för `yu_mode` / `yu_brand`.
+

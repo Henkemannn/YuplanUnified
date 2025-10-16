@@ -1,0 +1,101 @@
+{% extends "ui/base.html" %}
+{% block title %}Superuser – Översikt{% endblock %}
+
+{% block head_extra %}
+  <link rel="preload" href="{{ url_for('ui.static', filename='ui/tokens.css') }}" as="style" crossorigin>
+{% endblock %}
+
+{% block content %}
+<div class="su-shell" role="application">
+  <nav class="su-nav" aria-label="Huvudmeny">
+    <ul class="su-nav__list" role="list">
+      <li><a id="nav-overview" data-testid="nav-overview" href="{{ url_for('ui.superuser_dashboard') }}" aria-current="page" class="su-nav__link su-nav__link--active">Översikt</a></li>
+      <li><a id="nav-tenants" data-testid="nav-tenants" href="#" class="su-nav__link" tabindex="0">Tenants</a></li>
+      <li><a id="nav-modules" data-testid="nav-modules" href="#" class="su-nav__link" tabindex="0">Moduler</a></li>
+      <li><a id="nav-flags" data-testid="nav-flags" href="#" class="su-nav__link" tabindex="0">Feature Flags</a></li>
+      <li><a id="nav-audit" data-testid="nav-audit" href="#" class="su-nav__link" tabindex="0">Audit</a></li>
+    </ul>
+  </nav>
+
+  <main class="su-main" id="main" tabindex="-1">
+    <h1 id="page-title">Superuser – Översikt</h1>
+
+    <section aria-labelledby="kpi-title" class="kpi">
+      <h2 id="kpi-title" class="visually-hidden">Nyckeltal</h2>
+      <div class="kpi-grid">
+        <article id="kpi-tenants" class="card kpi-card" data-testid="kpi-tenants" aria-busy="true">
+          <div class="kpi-icon" aria-hidden="true">🏢</div>
+          <div class="kpi-meta">
+            <div class="kpi-label">Tenants</div>
+            <div class="kpi-value" data-kpi-value>—</div>
+          </div>
+        </article>
+        <article id="kpi-modules" class="card kpi-card" data-testid="kpi-modules" aria-busy="true">
+          <div class="kpi-icon" aria-hidden="true">🧩</div>
+          <div class="kpi-meta">
+            <div class="kpi-label">Aktiva moduler</div>
+            <div class="kpi-value" data-kpi-value>—</div>
+          </div>
+        </article>
+        <article id="kpi-flags" class="card kpi-card" data-testid="kpi-flags" aria-busy="true">
+          <div class="kpi-icon" aria-hidden="true">🚩</div>
+          <div class="kpi-meta">
+            <div class="kpi-label">Feature flags (på)</div>
+            <div class="kpi-value" data-kpi-value>—</div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="qa-title" class="qa">
+      <h2 id="qa-title" class="visually-hidden">Snabbåtgärder</h2>
+      <div class="yu-row yu-gap-3 su-actions">
+        <a class="yu-btn yu-btn--solid" data-testid="qa-create-tenant" aria-label="Skapa tenant" href="/tenants/new">Skapa tenant</a>
+        <a class="yu-btn yu-btn--outline" data-testid="qa-open-flags" aria-label="Visa Feature Flags" href="/feature-flags">Visa Flags</a>
+        <a class="yu-btn yu-btn--soft" data-testid="qa-open-audit" aria-label="Öppna Audit" href="/audit">Öppna Audit</a>
+      </div>
+    </section>
+
+    <section aria-labelledby="events-title" class="events">
+      <h2 id="events-title">Senaste händelser</h2>
+      <ul id="events-list" class="event-list" data-testid="events-list" aria-labelledby="events-title"></ul>
+      <div id="events-empty" class="card events-empty" data-testid="events-empty" hidden>
+        <div class="events-empty__icon" aria-hidden="true">�</div>
+        <p class="events-empty__text">Inga händelser ännu. När systemet används visas aktiviteter här.</p>
+        <a class="yu-btn yu-btn--soft" href="/audit">Gå till Audit</a>
+      </div>
+    </section>
+
+    <section aria-labelledby="health-title" class="health">
+      <h2 id="health-title">Systemhälsa</h2>
+      <div class="card health-grid" data-testid="sys-health">
+        <span class="badge" id="health-api" data-testid="health-api">API: —</span>
+        <span class="badge" id="health-db" data-testid="health-db">DB: —</span>
+        <span class="badge" id="health-queue" data-testid="health-queue">Queue: —</span>
+      </div>
+    </section>
+
+    {% if dev %}
+    <section aria-labelledby="dev-title" class="dev" data-testid="dev-theme-preview">
+      <h2 id="dev-title">Dev: Theme Preview</h2>
+      <div class="yu-row yu-gap-3">
+        <div role="group" aria-label="Brand">
+          <button class="yu-btn yu-btn--soft" id="dev-brand-ocean" aria-pressed="false">Ocean</button>
+          <button class="yu-btn yu-btn--soft" id="dev-brand-emerald" aria-pressed="false">Emerald</button>
+          <button class="yu-btn yu-btn--soft" id="dev-brand-teal" aria-pressed="true">Teal</button>
+        </div>
+        <div role="group" aria-label="Mode">
+          <button class="yu-btn yu-btn--soft" id="dev-mode-light" aria-pressed="false">Light</button>
+          <button class="yu-btn yu-btn--soft" id="dev-mode-dark" aria-pressed="true">Dark</button>
+        </div>
+      </div>
+      <p class="yu-help">Förhandsvisa Ocean/Emerald + Light/Dark. Val sparas i localStorage och uppdaterar <code>data-brand</code>/<code>data-mode</code>.</p>
+    </section>
+    {% endif %}
+  </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('ui.static', filename='js/dashboard.js') }}" defer></script>
+{% endblock %}

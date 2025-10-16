@@ -8,4 +8,4 @@ Parter: Henrik Jonsson (Discloser) och [Pilotorganisation] (Recipient)
 4) Discloser behåller all IP.
 5) Giltighet: 3 år.
 
-Kontakt: henrik@yuplan.se
+Kontakt: info@yuplan.se
