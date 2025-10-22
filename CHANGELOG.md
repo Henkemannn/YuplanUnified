@@ -1,4 +1,8 @@
 ## [Unreleased]
+- Superuser API: org-enheter (organization units) – added GET/POST `/api/superuser/tenants/{id}/org-units` with validations (name 1–80, type kitchen|department), auto/unique slug per tenant, and audit payload (tenant_id, unit_id, name, type).
+- Tenant UI: accessible modal to create org-enhet; list updates and focuses new row; CSRF header included from meta/cookie.
+- E2E: added `e2e/tests/tenant_org_units.spec.ts` covering create+list happy-path and focus behavior.
+- Security: CSRF enforcement expanded to include `/api/superuser/` writes (header `X-CSRF-Token` now required for POST/PUT/PATCH/DELETE under this prefix). README updated.
 - Pilot scope clarification: Auth endpoints remain on legacy envelopes during the ProblemDetails pilot. Migration to ProblemDetails for auth will occur in a later sweep once clients/tests are updated.
 - Legacy 429 responses now include `retry_after` (JSON) and `Retry-After` (header), and when available a `limit` field indicating the symbolic rate limit name. This applies to non-pilot endpoints; pilot endpoints continue to emit RFC7807 with `retry_after`.
  - Docs: Add Global 429 Standardization guide (`docs/429-standardization.md`).

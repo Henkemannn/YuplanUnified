@@ -122,17 +122,18 @@ After `v1.0.0-beta`: Further additive changes bump MINOR; any breaking change re
 
 For the exact steps, see **[RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md)**.
 
-### Feature Flag: Strict CSRF
-An opt-in stricter CSRF enforcement layer can be enabled with environment variable `YUPLAN_STRICT_CSRF=1`.
+### CSRF enforcement
+The platform enforces CSRF for mutating requests under selected prefixes.
 
-When active:
-* A per-session token is generated and exposed to templates and JS (meta tag `csrf-token`).
-* Mutating requests under selected prefixes (`/diet/`, `/superuser/impersonate/`) MUST include `X-CSRF-Token` header or form field `csrf_token`.
-* Failures return RFC7807 problem+json (`csrf_missing` or `csrf_invalid`).
-* A lightweight fetch wrapper (`/static/js/http.js`) auto-injects the header in the UI.
-* Prefix list expands gradually as tests migrate.
+Current enforced prefixes:
+* `/diet/`
+* `/api/superuser/` (new)
 
-Disable by omitting or setting the variable to `0` (legacy protections remain in place).
+Clients MUST include `X-CSRF-Token` (or form field `csrf_token`) when performing POST/PUT/PATCH/DELETE under these paths. The token is issued per session and exposed to templates as a meta tag (`csrf-token`); our JS UIs already inject the header for fetch calls.
+
+Failures return Problem Details with `csrf_missing` or `csrf_invalid`.
+
+Note: Enforcement scope may expand as we migrate endpoints. Check `core/csrf.py` for the authoritative prefix list.
 
 ### Release helper
 PowerShell (Windows):
