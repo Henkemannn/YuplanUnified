@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect, text
 
 # revision identifiers, used by Alembic.
 revision = "0002_add_task_status"
@@ -16,14 +17,19 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
-    # Add nullable first for wide compatibility
-    op.add_column("tasks", sa.Column("status", sa.String(length=20), nullable=True))
-    # Backfill using done flag: done -> done else todo
     conn = op.get_bind()
-    conn.execute(sa.text("UPDATE tasks SET status = CASE WHEN done = 1 THEN 'done' ELSE 'todo' END"))
-    # Set any remaining NULL (shouldn't be) to todo
-    conn.execute(sa.text("UPDATE tasks SET status = 'todo' WHERE status IS NULL"))
-    # (Optionally) could alter to non-null, but keep nullable to avoid dialect-specific issues
+    insp = inspect(conn)
+    cols = {c["name"] for c in insp.get_columns("tasks")}
+    # Add column only if missing
+    if "status" not in cols:
+        op.add_column("tasks", sa.Column("status", sa.String(length=20), nullable=True))
+        # Backfill using done flag: done -> done else todo
+        conn.execute(text("UPDATE tasks SET status = CASE WHEN done = 1 THEN 'done' ELSE 'todo' END"))
+        # Ensure no NULLs remain
+        conn.execute(text("UPDATE tasks SET status = 'todo' WHERE status IS NULL"))
+    else:
+        # Column exists; ensure any NULLs are set for consistency
+        conn.execute(text("UPDATE tasks SET status = 'todo' WHERE status IS NULL"))
 
 
 def downgrade() -> None:

@@ -1,0 +1,11 @@
+<svg viewBox="0 0 32 32" width="28" height="28" role="img" aria-label="Yuplan Unified logotyp" xmlns="http://www.w3.org/2000/svg" focusable="false" style="display:inline-block; vertical-align:middle;">
+  <!-- Simple geometric Y-mark: reliable at small sizes; uses currentColor -->
+  <g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Y arms -->
+  <path d="M6 6 L16 16 L26 6" />
+    <!-- Y stem -->
+    <path d="M16 16 L16 26"/>
+    <!-- Optional soft-corner frame for visual weight -->
+    <rect x="2.5" y="2.5" width="27" height="27" rx="6" ry="6" opacity="0.12"/>
+  </g>
+</svg>

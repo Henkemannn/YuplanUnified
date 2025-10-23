@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, session, redirect, url_for, current_app
+from flask import Blueprint, current_app, redirect, render_template, session, url_for
 
 from .auth import require_roles
 from .db import get_session
-from .models import Note, Task, User
+from .models import Note, Task, Tenant, User
 
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
 
@@ -88,3 +88,22 @@ def feature_flags_placeholder():
 @require_roles("superuser")
 def audit_placeholder():
     return render_template("superuser/audit.html")
+
+
+@ui_bp.get("/tenants/<int:tenant_id>")
+@require_roles("superuser")
+def tenant_show(tenant_id: int):
+    db = get_session()
+    try:
+        t = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if not t:
+            return redirect(url_for("ui.superuser_dashboard"))
+        return render_template("tenants/show.html", tenant=t)
+    finally:
+        db.close()
+
+
+@ui_bp.get("/tenants")
+@require_roles("superuser")
+def tenants_index():
+    return render_template("tenants/index.html")

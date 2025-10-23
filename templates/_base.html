@@ -44,7 +44,10 @@
 <header>
   <div class="wrap">
     <nav>
-      <strong>Yuplan</strong>
+      <a href="/" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:#111827">
+        <img src="{{ url_for('static', filename='YuplanUnified.svg') }}" alt="Yuplan Unified logotyp" style="width:28px;height:28px;border-radius:8px;display:inline-block;vertical-align:middle" />
+        <strong>Yuplan</strong>
+      </a>
       · <a href="{{ url_for('ui.workspace_ui') }}" class="{% if request.endpoint=='ui.workspace_ui' %}active{% endif %}">Översikt</a>
       {% if current_user %}<span class="pill">Tenant {{ tenant_id }}</span>{% endif %}
       <span style="float:right">

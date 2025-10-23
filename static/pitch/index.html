@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="sv" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yuplan – Smart planering & produktion för storkök</title>
+  <meta name="description" content="Yuplan: smart planering från meny till servering. För kommun, offshore och bankett/storkök. Planering, rapporter, recept, prepp, inköp." />
+  <!-- Tailwind CDN + dark mode config -->
+  <script>
+    window.tailwind = { config: { darkMode: 'class' } };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .card{border:1px solid rgba(0,0,0,.06); box-shadow:0 10px 18px rgba(0,0,0,.06)}
+    .pill{background:linear-gradient(135deg,#0ea5e9, #22c55e); color:#fff; box-shadow:0 10px 24px rgba(14,165,233,.25)}
+    .pill:hover{opacity:.95}
+    .lang-btn{opacity:.65} .lang-btn.active{opacity:1; border-bottom:2px solid currentColor}
+    .tab-btn{opacity:.7} .tab-btn.active{opacity:1; border-bottom:2px solid #0ea5e9; color:#0ea5e9}
+
+    /* Avatar (clean, minimal, still) */
+    .avatar{width:260px;height:auto}
+    .eye-lid{transform-origin:center; animation: blink 6s infinite}
+    @keyframes blink{ 0%, 97%, 100%{ transform: scaleY(1)} 98%, 99%{ transform: scaleY(0.1)} }
+
+    .reveal{opacity:0; transform: translateY(10px); transition: .45s ease}
+    .reveal.show{opacity:1; transform: none}
+
+    /* Dark tweaks for cards/borders */
+    .dark .card{border-color:rgba(255,255,255,.08); box-shadow:0 10px 24px rgba(0,0,0,.35)}
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+
+  <!-- NAV -->
+  <header class="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="/static/YuplanUnified.svg" alt="Yuplan Unified logotyp" class="w-9 h-9 rounded-2xl" />
+        <span class="font-semibold">Yuplan</span>
+      </div>
+      <nav class="hidden md:flex items-center gap-8 text-sm">
+        <a href="#instances" class="hover:text-sky-600" data-i18n="nav_instances">Instanser</a>
+        <a href="#modules" class="hover:text-sky-600" data-i18n="nav_modules">Moduler</a>
+        <a href="#proof" class="hover:text-sky-600" data-i18n="nav_proof">Så vet ni att det fungerar</a>
+        <a href="#contact" class="hover:text-sky-600" data-i18n="nav_contact">Kontakt</a>
+      </nav>
+      <div class="flex items-center gap-3">
+        <!-- Dark/Light toggle -->
+        <button id="themeToggle" class="px-3 py-1 rounded-xl border border-slate-300 dark:border-slate-700 text-sm">
+          <span id="themeIcon">🌙</span>
+        </button>
+        <!-- Lang Switch -->
+        <button class="lang-btn active" data-lang="sv">SV</button>
+        <button class="lang-btn" data-lang="no">NO</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+        <a href="#contact" class="ml-2 hidden sm:inline-flex pill px-4 py-2 rounded-xl text-sm font-semibold" data-i18n="cta_header">Boka demo</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 -z-10 bg-gradient-to-b from-sky-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-10 grid md:grid-cols-2 gap-10 items-center">
+      <div>
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 text-xs font-semibold mb-4">
+          <span>⚡</span><span data-i18n="hero_tag">Planering till servering – i ett flöde</span>
+        </span>
+        <h1 class="text-4xl sm:text-5xl font-extrabold leading-tight mb-4">
+          <span data-i18n="hero_title_1">Smart planering & produktion</span>
+          <span class="block text-sky-600" data-i18n="hero_title_2">för kommun, offshore och bankett/storkök</span>
+        </h1>
+        <p class="text-lg text-slate-700 dark:text-slate-300 mb-6" data-i18n="hero_sub">
+          Yuplan samlar meny, specialkost, planeringslistor, prepp, beställningar och rapporter. Anpassat från kommunala kök till riggar och stora event.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <a href="#instances" class="pill px-5 py-3 rounded-2xl font-semibold" data-i18n="cta_primary">Se uppläggen</a>
+          <a href="#modules" class="px-5 py-3 rounded-2xl font-semibold border border-slate-300 dark:border-slate-700 hover:bg-white/50 dark:hover:bg-slate-800" data-i18n="cta_secondary">Utforska moduler</a>
+        </div>
+        <p class="mt-4 text-sm text-slate-500 dark:text-slate-400" data-i18n="hero_note">Webbapp. Fungerar på dator, surfplatta och mobil.</p>
+      </div>
+
+      <!-- NEW AVATAR: standing chef holding iPad + language flag -->
+      <div class="justify-self-center md:justify-self-end">
+        <svg class="avatar" viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg" aria-label="Kock med iPad och flagga">
+          <!-- shadow -->
+          <ellipse cx="130" cy="242" rx="55" ry="10" fill="#e5e7eb" class="dark:fill-slate-800"/>
+          <!-- body -->
+          <rect x="90" y="100" width="80" height="90" rx="18" fill="#ffffff" stroke="#0f172a" stroke-width="3" class="dark:fill-slate-800 dark:stroke-slate-200"/>
+          <!-- head -->
+          <g>
+            <circle cx="130" cy="78" r="30" fill="#ffe7d1" stroke="#0f172a" stroke-width="3" class="dark:stroke-slate-200"/>
+            <!-- eyes (blink via eyelids) -->
+            <g class="eye-lid">
+              <circle cx="120" cy="74" r="4" fill="#0f172a" class="dark:fill-slate-100"/>
+              <circle cx="140" cy="74" r="4" fill="#0f172a" class="dark:fill-slate-100"/>
+            </g>
+            <path d="M118 88 q12 9 24 0" stroke="#0f172a" stroke-width="3" fill="none" class="dark:stroke-slate-200"/>
+            <!-- hat -->
+            <path d="M100 48 h60 a10 10 0 0 1 10 10 v6 h-80 v-6 a10 10 0 0 1 10-10z" fill="#fff" stroke="#0f172a" stroke-width="3" class="dark:fill-slate-100 dark:stroke-slate-200"/>
+          </g>
+          <!-- iPad -->
+          <g>
+            <rect x="152" y="120" width="52" height="36" rx="8" fill="#0f172a" class="dark:fill-slate-100"/>
+            <rect x="156" y="124" width="44" height="28" rx="6" fill="#111827" class="dark:fill-slate-900"/>
+            <circle cx="186" cy="138" r="2" fill="#374151" class="dark:fill-slate-500"/>
+          </g>
+          <!-- arms -->
+          <rect x="150" y="110" width="14" height="36" rx="7" fill="#ffffff" stroke="#0f172a" stroke-width="3" class="dark:fill-slate-800 dark:stroke-slate-200"/>
+          <rect x="96" y="110" width="14" height="36" rx="7" fill="#ffffff" stroke="#0f172a" stroke-width="3" class="dark:fill-slate-800 dark:stroke-slate-200"/>
+          <!-- legs -->
+          <rect x="108" y="190" width="14" height="44" rx="7" fill="#111827" class="dark:fill-slate-200"/>
+          <rect x="138" y="190" width="14" height="44" rx="7" fill="#111827" class="dark:fill-slate-200"/>
+          <rect x="104" y="232" width="26" height="8" rx="4" fill="#111827" class="dark:fill-slate-200"/>
+          <rect x="134" y="232" width="26" height="8" rx="4" fill="#111827" class="dark:fill-slate-200"/>
+          <!-- FLAG (changes with language) -->
+          <g id="flag" transform="translate(48,120)">
+            <!-- base -->
+            <rect id="flagBase" x="0" y="0" width="52" height="32" rx="4" fill="#005BBB" stroke="#0f172a" stroke-width="2" class="dark:stroke-slate-200"/>
+            <!-- cross layers for styles -->
+            <rect id="flagCrossH1" x="0" y="13" width="52" height="6" fill="#FFD500"/>
+            <rect id="flagCrossV1" x="23" y="0" width="6" height="32" fill="#FFD500"/>
+            <!-- optional white borders for some flags -->
+            <rect id="flagWhiteH" x="-2" y="11" width="56" height="10" fill="transparent"/>
+            <rect id="flagWhiteV" x="21" y="-2" width="10" height="36" fill="transparent"/>
+            <rect id="flagRedH" x="0" y="13" width="52" height="6" fill="transparent"/>
+            <rect id="flagRedV" x="23" y="0" width="6" height="32" fill="transparent"/>
+            <!-- pole -->
+            <rect x="-6" y="-2" width="4" height="40" rx="2" fill="#9ca3af" class="dark:fill-slate-500"/>
+          </g>
+        </svg>
+        <p class="text-center mt-3 text-slate-500 dark:text-slate-400 text-sm" data-i18n="chef_caption">Alltid uppdaterad – direkt på iPad</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSTANSER -->
+  <section id="instances" class="py-10 bg-white dark:bg-slate-950 border-y border-slate-200 dark:border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex gap-6 justify-center text-sm mb-8">
+        <button class="tab-btn active" data-tab="kommun" data-i18n="tab_kommun">Kommun</button>
+        <button class="tab-btn" data-tab="offshore" data-i18n="tab_offshore">Offshore</button>
+        <button class="tab-btn" data-tab="bankett" data-i18n="tab_bankett">Bankett/Storkök</button>
+      </div>
+
+            <!-- shoulders/torso (chef coat) -->
+            <path d="M96 130 q24 -28 64 -28 q40 0 64 28 v64 q0 12 -12 12 h-104 q-12 0 -12 -12 z"
+                  fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+            <!-- lapels / seam hint -->
+            <path d="M160 106 v100" stroke="#94a3b8" stroke-width="1" stroke-dasharray="2 4" opacity=".6"/>
+
+            <!-- chest apron with neck strap -->
+            <g id="apron">
+              <!-- neck strap -->
+              <path d="M132 104 q28 -22 56 0" fill="none" stroke="#94a3b8" stroke-width="2"/>
+              <!-- apron panel -->
+              <path d="M128 108 h64 v64 q0 10 -10 10 h-44 q-10 0 -10 -10z" fill="#ffffff" stroke="#94a3b8" stroke-width="1.8"/>
+              <!-- pocket -->
+              <rect x="148" y="136" width="24" height="14" rx="3" fill="#ffffff" stroke="#94a3b8" stroke-width="1.6"/>
+              <!-- waist tie suggestion -->
+              <path d="M120 170 h80" stroke="#cbd5e1" stroke-width="2"/>
+            </g>
+
+            <!-- arms slightly bent -->
+            <path d="M100 150 q-18 16 -8 34" stroke="#0f172a" stroke-width="8" stroke-linecap="round" fill="none"/>
+            <path d="M220 150 q18 16 8 34" stroke="#0f172a" stroke-width="8" stroke-linecap="round" fill="none"/>
+            <!-- simple hands -->
+            <circle cx="96" cy="188" r="6" fill="#ffe7d1" stroke="#0f172a" stroke-width="1.5"/>
+            <circle cx="224" cy="188" r="6" fill="#ffe7d1" stroke="#0f172a" stroke-width="1.5"/>
+
+            <!-- neck -->
+            <rect x="156" y="88" width="8" height="12" fill="#ffe7d1" stroke="#0f172a" stroke-width="1.5" rx="2"/>
+            <!-- head -->
+            <circle cx="160" cy="74" r="28" fill="#ffe7d1" stroke="#0f172a" stroke-width="2"/>
+            <!-- ears -->
+            <circle cx="132" cy="74" r="5" fill="#ffe7d1" stroke="#0f172a" stroke-width="1.5"/>
+            <circle cx="188" cy="74" r="5" fill="#ffe7d1" stroke="#0f172a" stroke-width="1.5"/>
+            <!-- eyes (blink) -->
+            <g id="eyes">
+              <ellipse class="eye" cx="150" cy="70" rx="2.6" ry="2.6" fill="#0f172a"/>
+              <ellipse class="eye" cx="170" cy="70" rx="2.6" ry="2.6" fill="#0f172a"/>
+            </g>
+            <!-- nose and soft smile -->
+            <path d="M160 76 q-2 4 0 6" stroke="#0f172a" stroke-width="1.5" fill="none"/>
+            <path d="M148 86 q12 8 24 0" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/>
+
+            <!-- tall chef hat (toque) -->
+            <g id="chef_hat">
+              <path d="M126 44 q16 -30 34 -18 q18 -12 34 18 q-2 18 -8 22 h-52 q-6 -4 -8 -22 z" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+              <rect x="132" y="56" width="56" height="12" rx="6" fill="#ffffff" stroke="#0f172a" stroke-width="2"/>
+            </g>
+          </svg>
+          <ul class="card__list">
+            <li data-i18n="mod_menu_1">Komponentbank & mallar</li>
+            <li data-i18n="mod_menu_2">Synliga menyval per avdelning</li>
+            <li data-i18n="mod_menu_3">Versionshantering & dubblettskydd</li>
+          </ul>
+        </article>
+        <article class="card">
+          <div class="card__kicker" data-i18n="mod_plan_kicker">Planering</div>
+          <h3 class="card__title" data-i18n="mod_plan_title">Planeringsvy</h3>
+          <p class="card__body" data-i18n="mod_plan_body">Dagliga listor på vilka som kan äta vad, vilka som behöver anpassning och hur många portioner som krävs.</p>
+          <ul class="card__list">
+            <li data-i18n="mod_plan_1">Avdelnings- & köksperspektiv</li>
+            <li data-i18n="mod_plan_2">Tydliga menyval</li>
+            <li data-i18n="mod_plan_3">Förmarkeringar för kosttyper</li>
+          </ul>
+        </article>
+        <article class="card">
+          <div class="card__kicker" data-i18n="mod_rec_kicker">Recept</div>
+          <h3 class="card__title" data-i18n="mod_rec_title">Recept & skalning</h3>
+          <p class="card__body" data-i18n="mod_rec_body">Skapa/importera recept, välj synlighet (privat/site/org), skala efter antal och koppla till menyrader när det passar.</p>
+          <ul class="card__list">
+            <li data-i18n="mod_rec_1">Kategori & delning inom org</li>
+            <li data-i18n="mod_rec_2">Snabb skalning & portionsutbyte</li>
+            <li data-i18n="mod_rec_3">Telemetri på användning</li>
+          </ul>
+        </article>
+        <article class="card">
+          <div class="card__kicker" data-i18n="mod_rep_kicker">Rapporter</div>
+          <h3 class="card__title" data-i18n="mod_rep_title">Rapporter & export</h3>
+          <p class="card__body" data-i18n="mod_rep_body">Veckosammanställningar per avdelning, måltid och kosttyp. Export till PDF/Excel med tydliga varningar om uppgifter saknas.</p>
+          <ul class="card__list">
+            <li data-i18n="mod_rep_1">Normalkost & specialkost</li>
+            <li data-i18n="mod_rep_2">Filter per vecka och enhet</li>
+            <li data-i18n="mod_rep_3">Mobilvänlig läsbarhet</li>
+          </ul>
+        </article>
+        <article class="card">
+          <div class="card__kicker" data-i18n="mod_ord_kicker">Beställning</div>
+          <h3 class="card__title" data-i18n="mod_ord_title">“Husk att bestill”</h3>
+          <p class="card__body" data-i18n="mod_ord_body">Påminnelselistor per dag och site utifrån aktuell meny & recept. Mottagare bockar av – listan nollställs enligt schema.</p>
+          <ul class="card__list">
+            <li data-i18n="mod_ord_1">Fasta dagar & mottagare</li>
+            <li data-i18n="mod_ord_2">Fria punkter från kockstartsidan</li>
+            <li data-i18n="mod_ord_3">API-klar för leverantörer</li>
+          </ul>
+        </article>
+        <article class="card">
+          <div class="card__kicker" data-i18n="mod_prep_kicker">Produktion</div>
+          <h3 class="card__title" data-i18n="mod_prep_title">Prepp & frysplock</h3>
+          <p class="card__body" data-i18n="mod_prep_body">Prepp-checklistor, ansvar/tider och förslag på frysplock baserat på historik och lager – smart svinnreducering.</p>
+          <ul class="card__list">
+            <li data-i18n="mod_prep_1">Mallar per komponent</li>
+            <li data-i18n="mod_prep_2">Telemetri på moment</li>
+            <li data-i18n="mod_prep_3">Offshore-logik vidareutvecklad</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="how" class="how">
+      <div class="how__inner">
+        <div class="how__copy">
+          <h2 data-i18n="how_title">Så funkar det</h2>
+          <p data-i18n="how_body_1">Klart uppdelade vyer för planering, produktion och uppföljning. Ni beskriver val och behov i text – systemet summerar och guidar.</p>
+          <ol>
+            <li data-i18n="how_li1">Bygg eller importera menyveckor. Lägg till komponenter vid behov.</li>
+            <li data-i18n="how_li2">Beskriv valen i text – avdelningar ser exakt vad som gäller.</li>
+            <li data-i18n="how_li3">Förmarkera kosttyper som alltid anpassas.</li>
+            <li data-i18n="how_li4">Klicka i planerings- och personalvy – Yuplan summerar portioner.</li>
+            <li data-i18n="how_li5">Rapportera veckan, exportera PDF/Excel, optimera prepp & frysplock.</li>
+          </ol>
+        </div>
+        <aside class="how__aside card">
+          <h3 data-i18n="how_callout_t">Resultat ni märker direkt</h3>
+          <ul>
+            <li>✅ <span data-i18n="how_c1">Mindre manuellt dubbelarbete</span></li>
+            <li>✅ <span data-i18n="how_c2">Färre fel i anpassningar och mängder</span></li>
+            <li>✅ <span data-i18n="how_c3">Mer tid till matlagning och kvalitet</span></li>
+          </ul>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Clear, simple features overview -->
+    <section id="features" class="features">
+      <h2 class="section__title" data-i18n="features_title">Funktioner – tydligt och enkelt</h2>
+      <div class="features__grid">
+        <article class="card">
+          <h3 data-i18n="feat_menu_t">Meny</h3>
+          <ul>
+            <li data-i18n="feat_menu_b1">Dra-och-släpp veckor och komponenter</li>
+            <li data-i18n="feat_menu_b2">Synliga menyval per avdelning/enhet</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3 data-i18n="feat_plan_t">Planering</h3>
+          <ul>
+            <li data-i18n="feat_plan_b1">Vem kan äta vad, vilka behöver anpassning</li>
+            <li data-i18n="feat_plan_b2">Automatiska summeringar av portioner</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3 data-i18n="feat_rec_t">Recept</h3>
+          <ul>
+            <li data-i18n="feat_rec_b1">Skalning och delning inom organisation</li>
+            <li data-i18n="feat_rec_b2">Koppla vid behov – inget tvång</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3 data-i18n="feat_rep_t">Rapporter</h3>
+          <ul>
+            <li data-i18n="feat_rep_b1">Normalkost & specialkost per vecka/enhet</li>
+            <li data-i18n="feat_rep_b2">Export till PDF/Excel</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3 data-i18n="feat_ord_t">Beställning</h3>
+          <ul>
+            <li data-i18n="feat_ord_b1">“Kom ihåg att beställa”-listor per dag/site</li>
+            <li data-i18n="feat_ord_b2">Fasta mottagare och fria punkter</li>
+          </ul>
+        </article>
+        <article class="card">
+          <h3 data-i18n="feat_prod_t">Produktion</h3>
+          <ul>
+            <li data-i18n="feat_prod_b1">Prepp-checklistor och ansvar/tider</li>
+            <li data-i18n="feat_prod_b2">Frysplock-förslag minskar svinn</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="contact" class="cta">
+      <div class="cta__inner">
+        <div class="cta__copy">
+          <h2 data-i18n="cta_title">Redo att se Yuplan live?</h2>
+          <p data-i18n="cta_body">Vi visar hur ni planerar, producerar och rapporterar utan friktion. Anpassat för er verksamhet – oavsett om det är kommun, skola, vård, catering, storkök eller företagsrestaurang.</p>
+          <a href="mailto:info@yuplan.se" class="btn btn--pill" data-i18n="cta_button">Boka demo</a>
+          <p class="muted" data-i18n="cta_hint">Eller mejla oss: info@yuplan.se</p>
+        </div>
+        <form id="contactForm" class="form" novalidate>
+          <label>
+            <span data-i18n="form_name">Namn</span>
+            <input required placeholder="Anna Andersson" />
+          </label>
+          <label>
+            <span data-i18n="form_email">E-post</span>
+            <input type="email" required placeholder="anna@exempel.se" />
+          </label>
+          <label class="full">
+            <span data-i18n="form_msg">Meddelande</span>
+            <textarea rows="4" placeholder="Kort om era behov…"></textarea>
+          </label>
+          <button class="btn btn--pill" data-i18n="form_send">Skicka</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>© <span id="year"></span> Yuplan. <span data-i18n="foot_rights">Alla rättigheter förbehållna.</span></p>
+  </footer>
+
+  <script>
+    // --- i18n dictionary ---
+    const i18n=(function(){
+      const dict={
+        sv:{
+          nav_instances:"Instanser", nav_modules:"Moduler", nav_proof:"Så vet ni att det fungerar", nav_contact:"Kontakt",
+          cta_header:"Boka demo", hero_tag:"Planering till servering – i ett flöde",
+          hero_title_1:"Smart planering & produktion", hero_title_2:"för kommun, offshore och bankett/storkök",
+          hero_sub:"Yuplan samlar meny, specialkost, planeringslistor, prepp, beställningar och rapporter. Anpassat från kommunala kök till riggar och stora event.",
+          cta_primary:"Se uppläggen", cta_secondary:"Utforska moduler", hero_note:"Webbapp. Fungerar på dator, surfplatta och mobil.",
+          chef_caption:"Alltid uppdaterad – direkt på iPad",
+          tab_kommun:"Kommun", tab_offshore:"Offshore", tab_bankett:"Bankett/Storkök",
+          kommun_h:"Kommun – skolor & omsorg",
+          kommun_p:"Bygg menyveckor, hantera specialkost och ge avdelningar tydliga val (Alt 1/Alt 2) utan dubbelarbete. Personalen klickar – Yuplan räknar och rapporterar.",
+          kommun_1:"Avdelningsvy som visar vad varje grupp ska få.",
+          kommun_2:"Förmarkerade kosttyper (t.ex. timbal).",
+          kommun_3:"Veckorapporter och export (PDF/Excel).",
+          kommun_list_h:"Dagens listor",
+          kommun_l1:"Antal portioner per enhet och måltid",
+          kommun_l2:"Specialkost med tydliga etiketter",
+          kommun_l3:"Avvikelser & noteringar från avdelningar",
+          kommun_cta:"Boka demo för kommun",
+          offshore_h:"Offshore – rigg & rotation",
+          offshore_p:"Planera efter skift/rotation, optimera frysplock och få preppförslag baserat på historik. “Kom ihåg att beställa” säkerställer inköp i rätt tid.",
+          offshore_1:"Skiftanpassade listor och portionsbehov.",
+          offshore_2:"Frysplocksoptimering för lägre svinn.",
+          offshore_3:"Inköpspåminnelser kopplade till meny.",
+          offshore_list_h:"Fokus i offshore",
+          offshore_l1:"Rotationer & bemanningsprofiler",
+          offshore_l2:"Lagerkoppling & frystemperaturer (manuell/CSV/API)",
+          offshore_l3:"Snabb menyjustering vid väder/leverans",
+          offshore_cta:"Boka demo för offshore",
+          bankett_h:"Bankett & storkök – event & volym",
+          bankett_p:"Bygg eventmenyer, skala recept efter gästantal och synka prepp mellan stationer. Realistiska körlistor och etiketter för leverans.",
+          bankett_1:"Skalning per komponent & yield.",
+          bankett_2:"Produktionsflöden med ansvar & tider.",
+          bankett_3:"Etiketter & utleveranslistor.",
+          bankett_list_h:"Planeringsstöd",
+          bankett_l1:"Gantt-liknande preppöversikt (enkel)",
+          bankett_l2:"Stationstilldelning & checklistor",
+          bankett_l3:"Allergen- och specialkostspårning",
+          bankett_cta:"Boka demo för event/storkök",
+          modules_title:"Moduler som bygger ert flöde",
+          m1_k:"Meny", m1_t:"Menybyggare", m1_p:"Skapa/importera veckor. Beskriv Alt 1/Alt 2 i klartext. Återanvänd komponenter, lås versioner och undvik dubbletter.",
+          m1_1:"Komponentbank & mallar", m1_2:"Versionshantering", m1_3:"Avdelningssynliga val",
+          m2_k:"Planering", m2_t:"Planeringsvy", m2_p:"Dagslistor över vad som ska produceras, vem som kan äta vad och vilka anpassningar som krävs.",
+          m2_1:"Avdelnings- och köksperspektiv", m2_2:"Alt 1/Alt 2 tydligt markerat", m2_3:"Förmarkerade kosttyper",
+          m3_k:"Recept", m3_t:"Recept & skalning", m3_p:"Skapa/importera recept. Välj synlighet (privat/site/org). Skala efter antal och koppla till menyrader när ni vill.",
+          m3_1:"Kategorier & delning", m3_2:"Snabb skalning & portionsbyten", m3_3:"Användningstelemetri",
+          m4_k:"Rapporter", m4_t:"Rapporter & export", m4_p:"Veckosammanställning per enhet, måltid och kosttyp. Exportera till PDF/Excel. Varningar när uppgifter saknas.",
+          m4_1:"Normalkost & specialkost", m4_2:"Filter på vecka & site", m4_3:"Mobilvänlig vy",
+          m5_k:"Inköp", m5_t:"Kom ihåg att beställa", m5_p:"Påminnelselistor per dag och site baserat på aktuell meny & recept. Mottagare bockar av – listan nollställs enligt schema.",
+          m5_1:"Fasta dagar & mottagare", m5_2:"Fria punkter från kockens startsida", m5_3:"API-klar mot leverantörer",
+          m6_k:"Produktion", m6_t:"Prepp & frysplock", m6_p:"Prepp-checklistor, ansvar/tider och frysplockförslag baserat på historik & lager – för mindre svinn.",
+          m6_1:"Mallar per komponent", m6_2:"Telemetri på moment", m6_3:"Event/Gantt-stöd",
+          proof_h:"Så vet ni att det fungerar",
+          proof_1h:"Spårbarhet & transparens", proof_1p:"Alla val och anpassningar loggas. Rapporter visar exakt vad som producerats och levererats.",
+          proof_2h:"Referensflöden", proof_2p:"Standardiserade arbetsflöden för kommun, offshore och event – beprövade upplägg ni kan starta med.",
+          proof_3h:"Trygg leverans", proof_3p:"GDPR-tänk, exportfunktioner och enkel back-up. Webbaserat – inget att installera.",
+          proof_quote_h1:"Vad kök säger", proof_quote_1:"“Vi fick ordning på meny, specialkost och prepp – utan extra admin. Listorna för dagen gör jobbet tydligt.”",
+          proof_quote_h2:"Vad ledning säger", proof_quote_2:"“Rapporterna ger läsbar statistik per enhet och vecka. Enkelt att följa upp utan kalkylblad.”",
+          cta_title:"Redo att se Yuplan i er miljö?", cta_body:"Vi visar hur flödet ser ut för kommun, offshore eller bankett/storkök – med era behov som utgångspunkt.",
+          cta_button:"Boka demo", cta_hint:"Eller mejla: info@yuplan.se",
+          form_name:"Namn", form_email:"E-post", form_msg:"Meddelande", form_send:"Skicka",
+          form_thanks:"Tack! Vi hör av oss inom kort.", foot_rights:"Alla rättigheter förbehållna."
+        },
+        no:{}, en:{}
+      };
+      let current='sv';
+      function t(k){return (dict[current]&&dict[current][k])||k}
+      function setLang(lang){
+        current = dict[lang]?lang:'sv';
+        document.documentElement.lang=current;
+        document.querySelectorAll('[data-i18n]').forEach(n=>{ const k=n.getAttribute('data-i18n'); n.textContent=t(k) });
+        document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active', b.dataset.lang===current));
+        updateFlag(current);
+      }
+      return {t,setLang}
+    })();
+
+    // --- theme toggle ---
+    const root = document.documentElement;
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+    function applyTheme(mode){
+      if(mode==='dark'){ root.classList.add('dark'); themeIcon.textContent='☀️'; localStorage.setItem('theme','dark'); }
+      else{ root.classList.remove('dark'); themeIcon.textContent='🌙'; localStorage.setItem('theme','light'); }
+    }
+    applyTheme(localStorage.getItem('theme')|| (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light'));
+    themeToggle.addEventListener('click', ()=> applyTheme(root.classList.contains('dark')?'light':'dark'));
+
+    // --- language buttons ---
+    document.querySelectorAll('.lang-btn').forEach(b=> b.addEventListener('click',()=> i18n.setLang(b.dataset.lang)));
+    i18n.setLang('sv');
+
+    // --- tabs ---
+    const tabs=[...document.querySelectorAll('.tab-btn')];
+    const panels={ kommun:document.getElementById('panel-kommun'), offshore:document.getElementById('panel-offshore'), bankett:document.getElementById('panel-bankett') };
+    function showTab(key){
+      tabs.forEach(b=> b.classList.toggle('active', b.dataset.tab===key));
+      Object.entries(panels).forEach(([k,el])=> el.classList.toggle('hidden', k!==key));
+      window.location.hash='#instances';
+    }
+    tabs.forEach(b=> b.addEventListener('click', ()=> showTab(b.dataset.tab)));
+    showTab('kommun');
+
+    // --- year ---
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // --- reveal ---
+    const io=new IntersectionObserver((es)=> es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('show'); io.unobserve(e.target)} }), {threshold:.12});
+    document.querySelectorAll('.reveal').forEach(el=> io.observe(el));
+
+    // --- flag painter (very simple stylized flags) ---
+    function updateFlag(lang){
+      const base = document.getElementById('flagBase');
+      const h1 = document.getElementById('flagCrossH1');
+      const v1 = document.getElementById('flagCrossV1');
+      const wH = document.getElementById('flagWhiteH');
+      const wV = document.getElementById('flagWhiteV');
+      const rH = document.getElementById('flagRedH');
+      const rV = document.getElementById('flagRedV');
+
+      // reset all
+      wH.setAttribute('fill','transparent'); wV.setAttribute('fill','transparent');
+      rH.setAttribute('fill','transparent'); rV.setAttribute('fill','transparent');
+
+      if(lang==='sv'){ // Sweden: blue + yellow cross
+        base.setAttribute('fill','#005BBB');
+        h1.setAttribute('fill','#FFD500'); v1.setAttribute('fill','#FFD500');
+      } else if(lang==='no'){ // Norway: red base, white cross, blue inner cross
+        base.setAttribute('fill','#BA0C2F');
+        // white cross (wide)
+        wH.setAttribute('fill','#FFFFFF'); wV.setAttribute('fill','#FFFFFF');
+        wH.setAttribute('y','10'); wH.setAttribute('height','12');
+        wV.setAttribute('x','20'); wV.setAttribute('width','12');
+        // blue cross (inner)
+        rH.setAttribute('fill','#00205B'); rV.setAttribute('fill','#00205B');
+        rH.setAttribute('y','13'); rH.setAttribute('height','6');
+        rV.setAttribute('x','23'); rV.setAttribute('width','6');
+        // hide yellow
+        h1.setAttribute('fill','transparent'); v1.setAttribute('fill','transparent');
+      } else { // EN (UK-ish simplified): blue base, white border cross + red inner
+        base.setAttribute('fill','#012169');
+        wH.setAttribute('fill','#FFFFFF'); wV.setAttribute('fill','#FFFFFF');
+        wH.setAttribute('y','10'); wH.setAttribute('height','12');
+        wV.setAttribute('x','20'); wV.setAttribute('width','12');
+        rH.setAttribute('fill','#C8102E'); rV.setAttribute('fill','#C8102E');
+        rH.setAttribute('y','13'); rH.setAttribute('height','6');
+        rV.setAttribute('x','23'); rV.setAttribute('width','6');
+        h1.setAttribute('fill','transparent'); v1.setAttribute('fill','transparent');
+      }
+    }
+    updateFlag('sv');
+  </script>
+</body>
+</html>
+</body>
+</html>

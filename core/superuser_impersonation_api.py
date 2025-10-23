@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from flask import Blueprint, request
+from flask import Blueprint, request, session
 
 from .app_authz import require_roles
 from .http_errors import bad_request, unprocessable_entity
 from .impersonation import get_impersonation, start_impersonation, stop_impersonation
+from .audit_events import record_audit_event
 
 bp = Blueprint("superuser_impersonation", __name__, url_prefix="/superuser/impersonate")
 
@@ -22,6 +23,15 @@ def impersonate_start():
     except ValueError:
         return unprocessable_entity([{"field": "tenant_id", "msg": "invalid_int"}])
     start_impersonation(tenant_id, reason)
+    try:
+        record_audit_event(
+            "impersonation_started",
+            actor_user_id=session.get("user_id"),  # type: ignore[arg-type]
+            tenant_id=tenant_id,
+            reason=reason,
+        )
+    except Exception:
+        pass
     return {"ok": True, "impersonating": tenant_id}
 
 
@@ -30,4 +40,12 @@ def impersonate_start():
 def impersonate_stop():
     st = get_impersonation()
     stop_impersonation()
+    try:
+        record_audit_event(
+            "impersonation_ended",
+            actor_user_id=session.get("user_id"),  # type: ignore[arg-type]
+            tenant_id=getattr(st, "tenant_id", None),
+        )
+    except Exception:
+        pass
     return {"ok": True, "stopped": True, "prev": getattr(st, "tenant_id", None)}

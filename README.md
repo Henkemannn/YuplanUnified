@@ -58,6 +58,11 @@ Examples
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
 
+Quick links:
+- [RBAC-matris](docs/rbac_matrix.md)
+- [Superuser UI Wireframe](docs/ui/superuser_wireframe.md)
+- CSRF: se `docs/ui/superuser_wireframe.md` (mutationer kräver `X-CSRF-Token`)
+
 ## Inline UI — Theme & Brand
 Our inline login UI uses design tokens for light/dark mode and per-tenant brand accents. See docs for how to toggle and persist preferences (localStorage keys `yu_mode` and `yu_brand`) and how to consume the alert helpers and focus ring:
 

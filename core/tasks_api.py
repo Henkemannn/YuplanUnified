@@ -16,7 +16,6 @@ from .api_types import (
     TaskCreateRequest,
     TaskCreateResponse,
     TaskId,
-    TaskUpdateResponse,
 )
 from .app_authz import AuthzError, require_roles
 from .app_sessions import require_session

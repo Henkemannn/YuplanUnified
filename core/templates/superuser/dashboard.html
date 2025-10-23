@@ -10,9 +10,9 @@
   <nav class="su-nav" aria-label="Huvudmeny">
     <ul class="su-nav__list" role="list">
       <li><a id="nav-overview" data-testid="nav-overview" href="{{ url_for('ui.superuser_dashboard') }}" aria-current="page" class="su-nav__link su-nav__link--active">Översikt</a></li>
-      <li><a id="nav-tenants" data-testid="nav-tenants" href="#" class="su-nav__link" tabindex="0">Tenants</a></li>
+  <li><a id="nav-tenants" data-testid="nav-tenants" href="/tenants" class="su-nav__link" tabindex="0">Tenants</a></li>
       <li><a id="nav-modules" data-testid="nav-modules" href="#" class="su-nav__link" tabindex="0">Moduler</a></li>
-      <li><a id="nav-flags" data-testid="nav-flags" href="#" class="su-nav__link" tabindex="0">Feature Flags</a></li>
+  <li><a id="nav-flags" data-testid="nav-flags" href="/feature-flags" class="su-nav__link" tabindex="0">Feature Flags</a></li>
       <li><a id="nav-audit" data-testid="nav-audit" href="#" class="su-nav__link" tabindex="0">Audit</a></li>
     </ul>
   </nav>
@@ -50,11 +50,26 @@
     <section aria-labelledby="qa-title" class="qa">
       <h2 id="qa-title" class="visually-hidden">Snabbåtgärder</h2>
       <div class="yu-row yu-gap-3 su-actions">
-        <a class="yu-btn yu-btn--solid" data-testid="qa-create-tenant" aria-label="Skapa tenant" href="/tenants/new">Skapa tenant</a>
+        <a class="yu-btn yu-btn--solid" data-testid="qa-create-tenant" id="qa-create-tenant" aria-label="Skapa tenant" href="#create-tenant">Skapa tenant</a>
         <a class="yu-btn yu-btn--outline" data-testid="qa-open-flags" aria-label="Visa Feature Flags" href="/feature-flags">Visa Flags</a>
         <a class="yu-btn yu-btn--soft" data-testid="qa-open-audit" aria-label="Öppna Audit" href="/audit">Öppna Audit</a>
       </div>
     </section>
+
+    <!-- Modal: Skapa tenant -->
+    <div id="tenant-modal" class="yu-modal" role="dialog" aria-modal="true" aria-labelledby="tenant-modal-title" hidden>
+      <div class="yu-modal__panel">
+        <h3 id="tenant-modal-title">Skapa tenant</h3>
+        <div class="alert-error" id="tenant-error" role="alert" hidden></div>
+        <form id="tenant-form">
+          <label>Namn <input id="t-name" name="name" required></label>
+          <label>Slug <input id="t-slug" name="slug" aria-describedby="slug-help"><span id="slug-help" class="yu-help">Kan ändras</span></label>
+          <label>Tema <select id="t-theme" name="theme"><option>ocean</option><option>emerald</option></select></label>
+          <label class="yu-row yu-gap-2"><input id="t-enabled" name="enabled" type="checkbox" checked> Aktiv</label>
+          <div class="yu-row yu-gap-2 yu-right"><button type="button" id="t-cancel" class="yu-btn yu-btn--soft">Avbryt</button><button type="submit" id="t-submit" class="yu-btn yu-btn--solid">Skapa</button></div>
+        </form>
+      </div>
+    </div>
 
     <section aria-labelledby="events-title" class="events">
       <h2 id="events-title">Senaste händelser</h2>
@@ -79,17 +94,12 @@
     <section aria-labelledby="dev-title" class="dev" data-testid="dev-theme-preview">
       <h2 id="dev-title">Dev: Theme Preview</h2>
       <div class="yu-row yu-gap-3">
-        <div role="group" aria-label="Brand">
-          <button class="yu-btn yu-btn--soft" id="dev-brand-ocean" aria-pressed="false">Ocean</button>
-          <button class="yu-btn yu-btn--soft" id="dev-brand-emerald" aria-pressed="false">Emerald</button>
-          <button class="yu-btn yu-btn--soft" id="dev-brand-teal" aria-pressed="true">Teal</button>
-        </div>
         <div role="group" aria-label="Mode">
           <button class="yu-btn yu-btn--soft" id="dev-mode-light" aria-pressed="false">Light</button>
           <button class="yu-btn yu-btn--soft" id="dev-mode-dark" aria-pressed="true">Dark</button>
         </div>
       </div>
-      <p class="yu-help">Förhandsvisa Ocean/Emerald + Light/Dark. Val sparas i localStorage och uppdaterar <code>data-brand</code>/<code>data-mode</code>.</p>
+      <p class="yu-help">Förhandsvisa Light/Dark. Val sparas i localStorage och uppdaterar <code>data-mode</code>.</p>
     </section>
     {% endif %}
   </main>

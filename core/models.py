@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date as _date, datetime
+from typing import Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
     Date,
     DateTime,
+    Enum,
     Float,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -23,12 +26,19 @@ class Base(DeclarativeBase):
     pass
 
 
-# --- Tenancy & Users ---
 class Tenant(Base):
     __tablename__ = "tenants"
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(120), unique=True)
-    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    slug: Mapped[str | None] = mapped_column(String(60), nullable=True, unique=True)
+    theme: Mapped[str | None] = mapped_column(Enum("ocean", "emerald", name="tenanttheme"), nullable=True)
+    # Legacy column kept for backward compatibility with existing SQLite dev DBs
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    def __repr__(self):
+        return f"<Tenant(name={self.name}, slug={self.slug})>"
 
 
 class User(Base):
@@ -48,6 +58,9 @@ class Unit(Base):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     name: Mapped[str] = mapped_column(String(120))
     default_attendance: Mapped[int | None] = mapped_column(Integer)
+    # New attributes for org-enheter taxonomy and addressing
+    unit_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # kitchen|department
+    slug: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
 
 # --- Menus & Dishes ---
@@ -90,7 +103,7 @@ class MenuOverride(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"))
-    date: Mapped[date] = mapped_column(Date)
+    date: Mapped[_date] = mapped_column(Date)
     meal: Mapped[str] = mapped_column(String(20))
     variant_type: Mapped[str] = mapped_column(String(20))
     replacement_dish_id: Mapped[int | None] = mapped_column(ForeignKey("dishes.id"))
@@ -118,7 +131,7 @@ class Attendance(Base):
     __tablename__ = "attendance"
     id: Mapped[int] = mapped_column(primary_key=True)
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"))
-    date: Mapped[date] = mapped_column(Date)
+    date: Mapped[_date] = mapped_column(Date)
     meal: Mapped[str] = mapped_column(String(20))
     count: Mapped[int] = mapped_column(Integer)
     origin: Mapped[str | None] = mapped_column(String(20))  # default / overridden / propagated
@@ -167,6 +180,26 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
+# --- Modules ---
+class Module(Base):
+    __tablename__ = "modules"
+    # Simple catalog of available modules
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+
+
+class TenantModule(Base):
+    __tablename__ = "tenant_modules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
+    module_key: Mapped[str] = mapped_column(String(50), ForeignKey("modules.key"))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    __table_args__ = (
+        Index("uq_tenant_module", "tenant_id", "module_key", unique=True),
+    )
+
+
 class TaskStatusTransition(Base):
     __tablename__ = "task_status_transitions"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -206,7 +239,7 @@ class ServiceMetric(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"))
-    date: Mapped[date] = mapped_column(Date)
+    date: Mapped[_date] = mapped_column(Date)
     meal: Mapped[str] = mapped_column(String(20))
     dish_id: Mapped[int | None] = mapped_column(ForeignKey("dishes.id"))
     category: Mapped[str | None] = mapped_column(String(50))
@@ -257,7 +290,8 @@ class AuditEvent(Base):
     actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     actor_role: Mapped[str | None] = mapped_column(String(50), nullable=True)
     event: Mapped[str] = mapped_column(String(120))
-    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Avoid Optional/Union in annotations for SQLAlchemy+Py3.14 typing quirk; nullable governs None acceptance
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (

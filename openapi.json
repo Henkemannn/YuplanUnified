@@ -239,6 +239,35 @@
         },
         "type": "object"
       },
+      "FeatureFlagItem": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "FeatureFlagsListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureFlagItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "ImportErrorResponse": {
         "properties": {
           "error": {
@@ -466,6 +495,50 @@
         ],
         "type": "object"
       },
+      "ModuleItem": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "ModuleListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModuleItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ModuleToggleRequest": {
+        "properties": {
+          "module_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "module_key"
+        ],
+        "type": "object"
+      },
       "Note": {
         "properties": {
           "content": {
@@ -509,6 +582,51 @@
         },
         "required": [
           "content"
+        ],
+        "type": "object"
+      },
+      "OrgUnitItem": {
+        "properties": {
+          "default_attendance": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "kitchen",
+              "department"
+            ],
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "OrgUnitListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrgUnitItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -647,6 +765,22 @@
             "nullable": true,
             "type": "string"
           },
+          "invalid_params": {
+            "description": "Validation details for 400 responses (alias to errors)",
+            "items": {
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
           "request_id": {
             "description": "Correlation id echoed as X-Request-Id header",
             "type": "string"
@@ -773,6 +907,45 @@
         ],
         "type": "string"
       },
+      "TenantCreateRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "theme": {
+            "enum": [
+              "ocean",
+              "emerald"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "TenantCreateResponse": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug"
+        ],
+        "type": "object"
+      },
       "TenantListResponse": {
         "properties": {
           "ok": {
@@ -831,6 +1004,12 @@
         "bearerFormat": "JWT",
         "scheme": "bearer",
         "type": "http"
+      },
+      "CsrfToken": {
+        "description": "Required for state-changing operations when strict CSRF is enabled. Server also sets a SameSite cookie used to validate the header token.",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "type": "apiKey"
       }
     }
   },
@@ -1364,6 +1543,344 @@
         "summary": "Create or update tenant override",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/api/superuser/events": {
+      "get": {
+        "operationId": "suListEvents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "List recent audit events",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/feature-flags": {
+      "get": {
+        "operationId": "suListFeatureFlags",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureFlagsListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List effective feature flags",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/feature-flags/{key}:toggle": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "key",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "suToggleFeatureFlag",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Toggle feature flag for tenant",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/health": {
+      "get": {
+        "operationId": "suHealth",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Service health for dashboard",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/summary": {
+      "get": {
+        "operationId": "suSummary",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "KPI summary for superuser dashboard",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/tenants": {
+      "get": {
+        "operationId": "suListTenants",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "List tenants",
+        "tags": [
+          "Superuser"
+        ]
+      },
+      "post": {
+        "operationId": "suCreateTenant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCreateResponse"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Create tenant",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/tenants/{tid}/modules": {
+      "get": {
+        "operationId": "suListModules",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List tenant modules",
+        "tags": [
+          "Superuser"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "tid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ]
+    },
+    "/api/superuser/tenants/{tid}/modules/toggle": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "tid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "suToggleModule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModuleToggleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Toggle tenant module",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/tenants/{tid}/org-units": {
+      "get": {
+        "operationId": "suListOrgUnits",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgUnitListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List org units",
+        "tags": [
+          "Superuser"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "tid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "suCreateOrgUnit",
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Create org unit",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/tenants/{tid}/org-units/{uid}": {
+      "delete": {
+        "operationId": "suDeleteOrgUnit",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Delete org unit",
+        "tags": [
+          "Superuser"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "tid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "uid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "suUpdateOrgUnit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Update org unit",
+        "tags": [
+          "Superuser"
         ]
       }
     },
@@ -2228,6 +2745,9 @@
     },
     {
       "name": "Tasks"
+    },
+    {
+      "name": "Superuser"
     }
   ]
 }

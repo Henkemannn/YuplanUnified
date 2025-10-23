@@ -26,7 +26,10 @@ def main() -> int:
         try:
             # Show DB URI/path for diagnostics
             try:
-                uri = str(db.bind.url)  # type: ignore[attr-defined]
+                bind = getattr(db, "bind", None)
+                uri = str(getattr(bind, "url", "")) if bind is not None else ""
+                if not uri:
+                    raise RuntimeError("no uri")
             except Exception:
                 uri = app.config.get("SQLALCHEMY_DATABASE_URI", "<unknown>")
             print("DB:", uri)

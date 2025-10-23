@@ -118,6 +118,14 @@ def register_error_handlers(app: Any) -> None:  # pragma: no cover - integration
         # Include required role when available
         required = getattr(err, "required", None)
         extra = {"required_role": required} if required else {}
+        # Also expose in invalid_params for nicer client UX/asserts
+        if required:
+            try:
+                inv = [{"name": "required_role", "value": required}]
+                # merge if existing invalid_params present elsewhere
+                extra["invalid_params"] = inv
+            except Exception:
+                pass
         resp = forbidden(detail=str(err) or "forbidden", **extra)
         _emit_problem(resp.get_json())
         return resp

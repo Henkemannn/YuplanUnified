@@ -106,25 +106,7 @@ function yuApplySavedBrand() {
   } catch(_){}
 }
 
-function yuWireVariantButtons() {
-  const submit = document.getElementById('submit');
-  const solid = document.getElementById('variant-solid');
-  const outline = document.getElementById('variant-outline');
-  const soft = document.getElementById('variant-soft');
-  const setPressed = (active) => {
-    if (solid) solid.setAttribute('aria-pressed', String(active === 'solid'));
-    if (outline) outline.setAttribute('aria-pressed', String(active === 'outline'));
-    if (soft) soft.setAttribute('aria-pressed', String(active === 'soft'));
-  };
-  const setVariant = (cls, key) => {
-    if (submit) submit.className = 'yu-btn ' + cls + ' yu-full';
-    setPressed(key);
-  };
-  if (solid) solid.addEventListener('click', () => setVariant('yu-btn--solid', 'solid'));
-  if (outline) outline.addEventListener('click', () => setVariant('yu-btn--outline', 'outline'));
-  if (soft) soft.addEventListener('click', () => setVariant('yu-btn--soft', 'soft'));
-  setPressed('solid');
-}
+  // Removed variant button demo; keep submit button default styling
 
 document.addEventListener('DOMContentLoaded', () => {
   yuApplySavedTheme();
@@ -242,5 +224,5 @@ document.addEventListener('DOMContentLoaded', () => {
   brandTeal && brandTeal.addEventListener('click', () => yuToggleBrand('teal'));
   brandOcean && brandOcean.addEventListener('click', () => yuToggleBrand('ocean'));
   brandEmerald && brandEmerald.addEventListener('click', () => yuToggleBrand('emerald'));
-  yuWireVariantButtons();
+  // No variant buttons to wire
 });

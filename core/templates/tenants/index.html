@@ -1,0 +1,15 @@
+{% extends "ui/base.html" %}
+{% block title %}Tenants{% endblock %}
+{% block content %}
+<main class="yu-stack yu-pad-4">
+  <h1 class="yu-text-2xl mb-4">Tenants</h1>
+  <form id="t-search" class="yu-row yu-gap-2" role="search">
+    <input name="q" placeholder="Sök tenant" aria-label="Sök" />
+    <button class="yu-btn yu-btn--soft" type="submit">Sök</button>
+  </form>
+  <ul id="tenants-list" data-testid="tenants-list" class="yu-stack"></ul>
+</main>
+{% endblock %}
+{% block scripts %}
+  <script src="{{ url_for('ui.static', filename='js/tenants_index.js') }}" defer></script>
+{% endblock %}

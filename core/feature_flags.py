@@ -48,13 +48,13 @@ class _FlagProxy:
     def __init__(self, registry: FeatureRegistry) -> None:
         self._registry = registry
 
-    def __contains__(self, name: object) -> bool:  # type: ignore[override]
+    def __contains__(self, name: object) -> bool:
         if not isinstance(name, str):
             return False
         # Treat existence in definitions as membership to satisfy guard checks in tests
         return self._registry.has(name)
 
-    def remove(self, name: str) -> None:  # type: ignore[override]
+    def remove(self, name: str) -> None:
         # Record a temporary disable only when app is in TESTING or DEBUG mode.
         try:
             from flask import current_app  # lazy to avoid heavy import at module load
