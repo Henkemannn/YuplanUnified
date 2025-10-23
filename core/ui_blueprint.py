@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, session
+from flask import Blueprint, current_app, redirect, render_template, session, url_for
 
 from .auth import require_roles
 from .db import get_session
-from .models import Note, Task, User
+from .models import Note, Task, Tenant, User
 
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
 
@@ -53,3 +53,57 @@ def workspace_ui():
         return render_template("ui/notes_tasks.html", notes=notes, tasks=tasks_view)
     finally:
         db.close()
+
+
+@ui_bp.get("/superuser/dashboard")
+def superuser_dashboard():
+    # UI-friendly guard: redirect unauthenticated/non-superuser to login instead of JSON envelope
+    if not session.get("user_id") or session.get("role") != "superuser":
+        try:
+            return redirect(url_for("inline_ui.login_page"))
+        except Exception:
+            return redirect("/ui/login")
+    # Render skeleton only, no API calls
+    return render_template(
+        "superuser/dashboard.html",
+        ui_theme=(session.get("ui_theme") or None),
+        ui_brand=(session.get("ui_brand") or None),
+        dev=(current_app.config.get("DEBUG") or current_app.config.get("ENV") == "development"),
+    )
+
+
+@ui_bp.get("/tenants/new")
+@require_roles("superuser")
+def tenant_new_placeholder():  # lightweight placeholder
+    return render_template("superuser/tenant_new.html")
+
+
+@ui_bp.get("/feature-flags")
+@require_roles("superuser")
+def feature_flags_placeholder():
+    return render_template("superuser/feature_flags.html")
+
+
+@ui_bp.get("/audit")
+@require_roles("superuser")
+def audit_placeholder():
+    return render_template("superuser/audit.html")
+
+
+@ui_bp.get("/tenants/<int:tenant_id>")
+@require_roles("superuser")
+def tenant_show(tenant_id: int):
+    db = get_session()
+    try:
+        t = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if not t:
+            return redirect(url_for("ui.superuser_dashboard"))
+        return render_template("tenants/show.html", tenant=t)
+    finally:
+        db.close()
+
+
+@ui_bp.get("/tenants")
+@require_roles("superuser")
+def tenants_index():
+    return render_template("tenants/index.html")

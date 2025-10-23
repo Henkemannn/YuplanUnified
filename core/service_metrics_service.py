@@ -185,26 +185,26 @@ class ServiceMetricsService:
         leftover = cast(float | int | None, r.get("leftover_qty_kg"))
         for num_field in ["guest_count", "produced_qty_kg", "served_qty_kg", "leftover_qty_kg"]:
             v_any = r.get(num_field)
-            if isinstance(v_any, (int, float)) and v_any < 0:  # noqa: UP038 (tuple form fine for runtime check)
+            if isinstance(v_any, int | float) and v_any < 0:
                 raise ValueError(f"{num_field} negative")
         if (
-            isinstance(produced, (int, float))
-            and isinstance(served, (int, float))
+            isinstance(produced, int | float)
+            and isinstance(served, int | float)
             and served > produced
-        ):  # noqa: UP038
+        ):
             raise ValueError("served > produced")
         if (
-            isinstance(produced, (int, float))
-            and isinstance(leftover, (int, float))
+            isinstance(produced, int | float)
+            and isinstance(leftover, int | float)
             and leftover > produced
-        ):  # noqa: UP038
+        ):
             raise ValueError("leftover > produced")
         served_g_per_guest = r.get("served_g_per_guest")
         if (
             served_g_per_guest is None
             and isinstance(guest_count, int)
-            and isinstance(served, (int, float))
-        ):  # noqa: UP038
+            and isinstance(served, int | float)
+        ):
             served_g_per_guest = (served * 1000.0) / guest_count if guest_count > 0 else None
         if "unit_id" not in r:
             raise ValueError("missing field unit_id")

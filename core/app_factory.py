@@ -16,12 +16,14 @@ implementation compact.
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from importlib import import_module
 from typing import Any
 
-from flask import Flask, g, jsonify, request, session
+from flask import Flask, g, request, send_from_directory, session
+from sqlalchemy import text
 from werkzeug.wrappers.response import Response
 
 from .admin_api import bp as admin_api_bp
@@ -75,6 +77,106 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- DB setup ---
     init_engine(cfg.database_url)
+    # SQLite dev safeguard for divergent heads: ensure new tenant columns exist
+    try:
+        if str(app.config.get("SQLALCHEMY_DATABASE_URI", "")).startswith("sqlite"):
+            db = get_session()
+            try:
+                cols = [r[1] for r in db.execute(text("PRAGMA table_info(tenants)")).fetchall()]
+
+                def _add(col: str, ddl: str) -> None:
+                    if col not in cols:
+                        db.execute(text(ddl))
+
+                _add("slug", "ALTER TABLE tenants ADD COLUMN slug VARCHAR(60)")
+                _add("theme", "ALTER TABLE tenants ADD COLUMN theme VARCHAR(20)")
+                _add(
+                    "enabled",
+                    "ALTER TABLE tenants ADD COLUMN enabled BOOLEAN DEFAULT 1 NOT NULL",
+                )
+                # SQLite cannot ALTER TABLE ... ADD COLUMN with a non-constant DEFAULT.
+                # Add the column without DEFAULT/NOT NULL, then backfill existing rows.
+                if "created_at" not in cols:
+                    db.execute(text("ALTER TABLE tenants ADD COLUMN created_at DATETIME"))
+                    db.execute(
+                        text(
+                            "UPDATE tenants SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"
+                        )
+                    )
+
+                db.execute(
+                    text("CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_slug ON tenants(slug)")
+                )
+                db.commit()
+            finally:
+                db.close()
+    except Exception:  # pragma: no cover
+        app.logger.warning("SQLite tenant column safeguard failed", exc_info=True)
+
+    # SQLite safeguard: ensure new unit columns (type, slug) and unique index exist
+    try:
+        if str(app.config.get("SQLALCHEMY_DATABASE_URI", "")).startswith("sqlite"):
+            db = get_session()
+            try:
+                cols = [r[1] for r in db.execute(text("PRAGMA table_info(units)")).fetchall()]
+                def _add(col: str, ddl: str) -> None:
+                    if col not in cols:
+                        db.execute(text(ddl))
+                _add("unit_type", "ALTER TABLE units ADD COLUMN unit_type VARCHAR(20)")
+                _add("slug", "ALTER TABLE units ADD COLUMN slug VARCHAR(80)")
+                db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_units_tenant_slug ON units(tenant_id, slug)"))
+                db.commit()
+            finally:
+                db.close()
+    except Exception:  # pragma: no cover
+        app.logger.warning("SQLite unit column safeguard failed", exc_info=True)
+
+    # SQLite safeguard: ensure modules and tenant_modules tables exist and seed defaults
+    try:
+        if str(app.config.get("SQLALCHEMY_DATABASE_URI", "")).startswith("sqlite"):
+            db = get_session()
+            try:
+                # modules table
+                db.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS modules (key VARCHAR(50) PRIMARY KEY, name VARCHAR(120) NOT NULL)"
+                    )
+                )
+                # tenant_modules table
+                db.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS tenant_modules (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, module_key VARCHAR(50) NOT NULL, enabled BOOLEAN DEFAULT 0, UNIQUE(tenant_id, module_key))"
+                    )
+                )
+                db.commit()
+            finally:
+                db.close()
+            # Seed basic modules from config if empty
+            from .db import get_session as _gs
+            from .models import Module as _Module
+            try:
+                s = _gs()
+                try:
+                    count = s.execute(text("SELECT COUNT(*) FROM modules")).scalar() or 0
+                    if count == 0:
+                        # Prefer configured default modules names; fallback to a couple of placeholders
+                        try:
+                            mod_names = list(cfg.default_enabled_modules)
+                        except Exception:
+                            mod_names = ["municipal", "offshore"]
+                        for key in mod_names:
+                            name = key.replace("_", " ").title()
+                            try:
+                                s.add(_Module(key=key, name=name))
+                            except Exception:
+                                pass
+                        s.commit()
+                finally:
+                    s.close()
+            except Exception:
+                app.logger.warning("Failed seeding modules catalog", exc_info=True)
+    except Exception:  # pragma: no cover
+        app.logger.warning("SQLite modules safeguard failed", exc_info=True)
 
     # --- Security middleware (CORS, CSRF, headers) ---
     init_security(app)
@@ -242,11 +344,31 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 return ""
             return f'<input type="hidden" name="csrf_token" value="{tok}">'  # nosec B704
 
+        # Determine default UI theme/brand by tenant kind (if available)
+        ui_theme = "light"
+        ui_brand = "teal"
+        try:
+            tid = getattr(g, "tenant_id", None)
+            if tid and getattr(app, "tenant_metadata_service", None):
+                svc = app.tenant_metadata_service  # type: ignore[attr-defined]
+                meta = svc.get(int(tid)) if isinstance(tid, int) else None
+                kind = (meta or {}).get("kind") if meta else None
+                if kind == "offshore":
+                    ui_brand = "ocean"
+                    ui_theme = "dark"
+                elif kind in ("municipal", "kommun", "kommunal"):
+                    ui_brand = "emerald"
+                    ui_theme = "light"
+        except Exception:
+            pass
+
         return {
             "tenant_id": getattr(g, "tenant_id", None),
             "feature_enabled": feature_enabled,
             "csrf_token": csrf_token(),
             "csrf_token_input": csrf_token_input,
+            "ui_theme": ui_theme,
+            "ui_brand": ui_brand,
         }
 
     # --- Logging / timing middleware ---
@@ -328,6 +450,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 )
             except Exception:
                 pass
+            try:
+                # Log and clear any temporary feature flag disables requested by tests via registry._flags.remove()
+                if app.config.get("TESTING") and getattr(feature_registry, "_temp_disabled", None):
+                    try:
+                        app.logger.info({"test_temp_flags_off": sorted(feature_registry._temp_disabled)})  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                feature_registry._clear_temp()  # type: ignore[attr-defined]
+            except Exception:
+                pass
         except Exception:
             pass
         return resp
@@ -390,6 +522,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
     app.register_blueprint(ui_bp)
+    # Superuser dashboard data API
+    try:
+        from .superuser_api import bp as superuser_api_bp  # type: ignore
+
+        app.register_blueprint(superuser_api_bp)
+    except Exception:  # pragma: no cover
+        app.logger.warning("Superuser API blueprint not loaded", exc_info=True)
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 
@@ -1005,6 +1144,18 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     "items": {"type": "object"},
                     "description": "Validation issues (422)",
                 },
+                "invalid_params": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "reason": {"type": "string"},
+                        },
+                        "additionalProperties": True,
+                    },
+                    "description": "Validation details for 400 responses (alias to errors)",
+                },
                 "retry_after": {
                     "type": "integer",
                     "description": "Rate limit reset seconds (429)",
@@ -1547,14 +1698,366 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
+        # Admin units (new): document list/create with CSRF on mutation and 403 example
+        try:
+            spec["paths"]["/admin/units"] = {
+                "get": {
+                    "summary": "List units",
+                    "tags": ["admin"],
+                    "responses": {
+                        "200": {"description": "OK"},
+                        "403": {
+                            "description": "Forbidden",
+                            "content": {
+                                "application/problem+json": {
+                                    "examples": {
+                                        "viewer_hitting_admin": {
+                                            "summary": "Viewer role",
+                                            "value": {
+                                                "type": "https://example.com/errors/forbidden",
+                                                "title": "Forbidden",
+                                                "status": 403,
+                                                "detail": "Admin role required.",
+                                                "required_role": "admin",
+                                                "invalid_params": [
+                                                    {"name": "required_role", "value": "admin"}
+                                                ],
+                                            },
+                                        }
+                                    }
+                                }
+                            },
+                        },
+                    },
+                },
+                "post": {
+                    "summary": "Create unit",
+                    "tags": ["admin"],
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {"type": "object"}}},
+                    },
+                    "security": [{"CsrfToken": []}],
+                    "responses": {
+                        "201": {"description": "Created"},
+                        "401": {
+                            "description": "Unauthorized",
+                            "content": {"application/problem+json": {}},
+                        },
+                        "403": {
+                            "description": "Forbidden",
+                            "content": {"application/problem+json": {}},
+                        },
+                    },
+                },
+            }
+        except Exception:
+            pass
+        # Superuser API (minimal OpenAPI sync)
+        # Tags
+        try:
+            if not any(t.get("name") == "Superuser" for t in spec.get("tags", [])):
+                spec.setdefault("tags", []).append({"name": "Superuser"})
+        except Exception:
+            pass
+        # Component Schemas (lightweight)
+        su_schemas = spec.setdefault("components", {}).setdefault("schemas", {})
+        su_schemas.setdefault(
+            "TenantCreateRequest",
+            {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "slug": {"type": "string"},
+                    "theme": {"type": "string", "enum": ["ocean", "emerald"]},
+                    "enabled": {"type": "boolean"},
+                },
+            },
+        )
+        su_schemas.setdefault(
+            "TenantCreateResponse",
+            {
+                "type": "object",
+                "required": ["id", "slug"],
+                "properties": {"id": {"type": "integer"}, "slug": {"type": "string"}},
+            },
+        )
+        su_schemas.setdefault(
+            "OrgUnitItem",
+            {
+                "type": "object",
+                "required": ["id", "name"],
+                "properties": {
+                    "id": {"type": "integer"},
+                    "name": {"type": "string"},
+                    "type": {"type": "string", "enum": ["kitchen", "department"], "nullable": True},
+                    "slug": {"type": "string", "nullable": True},
+                    "default_attendance": {"type": "integer", "nullable": True},
+                },
+            },
+        )
+        su_schemas.setdefault(
+            "OrgUnitListResponse",
+            {
+                "type": "object",
+                "required": ["items"],
+                "properties": {
+                    "items": {"type": "array", "items": {"$ref": "#/components/schemas/OrgUnitItem"}},
+                },
+            },
+        )
+        su_schemas.setdefault(
+            "ModuleItem",
+            {
+                "type": "object",
+                "required": ["key", "name", "enabled"],
+                "properties": {
+                    "key": {"type": "string"},
+                    "name": {"type": "string"},
+                    "enabled": {"type": "boolean"},
+                },
+            },
+        )
+        su_schemas.setdefault(
+            "ModuleListResponse",
+            {
+                "type": "object",
+                "required": ["items"],
+                "properties": {
+                    "items": {"type": "array", "items": {"$ref": "#/components/schemas/ModuleItem"}},
+                },
+            },
+        )
+        su_schemas.setdefault(
+            "ModuleToggleRequest",
+            {
+                "type": "object",
+                "required": ["module_key"],
+                "properties": {"module_key": {"type": "string"}},
+            },
+        )
+        su_schemas.setdefault(
+            "FeatureFlagItem",
+            {
+                "type": "object",
+                "required": ["key", "enabled"],
+                "properties": {"key": {"type": "string"}, "enabled": {"type": "boolean"}},
+            },
+        )
+        su_schemas.setdefault(
+            "FeatureFlagsListResponse",
+            {
+                "type": "object",
+                "required": ["items"],
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {"$ref": "#/components/schemas/FeatureFlagItem"},
+                    }
+                },
+            },
+        )
+        # Ensure CSRF security scheme is documented
+        try:
+            spec.setdefault("components", {}).setdefault("securitySchemes", {}).setdefault(
+                "CsrfToken",
+                {
+                    "type": "apiKey",
+                    "in": "header",
+                    "name": "X-CSRF-Token",
+                    "description": "Fetch via GET /csrf and send on mutating requests. Required for state-changing operations when strict CSRF is enabled.",
+                },
+            )
+        except Exception:
+            pass
+        # Paths
+        spec["paths"].update({
+            "/api/superuser/summary": {
+                "get": {
+                    "tags": ["Superuser"],
+                    "summary": "KPI summary for superuser dashboard",
+                    "operationId": "suSummary",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/api/superuser/events": {
+                "get": {
+                    "tags": ["Superuser"],
+                    "summary": "List recent audit events",
+                    "operationId": "suListEvents",
+                    "parameters": [
+                        {"name": "limit", "in": "query", "schema": {"type": "integer"}},
+                        {"name": "after_id", "in": "query", "schema": {"type": "integer"}},
+                    ],
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/api/superuser/health": {
+                "get": {
+                    "tags": ["Superuser"],
+                    "summary": "Service health for dashboard",
+                    "operationId": "suHealth",
+                    "responses": {"200": {"description": "OK"}},
+                }
+            },
+            "/api/superuser/tenants": {
+                "get": {
+                    "tags": ["Superuser"],
+                    "summary": "List tenants",
+                    "operationId": "suListTenants",
+                    "parameters": [
+                        {"name": "query", "in": "query", "required": False, "schema": {"type": "string"}},
+                    ],
+                    "responses": {"200": {"description": "OK"}},
+                },
+                "post": {
+                    "tags": ["Superuser"],
+                    "summary": "Create tenant",
+                    "operationId": "suCreateTenant",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {"schema": {"$ref": "#/components/schemas/TenantCreateRequest"}}
+                        },
+                    },
+                    "security": [{"CsrfToken": []}],
+                    "responses": {
+                        "201": {
+                            "description": "Created",
+                            "content": {
+                                "application/json": {"schema": {"$ref": "#/components/schemas/TenantCreateResponse"}}
+                            },
+                        }
+                    },
+                },
+            },
+            "/api/superuser/tenants/{tid}/org-units": {
+                "parameters": [
+                    {"name": "tid", "in": "path", "required": True, "schema": {"type": "integer"}},
+                ],
+                "get": {
+                    "tags": ["Superuser"],
+                    "summary": "List org units",
+                    "operationId": "suListOrgUnits",
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OrgUnitListResponse"}}},
+                        }
+                    },
+                },
+                "post": {
+                    "tags": ["Superuser"],
+                    "summary": "Create org unit",
+                    "operationId": "suCreateOrgUnit",
+                    "security": [{"CsrfToken": []}],
+                    "responses": {"201": {"description": "Created"}},
+                },
+            },
+            "/api/superuser/tenants/{tid}/org-units/{uid}": {
+                "parameters": [
+                    {"name": "tid", "in": "path", "required": True, "schema": {"type": "integer"}},
+                    {"name": "uid", "in": "path", "required": True, "schema": {"type": "integer"}},
+                ],
+                "patch": {
+                    "tags": ["Superuser"],
+                    "summary": "Update org unit",
+                    "operationId": "suUpdateOrgUnit",
+                    "security": [{"CsrfToken": []}],
+                    "responses": {"200": {"description": "OK"}},
+                },
+                "delete": {
+                    "tags": ["Superuser"],
+                    "summary": "Delete org unit",
+                    "operationId": "suDeleteOrgUnit",
+                    "security": [{"CsrfToken": []}],
+                    "responses": {"204": {"description": "No Content"}},
+                },
+            },
+            "/api/superuser/tenants/{tid}/modules": {
+                "parameters": [
+                    {"name": "tid", "in": "path", "required": True, "schema": {"type": "integer"}},
+                ],
+                "get": {
+                    "tags": ["Superuser"],
+                    "summary": "List tenant modules",
+                    "operationId": "suListModules",
+                    "responses": {
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ModuleListResponse"}}}},
+                    },
+                },
+            },
+            "/api/superuser/tenants/{tid}/modules/toggle": {
+                "parameters": [
+                    {"name": "tid", "in": "path", "required": True, "schema": {"type": "integer"}},
+                ],
+                "post": {
+                    "tags": ["Superuser"],
+                    "summary": "Toggle tenant module",
+                    "operationId": "suToggleModule",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {"schema": {"$ref": "#/components/schemas/ModuleToggleRequest"}}
+                        },
+                    },
+                    "security": [{"CsrfToken": []}],
+                    "responses": {"200": {"description": "OK"}},
+                },
+            },
+            "/api/superuser/feature-flags": {
+                "get": {
+                    "tags": ["Superuser"],
+                    "summary": "List effective feature flags",
+                    "operationId": "suListFeatureFlags",
+                    "responses": {"200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlagsListResponse"}}}}},
+                }
+            },
+            "/api/superuser/feature-flags/{key}:toggle": {
+                "parameters": [
+                    {"name": "key", "in": "path", "required": True, "schema": {"type": "string"}},
+                ],
+                "post": {
+                    "tags": ["Superuser"],
+                    "summary": "Toggle feature flag for tenant",
+                    "operationId": "suToggleFeatureFlag",
+                    "security": [{"CsrfToken": []}],
+                    "responses": {"200": {"description": "OK"}},
+                },
+            },
+        })
         return spec
+
+    # --- Static marketing pitch page ---
+    @app.get("/pitch")
+    def pitch_page() -> Response:  # pragma: no cover - simple file serving
+        # Serve project-root static/pitch/index.html regardless of app root
+        base = os.path.abspath(os.path.join(app.root_path, os.pardir, "static", "pitch"))
+        try:
+            return send_from_directory(base, "index.html", max_age=0)
+        except Exception:
+            # Fallback to 404 in problem envelope
+            from .http_errors import not_found as _problem_not_found
+
+            return _problem_not_found("pitch_not_found")
+
+    @app.get("/pitch/<path:filename>")
+    def pitch_assets(filename: str) -> Response:  # pragma: no cover
+        base = os.path.abspath(os.path.join(app.root_path, os.pardir, "static", "pitch"))
+        try:
+            return send_from_directory(base, filename, max_age=0)
+        except Exception:
+            from .http_errors import not_found as _problem_not_found
+
+            return _problem_not_found("pitch_asset_not_found")
 
     # --- Feature flag management endpoints (regression restore) ---
     from .rate_limit import RateLimitExceeded, allow, rate_limited_response
 
     @app.get("/features")
     @require_roles("admin")
-    def list_features() -> dict[str, Any]:  # pragma: no cover
+    def list_features() -> Response | dict[str, Any]:  # pragma: no cover
         tid = getattr(g, "tenant_id", None)
         try:
             allow(
@@ -1575,13 +2078,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     @app.get("/features/check")
     @require_roles("admin")
-    def check_feature() -> dict[str, Any] | tuple[dict[str, Any], int]:  # pragma: no cover
+    def check_feature() -> Response | dict[str, Any] | tuple[dict[str, Any], int]:  # pragma: no cover
         name = (request.args.get("name") or "").strip()
         if not name:
-            return jsonify({"ok": False, "error": "name required"}), 400
+            return {"ok": False, "error": "name required"}, 400
         tid = getattr(g, "tenant_id", None)
         if tid is None:
-            return jsonify({"ok": False, "error": "tenant required"}), 400
+            return {"ok": False, "error": "tenant required"}, 400
         try:
             allow(
                 tid,
@@ -1607,17 +2110,17 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     @app.post("/features/set")
     @require_roles("admin")
-    def set_feature() -> dict[str, Any] | tuple[dict[str, Any], int]:  # pragma: no cover
+    def set_feature() -> Response | dict[str, Any] | tuple[dict[str, Any], int]:  # pragma: no cover
         data = request.get_json(silent=True) or {}
         name = (data.get("name") or "").strip()
         if not name:
-            return jsonify({"ok": False, "error": "name required"}), 400
+            return {"ok": False, "error": "name required"}, 400
         if name not in feature_registry.list():
             feature_registry.add(name)
         enabled = bool(data.get("enabled"))
         tid = getattr(g, "tenant_id", None)
         if not tid:
-            return jsonify({"ok": False, "error": "tenant required"}), 400
+            return {"ok": False, "error": "tenant required"}, 400
         try:
             allow(
                 tid,
@@ -1699,7 +2202,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 return resp
 
         @app.get("/diet/_test/limit_pilot")
-        def _test_limit_pilot() -> None:  # pragma: no cover - exercised in contract tests
+        def _test_limit_pilot() -> Response:  # pragma: no cover - exercised in contract tests
             # Pilot path -> ProblemDetails with retry_after
             raise _TestRateLimitError(
                 "Rate limit exceeded for test_pilot", retry_after=9, limit="test_pilot"

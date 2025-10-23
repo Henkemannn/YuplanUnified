@@ -20,21 +20,46 @@ def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
     cols = {c["name"] for c in inspector.get_columns("tasks")}
-    needed = []
+    # Build list of columns to add (WITHOUT ForeignKey inline constraints to avoid unnamed constraints in batch mode)
+    to_add: list[sa.Column] = []
+    new_fk_cols: list[str] = []
     if "menu_id" not in cols:
-        needed.append(sa.Column("menu_id", sa.Integer(), sa.ForeignKey("menus.id")))
+        to_add.append(sa.Column("menu_id", sa.Integer()))
+        new_fk_cols.append("menu_id")
     if "dish_id" not in cols:
-        needed.append(sa.Column("dish_id", sa.Integer(), sa.ForeignKey("dishes.id")))
+        to_add.append(sa.Column("dish_id", sa.Integer()))
+        new_fk_cols.append("dish_id")
     if "private_flag" not in cols:
-        needed.append(sa.Column("private_flag", sa.Boolean(), server_default=sa.text("0"), nullable=False))
+        to_add.append(sa.Column("private_flag", sa.Boolean(), server_default=sa.text("0"), nullable=False))
     if "assignee_id" not in cols:
-        needed.append(sa.Column("assignee_id", sa.Integer(), sa.ForeignKey("users.id")))
+        to_add.append(sa.Column("assignee_id", sa.Integer()))
+        new_fk_cols.append("assignee_id")
     if "creator_user_id" not in cols:
-        needed.append(sa.Column("creator_user_id", sa.Integer(), sa.ForeignKey("users.id")))
-    if needed:
+        to_add.append(sa.Column("creator_user_id", sa.Integer()))
+        new_fk_cols.append("creator_user_id")
+
+    if to_add:
         with op.batch_alter_table("tasks") as batch:
-            for col in needed:
+            for col in to_add:
                 batch.add_column(col)
+            # Create named foreign keys for newly added FK columns
+            existing_fks = {tuple(fk.get("constrained_columns", [])) for fk in inspector.get_foreign_keys("tasks")}
+            if "menu_id" in new_fk_cols and ("menu_id",) not in existing_fks:
+                batch.create_foreign_key(
+                    "fk_tasks_menu_id_menus", "menus", ["menu_id"], ["id"], ondelete=None
+                )
+            if "dish_id" in new_fk_cols and ("dish_id",) not in existing_fks:
+                batch.create_foreign_key(
+                    "fk_tasks_dish_id_dishes", "dishes", ["dish_id"], ["id"], ondelete=None
+                )
+            if "assignee_id" in new_fk_cols and ("assignee_id",) not in existing_fks:
+                batch.create_foreign_key(
+                    "fk_tasks_assignee_id_users", "users", ["assignee_id"], ["id"], ondelete=None
+                )
+            if "creator_user_id" in new_fk_cols and ("creator_user_id",) not in existing_fks:
+                batch.create_foreign_key(
+                    "fk_tasks_creator_user_id_users", "users", ["creator_user_id"], ["id"], ondelete=None
+                )
     # Index
     existing_idx = {ix["name"] for ix in inspector.get_indexes("tasks")}
     if "ix_tasks_tenant_done_private" not in existing_idx:

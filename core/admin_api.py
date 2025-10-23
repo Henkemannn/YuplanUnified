@@ -5,6 +5,7 @@ from typing import cast
 from flask import Blueprint, current_app, jsonify, request, session
 
 from core.auth import require_roles
+from .app_authz import require_roles as require_admin_role
 
 from . import metrics as metrics_mod
 from .api_types import (
@@ -25,6 +26,7 @@ from .limit_registry import (
     set_override,
 )
 from .models import Tenant, TenantFeatureFlag, TenantMetadata
+from .models import Unit
 from .pagination import make_page_response, parse_page_params
 
 try:  # audit optional robustness
@@ -39,6 +41,72 @@ except Exception:  # pragma: no cover
 
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
+@bp.get("/units")
+@require_admin_role("admin")
+def list_units():  # type: ignore[return-value]
+    """List units for current tenant (admin only)."""
+    from flask import session as _sess
+
+    tid = _sess.get("tenant_id")
+    if not tid:
+        # Will normally be caught by require_session inside decorator path, but keep safe
+        from .http_errors import bad_request as _bad
+
+        return _bad("tenant context missing")
+    db = get_session()
+    try:
+        rows = (
+            db.query(Unit)
+            .filter(Unit.tenant_id == int(tid))
+            .order_by(Unit.id)
+            .all()
+        )
+        items = [
+            {
+                "id": u.id,
+                "name": u.name,
+                "type": getattr(u, "unit_type", None),
+                "slug": getattr(u, "slug", None),
+                "default_attendance": u.default_attendance,
+            }
+            for u in rows
+        ]
+        return jsonify({"ok": True, "items": items})
+    finally:
+        db.close()
+
+
+@bp.post("/units")
+@require_admin_role("admin")
+def create_unit():  # type: ignore[return-value]
+    """Create a unit in current tenant (admin only)."""
+    from flask import session as _sess
+
+    tid = _sess.get("tenant_id")
+    if not tid:
+        from .http_errors import bad_request as _bad
+
+        return _bad("tenant context missing")
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "validation_error", "message": "name required"}), 400  # type: ignore[return-value]
+    unit_type = (payload.get("type") or "kitchen").strip().lower()
+    if unit_type not in {"kitchen", "department"}:
+        return jsonify({"ok": False, "error": "validation_error", "message": "invalid type"}), 400  # type: ignore[return-value]
+    db = get_session()
+    try:
+        u = Unit(tenant_id=int(tid), name=name, unit_type=unit_type)
+        db.add(u)
+        db.commit()
+        return jsonify({
+            "ok": True,
+            "id": int(getattr(u, "id", 0) or 0),
+            "name": u.name,
+            "type": u.unit_type,
+        }), 201
+    finally:
+        db.close()
 
 
 @bp.get("/tenants")

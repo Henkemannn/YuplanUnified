@@ -1,0 +1,47 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - link "Unified Platform startsida" [ref=e3] [cursor=pointer]:
+      - /url: /
+      - img "Unified Platform" [ref=e4]
+      - generic [ref=e5]: Unified Platform
+    - generic [ref=e6]:
+      - group "Tema" [ref=e7]:
+        - button "Ljus" [pressed] [ref=e8] [cursor=pointer]
+        - button "Mörk" [ref=e9] [cursor=pointer]
+      - group "Färgtema" [ref=e10]:
+        - button "Teal" [pressed] [ref=e11] [cursor=pointer]
+        - button "Ocean" [ref=e12] [cursor=pointer]
+        - button "Emerald" [ref=e13] [cursor=pointer]
+  - main [ref=e14]:
+    - heading "Superuser Login" [level=1] [ref=e15]
+    - paragraph [ref=e16]: Endast systemadministratörer
+    - generic [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]: E-post
+        - textbox "E-post" [ref=e20]: admin@example.com
+      - generic [ref=e21]:
+        - generic [ref=e22]: Lösenord
+        - generic [ref=e23]:
+          - textbox "Lösenord" [active] [ref=e24]: Passw0rd!
+          - button "Visa" [ref=e25] [cursor=pointer]
+      - link "Glömt lösenord?" [ref=e27] [cursor=pointer]:
+        - /url: "#"
+      - group "Knappstilar" [ref=e28]:
+        - button "Logga in" [ref=e29] [cursor=pointer]:
+          - generic [ref=e30]: Logga in
+        - button "Solid" [pressed] [ref=e31] [cursor=pointer]
+        - button "Outline" [ref=e32] [cursor=pointer]
+        - button "Soft" [ref=e33] [cursor=pointer]
+      - generic [ref=e34]:
+        - text: Behöver du hjälp?
+        - link "Kontakta support" [ref=e35] [cursor=pointer]:
+          - /url: mailto:info@yuplan.se
+        - text: .
+      - generic [ref=e36]: "Superuser: sätt SUPERUSER_EMAIL och SUPERUSER_PASSWORD i miljön och starta om vid behov."
+    - alert [ref=e37]:
+      - strong [ref=e38]: Fel vid inloggning
+      - generic [ref=e39]: Kontrollera dina uppgifter och försök igen.
+```

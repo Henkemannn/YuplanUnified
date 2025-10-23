@@ -86,5 +86,5 @@ pre-commit install
 - Rotera tokens/secrets minst var 6:e månad.
 - Dokumentera vem som har access och varför (audit-logg).
 
-Kontakt: henrik@yuplan.se  
+Kontakt: info@yuplan.se  
 © 2025 Henrik Jonsson — All Rights Reserved

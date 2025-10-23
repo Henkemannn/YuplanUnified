@@ -4,8 +4,18 @@ Each service will later include full logic + SQLAlchemy session injection.
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Protocol
+
+
+def slugify(name: str) -> str:
+    s = name.lower().strip()
+    s = s.replace("å", "a").replace("ä", "a").replace("ö", "o")
+    s = re.sub(r"[^a-z0-9-]", "-", s)
+    s = re.sub(r"-+", "-", s)
+    s = s.strip("-")
+    return s[:60]
 
 
 class MenuService(Protocol):  # pragma: no cover - interface stub

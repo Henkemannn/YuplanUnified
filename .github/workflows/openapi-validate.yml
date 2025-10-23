@@ -1,0 +1,43 @@
+name: OpenAPI Validate
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+          pip install openapi-spec-validator==0.7.1
+      - name: Generate openapi.json
+        run: |
+          python - <<'PY'
+          from core.app_factory import create_app
+          app = create_app({"TESTING": True})
+          with app.test_client() as c:
+              data = c.get('/openapi.json').data
+              open('openapi.json','wb').write(data)
+          print('openapi.json bytes:', len(data))
+          PY
+      - name: Validate OpenAPI
+        run: python -m openapi_spec_validator openapi.json
+      - name: Upload OpenAPI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi.json
+          path: openapi.json
+          if-no-files-found: error

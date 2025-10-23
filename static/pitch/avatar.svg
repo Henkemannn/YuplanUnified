@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="280" viewBox="0 0 320 280" aria-labelledby="title desc" role="img">
+  <title id="title">Yuplan avatar with tablet</title>
+  <desc id="desc">A friendly cook/manager character walking while holding a tablet on the side.</desc>
+  <defs>
+    <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+    <clipPath id="c">
+      <rect x="0" y="0" width="320" height="280" rx="16"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#c)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- ground -->
+    <ellipse cx="160" cy="250" rx="120" ry="14" fill="#e5e7eb"/>
+    <!-- body -->
+    <g id="body" transform="translate(0,0)">
+      <!-- torso -->
+      <path d="M140 100 h40 v70 a20 20 0 0 1 -40 0 z" fill="#ffffff" stroke="#0f172a" stroke-width="3"/>
+      <!-- head -->
+      <circle cx="160" cy="74" r="28" fill="#ffe7d1" stroke="#0f172a" stroke-width="3"/>
+      <circle cx="150" cy="70" r="3" fill="#0f172a"/>
+      <circle cx="170" cy="70" r="3" fill="#0f172a"/>
+      <path d="M150 84 q10 8 20 0" stroke="#0f172a" stroke-width="3"/>
+      <!-- cap -->
+      <path d="M136 56 q24 -18 48 0 v10 h-48 z" fill="#fff" stroke="#0f172a" stroke-width="3"/>
+      <!-- tablet -->
+      <rect x="192" y="110" width="46" height="34" rx="5" fill="#0f172a"/>
+      <rect x="194" y="112" width="42" height="30" rx="4" fill="#111827" stroke="#22c55e" stroke-width="2"/>
+      <rect x="196" y="114" width="38" height="26" rx="3" fill="url(#g1)" opacity=".12"/>
+      <!-- arm holding tablet -->
+      <path d="M182 120 q12 6 24 0" stroke="#0f172a" stroke-width="10"/>
+      <!-- free arm -->
+      <path d="M138 120 q-16 8 -22 24" stroke="#0f172a" stroke-width="10"/>
+      <!-- legs -->
+      <path id="legL" d="M152 170 q-6 24 -10 48" stroke="#0f172a" stroke-width="12"/>
+      <path id="legR" d="M168 170 q6 24 10 48" stroke="#0f172a" stroke-width="12"/>
+      <!-- shoes -->
+      <path d="M138 218 h28" stroke="#0f172a" stroke-width="10"/>
+      <path d="M154 218 h28" stroke="#0f172a" stroke-width="10"/>
+      <!-- badge -->
+      <rect x="148" y="118" width="24" height="12" rx="6" fill="url(#g1)"/>
+    </g>
+  </g>
+</svg>

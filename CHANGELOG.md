@@ -1,4 +1,8 @@
 ## [Unreleased]
+- Superuser API: org-enheter (organization units) – added GET/POST `/api/superuser/tenants/{id}/org-units` with validations (name 1–80, type kitchen|department), auto/unique slug per tenant, and audit payload (tenant_id, unit_id, name, type).
+- Tenant UI: accessible modal to create org-enhet; list updates and focuses new row; CSRF header included from meta/cookie.
+- E2E: added `e2e/tests/tenant_org_units.spec.ts` covering create+list happy-path and focus behavior.
+- Security: CSRF enforcement expanded to include `/api/superuser/` writes (header `X-CSRF-Token` now required for POST/PUT/PATCH/DELETE under this prefix). README updated.
 - Pilot scope clarification: Auth endpoints remain on legacy envelopes during the ProblemDetails pilot. Migration to ProblemDetails for auth will occur in a later sweep once clients/tests are updated.
 - Legacy 429 responses now include `retry_after` (JSON) and `Retry-After` (header), and when available a `limit` field indicating the symbolic rate limit name. This applies to non-pilot endpoints; pilot endpoints continue to emit RFC7807 with `retry_after`.
  - Docs: Add Global 429 Standardization guide (`docs/429-standardization.md`).
@@ -173,4 +177,20 @@
 
 ### Fixed
 - Ruff auto-fixes applied ahead of RC tag.
+
+### UI / Inline UI (Pending Release)
+#### Added
+- Design tokens (Light/Dark) + brand-teman (Teal, Ocean, Emerald) med AA-kontrast och fokus-styles.
+- Superuser Login med Problem Details, spinner, toggles (theme/brand), Caps Lock-hint, reduced motion.
+- Superuser Dashboard (skelett): sidomeny, KPI-kort, Quick Actions, Events (empty state), Systemhälsa, dev Theme Preview.
+- Workspace referens-UI för Notes/Tasks (smoke-ytor).
+- Playwright e2e-svit + GitHub Actions-jobb (e2e.yml) med artifacts (report/trace/video).
+
+#### Changed
+- `/auth/login` svarar nu även med `role`, `tenant_id`; frontend redirect beroende på roll.
+- Superuser inkluderad i Tasks API READ/WRITE.
+- Feature flag test-isolation guard + logging; `_flags.remove(name)` tillåten endast i test/dev.
+
+#### Fixed
+- Fokusflöde och aria-live på login-fel; stabil toggle-persistens för `yu_mode` / `yu_brand`.
 

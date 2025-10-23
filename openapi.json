@@ -10,173 +10,196 @@
       }
     },
     "responses": {
-      "Error400": {
+      "Problem400": {
         "content": {
-          "application/json": {
-            "examples": {
-              "bad_request": {
-                "value": {
-                  "error": "bad_request",
-                  "message": "Bad Request"
-                }
-              }
-            },
+          "application/problem+json": {
+            "examples": {},
             "schema": {
-              "$ref": "#/components/schemas/Error"
+              "$ref": "#/components/schemas/ProblemDetails"
             }
           }
         },
-        "description": "Bad Request"
-      },
-      "Error401": {
-        "content": {
-          "application/json": {
-            "examples": {
-              "unauthorized": {
-                "value": {
-                  "error": "unauthorized",
-                  "message": "Bearer token missing or invalid"
-                }
-              }
-            },
-            "schema": {
-              "$ref": "#/components/schemas/Error"
-            }
-          }
-        },
-        "description": "Unauthorized"
-      },
-      "Error403": {
-        "content": {
-          "application/json": {
-            "examples": {
-              "forbidden": {
-                "value": {
-                  "error": "forbidden",
-                  "message": "Requires role admin",
-                  "required_role": "admin"
-                }
-              }
-            },
-            "schema": {
-              "properties": {
-                "error": {
-                  "type": "string"
-                },
-                "message": {
-                  "type": "string"
-                },
-                "required_role": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "error",
-                "message"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Forbidden"
-      },
-      "Error404": {
-        "content": {
-          "application/json": {
-            "examples": {
-              "not_found": {
-                "value": {
-                  "error": "not_found",
-                  "message": "Not Found"
-                }
-              }
-            },
-            "schema": {
-              "$ref": "#/components/schemas/Error"
-            }
-          }
-        },
-        "description": "Not Found"
-      },
-      "Error409": {
-        "content": {
-          "application/json": {
-            "examples": {
-              "conflict": {
-                "value": {
-                  "error": "conflict",
-                  "message": "Conflict"
-                }
-              }
-            },
-            "schema": {
-              "$ref": "#/components/schemas/Error"
-            }
-          }
-        },
-        "description": "Conflict"
-      },
-      "Error429": {
-        "content": {
-          "application/json": {
-            "examples": {
-              "rateLimited": {
-                "value": {
-                  "error": "rate_limited",
-                  "message": "Too many requests",
-                  "retry_after": 30
-                }
-              }
-            },
-            "schema": {
-              "properties": {
-                "error": {
-                  "type": "string"
-                },
-                "message": {
-                  "type": "string"
-                },
-                "retry_after": {
-                  "description": "Ceiled seconds until next permitted attempt (min 1 when present)",
-                  "nullable": true,
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "error",
-                "message"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Rate Limited",
+        "description": "Problem 400",
         "headers": {
-          "Retry-After": {
-            "description": "Seconds until new request may succeed",
-            "schema": {
-              "type": "integer"
-            }
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
           }
         }
       },
-      "Error500": {
+      "Problem401": {
         "content": {
-          "application/json": {
+          "application/problem+json": {
             "examples": {
-              "internal_error": {
+              "invalid_token": {
                 "value": {
-                  "error": "internal_error",
-                  "message": "Internal Server Error"
+                  "detail": "invalid_token",
+                  "request_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                  "status": 401,
+                  "title": "Unauthorized",
+                  "type": "https://example.com/errors/unauthorized"
+                }
+              },
+              "unauthorized": {
+                "value": {
+                  "detail": "unauthorized",
+                  "request_id": "11111111-1111-1111-1111-111111111111",
+                  "status": 401,
+                  "title": "Unauthorized",
+                  "type": "https://example.com/errors/unauthorized"
                 }
               }
             },
             "schema": {
-              "$ref": "#/components/schemas/Error"
+              "$ref": "#/components/schemas/ProblemDetails"
             }
           }
         },
-        "description": "Internal Server Error"
+        "description": "Problem 401",
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "Auth challenge (Bearer)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        }
+      },
+      "Problem403": {
+        "content": {
+          "application/problem+json": {
+            "examples": {},
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        },
+        "description": "Problem 403",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        }
+      },
+      "Problem404": {
+        "content": {
+          "application/problem+json": {
+            "examples": {},
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        },
+        "description": "Problem 404",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        }
+      },
+      "Problem409": {
+        "content": {
+          "application/problem+json": {
+            "examples": {},
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        },
+        "description": "Problem 409",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        }
+      },
+      "Problem422": {
+        "content": {
+          "application/problem+json": {
+            "examples": {
+              "validation": {
+                "value": {
+                  "detail": "validation_error",
+                  "errors": [
+                    {
+                      "field": "name",
+                      "message": "required"
+                    }
+                  ],
+                  "request_id": "22222222-2222-2222-2222-222222222222",
+                  "status": 422,
+                  "title": "Unprocessable Entity",
+                  "type": "https://example.com/errors/validation_error"
+                }
+              }
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        },
+        "description": "Problem 422",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        }
+      },
+      "Problem429": {
+        "content": {
+          "application/problem+json": {
+            "examples": {
+              "limited": {
+                "value": {
+                  "detail": "rate_limited",
+                  "request_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                  "retry_after": 30,
+                  "status": 429,
+                  "title": "Too Many Requests",
+                  "type": "https://example.com/errors/rate_limited"
+                }
+              }
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        },
+        "description": "Problem 429",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        }
+      },
+      "Problem500": {
+        "content": {
+          "application/problem+json": {
+            "examples": {
+              "incident": {
+                "value": {
+                  "detail": "internal_error",
+                  "incident_id": "33333333-3333-3333-3333-333333333333",
+                  "request_id": "33333333-3333-3333-3333-333333333333",
+                  "status": 500,
+                  "title": "Internal Server Error",
+                  "type": "https://example.com/errors/internal_error"
+                }
+              }
+            },
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetails"
+            }
+          }
+        },
+        "description": "Problem 500",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        }
       },
       "UnsupportedMediaType": {
         "description": "Unsupported Media Type"
@@ -216,21 +239,32 @@
         },
         "type": "object"
       },
-      "Error": {
-        "additionalProperties": false,
+      "FeatureFlagItem": {
         "properties": {
-          "error": {
-            "example": "validation_error",
-            "type": "string"
+          "enabled": {
+            "type": "boolean"
           },
-          "message": {
-            "example": "Invalid input",
+          "key": {
             "type": "string"
           }
         },
         "required": [
-          "error",
-          "message"
+          "key",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "FeatureFlagsListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeatureFlagItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -461,6 +495,50 @@
         ],
         "type": "object"
       },
+      "ModuleItem": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "ModuleListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModuleItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ModuleToggleRequest": {
+        "properties": {
+          "module_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "module_key"
+        ],
+        "type": "object"
+      },
       "Note": {
         "properties": {
           "content": {
@@ -504,6 +582,51 @@
         },
         "required": [
           "content"
+        ],
+        "type": "object"
+      },
+      "OrgUnitItem": {
+        "properties": {
+          "default_attendance": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "kitchen",
+              "department"
+            ],
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "OrgUnitListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrgUnitItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -618,6 +741,74 @@
         ],
         "type": "object"
       },
+      "ProblemDetails": {
+        "additionalProperties": true,
+        "description": "RFC7807 Problem Details (pilot). Extended with request_id, incident_id, errors[]",
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "errors": {
+            "description": "Validation issues (422)",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "incident_id": {
+            "description": "Present only for 500 errors to correlate logs",
+            "nullable": true,
+            "type": "string"
+          },
+          "instance": {
+            "format": "uri",
+            "nullable": true,
+            "type": "string"
+          },
+          "invalid_params": {
+            "description": "Validation details for 400 responses (alias to errors)",
+            "items": {
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "request_id": {
+            "description": "Correlation id echoed as X-Request-Id header",
+            "type": "string"
+          },
+          "retry_after": {
+            "description": "Rate limit reset seconds (429)",
+            "nullable": true,
+            "type": "integer"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail"
+        ],
+        "type": "object"
+      },
       "Task": {
         "properties": {
           "assignee_id": {
@@ -716,6 +907,45 @@
         ],
         "type": "string"
       },
+      "TenantCreateRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "theme": {
+            "enum": [
+              "ocean",
+              "emerald"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "TenantCreateResponse": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug"
+        ],
+        "type": "object"
+      },
       "TenantListResponse": {
         "properties": {
           "ok": {
@@ -774,10 +1004,17 @@
         "bearerFormat": "JWT",
         "scheme": "bearer",
         "type": "http"
+      },
+      "CsrfToken": {
+        "description": "Required for state-changing operations when strict CSRF is enabled. Server also sets a SameSite cookie used to validate the header token.",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "type": "apiKey"
       }
     }
   },
   "info": {
+    "description": "Problem Details (RFC7807) is the canonical error format across all endpoints. Legacy ErrorXXX components have been removed per ADR-003.",
     "title": "Unified Platform API",
     "version": "0.3.0"
   },
@@ -902,11 +1139,29 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/Problem400"
+          },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -938,26 +1193,28 @@
             "description": "Flags listed"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "429"
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1002,26 +1259,28 @@
             "description": "Flag updated"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "429"
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1048,11 +1307,29 @@
             },
             "description": "Tenants with flag enabled"
           },
+          "400": {
+            "$ref": "#/components/responses/Problem400"
+          },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1091,13 +1368,28 @@
             "description": "Deleted (idempotent)"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1162,13 +1454,28 @@
             "description": "Paged limits"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1204,13 +1511,28 @@
             "description": "Upserted"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1224,27 +1546,373 @@
         ]
       }
     },
+    "/api/superuser/events": {
+      "get": {
+        "operationId": "suListEvents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_id",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "List recent audit events",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/feature-flags": {
+      "get": {
+        "operationId": "suListFeatureFlags",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureFlagsListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List effective feature flags",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/feature-flags/{key}:toggle": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "key",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "suToggleFeatureFlag",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Toggle feature flag for tenant",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/health": {
+      "get": {
+        "operationId": "suHealth",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "Service health for dashboard",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/summary": {
+      "get": {
+        "operationId": "suSummary",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "KPI summary for superuser dashboard",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/tenants": {
+      "get": {
+        "operationId": "suListTenants",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "summary": "List tenants",
+        "tags": [
+          "Superuser"
+        ]
+      },
+      "post": {
+        "operationId": "suCreateTenant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCreateResponse"
+                }
+              }
+            },
+            "description": "Created"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Create tenant",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/tenants/{tid}/modules": {
+      "get": {
+        "operationId": "suListModules",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModuleListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List tenant modules",
+        "tags": [
+          "Superuser"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "tid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ]
+    },
+    "/api/superuser/tenants/{tid}/modules/toggle": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "tid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "suToggleModule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModuleToggleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Toggle tenant module",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/tenants/{tid}/org-units": {
+      "get": {
+        "operationId": "suListOrgUnits",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgUnitListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "List org units",
+        "tags": [
+          "Superuser"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "tid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "suCreateOrgUnit",
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Create org unit",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
+    "/api/superuser/tenants/{tid}/org-units/{uid}": {
+      "delete": {
+        "operationId": "suDeleteOrgUnit",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Delete org unit",
+        "tags": [
+          "Superuser"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "tid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "uid",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "suUpdateOrgUnit",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Update org unit",
+        "tags": [
+          "Superuser"
+        ]
+      }
+    },
     "/features": {
       "get": {
         "responses": {
           "200": {
             "description": "List flags"
           },
+          "400": {
+            "$ref": "#/components/responses/Problem400"
+          },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "429"
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1264,23 +1932,28 @@
             "description": "Flag state (unknown -> enabled=false)"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "429"
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1300,23 +1973,28 @@
             "description": "Updated flag"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "429"
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1362,27 +2040,13 @@
             "description": "OK"
           },
           "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportErrorResponse"
-                }
-              }
-            },
-            "description": "Invalid"
+            "$ref": "#/components/responses/Problem400"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportErrorResponse"
-                }
-              }
-            },
-            "description": "Rate limited"
+            "$ref": "#/components/responses/Problem429"
           }
         },
         "summary": "Import CSV file"
@@ -1421,27 +2085,13 @@
             "description": "OK"
           },
           "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportErrorResponse"
-                }
-              }
-            },
-            "description": "Invalid"
+            "$ref": "#/components/responses/Problem400"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportErrorResponse"
-                }
-              }
-            },
-            "description": "Rate limited"
+            "$ref": "#/components/responses/Problem429"
           }
         },
         "summary": "Import DOCX table"
@@ -1529,27 +2179,13 @@
             "description": "OK"
           },
           "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportErrorResponse"
-                }
-              }
-            },
-            "description": "Invalid"
+            "$ref": "#/components/responses/Problem400"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportErrorResponse"
-                }
-              }
-            },
-            "description": "Rate limited"
+            "$ref": "#/components/responses/Problem429"
           }
         },
         "summary": "Import weekly menu (dry-run supported)"
@@ -1588,27 +2224,13 @@
             "description": "OK"
           },
           "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportErrorResponse"
-                }
-              }
-            },
-            "description": "Invalid"
+            "$ref": "#/components/responses/Problem400"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportErrorResponse"
-                }
-              }
-            },
-            "description": "Rate limited"
+            "$ref": "#/components/responses/Problem429"
           }
         },
         "summary": "Import XLSX spreadsheet"
@@ -1669,16 +2291,28 @@
             "description": "Paged notes list"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1696,16 +2330,28 @@
             "description": "Create note"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1724,17 +2370,29 @@
           "200": {
             "description": "Delete note"
           },
+          "400": {
+            "$ref": "#/components/responses/Problem400"
+          },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
           },
           "404": {
-            "$ref": "#/components/responses/Error404"
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1762,19 +2420,28 @@
             "description": "Update note"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
           },
           "404": {
-            "$ref": "#/components/responses/Error404"
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1842,16 +2509,28 @@
             "description": "Paged tasks list"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1879,26 +2558,28 @@
             "description": "Created task"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
           },
           "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "description": "429"
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1917,17 +2598,29 @@
           "200": {
             "description": "Delete task"
           },
+          "400": {
+            "$ref": "#/components/responses/Problem400"
+          },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
           },
           "404": {
-            "$ref": "#/components/responses/Error404"
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1944,17 +2637,29 @@
           "200": {
             "description": "Get task"
           },
+          "400": {
+            "$ref": "#/components/responses/Problem400"
+          },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
           },
           "404": {
-            "$ref": "#/components/responses/Error404"
+            "$ref": "#/components/responses/Problem404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -1982,22 +2687,28 @@
             "description": "Update task"
           },
           "400": {
-            "$ref": "#/components/responses/Error400"
+            "$ref": "#/components/responses/Problem400"
           },
           "401": {
-            "$ref": "#/components/responses/Error401"
+            "$ref": "#/components/responses/Problem401"
           },
           "403": {
-            "$ref": "#/components/responses/Error403"
+            "$ref": "#/components/responses/Problem403"
           },
           "404": {
-            "$ref": "#/components/responses/Error404"
+            "$ref": "#/components/responses/Problem404"
           },
           "409": {
-            "$ref": "#/components/responses/Error409"
+            "$ref": "#/components/responses/Problem409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem422"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem429"
           },
           "500": {
-            "$ref": "#/components/responses/Error500"
+            "$ref": "#/components/responses/Problem500"
           }
         },
         "security": [
@@ -2034,6 +2745,9 @@
     },
     {
       "name": "Tasks"
+    },
+    {
+      "name": "Superuser"
     }
   ]
 }

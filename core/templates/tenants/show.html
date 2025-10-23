@@ -1,0 +1,65 @@
+{% extends "ui/base.html" %}
+{% block title %}Tenant – {{ tenant.name }}{% endblock %}
+{% block content %}
+<main class="yu-stack" aria-labelledby="tenant-h1" data-tenant-id="{{ tenant.id }}">
+  <h1 id="tenant-h1" data-testid="tenant-title" tabindex="-1">{{ tenant.name }} <span class="badge">{{ tenant.theme }}</span></h1>
+  <nav aria-label="Tenant navigation" class="mb-4">
+    <ul role="tablist" class="tabs" data-testid="tenant-tabs">
+      <li><button id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0" data-testid="tab-overview">Översikt</button></li>
+      <li><button id="tab-org" role="tab" aria-selected="false" aria-controls="panel-org" tabindex="-1" data-testid="tab-org">Org-enheter</button></li>
+      <li><button id="tab-modules" role="tab" aria-selected="false" aria-controls="panel-modules" tabindex="-1" data-testid="tab-modules">Moduler</button></li>
+      <li><button id="tab-flags" role="tab" aria-selected="false" aria-controls="panel-flags" tabindex="-1" data-testid="tab-flags">Flags</button></li>
+      <li><button id="tab-settings" role="tab" aria-selected="false" aria-controls="panel-settings" tabindex="-1" data-testid="tab-settings">Inställningar</button></li>
+    </ul>
+  </nav>
+  <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0" class="yu-stack" data-testid="panel-overview">
+    <h2 class="visually-hidden">Översikt</h2>
+    <div class="yu-row yu-gap-2">
+      <button id="btn-add-org" class="yu-btn yu-btn--solid" title="Lägg till org-enhet">Lägg till org-enhet</button>
+      <span class="yu-help">Hantera org-enheter i fliken nedan.</span>
+    </div>
+    <div class="card yu-pad-3">
+      <div>Slug: <code>{{ tenant.slug }}</code></div>
+      <div>Tema: <code>{{ tenant.theme }}</code></div>
+      <div>Status: <code>{{ 'aktiv' if tenant.enabled else 'av' }}</code></div>
+    </div>
+    <div><a class="yu-no-underline" href="{{ url_for('ui.superuser_dashboard') }}">← Tillbaka till dashboard</a></div>
+  </section>
+  <section id="panel-org" role="tabpanel" aria-labelledby="tab-org" hidden tabindex="0" data-testid="panel-org">
+    <h2 class="visually-hidden">Org-enheter</h2>
+    <ul id="org-list" class="yu-stack" data-testid="org-list"></ul>
+  </section>
+  <!-- Modal: Create Org-enhet -->
+  <div id="org-modal" role="dialog" aria-modal="true" aria-labelledby="org-modal-title" hidden>
+    <div class="card yu-pad-3 yu-stack" style="max-width: 420px;">
+      <h3 id="org-modal-title">Ny org-enhet</h3>
+      <div class="yu-stack">
+        <label>Namn
+          <input id="org-name" name="name" type="text" maxlength="80" required />
+        </label>
+        <label>Typ
+          <select id="org-type" name="type">
+            <option value="kitchen">kitchen</option>
+            <option value="department">department</option>
+          </select>
+        </label>
+        <div class="yu-help">Slug sätts automatiskt från namn. Visas i listan.</div>
+        <div id="org-errors" class="yu-help" role="alert" aria-live="polite"></div>
+      </div>
+      <div class="yu-row yu-justify-end yu-gap-2">
+        <button id="org-cancel" class="yu-btn yu-btn--soft">Avbryt</button>
+        <button id="org-save" class="yu-btn yu-btn--solid">Spara</button>
+      </div>
+    </div>
+  </div>
+  <section id="panel-modules" role="tabpanel" aria-labelledby="tab-modules" hidden tabindex="0" data-testid="panel-modules">
+    <ul id="tm-list" data-testid="tm-list" class="yu-stack"></ul>
+  </section>
+  <section id="panel-flags" role="tabpanel" aria-labelledby="tab-flags" hidden tabindex="0" data-testid="panel-flags"></section>
+  <section id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden tabindex="0" data-testid="panel-settings"></section>
+</main>
+{% endblock %}
+{% block scripts %}
+  <script src="{{ url_for('ui.static', filename='js/tenant_show.js') }}" defer></script>
+  <script src="{{ url_for('ui.static', filename='js/tenant_modules.js') }}" defer></script>
+{% endblock %}

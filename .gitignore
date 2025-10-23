@@ -50,6 +50,15 @@ temp/
 # Node tooling (if any future UI bits)
 node_modules/
 
+# Playwright artifacts
+e2e/playwright-report/
+e2e/test-results/
+playwright-report/
+test-results/
+
+# Local virtual envs
+.venv312/
+
 # Generated exports / snapshots
 openapi_snapshot_*.json
 requirements.freeze.txt

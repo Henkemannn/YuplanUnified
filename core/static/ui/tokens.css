@@ -1,0 +1,443 @@
+/* Yuplan Design Tokens v0.1
+   Light/Dark theme via CSS variables. Focus on clarity, calmness, WCAG AA.
+*/
+:root {
+  color-scheme: light;
+  /* Colors */
+  --yu-color-bg: #f7f9fb;            /* page bg */
+  --yu-color-surface: #ffffff;        /* cards */
+  --yu-color-elev-1: #0a0d140f;       /* subtle shadow color */
+  --yu-color-text: #0b1a22;           /* high contrast on light */
+  --yu-color-text-muted: #3f5b66;     /* secondary */
+  --yu-color-border: #d3dde4;         /* soft border */
+
+  /* Primary: blue-green */
+  --yu-color-primary: #1a9fb3;        /* calm teal */
+  --yu-color-primary-600: #138a9b;
+  --yu-color-primary-700: #0e7583;
+
+  /* Secondary: sand/beige */
+  --yu-color-secondary: #e6dfd4;      /* warm softness */
+  --yu-color-secondary-600: #d6cbb9;
+
+  /* Accent: mild green/yellow-green */
+  --yu-color-accent: #93c47d;         /* positive accents */
+
+  /* Error/Warning/Info */
+  --yu-color-error: #b00020;          /* AA accessible on white */
+  --yu-color-warn: #915f00;
+  --yu-color-info: #164e63;
+
+  /* Radii */
+  --yu-radius-sm: 8px;
+  --yu-radius-md: 12px;
+  --yu-radius-lg: 16px;
+  --yu-radius-pill: 999px;
+
+  /* Spacing (4px base) */
+  --yu-space-1: 4px;
+  --yu-space-2: 8px;
+  --yu-space-3: 12px;
+  --yu-space-4: 16px;
+  --yu-space-5: 20px;
+  --yu-space-6: 24px;
+  --yu-space-8: 32px;
+  --yu-space-10: 40px;
+
+  /* Typography */
+  --yu-font-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  --yu-font-size-xs: 12px;
+  --yu-font-size-sm: 14px;
+  --yu-font-size-md: 16px;
+  --yu-font-size-lg: 18px;
+  --yu-font-size-xl: 22px;
+  --yu-lineheight: 1.45;
+
+  /* Shadows */
+  --yu-shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  --yu-shadow-md: 0 4px 18px rgba(0,0,0,.10);
+  --yu-shadow-lg: 0 10px 30px rgba(0,0,0,.12);
+
+  /* Motion */
+  --yu-motion-fast: 150ms;
+  --yu-motion-base: 220ms;
+  --yu-ease: cubic-bezier(.2,.8,.2,1);
+}
+
+/* ===== Semantic status (brand-agnostiska) ===== */
+:root {
+  /* SUCCESS */
+  --yu-success-100: #e6f6ec;
+  --yu-success-300: #95d5b2;
+  --yu-success-600: #2a7f5f;
+  --yu-success-700: #20624a;
+
+  /* INFO */
+  --yu-info-100: #e8f1fb;
+  --yu-info-300: #9ec1f1;
+  --yu-info-600: #2557a1;
+  --yu-info-700: #1e467f;
+
+  /* WARN */
+  --yu-warn-100: #fff6e5;
+  --yu-warn-300: #ffd08a;
+  --yu-warn-600: #a15c00;
+  --yu-warn-700: #7f4900;
+
+  /* ERROR */
+  --yu-error-100: #fdebec;
+  --yu-error-300: #f3a6ad;
+  --yu-error-600: #a11a2b;
+  --yu-error-700: #7f1522;
+}
+
+/* Dark mode (supports data-mode or legacy data-theme) */
+:root[data-mode="dark"],
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --yu-color-bg: #0f1720;
+  /* Slightly lighter surface and stronger border for clearer cards/lines */
+  --yu-color-surface: #152231;
+  --yu-color-elev-1: #00000066;
+  --yu-color-text: #e7eef2;
+  --yu-color-text-muted: #b7c7cf;
+  --yu-color-border: #355063;
+
+  --yu-color-primary: #3cc2d6;
+  --yu-color-primary-600: #2da8bd;
+  --yu-color-primary-700: #24889a;
+
+  --yu-color-secondary: #3a3a2e;
+  --yu-color-secondary-600: #2e2e24;
+
+  --yu-color-accent: #9bd18a;
+
+  --yu-color-error: #ff557a;
+  --yu-color-warn: #e6b25e;
+  --yu-color-info: #60a5fa;
+
+  --yu-shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --yu-shadow-md: 0 8px 24px rgba(0,0,0,.45);
+  --yu-shadow-lg: 0 16px 40px rgba(0,0,0,.55);
+
+  /* Dark mode tuningar för bättre kontrast på mörk bakgrund */
+  --yu-success-100: #133126;
+  --yu-success-300: #2f6b52;
+  --yu-success-600: #8fe0bb;
+  --yu-success-700: #b7f0d5;
+
+  --yu-info-100: #0f2442;
+  --yu-info-300: #2e5fbb;
+  --yu-info-600: #9ec1f1;
+  --yu-info-700: #cfe1fb;
+
+  --yu-warn-100: #38260a;
+  --yu-warn-300: #a86b0f;
+  --yu-warn-600: #ffd08a;
+  --yu-warn-700: #ffe5bf;
+
+  --yu-error-100: #3a0d12;
+  --yu-error-300: #962c38;
+  --yu-error-600: #f3a6ad;
+  --yu-error-700: #ffd4d8;
+}
+
+/* Brand variants (palette proposals):
+   teal (default), ocean (cooler blue), emerald (greener accent).
+   Accept data-brand or data-theme as brand key (for compatibility with acceptance). */
+:root[data-brand="ocean"],
+:root[data-theme="ocean"] {
+  --yu-color-primary: #2b6fb3;        /* steel blue */
+  --yu-color-primary-600: #245f99;
+  --yu-color-primary-700: #1d4e7d;
+  --yu-color-accent: #6cc6d1;         /* aqua-steel accent */
+  --yu-color-secondary: #dee4ea;      /* cool steel separator */
+}
+
+:root[data-brand="emerald"],
+:root[data-theme="emerald"] {
+  --yu-color-primary: #2ea44f;        /* emerald green */
+  --yu-color-primary-600: #258542;
+  --yu-color-primary-700: #1e6a36;
+  --yu-color-accent: #d9d2c4;         /* warm cream accent as background tint */
+  --yu-color-bg: #faf7f0;             /* cream-white page bg for municipal */
+  --yu-color-surface: #ffffff;        /* crisp cards on cream bg */
+}
+
+/* Base resets and helpers */
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--yu-font-sans);
+  font-size: var(--yu-font-size-md);
+  line-height: var(--yu-lineheight);
+  background: var(--yu-color-bg, #f7f9fb);
+  color: var(--yu-color-text, #0b1a22);
+}
+
+.yu-container { max-width: 420px; margin: 12vh auto; padding: var(--yu-space-6); background: var(--yu-color-surface); border-radius: var(--yu-radius-md); box-shadow: var(--yu-shadow-md); }
+.yu-title { font-size: var(--yu-font-size-xl); margin: 0 0 var(--yu-space-4); }
+.yu-muted { color: var(--yu-color-text-muted); font-size: var(--yu-font-size-sm); }
+
+.yu-field { display: grid; gap: var(--yu-space-2); margin-top: var(--yu-space-4); }
+.yu-label { font-size: var(--yu-font-size-sm); }
+.yu-input { padding: 10px 12px; border: 1px solid var(--yu-color-border); background: transparent; color: inherit; border-radius: var(--yu-radius-sm); font: inherit; transition: border-color var(--yu-motion-base) var(--yu-ease), box-shadow var(--yu-motion-base) var(--yu-ease); }
+.yu-input:focus { outline: none; border-color: var(--yu-color-primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--yu-color-primary) 20%, transparent); }
+.yu-input, .yu-btn { min-height: 44px; }
+
+/* Buttons */
+.yu-btn { appearance: none; cursor: pointer; border: 1px solid transparent; border-radius: var(--yu-radius-sm); padding: 10px 12px; font-weight: 600; transition: background var(--yu-motion-fast) var(--yu-ease), transform var(--yu-motion-fast) var(--yu-ease), box-shadow var(--yu-motion-fast) var(--yu-ease); }
+.yu-btn:disabled { opacity: .6; cursor: default; }
+.yu-btn--sm { padding: 6px 10px; font-weight: 500; }
+
+/* Button variants */
+.yu-btn--solid { background: var(--yu-btn-bg, var(--yu-color-primary, #1a9fb3)); color: var(--yu-btn-fg, #fff); box-shadow: 0 1px 0 rgba(0,0,0,.06), 0 6px 12px rgba(26,159,179,.18); }
+.yu-btn--solid:hover { transform: translateY(-1px); background: var(--yu-btn-hover-bg, color-mix(in oklab, var(--yu-color-primary) 95%, black)); box-shadow: 0 2px 0 rgba(0,0,0,.05), 0 10px 18px rgba(26,159,179,.25); }
+.yu-btn--solid:active { transform: translateY(0); }
+
+.yu-btn--outline { background: transparent; color: var(--yu-color-text); border-color: var(--yu-color-border); }
+.yu-btn--outline:hover { border-color: var(--yu-color-primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--yu-color-primary) 20%, transparent); }
+
+.yu-btn--soft { background: color-mix(in oklab, var(--yu-color-primary) 14%, var(--yu-color-surface)); color: var(--yu-color-text); border: 1px solid color-mix(in oklab, var(--yu-color-primary) 24%, var(--yu-color-border)); }
+.yu-btn--soft:hover { background: color-mix(in oklab, var(--yu-color-primary) 18%, var(--yu-color-surface)); }
+
+/* Utility */
+.yu-row { display: flex; gap: var(--yu-space-3); align-items: center; }
+.yu-space-top { margin-top: var(--yu-space-4); }
+.yu-help { font-size: var(--yu-font-size-xs); color: var(--yu-color-text-muted); margin-top: var(--yu-space-2); }
+.yu-full { width: 100%; }
+.yu-justify-between { justify-content: space-between; }
+.yu-gap-2 { gap: var(--yu-space-2); }
+.yu-gap-3 { gap: var(--yu-space-3); }
+.yu-no-underline { text-decoration: none; }
+.yu-footer { margin-top: var(--yu-space-6); font-size: var(--yu-font-size-xs); color: var(--yu-color-text-muted); text-align: center; }
+
+/* Links (brand-aware) */
+a:not(.yu-btn) { color: var(--yu-link, var(--yu-color-primary)); text-decoration: underline; text-underline-offset: 2px; }
+a:not(.yu-btn):hover { color: var(--yu-link-hover, color-mix(in oklab, var(--yu-color-primary) 90%, black)); }
+
+/* Alerts */
+.alert { border: 1px solid var(--yu-border, #e5e7eb); border-radius: var(--yu-radius-md, 12px); padding: 12px 14px; font-size: 0.95rem; line-height: 1.35; }
+.alert-error   { background: var(--yu-error-100);  border-color: var(--yu-error-300);  color: var(--yu-error-700); }
+.alert-warn    { background: var(--yu-warn-100);   border-color: var(--yu-warn-300);   color: var(--yu-warn-700); }
+.alert-info    { background: var(--yu-info-100);   border-color: var(--yu-info-300);   color: var(--yu-info-700); }
+.alert-success { background: var(--yu-success-100);border-color: var(--yu-success-300);color: var(--yu-success-700); }
+
+/* Alert animation (subtle) */
+.alert--animate { animation: yu-alert-in var(--yu-motion-fast) ease-out; }
+@keyframes yu-alert-in {
+  from { opacity: 0; transform: scale(.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Focusring konsekvent i båda lägen */
+:root { --yu-focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.35); }
+[data-mode="dark"] { --yu-focus-ring: 0 0 0 3px rgba(147, 197, 253, 0.45); }
+:where(input,button,select,textarea,a):focus-visible { outline: none; box-shadow: var(--yu-focus-ring); border-color: var(--yu-brand-500, #2563eb); }
+
+/* Card layout constraint */
+.yu-container--narrow { max-width: 420px; }
+
+/* Toggle group */
+.yu-toggle { display: inline-flex; background: var(--yu-color-secondary); padding: 2px; border-radius: var(--yu-radius-pill); }
+.yu-toggle button { border: 0; background: transparent; padding: 6px 10px; border-radius: var(--yu-radius-pill); font: inherit; color: var(--yu-color-text); cursor: pointer; }
+.yu-toggle button[aria-pressed="true"] { background: var(--yu-color-surface); box-shadow: var(--yu-shadow-sm); }
+
+/* Logo placeholder */
+.yu-logo { display: inline-flex; align-items: center; gap: 10px; }
+.yu-logo svg { width: 28px; height: 28px; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  .alert--animate { animation: none !important; }
+}
+
+/* Button spinner */
+.yu-btn__label { display: inline-flex; align-items: center; gap: 8px; }
+.yu-btn__spinner { display: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in oklab, currentColor 35%, transparent); border-top-color: currentColor; animation: yu-spin var(--yu-motion-fast) linear infinite; }
+.yu-btn.is-loading .yu-btn__spinner,
+.yu-btn[aria-busy="true"] .yu-btn__spinner { display: inline-block; }
+.yu-btn.is-loading .yu-btn__label,
+.yu-btn[aria-busy="true"] .yu-btn__label { opacity: .85; }
+
+@keyframes yu-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+/* --- Superuser dashboard layout --- */
+.su-shell { display: grid; grid-template-columns: 240px 1fr; gap: var(--yu-space-6); padding: var(--yu-space-6); }
+@media (max-width: 900px) { .su-shell { grid-template-columns: 1fr; } }
+.su-nav { background: var(--yu-color-surface, #ffffff); border: 1px solid var(--yu-color-border, #e5e7eb); border-radius: var(--yu-radius-md); padding: var(--yu-space-4); }
+.su-nav__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.su-nav__link { display: block; padding: 10px 12px; border-radius: var(--yu-radius-sm); color: var(--yu-color-text); text-decoration: none; border: 1px solid transparent; }
+.su-nav__link:hover { background: color-mix(in oklab, var(--yu-color-primary) 10%, var(--yu-color-surface)); }
+.su-nav__link--active, .su-nav__link[aria-current="page"] { border-color: var(--yu-color-primary); box-shadow: var(--yu-focus-ring); }
+
+.su-main { display: grid; gap: var(--yu-space-6); }
+
+.card { background: var(--yu-color-surface, #ffffff); border: 1px solid var(--yu-color-border, #e5e7eb); border-radius: var(--yu-radius-md); padding: var(--yu-space-4); box-shadow: var(--yu-shadow-sm); }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--yu-space-4); }
+@media (max-width: 900px) { .kpi-grid { grid-template-columns: 1fr; } }
+.kpi-card { display: flex; align-items: center; gap: var(--yu-space-4); min-height: 84px; }
+.kpi-icon { font-size: 26px; line-height: 1; }
+.kpi-label { color: var(--yu-color-text-muted); font-size: var(--yu-font-size-sm); }
+.kpi-value { font-size: 22px; font-weight: 700; }
+
+.events-empty { text-align: center; display: grid; gap: var(--yu-space-3); justify-items: center; }
+.events-empty__icon { font-size: 32px; }
+.events-empty__text { margin: 0; color: var(--yu-color-text-muted); }
+
+.health-grid { display: inline-flex; gap: var(--yu-space-3); align-items: center; }
+.badge { display: inline-block; border-radius: var(--yu-radius-pill); padding: 6px 10px; font-size: var(--yu-font-size-sm); border: 1px solid transparent; }
+.badge--ok { background: color-mix(in oklab, var(--yu-success-600) 18%, var(--yu-color-surface)); color: var(--yu-success-700); border-color: color-mix(in oklab, var(--yu-success-600) 35%, var(--yu-color-border)); }
+
+/* Visually hidden for headings that still need to be announced */
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* =============================================
+   Brand palettes (AA-tested): Ocean & Emerald
+   These override high-level tokens for surfaces, text, borders, links,
+   and solid button styling depending on data-brand + data-mode.
+   --------------------------------------------- */
+
+/* ========== OCEAN – LIGHT ========== */
+:root[data-brand="ocean"][data-mode="light"] {
+  /* Surfaces (stål/graphite på vit bas) */
+  --yu-surface-0: #f8fafc; /* base */
+  --yu-surface-1: #f1f5f9;
+  --yu-surface-2: #e2e8f0;
+  --yu-border:    #e5e7eb;
+
+  /* Text */
+  --yu-fg:        #0f172a; /* primär text */
+  --yu-fg-muted:  #334155;
+
+  /* Brand scale (Ocean blå) */
+  --yu-brand-50:  #eef6ff;
+  --yu-brand-100: #dbeafe;
+  --yu-brand-300: #93c5fd;
+  --yu-brand-500: #3b82f6;
+  --yu-brand-600: #2563eb;
+  --yu-brand-700: #1d4ed8;
+
+  /* Links & focus */
+  --yu-link:      var(--yu-brand-600);
+  --yu-link-hover:#1e40af;
+  --yu-focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.35);
+
+  /* Solid-knapp (primär) */
+  --yu-btn-bg:        var(--yu-brand-600);
+  --yu-btn-fg:        #ffffff;
+  --yu-btn-hover-bg:  #1e40af;
+  --yu-btn-border:    transparent;
+}
+
+/* ========== OCEAN – DARK ========== */
+:root[data-brand="ocean"][data-mode="dark"] {
+  /* Surfaces (grafit/navy) */
+  --yu-surface-0: #0b1220;
+  --yu-surface-1: #101826;
+  --yu-surface-2: #1f2937;
+  --yu-border:    #334155;
+
+  /* Text */
+  --yu-fg:        #e5e7eb;
+  --yu-fg-muted:  #9ca3af;
+
+  /* Brand (ljusare för kontrast i dark) */
+  --yu-brand-50:  #0b1f3a;
+  --yu-brand-100: #153e7a;
+  --yu-brand-300: #60a5fa;
+  --yu-brand-500: #60a5fa; /* används för links/hover */
+  --yu-brand-600: #3b82f6;
+  --yu-brand-700: #1d4ed8;
+
+  /* Links & focus */
+  --yu-link:       #93c5fd;
+  --yu-link-hover: #bfdbfe;
+  --yu-focus-ring: 0 0 0 3px rgba(147, 197, 253, 0.45);
+
+  /* Solid-knapp (primär) */
+  --yu-btn-bg:        var(--yu-brand-600);
+  --yu-btn-fg:        #0b1220;  /* alternativt vitt; #0b1220 ger pop */
+  --yu-btn-hover-bg:  #60a5fa;
+  --yu-btn-border:    transparent;
+}
+
+/* ========== EMERALD – LIGHT (krämvita ytor) ========== */
+:root[data-brand="emerald"][data-mode="light"] {
+  /* Surfaces (kräm/varm neutral) */
+  --yu-surface-0: #faf8f3; /* base (krämvit) */
+  --yu-surface-1: #f3f0e8;
+  --yu-surface-2: #e8e2d9;
+  --yu-border:    #e6e0d4;
+
+  /* Text (mörk för läsbarhet mot kräm) */
+  --yu-fg:        #1f2937;
+  --yu-fg-muted:  #4b5563;
+
+  /* Brand scale (Emerald grön) */
+  --yu-brand-50:  #ecfdf5;
+  --yu-brand-100: #d1fae5;
+  --yu-brand-300: #86efac;
+  --yu-brand-500: #10b981;
+  --yu-brand-600: #059669;
+  --yu-brand-700: #047857;
+
+  /* Links & focus */
+  --yu-link:       var(--yu-brand-600);
+  --yu-link-hover: #065f46;
+  --yu-focus-ring: 0 0 0 3px rgba(16, 185, 129, 0.35);
+
+  /* Solid-knapp (primär) */
+  --yu-btn-bg:        var(--yu-brand-600);
+  --yu-btn-fg:        #ffffff;
+  --yu-btn-hover-bg:  #065f46;
+  --yu-btn-border:    transparent;
+}
+
+/* ========== EMERALD – DARK (mättad grönsvart) ========== */
+:root[data-brand="emerald"][data-mode="dark"] {
+  /* Surfaces (djup grönsvart) */
+  --yu-surface-0: #0f1a14;
+  --yu-surface-1: #132019;
+  --yu-surface-2: #1b2a22;
+  --yu-border:    #274034;
+
+  /* Text */
+  --yu-fg:        #e6f6ec;
+  --yu-fg-muted:  #b7dccc;
+
+  /* Brand (lyft ljushet för dark) */
+  --yu-brand-50:  #0b261d;
+  --yu-brand-100: #0f3a2c;
+  --yu-brand-300: #34d399;
+  --yu-brand-500: #34d399;
+  --yu-brand-600: #10b981;
+  --yu-brand-700: #059669;
+
+  /* Links & focus */
+  --yu-link:       #86efac;
+  --yu-link-hover: #bbf7d0;
+  --yu-focus-ring: 0 0 0 3px rgba(134, 239, 172, 0.45);
+
+  /* Solid-knapp (primär) */
+  --yu-btn-bg:        var(--yu-brand-600);
+  --yu-btn-fg:        #0f1a14; /* alt. vitt; välj enligt smak */
+  --yu-btn-hover-bg:  #34d399;
+  --yu-btn-border:    transparent;
+}
+
+/* Map brand surface tokens into base UI variables when present */
+:root[data-brand] {
+  /* Prefer brand-aware surfaces when provided */
+  --yu-color-bg: var(--yu-surface-0, var(--yu-color-bg));
+  --yu-color-surface: var(--yu-surface-1, var(--yu-color-surface));
+  --yu-color-border: var(--yu-border, var(--yu-color-border));
+  --yu-color-text: var(--yu-fg, var(--yu-color-text));
+  --yu-color-text-muted: var(--yu-fg-muted, var(--yu-color-text-muted));
+
+  /* Buttons (solid) */
+  --yu-color-primary: var(--yu-brand-600, var(--yu-color-primary));
+}
+

@@ -9,13 +9,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from flask import Blueprint, Response, current_app, g, jsonify, request, session, url_for
+from flask import Blueprint, current_app, g, jsonify, request, session, url_for
+from flask.typing import ResponseReturnValue
 
 from .api_types import (
     TaskCreateRequest,
     TaskCreateResponse,
     TaskId,
-    TaskUpdateResponse,
 )
 from .app_authz import AuthzError, require_roles
 from .app_sessions import require_session
@@ -41,8 +41,9 @@ READ_ROLES = (
     "viewer",
     "editor",
     "admin",
-)  # legacy cook -> viewer, unit_portal -> editor via adapter
-WRITE_ROLES = ("editor", "admin")
+    "superuser",
+)  # legacy cook -> viewer, unit_portal -> editor via adapter; superuser allowed
+WRITE_ROLES = ("editor", "admin", "superuser")
 
 ALLOWED_STATUS = {"todo", "doing", "blocked", "done", "cancelled"}
 
@@ -73,8 +74,8 @@ def _serialize(t: Task):
 
 
 @bp.get("/")
-@require_roles("viewer", "editor", "admin")
-def list_tasks() -> Response:
+@require_roles(*READ_ROLES)
+def list_tasks() -> ResponseReturnValue:
     tid = _tenant_id()
     page_req = parse_page_params(dict(request.args))
     db = get_session()
@@ -117,8 +118,8 @@ def list_tasks() -> Response:
 
 
 @bp.post("/")
-@require_roles("viewer", "editor", "admin")
-def create_task() -> TaskCreateResponse | Response:
+@require_roles(*READ_ROLES)
+def create_task() -> ResponseReturnValue:
     tid = _tenant_id()
     data = request.get_json(silent=True) or {}
     # Legacy cook (raw role 'cook') should be allowed though it maps to canonical viewer.
@@ -203,8 +204,8 @@ def create_task() -> TaskCreateResponse | Response:
 
 
 @bp.get("/<int:task_id>")
-@require_roles("viewer", "editor", "admin")
-def get_task(task_id: int):
+@require_roles(*READ_ROLES)
+def get_task(task_id: int) -> ResponseReturnValue:
     tid = _tenant_id()
     db = get_session()
     try:
@@ -222,8 +223,8 @@ def get_task(task_id: int):
 
 @bp.put("/<int:task_id>")
 @bp.patch("/<int:task_id>")
-@require_roles("editor", "admin")
-def update_task(task_id: int) -> TaskUpdateResponse | Response:
+@require_roles(*WRITE_ROLES)
+def update_task(task_id: int) -> ResponseReturnValue:
     tid = _tenant_id()
     db = get_session()
     try:
@@ -250,7 +251,23 @@ def update_task(task_id: int) -> TaskUpdateResponse | Response:
             )
         except RateLimitExceeded:
             return rate_limited_response()
-        data = request.get_json(silent=True) or {}
+        raw = request.get_json(silent=True) or {}
+        # Whitelist allowed update keys to keep typing predictable
+        data_keys = {
+            k: v
+            for k, v in raw.items()
+            if k
+            in {
+                "title",
+                "status",
+                "done",
+                "private_flag",
+                "assignee_id",
+                "menu_id",
+                "dish_id",
+            }
+        }
+        data = data_keys  # local alias
         if "title" in data:
             title = (data.get("title") or "").strip()
             if not title:
@@ -299,17 +316,26 @@ def update_task(task_id: int) -> TaskUpdateResponse | Response:
         db.commit()
         db.refresh(t)
         # Also invoke service update for future parity (idempotent)
-        svc_update_task(
-            db, tenant_id=tid, user_id=user_id, role=str(role), task_id=task_id, payload=data
-        )  # type: ignore[arg-type]
+        try:
+            svc_update_task(
+                db,
+                tenant_id=tid,
+                user_id=user_id,
+                role=str(role),
+                task_id=task_id,
+                payload=data,  # type: ignore[arg-type]
+            )
+        except Exception:
+            # Best-effort; service update is supplementary for now
+            pass
         return {"ok": True, "task": _serialize(t)}
     finally:
         db.close()
 
 
 @bp.delete("/<int:task_id>")
-@require_roles("editor", "admin")
-def delete_task(task_id: int):
+@require_roles(*WRITE_ROLES)
+def delete_task(task_id: int) -> ResponseReturnValue:
     tid = _tenant_id()
     db = get_session()
     try:

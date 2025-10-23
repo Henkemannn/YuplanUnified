@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="sv" data-mode="{{ ui_theme|default('light') }}" data-brand="{{ ui_brand|default('teal') }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'">
+  <title>{% block title %}Unified Platform{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('inline_ui.static', filename='ui/tokens.css') }}">
+  {% block head_extra %}{% endblock %}
+  <style>
+    /* Minimal page framing if needed by children */
+    body { margin: 0; background: var(--yu-color-bg); color: var(--yu-color-text); }
+    /* Brand-aware logo color using currentColor inside inline SVG */
+    .yu-logo { color: var(--yu-brand-600, var(--yu-color-primary)); text-decoration: none; }
+    /* Logo animation + color tokens */
+    :root {
+      --yu-logo-primary: var(--yu-brand-600, var(--yu-color-primary));
+      --yu-logo-accent: var(--yu-brand-300, color-mix(in oklab, var(--yu-color-primary) 65%, white));
+    }
+    .yu-logo svg { display:inline-block; width:28px; height:28px; }
+    .yu-logo .is-animated { animation: yu-breathe 2.8s var(--yu-ease, ease-in-out) infinite; transform-origin: 50% 50%; }
+    @keyframes yu-breathe {
+      0% { transform: scale(1); filter: drop-shadow(0 0 0 color-mix(in oklab, var(--yu-logo-primary) 0%, transparent)); }
+      50% { transform: scale(1.06); filter: drop-shadow(0 0 8px color-mix(in oklab, var(--yu-logo-primary) 35%, transparent)); }
+      100% { transform: scale(1); filter: drop-shadow(0 0 0 color-mix(in oklab, var(--yu-logo-primary) 0%, transparent)); }
+    }
+  </style>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  
+</head>
+<body>
+  <header class="yu-row" style="justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--yu-color-border); background: var(--yu-color-surface);">
+    <a href="/" class="yu-logo yu-no-underline" aria-label="Unified Platform startsida">
+      {% include 'ui/_logo_animated.svg' %}
+      <span>Yuplan Unified</span>
+    </a>
+    <div class="yu-row" style="gap: var(--yu-space-3);">
+      <div class="yu-row" role="group" aria-label="Tema">
+        <button id="theme-light" class="yu-btn yu-btn--soft yu-btn--sm" aria-pressed="{{ 'true' if ui_theme=='light' else 'false' }}">Ljus</button>
+        <button id="theme-dark" class="yu-btn yu-btn--soft yu-btn--sm" aria-pressed="{{ 'true' if ui_theme!='light' else 'false' }}">Mörk</button>
+      </div>
+    </div>
+  </header>
+
+  {% block content %}{% endblock %}
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
