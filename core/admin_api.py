@@ -364,6 +364,7 @@ def admin_users_create_stub():  # type: ignore[return-value]
 
 
 # ---- Phase-2: admin feature-flags (stubs) ---------------------------------
+# Phase-2 stub: feature-flags endpoints (guarded)
 
 @bp.get("/feature-flags")
 @require_roles("admin")
@@ -387,6 +388,7 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 
 
 # ---- Phase-2: admin roles (stubs) -----------------------------------------
+# Phase-2 stub: roles endpoints (guarded)
 
 @bp.get("/roles")
 @require_roles("admin")
