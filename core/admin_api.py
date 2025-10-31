@@ -4,7 +4,7 @@ from typing import cast
 
 from flask import Blueprint, current_app, jsonify, request, session
 
-from core.auth import require_roles
+from .app_authz import require_roles
 
 from . import metrics as metrics_mod
 from .api_types import (
