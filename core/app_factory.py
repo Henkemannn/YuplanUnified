@@ -595,6 +595,166 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "security": [{"BearerAuth": []}]
                 }
             },
+            # ---- Phase-2: Minimal Admin paths (users, feature-flags, roles) ----
+            "/admin/users": {
+                "get": attach({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List users (tenant scoped)",
+                    "responses": {
+                        "200": {
+                            "description": "Users",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["items", "total"],
+                                        "properties": {
+                                            "items": {"type": "array", "items": {"$ref": "#/components/schemas/User"}},
+                                            "total": {"type": "integer"}
+                                        },
+                                        "additionalProperties": False
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403"]),
+                "post": attach({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Create user",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["email", "role"],
+                                    "properties": {
+                                        "email": {"type": "string", "format": "email"},
+                                        "role": {"type": "string", "enum": ["admin", "editor", "viewer"]}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}}
+                    }
+                }, ["401", "403", "422"])  # 422 via default fallback schema
+            },
+            "/admin/feature-flags": {
+                "get": attach({
+                    "tags": ["admin", "feature-flags"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List feature flags (tenant scoped)",
+                    "parameters": [
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Quick filter"}
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Flags",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["items", "total"],
+                                        "properties": {
+                                            "items": {"type": "array", "items": {"$ref": "#/components/schemas/FeatureFlag"}},
+                                            "total": {"type": "integer"}
+                                        },
+                                        "additionalProperties": False
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403"]),
+            },
+            "/admin/feature-flags/{key}": {
+                "parameters": [
+                    {"name": "key", "in": "path", "required": True, "schema": {"type": "string"}}
+                ],
+                "patch": attach({
+                    "tags": ["admin", "feature-flags"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Update feature flag (enabled/notes)",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "enabled": {"type": "boolean"},
+                                        "notes": {"type": "string", "maxLength": 500}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}}
+                    }
+                }, ["401", "403", "404", "422"])
+            },
+            "/admin/roles": {
+                "get": attach({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List users with roles",
+                    "parameters": [
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email"}
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Users with roles",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["items", "total"],
+                                        "properties": {
+                                            "items": {"type": "array", "items": {"$ref": "#/components/schemas/UserWithRole"}},
+                                            "total": {"type": "integer"}
+                                        },
+                                        "additionalProperties": False
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403"])
+            },
+            "/admin/roles/{user_id}": {
+                "parameters": [
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}
+                ],
+                "patch": attach({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Update user role",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["role"],
+                                    "properties": {"role": {"type": "string", "enum": ["admin", "editor", "viewer"]}},
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}}}}
+                    }
+                }, ["401", "403", "404", "422"])
+            }
         }
         spec = {
             "openapi": "3.0.3",
@@ -602,14 +762,39 @@ def create_app(config_override: dict | None = None) -> Flask:
             "servers": [{"url": "/"}],
             "tags": [
                 {"name": "Auth"}, {"name": "Menus"}, {"name": "Features"}, {"name": "System"},
-                {"name": "Notes"}, {"name": "Tasks"}
+                {"name": "Notes"}, {"name": "Tasks"}, {"name": "admin"}
             ],
             "components": {
                 "securitySchemes": {
-                    "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+                    "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"},
+                    # Required for mutating admin operations
+                    "CsrfToken": {"type": "apiKey", "in": "header", "name": "X-CSRF-Token", "description": "Fetch via GET /csrf"}
                 },
                 "schemas": {
                     "Error": error_schema,
+                    # Minimal admin-related models
+                    "User": {
+                        "type": "object",
+                        "required": ["id", "email", "role"],
+                        "properties": {
+                            "id": {"type": "string", "format": "uuid"},
+                            "email": {"type": "string", "format": "email"},
+                            "role": {"type": "string", "enum": ["admin", "editor", "viewer"]}
+                        },
+                        "additionalProperties": False
+                    },
+                    "UserWithRole": {"$ref": "#/components/schemas/User"},
+                    "FeatureFlag": {
+                        "type": "object",
+                        "required": ["key", "enabled"],
+                        "properties": {
+                            "key": {"type": "string"},
+                            "enabled": {"type": "boolean"},
+                            "notes": {"type": "string", "nullable": True},
+                            "updated_at": {"type": "string", "format": "date-time", "nullable": True}
+                        },
+                        "additionalProperties": False
+                    },
                     "PageMeta": {"type": "object", "required": ["page","size","total","pages"], "properties": {"page": {"type": "integer"}, "size": {"type": "integer"}, "total": {"type": "integer"}, "pages": {"type": "integer"}}},
                     "PageResponse_Notes": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/Note"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
                     "PageResponse_Tasks": {"type": "object", "required": ["ok","items","meta"], "properties": {"ok": {"type": "boolean"}, "items": {"type": "array", "items": {"$ref": "#/components/schemas/Task"}}, "meta": {"$ref": "#/components/schemas/PageMeta"}}},
