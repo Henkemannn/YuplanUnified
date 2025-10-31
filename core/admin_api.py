@@ -339,3 +339,70 @@ def delete_limit():  # type: ignore[return-value]
             actor_role=session.get("role"),        # type: ignore[arg-type]
         )
     return jsonify({"ok": True, "removed": removed})
+
+
+# ---- Phase-2: admin users (stubs) -----------------------------------------
+
+@bp.get("/users")
+@require_roles("admin")
+def admin_users_list_stub():  # type: ignore[return-value]
+    """Stub: list users for current tenant.
+
+    TODO Phase-2: replace stub with repo/service.
+    """
+    return jsonify({"items": [], "total": 0}), 200
+
+
+@bp.post("/users")
+@require_roles("admin")
+def admin_users_create_stub():  # type: ignore[return-value]
+    """Stub: create user in current tenant.
+
+    TODO Phase-2: replace stub with repo/service.
+    """
+    return jsonify({"id": "stub", "email": "stub@local", "role": "viewer"}), 201
+
+
+# ---- Phase-2: admin feature-flags (stubs) ---------------------------------
+
+@bp.get("/feature-flags")
+@require_roles("admin")
+def admin_feature_flags_list_stub():  # type: ignore[return-value]
+    """Stub: hyphen-path variant list of feature flags.
+
+    Note: legacy underscore path exists at /admin/feature_flags.
+    TODO Phase-2: reconcile paths and implement q= filter.
+    """
+    return jsonify({"items": [], "total": 0}), 200
+
+
+@bp.patch("/feature-flags/<string:key>")
+@require_roles("admin")
+def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
+    """Stub: update a feature flag (enable/notes).
+
+    TODO Phase-2: add CSRF enforcement, validation and connect to service.
+    """
+    return jsonify({"key": key, "enabled": False, "notes": ""}), 200
+
+
+# ---- Phase-2: admin roles (stubs) -----------------------------------------
+
+@bp.get("/roles")
+@require_roles("admin")
+def admin_roles_list_stub():  # type: ignore[return-value]
+    """Stub: list users and their roles for current tenant.
+
+    TODO Phase-2: replace stub with repo/service and optional q= on email.
+    """
+    return jsonify({"items": [], "total": 0}), 200
+
+
+@bp.patch("/roles/<string:user_id>")
+@require_roles("admin")
+def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
+    """Stub: update a user's role.
+
+    TODO Phase-2: add CSRF enforcement, validate enum and connect to service.
+    """
+    return jsonify({"id": user_id, "role": "viewer"}), 200
