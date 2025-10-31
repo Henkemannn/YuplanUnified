@@ -495,3 +495,50 @@ def test_patch_flag_422(client, auth_headers, payload, expected):
 - [ ] Unit tests: RBAC/CSRF/404/422/happy path.
 - [ ] CI green: tests, typecheck/lint, openapi-validate.
 
+---
+
+## Endpoint 3: /admin/roles (GET + PATCH)
+
+### Scope (lean but useful)
+- GET `/admin/roles`: list users + their roles for current tenant (supports `q=` on email).
+- PATCH `/admin/roles/{user_id}`: change role (`admin|editor|viewer`) for a given user. Mutation → CsrfToken required.
+- Guard: `require_roles("admin")` on both.
+
+### Acceptance Criteria
+- RBAC: unauth → 401, viewer → 403 with `required_role=admin` (+ `invalid_params` echo).
+- PATCH body: `{ role: "admin|editor|viewer" }` only (no extra fields).
+- 404 if `user_id` not found in tenant.
+- 422 for invalid role or extra fields.
+- CSRF required for PATCH via `X-CSRF-Token`.
+- OpenAPI: paths/params; `security: [BearerToken, CsrfToken]` on PATCH; 403 example (viewer→admin); 404/422 examples; `UserRoleUpdate` schema with `additionalProperties: false`.
+- CI: tests green on Py 3.12; OpenAPI‑validate green; lint/typecheck PASS.
+
+### Work steps (small commits)
+1) Routes & guard
+   - Add GET `/admin/roles` and PATCH `/admin/roles/<user_id>` under an admin blueprint.
+   - Decorate with `@require_roles("admin")`.
+2) Query/filter
+   - GET: optional `?q=` substring (case‑insensitive) against email.
+3) RFC7807
+   - Reuse central helpers: 401/403; 404 (unknown user); 422 (validation/extra field).
+4) CSRF
+   - PATCH must validate `X‑CSRF‑Token` (middleware enforced).
+5) OpenAPI
+   - Define `UserWithRole` and `UserRoleUpdate` schemas; set `additionalProperties: false` for update.
+   - Add security: `[BearerToken, CsrfToken]` for PATCH and a 403 example with `required_role=admin`.
+6) Tests
+   - Create `tests/admin/test_roles.py` to cover: GET unauth=401; viewer=403; admin=200 (+ `?q=` filter); PATCH unauth=401; viewer=403; no CSRF=401/403; 404 unknown user; 422 invalid role/extra field; happy path 200.
+
+### Minimal data contracts (OpenAPI, not code)
+- `UserWithRole`: `id: uuid`, `email: email`, `role: enum[admin,editor,viewer]`, `updated_at: date‑time`.
+- `UserRoleUpdate`: required `role`; enum as above; `additionalProperties: false`.
+
+### Checklist (to tick when implementing)
+- [ ] `/admin/roles` GET/PATCH guarded by `app_authz` (admin).
+- [ ] GET supports `?q=` on email; returns filtered result.
+- [ ] PATCH requires `CsrfToken`; only `{ role }` allowed; updates role.
+- [ ] RFC7807 401/403/404/422 per AC.
+- [ ] OpenAPI: paths/params/security + examples; `UserRoleUpdate` schema.
+- [ ] Unit tests: RBAC, CSRF, 404, 422, happy path.
+- [ ] CI green across tests/typecheck/lint/OpenAPI.
+
