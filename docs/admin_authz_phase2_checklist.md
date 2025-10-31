@@ -44,6 +44,55 @@ This checklist prepares the next batch after RC1 is merged. It assumes base = `f
 - Keep commits small and logical. Ensure OpenAPI diff is reviewed.
 - Merge when CI green. Follow up with E2E issues.
 
+## Post-RC1 kickoff sequence (quick)
+1) Rebase/sync
+   - Run `scripts/make_phase2_branch.ps1` to refresh `feat/admin-authz-phase2` from default.
+2) Route stubs + guards (all 3 endpoints)
+   - Goal: endpoints exist; 401/403 flow through central handling.
+   - Temporarily return simple 200/201 stub bodies (or 501 if preferred) — replaced later.
+   - Commit per endpoint (small diffs).
+3) OpenAPI – minimal paths + security hooks
+   - Add paths + CsrfToken on mutations + one 403 example per endpoint.
+   - Keep schemas minimal (reuse `User`, `ProblemDetails`; add small `Update*Request` as needed).
+4) Tests — staged
+   - Start with RBAC (unauth=401, viewer=403).
+   - Then CSRF (mutations without token → 401/403 per policy).
+   - Then 422/404 validation.
+   - Finally happy path.
+
+### Commit message patterns
+- feat(admin-authz): stub /admin/users with require_roles("admin")
+- feat(admin-authz): stub /admin/feature-flags with admin guard
+- feat(admin-authz): stub /admin/roles with admin guard
+- docs(openapi): add minimal paths for users/feature-flags/roles with CsrfToken on mutations
+- test(admin): RBAC for users/feature-flags/roles (401/403)
+- test(admin): CSRF enforcement on mutations
+- test(admin): validation (422) and not-found (404) scaffolding
+- test(admin): happy path smoke for users/flags/roles
+- chore(ci): ensure openapi-validate includes new admin paths
+
+### Copilot prompt pack (paste into editor for diffs)
+1) Route stubs + guards
+   - Users: add GET/POST under admin blueprint, decorate with require_roles("admin"); GET returns {items:[], total:0} (200), POST returns {id:"stub", email:"stub", role:"viewer"} (201).
+   - Feature-flags: add GET/PATCH; guard with require_roles("admin"); GET returns {items:[], total:0} (200); PATCH returns {key:"<path_key>", enabled:false, notes:""} (200).
+   - Roles: add GET/PATCH; guard with require_roles("admin"); GET returns {items:[], total:0} (200); PATCH returns {id:"<user_id>", role:"viewer"} (200).
+   - Hint: set blueprint prefix "/admin" if not centralized; import from app_authz; central problem helpers handle 401/403 before handlers.
+2) OpenAPI minimal
+   - Add paths for users (GET+POST), feature-flags (GET + PATCH {key}), roles (GET + PATCH {user_id}); attach CsrfToken to mutations; add one 403 example per endpoint.
+   - Reuse ProblemDetails, UnauthorizedProblem, ForbiddenProblem, CsrfToken security.
+3) Tests (stage 1: RBAC)
+   - For each endpoint: GET unauth→401; GET viewer→403 with required_role=admin; POST/PATCH unauth→401; POST/PATCH viewer→403.
+
+### Definition of Done (per endpoint)
+- [ ] Route guard in place: require_roles("admin") on all ops.
+- [ ] RBAC tests: unauth=401; viewer=403 with required_role=admin (+ invalid_params echo).
+- [ ] CSRF enforced on mutations (tests assert 401/403 per policy).
+- [ ] Validation 422: invalid payloads return ProblemDetails with invalid_params.
+- [ ] Not Found 404 for unknown key/id where applicable.
+- [ ] OpenAPI updated: paths, params, CsrfToken on mutations, at least one 403 example.
+- [ ] Happy path covered with minimal success body.
+- [ ] CI green: tests, typecheck/lint, openapi-validate.
+
 
 ---
 
