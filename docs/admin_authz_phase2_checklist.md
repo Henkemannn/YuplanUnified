@@ -273,3 +273,225 @@ def test_post_users_validation_422(client, auth_headers, bad_payload, expected_n
 - [ ] Unit tests: RBAC (401/403), CSRF, validation 422, happy path 201.
 - [ ] CI: tests & openapi-validate green.
 
+---
+
+## Endpoint 2: /admin/feature-flags (GET + PATCH)
+
+### Scope
+- GET `/admin/feature-flags` — list all flags for current tenant (supports `q=` quick filter).
+- PATCH `/admin/feature-flags/{key}` — toggle/update metadata for a flag (e.g., enabled, notes). Mutation → CsrfToken required.
+- Both routes protected by `app_authz.require_roles("admin")`.
+- Unified RFC7807 for 401/403/404/422.
+- OpenAPI with 403 example (viewer → admin); PATCH has `CsrfToken` security + hint.
+
+### Acceptance Criteria
+- Guard: `require_roles("admin")` on GET & PATCH.
+- GET supports `?q=` as case-insensitive substring filter on key and description.
+- PATCH validates body (allowed only: `enabled: bool`, `notes: string<=500`).
+- 401/403 per established model with `required_role=admin`.
+- 404 when flag key is missing.
+- 422 for validation errors (e.g., wrong type for enabled, notes too long).
+- OpenAPI: paths documented; PATCH has `security: [ { CsrfToken: [] } ]`; 403 example; path parameter `{key}` defined.
+- Tests (CI Py 3.12): RBAC (viewer→403, unauth→401), CSRF (PATCH without token → 401/403 per policy), 404, 422, happy path.
+- Lint/Typecheck PASS. OpenAPI-validate green.
+
+### Migration steps (small commits)
+1) Routes + guard: GET/PATCH with `@require_roles("admin")`.
+2) Query filter: apply `q=` in repo/service layer (new or existing).
+3) RFC7807: 401/403/404/422 via centralized helpers.
+4) CSRF: PATCH requires `X-CSRF-Token`.
+5) OpenAPI: paths/params/schemas/security + 403 example.
+6) Tests: RBAC/CSRF/404/422/happy-path.
+
+### OpenAPI (YAML fragment)
+```yaml
+paths:
+   /admin/feature-flags:
+      get:
+         summary: List feature flags for current tenant
+         tags: [Admin]
+         security: [ { BearerToken: [] } ]
+         parameters:
+            - in: query
+               name: q
+               schema: { type: string }
+               description: Case-insensitive substring filter on key/description
+         responses:
+            '200':
+               description: OK
+               content:
+                  application/json:
+                     schema:
+                        type: object
+                        properties:
+                           items:
+                              type: array
+                              items: { $ref: '#/components/schemas/FeatureFlag' }
+                           total: { type: integer }
+            '401': { $ref: '#/components/responses/UnauthorizedProblem' }
+            '403':
+               description: Forbidden (requires admin)
+               content:
+                  application/problem+json:
+                     schema: { $ref: '#/components/schemas/ProblemDetails' }
+                     examples:
+                        viewer_hitting_admin:
+                           value:
+                              type: about:blank
+                              title: Forbidden
+                              status: 403
+                              required_role: admin
+                              invalid_params: [ { name: required_role, value: admin } ]
+   /admin/feature-flags/{key}:
+      patch:
+         summary: Update a feature flag (enable/notes)
+         tags: [Admin]
+         security:
+            - BearerToken: []
+            - CsrfToken: []
+         parameters:
+            - in: path
+               name: key
+               required: true
+               schema: { type: string }
+         requestBody:
+            required: true
+            content:
+               application/json:
+                  schema: { $ref: '#/components/schemas/UpdateFeatureFlagRequest' }
+         responses:
+            '200':
+               description: Updated
+               content:
+                  application/json:
+                     schema: { $ref: '#/components/schemas/FeatureFlag' }
+            '401': { $ref: '#/components/responses/UnauthorizedProblem' }
+            '403': { $ref: '#/components/responses/ForbiddenProblem' }
+            '404':
+               description: Not Found
+               content:
+                  application/problem+json:
+                     schema: { $ref: '#/components/schemas/ProblemDetails' }
+            '422':
+               description: Validation error
+               content:
+                  application/problem+json:
+                     schema: { $ref: '#/components/schemas/ProblemDetails' }
+components:
+   schemas:
+      FeatureFlag:
+         type: object
+         required: [key, enabled]
+         properties:
+            key: { type: string }
+            description: { type: string }
+            enabled: { type: boolean }
+            notes: { type: string, maxLength: 500 }
+            updated_at: { type: string, format: date-time }
+      UpdateFeatureFlagRequest:
+         type: object
+         additionalProperties: false
+         properties:
+            enabled: { type: boolean }
+            notes:   { type: string, maxLength: 500 }
+```
+
+### RFC7807 – examples
+- 403 (viewer):
+```json
+{ "type":"about:blank","title":"Forbidden","status":403,
+   "required_role":"admin",
+   "invalid_params":[{"name":"required_role","value":"admin"}] }
+```
+
+- 404 (unknown flag):
+```json
+{ "type":"about:blank","title":"Not Found","status":404,"detail":"feature flag not found" }
+```
+
+- 422 (validation):
+```json
+{ "type":"about:blank","title":"Validation error","status":422,
+   "invalid_params":[{"name":"notes","reason":"too_long"}] }
+```
+
+### Test skeleton (pytest)
+Save as `tests/admin/test_feature_flags.py`.
+```python
+import pytest
+
+
+def test_list_flags_unauth_401(client):
+      r = client.get("/admin/feature-flags")
+      assert r.status_code == 401
+
+
+def test_list_flags_viewer_403(client, auth_headers):
+      r = client.get("/admin/feature-flags", headers=auth_headers(role="viewer"))
+      assert r.status_code == 403
+      body = r.get_json()
+      assert body["required_role"] == "admin"
+
+
+def test_list_flags_filter_q(client, auth_headers):
+      r = client.get("/admin/feature-flags?q=beta", headers=auth_headers(role="admin"))
+      assert r.status_code == 200
+      body = r.get_json()
+      assert "items" in body
+
+
+def test_patch_flag_requires_csrf(client, auth_headers):
+      r = client.patch(
+            "/admin/feature-flags/some-flag",
+            json={"enabled": True},
+            headers=auth_headers(role="admin"),
+      )
+      assert r.status_code in (401, 403)  # per CSRF policy
+
+
+def test_patch_flag_happy_path(client, auth_headers):
+      headers = auth_headers(role="admin"); headers["X-CSRF-Token"] = "valid"
+      r = client.patch(
+            "/admin/feature-flags/some-flag",
+            json={"enabled": False, "notes": "Rolling back"},
+            headers=headers,
+      )
+      assert r.status_code == 200
+      body = r.get_json()
+      assert body["key"] == "some-flag"
+      assert body["enabled"] is False
+
+
+def test_patch_flag_404(client, auth_headers):
+      headers = auth_headers(role="admin"); headers["X-CSRF-Token"] = "valid"
+      r = client.patch(
+            "/admin/feature-flags/does-not-exist",
+            json={"enabled": True},
+            headers=headers,
+      )
+      assert r.status_code == 404
+
+
+@pytest.mark.parametrize("payload,expected", [
+      ({"enabled": "yes"}, "enabled"),               # wrong type
+      ({"notes": "x"*501}, "notes"),                 # too long
+      ({"unknown": "field"}, "unknown"),             # disallowed
+])
+def test_patch_flag_422(client, auth_headers, payload, expected):
+      headers = auth_headers(role="admin"); headers["X-CSRF-Token"] = "valid"
+      r = client.patch("/admin/feature-flags/some-flag", json=payload, headers=headers)
+      assert r.status_code == 422
+      body = r.get_json()
+      # either invalid_params.name == expected, or generic "additionalProperties not allowed"
+      assert "invalid_params" in body
+```
+
+### Checklist (to tick when implementing)
+- [ ] `/admin/feature-flags` GET/PATCH guarded by `app_authz` (admin).
+- [ ] GET supports `?q=` quick filter (key/description).
+- [ ] PATCH requires `CsrfToken` and validates allowed fields.
+- [ ] RFC7807 401/403/404/422 per examples.
+- [ ] OpenAPI: paths, params, 403 example, CsrfToken security, request/response schemas.
+- [ ] Unit tests: RBAC/CSRF/404/422/happy path.
+- [ ] CI green: tests, typecheck/lint, openapi-validate.
+
