@@ -408,3 +408,4 @@ def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
     TODO Phase-2: add CSRF enforcement, validate enum and connect to service.
     """
     return jsonify({"id": user_id, "role": "viewer"}), 200
+
