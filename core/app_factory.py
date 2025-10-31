@@ -179,6 +179,15 @@ def create_app(config_override: dict | None = None) -> Flask:
         g._t0 = time.perf_counter()
         g.request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
         _load_feature_flags_logic()
+        # Enforce CSRF for /admin mutations (lightweight)
+        try:
+            from .csrf import require_csrf_for_admin_mutations
+            resp = require_csrf_for_admin_mutations(request)
+            if resp is not None:
+                return resp
+        except Exception:
+            # Do not crash request pipeline; fall through to handlers
+            pass
 
     @app.after_request
     def _after_req(resp):
