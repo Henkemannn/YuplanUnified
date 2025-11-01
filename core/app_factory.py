@@ -612,6 +612,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "summary": "List users (tenant scoped)",
                     "description": "pagination stub — currently ignored by API response",
                     "parameters": [
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email (case-insensitive substring)"},
                         {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
                         {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
                     ],
@@ -690,7 +691,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "summary": "List feature flags (tenant scoped)",
                     "description": "pagination stub — currently ignored by API response",
                     "parameters": [
-                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Quick filter"}
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Quick filter"},
                         {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
                         {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
                     ],
