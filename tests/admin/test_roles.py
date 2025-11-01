@@ -116,3 +116,39 @@ def test_patch_roles_404_unknown_user_id(client_admin):
         "/admin/roles/nonexistent-user", json={"role": "viewer"}, headers=headers
     )
     assert r.status_code == 404
+
+
+def test_patch_roles_happy_path_persists_change_and_idempotent(client_admin):
+    # Seed a user with role viewer in tenant 1
+    from core.db import get_session
+    from core.models import User
+
+    db = get_session()
+    try:
+        u = User(tenant_id=1, email="rolepatch1@example.com", password_hash="x", role="viewer")
+        db.add(u)
+        db.commit()
+        db.refresh(u)
+        uid = str(u.id)
+    finally:
+        db.close()
+
+    # Prepare CSRF for admin
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "tokR1"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "tokR1"}
+
+    # Change role to editor
+    r1 = client_admin.patch(f"/admin/roles/{uid}", json={"role": "editor"}, headers=headers)
+    assert r1.status_code == 200
+    body1 = r1.get_json()
+    assert body1.get("id") == uid
+    assert body1.get("email") == "rolepatch1@example.com"
+    assert body1.get("role") == "editor"
+    assert isinstance(body1.get("updated_at"), str) and "T" in body1.get("updated_at")
+
+    # Idempotent call with same role
+    r2 = client_admin.patch(f"/admin/roles/{uid}", json={"role": "editor"}, headers=headers)
+    assert r2.status_code == 200
+    body2 = r2.get_json()
+    assert body2.get("role") == "editor"

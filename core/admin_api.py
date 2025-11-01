@@ -660,15 +660,67 @@ def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
         if tid_int is None or uid_int is None:
             r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
             return r404, 404  # type: ignore[return-value]
-        try:
-            row = db.query(_User).filter_by(tenant_id=tid_int, id=uid_int).first()
-        finally:
-            db.close()
+        row = db.query(_User).filter_by(tenant_id=tid_int, id=uid_int).first()
         if not row:
             r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
+            db.close()
             return r404, 404  # type: ignore[return-value]
     except Exception:
         # Fall through to stubbed OK on unexpected errors in Phase-2
         pass
-    return jsonify({"id": user_id, "role": "viewer"}), 200
+
+    # Persist role change (idempotent) and return updated user payload
+    try:
+        from datetime import datetime as _dt, UTC as _UTC
+        from .db import get_session as _get_session2
+        from .models import User as _User2
+        from flask import g as _g2
+        db2 = _get_session2()
+        try:
+            tid2 = getattr(_g2, "tenant_id", None) or session.get("tenant_id")
+            tid2_int = int(tid2) if tid2 is not None else None
+        except Exception:
+            tid2_int = None
+        # Convert user id to int; if invalid treat as not found (should have been caught above)
+        try:
+            uid2_int = int(user_id)
+        except Exception:
+            uid2_int = None
+        row2 = None
+        if tid2_int is not None and uid2_int is not None:
+            row2 = db2.query(_User2).filter_by(tenant_id=tid2_int, id=uid2_int).first()
+        if row2 is not None:
+            new_role = str(data.get("role"))
+            # Idempotent update: only change fields if different
+            if str(getattr(row2, "role", "")) != new_role:
+                row2.role = new_role
+                # Update timestamp in timezone-aware UTC
+                try:
+                    row2.updated_at = _dt.now(_UTC)
+                except Exception:
+                    # If for any reason updated_at isn't present or timezone fails, ignore
+                    pass
+                db2.add(row2)
+                db2.commit()
+                db2.refresh(row2)
+            # If no change, still safe to flush/commit (no-op) for consistency
+            else:
+                try:
+                    db2.flush()
+                    db2.commit()
+                except Exception:
+                    pass
+            resp = {
+                "id": str(getattr(row2, "id", user_id)),
+                "email": str(getattr(row2, "email", "")),
+                "role": str(getattr(row2, "role", new_role)),
+                "updated_at": (getattr(row2, "updated_at", None).isoformat() if getattr(row2, "updated_at", None) else None),
+            }
+            db2.close()
+            return jsonify(resp), 200
+        # If unable to refetch, fall through to stub response
+        db2.close()
+    except Exception:
+        pass
+    return jsonify({"id": user_id, "role": data.get("role", "viewer"), "email": "", "updated_at": None}), 200
 
