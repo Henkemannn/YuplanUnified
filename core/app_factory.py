@@ -659,7 +659,8 @@ def create_app(config_override: dict | None = None) -> Flask:
                                     "examples": {
                                         "invalidEmail": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"invalid_format"}]}},
                                         "invalidRole": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}},
-                                        "additional": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"extra","reason":"additional_properties_not_allowed"}]}}
+                                        "additional": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"extra","reason":"additional_properties_not_allowed"}]}},
+                                        "duplicateEmail": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"duplicate"}]}}
                                     }
                                 }
                             }
