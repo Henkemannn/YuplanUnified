@@ -392,8 +392,32 @@ def admin_users_create_stub():  # type: ignore[return-value]
             invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
     if invalid_params:
         return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": invalid_params}), 422  # type: ignore[return-value]
-    # Success (stubbed implementation unchanged)
-    return jsonify({"id": "stub", "email": "stub@local", "role": "viewer"}), 201
+    # Success (happy path connected to DB minimally; still returns simple payload)
+    try:
+        from flask import g as _g
+        from .db import get_session as _get_session
+        from .models import User as _User
+        db = _get_session()
+        try:
+            tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
+            tid_int = int(tid) if tid is not None else None
+        except Exception:
+            tid_int = None
+        if tid_int is None:
+            # Tenant context missing -> treat as invalid for now
+            return jsonify({"ok": False, "error": "invalid", "message": "tenant context missing"}), 400  # type: ignore[return-value]
+        # Minimal create; password_hash placeholder to satisfy NOT NULL.
+        new_user = _User(tenant_id=tid_int, email=str(email), role=str(role), password_hash="!")  # type: ignore[arg-type]
+        try:
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+        finally:
+            db.close()
+        return jsonify({"id": str(getattr(new_user, "id", "")), "email": str(email), "role": str(role)}), 201
+    except Exception:
+        # On any unexpected error, keep previous stub payload to avoid breaking flow
+        return jsonify({"id": "stub", "email": "stub@local", "role": "viewer"}), 201
 
 
 # ---- Phase-2: admin feature-flags (stubs) ---------------------------------

@@ -91,6 +91,22 @@ def test_post_users_admin_blocked_without_or_invalid_csrf(client_admin):
     assert r2.status_code == 401
 
 
+def test_post_users_happy_path_creates_user_and_returns_201(client_admin):
+    # Arrange admin + CSRF
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "u1"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "u1"}
+    # Valid payload
+    payload = {"email": "new@example.com", "role": "viewer"}
+    r = client_admin.post("/admin/users", json=payload, headers=headers)
+    assert r.status_code == 201
+    body = r.get_json()
+    assert isinstance(body, dict)
+    # Minimal shape checks
+    assert body.get("email") == payload["email"]
+    assert body.get("role") == payload["role"]
+    assert body.get("id") is not None and str(body.get("id")) != ""
+
 def test_post_users_422_invalid_email(client_admin):
     # Ensure CSRF passes by priming session token
     with client_admin.session_transaction() as sess:
