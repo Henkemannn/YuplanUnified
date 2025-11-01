@@ -417,6 +417,29 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 
     TODO Phase-2: add CSRF enforcement, validation and connect to service.
     """
+    # Validation: enabled must be bool (if present); notes must be str len<=500 (if present); no additional props.
+    data = request.get_json(silent=True) or {}
+    invalid_params: list[dict[str, object]] = []
+    if isinstance(data, dict):
+        allowed_keys = {"enabled", "notes"}
+        if "enabled" in data:
+            if not isinstance(data.get("enabled"), bool):
+                invalid_params.append({"name": "enabled", "reason": "invalid_type"})
+        if "notes" in data:
+            val = data.get("notes")
+            if not isinstance(val, str):
+                invalid_params.append({"name": "notes", "reason": "invalid_type"})
+            else:
+                if len(val) > 500:
+                    invalid_params.append({"name": "notes", "reason": "max_length_exceeded", "max": 500})
+        for k in data.keys():
+            if k not in allowed_keys:
+                invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
+    else:
+        invalid_params.append({"name": "body", "reason": "invalid_type"})
+    if invalid_params:
+        return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": invalid_params}), 422  # type: ignore[return-value]
+
     # Not-found guard (tenant+key). If missing, return 404 with central envelope.
     try:
         from .db import get_session as _get_session
