@@ -671,17 +671,23 @@ def admin_roles_list_stub():  # type: ignore[return-value]
     from flask import g as _g
     from .db import get_session as _get_session
     from .models import User as _User
+    from sqlalchemy import func as _func
     db = _get_session()
     try:
         tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
         tid_int = int(tid) if tid is not None else None
     except Exception:
         tid_int = None
+    # Optional quick filter on email (case-insensitive substring)
+    q = (request.args.get("q") or "").strip().lower()
     items: list[dict[str, object]] = []
     total = 0
     try:
         if tid_int is not None:
-            rows = db.query(_User).filter_by(tenant_id=tid_int).all()
+            query = db.query(_User).filter_by(tenant_id=tid_int)
+            if q:
+                query = query.filter(_func.lower(_User.email).contains(q))
+            rows = query.all()
             total = len(rows)
             for u in rows:
                 items.append({"id": str(getattr(u, "id", "")), "email": str(u.email), "role": str(u.role)})
