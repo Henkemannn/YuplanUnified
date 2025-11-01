@@ -684,6 +684,46 @@ def create_app(config_override: dict | None = None) -> Flask:
                     }
                 }, ["401", "403", "422"])  # 422 via default fallback schema
             },
+            "/admin/users/{user_id}": {
+                "parameters": [
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
+                ],
+                "delete": attach({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Soft-delete user",
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["id", "deleted_at"],
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "deleted_at": {"type": "string", "format": "date-time"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {"value": {"id": "u1", "deleted_at": "2025-01-01T12:00:00+00:00"}}
+                                    }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Not found",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Error"},
+                                    "examples": {"userMissing": {"value": {"ok": false, "error": "not_found", "message": "user not found"}}}
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403", "404"])  # CSRF + RBAC enforced
+            },
             "/admin/feature-flags": {
                 "get": attach({
                     "tags": ["admin", "feature-flags"],

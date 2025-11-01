@@ -390,7 +390,7 @@ def admin_users_list_stub():  # type: ignore[return-value]
     total = 0
     try:
         if tid_int is not None:
-            query = db.query(_User).filter_by(tenant_id=tid_int)
+            query = db.query(_User).filter_by(tenant_id=tid_int).filter(_User.deleted_at.is_(None))
             if q:
                 query = query.filter(_func.lower(_User.email).contains(q))
             rows = query.all()
@@ -478,6 +478,55 @@ def admin_users_create_stub():  # type: ignore[return-value]
     except Exception:
         # On any unexpected error, keep previous stub payload to avoid breaking flow
         return jsonify({"id": "stub", "email": "stub@local", "role": "viewer"}), 201
+
+
+@bp.delete("/users/<string:user_id>")
+@require_roles("admin")
+def admin_users_delete_soft(user_id: str):  # type: ignore[return-value]
+    """Soft-delete a user in current tenant by setting deleted_at.
+
+    Behavior:
+      - Guarded by admin + CSRF (enforced centrally).
+      - Lookup by (tenant_id, user_id) with deleted_at IS NULL.
+      - If not found → 404 {ok:false,error:"not_found",message:"user not found"}.
+      - If found → set deleted_at=now(UTC), commit, return 200 {id, deleted_at}.
+      - Idempotent: second call returns 404.
+    """
+    from flask import g as _g
+    from .db import get_session as _get_session
+    from .models import User as _User
+    from datetime import datetime as _dt, UTC as _UTC
+    # Parse tenant + user id
+    try:
+        tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
+        tid_int = int(tid) if tid is not None else None
+    except Exception:
+        tid_int = None
+    try:
+        uid_int = int(user_id)
+    except Exception:
+        uid_int = None
+    if tid_int is None or uid_int is None:
+        r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
+        return r404, 404  # type: ignore[return-value]
+    db = _get_session()
+    try:
+        row = (
+            db.query(_User)
+            .filter(_User.tenant_id == tid_int, _User.id == uid_int, _User.deleted_at.is_(None))
+            .first()
+        )
+        if not row:
+            r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
+            return r404, 404  # type: ignore[return-value]
+        # Soft-delete
+        row.deleted_at = _dt.now(_UTC)
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return jsonify({"id": str(getattr(row, "id", user_id)), "deleted_at": row.deleted_at.isoformat()}), 200
+    finally:
+        db.close()
 
 
 # ---- Phase-2: admin feature-flags (stubs) ---------------------------------
@@ -684,7 +733,7 @@ def admin_roles_list_stub():  # type: ignore[return-value]
     total = 0
     try:
         if tid_int is not None:
-            query = db.query(_User).filter_by(tenant_id=tid_int)
+            query = db.query(_User).filter_by(tenant_id=tid_int).filter(_User.deleted_at.is_(None))
             if q:
                 query = query.filter(_func.lower(_User.email).contains(q))
             rows = query.all()
