@@ -82,27 +82,36 @@ def test_patch_roles_admin_blocked_by_missing_or_invalid_csrf(client_admin):
     assert r2.status_code == 401
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_patch_roles_422_role_not_in_enum(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "tr1"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "tr1"}
     r = client_admin.patch(
         "/admin/roles/123", json={"role": "owner"}, headers=headers
     )
     assert r.status_code == 422
+    body = r.get_json()
+    ips = body.get("invalid_params") or []
+    assert any(p.get("name") == "role" for p in ips)
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_patch_roles_422_additional_properties(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "tr2"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "tr2"}
     r = client_admin.patch(
         "/admin/roles/123", json={"role": "viewer", "other": True}, headers=headers
     )
     assert r.status_code == 422
+    body = r.get_json()
+    ips = body.get("invalid_params") or []
+    assert any((p.get("name") in ("other", "unknown")) and p.get("reason") == "additional_properties_not_allowed" for p in ips)
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: not-found not implemented")
 def test_patch_roles_404_unknown_user_id(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "tr3"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "tr3"}
     r = client_admin.patch(
         "/admin/roles/nonexistent-user", json={"role": "viewer"}, headers=headers
     )
