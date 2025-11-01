@@ -346,11 +346,30 @@ def delete_limit():  # type: ignore[return-value]
 @bp.get("/users")
 @require_roles("admin")
 def admin_users_list_stub():  # type: ignore[return-value]
-    """Stub: list users for current tenant.
+    """List users for current tenant.
 
-    TODO Phase-2: replace stub with repo/service.
+    Returns: {items:[{id,email,role}], total}
     """
-    return jsonify({"items": [], "total": 0}), 200
+    from flask import g as _g
+    from .db import get_session as _get_session
+    from .models import User as _User
+    db = _get_session()
+    try:
+        tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
+        tid_int = int(tid) if tid is not None else None
+    except Exception:
+        tid_int = None
+    items: list[dict[str, object]] = []
+    total = 0
+    try:
+        if tid_int is not None:
+            rows = db.query(_User).filter_by(tenant_id=tid_int).all()
+            total = len(rows)
+            for u in rows:
+                items.append({"id": str(getattr(u, "id", "")), "email": str(u.email), "role": str(u.role)})
+    finally:
+        db.close()
+    return jsonify({"items": items, "total": total}), 200
 
 
 @bp.post("/users")
@@ -434,12 +453,35 @@ def admin_users_create_stub():  # type: ignore[return-value]
 @bp.get("/feature-flags")
 @require_roles("admin")
 def admin_feature_flags_list_stub():  # type: ignore[return-value]
-    """Stub: hyphen-path variant list of feature flags.
-
-    Note: legacy underscore path exists at /admin/feature_flags.
-    TODO Phase-2: reconcile paths and implement q= filter.
-    """
-    return jsonify({"items": [], "total": 0}), 200
+    """List feature flags for tenant with optional ?q= filter on key or notes (case-insensitive)."""
+    from flask import g as _g
+    from .db import get_session as _get_session
+    from .models import TenantFeatureFlag as _TFF
+    db = _get_session()
+    try:
+        tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
+        tid_int = int(tid) if tid is not None else None
+    except Exception:
+        tid_int = None
+    q = (request.args.get("q") or "").strip().lower()
+    items: list[dict[str, object]] = []
+    total = 0
+    try:
+        if tid_int is not None:
+            rows = db.query(_TFF).filter_by(tenant_id=tid_int).all()
+            if q:
+                rows = [r for r in rows if (q in str(r.name).lower()) or (q in str(r.notes or "").lower())]
+            total = len(rows)
+            for r in rows:
+                items.append({
+                    "key": str(r.name),
+                    "enabled": bool(r.enabled),
+                    "notes": r.notes or "",
+                    "updated_at": r.updated_at.isoformat() if getattr(r, "updated_at", None) else None,
+                })
+    finally:
+        db.close()
+    return jsonify({"items": items, "total": total}), 200
 
 
 @bp.patch("/feature-flags/<string:key>")
@@ -500,7 +542,7 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 
     # Persist enabled/notes if provided; return updated record
     try:
-    from datetime import datetime as _dt, UTC as _UTC
+        from datetime import datetime as _dt, UTC as _UTC
         from .db import get_session as _get_session2
         from .models import TenantFeatureFlag as _TenantFeatureFlag2
         from flask import g as _g2
@@ -547,11 +589,27 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 @bp.get("/roles")
 @require_roles("admin")
 def admin_roles_list_stub():  # type: ignore[return-value]
-    """Stub: list users and their roles for current tenant.
-
-    TODO Phase-2: replace stub with repo/service and optional q= on email.
-    """
-    return jsonify({"items": [], "total": 0}), 200
+    """List users and their roles for current tenant (same shape as users list)."""
+    from flask import g as _g
+    from .db import get_session as _get_session
+    from .models import User as _User
+    db = _get_session()
+    try:
+        tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
+        tid_int = int(tid) if tid is not None else None
+    except Exception:
+        tid_int = None
+    items: list[dict[str, object]] = []
+    total = 0
+    try:
+        if tid_int is not None:
+            rows = db.query(_User).filter_by(tenant_id=tid_int).all()
+            total = len(rows)
+            for u in rows:
+                items.append({"id": str(getattr(u, "id", "")), "email": str(u.email), "role": str(u.role)})
+    finally:
+        db.close()
+    return jsonify({"items": items, "total": total}), 200
 
 
 @bp.patch("/roles/<string:user_id>")
