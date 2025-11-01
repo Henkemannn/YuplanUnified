@@ -98,3 +98,33 @@ def test_pagination_stub_coerces_and_sets_header(client_admin):
     assert r2.headers.get("X-Pagination-Stub") == "true"
     body2 = r2.get_json()
     assert set(body2.keys()) >= {"items", "total"}
+
+
+def test_users_list_supports_q_filter(client_admin):
+    # Seed specific users for tenant 1
+    db = get_session()
+    try:
+        if not db.query(User).filter_by(tenant_id=1, email="a@ex").first():
+            db.add(User(tenant_id=1, email="a@ex", role="viewer", password_hash="!"))
+        if not db.query(User).filter_by(tenant_id=1, email="b@sample").first():
+            db.add(User(tenant_id=1, email="b@sample", role="editor", password_hash="!"))
+        db.commit()
+    finally:
+        db.close()
+
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+    # Lowercase query (specific substring)
+    r1 = client_admin.get("/admin/users?q=a@ex", headers=headers)
+    assert r1.status_code == 200
+    body1 = r1.get_json()
+    emails1 = [it["email"] for it in body1["items"]]
+    assert emails1 == ["a@ex"]
+    assert body1["total"] == 1
+
+    # Uppercase query should behave the same (case-insensitive)
+    r2 = client_admin.get("/admin/users?q=A@EX", headers=headers)
+    assert r2.status_code == 200
+    body2 = r2.get_json()
+    emails2 = [it["email"] for it in body2["items"]]
+    assert emails2 == ["a@ex"]
+    assert body2["total"] == 1
