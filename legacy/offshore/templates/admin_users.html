@@ -10,6 +10,13 @@
   <div class="card shadow-sm mb-4">
     <div class="card-body">
   <h5>Brukere (kokker/vikarer/administratorer)</h5>
+      <div class="d-flex align-items-start gap-2 small text-muted mb-3" role="note" aria-label="Admin hint">
+        <span aria-hidden="true" style="font-size:1rem; line-height:1">ℹ️</span>
+        <div>
+          <div>Mutationer kräver <code>X-CSRF-Token</code> (hämta via <code>GET /csrf</code>).</div>
+          <div>Endast administratörer kan utföra denna åtgärd.</div>
+        </div>
+      </div>
       <table class="table table-bordered table-sm">
         <thead>
           <tr><th>Navn</th><th>E-post</th><th>Rolle</th><th>Rigg</th><th>Handling</th></tr>
@@ -109,6 +116,13 @@
         </div>
       {% endif %}
   <h5>Opprett ny bruker for denne riggen</h5>
+        <div class="d-flex align-items-start gap-2 small text-muted mb-2" role="note" aria-label="Admin hint">
+          <span aria-hidden="true" style="font-size:1rem; line-height:1">ℹ️</span>
+          <div>
+            <div>Mutationer kräver <code>X-CSRF-Token</code> (hämta via <code>GET /csrf</code>).</div>
+            <div>Endast administratörer kan utföra denna åtgärd.</div>
+          </div>
+        </div>
         {% if error %}
           <div class="alert alert-danger">{{ error }}</div>
         {% endif %}
