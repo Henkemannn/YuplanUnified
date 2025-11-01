@@ -64,3 +64,33 @@ def test_feature_flags_list_supports_q_filter(client_admin):
     keys = [it["key"] for it in body["items"]]
     assert "activate-search" in keys
     assert "beta-preview" not in keys
+
+
+def test_pagination_stub_header_present_on_valid_params(client_admin):
+    _seed_users()
+    _seed_flags()
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+
+    for path in ("/admin/users", "/admin/roles", "/admin/feature-flags"):
+        r = client_admin.get(f"{path}?page=1&size=20", headers=headers)
+        assert r.status_code == 200
+        assert r.headers.get("X-Pagination-Stub") == "true"
+        body = r.get_json()
+        assert set(body.keys()) >= {"items", "total"}
+
+
+def test_pagination_invalid_params_return_422(client_admin):
+    _seed_users()
+    _seed_flags()
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+
+    for path in ("/admin/users", "/admin/roles", "/admin/feature-flags"):
+        r1 = client_admin.get(f"{path}?page=0", headers=headers)
+        assert r1.status_code == 422
+        ips1 = (r1.get_json() or {}).get("invalid_params") or []
+        assert any(p.get("name") == "page" for p in ips1)
+
+        r2 = client_admin.get(f"{path}?size=0", headers=headers)
+        assert r2.status_code == 422
+        ips2 = (r2.get_json() or {}).get("invalid_params") or []
+        assert any(p.get("name") == "size" for p in ips2)
