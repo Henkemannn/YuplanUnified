@@ -417,6 +417,31 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 
     TODO Phase-2: add CSRF enforcement, validation and connect to service.
     """
+    # Not-found guard (tenant+key). If missing, return 404 with central envelope.
+    try:
+        from .db import get_session as _get_session
+        from .models import TenantFeatureFlag as _TenantFeatureFlag
+        from flask import g as _g
+        db = _get_session()
+        try:
+            tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
+            tid_int = int(tid) if tid is not None else None
+        except Exception:
+            tid_int = None
+        if tid_int is None:
+            # Without tenant context, treat as not found to avoid leaking keys across tenants
+            r404 = jsonify({"ok": False, "error": "not_found", "message": "feature flag not found"})
+            return r404, 404  # type: ignore[return-value]
+        try:
+            row = db.query(_TenantFeatureFlag).filter_by(tenant_id=tid_int, name=str(key)).first()
+        finally:
+            db.close()
+        if not row:
+            r404 = jsonify({"ok": False, "error": "not_found", "message": "feature flag not found"})
+            return r404, 404  # type: ignore[return-value]
+    except Exception:
+        # On errors during lookup, fall back to stubbed 200 to avoid breaking flows in Phase-2
+        pass
     return jsonify({"key": key, "enabled": False, "notes": ""}), 200
 
 

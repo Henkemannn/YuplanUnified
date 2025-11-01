@@ -85,18 +85,20 @@ def test_patch_feature_flag_admin_blocked_by_missing_or_invalid_csrf(client_admi
     assert r2.status_code == 401
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_patch_feature_flag_422_enabled_wrong_type(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "tfl1"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "tfl1"}
     r = client_admin.patch(
         "/admin/feature-flags/some-flag", json={"enabled": "yes"}, headers=headers
     )
     assert r.status_code == 422
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_patch_feature_flag_422_notes_too_long(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "tfl2"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "tfl2"}
     notes = "x" * 501
     r = client_admin.patch(
         "/admin/feature-flags/some-flag", json={"notes": notes}, headers=headers
@@ -104,18 +106,20 @@ def test_patch_feature_flag_422_notes_too_long(client_admin):
     assert r.status_code == 422
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_patch_feature_flag_422_additional_properties(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "tfl3"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "tfl3"}
     r = client_admin.patch(
         "/admin/feature-flags/some-flag", json={"enabled": True, "other": 1}, headers=headers
     )
     assert r.status_code == 422
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: not-found not implemented")
 def test_patch_feature_flag_404_unknown_key(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "tfl4"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "tfl4"}
     r = client_admin.patch(
         "/admin/feature-flags/does-not-exist", json={"enabled": True}, headers=headers
     )
