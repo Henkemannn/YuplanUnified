@@ -107,6 +107,22 @@ def test_post_users_happy_path_creates_user_and_returns_201(client_admin):
     assert body.get("role") == payload["role"]
     assert body.get("id") is not None and str(body.get("id")) != ""
 
+
+def test_post_users_duplicate_email_returns_422(client_admin):
+    # Admin + CSRF
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "u2"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "u2"}
+    payload = {"email": "dup@example.com", "role": "viewer"}
+    r1 = client_admin.post("/admin/users", json=payload, headers=headers)
+    assert r1.status_code == 201
+    # Post again with same email
+    r2 = client_admin.post("/admin/users", json=payload, headers=headers)
+    assert r2.status_code == 422
+    body = r2.get_json()
+    ips = body.get("invalid_params") or []
+    assert any(p.get("name") == "email" and p.get("reason") == "duplicate" for p in ips)
+
 def test_post_users_422_invalid_email(client_admin):
     # Ensure CSRF passes by priming session token
     with client_admin.session_transaction() as sess:

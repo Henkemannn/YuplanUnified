@@ -406,6 +406,14 @@ def admin_users_create_stub():  # type: ignore[return-value]
         if tid_int is None:
             # Tenant context missing -> treat as invalid for now
             return jsonify({"ok": False, "error": "invalid", "message": "tenant context missing"}), 400  # type: ignore[return-value]
+        # Duplicate email check (tenant-scoped)
+        exists = None
+        try:
+            exists = db.query(_User).filter_by(tenant_id=tid_int, email=str(email)).first()
+        except Exception:
+            exists = None
+        if exists is not None:
+            return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name": "email", "reason": "duplicate"}]}), 422  # type: ignore[return-value]
         # Minimal create; password_hash placeholder to satisfy NOT NULL.
         new_user = _User(tenant_id=tid_int, email=str(email), role=str(role), password_hash="!")  # type: ignore[arg-type]
         try:
