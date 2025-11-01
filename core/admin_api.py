@@ -350,32 +350,29 @@ def admin_users_list_stub():  # type: ignore[return-value]
 
     Returns: {items:[{id,email,role}], total}
     """
-    # Pagination stub: parse optional page/size; on valid presence set header; on invalid return 422
+    # Pagination stub: parse optional page/size leniently; coerce to bounds; always set header when provided
     args = request.args
     page_raw = args.get("page")
     size_raw = args.get("size")
-    invalid_params: list[dict[str, object]] = []
-    stub = False
+    stub = page_raw is not None or size_raw is not None
     if page_raw is not None:
         try:
             page_val = int(page_raw)
             if page_val < 1:
-                invalid_params.append({"name": "page", "reason": "out_of_range"})
-            else:
-                stub = True
+                page_val = 1
         except Exception:
-            invalid_params.append({"name": "page", "reason": "invalid_type"})
+            # ignore unparseable
+            pass
     if size_raw is not None:
         try:
             size_val = int(size_raw)
-            if size_val < 1 or size_val > 100:
-                invalid_params.append({"name": "size", "reason": "out_of_range"})
-            else:
-                stub = True
+            if size_val < 1:
+                size_val = 1
+            if size_val > 100:
+                size_val = 100
         except Exception:
-            invalid_params.append({"name": "size", "reason": "invalid_type"})
-    if invalid_params:
-        return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": invalid_params}), 422  # type: ignore[return-value]
+            # ignore unparseable
+            pass
 
     from flask import g as _g
     from .db import get_session as _get_session
@@ -484,32 +481,27 @@ def admin_users_create_stub():  # type: ignore[return-value]
 @require_roles("admin")
 def admin_feature_flags_list_stub():  # type: ignore[return-value]
     """List feature flags for tenant with optional ?q= filter on key or notes (case-insensitive)."""
-    # Pagination stub: parse optional page/size; on valid presence set header; on invalid return 422
+    # Pagination stub: parse optional page/size leniently; coerce to bounds; always set header when provided
     args = request.args
     page_raw = args.get("page")
     size_raw = args.get("size")
-    invalid_params: list[dict[str, object]] = []
-    stub = False
+    stub = page_raw is not None or size_raw is not None
     if page_raw is not None:
         try:
             page_val = int(page_raw)
             if page_val < 1:
-                invalid_params.append({"name": "page", "reason": "out_of_range"})
-            else:
-                stub = True
+                page_val = 1
         except Exception:
-            invalid_params.append({"name": "page", "reason": "invalid_type"})
+            pass
     if size_raw is not None:
         try:
             size_val = int(size_raw)
-            if size_val < 1 or size_val > 100:
-                invalid_params.append({"name": "size", "reason": "out_of_range"})
-            else:
-                stub = True
+            if size_val < 1:
+                size_val = 1
+            if size_val > 100:
+                size_val = 100
         except Exception:
-            invalid_params.append({"name": "size", "reason": "invalid_type"})
-    if invalid_params:
-        return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": invalid_params}), 422  # type: ignore[return-value]
+            pass
     from flask import g as _g
     from .db import get_session as _get_session
     from .models import TenantFeatureFlag as _TFF
@@ -649,32 +641,27 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 @require_roles("admin")
 def admin_roles_list_stub():  # type: ignore[return-value]
     """List users and their roles for current tenant (same shape as users list)."""
-    # Pagination stub: parse optional page/size; on valid presence set header; on invalid return 422
+    # Pagination stub: parse optional page/size leniently; coerce to bounds; always set header when provided
     args = request.args
     page_raw = args.get("page")
     size_raw = args.get("size")
-    invalid_params: list[dict[str, object]] = []
-    stub = False
+    stub = page_raw is not None or size_raw is not None
     if page_raw is not None:
         try:
             page_val = int(page_raw)
             if page_val < 1:
-                invalid_params.append({"name": "page", "reason": "out_of_range"})
-            else:
-                stub = True
+                page_val = 1
         except Exception:
-            invalid_params.append({"name": "page", "reason": "invalid_type"})
+            pass
     if size_raw is not None:
         try:
             size_val = int(size_raw)
-            if size_val < 1 or size_val > 100:
-                invalid_params.append({"name": "size", "reason": "out_of_range"})
-            else:
-                stub = True
+            if size_val < 1:
+                size_val = 1
+            if size_val > 100:
+                size_val = 100
         except Exception:
-            invalid_params.append({"name": "size", "reason": "invalid_type"})
-    if invalid_params:
-        return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": invalid_params}), 422  # type: ignore[return-value]
+            pass
     from flask import g as _g
     from .db import get_session as _get_session
     from .models import User as _User
