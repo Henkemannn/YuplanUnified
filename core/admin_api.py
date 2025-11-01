@@ -488,5 +488,56 @@ def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
 
     TODO Phase-2: add CSRF enforcement, validate enum and connect to service.
     """
+    # Validation: require body with only {"role": enum}; disallow extras
+    data = request.get_json(silent=True) or {}
+    invalid_params: list[dict[str, object]] = []
+    allowed_roles = {"admin", "editor", "viewer"}
+    if not isinstance(data, dict):
+        invalid_params.append({"name": "body", "reason": "invalid_type"})
+    else:
+        if "role" not in data:
+            invalid_params.append({"name": "role", "reason": "required"})
+        else:
+            role = data.get("role")
+            if not isinstance(role, str):
+                invalid_params.append({"name": "role", "reason": "invalid_type"})
+            elif role not in allowed_roles:
+                invalid_params.append({"name": "role", "reason": "invalid_enum", "allowed": ["admin","editor","viewer"]})
+        for k in data.keys():
+            if k not in ("role",):
+                invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
+    if invalid_params:
+        return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": invalid_params}), 422  # type: ignore[return-value]
+
+    # Not-found: lookup user by tenant + user_id; if missing return 404 (validation first)
+    try:
+        from .db import get_session as _get_session
+        from .models import User as _User
+        from flask import g as _g
+        db = _get_session()
+        try:
+            tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
+            tid_int = int(tid) if tid is not None else None
+        except Exception:
+            tid_int = None
+        # Treat non-numeric user_id as not found in this stubbed phase
+        uid_int = None
+        try:
+            uid_int = int(user_id)
+        except Exception:
+            uid_int = None
+        if tid_int is None or uid_int is None:
+            r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
+            return r404, 404  # type: ignore[return-value]
+        try:
+            row = db.query(_User).filter_by(tenant_id=tid_int, id=uid_int).first()
+        finally:
+            db.close()
+        if not row:
+            r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
+            return r404, 404  # type: ignore[return-value]
+    except Exception:
+        # Fall through to stubbed OK on unexpected errors in Phase-2
+        pass
     return jsonify({"id": user_id, "role": "viewer"}), 200
 
