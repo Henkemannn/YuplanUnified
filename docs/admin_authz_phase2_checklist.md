@@ -2,6 +2,24 @@
 
 This checklist prepares the next batch after RC1 is merged. It assumes base = `feat/admin-limits-inspection` (default branch) and focuses on migrating additional admin endpoints to `app_authz`, tightening RFC7807 responses, and enriching OpenAPI examples.
 
+## Progress (2025-11-01)
+- Users
+   - GET: implemented list with pagination-stub headers and case-insensitive `?q=` email substring filter.
+   - POST: RBAC/CSRF enforced; 422 validation (email format, role enum, no additional props); duplicate email → 422; happy-path persists to DB.
+- Feature-flags
+   - GET: list with `?q=` filter (key/notes, case-insensitive); pagination-stub headers.
+   - PATCH: 422 validation, 404 on unknown key (tenant-scoped), persists `enabled/notes` and `updated_at` (UTC).
+- Roles
+   - GET: list (same shape as users) with pagination-stub headers.
+   - PATCH: 422 validation, 404 on unknown user (tenant-scoped); persists role and `updated_at` (UTC); idempotent.
+- OpenAPI
+   - Paths for users/feature-flags/roles; CsrfToken on mutations; 403 examples; added 200 examples for lists and roles PATCH.
+   - Documented pagination stub (`page/size`) on lists and `q` param on users/feature-flags lists.
+- Tests (pytest)
+   - RBAC, CSRF, validation, not-found, persistence happy-paths; list endpoints + pagination-stub header behavior; `?q=` filters for flags and users.
+- Pending/Near-term
+   - Optional: Roles GET `?q=` (mirror users); UI hints (CSRF/rights) in admin views; Users DELETE (soft-delete) for test-data cleanup.
+
 ## Scope
 - Migrate remaining Admin routes to `app_authz.require_roles(["admin"])` with consistent RFC7807 401/403.
 - Add OpenAPI examples for Admin endpoints (403 examples, CsrfToken security for mutating operations).
