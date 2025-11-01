@@ -152,3 +152,12 @@ def test_patch_roles_happy_path_persists_change_and_idempotent(client_admin):
     assert r2.status_code == 200
     body2 = r2.get_json()
     assert body2.get("role") == "editor"
+    # Verify persisted in DB
+    db2 = get_session()
+    try:
+        from core.models import User as _User
+        persisted = db2.query(_User).filter_by(id=int(uid), tenant_id=1).first()
+        assert persisted is not None
+        assert persisted.role == "editor"
+    finally:
+        db2.close()
