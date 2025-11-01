@@ -91,28 +91,45 @@ def test_post_users_admin_blocked_without_or_invalid_csrf(client_admin):
     assert r2.status_code == 401
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_post_users_422_invalid_email(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    # Ensure CSRF passes by priming session token
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "t1"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "t1"}
     r = client_admin.post(
         "/admin/users", json={"email": "not-an-email", "role": "viewer"}, headers=headers
     )
     assert r.status_code == 422
+    body = r.get_json()
+    assert isinstance(body, dict)
+    ips = body.get("invalid_params") or []
+    assert any(p.get("name") == "email" for p in ips)
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_post_users_422_invalid_role_enum(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "t2"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "t2"}
     r = client_admin.post(
         "/admin/users", json={"email": "ok@example.com", "role": "owner"}, headers=headers
     )
     assert r.status_code == 422
+    body = r.get_json()
+    ips = body.get("invalid_params") or []
+    assert any(p.get("name") == "role" and p.get("reason") == "invalid_enum" for p in ips)
+    # Optional: if server includes allowed list
+    if any(p.get("name") == "role" and p.get("allowed") for p in ips):
+        assert set(next(p.get("allowed") for p in ips if p.get("name") == "role")) >= {"admin","editor","viewer"}
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_post_users_422_additional_properties(client_admin):
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "t3"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "t3"}
     r = client_admin.post(
         "/admin/users", json={"email": "ok@example.com", "role": "viewer", "extra": True}, headers=headers
     )
     assert r.status_code == 422
+    body = r.get_json()
+    ips = body.get("invalid_params") or []
+    assert any((p.get("name") in ("extra", "unknown")) and p.get("reason") == "additional_properties_not_allowed" for p in ips)
