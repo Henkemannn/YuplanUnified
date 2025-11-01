@@ -623,6 +623,16 @@ def create_app(config_override: dict | None = None) -> Flask:
                                             "total": {"type": "integer"}
                                         },
                                         "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {
+                                            "value": {
+                                                "items": [
+                                                    {"id": "u1", "email": "a@ex", "role": "admin"}
+                                                ],
+                                                "total": 1
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -689,6 +699,16 @@ def create_app(config_override: dict | None = None) -> Flask:
                                             "total": {"type": "integer"}
                                         },
                                         "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {
+                                            "value": {
+                                                "items": [
+                                                    {"key": "beta-ui", "enabled": True, "notes": "Activated", "updated_at": "2025-01-01T12:00:00+00:00"}
+                                                ],
+                                                "total": 1
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -756,6 +776,16 @@ def create_app(config_override: dict | None = None) -> Flask:
                                             "total": {"type": "integer"}
                                         },
                                         "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {
+                                            "value": {
+                                                "items": [
+                                                    {"id": "u1", "email": "a@ex", "role": "editor"}
+                                                ],
+                                                "total": 1
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -785,7 +815,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                         }
                     },
                     "responses": {
-                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}}}},
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}, "examples": {"ok": {"value": {"id": "u1", "email": "a@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}}}},
                         "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": false, "error": "not_found", "message": "user not found"}}}}}},
                         "422": {"description": "Validation error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"invalidRole": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}}}}}}
                     }
