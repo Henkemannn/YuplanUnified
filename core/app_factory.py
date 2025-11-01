@@ -610,6 +610,11 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": []}],
                     "summary": "List users (tenant scoped)",
+                    "description": "pagination stub — currently ignored by API response",
+                    "parameters": [
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+                    ],
                     "responses": {
                         "200": {
                             "description": "Users",
@@ -683,8 +688,11 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin", "feature-flags"],
                     "security": [{"BearerAuth": []}],
                     "summary": "List feature flags (tenant scoped)",
+                    "description": "pagination stub — currently ignored by API response",
                     "parameters": [
                         {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Quick filter"}
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
                     ],
                     "responses": {
                         "200": {
@@ -760,8 +768,11 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": []}],
                     "summary": "List users with roles",
+                    "description": "pagination stub — currently ignored by API response",
                     "parameters": [
-                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email"}
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email"},
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
                     ],
                     "responses": {
                         "200": {
