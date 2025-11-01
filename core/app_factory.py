@@ -650,7 +650,20 @@ def create_app(config_override: dict | None = None) -> Flask:
                         }
                     },
                     "responses": {
-                        "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}}
+                        "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
+                        "422": {
+                            "description": "Validation error",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Error"},
+                                    "examples": {
+                                        "invalidEmail": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"invalid_format"}]}},
+                                        "invalidRole": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}},
+                                        "additional": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"extra","reason":"additional_properties_not_allowed"}]}}
+                                    }
+                                }
+                            }
+                        }
                     }
                 }, ["401", "403", "422"])  # 422 via default fallback schema
             },
@@ -706,7 +719,18 @@ def create_app(config_override: dict | None = None) -> Flask:
                         }
                     },
                     "responses": {
-                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}}
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}},
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"flagMissing": {"value": {"ok": false, "error": "not_found", "message": "feature flag not found"}}}}}
+                        },
+                        "422": {
+                            "description": "Validation error",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {
+                                "enabledType": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"enabled","reason":"invalid_type"}]}},
+                                "notesTooLong": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"notes","reason":"max_length_exceeded","max":500}]}}
+                            }}}
+                        }
                     }
                 }, ["401", "403", "404", "422"])
             },
@@ -760,7 +784,9 @@ def create_app(config_override: dict | None = None) -> Flask:
                         }
                     },
                     "responses": {
-                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}}}}
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}}}},
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": false, "error": "not_found", "message": "user not found"}}}}}},
+                        "422": {"description": "Validation error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"invalidRole": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}}}}}}
                     }
                 }, ["401", "403", "404", "422"])
             }
