@@ -360,6 +360,39 @@ def admin_users_create_stub():  # type: ignore[return-value]
 
     TODO Phase-2: replace stub with repo/service.
     """
+    # Copilot prompt: Add input validation: require email containing '@', role in {'admin','editor','viewer'}, and disallow additional properties. On invalid, return 422 using the same JSON envelope as other errors plus invalid_params like [{"name":"email","reason":"invalid_format"}]. Keep current success payload unchanged.
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name": "body", "reason": "invalid_type"}]}), 422  # type: ignore[return-value]
+    allowed_roles = {"admin", "editor", "viewer"}
+    invalid_params: list[dict[str, object]] = []
+    # Extract and normalize
+    raw_email = data.get("email")
+    email = (raw_email.strip() if isinstance(raw_email, str) else raw_email)
+    role = data.get("role")
+    # Required checks
+    if email is None:
+        invalid_params.append({"name": "email", "reason": "required"})
+    if role is None:
+        invalid_params.append({"name": "role", "reason": "required"})
+    # Format / enum checks (only if present)
+    if isinstance(email, str):
+        if "@" not in email:
+            invalid_params.append({"name": "email", "reason": "invalid_format"})
+    elif email is not None:
+        invalid_params.append({"name": "email", "reason": "invalid_type"})
+    if role is not None:
+        if not isinstance(role, str):
+            invalid_params.append({"name": "role", "reason": "invalid_type"})
+        elif role not in allowed_roles:
+            invalid_params.append({"name": "role", "reason": "invalid_enum", "allowed": sorted(list(allowed_roles))})
+    # Additional properties
+    for k in data.keys():
+        if k not in ("email", "role"):
+            invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
+    if invalid_params:
+        return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": invalid_params}), 422  # type: ignore[return-value]
+    # Success (stubbed implementation unchanged)
     return jsonify({"id": "stub", "email": "stub@local", "role": "viewer"}), 201
 
 
