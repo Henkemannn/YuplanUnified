@@ -153,6 +153,13 @@ def require_csrf_for_admin_mutations(req) -> Response | None:
         path = req.path or "/"
         if not path.startswith("/admin"):
             return None
+        # Only enforce CSRF for admin role to keep RBAC semantics for viewer intact
+        try:
+            role = session.get("role")
+        except Exception:
+            role = None
+        if role != "admin":
+            return None
         expected = session.get(CSRF_SESSION_KEY)
         supplied = req.headers.get(HEADER_NAME) or req.form.get(FORM_FIELD)
         if not expected or not supplied:

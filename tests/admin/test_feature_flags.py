@@ -61,6 +61,30 @@ def test_patch_feature_flag_csrf_invalid_token_still_blocked(client_admin):
     assert body.get("required_role") == "admin"
 
 
+def test_patch_feature_flag_admin_missing_or_invalid_csrf_returns_401(client_admin):
+    # Admin without CSRF token
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+    r1 = client_admin.patch("/admin/feature-flags/some-flag", json={"enabled": True}, headers=headers)
+    assert r1.status_code == 401
+    # Admin with bogus token
+    headers["X-CSRF-Token"] = "bogus"
+    r2 = client_admin.patch("/admin/feature-flags/some-flag", json={"enabled": False}, headers=headers)
+    assert r2.status_code == 401
+
+
+def test_patch_feature_flag_admin_blocked_by_missing_or_invalid_csrf(client_admin):
+    headers_missing = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+    r1 = client_admin.patch(
+        "/admin/feature-flags/some-flag", json={"enabled": True}, headers=headers_missing
+    )
+    assert r1.status_code == 401
+    headers_invalid = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "bogus"}
+    r2 = client_admin.patch(
+        "/admin/feature-flags/some-flag", json={"enabled": False}, headers=headers_invalid
+    )
+    assert r2.status_code == 401
+
+
 @pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_patch_feature_flag_422_enabled_wrong_type(client_admin):
     headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}

@@ -63,6 +63,34 @@ def test_post_users_csrf_invalid_token_still_blocked_by_rbac(client_admin):
     assert body.get("required_role") == "admin"
 
 
+def test_post_users_admin_missing_or_invalid_csrf_returns_401(client_admin):
+    # Admin without CSRF token
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+    r1 = client_admin.post("/admin/users", json={"email": "a@example.com", "role": "viewer"}, headers=headers)
+    assert r1.status_code == 401
+    # Admin with bogus token
+    headers["X-CSRF-Token"] = "bogus"
+    r2 = client_admin.post("/admin/users", json={"email": "b@example.com", "role": "viewer"}, headers=headers)
+    assert r2.status_code == 401
+
+
+def test_post_users_admin_blocked_without_or_invalid_csrf(client_admin):
+    # Admin without CSRF should be blocked by CSRF enforcement
+    admin_headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+    r1 = client_admin.post(
+        "/admin/users", json={"email": "a@example.com", "role": "viewer"}, headers=admin_headers
+    )
+    assert r1.status_code == 401
+    body1 = r1.get_json()
+    assert body1.get("status") == 401 or body1.get("error") == "unauthorized"
+    # With bogus token still blocked
+    admin_headers2 = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "bogus"}
+    r2 = client_admin.post(
+        "/admin/users", json={"email": "a2@example.com", "role": "viewer"}, headers=admin_headers2
+    )
+    assert r2.status_code == 401
+
+
 @pytest.mark.xfail(strict=False, reason="Phase-2: validation not implemented")
 def test_post_users_422_invalid_email(client_admin):
     headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "fake"}
