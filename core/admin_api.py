@@ -500,7 +500,7 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 
     # Persist enabled/notes if provided; return updated record
     try:
-        from datetime import datetime as _dt
+    from datetime import datetime as _dt, UTC as _UTC
         from .db import get_session as _get_session2
         from .models import TenantFeatureFlag as _TenantFeatureFlag2
         from flask import g as _g2
@@ -524,7 +524,7 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
                 row2.notes = str(val) if isinstance(val, str) else None
                 changed = True
             if changed:
-                row2.updated_at = _dt.utcnow()
+                row2.updated_at = _dt.now(_UTC)
                 db2.add(row2)
                 db2.commit()
                 db2.refresh(row2)
@@ -532,7 +532,7 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
                 "key": str(row2.name),
                 "enabled": bool(row2.enabled),
                 "notes": row2.notes if row2.notes is not None else "",
-                "updated_at": (row2.updated_at.isoformat() + "Z") if row2.updated_at else None,
+                "updated_at": (row2.updated_at.isoformat()) if row2.updated_at else None,
             }
             return jsonify(resp), 200
         # If we cannot refetch row, fall through to stub
