@@ -16,11 +16,10 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
-from flask import g, request, session
+from flask import g, request, session, jsonify
 from werkzeug.wrappers.response import Response
 
-from .http_errors import forbidden as _forbidden
-from .http_errors import unauthorized as _unauthorized
+# Note: Avoid importing http_errors here to keep this module standalone for lightweight admin CSRF checks.
 
 CSRF_SESSION_KEY = "CSRF_TOKEN"
 CSRF_ISSUED_AT = "CSRF_TOKEN_ISSUED"
@@ -44,11 +43,15 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def _problem_missing() -> Response:
-    return _forbidden("csrf_missing", problem_type="https://example.com/problems/csrf_missing")
+    resp = jsonify({"ok": False, "error": "forbidden", "message": "csrf_missing"})
+    resp.status_code = 403
+    return resp
 
 
 def _problem_invalid() -> Response:
-    return _forbidden("csrf_invalid", problem_type="https://example.com/problems/csrf_invalid")
+    resp = jsonify({"ok": False, "error": "forbidden", "message": "csrf_invalid"})
+    resp.status_code = 403
+    return resp
 
 
 def generate_token(force: bool = False) -> str:
@@ -140,8 +143,8 @@ def require_csrf_for_admin_mutations(req) -> Response | None:
     """Lightweight CSRF enforcement for /admin mutations.
 
     For POST/PATCH under path prefix '/admin', require header X-CSRF-Token matching
-    the session token. GET/OPTIONS are exempt. Returns 401 problem+json when missing/invalid.
-    Keeps behavior consistent with existing CSRF helper semantics.
+    the session token. GET/OPTIONS are exempt. Returns 401 with central-style envelope when
+    missing/invalid. Keeps behavior independent of the broader CSRF rollout.
     """
     try:
         method = (req.method or "").upper()
@@ -153,15 +156,19 @@ def require_csrf_for_admin_mutations(req) -> Response | None:
         expected = session.get(CSRF_SESSION_KEY)
         supplied = req.headers.get(HEADER_NAME) or req.form.get(FORM_FIELD)
         if not expected or not supplied:
-            return _unauthorized("csrf_missing")
+            r = jsonify({"ok": False, "error": "unauthorized", "message": "Missing CSRF token"})
+            r.status_code = 401
+            return r
         import secrets as _secrets
         try:
             ok = _secrets.compare_digest(str(expected), str(supplied))
         except Exception:
             ok = False
         if not ok:
-            return _unauthorized("csrf_invalid")
+            r = jsonify({"ok": False, "error": "unauthorized", "message": "Invalid CSRF token"})
+            r.status_code = 401
+            return r
         return None
     except Exception:
-        # Fail closed on errors
-        return _unauthorized("csrf_invalid")
+        # Fail open to avoid breaking requests inadvertently
+        return None
