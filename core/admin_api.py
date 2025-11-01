@@ -388,6 +388,7 @@ def admin_users_list_stub():  # type: ignore[return-value]
     q = (request.args.get("q") or "").strip().lower()
     items: list[dict[str, object]] = []
     total = 0
+    deleted_total = 0
     try:
         if tid_int is not None:
             query = db.query(_User).filter_by(tenant_id=tid_int).filter(_User.deleted_at.is_(None))
@@ -397,11 +398,18 @@ def admin_users_list_stub():  # type: ignore[return-value]
             total = len(rows)
             for u in rows:
                 items.append({"id": str(getattr(u, "id", "")), "email": str(u.email), "role": str(u.role)})
+            # Count soft-deleted users for this tenant (deleted_at IS NOT NULL)
+            try:
+                deleted_total = db.query(_User).filter(_User.tenant_id == tid_int).filter(_User.deleted_at.isnot(None)).count()
+            except Exception:
+                deleted_total = 0
     finally:
         db.close()
     resp = jsonify({"items": items, "total": total})
     if stub:
         resp.headers["X-Pagination-Stub"] = "true"
+    # Always include count of soft-deleted users (as string) for current tenant
+    resp.headers["X-Users-Deleted-Total"] = str(int(deleted_total))
     return resp, 200
 
 
