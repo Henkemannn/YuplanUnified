@@ -39,6 +39,8 @@ class User(Base):
     refresh_token_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Use timezone-aware UTC timestamps for last role/user update operations
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    # Soft-delete marker (UTC, timezone-aware). NULL = active
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
 
 class Unit(Base):
     __tablename__ = "units"
