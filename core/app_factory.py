@@ -610,7 +610,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": []}],
                     "summary": "List users (tenant scoped)",
-                    "description": "pagination stub — currently ignored by API response",
+                    "description": "pagination stub — currently ignored by API response. Response header X-Users-Deleted-Total returns the count of soft-deleted users for the current tenant.",
                     "parameters": [
                         {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email (case-insensitive substring)"},
                         {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
