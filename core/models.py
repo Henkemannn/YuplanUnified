@@ -202,6 +202,8 @@ class TenantFeatureFlag(Base):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     name: Mapped[str] = mapped_column(String(80))  # e.g. module.offshore, waste.metrics
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 # --- Tenant Metadata ---
 class TenantMetadata(Base):

@@ -85,6 +85,34 @@ def test_patch_feature_flag_admin_blocked_by_missing_or_invalid_csrf(client_admi
     assert r2.status_code == 401
 
 
+def test_patch_feature_flag_happy_path_persists_enabled_and_notes(client_admin, app_session):
+    # Seed a feature-flag for tenant 1
+    from core.db import get_session
+    from core.models import TenantFeatureFlag
+    db = get_session()
+    try:
+        if not db.query(TenantFeatureFlag).filter_by(tenant_id=1, name="some-flag").first():
+            db.add(TenantFeatureFlag(tenant_id=1, name="some-flag", enabled=False))
+            db.commit()
+    finally:
+        db.close()
+    # Admin + CSRF
+    with client_admin.session_transaction() as sess:
+        sess["CSRF_TOKEN"] = "pfl1"
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "pfl1"}
+    # Toggle enabled and update notes
+    r = client_admin.patch(
+        "/admin/feature-flags/some-flag", json={"enabled": True, "notes": "Activated"}, headers=headers
+    )
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body.get("key") == "some-flag"
+    assert body.get("enabled") is True
+    assert body.get("notes") == "Activated"
+    # updated_at is optional but if present should be a string
+    if body.get("updated_at") is not None:
+        assert isinstance(body["updated_at"], str)
+
 def test_patch_feature_flag_422_enabled_wrong_type(client_admin):
     with client_admin.session_transaction() as sess:
         sess["CSRF_TOKEN"] = "tfl1"

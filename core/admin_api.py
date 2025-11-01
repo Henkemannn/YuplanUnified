@@ -489,6 +489,47 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
     except Exception:
         # On errors during lookup, fall back to stubbed 200 to avoid breaking flows in Phase-2
         pass
+
+    # Persist enabled/notes if provided; return updated record
+    try:
+        from datetime import datetime as _dt
+        from .db import get_session as _get_session2
+        from .models import TenantFeatureFlag as _TenantFeatureFlag2
+        from flask import g as _g2
+        db2 = _get_session2()
+        try:
+            tid2 = getattr(_g2, "tenant_id", None) or session.get("tenant_id")
+            tid2_int = int(tid2) if tid2 is not None else None
+        except Exception:
+            tid2_int = None
+        # Fetch again to be safe in this scope
+        row2 = None
+        if tid2_int is not None:
+            row2 = db2.query(_TenantFeatureFlag2).filter_by(tenant_id=tid2_int, name=str(key)).first()
+        if row2 is not None:
+            changed = False
+            if isinstance(data, dict) and "enabled" in data:
+                row2.enabled = bool(data.get("enabled"))
+                changed = True
+            if isinstance(data, dict) and "notes" in data:
+                val = data.get("notes")
+                row2.notes = str(val) if isinstance(val, str) else None
+                changed = True
+            if changed:
+                row2.updated_at = _dt.utcnow()
+                db2.add(row2)
+                db2.commit()
+                db2.refresh(row2)
+            resp = {
+                "key": str(row2.name),
+                "enabled": bool(row2.enabled),
+                "notes": row2.notes if row2.notes is not None else "",
+                "updated_at": (row2.updated_at.isoformat() + "Z") if row2.updated_at else None,
+            }
+            return jsonify(resp), 200
+        # If we cannot refetch row, fall through to stub
+    except Exception:
+        pass
     return jsonify({"key": key, "enabled": False, "notes": ""}), 200
 
 
