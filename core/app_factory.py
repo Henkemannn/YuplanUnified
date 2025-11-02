@@ -649,6 +649,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Create user",
+                    "description": "On success, an audit event (user_create) is recorded.",
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -692,6 +693,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Update user (email/role)",
+                    "description": "When role changes, an audit event (user_update_role) is recorded.",
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -818,6 +820,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin", "feature-flags"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Update feature flag (enabled/notes)",
+                    "description": "On change, an audit event (feature_flag_update) is recorded.",
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -898,6 +901,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Update user role",
+                    "description": "On change, an audit event (user_update_role) is recorded.",
                     "requestBody": {
                         "required": True,
                         "content": {
