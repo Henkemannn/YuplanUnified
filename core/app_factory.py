@@ -610,7 +610,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": []}],
                     "summary": "List users (tenant scoped)",
-                    "description": "pagination stub — currently ignored by API response. Response header X-Users-Deleted-Total returns the count of soft-deleted users for the current tenant.",
+                    "description": "pagination stub — currently ignored by API response. Response header X-Users-Deleted-Total returns the count of soft-deleted users for the current tenant. Errors on admin routes use RFC7807 (application/problem+json).",
                     "parameters": [
                         {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email (case-insensitive substring)"},
                         {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
@@ -649,7 +649,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Create user",
-                    "description": "On success, an audit event (user_create) is recorded.",
+                    "description": "On success, an audit event (user_create) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -693,7 +693,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Update user (email/role)",
-                    "description": "When role changes, an audit event (user_update_role) is recorded.",
+                    "description": "When role changes, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -739,6 +739,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Soft-delete user",
+                    "description": "Errors on admin routes use RFC7807 (application/problem+json).",
                     "responses": {
                         "200": {
                             "description": "OK",
@@ -764,7 +765,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                             "content": {
                                 "application/json": {
                                     "schema": {"$ref": "#/components/schemas/Error"},
-                                    "examples": {"userMissing": {"value": {"ok": false, "error": "not_found", "message": "user not found"}}}
+                                    "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}
                                 }
                             }
                         }
@@ -776,7 +777,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin", "feature-flags"],
                     "security": [{"BearerAuth": []}],
                     "summary": "List feature flags (tenant scoped)",
-                    "description": "pagination stub — currently ignored by API response",
+                    "description": "pagination stub — currently ignored by API response. Errors on admin routes use RFC7807 (application/problem+json).",
                     "parameters": [
                         {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Quick filter"},
                         {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
@@ -820,7 +821,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin", "feature-flags"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Update feature flag (enabled/notes)",
-                    "description": "On change, an audit event (feature_flag_update) is recorded.",
+                    "description": "On change, an audit event (feature_flag_update) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -840,13 +841,13 @@ def create_app(config_override: dict | None = None) -> Flask:
                         "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}},
                         "404": {
                             "description": "Not found",
-                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"flagMissing": {"value": {"ok": false, "error": "not_found", "message": "feature flag not found"}}}}}
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"flagMissing": {"value": {"ok": False, "error": "not_found", "message": "feature flag not found"}}}}}
                         },
                         "422": {
                             "description": "Validation error",
                             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {
-                                "enabledType": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"enabled","reason":"invalid_type"}]}},
-                                "notesTooLong": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"notes","reason":"max_length_exceeded","max":500}]}}
+                                "enabledType": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"enabled","reason":"invalid_type"}]}},
+                                "notesTooLong": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"notes","reason":"max_length_exceeded","max":500}]}}
                             }}}
                         }
                     }
@@ -857,7 +858,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": []}],
                     "summary": "List users with roles",
-                    "description": "pagination stub — currently ignored by API response",
+                    "description": "pagination stub — currently ignored by API response. Errors on admin routes use RFC7807 (application/problem+json).",
                     "parameters": [
                         {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email"},
                         {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
@@ -901,7 +902,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Update user role",
-                    "description": "On change, an audit event (user_update_role) is recorded.",
+                    "description": "On change, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -917,8 +918,8 @@ def create_app(config_override: dict | None = None) -> Flask:
                     },
                     "responses": {
                         "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}, "examples": {"ok": {"value": {"id": "u1", "email": "a@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}}}},
-                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": false, "error": "not_found", "message": "user not found"}}}}}},
-                        "422": {"description": "Validation error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"invalidRole": {"value": {"ok": false, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}}}}}}
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}},
+                        "422": {"description": "Validation error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}}}}}}
                     }
                 }, ["401", "403", "404", "422"])
             }
@@ -938,6 +939,19 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "CsrfToken": {"type": "apiKey", "in": "header", "name": "X-CSRF-Token", "description": "Fetch via GET /csrf"}
                 },
                 "schemas": {
+                    "ProblemDetails": {
+                        "type": "object",
+                        "required": ["type","title","status"],
+                        "properties": {
+                            "type": {"type": "string", "example": "about:blank"},
+                            "title": {"type": "string", "example": "Validation error"},
+                            "status": {"type": "integer", "example": 422},
+                            "detail": {"type": "string", "nullable": True},
+                            "invalid_params": {"type": "array", "items": {"type": "object"}},
+                            "required_role": {"type": "string", "nullable": True}
+                        },
+                        "additionalProperties": True
+                    },
                     "Error": error_schema,
                     # Minimal admin-related models
                     "User": {

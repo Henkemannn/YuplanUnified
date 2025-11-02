@@ -45,6 +45,68 @@ except Exception:  # pragma: no cover
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
+
+def _admin_problem(status: int, title: str, *, detail: str | None = None, invalid_params: list | None = None, extra: dict | None = None):
+    """Build RFC7807 problem+json response for admin endpoints.
+
+    Shape: {type:'about:blank', title, status, detail?, invalid_params? , ...extra}
+    """
+    from flask import jsonify
+    payload: dict[str, object] = {"type": "about:blank", "title": str(title), "status": int(status)}
+    if detail:
+        payload["detail"] = str(detail)
+    if invalid_params is not None:
+        payload["invalid_params"] = invalid_params
+    if extra:
+        payload.update(extra)
+    resp = jsonify(payload)
+    resp.status_code = int(status)
+    resp.headers["Content-Type"] = "application/problem+json"
+    return resp
+
+
+@bp.after_request
+def _admin_rfc7807_adapter(resp):  # type: ignore[override]
+    """Convert admin error envelopes to RFC7807 for selected statuses.
+
+    Only applies to /admin routes; non-admin routes untouched.
+    Maps status -> title and reshapes fields accordingly.
+    """
+    try:
+        from flask import request
+        path = request.path or ""
+        if not path.startswith("/admin"):
+            return resp
+        status = int(getattr(resp, "status_code", 200))
+        if status not in (401, 403, 404, 422):
+            return resp
+        try:
+            data = resp.get_json(silent=True) or {}
+        except Exception:
+            data = {}
+        # Map to titles
+        title_map = {401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 422: "Validation error"}
+        title = title_map.get(status, "Error")
+        detail = data.get("message") if isinstance(data, dict) else None
+        invalid_params = data.get("invalid_params") if isinstance(data, dict) else None
+        # Special handling for 403: include required_role in both top-level and invalid_params
+        if status == 403:
+            req_role = (data.get("required_role") if isinstance(data, dict) else None) or "admin"
+            inv = list(invalid_params) if isinstance(invalid_params, list) else []
+            inv.append({"name": "required_role", "value": str(req_role)})
+            return _admin_problem(403, title, detail=str(detail) if detail else None, invalid_params=inv, extra={"required_role": str(req_role)})
+        if status == 401:
+            return _admin_problem(401, title, detail=str(detail) if detail else None)
+        if status == 404:
+            return _admin_problem(404, title, detail=str(detail) if detail else "Resource not found")
+        if status == 422:
+            inv = list(invalid_params) if isinstance(invalid_params, list) else []
+            return _admin_problem(422, title, detail=str(detail) if detail else None, invalid_params=inv)
+        return resp
+    except Exception:
+        # On any adapter error, fall-through with original response
+        return resp
+
 @bp.get("/tenants")
 @require_roles("superuser")
 def list_tenants() -> TenantListResponse | ErrorResponse:  # pragma: no cover simple pass-through
