@@ -689,6 +689,52 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "parameters": [
                     {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
                 ],
+                "put": attach({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Replace user (strict)",
+                    "description": "Full-body replace of user email and role. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["email", "role"],
+                                    "properties": {
+                                        "email": {"type": "string", "format": "email"},
+                                        "role": {"type": "string", "enum": ["admin","editor","viewer"]}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/UserWithRole"},
+                                    "examples": {"ok": {"value": {"id": "u1", "email": "a2@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}
+                        },
+                        "422": {
+                            "description": "Validation error",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {
+                                "missing": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"required"},{"name":"role","reason":"required"}]}},
+                                "invalidEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"invalid_format"}]}},
+                                "invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}},
+                                "duplicateEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"duplicate"}]}}
+                            }}}
+                        }
+                    }
+                }, ["401", "403", "404", "422"]),
                 "patch": attach({
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],

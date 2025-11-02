@@ -702,13 +702,18 @@ def admin_users_update_patch(user_id: str):  # type: ignore[return-value]
 
         # Apply changes; idempotent if no actual field differences
         changed = False
+        email_changed = False
+        role_changed = False
+        prev_email = str(getattr(row, "email", ""))
+        prev_role = str(getattr(row, "role", ""))
+
         if "email" in data and isinstance(data.get("email"), str):
             new_email = str(data["email"]).strip()
-            if new_email and new_email != str(getattr(row, "email", "")):
+            if new_email and new_email != prev_email:
                 row.email = new_email
                 changed = True
-        role_changed = False
-        prev_role = str(getattr(row, "role", ""))
+                email_changed = True
+
         if "role" in data and isinstance(data.get("role"), str):
             new_role = str(data["role"])
             if new_role != prev_role:
@@ -725,7 +730,7 @@ def admin_users_update_patch(user_id: str):  # type: ignore[return-value]
             db.add(row)
             db.commit()
             db.refresh(row)
-            # Emit audit only when role actually changes
+            # Emit audit for role change
             if role_changed:
                 try:
                     _emit_audit(
@@ -734,6 +739,174 @@ def admin_users_update_patch(user_id: str):  # type: ignore[return-value]
                         user_id=uid_int,
                         old_role=prev_role,
                         new_role=str(getattr(row, "role", prev_role)),
+                    )
+                except Exception:
+                    pass
+            # Emit audit for email change
+            if email_changed:
+                try:
+                    _emit_audit(
+                        "user_update_email",
+                        tenant_id=tid_int,
+                        user_id=uid_int,
+                        old_email=prev_email,
+                        new_email=str(getattr(row, "email", "")),
+                        actor_user_id=session.get("user_id"),  # type: ignore[arg-type]
+                        actor_role=session.get("role"),        # type: ignore[arg-type]
+                    )
+                except Exception:
+                    pass
+        else:
+            # Ensure consistent behavior
+            try:
+                db.flush()
+                db.commit()
+            except Exception:
+                pass
+
+        resp = {
+            "id": str(getattr(row, "id", user_id)),
+            "email": str(getattr(row, "email", "")),
+            "role": str(getattr(row, "role", "")),
+            "updated_at": (getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None),
+        }
+        return jsonify(resp), 200
+    finally:
+        db.close()
+
+
+@bp.put("/users/<string:user_id>")
+@require_roles("admin")
+def admin_users_replace_put(user_id: str):  # type: ignore[return-value]
+    """Replace a user's email and role (strict schema).
+
+    Behavior:
+      - Guarded by admin (+ CSRF enforced centrally for /admin mutations).
+      - Lookup by (tenant_id, user_id) with deleted_at IS NULL; 404 if not found.
+      - Requires full body with email and role; disallows additional properties.
+      - Returns 200 {id, email, role, updated_at} (UTC ISO string).
+    """
+    # Parse and validate payload (strict)
+    data = request.get_json(silent=True) or {}
+    invalid_params: list[dict[str, object]] = []
+    allowed_roles = {"admin", "editor", "viewer"}
+    if not isinstance(data, dict):
+        invalid_params.append({"name": "body", "reason": "invalid_type"})
+    else:
+        # Required keys
+        if "email" not in data:
+            invalid_params.append({"name": "email", "reason": "required"})
+        if "role" not in data:
+            invalid_params.append({"name": "role", "reason": "required"})
+        # Disallow additional properties
+        for k in data.keys():
+            if k not in ("email", "role"):
+                invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
+        # Validate types and formats
+        em = data.get("email")
+        if em is not None and not isinstance(em, str):
+            invalid_params.append({"name": "email", "reason": "invalid_type"})
+        elif isinstance(em, str):
+            if "@" not in em:
+                invalid_params.append({"name": "email", "reason": "invalid_format"})
+        r = data.get("role")
+        if r is not None and not isinstance(r, str):
+            invalid_params.append({"name": "role", "reason": "invalid_type"})
+        elif isinstance(r, str) and r not in allowed_roles:
+            invalid_params.append({"name": "role", "reason": "invalid_enum", "allowed": ["admin", "editor", "viewer"]})
+    if invalid_params:
+        return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": invalid_params}), 422  # type: ignore[return-value]
+
+    # Tenant + user lookup (active only)
+    from flask import g as _g
+    from .db import get_session as _get_session
+    from .models import User as _User
+    db = _get_session()
+    try:
+        try:
+            tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
+            tid_int = int(tid) if tid is not None else None
+        except Exception:
+            tid_int = None
+        try:
+            uid_int = int(user_id)
+        except Exception:
+            uid_int = None
+        if tid_int is None or uid_int is None:
+            r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
+            return r404, 404  # type: ignore[return-value]
+        row = (
+            db.query(_User)
+            .filter(_User.tenant_id == tid_int, _User.id == uid_int, _User.deleted_at.is_(None))
+            .first()
+        )
+        if not row:
+            r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
+            return r404, 404  # type: ignore[return-value]
+
+        # Duplicate email check (same tenant, active users, excluding self)
+        new_email = str(data.get("email")) if isinstance(data.get("email"), str) else None
+        if new_email and new_email != str(getattr(row, "email", "")):
+            exists = (
+                db.query(_User)
+                .filter(
+                    _User.tenant_id == tid_int,
+                    _User.email == new_email,
+                    _User.deleted_at.is_(None),
+                    _User.id != uid_int,
+                )
+                .first()
+            )
+            if exists is not None:
+                return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name": "email", "reason": "duplicate"}]}), 422  # type: ignore[return-value]
+
+        # Apply replacement; idempotent if no actual field differences
+        changed = False
+        role_changed = False
+        email_changed = False
+        prev_email = str(getattr(row, "email", ""))
+        prev_role = str(getattr(row, "role", ""))
+        if isinstance(new_email, str) and new_email and new_email != prev_email:
+            row.email = new_email
+            changed = True
+            email_changed = True
+        new_role = str(data.get("role")) if isinstance(data.get("role"), str) else prev_role
+        if new_role != prev_role:
+            row.role = new_role
+            changed = True
+            role_changed = True
+
+        from datetime import datetime as _dt, UTC as _UTC
+        if changed:
+            try:
+                row.updated_at = _dt.now(_UTC)
+            except Exception:
+                pass
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            # Emit audit only when changes occur
+            if role_changed:
+                try:
+                    _emit_audit(
+                        "user_update_role",
+                        tenant_id=tid_int,
+                        user_id=uid_int,
+                        old_role=prev_role,
+                        new_role=str(getattr(row, "role", prev_role)),
+                    )
+                except Exception:
+                    pass
+            if email_changed:
+                try:
+                    _emit_audit(
+                        "user_update_email",
+                        tenant_id=tid_int,
+                        user_id=uid_int,
+                        old_email=prev_email,
+                        new_email=str(getattr(row, "email", "")),
+                        actor_user_id=session.get("user_id"),  # type: ignore[arg-type]
+                        actor_role=session.get("role"),        # type: ignore[arg-type]
                     )
                 except Exception:
                     pass
