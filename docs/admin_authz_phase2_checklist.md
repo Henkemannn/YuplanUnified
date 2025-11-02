@@ -1,5 +1,23 @@
 # Admin AuthZ Phase 2 – Checklist
 
+## ✅ Acceptance Criteria (Phase 2) — all met
+
+- ✅ RBAC on admin endpoints (admin-only for mutations via `require_roles`)
+- ✅ CSRF enforcement on /admin mutations (header `X-CSRF-Token` validated centrally)
+- ✅ 422 for validation errors and 404 for not-found with details
+- ✅ RFC7807 on admin errors (application/problem+json for 401/403/404/422)
+- ✅ OpenAPI updated for users/roles/feature-flags (+ CsrfToken on mutations)
+- ✅ Audit events on mutations (user_create, user_update_role, feature_flag_update, user_update_email)
+- ✅ Admin test suite green (CI + local)
+
+### Ready for Merge checklist
+
+- [ ] CI green on admin test suite
+- [ ] OpenAPI validate green
+- [ ] Phase 2 branch rebased onto default
+- [ ] Draft PR converted to Ready-for-Review
+- [ ] Squash-merge with title: `feat(admin-authz-phase2): complete migration + RFC7807`
+
 This checklist prepares the next batch after RC1 is merged. It assumes base = `feat/admin-limits-inspection` (default branch) and focuses on migrating additional admin endpoints to `app_authz`, tightening RFC7807 responses, and enriching OpenAPI examples.
 
 ## Progress (2025-11-01)
