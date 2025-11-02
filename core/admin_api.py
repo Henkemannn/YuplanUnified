@@ -30,7 +30,15 @@ from .pagination import make_page_response, parse_page_params
 try:  # audit optional robustness
     from . import audit as _audit_mod  # type: ignore
     def _emit_audit(event_name: str, **fields):  # indirection layer for monkeypatch friendliness
-        _audit_mod.log_event(event_name, **fields)  # type: ignore[attr-defined]
+        # Prefer a simple .log helper if present; fall back to .log_event
+        try:
+            if hasattr(_audit_mod, "log"):
+                _audit_mod.log(event_name, **fields)  # type: ignore[attr-defined]
+            else:
+                _audit_mod.log_event(event_name, **fields)  # type: ignore[attr-defined]
+        except Exception:
+            # Best-effort; ignore failures
+            return None
 except Exception:  # pragma: no cover
     def _emit_audit(event_name: str, **fields):  # type: ignore[unused-ignore]
         return None
@@ -482,6 +490,17 @@ def admin_users_create_stub():  # type: ignore[return-value]
             db.refresh(new_user)
         finally:
             db.close()
+        # Emit audit event for user creation
+        try:
+            _emit_audit(
+                "user_create",
+                tenant_id=tid_int,
+                user_id=getattr(new_user, "id", None),
+                email=str(email),
+                role=str(role),
+            )
+        except Exception:
+            pass
         return jsonify({"id": str(getattr(new_user, "id", "")), "email": str(email), "role": str(role)}), 201
     except Exception:
         # On any unexpected error, keep previous stub payload to avoid breaking flow
@@ -626,11 +645,14 @@ def admin_users_update_patch(user_id: str):  # type: ignore[return-value]
             if new_email and new_email != str(getattr(row, "email", "")):
                 row.email = new_email
                 changed = True
+        role_changed = False
+        prev_role = str(getattr(row, "role", ""))
         if "role" in data and isinstance(data.get("role"), str):
             new_role = str(data["role"])
-            if new_role != str(getattr(row, "role", "")):
+            if new_role != prev_role:
                 row.role = new_role
                 changed = True
+                role_changed = True
 
         from datetime import datetime as _dt, UTC as _UTC
         if changed:
@@ -641,6 +663,18 @@ def admin_users_update_patch(user_id: str):  # type: ignore[return-value]
             db.add(row)
             db.commit()
             db.refresh(row)
+            # Emit audit only when role actually changes
+            if role_changed:
+                try:
+                    _emit_audit(
+                        "user_update_role",
+                        tenant_id=tid_int,
+                        user_id=uid_int,
+                        old_role=prev_role,
+                        new_role=str(getattr(row, "role", prev_role)),
+                    )
+                except Exception:
+                    pass
         else:
             # Ensure consistent behavior
             try:
@@ -794,18 +828,31 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
             row2 = db2.query(_TenantFeatureFlag2).filter_by(tenant_id=tid2_int, name=str(key)).first()
         if row2 is not None:
             changed = False
+            change_fields: dict[str, object] = {}
             if isinstance(data, dict) and "enabled" in data:
                 row2.enabled = bool(data.get("enabled"))
                 changed = True
+                change_fields["enabled"] = bool(data.get("enabled"))
             if isinstance(data, dict) and "notes" in data:
                 val = data.get("notes")
                 row2.notes = str(val) if isinstance(val, str) else None
                 changed = True
+                change_fields["notes"] = (str(val) if isinstance(val, str) else None)
             if changed:
                 row2.updated_at = _dt.now(_UTC)
                 db2.add(row2)
                 db2.commit()
                 db2.refresh(row2)
+                # Emit audit for feature flag update (only when changed)
+                try:
+                    _emit_audit(
+                        "feature_flag_update",
+                        tenant_id=tid2_int,
+                        key=str(row2.name),
+                        changes=change_fields,
+                    )
+                except Exception:
+                    pass
             resp = {
                 "key": str(row2.name),
                 "enabled": bool(row2.enabled),
@@ -957,8 +1004,9 @@ def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
             row2 = db2.query(_User2).filter_by(tenant_id=tid2_int, id=uid2_int).first()
         if row2 is not None:
             new_role = str(data.get("role"))
+            prev_role = str(getattr(row2, "role", ""))
             # Idempotent update: only change fields if different
-            if str(getattr(row2, "role", "")) != new_role:
+            if prev_role != new_role:
                 row2.role = new_role
                 # Update timestamp in timezone-aware UTC
                 try:
@@ -969,6 +1017,17 @@ def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
                 db2.add(row2)
                 db2.commit()
                 db2.refresh(row2)
+                # Emit audit event for role change
+                try:
+                    _emit_audit(
+                        "user_update_role",
+                        tenant_id=tid2_int,
+                        user_id=getattr(row2, "id", user_id),
+                        old_role=prev_role,
+                        new_role=new_role,
+                    )
+                except Exception:
+                    pass
             # If no change, still safe to flush/commit (no-op) for consistency
             else:
                 try:
