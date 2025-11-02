@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core.db import get_session
 from core.models import User
+from ._problem_utils import assert_problem
 
 
 def _seed_two_users(tenant_id: int = 1):
@@ -52,6 +53,4 @@ def test_soft_delete_and_list_filtering(client_admin):
 
     # Idempotency: deleting again yields 404
     r_del2 = client_admin.delete(f"/admin/users/{u1_id}", headers=headers)
-    assert r_del2.status_code == 404
-    body_del2 = r_del2.get_json()
-    assert body_del2.get("error") == "not_found"
+    assert_problem(r_del2, 404, "Not Found")

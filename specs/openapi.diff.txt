@@ -1,0 +1,85 @@
+== OpenAPI Semantic Diff ==
+Baseline: specs\openapi.baseline.json
+New:      openapi.json
+
+Breaking changes: none ✅
+
+Additions (non-breaking):
+  + Added response 400: GET /admin/audit
+  + Added response 404: GET /admin/audit
+  + Added response 409: GET /admin/audit
+  + Added response 422: GET /admin/audit
+  + Added response 429: GET /admin/audit
+  + Added response 500: GET /admin/audit
+  + Added response 404: GET /admin/feature_flags
+  + Added response 409: GET /admin/feature_flags
+  + Added response 422: GET /admin/feature_flags
+  + Added response 404: POST /admin/feature_flags
+  + Added response 409: POST /admin/feature_flags
+  + Added response 422: POST /admin/feature_flags
+  + Added response 400: GET /admin/flags/legacy-cook
+  + Added response 404: GET /admin/flags/legacy-cook
+  + Added response 409: GET /admin/flags/legacy-cook
+  + Added response 422: GET /admin/flags/legacy-cook
+  + Added response 429: GET /admin/flags/legacy-cook
+  + Added response 500: GET /admin/flags/legacy-cook
+  + Added response 404: DELETE /admin/limits
+  + Added response 409: DELETE /admin/limits
+  + Added response 422: DELETE /admin/limits
+  + Added response 429: DELETE /admin/limits
+  + Added response 500: DELETE /admin/limits
+  + Added response 404: GET /admin/limits
+  + Added response 409: GET /admin/limits
+  + Added response 422: GET /admin/limits
+  + Added response 429: GET /admin/limits
+  + Added response 500: GET /admin/limits
+  + Added response 404: POST /admin/limits
+  + Added response 409: POST /admin/limits
+  + Added response 422: POST /admin/limits
+  + Added response 429: POST /admin/limits
+  + Added response 500: POST /admin/limits
+  + Added response 400: GET /features
+  + Added response 403: GET /features
+  + Added response 404: GET /features
+  + Added response 409: GET /features
+  + Added response 422: GET /features
+  + Added response 403: GET /features/check
+  + Added response 404: GET /features/check
+  + Added response 409: GET /features/check
+  + Added response 422: GET /features/check
+  + Added response 403: POST /features/set
+  + Added response 404: POST /features/set
+  + Added response 409: POST /features/set
+  + Added response 422: POST /features/set
+  + Added response 404: GET /notes/
+  + Added response 409: GET /notes/
+  + Added response 422: GET /notes/
+  + Added response 429: GET /notes/
+  + Added response 404: POST /notes/
+  + Added response 409: POST /notes/
+  + Added response 422: POST /notes/
+  + Added response 429: POST /notes/
+  + Added response 400: DELETE /notes/{id}
+  + Added response 409: DELETE /notes/{id}
+  + Added response 422: DELETE /notes/{id}
+  + Added response 429: DELETE /notes/{id}
+  + Added response 409: PUT /notes/{id}
+  + Added response 422: PUT /notes/{id}
+  + Added response 429: PUT /notes/{id}
+  + Added response 404: GET /tasks/
+  + Added response 409: GET /tasks/
+  + Added response 422: GET /tasks/
+  + Added response 429: GET /tasks/
+  + Added response 404: POST /tasks/
+  + Added response 409: POST /tasks/
+  + Added response 422: POST /tasks/
+  + Added response 400: DELETE /tasks/{id}
+  + Added response 409: DELETE /tasks/{id}
+  + Added response 422: DELETE /tasks/{id}
+  + Added response 429: DELETE /tasks/{id}
+  + Added response 400: GET /tasks/{id}
+  + Added response 409: GET /tasks/{id}
+  + Added response 422: GET /tasks/{id}
+  + Added response 429: GET /tasks/{id}
+  + Added response 422: PUT /tasks/{id}
+  + Added response 429: PUT /tasks/{id}

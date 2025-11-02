@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core.db import get_session
 from core.models import User
+from ._problem_utils import assert_problem
 
 
 def _seed_two_users(tenant_id: int = 1):
@@ -34,23 +35,19 @@ def test_users_patch_validation_duplicate_and_happy_path(client_admin):
 
     # invalid email format
     r1 = client_admin.patch(f"/admin/users/{u1_id}", json={"email": "x"}, headers=headers)
-    assert r1.status_code == 422
-    body1 = r1.get_json()
-    assert body1.get("error") in ("invalid", "validation_error", "invalid")
+    body1 = assert_problem(r1, 422, "Validation error")
     reasons1 = [p.get("reason") for p in body1.get("invalid_params", []) if p.get("name") == "email"]
     assert "invalid_format" in reasons1
 
     # invalid role enum
     r2 = client_admin.patch(f"/admin/users/{u1_id}", json={"role": "invalid"}, headers=headers)
-    assert r2.status_code == 422
-    body2 = r2.get_json()
+    body2 = assert_problem(r2, 422, "Validation error")
     reasons2 = [p.get("reason") for p in body2.get("invalid_params", []) if p.get("name") == "role"]
     assert "invalid_enum" in reasons2
 
     # duplicate email within tenant (u2 has b@ex)
     r3 = client_admin.patch(f"/admin/users/{u1_id}", json={"email": "b@ex"}, headers=headers)
-    assert r3.status_code == 422
-    body3 = r3.get_json()
+    body3 = assert_problem(r3, 422, "Validation error")
     reasons3 = [p.get("reason") for p in body3.get("invalid_params", []) if p.get("name") == "email"]
     assert "duplicate" in reasons3
 

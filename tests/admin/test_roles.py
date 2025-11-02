@@ -1,28 +1,25 @@
 from __future__ import annotations
 
 import pytest
+from ._problem_utils import assert_problem
 
 
 def test_list_roles_unauth_returns_401(client_no_tenant):
     r = client_no_tenant.get("/admin/roles")
-    assert r.status_code == 401
-    body = r.get_json()
-    assert body.get("error") == "unauthorized"
+    assert_problem(r, 401, "Unauthorized")
 
 
 def test_list_roles_viewer_returns_403(client_admin):
     r = client_admin.get("/admin/roles", headers={"X-User-Role": "viewer", "X-Tenant-Id": "1"})
-    assert r.status_code == 403
-    body = r.get_json()
-    assert body.get("error") == "forbidden"
-    assert body.get("required_role") == "admin"
+    b = assert_problem(r, 403, "Forbidden")
+    assert b.get("required_role") == "admin"
+    inv = b.get("invalid_params") or []
+    assert any(p.get("name") == "required_role" for p in inv)
 
 
 def test_patch_roles_unauth_returns_401(client_no_tenant):
     r = client_no_tenant.patch("/admin/roles/123", json={"role": "editor"})
-    assert r.status_code == 401
-    body = r.get_json()
-    assert body.get("error") == "unauthorized"
+    assert_problem(r, 401, "Unauthorized")
 
 
 def test_patch_roles_viewer_returns_403(client_admin):
@@ -31,10 +28,10 @@ def test_patch_roles_viewer_returns_403(client_admin):
         json={"role": "viewer"},
         headers={"X-User-Role": "viewer", "X-Tenant-Id": "1"},
     )
-    assert r.status_code == 403
-    body = r.get_json()
-    assert body.get("error") == "forbidden"
-    assert body.get("required_role") == "admin"
+    b = assert_problem(r, 403, "Forbidden")
+    assert b.get("required_role") == "admin"
+    inv = b.get("invalid_params") or []
+    assert any(p.get("name") == "required_role" for p in inv)
 
 
 def test_patch_roles_csrf_missing_blocks_mutation(client_admin):
@@ -43,10 +40,11 @@ def test_patch_roles_csrf_missing_blocks_mutation(client_admin):
         "/admin/roles/123", json={"role": "editor"}, headers=headers
     )
     assert r.status_code in (401, 403)
-    body = r.get_json()
-    assert body.get("error") in ("unauthorized", "forbidden")
+    b = assert_problem(r)
     if r.status_code == 403:
-        assert body.get("required_role") == "admin"
+        assert b.get("required_role") == "admin"
+        inv = b.get("invalid_params") or []
+        assert any(p.get("name") == "required_role" for p in inv)
 
 
 def test_patch_roles_csrf_invalid_token_still_blocked(client_admin):
@@ -54,19 +52,19 @@ def test_patch_roles_csrf_invalid_token_still_blocked(client_admin):
     r = client_admin.patch(
         "/admin/roles/123", json={"role": "viewer"}, headers=headers
     )
-    assert r.status_code == 403
-    body = r.get_json()
-    assert body.get("error") == "forbidden"
-    assert body.get("required_role") == "admin"
+    b = assert_problem(r, 403, "Forbidden")
+    assert b.get("required_role") == "admin"
+    inv = b.get("invalid_params") or []
+    assert any(p.get("name") == "required_role" for p in inv)
 
 
 def test_patch_roles_admin_missing_or_invalid_csrf_returns_401(client_admin):
     headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
     r1 = client_admin.patch("/admin/roles/123", json={"role": "viewer"}, headers=headers)
-    assert r1.status_code == 401
+    assert_problem(r1, 401, "Unauthorized")
     headers["X-CSRF-Token"] = "bogus"
     r2 = client_admin.patch("/admin/roles/123", json={"role": "viewer"}, headers=headers)
-    assert r2.status_code == 401
+    assert_problem(r2, 401, "Unauthorized")
 
 
 def test_patch_roles_admin_blocked_by_missing_or_invalid_csrf(client_admin):
@@ -74,12 +72,12 @@ def test_patch_roles_admin_blocked_by_missing_or_invalid_csrf(client_admin):
     r1 = client_admin.patch(
         "/admin/roles/123", json={"role": "viewer"}, headers=headers_missing
     )
-    assert r1.status_code == 401
+    assert_problem(r1, 401, "Unauthorized")
     headers_invalid = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "bogus"}
     r2 = client_admin.patch(
         "/admin/roles/123", json={"role": "viewer"}, headers=headers_invalid
     )
-    assert r2.status_code == 401
+    assert_problem(r2, 401, "Unauthorized")
 
 
 def test_patch_roles_422_role_not_in_enum(client_admin):
@@ -89,8 +87,7 @@ def test_patch_roles_422_role_not_in_enum(client_admin):
     r = client_admin.patch(
         "/admin/roles/123", json={"role": "owner"}, headers=headers
     )
-    assert r.status_code == 422
-    body = r.get_json()
+    body = assert_problem(r, 422, "Validation error")
     ips = body.get("invalid_params") or []
     assert any(p.get("name") == "role" for p in ips)
 
@@ -102,8 +99,7 @@ def test_patch_roles_422_additional_properties(client_admin):
     r = client_admin.patch(
         "/admin/roles/123", json={"role": "viewer", "other": True}, headers=headers
     )
-    assert r.status_code == 422
-    body = r.get_json()
+    body = assert_problem(r, 422, "Validation error")
     ips = body.get("invalid_params") or []
     assert any((p.get("name") in ("other", "unknown")) and p.get("reason") == "additional_properties_not_allowed" for p in ips)
 
@@ -115,7 +111,7 @@ def test_patch_roles_404_unknown_user_id(client_admin):
     r = client_admin.patch(
         "/admin/roles/nonexistent-user", json={"role": "viewer"}, headers=headers
     )
-    assert r.status_code == 404
+    assert_problem(r, 404, "Not Found")
 
 
 def test_patch_roles_happy_path_persists_change_and_idempotent(client_admin):
