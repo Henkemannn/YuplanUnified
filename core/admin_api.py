@@ -537,6 +537,128 @@ def admin_users_delete_soft(user_id: str):  # type: ignore[return-value]
         db.close()
 
 
+@bp.patch("/users/<string:user_id>")
+@require_roles("admin")
+def admin_users_update_patch(user_id: str):  # type: ignore[return-value]
+    """Update a user's email and/or role (partial update).
+
+    Behavior:
+      - Guarded by admin (+ CSRF enforced centrally for /admin mutations).
+      - Lookup by (tenant_id, user_id) with deleted_at IS NULL; 404 if not found.
+      - Accepts partial body with optional email, role; idempotent if no change.
+      - Returns 200 {id, email, role, updated_at} (UTC ISO string).
+    """
+    # Parse and validate payload
+    data = request.get_json(silent=True) or {}
+    invalid_params: list[dict[str, object]] = []
+    allowed_roles = {"admin", "editor", "viewer"}
+    if not isinstance(data, dict):
+        invalid_params.append({"name": "body", "reason": "invalid_type"})
+    else:
+        # Disallow additional properties
+        for k in data.keys():
+            if k not in ("email", "role"):
+                invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
+        if "email" in data:
+            em = data.get("email")
+            if not isinstance(em, str):
+                invalid_params.append({"name": "email", "reason": "invalid_type"})
+            else:
+                if "@" not in em:
+                    invalid_params.append({"name": "email", "reason": "invalid_format"})
+        if "role" in data:
+            r = data.get("role")
+            if not isinstance(r, str):
+                invalid_params.append({"name": "role", "reason": "invalid_type"})
+            elif r not in allowed_roles:
+                invalid_params.append({"name": "role", "reason": "invalid_enum", "allowed": ["admin", "editor", "viewer"]})
+    if invalid_params:
+        return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": invalid_params}), 422  # type: ignore[return-value]
+
+    # Tenant + user lookup (active only)
+    from flask import g as _g
+    from .db import get_session as _get_session
+    from .models import User as _User
+    db = _get_session()
+    try:
+        try:
+            tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
+            tid_int = int(tid) if tid is not None else None
+        except Exception:
+            tid_int = None
+        try:
+            uid_int = int(user_id)
+        except Exception:
+            uid_int = None
+        if tid_int is None or uid_int is None:
+            r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
+            return r404, 404  # type: ignore[return-value]
+        row = (
+            db.query(_User)
+            .filter(_User.tenant_id == tid_int, _User.id == uid_int, _User.deleted_at.is_(None))
+            .first()
+        )
+        if not row:
+            r404 = jsonify({"ok": False, "error": "not_found", "message": "user not found"})
+            return r404, 404  # type: ignore[return-value]
+
+        # Duplicate email check (same tenant, active users, excluding self)
+        if "email" in data and isinstance(data.get("email"), str):
+            new_email = str(data["email"]).strip()
+            if new_email and new_email != str(getattr(row, "email", "")):
+                exists = (
+                    db.query(_User)
+                    .filter(
+                        _User.tenant_id == tid_int,
+                        _User.email == new_email,
+                        _User.deleted_at.is_(None),
+                        _User.id != uid_int,
+                    )
+                    .first()
+                )
+                if exists is not None:
+                    return jsonify({"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name": "email", "reason": "duplicate"}]}), 422  # type: ignore[return-value]
+
+        # Apply changes; idempotent if no actual field differences
+        changed = False
+        if "email" in data and isinstance(data.get("email"), str):
+            new_email = str(data["email"]).strip()
+            if new_email and new_email != str(getattr(row, "email", "")):
+                row.email = new_email
+                changed = True
+        if "role" in data and isinstance(data.get("role"), str):
+            new_role = str(data["role"])
+            if new_role != str(getattr(row, "role", "")):
+                row.role = new_role
+                changed = True
+
+        from datetime import datetime as _dt, UTC as _UTC
+        if changed:
+            try:
+                row.updated_at = _dt.now(_UTC)
+            except Exception:
+                pass
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+        else:
+            # Ensure consistent behavior
+            try:
+                db.flush()
+                db.commit()
+            except Exception:
+                pass
+
+        resp = {
+            "id": str(getattr(row, "id", user_id)),
+            "email": str(getattr(row, "email", "")),
+            "role": str(getattr(row, "role", "")),
+            "updated_at": (getattr(row, "updated_at", None).isoformat() if getattr(row, "updated_at", None) else None),
+        }
+        return jsonify(resp), 200
+    finally:
+        db.close()
+
 # ---- Phase-2: admin feature-flags (stubs) ---------------------------------
 # Phase-2 stub: feature-flags endpoints (guarded)
 
