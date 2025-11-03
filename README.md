@@ -255,7 +255,13 @@ Phasing plan:
 ### CI Integration
 The lint / type gate runs in a dedicated workflow: `.github/workflows/lint-type.yml` (Ruff first, then Mypy). The general test workflow remains in `.github/workflows/ci.yml`.
 
-OpenAPI spec is validated on each push in CI (job: `openapi-validate`), and the generated `openapi.json` is uploaded as an artifact. Validation uses `openapi-spec-validator` (with `rpds-py`).
+OpenAPI spec is validated on each push in CI (job: `openapi-validate`), and the generated `openapi.json` is uploaded as an artifact. Validation uses `openapi-spec-validator`.
+
+Local note (Windows + Python 3.13): some validator transitive deps require a Rust-backed wheel (`rpds-py`), which may not be available for 3.13 yet. If you want to validate locally:
+```
+pip install -r requirements-dev.txt   # recommends Python 3.11/3.12
+```
+Alternatively install Rust toolchain so `rpds-py` can build from source.
 
 PR Checklist (developer self-check):
 1. `ruff check .` passes with no new violations.
