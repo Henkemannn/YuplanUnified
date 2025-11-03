@@ -1,5 +1,4 @@
 # Developer-only dependencies
-# Note: rpds-py wheels may not be available for Python 3.13 on Windows yet.
-# Use Python 3.11/3.12 for these tools, or install a Rust toolchain to build from source.
 openapi-spec-validator==0.7.1
-rpds-py; python_version < '3.13'
+lxml==5.3.0
+rpds-py==0.20.0 ; python_version < "3.13" or platform_system != "Windows"

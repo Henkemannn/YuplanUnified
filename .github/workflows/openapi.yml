@@ -86,6 +86,17 @@ jobs:
           curl -fsS http://127.0.0.1:5000/openapi.json > openapi.json
           test -s openapi.json
 
+      - name: Validate OpenAPI spec (refs & structure)
+        run: |
+          python - <<'PY'
+          import json, sys
+          from openapi_spec_validator import validate_spec
+          with open('openapi.json', 'r', encoding='utf-8') as f:
+              spec = json.load(f)
+          validate_spec(spec)
+          print('OpenAPI spec is valid')
+          PY
+
       - name: Normalize current spec
         run: |
           if command -v jq >/dev/null 2>&1; then

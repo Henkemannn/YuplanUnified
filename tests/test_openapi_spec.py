@@ -1,3 +1,10 @@
+import platform
+import sys
+
+if platform.system() == "Windows" and sys.version_info >= (3, 13):
+    import pytest as _pytest
+    _pytest.skip("Skip OpenAPI validator on Windows/Py3.13 (rpds wheels)", allow_module_level=True)
+
 
 
 def test_openapi_basic_structure(client_admin):
