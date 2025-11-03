@@ -580,7 +580,8 @@ def test_patch_flag_422(client, auth_headers, payload, expected):
 - [ ] Unit tests: RBAC/CSRF/404/422/happy path.
 - [ ] CI green: tests, typecheck/lint, openapi-validate.
 
----
+
+<!-- lint: markdownlint configured via .markdownlint.json; long lines permitted for tables and examples -->
 
 ## Endpoint 3: /admin/roles (GET + PATCH)
 
