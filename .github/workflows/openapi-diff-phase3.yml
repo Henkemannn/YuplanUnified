@@ -1,0 +1,96 @@
+name: openapi-diff-phase3
+
+on:
+  push:
+    branches:
+      - 'feat/admin-authz-phase3*'
+  pull_request:
+    branches:
+      - 'feat/admin-authz-phase3*'
+
+jobs:
+  diff:
+    name: Generate OpenAPI diff (phase3)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install minimal deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install Flask==3.0.3 openapi-spec-validator==0.7.1 rpds-py
+
+      - name: Generate current OpenAPI via app context
+        run: |
+          python - <<'PY'
+          from core.app_factory import create_app
+          app = create_app({'TESTING': True})
+          with app.app_context():
+              from flask.testing import FlaskClient
+              client: FlaskClient = app.test_client()
+              spec = client.get('/openapi.json', headers={'X-User-Role':'admin','X-Tenant-Id':'1'}).get_json()
+          import json
+          open('openapi.current.json','w').write(json.dumps(spec, indent=2, sort_keys=True))
+          print('Wrote openapi.current.json')
+          PY
+
+      - name: Compute diff against baseline (repo specs/openapi.current.json)
+        run: |
+          python - <<'PY'
+          import json, sys, hashlib
+          from pathlib import Path
+          import difflib
+
+          baseline_path = Path('specs/openapi.current.json')
+          current_path = Path('openapi.current.json')
+
+          if not baseline_path.exists():
+              print('No baseline found at specs/openapi.current.json; skipping diff.')
+              sys.exit(0)
+
+          base = baseline_path.read_text(encoding='utf-8').splitlines(keepends=False)
+          cur  = current_path.read_text(encoding='utf-8').splitlines(keepends=False)
+
+          udiff = difflib.unified_diff(base, cur, fromfile=str(baseline_path), tofile=str(current_path), n=2)
+          diff_txt = ''.join(udiff)
+
+          if not diff_txt.strip():
+              print('No differences detected between baseline and current spec.')
+          else:
+              print('Differences detected; writing artifact files...')
+
+          Path('openapi.diff.txt').write_text(diff_txt, encoding='utf-8')
+          # Write quick summary
+          import json
+          cur_json = json.loads(current_path.read_text(encoding='utf-8'))
+          base_json = json.loads(baseline_path.read_text(encoding='utf-8'))
+          def stats(d):
+              return {
+                  'paths': len(d.get('paths', {})),
+                  'schemas': len(d.get('components', {}).get('schemas', {})),
+              }
+          summary = {
+              'baseline': stats(base_json),
+              'current': stats(cur_json),
+          }
+          Path('openapi.diff.summary.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
+          print('Summary:', summary)
+          PY
+
+      - name: Upload diff artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-diff-phase3
+          path: |
+            openapi.current.json
+            openapi.diff.txt
+            openapi.diff.summary.json
+          if-no-files-found: warn
