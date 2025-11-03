@@ -4,8 +4,6 @@ from typing import cast
 
 from flask import Blueprint, current_app, jsonify, request, session
 
-from .app_authz import require_roles
-
 from . import metrics as metrics_mod
 from .api_types import (
     ErrorResponse,
@@ -14,6 +12,7 @@ from .api_types import (
     TenantCreateResponse,
     TenantListResponse,
 )
+from .app_authz import require_roles
 from .db import get_session
 from .feature_service import FeatureService
 from .http_limits import limit as http_limit
@@ -445,9 +444,10 @@ def admin_users_list_stub():  # type: ignore[return-value]
             pass
 
     from flask import g as _g
+    from sqlalchemy import func as _func
+
     from .db import get_session as _get_session
     from .models import User as _User
-    from sqlalchemy import func as _func
     db = _get_session()
     try:
         tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
@@ -517,7 +517,7 @@ def admin_users_create_stub():  # type: ignore[return-value]
         elif role not in allowed_roles:
             invalid_params.append({"name": "role", "reason": "invalid_enum", "allowed": sorted(list(allowed_roles))})
     # Additional properties
-    for k in data.keys():
+    for k in data:
         if k not in ("email", "role"):
             invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
     if invalid_params:
@@ -525,6 +525,7 @@ def admin_users_create_stub():  # type: ignore[return-value]
     # Success (happy path connected to DB minimally; still returns simple payload)
     try:
         from flask import g as _g
+
         from .db import get_session as _get_session
         from .models import User as _User
         db = _get_session()
@@ -581,10 +582,12 @@ def admin_users_delete_soft(user_id: str):  # type: ignore[return-value]
       - If found → set deleted_at=now(UTC), commit, return 200 {id, deleted_at}.
       - Idempotent: second call returns 404.
     """
+    from datetime import UTC as _UTC, datetime as _dt
+
     from flask import g as _g
+
     from .db import get_session as _get_session
     from .models import User as _User
-    from datetime import datetime as _dt, UTC as _UTC
     # Parse tenant + user id
     try:
         tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
@@ -637,7 +640,7 @@ def admin_users_update_patch(user_id: str):  # type: ignore[return-value]
         invalid_params.append({"name": "body", "reason": "invalid_type"})
     else:
         # Disallow additional properties
-        for k in data.keys():
+        for k in data:
             if k not in ("email", "role"):
                 invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
         if "email" in data:
@@ -658,6 +661,7 @@ def admin_users_update_patch(user_id: str):  # type: ignore[return-value]
 
     # Tenant + user lookup (active only)
     from flask import g as _g
+
     from .db import get_session as _get_session
     from .models import User as _User
     db = _get_session()
@@ -721,7 +725,7 @@ def admin_users_update_patch(user_id: str):  # type: ignore[return-value]
                 changed = True
                 role_changed = True
 
-        from datetime import datetime as _dt, UTC as _UTC
+        from datetime import UTC as _UTC, datetime as _dt
         if changed:
             try:
                 row.updated_at = _dt.now(_UTC)
@@ -799,16 +803,15 @@ def admin_users_replace_put(user_id: str):  # type: ignore[return-value]
         if "role" not in data:
             invalid_params.append({"name": "role", "reason": "required"})
         # Disallow additional properties
-        for k in data.keys():
+        for k in data:
             if k not in ("email", "role"):
                 invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
         # Validate types and formats
         em = data.get("email")
         if em is not None and not isinstance(em, str):
             invalid_params.append({"name": "email", "reason": "invalid_type"})
-        elif isinstance(em, str):
-            if "@" not in em:
-                invalid_params.append({"name": "email", "reason": "invalid_format"})
+        elif isinstance(em, str) and "@" not in em:
+            invalid_params.append({"name": "email", "reason": "invalid_format"})
         r = data.get("role")
         if r is not None and not isinstance(r, str):
             invalid_params.append({"name": "role", "reason": "invalid_type"})
@@ -819,6 +822,7 @@ def admin_users_replace_put(user_id: str):  # type: ignore[return-value]
 
     # Tenant + user lookup (active only)
     from flask import g as _g
+
     from .db import get_session as _get_session
     from .models import User as _User
     db = _get_session()
@@ -876,7 +880,7 @@ def admin_users_replace_put(user_id: str):  # type: ignore[return-value]
             changed = True
             role_changed = True
 
-        from datetime import datetime as _dt, UTC as _UTC
+        from datetime import UTC as _UTC, datetime as _dt
         if changed:
             try:
                 row.updated_at = _dt.now(_UTC)
@@ -957,6 +961,7 @@ def admin_feature_flags_list_stub():  # type: ignore[return-value]
         except Exception:
             pass
     from flask import g as _g
+
     from .db import get_session as _get_session
     from .models import TenantFeatureFlag as _TFF
     db = _get_session()
@@ -1001,9 +1006,8 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
     invalid_params: list[dict[str, object]] = []
     if isinstance(data, dict):
         allowed_keys = {"enabled", "notes"}
-        if "enabled" in data:
-            if not isinstance(data.get("enabled"), bool):
-                invalid_params.append({"name": "enabled", "reason": "invalid_type"})
+        if "enabled" in data and not isinstance(data.get("enabled"), bool):
+            invalid_params.append({"name": "enabled", "reason": "invalid_type"})
         if "notes" in data:
             val = data.get("notes")
             if not isinstance(val, str):
@@ -1011,7 +1015,7 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
             else:
                 if len(val) > 500:
                     invalid_params.append({"name": "notes", "reason": "max_length_exceeded", "max": 500})
-        for k in data.keys():
+        for k in data:
             if k not in allowed_keys:
                 invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
     else:
@@ -1021,9 +1025,10 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 
     # Not-found guard (tenant+key). If missing, return 404 with central envelope.
     try:
+        from flask import g as _g
+
         from .db import get_session as _get_session
         from .models import TenantFeatureFlag as _TenantFeatureFlag
-        from flask import g as _g
         db = _get_session()
         try:
             tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
@@ -1047,10 +1052,12 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 
     # Persist enabled/notes if provided; return updated record
     try:
-        from datetime import datetime as _dt, UTC as _UTC
+        from datetime import UTC as _UTC, datetime as _dt
+
+        from flask import g as _g2
+
         from .db import get_session as _get_session2
         from .models import TenantFeatureFlag as _TenantFeatureFlag2
-        from flask import g as _g2
         db2 = _get_session2()
         try:
             tid2 = getattr(_g2, "tenant_id", None) or session.get("tenant_id")
@@ -1130,9 +1137,10 @@ def admin_roles_list_stub():  # type: ignore[return-value]
         except Exception:
             pass
     from flask import g as _g
+    from sqlalchemy import func as _func
+
     from .db import get_session as _get_session
     from .models import User as _User
-    from sqlalchemy import func as _func
     db = _get_session()
     try:
         tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
@@ -1182,7 +1190,7 @@ def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
                 invalid_params.append({"name": "role", "reason": "invalid_type"})
             elif role not in allowed_roles:
                 invalid_params.append({"name": "role", "reason": "invalid_enum", "allowed": ["admin","editor","viewer"]})
-        for k in data.keys():
+        for k in data:
             if k not in ("role",):
                 invalid_params.append({"name": str(k), "reason": "additional_properties_not_allowed"})
     if invalid_params:
@@ -1190,9 +1198,10 @@ def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
 
     # Not-found: lookup user by tenant + user_id; if missing return 404 (validation first)
     try:
+        from flask import g as _g
+
         from .db import get_session as _get_session
         from .models import User as _User
-        from flask import g as _g
         db = _get_session()
         try:
             tid = getattr(_g, "tenant_id", None) or session.get("tenant_id")
@@ -1219,10 +1228,12 @@ def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
 
     # Persist role change (idempotent) and return updated user payload
     try:
-        from datetime import datetime as _dt, UTC as _UTC
+        from datetime import UTC as _UTC, datetime as _dt
+
+        from flask import g as _g2
+
         from .db import get_session as _get_session2
         from .models import User as _User2
-        from flask import g as _g2
         db2 = _get_session2()
         try:
             tid2 = getattr(_g2, "tenant_id", None) or session.get("tenant_id")
