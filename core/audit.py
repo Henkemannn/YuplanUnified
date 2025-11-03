@@ -32,7 +32,27 @@ def log_event(name: str, **fields) -> None:
     except Exception:  # pragma: no cover
         return None
 
-__all__ = ["log_task_status_transition", "log_event"]
+def log(name: str, actor_id: int | None = None, tenant_id: int | None = None, meta: dict | None = None) -> None:
+    """Convenience helper for emitting audit events.
+
+    Parameters:
+      - name: event name
+      - actor_id: acting user id (optional; inferred from session if absent)
+      - tenant_id: tenant context (optional; inferred if absent)
+      - meta: additional payload fields (dict)
+    """
+    meta = meta or {}
+    try:
+        kwargs = dict(meta)
+        if actor_id is not None:
+            kwargs["actor_user_id"] = actor_id
+        if tenant_id is not None:
+            kwargs["tenant_id"] = tenant_id
+        log_event(name, **kwargs)
+    except Exception:  # pragma: no cover
+        return None
+
+__all__ = ["log_task_status_transition", "log_event", "log"]
 
 
 def log_task_status_transition(db: Session, task: Task, old_status: str | None, new_status: str, user_id: int | None) -> None:

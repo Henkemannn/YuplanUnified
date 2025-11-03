@@ -37,6 +37,10 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50))  # admin, unit_portal, cook, superuser
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
     refresh_token_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Use timezone-aware UTC timestamps for last role/user update operations
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    # Soft-delete marker (UTC, timezone-aware). NULL = active
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
 
 class Unit(Base):
     __tablename__ = "units"
@@ -202,6 +206,8 @@ class TenantFeatureFlag(Base):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     name: Mapped[str] = mapped_column(String(80))  # e.g. module.offshore, waste.metrics
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 # --- Tenant Metadata ---
 class TenantMetadata(Base):

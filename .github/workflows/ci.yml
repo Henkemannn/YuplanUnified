@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
       - name: Install dependencies (ruff + mypy only)
         run: |
@@ -38,12 +38,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
       - name: Install minimal deps
         run: |
           python -m pip install --upgrade pip
-          pip install openapi-spec-validator==0.7.1 Flask==3.0.3
+          pip install openapi-spec-validator==0.7.1 Flask==3.0.3 rpds-py
       - name: Generate spec via app context
         run: |
           python - <<'PY'
@@ -93,7 +93,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
 
       - name: Install dependencies
@@ -118,6 +118,13 @@ jobs:
           DATABASE_URL: sqlite:///ci.db
         run: |
           pytest -q
+
+      # Phase 2 DoD gate – admin authz must stay green
+      - name: Run admin test suite (must stay green)
+        env:
+          DATABASE_URL: sqlite:///ci.db
+        run: |
+          pytest tests/admin -v --maxfail=1 --disable-warnings
 
       - name: Archive test results (optional placeholder)
         if: always()
