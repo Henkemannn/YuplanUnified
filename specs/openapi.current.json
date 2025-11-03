@@ -10,196 +10,173 @@
       }
     },
     "responses": {
-      "Problem400": {
+      "Error400": {
         "content": {
-          "application/problem+json": {
-            "examples": {},
+          "application/json": {
+            "examples": {
+              "bad_request": {
+                "value": {
+                  "error": "bad_request",
+                  "message": "Bad Request"
+                }
+              }
+            },
             "schema": {
-              "$ref": "#/components/schemas/ProblemDetails"
+              "$ref": "#/components/schemas/Error"
             }
           }
         },
-        "description": "Problem 400",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/X-Request-Id"
-          }
-        }
+        "description": "Bad Request"
       },
-      "Problem401": {
+      "Error401": {
         "content": {
-          "application/problem+json": {
+          "application/json": {
             "examples": {
-              "invalid_token": {
-                "value": {
-                  "detail": "invalid_token",
-                  "request_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-                  "status": 401,
-                  "title": "Unauthorized",
-                  "type": "https://example.com/errors/unauthorized"
-                }
-              },
               "unauthorized": {
                 "value": {
-                  "detail": "unauthorized",
-                  "request_id": "11111111-1111-1111-1111-111111111111",
-                  "status": 401,
-                  "title": "Unauthorized",
-                  "type": "https://example.com/errors/unauthorized"
+                  "error": "unauthorized",
+                  "message": "Bearer token missing or invalid"
                 }
               }
             },
             "schema": {
-              "$ref": "#/components/schemas/ProblemDetails"
+              "$ref": "#/components/schemas/Error"
             }
           }
         },
-        "description": "Problem 401",
-        "headers": {
-          "WWW-Authenticate": {
-            "description": "Auth challenge (Bearer)",
-            "schema": {
-              "type": "string"
-            }
-          },
-          "X-Request-Id": {
-            "$ref": "#/components/headers/X-Request-Id"
-          }
-        }
+        "description": "Unauthorized"
       },
-      "Problem403": {
+      "Error403": {
         "content": {
-          "application/problem+json": {
-            "examples": {},
-            "schema": {
-              "$ref": "#/components/schemas/ProblemDetails"
-            }
-          }
-        },
-        "description": "Problem 403",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/X-Request-Id"
-          }
-        }
-      },
-      "Problem404": {
-        "content": {
-          "application/problem+json": {
-            "examples": {},
-            "schema": {
-              "$ref": "#/components/schemas/ProblemDetails"
-            }
-          }
-        },
-        "description": "Problem 404",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/X-Request-Id"
-          }
-        }
-      },
-      "Problem409": {
-        "content": {
-          "application/problem+json": {
-            "examples": {},
-            "schema": {
-              "$ref": "#/components/schemas/ProblemDetails"
-            }
-          }
-        },
-        "description": "Problem 409",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/X-Request-Id"
-          }
-        }
-      },
-      "Problem422": {
-        "content": {
-          "application/problem+json": {
+          "application/json": {
             "examples": {
-              "validation": {
+              "forbidden": {
                 "value": {
-                  "detail": "validation_error",
-                  "errors": [
-                    {
-                      "field": "name",
-                      "message": "required"
-                    }
-                  ],
-                  "request_id": "22222222-2222-2222-2222-222222222222",
-                  "status": 422,
-                  "title": "Unprocessable Entity",
-                  "type": "https://example.com/errors/validation_error"
+                  "error": "forbidden",
+                  "message": "Requires role admin",
+                  "required_role": "admin"
                 }
               }
             },
             "schema": {
-              "$ref": "#/components/schemas/ProblemDetails"
+              "properties": {
+                "error": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "required_role": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "error",
+                "message"
+              ],
+              "type": "object"
             }
           }
         },
-        "description": "Problem 422",
+        "description": "Forbidden"
+      },
+      "Error404": {
+        "content": {
+          "application/json": {
+            "examples": {
+              "not_found": {
+                "value": {
+                  "error": "not_found",
+                  "message": "Not Found"
+                }
+              }
+            },
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Not Found"
+      },
+      "Error409": {
+        "content": {
+          "application/json": {
+            "examples": {
+              "conflict": {
+                "value": {
+                  "error": "conflict",
+                  "message": "Conflict"
+                }
+              }
+            },
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Conflict"
+      },
+      "Error429": {
+        "content": {
+          "application/json": {
+            "examples": {
+              "rateLimited": {
+                "value": {
+                  "error": "rate_limited",
+                  "message": "Too many requests",
+                  "retry_after": 30
+                }
+              }
+            },
+            "schema": {
+              "properties": {
+                "error": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retry_after": {
+                  "description": "Ceiled seconds until next permitted attempt (min 1 when present)",
+                  "nullable": true,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "error",
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Rate Limited",
         "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/X-Request-Id"
+          "Retry-After": {
+            "description": "Seconds until new request may succeed",
+            "schema": {
+              "type": "integer"
+            }
           }
         }
       },
-      "Problem429": {
+      "Error500": {
         "content": {
-          "application/problem+json": {
+          "application/json": {
             "examples": {
-              "limited": {
+              "internal_error": {
                 "value": {
-                  "detail": "rate_limited",
-                  "request_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-                  "retry_after": 30,
-                  "status": 429,
-                  "title": "Too Many Requests",
-                  "type": "https://example.com/errors/rate_limited"
+                  "error": "internal_error",
+                  "message": "Internal Server Error"
                 }
               }
             },
             "schema": {
-              "$ref": "#/components/schemas/ProblemDetails"
+              "$ref": "#/components/schemas/Error"
             }
           }
         },
-        "description": "Problem 429",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/X-Request-Id"
-          }
-        }
-      },
-      "Problem500": {
-        "content": {
-          "application/problem+json": {
-            "examples": {
-              "incident": {
-                "value": {
-                  "detail": "internal_error",
-                  "incident_id": "33333333-3333-3333-3333-333333333333",
-                  "request_id": "33333333-3333-3333-3333-333333333333",
-                  "status": 500,
-                  "title": "Internal Server Error",
-                  "type": "https://example.com/errors/internal_error"
-                }
-              }
-            },
-            "schema": {
-              "$ref": "#/components/schemas/ProblemDetails"
-            }
-          }
-        },
-        "description": "Problem 500",
-        "headers": {
-          "X-Request-Id": {
-            "$ref": "#/components/headers/X-Request-Id"
-          }
-        }
+        "description": "Internal Server Error"
       },
       "UnsupportedMediaType": {
         "description": "Unsupported Media Type"
@@ -237,6 +214,49 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "Error": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "example": "validation_error",
+            "type": "string"
+          },
+          "message": {
+            "example": "Invalid input",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "message"
+        ],
+        "type": "object"
+      },
+      "FeatureFlag": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "notes": {
+            "nullable": true,
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "enabled"
+        ],
         "type": "object"
       },
       "ImportErrorResponse": {
@@ -625,53 +645,38 @@
       },
       "ProblemDetails": {
         "additionalProperties": true,
-        "description": "RFC7807 Problem Details (pilot). Extended with request_id, incident_id, errors[]",
         "properties": {
           "detail": {
+            "nullable": true,
             "type": "string"
           },
-          "errors": {
-            "description": "Validation issues (422)",
+          "invalid_params": {
             "items": {
               "type": "object"
             },
             "type": "array"
           },
-          "incident_id": {
-            "description": "Present only for 500 errors to correlate logs",
+          "required_role": {
             "nullable": true,
             "type": "string"
-          },
-          "instance": {
-            "format": "uri",
-            "nullable": true,
-            "type": "string"
-          },
-          "request_id": {
-            "description": "Correlation id echoed as X-Request-Id header",
-            "type": "string"
-          },
-          "retry_after": {
-            "description": "Rate limit reset seconds (429)",
-            "nullable": true,
-            "type": "integer"
           },
           "status": {
+            "example": 422,
             "type": "integer"
           },
           "title": {
+            "example": "Validation error",
             "type": "string"
           },
           "type": {
-            "format": "uri",
+            "example": "about:blank",
             "type": "string"
           }
         },
         "required": [
           "type",
           "title",
-          "status",
-          "detail"
+          "status"
         ],
         "type": "object"
       },
@@ -824,6 +829,36 @@
           "features"
         ],
         "type": "object"
+      },
+      "User": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "format": "email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "editor",
+              "viewer"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role"
+        ],
+        "type": "object"
+      },
+      "UserWithRole": {
+        "$ref": "#/components/schemas/User"
       }
     },
     "securitySchemes": {
@@ -831,11 +866,16 @@
         "bearerFormat": "JWT",
         "scheme": "bearer",
         "type": "http"
+      },
+      "CsrfToken": {
+        "description": "Fetch via GET /csrf",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "type": "apiKey"
       }
     }
   },
   "info": {
-    "description": "Problem Details (RFC7807) is the canonical error format across all endpoints. Legacy ErrorXXX components have been removed per ADR-003.",
     "title": "Unified Platform API",
     "version": "0.3.0"
   },
@@ -960,29 +1000,11 @@
               }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/Problem400"
-          },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error403"
           }
         },
         "security": [
@@ -993,6 +1015,222 @@
         "summary": "List audit events (paged, newest first)",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/admin/feature-flags": {
+      "get": {
+        "description": "pagination stub \u2014 currently ignored by API response. Errors on admin routes use RFC7807 (application/problem+json).",
+        "parameters": [
+          {
+            "description": "Quick filter",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "ok": {
+                    "value": {
+                      "items": [
+                        {
+                          "enabled": true,
+                          "key": "beta-ui",
+                          "notes": "Activated",
+                          "updated_at": "2025-01-01T12:00:00+00:00"
+                        }
+                      ],
+                      "total": 1
+                    }
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/FeatureFlag"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Flags"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List feature flags (tenant scoped)",
+        "tags": [
+          "admin",
+          "feature-flags"
+        ]
+      }
+    },
+    "/admin/feature-flags/{key}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "key",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "patch": {
+        "description": "On change, an audit event (feature_flag_update) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "notes": {
+                    "maxLength": 500,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureFlag"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "flagMissing": {
+                    "value": {
+                      "error": "not_found",
+                      "message": "feature flag not found",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "enabledType": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "name": "enabled",
+                          "reason": "invalid_type"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  },
+                  "notesTooLong": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "max": 500,
+                          "name": "notes",
+                          "reason": "max_length_exceeded"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": [],
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Update feature flag (enabled/notes)",
+        "tags": [
+          "admin",
+          "feature-flags"
         ]
       }
     },
@@ -1014,28 +1252,26 @@
             "description": "Flags listed"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
+            "$ref": "#/components/responses/Error403"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "429"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -1080,28 +1316,26 @@
             "description": "Flag updated"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
+            "$ref": "#/components/responses/Error403"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "429"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -1128,29 +1362,11 @@
             },
             "description": "Tenants with flag enabled"
           },
-          "400": {
-            "$ref": "#/components/responses/Problem400"
-          },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error403"
           }
         },
         "security": [
@@ -1189,28 +1405,13 @@
             "description": "Deleted (idempotent)"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error403"
           }
         },
         "security": [
@@ -1275,28 +1476,13 @@
             "description": "Paged limits"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error403"
           }
         },
         "security": [
@@ -1332,28 +1518,13 @@
             "description": "Upserted"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error403"
           }
         },
         "security": [
@@ -1367,35 +1538,854 @@
         ]
       }
     },
+    "/admin/roles": {
+      "get": {
+        "description": "pagination stub \u2014 currently ignored by API response. Errors on admin routes use RFC7807 (application/problem+json).",
+        "parameters": [
+          {
+            "description": "Filter by email",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "ok": {
+                    "value": {
+                      "items": [
+                        {
+                          "email": "a@ex",
+                          "id": "u1",
+                          "role": "editor"
+                        }
+                      ],
+                      "total": 1
+                    }
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/UserWithRole"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Users with roles"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List users with roles",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/roles/{user_id}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "user_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ],
+      "patch": {
+        "description": "On change, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "role": {
+                    "enum": [
+                      "admin",
+                      "editor",
+                      "viewer"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "role"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "ok": {
+                    "value": {
+                      "email": "a@ex",
+                      "id": "u1",
+                      "role": "editor",
+                      "updated_at": "2025-01-01T12:00:00+00:00"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/UserWithRole"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "userMissing": {
+                    "value": {
+                      "error": "not_found",
+                      "message": "user not found",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "invalidRole": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "allowed": [
+                            "admin",
+                            "editor",
+                            "viewer"
+                          ],
+                          "name": "role",
+                          "reason": "invalid_enum"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": [],
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Update user role",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "description": "pagination stub \u2014 currently ignored by API response. Response header X-Users-Deleted-Total returns the count of soft-deleted users for the current tenant. Errors on admin routes use RFC7807 (application/problem+json).",
+        "parameters": [
+          {
+            "description": "Filter by email (case-insensitive substring)",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "ok": {
+                    "value": {
+                      "items": [
+                        {
+                          "email": "a@ex",
+                          "id": "u1",
+                          "role": "admin"
+                        }
+                      ],
+                      "total": 1
+                    }
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Users"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List users (tenant scoped)",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "On success, an audit event (user_create) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "admin",
+                      "editor",
+                      "viewer"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email",
+                  "role"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "additional": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "name": "extra",
+                          "reason": "additional_properties_not_allowed"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  },
+                  "duplicateEmail": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "name": "email",
+                          "reason": "duplicate"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  },
+                  "invalidEmail": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "name": "email",
+                          "reason": "invalid_format"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  },
+                  "invalidRole": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "allowed": [
+                            "admin",
+                            "editor",
+                            "viewer"
+                          ],
+                          "name": "role",
+                          "reason": "invalid_enum"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": [],
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Create user",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/users/{user_id}": {
+      "delete": {
+        "description": "Errors on admin routes use RFC7807 (application/problem+json).",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "ok": {
+                    "value": {
+                      "deleted_at": "2025-01-01T12:00:00+00:00",
+                      "id": "u1"
+                    }
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "deleted_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "deleted_at"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "userMissing": {
+                    "value": {
+                      "error": "not_found",
+                      "message": "user not found",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": [],
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Soft-delete user",
+        "tags": [
+          "admin"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "user_id",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "patch": {
+        "description": "When role changes, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "admin",
+                      "editor",
+                      "viewer"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "ok": {
+                    "value": {
+                      "email": "a2@ex",
+                      "id": "u1",
+                      "role": "editor",
+                      "updated_at": "2025-01-01T12:00:00+00:00"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/UserWithRole"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "userMissing": {
+                    "value": {
+                      "error": "not_found",
+                      "message": "user not found",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "duplicateEmail": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "name": "email",
+                          "reason": "duplicate"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  },
+                  "invalidEmail": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "name": "email",
+                          "reason": "invalid_format"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  },
+                  "invalidRole": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "allowed": [
+                            "admin",
+                            "editor",
+                            "viewer"
+                          ],
+                          "name": "role",
+                          "reason": "invalid_enum"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": [],
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Update user (email/role)",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Full-body replace of user email and role. Errors on admin routes use RFC7807 (application/problem+json).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "email": {
+                    "format": "email",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "admin",
+                      "editor",
+                      "viewer"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email",
+                  "role"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "ok": {
+                    "value": {
+                      "email": "a2@ex",
+                      "id": "u1",
+                      "role": "editor",
+                      "updated_at": "2025-01-01T12:00:00+00:00"
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/UserWithRole"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "userMissing": {
+                    "value": {
+                      "error": "not_found",
+                      "message": "user not found",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "duplicateEmail": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "name": "email",
+                          "reason": "duplicate"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  },
+                  "invalidEmail": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "name": "email",
+                          "reason": "invalid_format"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  },
+                  "invalidRole": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "allowed": [
+                            "admin",
+                            "editor",
+                            "viewer"
+                          ],
+                          "name": "role",
+                          "reason": "invalid_enum"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  },
+                  "missing": {
+                    "value": {
+                      "error": "invalid",
+                      "invalid_params": [
+                        {
+                          "name": "email",
+                          "reason": "required"
+                        },
+                        {
+                          "name": "role",
+                          "reason": "required"
+                        }
+                      ],
+                      "message": "validation_error",
+                      "ok": false
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": [],
+            "CsrfToken": []
+          }
+        ],
+        "summary": "Replace user (strict)",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/features": {
       "get": {
         "responses": {
           "200": {
             "description": "List flags"
           },
-          "400": {
-            "$ref": "#/components/responses/Problem400"
-          },
           "401": {
-            "$ref": "#/components/responses/Problem401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
+            "$ref": "#/components/responses/Error401"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "429"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -1415,28 +2405,23 @@
             "description": "Flag state (unknown -> enabled=false)"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
+            "$ref": "#/components/responses/Error401"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "429"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -1456,28 +2441,23 @@
             "description": "Updated flag"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
+            "$ref": "#/components/responses/Error401"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "429"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -1523,13 +2503,27 @@
             "description": "OK"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
           }
         },
         "summary": "Import CSV file"
@@ -1568,13 +2562,27 @@
             "description": "OK"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
           }
         },
         "summary": "Import DOCX table"
@@ -1662,13 +2670,27 @@
             "description": "OK"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
           }
         },
         "summary": "Import weekly menu (dry-run supported)"
@@ -1707,13 +2729,27 @@
             "description": "OK"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
           }
         },
         "summary": "Import XLSX spreadsheet"
@@ -1774,28 +2810,16 @@
             "description": "Paged notes list"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
+            "$ref": "#/components/responses/Error403"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -1813,28 +2837,16 @@
             "description": "Create note"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
+            "$ref": "#/components/responses/Error403"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -1853,29 +2865,17 @@
           "200": {
             "description": "Delete note"
           },
-          "400": {
-            "$ref": "#/components/responses/Problem400"
-          },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
+            "$ref": "#/components/responses/Error403"
           },
           "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
+            "$ref": "#/components/responses/Error404"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -1903,28 +2903,19 @@
             "description": "Update note"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
+            "$ref": "#/components/responses/Error403"
           },
           "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
+            "$ref": "#/components/responses/Error404"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -1992,28 +2983,16 @@
             "description": "Paged tasks list"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
+            "$ref": "#/components/responses/Error403"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -2041,28 +3020,26 @@
             "description": "Created task"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
+            "$ref": "#/components/responses/Error403"
           },
           "429": {
-            "$ref": "#/components/responses/Problem429"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "429"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -2081,29 +3058,17 @@
           "200": {
             "description": "Delete task"
           },
-          "400": {
-            "$ref": "#/components/responses/Problem400"
-          },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
+            "$ref": "#/components/responses/Error403"
           },
           "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
+            "$ref": "#/components/responses/Error404"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -2120,29 +3085,17 @@
           "200": {
             "description": "Get task"
           },
-          "400": {
-            "$ref": "#/components/responses/Problem400"
-          },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
+            "$ref": "#/components/responses/Error403"
           },
           "404": {
-            "$ref": "#/components/responses/Problem404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
+            "$ref": "#/components/responses/Error404"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -2170,28 +3123,22 @@
             "description": "Update task"
           },
           "400": {
-            "$ref": "#/components/responses/Problem400"
+            "$ref": "#/components/responses/Error400"
           },
           "401": {
-            "$ref": "#/components/responses/Problem401"
+            "$ref": "#/components/responses/Error401"
           },
           "403": {
-            "$ref": "#/components/responses/Problem403"
+            "$ref": "#/components/responses/Error403"
           },
           "404": {
-            "$ref": "#/components/responses/Problem404"
+            "$ref": "#/components/responses/Error404"
           },
           "409": {
-            "$ref": "#/components/responses/Problem409"
-          },
-          "422": {
-            "$ref": "#/components/responses/Problem422"
-          },
-          "429": {
-            "$ref": "#/components/responses/Problem429"
+            "$ref": "#/components/responses/Error409"
           },
           "500": {
-            "$ref": "#/components/responses/Problem500"
+            "$ref": "#/components/responses/Error500"
           }
         },
         "security": [
@@ -2228,6 +3175,9 @@
     },
     {
       "name": "Tasks"
+    },
+    {
+      "name": "admin"
     }
   ]
 }

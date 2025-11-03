@@ -58,6 +58,14 @@ Client -> Flask Blueprint (module or core) -> Service Layer -> ORM -> DB
 - Structured JSON logging in production mode
 - Health endpoint /health listing registered modules
 
+## Optimistic Concurrency (quick guide)
+- GET resource and store ETag from the response header.
+- For mutations (PATCH/PUT/DELETE), send header If-Match with the stored ETag.
+- If ETag matches, the change applies and a new ETag is returned.
+- If ETag is stale, server returns 412 problem+json with expected_etag and got_etag.
+- Conditional GET: send If-None-Match; matching ETag returns 304 with empty body.
+Note: On Windows with Python 3.13, OpenAPI validator tests are locally skipped; CI runs them on Ubuntu/Python 3.11.
+
 ## Future Extensions
 - Real-time notifications (WebSocket or SSE)
 - External SSO (OAuth2 / SAML)

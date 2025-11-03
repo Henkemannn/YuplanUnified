@@ -1,0 +1,144 @@
+name: openapi-diff-phase3
+
+on:
+  push:
+    branches:
+      - 'feat/admin-authz-phase3*'
+  pull_request:
+    branches:
+      - 'feat/admin-authz-phase3*'
+
+jobs:
+  diff:
+    name: Generate OpenAPI diff (phase3)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install minimal deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install Flask==3.0.3 SQLAlchemy==2.0.32 openapi-spec-validator==0.7.1 rpds-py
+
+      - name: Generate current OpenAPI via app context
+        run: |
+          python - <<'PY'
+          from core.app_factory import create_app
+          app = create_app({'TESTING': True})
+          with app.app_context():
+              from flask.testing import FlaskClient
+              client: FlaskClient = app.test_client()
+              # No special headers: avoid DB access in before_request via tenant feature flags
+              spec = client.get('/openapi.json').get_json()
+          import json
+          open('openapi.current.json','w').write(json.dumps(spec, indent=2, sort_keys=True))
+          print('Wrote openapi.current.json')
+          PY
+
+      - name: Compute diff against baseline (repo specs/openapi.current.json)
+        id: diff
+        run: |
+          python - <<'PY'
+          import json, sys, hashlib
+          from pathlib import Path
+          import difflib, os
+
+          baseline_path = Path('specs/openapi.current.json')
+          current_path = Path('openapi.current.json')
+
+          if not baseline_path.exists():
+              print('No baseline found at specs/openapi.current.json; skipping diff.')
+              # Still write summary of current
+              cur_json = json.loads(current_path.read_text(encoding='utf-8'))
+              def stats(d):
+                  return {
+                      'paths': len(d.get('paths', {})),
+                      'schemas': len(d.get('components', {}).get('schemas', {})),
+                  }
+              summary = { 'baseline': {'paths': 0, 'schemas': 0}, 'current': stats(cur_json) }
+              Path('openapi.diff.summary.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
+              # Export outputs for later steps
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+                  fh.write(f"baseline_paths=0\n")
+                  fh.write(f"baseline_schemas=0\n")
+                  fh.write(f"current_paths={summary['current']['paths']}\n")
+                  fh.write(f"current_schemas={summary['current']['schemas']}\n")
+                  fh.write(f"diff_detected=false\n")
+              sys.exit(0)
+
+          base = baseline_path.read_text(encoding='utf-8').splitlines(keepends=False)
+          cur  = current_path.read_text(encoding='utf-8').splitlines(keepends=False)
+
+          udiff = difflib.unified_diff(base, cur, fromfile=str(baseline_path), tofile=str(current_path), n=2)
+          diff_txt = ''.join(udiff)
+
+          if not diff_txt.strip():
+              print('No differences detected between baseline and current spec.')
+              diff_detected = False
+          else:
+              print('Differences detected; writing artifact files...')
+              diff_detected = True
+
+          Path('openapi.diff.txt').write_text(diff_txt, encoding='utf-8')
+          # Write quick summary
+          cur_json = json.loads(current_path.read_text(encoding='utf-8'))
+          base_json = json.loads(baseline_path.read_text(encoding='utf-8'))
+          def stats(d):
+              return {
+                  'paths': len(d.get('paths', {})),
+                  'schemas': len(d.get('components', {}).get('schemas', {})),
+              }
+          cur_stats = stats(cur_json)
+          base_stats = stats(base_json)
+          summary = {
+              'baseline': base_stats,
+              'current': cur_stats,
+          }
+          Path('openapi.diff.summary.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
+          print('Summary:', summary)
+          # Export outputs for later steps
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write(f"baseline_paths={base_stats['paths']}\n")
+              fh.write(f"baseline_schemas={base_stats['schemas']}\n")
+              fh.write(f"current_paths={cur_stats['paths']}\n")
+              fh.write(f"current_schemas={cur_stats['schemas']}\n")
+              fh.write(f"diff_detected={'true' if diff_detected else 'false'}\n")
+          PY
+
+      - name: Comment PR with OpenAPI diff summary
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          ADDED_PATHS=$(( ${{ steps.diff.outputs.current_paths }} - ${{ steps.diff.outputs.baseline_paths }} ))
+          ADDED_SCHEMAS=$(( ${{ steps.diff.outputs.current_schemas }} - ${{ steps.diff.outputs.baseline_schemas }} ))
+          BODY=$(cat <<'EOF'
+          OpenAPI diff summary:
+          - Paths: ${{ steps.diff.outputs.baseline_paths }} -> ${{ steps.diff.outputs.current_paths }} (Δ ${ADDED_PATHS})
+          - Schemas: ${{ steps.diff.outputs.baseline_schemas }} -> ${{ steps.diff.outputs.current_schemas }} (Δ ${ADDED_SCHEMAS})
+
+          Artifacts: openapi-diff-phase3
+          EOF
+          )
+          gh api \
+            repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
+            -f body="$BODY"
+
+      - name: Upload diff artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-diff-phase3
+          path: |
+            openapi.current.json
+            openapi.diff.txt
+            openapi.diff.summary.json
+          if-no-files-found: warn
