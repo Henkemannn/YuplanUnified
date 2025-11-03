@@ -36,7 +36,8 @@ jobs:
           with app.app_context():
               from flask.testing import FlaskClient
               client: FlaskClient = app.test_client()
-              spec = client.get('/openapi.json', headers={'X-User-Role':'admin','X-Tenant-Id':'1'}).get_json()
+              # No special headers: avoid DB access in before_request via tenant feature flags
+              spec = client.get('/openapi.json').get_json()
           import json
           open('openapi.current.json','w').write(json.dumps(spec, indent=2, sort_keys=True))
           print('Wrote openapi.current.json')
