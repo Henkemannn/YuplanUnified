@@ -26,7 +26,7 @@ jobs:
       - name: Install minimal deps
         run: |
           python -m pip install --upgrade pip
-          pip install Flask==3.0.3 openapi-spec-validator==0.7.1 rpds-py
+          pip install Flask==3.0.3 SQLAlchemy==2.0.32 openapi-spec-validator==0.7.1 rpds-py
 
       - name: Generate current OpenAPI via app context
         run: |
