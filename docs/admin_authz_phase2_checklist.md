@@ -38,6 +38,8 @@ This checklist prepares the next batch after RC1 is merged. It assumes base = `f
 - Pending/Near-term
    - Optional: Roles GET `?q=` (mirror users); UI hints (CSRF/rights) in admin views; Users DELETE (soft-delete) for test-data cleanup.
 
+<!-- ci: re-run markdownlint after config changes -->
+
 ## Scope
 - Migrate remaining Admin routes to `app_authz.require_roles(["admin"])` with consistent RFC7807 401/403.
 - Add OpenAPI examples for Admin endpoints (403 examples, CsrfToken security for mutating operations).
