@@ -44,17 +44,34 @@ jobs:
           PY
 
       - name: Compute diff against baseline (repo specs/openapi.current.json)
+        id: diff
         run: |
           python - <<'PY'
           import json, sys, hashlib
           from pathlib import Path
-          import difflib
+          import difflib, os
 
           baseline_path = Path('specs/openapi.current.json')
           current_path = Path('openapi.current.json')
 
           if not baseline_path.exists():
               print('No baseline found at specs/openapi.current.json; skipping diff.')
+              # Still write summary of current
+              cur_json = json.loads(current_path.read_text(encoding='utf-8'))
+              def stats(d):
+                  return {
+                      'paths': len(d.get('paths', {})),
+                      'schemas': len(d.get('components', {}).get('schemas', {})),
+                  }
+              summary = { 'baseline': {'paths': 0, 'schemas': 0}, 'current': stats(cur_json) }
+              Path('openapi.diff.summary.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
+              # Export outputs for later steps
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+                  fh.write(f"baseline_paths=0\n")
+                  fh.write(f"baseline_schemas=0\n")
+                  fh.write(f"current_paths={summary['current']['paths']}\n")
+                  fh.write(f"current_schemas={summary['current']['schemas']}\n")
+                  fh.write(f"diff_detected=false\n")
               sys.exit(0)
 
           base = baseline_path.read_text(encoding='utf-8').splitlines(keepends=False)
@@ -65,12 +82,13 @@ jobs:
 
           if not diff_txt.strip():
               print('No differences detected between baseline and current spec.')
+              diff_detected = False
           else:
               print('Differences detected; writing artifact files...')
+              diff_detected = True
 
           Path('openapi.diff.txt').write_text(diff_txt, encoding='utf-8')
           # Write quick summary
-          import json
           cur_json = json.loads(current_path.read_text(encoding='utf-8'))
           base_json = json.loads(baseline_path.read_text(encoding='utf-8'))
           def stats(d):
@@ -78,13 +96,42 @@ jobs:
                   'paths': len(d.get('paths', {})),
                   'schemas': len(d.get('components', {}).get('schemas', {})),
               }
+          cur_stats = stats(cur_json)
+          base_stats = stats(base_json)
           summary = {
-              'baseline': stats(base_json),
-              'current': stats(cur_json),
+              'baseline': base_stats,
+              'current': cur_stats,
           }
           Path('openapi.diff.summary.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
           print('Summary:', summary)
+          # Export outputs for later steps
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write(f"baseline_paths={base_stats['paths']}\n")
+              fh.write(f"baseline_schemas={base_stats['schemas']}\n")
+              fh.write(f"current_paths={cur_stats['paths']}\n")
+              fh.write(f"current_schemas={cur_stats['schemas']}\n")
+              fh.write(f"diff_detected={'true' if diff_detected else 'false'}\n")
           PY
+
+      - name: Comment PR with OpenAPI diff summary
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          ADDED_PATHS=$(( ${{ steps.diff.outputs.current_paths }} - ${{ steps.diff.outputs.baseline_paths }} ))
+          ADDED_SCHEMAS=$(( ${{ steps.diff.outputs.current_schemas }} - ${{ steps.diff.outputs.baseline_schemas }} ))
+          BODY=$(cat <<'EOF'
+          OpenAPI diff summary:
+          - Paths: ${{ steps.diff.outputs.baseline_paths }} -> ${{ steps.diff.outputs.current_paths }} (Δ ${ADDED_PATHS})
+          - Schemas: ${{ steps.diff.outputs.baseline_schemas }} -> ${{ steps.diff.outputs.current_schemas }} (Δ ${ADDED_SCHEMAS})
+
+          Artifacts: openapi-diff-phase3
+          EOF
+          )
+          gh api \
+            repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
+            -f body="$BODY"
 
       - name: Upload diff artifact
         uses: actions/upload-artifact@v4
