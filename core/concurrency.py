@@ -63,6 +63,25 @@ def get_if_match_header() -> str | None:
     return request.headers.get("If-Match")
 
 
+def _normalize_etag(etag: str) -> str:
+    """Normalize an ETag by removing quotes and W/ prefix.
+    
+    Args:
+        etag: ETag string (e.g., 'W/"abc"', '"abc"', or 'abc')
+        
+    Returns:
+        Normalized ETag hash without quotes or W/ prefix
+    """
+    # Strip whitespace and outer quotes
+    clean = etag.strip().strip('"')
+    
+    # Handle weak ETags (W/"...") - strip the W/ prefix and quotes
+    if clean.startswith("W/"):
+        clean = clean[2:].strip('"')
+    
+    return clean
+
+
 def validate_if_match(
     entity_id: int | str,
     updated_at: datetime | None,
@@ -101,15 +120,9 @@ def validate_if_match(
     
     current_etag = compute_etag(entity_id, updated_at)
     
-    # Strip quotes from If-Match for comparison (handle both quoted and unquoted)
-    if_match_clean = if_match.strip().strip('"')
-    current_clean = current_etag.strip().strip('"')
-    
-    # Handle weak ETags (W/"...") - strip the W/ prefix
-    if if_match_clean.startswith("W/"):
-        if_match_clean = if_match_clean[2:].strip('"')
-    if current_clean.startswith("W/"):
-        current_clean = current_clean[2:].strip('"')
+    # Normalize both ETags for comparison
+    if_match_clean = _normalize_etag(if_match)
+    current_clean = _normalize_etag(current_etag)
     
     if if_match_clean != current_clean:
         return (False, "mismatch")

@@ -111,8 +111,9 @@ def test_validate_if_match_strips_quotes(client_admin):
     """Validation should handle quoted and unquoted ETags."""
     dt = datetime(2025, 1, 1, tzinfo=UTC)
     etag = compute_etag(1, dt)
-    # Extract hash without W/" prefix and quotes
-    etag_hash = etag.split('"')[1]
+    # Extract hash using the same normalization logic as the module
+    from core.concurrency import _normalize_etag
+    etag_hash = _normalize_etag(etag)
     
     # Test with various quote formats
     for if_match_value in [
