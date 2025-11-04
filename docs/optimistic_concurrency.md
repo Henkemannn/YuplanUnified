@@ -6,6 +6,19 @@ YuplanUnified uses ETags and HTTP conditional headers (If-Match / If-None-Match)
 
 Optimistic concurrency allows multiple clients to safely update shared resources without exclusive locks. Clients receive an ETag with each resource representation and must provide it in conditional requests to modify the resource.
 
+## CI & Branch Protection
+
+### Required Checks
+
+For branch protection on `master` branch, the following checks should be marked as required:
+- **admin-suite**: Runs all tests in `tests/admin/` to ensure admin functionality remains stable
+- **mypy-admin**: Type checks `core/concurrency.py`, `core/admin_api.py`, and `core/app_factory.py` with strict mode
+
+These checks ensure that:
+- Concurrency logic remains correct and type-safe
+- Admin endpoints continue to work as expected
+- ETag/If-Match behavior is preserved across changes
+
 ## Resources with Concurrency Support
 
 - **Admin Users** (`/admin/users/{id}`)
