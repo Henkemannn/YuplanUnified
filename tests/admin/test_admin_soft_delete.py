@@ -6,30 +6,37 @@ from ._problem_utils import assert_problem
 
 
 def _seed_two_users(tenant_id: int = 1):
+    from datetime import UTC, datetime
     db = get_session()
     try:
         if not db.query(User).filter_by(tenant_id=tenant_id, email="u1@example.com").first():
-            db.add(User(tenant_id=tenant_id, email="u1@example.com", role="viewer", password_hash="!"))
+            u1 = User(tenant_id=tenant_id, email="u1@example.com", role="viewer", password_hash="!")
+            u1.updated_at = datetime.now(UTC)
+            db.add(u1)
         if not db.query(User).filter_by(tenant_id=tenant_id, email="u2@example.com").first():
-            db.add(User(tenant_id=tenant_id, email="u2@example.com", role="editor", password_hash="!"))
+            u2 = User(tenant_id=tenant_id, email="u2@example.com", role="editor", password_hash="!")
+            u2.updated_at = datetime.now(UTC)
+            db.add(u2)
         db.commit()
-        # Return their ids
+        # Return their ids and updated_at
         u1 = db.query(User).filter_by(tenant_id=tenant_id, email="u1@example.com").first()
         u2 = db.query(User).filter_by(tenant_id=tenant_id, email="u2@example.com").first()
-        return (u1.id if u1 else None, u2.id if u2 else None)
+        return (u1.id if u1 else None, u1.updated_at if u1 else None, u2.id if u2 else None, u2.updated_at if u2 else None)
     finally:
         db.close()
 
 
 def test_soft_delete_and_list_filtering(client_admin):
     # Arrange: seed and capture ids
-    u1_id, u2_id = _seed_two_users(tenant_id=1)
+    from core.concurrency import compute_etag
+    u1_id, u1_updated_at, u2_id, u2_updated_at = _seed_two_users(tenant_id=1)
     assert u1_id is not None and u2_id is not None
 
     # Prime CSRF for admin
     with client_admin.session_transaction() as sess:
         sess["CSRF_TOKEN"] = "sd1"
-    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "sd1"}
+    etag = compute_etag(u1_id, u1_updated_at)
+    headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "sd1", "If-Match": etag}
 
     # Delete u1
     r_del = client_admin.delete(f"/admin/users/{u1_id}", headers=headers)
