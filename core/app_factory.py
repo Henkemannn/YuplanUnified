@@ -683,6 +683,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                             "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}
                         },
                         "304": {"$ref": "#/components/responses/NotModified304"},
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
                         "404": {
                             "description": "Not found",
                             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}
@@ -724,6 +725,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                             },
                             "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}
                         },
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
                         "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {
                             "description": "Not found",
@@ -776,6 +778,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                             },
                             "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}
                         },
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
                         "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {
                             "description": "Not found",
@@ -801,6 +804,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     ],
                     "responses": {
                         "204": {"description": "No Content"},
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
                         "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {
                             "description": "Not found",
@@ -868,6 +872,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "responses": {
                         "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}, "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}},
                         "304": {"$ref": "#/components/responses/NotModified304"},
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
                         "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"flagMissing": {"value": {"ok": False, "error": "not_found", "message": "feature flag not found"}}}}}}
                     }
                 }, ["401", "403", "404"]),
@@ -894,6 +899,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     },
                     "responses": {
                         "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}, "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}},
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
                         "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {
                             "description": "Not found",
@@ -907,7 +913,20 @@ def create_app(config_override: dict | None = None) -> Flask:
                             }}}
                         }
                     }
-                }, ["401", "403", "404", "422"])
+                }, ["401", "403", "404", "422"]),
+                "delete": attach({
+                    "tags": ["admin", "feature-flags"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Delete feature flag",
+                    "description": "Soft-delete feature flag. Requires If-Match header for optimistic concurrency. On success returns 204 No Content. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [{"$ref": "#/components/parameters/IfMatch"}],
+                    "responses": {
+                        "204": {"description": "No Content"},
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
+                        "412": {"$ref": "#/components/responses/PreconditionFailed412"},
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"flagMissing": {"value": {"ok": False, "error": "not_found", "message": "feature flag not found"}}}}}}
+                    }
+                }, ["401", "403", "404"])
             },
             "/admin/roles": {
                 "get": attach({
@@ -963,6 +982,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "responses": {
                         "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}}}, "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}},
                         "304": {"$ref": "#/components/responses/NotModified304"},
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
                         "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}}
                     }
                 }, ["401", "403", "404"]),
@@ -987,6 +1007,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     },
                     "responses": {
                         "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}, "examples": {"ok": {"value": {"id": "u1", "email": "a@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}}}, "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}},
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
                         "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}},
                         "422": {"description": "Validation error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}}}}}}
@@ -1001,6 +1022,7 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "parameters": [{"$ref": "#/components/parameters/IfMatch"}],
                     "responses": {
                         "204": {"description": "No Content"},
+                        "400": {"$ref": "#/components/responses/BadRequest400"},
                         "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}}
                     }
@@ -1034,6 +1056,43 @@ def create_app(config_override: dict | None = None) -> Flask:
                             "required_role": {"type": "string", "nullable": True}
                         },
                         "additionalProperties": True
+                    },
+                    "ProblemDetailsBadRequest": {
+                        "type": "object",
+                        "required": ["type","title","status","detail","invalid_params"],
+                        "properties": {
+                            "type": {"type": "string", "example": "about:blank"},
+                            "title": {"type": "string", "example": "Bad Request"},
+                            "status": {"type": "integer", "example": 400},
+                            "detail": {"type": "string", "example": "Invalid header"},
+                            "invalid_params": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "required": ["name", "reason"],
+                                    "properties": {
+                                        "name": {"type": "string", "example": "If-Match"},
+                                        "reason": {"type": "string", "example": "invalid_header"}
+                                    }
+                                }
+                            }
+                        },
+                        "additionalProperties": False
+                    },
+                    "ProblemDetailsPreconditionFailed": {
+                        "type": "object",
+                        "required": ["type","title","status","detail","resource","expected_etag","got_etag"],
+                        "properties": {
+                            "type": {"type": "string", "example": "about:blank"},
+                            "title": {"type": "string", "example": "Precondition Failed"},
+                            "status": {"type": "integer", "example": 412},
+                            "detail": {"type": "string", "example": "If-Match did not match"},
+                            "resource": {"type": "string", "example": "admin_user"},
+                            "resource_id": {"type": "string", "example": "123", "nullable": True},
+                            "expected_etag": {"type": "string", "example": 'W/"current"', "nullable": True},
+                            "got_etag": {"type": "string", "example": 'W/"stale"', "nullable": True}
+                        },
+                        "additionalProperties": False
                     },
                     "Error": error_schema,
                     # Minimal admin-related models
@@ -1095,11 +1154,76 @@ def create_app(config_override: dict | None = None) -> Flask:
                 },
                 "responses": {
                     **reusable,
-                    "PreconditionFailed412": {
-                        "description": "Precondition Failed",
-                        "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"precondition": {"value": {"type": "about:blank", "title": "Precondition Failed", "status": 412, "detail": "If-Match did not match", "expected_etag": 'W/"..."', "got_etag": 'W/"..."'}}}}}
+                    "BadRequest400": {
+                        "description": "Bad Request - Invalid header",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {"$ref": "#/components/schemas/ProblemDetailsBadRequest"},
+                                "examples": {
+                                    "invalidIfMatch": {
+                                        "summary": "Invalid If-Match header",
+                                        "value": {
+                                            "type": "about:blank",
+                                            "title": "Bad Request",
+                                            "status": 400,
+                                            "detail": "Invalid header",
+                                            "invalid_params": [{"name": "If-Match", "reason": "invalid_header"}]
+                                        }
+                                    },
+                                    "invalidIfNoneMatch": {
+                                        "summary": "Invalid If-None-Match header",
+                                        "value": {
+                                            "type": "about:blank",
+                                            "title": "Bad Request",
+                                            "status": 400,
+                                            "detail": "Invalid header",
+                                            "invalid_params": [{"name": "If-None-Match", "reason": "invalid_header"}]
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     },
-                    "NotModified304": {"description": "Not Modified"}
+                    "PreconditionFailed412": {
+                        "description": "Precondition Failed - If-Match did not match current ETag",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {"$ref": "#/components/schemas/ProblemDetailsPreconditionFailed"},
+                                "examples": {
+                                    "userMismatch": {
+                                        "summary": "User ETag mismatch",
+                                        "value": {
+                                            "type": "about:blank",
+                                            "title": "Precondition Failed",
+                                            "status": 412,
+                                            "detail": "If-Match did not match",
+                                            "resource": "admin_user",
+                                            "resource_id": "42",
+                                            "expected_etag": 'W/"current123"',
+                                            "got_etag": 'W/"stale456"'
+                                        }
+                                    },
+                                    "featureFlagMismatch": {
+                                        "summary": "Feature flag ETag mismatch",
+                                        "value": {
+                                            "type": "about:blank",
+                                            "title": "Precondition Failed",
+                                            "status": 412,
+                                            "detail": "If-Match did not match",
+                                            "resource": "feature_flag",
+                                            "resource_id": "beta-ui",
+                                            "expected_etag": 'W/"xyz789"',
+                                            "got_etag": 'W/"abc123"'
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "NotModified304": {
+                        "description": "Not Modified - Resource has not changed (If-None-Match matched current ETag)",
+                        "content": {}
+                    }
                 },
             },
             "paths": paths,
