@@ -1,6 +1,12 @@
 ## Unreleased
 
 ### Added
+- Admin concurrency: ETag/If-Match support for users/roles/feature-flags with optimistic locking (DELETE strict; PATCH/PUT allow idempotent no-op without If-Match)
+- OpenAPI: ProblemDetails schemas for 412 Precondition Failed and 400 Bad Request with typed response components
+- OpenAPI: 304 Not Modified response documentation for conditional GET requests
+- OpenAPI: DELETE endpoint for feature-flags with If-Match requirement
+- OpenAPI: 400 BadRequest response for invalid If-Match/If-None-Match headers on all concurrency-enabled endpoints
+- Docs: Optimistic concurrency quick guide (`docs/optimistic_concurrency.md`) with examples and testing notes
 - Strict Pocket 5: Tasks API & service under `--strict`.
 - Unified error envelope repo-brett: `{ "ok": false, "error", "message?" }`.
 - Tasks: `PATCH /tasks/{id}` (behåller `PUT` tills vidare).

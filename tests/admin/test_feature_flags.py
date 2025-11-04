@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from ._problem_utils import assert_problem
 
 
@@ -99,8 +98,22 @@ def test_patch_feature_flag_happy_path_persists_enabled_and_notes(client_admin, 
         sess["CSRF_TOKEN"] = "pfl1"
     headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "pfl1"}
     # Toggle enabled and update notes
+    # Include If-Match for changing update
+    import hashlib
+
+    from core.db import get_session as _gs
+    db2 = _gs()
+    try:
+        row = db2.query(TenantFeatureFlag).filter_by(tenant_id=1, name="some-flag").first()
+        ts = getattr(row, "updated_at", None)
+        ts_iso = ts.isoformat() if ts is not None else ""
+        etag = 'W/"' + hashlib.sha1(f"{'some-flag'}:{ts_iso}".encode()).hexdigest() + '"'
+    finally:
+        db2.close()
+    headers2 = dict(headers)
+    headers2["If-Match"] = etag
     r = client_admin.patch(
-        "/admin/feature-flags/some-flag", json={"enabled": True, "notes": "Activated"}, headers=headers
+        "/admin/feature-flags/some-flag", json={"enabled": True, "notes": "Activated"}, headers=headers2
     )
     assert r.status_code == 200
     body = r.get_json()

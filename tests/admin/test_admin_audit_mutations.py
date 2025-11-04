@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from core.db import get_session
-from core.models import User, TenantFeatureFlag
-
+from core.models import TenantFeatureFlag, User
 
 audit_calls = []
 
@@ -64,7 +63,15 @@ def test_audit_events_for_admin_mutations(monkeypatch, client_admin):
     u1_id, u2_id = _seed_users(tenant_id=1)
 
     # 2) PATCH /admin/roles/{id} changing role -> user_update_role (once)
-    r_role = client_admin.patch(f"/admin/roles/{u1_id}", json={"role": "editor"}, headers=headers)
+    # Fetch current ETag via GET, then send If-Match for the changing PATCH
+    base = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+    r_etag = client_admin.get(f"/admin/roles/{u1_id}", headers=base)
+    assert r_etag.status_code == 200
+    etag_role = r_etag.headers.get("ETag")
+    assert etag_role
+    r_role = client_admin.patch(
+        f"/admin/roles/{u1_id}", json={"role": "editor"}, headers={**headers, "If-Match": etag_role}
+    )
     assert r_role.status_code == 200
     before_count = len([c for c in audit_calls if c[0] == "user_update_role"])
 
@@ -76,8 +83,13 @@ def test_audit_events_for_admin_mutations(monkeypatch, client_admin):
 
     # 3) PATCH /admin/feature-flags/{key} changing enabled/notes -> feature_flag_update
     _ensure_flag(tenant_id=1, key="aud-flag")
+    # Fetch ETag then mutate with If-Match
+    r_flag_etag = client_admin.get("/admin/feature-flags/aud-flag", headers=base)
+    assert r_flag_etag.status_code == 200
+    etag_flag = r_flag_etag.headers.get("ETag")
+    assert etag_flag
     r_flag = client_admin.patch(
-        "/admin/feature-flags/aud-flag", json={"enabled": True, "notes": "On"}, headers=headers
+        "/admin/feature-flags/aud-flag", json={"enabled": True, "notes": "On"}, headers={**headers, "If-Match": etag_flag}
     )
     assert r_flag.status_code == 200
     flag_events = [c for c in audit_calls if c[0] == "feature_flag_update"]

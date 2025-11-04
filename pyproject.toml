@@ -1,12 +1,18 @@
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 exclude = [
   # Phase 1 lint scope intentionally excludes legacy & migration code; will be reintroduced in later pockets.
   "migrations",
   "legacy",
   "core/static",
   "core/templates",
+  ".venv",
+  ".venv*",
+  "**/site-packages/**",
+  ".mypy_cache",
+  ".ruff_cache",
+  ".pytest_cache",
 ]
 extend-exclude = ["**/*.md"]
 
@@ -17,6 +23,10 @@ ignore = [
   # Temporarily ignore line length (can be enabled later by removing E501 here & adding a formatting step)
   "E501",
   "SIM105",
+  # Temporarily ignore some simplification suggestions to minimize churn
+  "SIM102",
+  "SIM108",
+  "SIM222",
 ]
 
 [tool.ruff.lint.isort]

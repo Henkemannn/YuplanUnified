@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+
 from core.db import get_session
 from core.models import User
+
 from ._problem_utils import assert_problem
 
 
@@ -52,14 +55,28 @@ def test_users_patch_validation_duplicate_and_happy_path(client_admin):
     assert "duplicate" in reasons3
 
     # role update (idempotent OK regardless of prior state)
-    r4 = client_admin.patch(f"/admin/users/{u1_id}", json={"role": "editor"}, headers=headers)
+    # Include If-Match for actual change
+    db = get_session()
+    try:
+        row = db.query(User).filter_by(id=u1_id).first()
+        ts = getattr(row, "updated_at", None)
+        ts_iso = ts.isoformat() if ts is not None else ""
+        etag = 'W/"' + hashlib.sha1(f"{u1_id}:{ts_iso}".encode()).hexdigest() + '"'
+    finally:
+        db.close()
+    headers2 = dict(headers)
+    headers2["If-Match"] = etag
+    r4 = client_admin.patch(f"/admin/users/{u1_id}", json={"role": "editor"}, headers=headers2)
     assert r4.status_code == 200
     body4 = r4.get_json()
     assert set(body4.keys()) >= {"id", "email", "role", "updated_at"}
     assert body4["role"] == "editor"
 
-    # email update persists with updated_at present
-    r5 = client_admin.patch(f"/admin/users/{u1_id}", json={"email": "a2@ex"}, headers=headers)
+    # email update persists with updated_at present (requires If-Match)
+    headers3 = dict(headers2)
+    # Refresh ETag after prior change
+    headers3["If-Match"] = 'W/"' + hashlib.sha1(f"{u1_id}:{(get_session().query(User).filter_by(id=u1_id).first().updated_at or '').isoformat() if get_session().query(User).filter_by(id=u1_id).first().updated_at else ''}".encode()).hexdigest() + '"'
+    r5 = client_admin.patch(f"/admin/users/{u1_id}", json={"email": "a2@ex"}, headers=headers3)
     assert r5.status_code == 200
     body5 = r5.get_json()
     assert set(body5.keys()) >= {"id", "email", "role", "updated_at"}

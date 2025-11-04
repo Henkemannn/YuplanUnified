@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from ._problem_utils import assert_problem
 
 
@@ -134,8 +133,16 @@ def test_patch_roles_happy_path_persists_change_and_idempotent(client_admin):
         sess["CSRF_TOKEN"] = "tokR1"
     headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "tokR1"}
 
-    # Change role to editor
-    r1 = client_admin.patch(f"/admin/roles/{uid}", json={"role": "editor"}, headers=headers)
+    # Change role to editor (require If-Match since it's a change)
+    # Fetch current ETag via GET first
+    base = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+    r_get = client_admin.get(f"/admin/roles/{uid}", headers=base)
+    assert r_get.status_code == 200
+    etag = r_get.headers.get("ETag")
+    assert etag
+    headers_with_match = dict(headers)
+    headers_with_match["If-Match"] = etag
+    r1 = client_admin.patch(f"/admin/roles/{uid}", json={"role": "editor"}, headers=headers_with_match)
     assert r1.status_code == 200
     body1 = r1.get_json()
     assert body1.get("id") == uid

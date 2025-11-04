@@ -16,7 +16,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
-from flask import g, request, session, jsonify
+from flask import g, jsonify, request, session
 from werkzeug.wrappers.response import Response
 
 # Note: Avoid importing http_errors here to keep this module standalone for lightweight admin CSRF checks.
