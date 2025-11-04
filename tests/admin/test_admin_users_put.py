@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+
 from core.db import get_session
 from core.models import User
+
 from ._problem_utils import assert_problem
 
 
@@ -68,8 +71,19 @@ def test_users_put_validation_and_happy_path(client_admin):
     assert "duplicate" in reasons_d
 
     # happy path: update both fields
+    # Include If-Match for actual change
+    db = get_session()
+    try:
+        row = db.query(User).filter_by(id=u1_id).first()
+        ts = getattr(row, "updated_at", None)
+        ts_iso = ts.isoformat() if ts is not None else ""
+        etag = 'W/"' + hashlib.sha1(f"{u1_id}:{ts_iso}".encode()).hexdigest() + '"'
+    finally:
+        db.close()
+    headers2 = dict(headers)
+    headers2["If-Match"] = etag
     r_ok = client_admin.put(
-        f"/admin/users/{u1_id}", json={"email": "pu_new@ex", "role": "editor"}, headers=headers
+        f"/admin/users/{u1_id}", json={"email": "pu_new@ex", "role": "editor"}, headers=headers2
     )
     assert r_ok.status_code == 200
     body_ok = r_ok.get_json()

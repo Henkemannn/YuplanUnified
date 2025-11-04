@@ -1,9 +1,21 @@
 from __future__ import annotations
 
+import hashlib
+
 from core.db import get_session
 from core.models import User
 
-from ._problem_utils import assert_problem
+
+def _etag_for_user(user_id: int) -> str:
+    db = get_session()
+    try:
+        row = db.query(User).filter_by(id=user_id).first()
+        ts = getattr(row, "updated_at", None)
+        ts_iso = ts.isoformat() if ts is not None else ""
+        return 'W/"' + hashlib.sha1(f"{user_id}:{ts_iso}".encode()).hexdigest() + '"'
+    finally:
+        db.close()
+
 
 
 audit_calls = []
@@ -52,7 +64,9 @@ def test_audit_emitted_only_on_actual_email_change(monkeypatch, client_admin):
     assert len([c for c in audit_calls if c[0] == "user_update_email"]) == 0
 
     # PATCH new email -> one event with old/new
-    r2 = client_admin.patch(f"/admin/users/{u1_id}", json={"email": "email_a2@ex"}, headers=headers)
+    headers2 = dict(headers)
+    headers2["If-Match"] = _etag_for_user(int(u1_id))
+    r2 = client_admin.patch(f"/admin/users/{u1_id}", json={"email": "email_a2@ex"}, headers=headers2)
     assert r2.status_code == 200
     upd_events = [c for c in audit_calls if c[0] == "user_update_email"]
     assert len(upd_events) >= 1
@@ -60,16 +74,18 @@ def test_audit_emitted_only_on_actual_email_change(monkeypatch, client_admin):
     assert evt[1].get("old_email") == "email_a@ex"
     assert evt[1].get("new_email") == "email_a2@ex"
 
-    # PUT same email/role -> no additional event
+    # PUT same email/role -> no additional event (no change -> no If-Match required)
     r3 = client_admin.put(
         f"/admin/users/{u1_id}", json={"email": "email_a2@ex", "role": "viewer"}, headers=headers
     )
     assert r3.status_code == 200
     after_count = len([c for c in audit_calls if c[0] == "user_update_email"])
 
-    # PUT update email -> one more event
+    # PUT update email -> one more event (requires If-Match)
+    headers_put = dict(headers)
+    headers_put["If-Match"] = _etag_for_user(int(u1_id))
     r4 = client_admin.put(
-        f"/admin/users/{u1_id}", json={"email": "email_a3@ex", "role": "viewer"}, headers=headers
+        f"/admin/users/{u1_id}", json={"email": "email_a3@ex", "role": "viewer"}, headers=headers_put
     )
     assert r4.status_code == 200
     final_count = len([c for c in audit_calls if c[0] == "user_update_email"])

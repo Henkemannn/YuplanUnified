@@ -7,7 +7,8 @@ the implementation.
 from __future__ import annotations
 
 import ast
-from typing import NamedTuple, Sequence, Tuple, Union
+from collections.abc import Sequence
+from typing import NamedTuple, Union
 
 from ._tokenizer import DEFAULT_RULES, Tokenizer
 
@@ -42,7 +43,7 @@ class Op(Node):
 
 
 MarkerVar = Union[Variable, Value]
-MarkerItem = Tuple[MarkerVar, Op, MarkerVar]
+MarkerItem = tuple[MarkerVar, Op, MarkerVar]
 MarkerAtom = Union[MarkerItem, Sequence["MarkerAtom"]]
 MarkerList = Sequence[Union["MarkerList", MarkerAtom, str]]
 

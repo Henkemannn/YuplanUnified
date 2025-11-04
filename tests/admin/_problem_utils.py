@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 
-def assert_problem(resp, expected_status: int | None = None, expected_title: str | None = None) -> Dict[str, Any]:
+def assert_problem(resp, expected_status: int | None = None, expected_title: str | None = None) -> dict[str, Any]:
     """Assert RFC7807 problem+json basics and return parsed body.
 
     - Ensures Content-Type starts with application/problem+json

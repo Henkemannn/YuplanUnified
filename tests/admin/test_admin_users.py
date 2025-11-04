@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import pytest
 from ._problem_utils import assert_problem
 
 
 def test_get_users_unauth_returns_401(client_no_tenant):
     r = client_no_tenant.get("/admin/users")
-    b = assert_problem(r, 401, "Unauthorized")
+    assert_problem(r, 401, "Unauthorized")
 
 
 def test_get_users_viewer_returns_403(client_admin):

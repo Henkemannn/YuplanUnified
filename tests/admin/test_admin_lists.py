@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core.db import get_session
-from core.models import User, TenantFeatureFlag
+from core.models import TenantFeatureFlag, User
 
 
 def _seed_users():

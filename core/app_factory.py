@@ -433,34 +433,7 @@ def create_app(config_override: dict | None = None) -> Flask:
             "/features": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "List flags"}}}, ["401","429","500"])},
             "/features/check": {"get": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Flag state (unknown -> enabled=false)"}}}, ["400","401","429","500"])},
             "/features/set": {"post": attach({"tags": ["Features"], "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Updated flag"}}}, ["400","401","429","500"])},
-            "/admin/feature_flags": {
-                "post": attach({
-                    "tags": ["Features"],
-                    "security": [{"BearerAuth": []}],
-                    "summary": "Toggle tenant-scoped feature flag",
-                    "requestBody": {
-                        "required": True,
-                        "content": {"application/json": {"schema": {
-                            "type": "object", "required": ["name","enabled"],
-                            "properties": {
-                                "name": {"type": "string"},
-                                "enabled": {"type": "boolean"},
-                                "tenant_id": {"type": "integer", "description": "Only for superuser"}
-                            }
-                        }}}
-                    },
-                    "responses": {"200": {"description": "Flag updated"}}
-                }, ["400","401","403","429","500"]),
-                "get": attach({
-                    "tags": ["Features"],
-                    "security": [{"BearerAuth": []}],
-                    "summary": "List tenant-scoped enabled feature flags",
-                    "parameters": [
-                        {"name": "tenant_id","in":"query","required": False,"schema": {"type":"integer"}, "description":"Only superuser may specify"}
-                    ],
-                    "responses": {"200": {"description": "Flags listed"}},
-                }, ["400","401","403","429","500"])
-            },
+            
             "/notes/": {
                 "get": attach({
                     "tags": ["Notes"],
@@ -667,7 +640,13 @@ def create_app(config_override: dict | None = None) -> Flask:
                         }
                     },
                     "responses": {
-                        "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
+                        "201": {
+                            "description": "Created",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}},
+                            "headers": {
+                                "ETag": {"description": "Current weak ETag for optimistic concurrency", "schema": {"type": "string"}}
+                            }
+                        },
                         "422": {
                             "description": "Validation error",
                             "content": {
@@ -689,11 +668,35 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "parameters": [
                     {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
                 ],
+                "get": attach({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "Get user",
+                    "description": "Returns user by id with ETag support. If If-None-Match matches current ETag, returns 304 without body.",
+                    "parameters": [
+                        {"$ref": "#/components/parameters/IfNoneMatch"}
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}}},
+                            "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}
+                        },
+                        "304": {"$ref": "#/components/responses/NotModified304"},
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}
+                        }
+                    }
+                }, ["401", "403", "404"]),
                 "put": attach({
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Replace user (strict)",
-                    "description": "Full-body replace of user email and role. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "description": "Full-body replace of user email and role. Requires If-Match header for optimistic concurrency. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [
+                        {"$ref": "#/components/parameters/IfMatch"}
+                    ],
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -718,8 +721,10 @@ def create_app(config_override: dict | None = None) -> Flask:
                                     "schema": {"$ref": "#/components/schemas/UserWithRole"},
                                     "examples": {"ok": {"value": {"id": "u1", "email": "a2@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}
                                 }
-                            }
+                            },
+                            "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}
                         },
+                        "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {
                             "description": "Not found",
                             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}
@@ -739,7 +744,10 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Update user (email/role)",
-                    "description": "When role changes, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "description": "When role changes, an audit event (user_update_role) is recorded. Requires If-Match header for optimistic concurrency. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [
+                        {"$ref": "#/components/parameters/IfMatch"}
+                    ],
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -765,8 +773,10 @@ def create_app(config_override: dict | None = None) -> Flask:
                                         "ok": {"value": {"id": "u1", "email": "a2@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}
                                     }
                                 }
-                            }
+                            },
+                            "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}
                         },
+                        "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {
                             "description": "Not found",
                             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}
@@ -785,27 +795,13 @@ def create_app(config_override: dict | None = None) -> Flask:
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Soft-delete user",
-                    "description": "Errors on admin routes use RFC7807 (application/problem+json).",
+                    "description": "On success returns 204 No Content. Requires If-Match header for optimistic concurrency. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [
+                        {"$ref": "#/components/parameters/IfMatch"}
+                    ],
                     "responses": {
-                        "200": {
-                            "description": "OK",
-                            "content": {
-                                "application/json": {
-                                    "schema": {
-                                        "type": "object",
-                                        "required": ["id", "deleted_at"],
-                                        "properties": {
-                                            "id": {"type": "string"},
-                                            "deleted_at": {"type": "string", "format": "date-time"}
-                                        },
-                                        "additionalProperties": False
-                                    },
-                                    "examples": {
-                                        "ok": {"value": {"id": "u1", "deleted_at": "2025-01-01T12:00:00+00:00"}}
-                                    }
-                                }
-                            }
-                        },
+                        "204": {"description": "No Content"},
+                        "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {
                             "description": "Not found",
                             "content": {
@@ -863,11 +859,24 @@ def create_app(config_override: dict | None = None) -> Flask:
                 "parameters": [
                     {"name": "key", "in": "path", "required": True, "schema": {"type": "string"}}
                 ],
+                "get": attach({
+                    "tags": ["admin", "feature-flags"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "Get feature flag",
+                    "description": "Return a single feature flag by key. Supports If-None-Match for 304 Not Modified.",
+                    "parameters": [{"$ref": "#/components/parameters/IfNoneMatch"}],
+                    "responses": {
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}, "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}},
+                        "304": {"$ref": "#/components/responses/NotModified304"},
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"flagMissing": {"value": {"ok": False, "error": "not_found", "message": "feature flag not found"}}}}}}
+                    }
+                }, ["401", "403", "404"]),
                 "patch": attach({
                     "tags": ["admin", "feature-flags"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Update feature flag (enabled/notes)",
-                    "description": "On change, an audit event (feature_flag_update) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "description": "On change, an audit event (feature_flag_update) is recorded. Requires If-Match for optimistic concurrency. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [{"$ref": "#/components/parameters/IfMatch"}],
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -884,7 +893,8 @@ def create_app(config_override: dict | None = None) -> Flask:
                         }
                     },
                     "responses": {
-                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}},
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}, "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}},
+                        "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {
                             "description": "Not found",
                             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"flagMissing": {"value": {"ok": False, "error": "not_found", "message": "feature flag not found"}}}}}
@@ -942,13 +952,26 @@ def create_app(config_override: dict | None = None) -> Flask:
             },
             "/admin/roles/{user_id}": {
                 "parameters": [
-                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
                 ],
+                "get": attach({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "Get user role",
+                    "description": "Return user by id with role. Supports If-None-Match for 304 Not Modified.",
+                    "parameters": [{"$ref": "#/components/parameters/IfNoneMatch"}],
+                    "responses": {
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}}}, "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}},
+                        "304": {"$ref": "#/components/responses/NotModified304"},
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}}
+                    }
+                }, ["401", "403", "404"]),
                 "patch": attach({
                     "tags": ["admin"],
                     "security": [{"BearerAuth": [], "CsrfToken": []}],
                     "summary": "Update user role",
-                    "description": "On change, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "description": "On change, an audit event (user_update_role) is recorded. Requires If-Match on changes for optimistic concurrency. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [{"$ref": "#/components/parameters/IfMatch"}],
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -963,11 +986,25 @@ def create_app(config_override: dict | None = None) -> Flask:
                         }
                     },
                     "responses": {
-                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}, "examples": {"ok": {"value": {"id": "u1", "email": "a@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}}}},
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}, "examples": {"ok": {"value": {"id": "u1", "email": "a@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}}}, "headers": {"ETag": {"$ref": "#/components/headers/ETag"}}},
+                        "412": {"$ref": "#/components/responses/PreconditionFailed412"},
                         "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}},
                         "422": {"description": "Validation error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}}}}}}
                     }
                 }, ["401", "403", "404", "422"])
+                ,
+                "delete": attach({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Soft-delete user (roles view)",
+                    "description": "On success returns 204 No Content. Requires If-Match header for optimistic concurrency.",
+                    "parameters": [{"$ref": "#/components/parameters/IfMatch"}],
+                    "responses": {
+                        "204": {"description": "No Content"},
+                        "412": {"$ref": "#/components/responses/PreconditionFailed412"},
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}}
+                    }
+                }, ["401", "403", "404"]) 
             }
         }
         spec = {
@@ -1049,9 +1086,21 @@ def create_app(config_override: dict | None = None) -> Flask:
                         "description": "Echoed from request or generated by server; useful for log correlation.",
                         "schema": {"type": "string"},
                         "example": "f3a2b1f8-2e0e-4b12-9f4c-5c28a6a0c3a1"
-                    }
+                    },
+                    "ETag": {"description": "Current weak ETag for optimistic concurrency", "schema": {"type": "string"}}
                 },
-                "responses": reusable,
+                "parameters": {
+                    "IfMatch": {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}, "description": "Optimistic concurrency; must match current ETag"},
+                    "IfNoneMatch": {"name": "If-None-Match", "in": "header", "required": False, "schema": {"type": "string"}, "description": "Return 304 if tag matches current ETag; '*' matches any representation"}
+                },
+                "responses": {
+                    **reusable,
+                    "PreconditionFailed412": {
+                        "description": "Precondition Failed",
+                        "content": {"application/problem+json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"precondition": {"value": {"type": "about:blank", "title": "Precondition Failed", "status": 412, "detail": "If-Match did not match", "expected_etag": 'W/"..."', "got_etag": 'W/"..."'}}}}}
+                    },
+                    "NotModified304": {"description": "Not Modified"}
+                },
             },
             "paths": paths,
         }

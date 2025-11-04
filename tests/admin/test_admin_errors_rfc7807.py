@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 def _assert_problem(resp, expected_status: int, expected_title: str | None = None):
     assert resp.status_code == expected_status
     ctype = resp.headers.get("Content-Type", "")
@@ -16,8 +17,8 @@ def _assert_problem(resp, expected_status: int, expected_title: str | None = Non
 def test_admin_401_problem_shape(client):
     # No auth headers -> 401 from admin endpoint
     r = client.get("/admin/limits")
-    b = _assert_problem(r, 401, "Unauthorized")
-    assert "detail" in b or True  # optional
+    _assert_problem(r, 401, "Unauthorized")
+    # 'detail' field is optional; no assertion required
 
 
 def test_admin_403_problem_shape(client):

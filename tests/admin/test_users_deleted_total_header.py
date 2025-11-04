@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 from core.db import get_session
 from core.models import User
 
@@ -30,8 +32,21 @@ def test_users_deleted_total_header_present(client_admin):
         sess["CSRF_TOKEN"] = "hdr1"
     headers_admin = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "hdr1"}
 
-    r_del = client_admin.delete(f"/admin/users/{del_id}", headers=headers_admin)
-    assert r_del.status_code == 200
+    # Compute ETag and include If-Match precondition
+    db = get_session()
+    try:
+        row = db.query(User).filter_by(id=del_id).first()
+        ts = getattr(row, "updated_at", None)
+        ts_iso = ts.isoformat() if ts is not None else ""
+        etag = 'W/"' + hashlib.sha1(f"{del_id}:{ts_iso}".encode()).hexdigest() + '"'
+    finally:
+        db.close()
+    headers_admin2 = dict(headers_admin)
+    headers_admin2["If-Match"] = etag
+    r_del = client_admin.delete(f"/admin/users/{del_id}", headers=headers_admin2)
+    assert r_del.status_code == 204
+    # No content on success
+    assert (r_del.data is None) or (r_del.data == b"")
 
     # Act: GET /admin/users
     headers_get = {"X-User-Role": "admin", "X-Tenant-Id": "1"}

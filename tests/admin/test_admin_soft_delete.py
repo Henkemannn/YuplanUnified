@@ -1,8 +1,23 @@
 from __future__ import annotations
 
+import hashlib
+
 from core.db import get_session
 from core.models import User
+
 from ._problem_utils import assert_problem
+
+
+def _etag_for_user(user_id: int) -> str:
+    db = get_session()
+    try:
+        row = db.query(User).filter_by(id=user_id).first()
+        ts = getattr(row, "updated_at", None)
+        ts_iso = ts.isoformat() if ts is not None else ""
+        raw = f"{user_id}:{ts_iso}".encode()
+        return 'W/"' + hashlib.sha1(raw).hexdigest() + '"'
+    finally:
+        db.close()
 
 
 def _seed_two_users(tenant_id: int = 1):
@@ -32,11 +47,13 @@ def test_soft_delete_and_list_filtering(client_admin):
     headers = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "sd1"}
 
     # Delete u1
-    r_del = client_admin.delete(f"/admin/users/{u1_id}", headers=headers)
-    assert r_del.status_code == 200
-    body_del = r_del.get_json()
-    assert body_del.get("id") == str(u1_id)
-    assert isinstance(body_del.get("deleted_at"), str) and body_del.get("deleted_at")
+    # Include concurrency precondition
+    headers_del = dict(headers)
+    headers_del["If-Match"] = _etag_for_user(int(u1_id))
+    r_del = client_admin.delete(f"/admin/users/{u1_id}", headers=headers_del)
+    assert r_del.status_code == 204
+    # No content on success
+    assert (r_del.data is None) or (r_del.data == b"")
 
     # Lists exclude deleted
     r_users = client_admin.get("/admin/users", headers=headers)
