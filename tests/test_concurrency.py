@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-
 from core.concurrency import (
     compute_etag,
     get_if_match_header,

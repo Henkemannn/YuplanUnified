@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from core.concurrency import compute_etag
 from core.db import get_session
-from core.models import TenantFeatureFlag, User
+from core.models import User
 
 
 def _seed_user(tenant_id: int = 1, email: str = "test@example.com", role: str = "viewer"):
