@@ -388,6 +388,14 @@ Phasing plan:
 ### CI Integration
 The lint / type gate runs in a dedicated workflow: `.github/workflows/lint-type.yml` (Ruff first, then Mypy). The general test workflow remains in `.github/workflows/ci.yml`.
 
+## 🧱 Infra
+
+### Branch protection
+Regler för `master` versioneras i `infra/bp.json`. Detta är source of truth för vilka status‑checks och skydd som gäller.
+
+### Sync
+Kör `tools/sync_branch_protection.py` eller följ instruktionerna i `docs/branch-protection.md` för att tillämpa reglerna via GitHub‑API.
+
 ## Architecture Decisions
 
 - See ADR index: `adr/README.md`
