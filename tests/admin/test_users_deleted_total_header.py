@@ -5,30 +5,35 @@ from core.models import User
 
 
 def _seed_three_users(tenant_id: int = 1):
+    from datetime import UTC, datetime
     db = get_session()
     try:
         emails = ["ux1@example.com", "ux2@example.com", "ux3@example.com"]
         for i, em in enumerate(emails, start=1):
             if not db.query(User).filter_by(tenant_id=tenant_id, email=em).first():
                 role = "admin" if i == 1 else ("editor" if i == 2 else "viewer")
-                db.add(User(tenant_id=tenant_id, email=em, role=role, password_hash="!"))
+                u = User(tenant_id=tenant_id, email=em, role=role, password_hash="!")
+                u.updated_at = datetime.now(UTC)
+                db.add(u)
         db.commit()
         rows = db.query(User).filter(User.tenant_id == tenant_id, User.email.in_(emails)).all()
-        return {r.email: r.id for r in rows}
+        return {r.email: (r.id, r.updated_at) for r in rows}
     finally:
         db.close()
 
 
 def test_users_deleted_total_header_present(client_admin):
     # Arrange: seed and soft-delete one user in tenant 1
+    from core.concurrency import compute_etag
     ids = _seed_three_users(tenant_id=1)
     assert len(ids) == 3
-    del_id = ids["ux1@example.com"]
+    del_id, del_updated_at = ids["ux1@example.com"]
 
     # CSRF prime for DELETE (mutating admin op)
     with client_admin.session_transaction() as sess:
         sess["CSRF_TOKEN"] = "hdr1"
-    headers_admin = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "hdr1"}
+    etag = compute_etag(del_id, del_updated_at)
+    headers_admin = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-CSRF-Token": "hdr1", "If-Match": etag}
 
     r_del = client_admin.delete(f"/admin/users/{del_id}", headers=headers_admin)
     assert r_del.status_code == 200
