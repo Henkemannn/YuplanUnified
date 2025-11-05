@@ -29,6 +29,7 @@ from .auth import bp as auth_bp, ensure_bootstrap_superuser
 from .config import Config
 from .db import get_session, init_engine
 from .diet_api import bp as diet_api_bp
+from .dashboard_ui import bp as dashboard_bp
 from .errors import APIError
 from .export_api import bp as export_bp
 from .feature_flags import FeatureRegistry
@@ -274,6 +275,7 @@ def create_app(config_override: dict | None = None) -> Flask:
     app.register_blueprint(admin_audit_bp)
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
+    app.register_blueprint(dashboard_bp)
 
     # Dynamic module blueprints
     for mod in cfg.default_enabled_modules:
