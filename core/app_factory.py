@@ -50,6 +50,7 @@ from .service_metrics_api import bp as metrics_api_bp
 from .service_recommendation_api import bp as service_recommendation_bp
 from .tasks_api import bp as tasks_bp
 from .turnus_api import bp as turnus_api_bp
+from .weekview_api import bp as weekview_api_bp
 from .ui_blueprint import ui_bp
 
 # Map of module key -> import path:attr blueprint (for dynamic registration)
@@ -390,6 +391,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
     app.register_blueprint(ui_bp)
+    app.register_blueprint(weekview_api_bp)
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 
@@ -1113,6 +1115,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 {"name": "System"},
                 {"name": "Notes"},
                 {"name": "Tasks"},
+                {"name": "weekview"},
             ],
             "components": {
                 "securitySchemes": {
@@ -1545,6 +1548,66 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     "415": {"$ref": "#/components/responses/UnsupportedMediaType"},
                     "429": {"$ref": "#/components/responses/Problem429"},
                 },
+            }
+        }
+        # --- Weekview Paths (Phase A skeleton; server implemented) ---
+        spec["paths"]["/api/weekview"] = {
+            "get": {
+                "tags": ["weekview"],
+                "summary": "Get week view representation",
+                "parameters": [
+                    {"name": "year", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    {
+                        "name": "week",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "integer", "minimum": 1, "maximum": 53},
+                    },
+                    {
+                        "name": "department_id",
+                        "in": "query",
+                        "required": False,
+                        "schema": {"type": "string", "format": "uuid"},
+                    },
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Week view representation",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "Weak ETag for concurrency"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object"}}},
+                    }
+                },
+            },
+            "patch": {
+                "tags": ["weekview"],
+                "summary": "Apply changes to week view (requires If-Match)",
+                "parameters": [
+                    {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}},
+                ],
+                "responses": {
+                    "501": {"description": "Not Implemented (Phase A)"},
+                    "400": {"$ref": "#/components/responses/Problem400"},
+                    "403": {"$ref": "#/components/responses/Problem403"},
+                },
+            },
+        }
+        spec["paths"]["/api/weekview/resolve"] = {
+            "get": {
+                "tags": ["weekview"],
+                "summary": "Resolve helper",
+                "parameters": [
+                    {"name": "site", "in": "query", "required": True, "schema": {"type": "string"}},
+                    {
+                        "name": "department_id",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "string", "format": "uuid"},
+                    },
+                    {"name": "date", "in": "query", "required": True, "schema": {"type": "string", "format": "date"}},
+                ],
+                "responses": {"200": {"description": "Resolution result"}},
             }
         }
         return spec
