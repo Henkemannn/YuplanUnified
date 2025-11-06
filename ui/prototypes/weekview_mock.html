@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weekview Mock</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 16px; }
+      .topbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+      .grid { border-collapse: collapse; width: 100%; table-layout: fixed; }
+      .grid th, .grid td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+      .grid th { background: #f7f7f7; text-align: center; }
+      .dept { background: #fafafa; font-weight: 600; }
+      .meal { font-size: 12px; color: #555; }
+      .item { background: #eef6ff; border: 1px solid #cfe3ff; border-radius: 4px; padding: 4px 6px; margin: 4px 0; }
+      .muted { color: #777; }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <h1 id="weekview-title" style="margin: 0;">Weekview</h1>
+      <div style="margin-left: auto; display: flex; gap: 6px;">
+        <button>&lt;</button>
+        <button>Today</button>
+        <button>&gt;</button>
+        <select>
+          <option>Dept A</option>
+          <option>Dept B</option>
+          <option>Dept C</option>
+        </select>
+      </div>
+    </div>
+
+    <table class="grid" id="weekview-grid" aria-label="Department × Day × Meal grid">
+      <thead>
+        <tr>
+          <th>Department</th>
+          <th>Mon</th>
+          <th>Tue</th>
+          <th>Wed</th>
+          <th>Thu</th>
+          <th>Fri</th>
+          <th>Sat</th>
+          <th>Sun</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="dept">Dept A</td>
+          <td>
+            <div class="meal">Breakfast</div>
+            <div class="item">Porridge</div>
+            <div class="meal">Lunch</div>
+            <div class="item">Chicken salad</div>
+            <div class="meal">Dinner</div>
+            <div class="item">Tomato soup</div>
+          </td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+        </tr>
+        <tr>
+          <td class="dept">Dept B</td>
+          <td class="muted">—</td>
+          <td>
+            <div class="meal">Breakfast</div>
+            <div class="item">Yogurt &amp; fruit</div>
+            <div class="meal">Lunch</div>
+            <div class="item">Pasta</div>
+            <div class="meal">Dinner</div>
+            <div class="item">Grilled fish</div>
+          </td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+  </html>

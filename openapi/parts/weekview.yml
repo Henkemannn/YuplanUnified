@@ -1,0 +1,174 @@
+openapi: 3.0.3
+info:
+  title: Weekview API (Draft)
+  version: 0.1.0
+  description: API surface for Weekview module (M1 draft, no server implementation yet)
+tags:
+  - name: weekview
+paths:
+  /api/weekview:
+    get:
+      tags: [weekview]
+      summary: Get week view representation
+      parameters:
+        - in: query
+          name: start
+          required: true
+          schema: { type: string, format: date }
+          description: Week start date (ISO, Monday-based)
+        - in: query
+          name: end
+          required: true
+          schema: { type: string, format: date }
+          description: Week end date (ISO)
+        - in: query
+          name: department
+          required: false
+          schema: { type: string }
+          description: Optional department id filter
+      responses:
+        '200':
+          description: Week view representation
+          headers:
+            ETag:
+              description: Entity tag for optimistic concurrency
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeekView'
+        '304':
+          description: Not Modified (empty body)
+    patch:
+      tags: [weekview]
+      summary: Apply changes to week view
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+          description: Required ETag precondition for optimistic concurrency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/JsonPatch'
+                - $ref: '#/components/schemas/WeekViewOps'
+      responses:
+        '200':
+          description: Updated representation
+          headers:
+            ETag:
+              description: New entity tag
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeekView'
+        '400':
+          description: Invalid patch/ops
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '412':
+          description: Precondition Failed (ETag mismatch)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/weekview/resolve:
+    post:
+      tags: [weekview]
+      summary: Resolve conflicts server-side (optional helper)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveRequest'
+      responses:
+        '200':
+          description: Resolution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveResult'
+        '400':
+          description: Invalid payload
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+components:
+  schemas:
+    WeekView:
+      type: object
+      properties:
+        week_start: { type: string, format: date }
+        week_end: { type: string, format: date }
+        department_summaries:
+          type: array
+          items: { $ref: '#/components/schemas/DepartmentSummary' }
+    DepartmentSummary:
+      type: object
+      properties:
+        department_id: { type: string }
+        department_name: { type: string }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/DayPlan' }
+    DayPlan:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        meals:
+          type: array
+          items: { $ref: '#/components/schemas/MealSlot' }
+    MealSlot:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [breakfast, lunch, dinner]
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Item' }
+    Item:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        notes: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [planned, confirmed, canceled]
+        assigned_to: { type: string, nullable: true }
+    JsonPatch:
+      type: array
+      items:
+        type: object
+        properties:
+          op: { type: string }
+          path: { type: string }
+          value: {}
+    WeekViewOps:
+      type: object
+      description: Placeholder for typed operations model
+    ResolveRequest:
+      type: object
+      description: Placeholder resolve payload
+    ResolveResult:
+      type: object
+      description: Placeholder resolve result
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
