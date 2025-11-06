@@ -1,0 +1,29 @@
+# Fly.io app configuration for Yuplan Unified (staging)
+# Replace "yuplan-unified-staging" with your actual app name via `fly launch`
+
+app = "yuplan-unified-staging"
+primary_region = "ams"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 40
+
+  [[http_service.checks]]
+    grace_period = "5s"
+    interval = "10s"
+    method = "GET"
+    path = "/healthz"
+    protocol = "http"
+    timeout = "2s"

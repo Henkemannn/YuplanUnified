@@ -398,6 +398,79 @@ Kör `tools/sync_branch_protection.py` eller följ instruktionerna i `docs/branc
 
 ## Architecture Decisions
 
+## Staging deploy (v0.4)
+
+This release adds a containerized runtime and a simple health endpoint to make the app easy to deploy to a staging environment.
+
+Included:
+- Dockerfile (Python slim, non-root) running `gunicorn core.app_factory:create_app()` on port 8080
+- `gunicorn.conf.py` (timeout=60, loglevel=info)
+- Health endpoint at `GET /healthz` returning `{ "status": "ok" }`
+- `.env.example` with common variables
+- Optional tools: `tools/init_db.py` (alembic + minimal seed), `tools/seed_weekview.py` (dev-only weekview seed)
+- Fly.io manifest `fly.toml` (you can alternatively use Render with the same Dockerfile)
+
+### Environment variables
+
+Copy `.env.example` and set the following (names mirror staging defaults):
+
+- DATABASE_URL (e.g. `postgresql+psycopg://user:pass@host:5432/yuplan`)
+- SECRET_KEY (any random string for session signing)
+- FF_WEEKVIEW_ENABLED=true
+- FF_REPORT_ENABLED=true
+- FF_ADMIN_ENABLED=false
+
+Feature flags default here are for convenience; per-tenant DB overrides take precedence.
+
+### Deploy on Fly.io
+
+Prerequisites:
+- Fly CLI installed and authenticated
+- A Postgres instance (Fly Postgres or external)
+
+Steps:
+
+```powershell
+fly launch --no-deploy
+# Set secrets (examples):
+fly secrets set DATABASE_URL="postgresql+psycopg://user:pass@host:5432/yuplan" SECRET_KEY="change-me"
+# Deploy
+fly deploy
+```
+
+Health check: `GET /healthz` → 200 with `{ "status": "ok" }`.
+
+### Optional: Render
+
+If deploying on Render instead, use the Dockerfile, set the Health Check Path to `/healthz`, and configure environment variables from `.env.example`.
+
+### Database init (optional)
+
+Run Alembic and seed minimal data:
+
+```powershell
+$env:DATABASE_URL = "postgresql+psycopg://user:pass@host:5432/yuplan"
+python tools/init_db.py
+```
+
+Dev-only seed example for weekview data:
+
+```powershell
+$env:DATABASE_URL = "sqlite:///unified.db"  # or Postgres URL
+python tools/seed_weekview.py --year 2025 --week 45
+```
+
+### Smoke tests
+
+After deploy, validate the following:
+
+- GET `/healthz` → 200
+- GET `/api/weekview?...` → 200 + ETag
+- PATCH `/api/weekview` with If-Match → 200 + new ETag
+- GET `/api/weekview` with If-None-Match → 304
+- GET `/api/report?...` → 200 + ETag
+- GET `/api/report/export?...&format=csv|xlsx` → 200 + file
+
 - See ADR index: `adr/README.md`
 
 Current ADRs:

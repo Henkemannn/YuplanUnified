@@ -53,6 +53,7 @@ from .turnus_api import bp as turnus_api_bp
 from .weekview_api import bp as weekview_api_bp
 from .report_api import bp as report_api_bp
 from .ui_blueprint import ui_bp
+from .health_api import bp as health_bp
 
 # Map of module key -> import path:attr blueprint (for dynamic registration)
 MODULE_IMPORTS = {
@@ -394,6 +395,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(ui_bp)
     app.register_blueprint(weekview_api_bp)
     app.register_blueprint(report_api_bp)
+    app.register_blueprint(health_bp)
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 
