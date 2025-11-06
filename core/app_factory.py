@@ -51,6 +51,7 @@ from .service_recommendation_api import bp as service_recommendation_bp
 from .tasks_api import bp as tasks_bp
 from .turnus_api import bp as turnus_api_bp
 from .weekview_api import bp as weekview_api_bp
+from .report_api import bp as report_api_bp
 from .ui_blueprint import ui_bp
 
 # Map of module key -> import path:attr blueprint (for dynamic registration)
@@ -392,6 +393,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(inline_ui_bp)
     app.register_blueprint(ui_bp)
     app.register_blueprint(weekview_api_bp)
+    app.register_blueprint(report_api_bp)
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 
@@ -1116,6 +1118,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 {"name": "Notes"},
                 {"name": "Tasks"},
                 {"name": "weekview"},
+                {"name": "report"},
             ],
             "components": {
                 "securitySchemes": {
@@ -1550,7 +1553,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
-        # --- Weekview Paths (Phase B: mutations + ETag/412) ---
+        # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
         spec["paths"]["/api/weekview"] = {
             "get": {
                 "tags": ["weekview"],
@@ -1569,6 +1572,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                         "required": False,
                         "schema": {"type": "string", "format": "uuid"},
                     },
+                    {
+                        "name": "If-None-Match",
+                        "in": "header",
+                        "required": False,
+                        "schema": {"type": "string"},
+                        "description": "Return 304 Not Modified when matches current ETag",
+                    },
                 ],
                 "responses": {
                     "200": {
@@ -1577,7 +1587,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                             "ETag": {"schema": {"type": "string"}, "description": "Weak ETag for concurrency"}
                         },
                         "content": {"application/json": {"schema": {"type": "object"}}},
-                    }
+                    },
+                    "304": {
+                        "description": "Not Modified",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "Weak ETag for cache validation"}
+                        },
+                    },
                 },
             },
             "patch": {
@@ -1657,6 +1673,169 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     {"name": "date", "in": "query", "required": True, "schema": {"type": "string", "format": "date"}},
                 ],
                 "responses": {"200": {"description": "Resolution result"}},
+            }
+        }
+        # Residents counts mutation
+        spec["paths"]["/api/weekview/residents"] = {
+            "patch": {
+                "tags": ["weekview"],
+                "summary": "Set residents counts per day/meal (requires If-Match)",
+                "parameters": [
+                    {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}},
+                ],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["department_id", "year", "week", "items"],
+                                "properties": {
+                                    "tenant_id": {"type": "string"},
+                                    "department_id": {"type": "string", "format": "uuid"},
+                                    "year": {"type": "integer"},
+                                    "week": {"type": "integer", "minimum": 1, "maximum": 53},
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": ["day_of_week", "meal", "count"],
+                                            "properties": {
+                                                "day_of_week": {"type": "integer", "minimum": 1, "maximum": 7},
+                                                "meal": {"type": "string", "enum": ["lunch", "dinner"]},
+                                                "count": {"type": "integer", "minimum": 0},
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "New weak ETag after mutation"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {"updated": {"type": "integer"}}}}}
+                    },
+                    "400": {"$ref": "#/components/responses/Problem400"},
+                    "403": {"$ref": "#/components/responses/Problem403"},
+                    "412": {"$ref": "#/components/responses/Problem412"},
+                },
+            }
+        }
+        # Alt2 flags mutation
+        spec["paths"]["/api/weekview/alt2"] = {
+            "patch": {
+                "tags": ["weekview"],
+                "summary": "Set Alt2 days (requires If-Match)",
+                "parameters": [
+                    {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}},
+                ],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["department_id", "year", "week", "days"],
+                                "properties": {
+                                    "tenant_id": {"type": "string"},
+                                    "department_id": {"type": "string", "format": "uuid"},
+                                    "year": {"type": "integer"},
+                                    "week": {"type": "integer", "minimum": 1, "maximum": 53},
+                                    "days": {
+                                        "type": "array",
+                                        "items": {"type": "integer", "minimum": 1, "maximum": 7},
+                                    },
+                                },
+                            },
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "New weak ETag after mutation"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {"updated": {"type": "integer"}}}}}
+                    },
+                    "400": {"$ref": "#/components/responses/Problem400"},
+                    "403": {"$ref": "#/components/responses/Problem403"},
+                    "412": {"$ref": "#/components/responses/Problem412"},
+                },
+            }
+        }
+        # --- Report Paths (Phase A: read-only aggregation + conditional GET) ---
+        spec["paths"]["/api/report"] = {
+            "get": {
+                "tags": ["report"],
+                "summary": "Get weekly report (read-only)",
+                "parameters": [
+                    {"name": "year", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    {
+                        "name": "week",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "integer", "minimum": 1, "maximum": 53},
+                    },
+                    {
+                        "name": "department_id",
+                        "in": "query",
+                        "required": False,
+                        "schema": {"type": "string", "format": "uuid"},
+                    },
+                    {
+                        "name": "If-None-Match",
+                        "in": "header",
+                        "required": False,
+                        "schema": {"type": "string"},
+                        "description": "Return 304 Not Modified when matches current ETag",
+                    },
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Report payload",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "Weak ETag for concurrency"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object"}}},
+                    },
+                    "304": {
+                        "description": "Not Modified",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "Weak ETag for cache validation"}
+                        },
+                    },
+                },
+            }
+        }
+        # Report export
+        spec["paths"]["/api/report/export"] = {
+            "get": {
+                "tags": ["report"],
+                "summary": "Export weekly report as CSV or XLSX",
+                "parameters": [
+                    {"name": "year", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    {"name": "week", "in": "query", "required": True, "schema": {"type": "integer", "minimum": 1, "maximum": 53}},
+                    {"name": "department_id", "in": "query", "required": False, "schema": {"type": "string", "format": "uuid"}},
+                    {"name": "format", "in": "query", "required": True, "schema": {"type": "string", "enum": ["csv", "xlsx"]}},
+                    {"name": "If-None-Match", "in": "header", "required": False, "schema": {"type": "string"}, "description": "Return 304 Not Modified when matches current export ETag (format-specific)"}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Binary export file",
+                        "headers": {"ETag": {"schema": {"type": "string"}}},
+                        "content": {
+                            "text/csv": {"schema": {"type": "string", "format": "binary"}},
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {"schema": {"type": "string", "format": "binary"}},
+                        },
+                    },
+                    "304": {"description": "Not Modified", "headers": {"ETag": {"schema": {"type": "string"}}}},
+                },
             }
         }
         return spec
