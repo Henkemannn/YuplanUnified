@@ -7,7 +7,7 @@ from flask import Blueprint, Response, current_app, jsonify, request, session, g
 
 from .auth import require_roles
 from .http_errors import bad_request, not_found, forbidden, problem
-from .weekview.service import WeekviewService
+from .weekview.service import WeekviewService, EtagMismatchError
 
 bp = Blueprint("weekview_api", __name__, url_prefix="/api")
 _service = WeekviewService()
@@ -100,10 +100,49 @@ def patch_weekview() -> Response:
     etag = request.headers.get("If-Match")
     if not etag:
         return bad_request("missing_if_match")
-    # Phase A: Not Implemented
-    return problem(
-        501,
-        "https://example.com/errors/not_implemented",
-        "Not Implemented",
-        "weekview_patch_phaseA",
-    )
+    data = request.get_json(silent=True) or {}
+    # Allow tenant from context; if provided in body ensure match
+    tid = _tenant_id()
+    if tid is None:
+        return bad_request("tenant_missing")
+    body_tid = data.get("tenant_id")
+    if body_tid is not None and str(body_tid) != str(tid):
+        return bad_request("tenant_mismatch")
+    department_id = (data.get("department_id") or "").strip()
+    try:
+        year = int(data.get("year", 0))
+        week = int(data.get("week", 0))
+    except Exception:
+        return bad_request("invalid_year_or_week")
+    if not department_id:
+        return bad_request("invalid_department_id")
+    try:
+        uuid.UUID(department_id)
+    except Exception:
+        return bad_request("invalid_department_id")
+    if year < 1970 or not (1 <= week <= 53):
+        return bad_request("invalid_year_or_week")
+    ops = data.get("operations") or []
+    if not isinstance(ops, list):
+        return bad_request("invalid_operations")
+    allowed_meals = {"lunch", "dinner"}
+    for op in ops:
+        try:
+            dow = int(op.get("day_of_week"))
+            meal = str(op.get("meal"))
+            diet = str(op.get("diet_type"))
+        except Exception:
+            return bad_request("invalid_operations")
+        if dow < 1 or dow > 7:
+            return bad_request("invalid_day_of_week")
+        if meal not in allowed_meals:
+            return bad_request("invalid_meal")
+        if not diet:
+            return bad_request("invalid_diet_type")
+    try:
+        new_etag = _service.toggle_marks(tid, year, week, department_id, etag, ops)
+    except EtagMismatchError:
+        return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
+    resp = jsonify({"updated": len(ops)})
+    resp.headers["ETag"] = new_etag
+    return resp

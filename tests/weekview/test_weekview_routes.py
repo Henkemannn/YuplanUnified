@@ -16,8 +16,12 @@ def _enable_flag(app, name: str, enabled: bool):
 
 
 def test_feature_flag_off_returns_404(client_admin):
-    app = client_admin.application
-    _enable_flag(app, "ff.weekview.enabled", False)
+    # Disable via admin endpoint to ensure tenant-scoped state
+    client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": False},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
 
     headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
@@ -35,8 +39,11 @@ def test_feature_flag_off_returns_404(client_admin):
 
 
 def test_weekview_get_and_resolve_etag_and_rbac(client_admin):
-    app = client_admin.application
-    _enable_flag(app, "ff.weekview.enabled", True)
+    client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
 
     dep_id = str(uuid.uuid4())
     base_headers = {"X-Tenant-Id": "1"}
@@ -61,8 +68,12 @@ def test_weekview_get_and_resolve_etag_and_rbac(client_admin):
 
 
 def test_weekview_patch_rbac_and_if_match(client_admin):
-    app = client_admin.application
-    _enable_flag(app, "ff.weekview.enabled", True)
+    # Enable via admin endpoint for deterministic behavior
+    client_admin.post(
+        "/features/set",
+        json={"name": "ff.weekview.enabled", "enabled": True},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
 
     base_headers = {"X-Tenant-Id": "1"}
 
@@ -75,12 +86,13 @@ def test_weekview_patch_rbac_and_if_match(client_admin):
         h = {**base_headers, "X-User-Role": role}
         r = client_admin.patch("/api/weekview", headers=h, json={})
         assert r.status_code == 400
+        # Missing required body fields -> 400 (Phase B)
         r = client_admin.patch(
             "/api/weekview",
             headers={**h, "If-Match": 'W/"weekview:dept:abc:year:2025:week:44:v0"'},
             json={"ops": []},
         )
-        assert r.status_code == 501
+        assert r.status_code == 400
 import re
 
 import pytest
@@ -164,4 +176,4 @@ def test_weekview_rbac_and_etag(client_admin):
             "If-Match": 'W/"weekview:dept:00000000-0000-0000-0000-000000000000:year:2025:week:45:v0"',
         },
     )
-    assert r.status_code == 501
+    assert r.status_code == 400

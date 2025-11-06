@@ -1027,7 +1027,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     }
                 },
             }
-            for code in ["400", "401", "403", "404", "409", "422", "429", "500"]
+            for code in ["400", "401", "403", "404", "409", "412", "422", "429", "500"]
         }
         # Populate representative examples (401, 422, 500 mandatory; others minimal)
         problem_responses["401"]["content"]["application/problem+json"]["examples"][
@@ -1386,7 +1386,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 ):
                     continue
                 responses = op.get("responses", {})
-                for ensure_code in ["400", "401", "403", "404", "409", "422", "429", "500"]:
+                for ensure_code in ["400", "401", "403", "404", "409", "412", "422", "429", "500"]:
                     if ensure_code not in responses:
                         responses[ensure_code] = {
                             "$ref": f"#/components/responses/Problem{ensure_code}"
@@ -1550,7 +1550,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
-        # --- Weekview Paths (Phase A skeleton; server implemented) ---
+        # --- Weekview Paths (Phase B: mutations + ETag/412) ---
         spec["paths"]["/api/weekview"] = {
             "get": {
                 "tags": ["weekview"],
@@ -1586,10 +1586,59 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 "parameters": [
                     {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}},
                 ],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["department_id", "year", "week", "operations"],
+                                "properties": {
+                                    "tenant_id": {"type": "string"},
+                                    "department_id": {"type": "string", "format": "uuid"},
+                                    "year": {"type": "integer"},
+                                    "week": {"type": "integer", "minimum": 1, "maximum": 53},
+                                    "operations": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": ["day_of_week", "meal", "diet_type", "marked"],
+                                            "properties": {
+                                                "day_of_week": {"type": "integer", "minimum": 1, "maximum": 7},
+                                                "meal": {"type": "string", "enum": ["lunch", "dinner"]},
+                                                "diet_type": {"type": "string"},
+                                                "marked": {"type": "boolean"}
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "examples": {
+                                "toggleOne": {
+                                    "value": {
+                                        "department_id": "00000000-0000-0000-0000-000000000000",
+                                        "year": 2025,
+                                        "week": 45,
+                                        "operations": [
+                                            {"day_of_week": 1, "meal": "lunch", "diet_type": "normal", "marked": True}
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
                 "responses": {
-                    "501": {"description": "Not Implemented (Phase A)"},
+                    "200": {
+                        "description": "Updated",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "New weak ETag after mutation"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {"updated": {"type": "integer"}}}}}
+                    },
                     "400": {"$ref": "#/components/responses/Problem400"},
                     "403": {"$ref": "#/components/responses/Problem403"},
+                    "412": {"$ref": "#/components/responses/Problem412"},
                 },
             },
         }
