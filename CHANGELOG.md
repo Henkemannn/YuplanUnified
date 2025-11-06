@@ -20,6 +20,7 @@
 
 ### Features
 - feat(core): RFC7807 full adoption — all endpoints return ProblemDetails. Standardized 429 includes `Retry-After` header and `retry_after` body field; 401/403 carry appropriate details, 422 includes `errors[]`, and 500 emits `incident_id`.
+- feat(dashboard): add quickstart, alerts, and department notes widgets on the dashboard UI (#16).
 
 
 ### Added

@@ -33,6 +33,7 @@ from .auth import bp as auth_bp, ensure_bootstrap_superuser
 from .config import Config
 from .db import get_session, init_engine
 from .diet_api import bp as diet_api_bp
+from .dashboard_ui import bp as dashboard_bp
 from .errors import APIError, register_error_handlers as register_domain_handlers
 from .export_api import bp as export_bp
 from .feature_flags import FeatureRegistry
@@ -390,6 +391,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
     app.register_blueprint(ui_bp)
+    app.register_blueprint(dashboard_bp)
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 

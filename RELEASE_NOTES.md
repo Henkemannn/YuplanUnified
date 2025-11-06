@@ -1,3 +1,8 @@
+# Unreleased
+
+## Added
+- feat(dashboard): add quickstart/alerts/dept-notes widgets (#16)
+
 # v1.0.0 (GA) — Release Notes
 
 ## Highlights
