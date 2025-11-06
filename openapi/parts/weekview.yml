@@ -12,19 +12,19 @@ paths:
       summary: Get week view representation
       parameters:
         - in: query
-          name: start
+          name: year
           required: true
-          schema: { type: string, format: date }
-          description: Week start date (ISO, Monday-based)
+          schema: { type: integer, minimum: 1970 }
+          description: ISO year (e.g., 2025)
         - in: query
-          name: end
+          name: week
           required: true
-          schema: { type: string, format: date }
-          description: Week end date (ISO)
+          schema: { type: integer, minimum: 1, maximum: 53 }
+          description: ISO week number (1..53)
         - in: query
-          name: department
+          name: department_id
           required: false
-          schema: { type: string }
+          schema: { type: string, format: uuid }
           description: Optional department id filter
       responses:
         '200':
@@ -33,6 +33,7 @@ paths:
             ETag:
               description: Entity tag for optimistic concurrency
               schema: { type: string }
+              example: 'W/"weekview:dept:{uuid}:week:{int}:v{n+1}"'
           content:
             application/json:
               schema:
@@ -41,13 +42,14 @@ paths:
           description: Not Modified (empty body)
     patch:
       tags: [weekview]
-      summary: Apply changes to week view
+      summary: Apply changes to week view (admin/staff write; viewer forbidden)
       parameters:
         - in: header
           name: If-Match
           required: true
           schema: { type: string }
           description: Required ETag precondition for optimistic concurrency
+          example: 'W/"weekview:dept:{uuid}:week:{int}:v{n}"'
       requestBody:
         required: true
         content:
@@ -63,10 +65,13 @@ paths:
             ETag:
               description: New entity tag
               schema: { type: string }
+              example: 'W/"weekview:dept:{uuid}:week:{int}:v{n+1}"'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/WeekView'
+        '403':
+          description: Forbidden (viewer role)
         '400':
           description: Invalid patch/ops
           content:
@@ -74,21 +79,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '412':
-          description: Precondition Failed (ETag mismatch)
+          description: Precondition Failed (ETag mismatch; problem.type=etag_mismatch)
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
   /api/weekview/resolve:
-    post:
+    get:
       tags: [weekview]
-      summary: Resolve conflicts server-side (optional helper)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ResolveRequest'
+      summary: Resolve conflicts (idempotent helper). RBAC: admin/staff/viewer read if ff.weekview.enabled.
+      parameters:
+        - in: query
+          name: site
+          required: true
+          schema: { type: string }
+          description: Site identifier
+        - in: query
+          name: department_id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Department identifier (UUID)
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, format: date }
+          description: A date within the target week (ISO date)
       responses:
         '200':
           description: Resolution result
@@ -96,6 +111,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResolveResult'
+        '404':
+          description: Not resolvable for given parameters
         '400':
           description: Invalid payload
           content:
@@ -108,6 +125,8 @@ components:
     WeekView:
       type: object
       properties:
+        year: { type: integer, minimum: 1970 }
+        week: { type: integer, minimum: 1, maximum: 53 }
         week_start: { type: string, format: date }
         week_end: { type: string, format: date }
         department_summaries:
@@ -118,6 +137,10 @@ components:
       properties:
         department_id: { type: string }
         department_name: { type: string }
+        department_notes:
+          type: array
+          description: Display-only notes for the department
+          items: { type: string }
         days:
           type: array
           items: { $ref: '#/components/schemas/DayPlan' }
@@ -125,6 +148,10 @@ components:
       type: object
       properties:
         date: { type: string, format: date }
+        day_of_week:
+          type: integer
+          description: ISO day-of-week (Mon=1..Sun=7)
+          enum: [1, 2, 3, 4, 5, 6, 7]
         meals:
           type: array
           items: { $ref: '#/components/schemas/MealSlot' }
@@ -133,7 +160,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [breakfast, lunch, dinner]
+          enum: [lunch, dinner]
         items:
           type: array
           items: { $ref: '#/components/schemas/Item' }
@@ -143,6 +170,9 @@ components:
         id: { type: string }
         title: { type: string }
         notes: { type: string, nullable: true }
+        diet_type:
+          type: string
+          description: Diet type (extensible). Examples: normal, gluten_free, lactose_free, vegetarian, texture_timbal
         status:
           type: string
           enum: [planned, confirmed, canceled]
