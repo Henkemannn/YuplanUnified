@@ -1,0 +1,194 @@
+openapi: 3.0.3
+info:
+  title: Report API (Phase A)
+  version: 0.1.0
+  description: Read-only aggregation of residents and dietary marks per department for a given ISO year/week.
+tags:
+  - name: report
+paths:
+  /api/report:
+    get:
+      tags: [report]
+      summary: Get weekly report (read-only)
+      parameters:
+        - in: query
+          name: year
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 9999 }
+          description: ISO year
+        - in: query
+          name: week
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 53 }
+          description: ISO week number (1..53)
+        - in: query
+          name: department_id
+          required: false
+          schema: { type: string, format: uuid }
+          description: Optional department id filter
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: Return 304 if unchanged
+      responses:
+        '200':
+          description: Report payload
+          headers:
+            ETag:
+              description: Weak ETag for conditional requests
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+              examples:
+                singleDepartment:
+                  summary: Single department
+                  value:
+                    year: 2025
+                    week: 45
+                    departments:
+                      - department_id: "00000000-0000-0000-0000-000000000000"
+                        department_name: "Dept A"
+                        notes: null
+                        lunch:
+                          normal: 7
+                          specials: { gluten: 2, timbal: 1 }
+                          total: 10
+                        dinner:
+                          normal: 7
+                          specials: { gluten: 1 }
+                          total: 8
+                    totals:
+                      lunch:
+                        normal: 7
+                        specials: { gluten: 2, timbal: 1 }
+                        total: 10
+                      dinner:
+                        normal: 7
+                        specials: { gluten: 1 }
+                        total: 8
+                allDepartments:
+                  summary: All departments
+                  value:
+                    year: 2025
+                    week: 45
+                    departments:
+                      - department_id: "00000000-0000-0000-0000-000000000000"
+                        department_name: "Dept A"
+                        notes: null
+                        lunch: { normal: 7, specials: { gluten: 2, timbal: 1 }, total: 10 }
+                        dinner: { normal: 7, specials: { gluten: 1 }, total: 8 }
+                      - department_id: "11111111-1111-1111-1111-111111111111"
+                        department_name: "Dept B"
+                        notes: null
+                        lunch: { normal: 5, specials: { gluten: 1 }, total: 6 }
+                        dinner: { normal: 3, specials: {}, total: 3 }
+                    totals:
+                      lunch: { normal: 12, specials: { gluten: 3, timbal: 1 }, total: 16 }
+                      dinner: { normal: 10, specials: { gluten: 1 }, total: 11 }
+        '304':
+          description: Not Modified (empty body)
+  /api/report/export:
+    get:
+      tags: [report]
+      summary: Export weekly report as CSV or XLSX
+      description: Requires ff.report.enabled and roles admin/editor. Uses same aggregation as GET /api/report.
+      parameters:
+        - in: query
+          name: year
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 9999 }
+        - in: query
+          name: week
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 53 }
+        - in: query
+          name: department_id
+          required: false
+          schema: { type: string, format: uuid }
+        - in: query
+          name: format
+          required: true
+          schema: { type: string, enum: [csv, xlsx] }
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: Return 304 if unchanged for the given format
+      responses:
+        '200':
+          description: Export file
+          headers:
+            ETag:
+              description: Weak ETag (format-specific)
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '304':
+          description: Not Modified (empty body)
+        '400':
+          description: Validation error
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403':
+          description: Forbidden (viewer role)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404':
+          description: Not found (no data)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+components:
+  schemas:
+    ReportResponse:
+      type: object
+      required: [year, week, departments, totals]
+      properties:
+        year: { type: integer }
+        week: { type: integer }
+        departments:
+          type: array
+          items: { $ref: '#/components/schemas/DepartmentReport' }
+        totals: { $ref: '#/components/schemas/TotalsReport' }
+    DepartmentReport:
+      type: object
+      required: [department_id, lunch, dinner]
+      properties:
+        department_id: { type: string, format: uuid }
+        department_name: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        lunch: { $ref: '#/components/schemas/MealReport' }
+        dinner: { $ref: '#/components/schemas/MealReport' }
+    MealReport:
+      type: object
+      required: [normal, specials, total]
+      properties:
+        normal: { type: integer, minimum: 0 }
+        specials:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+          description: Map diet_type -> count
+        total: { type: integer, minimum: 0 }
+    TotalsReport:
+      type: object
+      required: [lunch, dinner]
+      properties:
+        lunch: { $ref: '#/components/schemas/MealReport' }
+        dinner: { $ref: '#/components/schemas/MealReport' }
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Weekview Mock</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 16px; }
+      .topbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+      .grid { border-collapse: collapse; width: 100%; table-layout: fixed; }
+      .grid th, .grid td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+      .grid th { background: #f7f7f7; text-align: center; }
+      .dept { background: #fafafa; font-weight: 600; }
+      .meal { font-size: 12px; color: #555; }
+      .item { background: #eef6ff; border: 1px solid #cfe3ff; border-radius: 4px; padding: 4px 6px; margin: 4px 0; }
+      .muted { color: #777; }
+      .cell { position: relative; min-height: 80px; }
+      .alt2-tag { position: absolute; top: 0; right: 0; width: 0; height: 0; border-top: 14px solid #ffd966; border-left: 14px solid transparent; }
+      .marked-count { display: inline-block; padding: 2px 6px; border: 2px solid #16a34a; color: #166534; border-radius: 9999px; font-weight: 600; font-size: 12px; }
+      .meal-slot { margin-bottom: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <h1 id="weekview-title" style="margin: 0;">Weekview</h1>
+      <div style="margin-left: auto; display: flex; gap: 6px;">
+        <button>&lt;</button>
+        <button>Today</button>
+        <button>&gt;</button>
+        <select>
+          <option>Dept A</option>
+          <option>Dept B</option>
+          <option>Dept C</option>
+        </select>
+      </div>
+    </div>
+
+  <table class="grid" id="weekview-grid" aria-label="Department × Day × Meal grid" data-week="45" data-year="2025">
+      <thead>
+        <tr>
+          <th>Department</th>
+          <th>Mon</th>
+          <th>Tue</th>
+          <th>Wed</th>
+          <th>Thu</th>
+          <th>Fri</th>
+          <th>Sat</th>
+          <th>Sun</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="dept" data-department-id="11111111-1111-1111-1111-111111111111">Dept A</td>
+          <td class="cell" data-department-id="11111111-1111-1111-1111-111111111111" data-day="1" data-week="45" data-year="2025">
+            <span class="alt2-tag" title="Alt2"></span>
+            <div class="meal-slot" data-meal="lunch" data-diet="normal" data-marked="3">
+              <div class="meal">Lunch <span class="marked-count">3</span></div>
+              <div class="item">Chicken salad</div>
+            </div>
+            <div class="meal-slot" data-meal="dinner" data-diet="gluten_free" data-marked="0">
+              <div class="meal">Dinner</div>
+              <div class="item">Tomato soup</div>
+            </div>
+          </td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+        </tr>
+        <tr>
+          <td class="dept" data-department-id="22222222-2222-2222-2222-222222222222">Dept B</td>
+          <td class="muted">—</td>
+          <td class="cell" data-department-id="22222222-2222-2222-2222-222222222222" data-day="2" data-week="45" data-year="2025">
+            <span class="alt2-tag" title="Alt2"></span>
+            <div class="meal-slot" data-meal="lunch" data-diet="vegetarian" data-marked="1">
+              <div class="meal">Lunch <span class="marked-count">1</span></div>
+              <div class="item">Pasta</div>
+            </div>
+            <div class="meal-slot" data-meal="dinner" data-diet="lactose_free" data-marked="0">
+              <div class="meal">Dinner</div>
+              <div class="item">Grilled fish</div>
+            </div>
+          </td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+          <td class="muted">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+  </html>
