@@ -6,14 +6,19 @@
   <title>Dashboard</title>
   <link rel="icon" href="{{ url_for('static', filename='logo/YuplanBlue.svg') }}" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/css/dashboard.css" />
+  <style>
+    .brand { display:flex; align-items:center; gap:.5rem; text-decoration:none; }
+    .brand-wordmark { height:34px; display:block; inline-size:auto; }
+    @media (max-width: 420px){ .brand-wordmark { height:28px; } }
+  </style>
 </head>
 <body>
   <div class="wrap">
     <header class="topbar">
-      <div style="display:flex;align-items:center;gap:.75rem;">
-  <img src="{{ url_for('static', filename='logo/YuplanWordmark.svg') }}" alt="Yuplan" style="height:34px;display:block;" />
-  <h1 style="margin:0;font-size:1.35rem;line-height:1;">Dashboard</h1>
-      </div>
+      <a class="brand" href="/">
+        <img class="brand-wordmark" src="{{ url_for('static', filename='logo/YuplanWordmark.svg') }}" alt="Yuplan" />
+        <h1 style="margin:0;font-size:1.35rem;line-height:1;">Dashboard</h1>
+      </a>
     </header>
 
     <section class="grid">

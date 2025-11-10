@@ -29,7 +29,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, feat/admin-phase-c ]
   pull_request:
     branches: [ main, master ]
 
@@ -175,6 +175,9 @@ jobs:
         run: |
           pip install pytest-cov
           pytest --cov=core --cov=modules --cov-report xml:coverage.xml --cov-report term-missing -q
+      - name: Run UI tests (Vitest)
+        run: |
+          if [ -f package.json ]; then npm ci && npm test || exit 1; else echo 'No frontend package.json, skipping UI tests'; fi
 
       - name: Generate coverage badge json
         run: |
@@ -252,6 +255,7 @@ jobs:
             echo 'NON-STRICT MODE: full suite';
             pytest -q;
           fi
+          if [ -f package.json ]; then echo 'Running UI tests after Python matrix'; npm ci && npm test || exit 1; fi
       - name: Matrix summary
         if: always()
         run: echo "CSRF matrix strict=${{ matrix.strict }} finished" >> $GITHUB_STEP_SUMMARY
