@@ -53,7 +53,9 @@ from .turnus_api import bp as turnus_api_bp
 from .weekview_api import bp as weekview_api_bp
 from .report_api import bp as report_api_bp
 from .ui_blueprint import ui_bp
+from .dashboard_ui import bp as dashboard_bp
 from .health_api import bp as health_bp
+from .home import bp as home_bp
 
 # Map of module key -> import path:attr blueprint (for dynamic registration)
 MODULE_IMPORTS = {
@@ -396,6 +398,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(weekview_api_bp)
     app.register_blueprint(report_api_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(home_bp)
+    app.register_blueprint(dashboard_bp)
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 
@@ -1108,8 +1112,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             "openapi": "3.0.3",
             "info": {
                 "title": "Unified Platform API",
-                "version": "0.3.0",
-                "description": "Problem Details (RFC7807) is the canonical error format across all endpoints. Legacy ErrorXXX components have been removed per ADR-003.",
+                "version": "1.8.0",
+                "description": "Problem Details (RFC7807) is the canonical error format across all endpoints. Legacy ErrorXXX components have been removed per ADR-003. Admin Phase B adds write persistence (sites, departments, diet defaults, Alt2 bulk) with ETag/If-Match optimistic concurrency.",
             },
             "servers": [{"url": "/"}],
             "tags": [
@@ -1771,7 +1775,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
-        # --- Report Paths (Phase A: read-only aggregation + conditional GET) ---
+    # --- Report Paths (Phase A: read-only aggregation + conditional GET) ---
         spec["paths"]["/api/report"] = {
             "get": {
                 "tags": ["report"],
@@ -1840,6 +1844,29 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
+
+        # --- Merge OpenAPI parts (admin.yml) when enabled ---
+        try:
+            import os
+            from .openapi_merge import load_yaml, merge_openapi
+
+            include_parts = os.getenv("OPENAPI_INCLUDE_PARTS", "1").lower() not in (
+                "0",
+                "false",
+                "no",
+            )
+            if include_parts:
+                base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+                admin_path = os.path.join(base_dir, "openapi", "parts", "admin.yml")
+                extra = load_yaml(admin_path)
+                if extra:
+                    merge_openapi(spec, extra)
+                    app.logger.info("Merged admin.yml into OpenAPI")
+                else:
+                    app.logger.warning("Failed to load or empty admin.yml for OpenAPI merge: %s", admin_path)
+        except Exception:  # pragma: no cover
+            app.logger.warning("OpenAPI parts merge failed", exc_info=True)
+
         return spec
 
     # --- Feature flag management endpoints (regression restore) ---

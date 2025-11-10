@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/static/css/dashboard.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <h1>Dashboard</h1>
+    </header>
+
+    <section class="grid">
+      <div class="card wide" id="widget-today-menu">
+        <h2>Snabbstart</h2>
+        <p>Gå till Inline UI för Notes & Tasks (demo).</p>
+        <div class="actions">
+          <a class="button" href="/ui/inline">Öppna Inline UI</a>
+          <a class="button" href="/openapi.json" target="_blank" rel="noopener">API-spec</a>
+        </div>
+      </div>
+
+      <div class="card" id="widget-quickstart">
+        <h3>Snabbval</h3>
+        <div class="actions">
+          {% if has_role('admin') or has_role('editor') %}
+            <a class="button" href="/weekview">Veckovy</a>
+            <a class="button" href="/report">Rapport</a>
+            <a class="button" href="/planning">Planering</a>
+          {% else %}
+            <button class="button" disabled title="Insufficient permissions">Veckovy</button>
+            <button class="button" disabled title="Insufficient permissions">Rapport</button>
+            <button class="button" disabled title="Insufficient permissions">Planering</button>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card" id="widget-alerts">
+        <h3>Alerts & Status</h3>
+        <ul>
+          <li>Saknat boendeantal</li>
+          <li>Stale data (vecka)</li>
+          <li>Alt 2 planerad idag</li>
+        </ul>
+      </div>
+
+      <div class="card" id="widget-dept-notes">
+        <h3>Avdelningsnotiser</h3>
+        <ul>
+          <li>Påminnelse: Beställ mjölk till fredag</li>
+          <li>Städ dag 2:a tisdagen varje månad</li>
+          <li>Brandövning kl 14 på torsdag</li>
+        </ul>
+      </div>
+
+      <div class="card" id="widget-tasks">
+        <h3>Status</h3>
+        <ul>
+          <li>App: OK</li>
+          <li>Version: 0.3.x</li>
+        </ul>
+      </div>
+
+      <div class="card" id="widget-notes">
+        <h3>Snarvägar</h3>
+        <ul>
+          <li><a href="/notes/">Notes API</a></li>
+          <li><a href="/tasks/">Tasks API</a></li>
+        </ul>
+      </div>
+
+      <div class="card" id="widget-shortcuts">
+        <h3>Om</h3>
+        <p class="muted">Denna dashboard är en enkel skalvy som kan utökas med widgetar och realtidsdata.</p>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

@@ -428,3 +428,337 @@ def delete_limit():  # type: ignore[return-value]
             actor_role=session.get("role"),  # type: ignore[arg-type]
         )
     return jsonify({"ok": True, "removed": removed})
+
+
+# ============================================================================
+# Admin Module - Phase A API Endpoints
+# ============================================================================
+
+from .http_errors import bad_request, forbidden, not_found, problem
+from .admin_service import AdminService
+from .etag import ConcurrencyError
+
+
+def _admin_feature_enabled(name: str) -> bool:
+    """Check if admin feature flag is enabled for current tenant."""
+    try:
+        # Check tenant-specific feature flags first (via g.tenant_feature_flags if set)
+        from flask import g
+        override = getattr(g, "tenant_feature_flags", {}).get(name)
+        if override is not None:
+            return bool(override)
+        
+        # Fall back to global feature registry
+        reg = getattr(current_app, "feature_registry", None)
+        if reg is not None:
+            return bool(reg.enabled(name))
+    except Exception:
+        pass
+    return False
+
+
+def _require_admin_module_enabled():
+    """Return 404 ProblemDetails if admin module is disabled."""
+    if not _admin_feature_enabled("ff.admin.enabled"):
+        return not_found(
+            error_type="admin_disabled",
+            detail="Admin module is not enabled",
+        )
+    return None
+
+
+def _admin_tenant_id():
+    """Get current tenant ID from session."""
+    tid = session.get("tenant_id")
+    if not tid:
+        # In tests, this should be set via header injector; treat missing as 401
+        return None
+    return tid
+
+
+def _validate_week_range(week: int) -> bool:
+    """Validate week number is in valid range 1-53."""
+    return 1 <= week <= 53
+
+
+@bp.get("/stats")
+@require_roles("admin", "editor")
+def get_admin_stats():
+    """Get system statistics (admin/editor access only).
+    
+    Phase A: Returns minimal statistics with ETag.
+    """
+    maybe = _require_admin_module_enabled()
+    if maybe is not None:
+        return maybe
+    
+    tid = _admin_tenant_id()
+    if not tid:
+        return forbidden("tenant_required", "Tenant context required")
+    
+    # Parse query parameters
+    try:
+        year = request.args.get("year", type=int)
+        week = request.args.get("week", type=int) 
+        department_id = request.args.get("department_id")
+        
+        # Validation
+        if year is not None and (year < 1970 or year > 2100):
+            return bad_request("Year must be between 1970 and 2100")
+        
+        if week is not None and not _validate_week_range(week):
+            return bad_request("Week must be between 1 and 53")
+        
+        # Default to current year/week if not provided (Phase A: use fixed values)
+        if year is None:
+            year = 2025
+        if week is None:
+            week = 45
+        
+        # Phase A: Minimal stats payload
+        stats = {
+            "year": year,
+            "week": week,
+            "departments": []
+        }
+        
+        # Generate weak ETag for caching
+        etag = f'W/"admin:stats:y{year}:w{week}:v0"'
+        
+        # Check If-None-Match for 304 Not Modified
+        if_none_match = request.headers.get("If-None-Match")
+        if if_none_match and if_none_match == etag:
+            from flask import Response
+            response = Response(status=304)
+            response.headers["ETag"] = etag
+            response.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+            return response
+        
+        response = jsonify(stats)
+        response.headers["ETag"] = etag
+        response.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+        return response
+        
+    except Exception as e:
+        return bad_request(f"Invalid request parameters: {str(e)}")
+
+
+@bp.post("/sites")
+@require_roles("admin")
+def create_site():
+    """Create new site (admin only)."""
+    maybe = _require_admin_module_enabled()
+    if maybe is not None:
+        return maybe
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return bad_request("name is required")
+    svc = AdminService()
+    try:
+        rec, etag = svc.create_site(name)
+    except Exception as e:  # pragma: no cover – unexpected
+        return bad_request(str(e))
+    resp = jsonify(rec)
+    resp.status_code = 201
+    resp.headers["ETag"] = etag
+    return resp
+
+
+@bp.post("/departments")
+@require_roles("admin")
+def create_department():
+    """Create new department (admin only)."""
+    maybe = _require_admin_module_enabled()
+    if maybe is not None:
+        return maybe
+    data = request.get_json(silent=True) or {}
+    site_id = data.get("site_id")
+    name = (data.get("name") or "").strip()
+    mode = data.get("resident_count_mode") or "fixed"
+    fixed = data.get("resident_count_fixed")
+    if not site_id or not name:
+        return bad_request("site_id and name are required")
+    svc = AdminService()
+    try:
+        rec, etag = svc.create_department(site_id, name, mode, fixed)
+    except ValueError as ve:
+        return bad_request(str(ve))
+    resp = jsonify(rec)
+    resp.status_code = 201
+    resp.headers["ETag"] = etag
+    return resp
+
+
+@bp.put("/departments/<department_id>")
+@require_roles("admin")
+def update_department(department_id: str):
+    """Update department (admin only, requires If-Match)."""
+    maybe = _require_admin_module_enabled()
+    if maybe is not None:
+        return maybe
+    if_match = request.headers.get("If-Match")
+    if not if_match:
+        return bad_request("missing_if_match")
+    data = request.get_json(silent=True) or {}
+    svc = AdminService()
+    try:
+        rep, etag = svc.update_department(department_id, if_match, data)
+    except ValueError as ve:
+        return bad_request(str(ve))
+    except ConcurrencyError:
+        # Return 412 with ProblemDetails and current ETag
+        current = AdminService().get_department_current_etag(department_id)
+        pb = problem(412, "etag_mismatch", "Precondition Failed", "Resource has been modified since last read")
+        # Attach current_etag if available
+        try:
+            body = pb.get_json()
+            if current:
+                body["current_etag"] = current
+            from flask import Response
+            resp = jsonify(body)
+            return resp, 412
+        except Exception:
+            return pb
+    resp = jsonify(rep)
+    resp.headers["ETag"] = etag
+    return resp
+
+
+@bp.put("/departments/<department_id>/notes")
+@require_roles("admin")
+def update_department_notes(department_id: str):
+    """Update department notes (admin only, requires If-Match)."""
+    maybe = _require_admin_module_enabled()
+    if maybe is not None:
+        return maybe
+    if_match = request.headers.get("If-Match")
+    if not if_match:
+        return bad_request("missing_if_match")
+    data = request.get_json(silent=True) or {}
+    notes = data.get("notes")
+    svc = AdminService()
+    try:
+        rep, etag = svc.update_department_notes(department_id, if_match, notes)
+    except ValueError as ve:
+        return bad_request(str(ve))
+    except ConcurrencyError:
+        current = AdminService().get_department_current_etag(department_id)
+        pb = problem(412, "etag_mismatch", "Precondition Failed", "Resource has been modified since last read")
+        try:
+            body = pb.get_json()
+            if current:
+                body["current_etag"] = current
+            resp = jsonify(body)
+            return resp, 412
+        except Exception:
+            return pb
+    resp = jsonify(rep)
+    resp.headers["ETag"] = etag
+    return resp
+
+
+@bp.put("/departments/<department_id>/diet-defaults")
+@require_roles("admin")
+def update_diet_defaults(department_id: str):
+    """Update dietary defaults for department (admin only, requires If-Match)."""
+    maybe = _require_admin_module_enabled()
+    if maybe is not None:
+        return maybe
+    if_match = request.headers.get("If-Match")
+    if not if_match:
+        return bad_request("missing_if_match")
+    data = request.get_json(silent=True) or {}
+    items = data.get("items") or data.get("dietary_counts") or []
+    if not isinstance(items, list):
+        return bad_request("invalid items")
+    svc = AdminService()
+    try:
+        items_out, etag = svc.update_diet_defaults(department_id, if_match, items)
+    except ValueError as ve:
+        return bad_request(str(ve))
+    except ConcurrencyError:
+        current = AdminService().get_department_current_etag(department_id)
+        pb = problem(412, "etag_mismatch", "Precondition Failed", "Resource has been modified since last read")
+        try:
+            body = pb.get_json()
+            if current:
+                body["current_etag"] = current
+            resp = jsonify(body)
+            return resp, 412
+        except Exception:
+            return pb
+    resp = jsonify({"department_id": department_id, "items": items_out})
+    resp.headers["ETag"] = etag
+    return resp
+
+
+@bp.post("/menu-import")
+@require_roles("admin")
+def start_menu_import():
+    """Start menu import job (admin only).
+    
+    Phase A: Returns 501 Not Implemented.
+    """
+    maybe = _require_admin_module_enabled()
+    if maybe is not None:
+        return maybe
+    
+    return problem(501, "not_implemented_phase_a", "Not Implemented", "Menu import will be implemented in Phase B")
+
+
+@bp.get("/menu-import/<job_id>")
+@require_roles("admin", "editor")
+def get_menu_import_status(job_id: str):
+    """Get menu import job status (admin/editor access).
+    
+    Phase A: Returns 501 Not Implemented.
+    """
+    maybe = _require_admin_module_enabled()
+    if maybe is not None:
+        return maybe
+    
+    return problem(501, "not_implemented_phase_a", "Not Implemented", "Menu import status tracking will be implemented in Phase B")
+
+
+@bp.put("/alt2")
+@require_roles("admin")
+def update_bulk_alt2():
+    """Bulk Alt2 configuration (admin only, requires If-Match).
+
+    Body: { week:int, items:[{department_id, weekday, enabled}] }
+    """
+    maybe = _require_admin_module_enabled()
+    if maybe is not None:
+        return maybe
+    if_match = request.headers.get("If-Match")
+    if not if_match:
+        return bad_request("missing_if_match")
+    data = request.get_json(silent=True) or {}
+    try:
+        week = int(data.get("week"))
+    except Exception:
+        return bad_request("invalid week")
+    if not _validate_week_range(week):
+        return bad_request("Week must be between 1 and 53")
+    items = data.get("items") or []
+    if not isinstance(items, list):
+        return bad_request("items must be list")
+    svc = AdminService()
+    try:
+        body, new_etag = svc.update_alt2_bulk(if_match, week, items)
+    except ValueError as ve:
+        return bad_request(str(ve))
+    except ConcurrencyError:
+        current = AdminService().get_alt2_collection_etag(week)
+        pb = problem(412, "etag_mismatch", "Precondition Failed", "Resource has been modified since last read")
+        try:
+            body = pb.get_json()
+            body["current_etag"] = current
+            resp = jsonify(body)
+            return resp, 412
+        except Exception:
+            return pb
+    resp = jsonify(body)
+    resp.headers["ETag"] = new_etag
+    return resp

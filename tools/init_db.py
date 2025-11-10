@@ -20,7 +20,8 @@ def run_migrations(database_url: str) -> None:
     acfg = AlembicConfig(alembic_ini)
     # Pass URL via env override supported by migrations/env.py
     os.environ.setdefault("DATABASE_URL", database_url)
-    command.upgrade(acfg, "head")
+    # Use 'heads' to support multiple Alembic branches being upgraded
+    command.upgrade(acfg, "heads")
 
 
 def seed_minimal() -> None:

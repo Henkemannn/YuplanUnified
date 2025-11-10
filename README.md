@@ -58,6 +58,53 @@ Examples
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
 
+## Staging environment (Fly.io)
+
+Current staging URL: https://yuplan-unified-staging-icy-wave-9332.fly.dev/
+
+Landing page `/` links to health (`/health` + `/healthz`), docs (`/docs/`), and the OpenAPI spec (`/openapi.json`).
+
+### Database driver
+
+Staging runs on Postgres (Fly managed cluster) — preferred over SQLite for concurrency & realistic query planning. SQLite is still usable locally and in CI for light tests. Migrations are Alembic-driven; never rely on `create_all` in staging.
+
+### Initialize schema & minimal seed (local dev)
+
+PowerShell (Windows):
+```powershell
+python tools/init_db.py
+```
+
+Bash (macOS/Linux):
+```bash
+python tools/init_db.py
+```
+
+This runs all Alembic migrations (multi-head safe) and seeds tenant `demo` with units `Alpha`, `Bravo`.
+
+### Week view seed example
+
+PowerShell:
+```powershell
+python tools/seed_weekview.py --tenant demo --year 2025 --week 45 --departments Alpha Bravo
+```
+
+Bash:
+```bash
+python tools/seed_weekview.py --tenant demo --year 2025 --week 45 --departments Alpha Bravo
+```
+
+### Postgres staging runbook
+
+See `docs/staging_postgres_runbook.md` for end-to-end commands to:
+1. Provision a Fly Postgres cluster
+2. Attach and set `DATABASE_URL`
+3. Run migrations + seed inside the machine
+4. Validate health
+
+If switching to a fresh database or re-running migrations in-place, ensure no conflicting heads (we use `upgrade heads`).
+
+
 ## Contributing
 See CONTRIBUTING.md for branching, PR, and quality gates. Use the GitHub Issue templates for GA checklist and roadmap kickoff from the New Issue menu.
 
@@ -649,7 +696,15 @@ Example enable (admin session or test header injection):
 POST /features/set { "name": "openapi_ui", "enabled": true }
 ```
 
-The OpenAPI spec is currently a hand-maintained subset; extend `openapi.json` generation in `core/app_factory.py` for new endpoints.
+The OpenAPI spec is generated in `core/app_factory.py` and can merge modular parts:
+
+Environment toggle:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAPI_INCLUDE_PARTS` | `true` | When truthy merges `openapi/parts/admin.yml` (and future parts) into `/openapi.json`. Set to `0`/`false`/`no` to disable. |
+
+Admin endpoints and schemas live in `openapi/parts/admin.yml` and are automatically merged unless disabled.
 See docs/ for full architecture, data model, migration plan, module definitions, roadmap, deployment guidance.
 
 ### OpenAPI Baseline & Semantic Diff
