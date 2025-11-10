@@ -1,4 +1,5 @@
 import { fetchWithEtag } from "../lib/fetchWithEtag";
+import { fetchIfNoneMatch } from "../lib/fetchIfNoneMatch";
 import { etagKey } from "../lib/etagStore";
 import { ConcurrencyError, AuthzError } from "../lib/errors";
 
@@ -15,7 +16,7 @@ function handleErr(e: any) {
 export async function listDepartments(siteId:string): Promise<Department[]> {
   const key = etagKey("admin","departments",siteId);
   try {
-    return await fetchWithEtag(key, `/api/admin/departments?site=${encodeURIComponent(siteId)}`, {}, { method:"GET" });
+    return await fetchIfNoneMatch(key, `/api/admin/departments?site=${encodeURIComponent(siteId)}`);
   } catch(e){ handleErr(e); }
   return [];
 }
@@ -47,7 +48,7 @@ export async function updateDepartment(depId:string, payload: Partial<Department
 export async function getDietDefaults(depId:string): Promise<DietDefaultItem[]> {
   const key = etagKey("admin","diet-defaults",depId);
   try {
-    return await fetchWithEtag(key, `/api/admin/departments/${encodeURIComponent(depId)}/diet-defaults`, {}, { method:"GET" });
+    return await fetchIfNoneMatch(key, `/api/admin/departments/${encodeURIComponent(depId)}/diet-defaults`);
   } catch(e){ handleErr(e); }
   return [];
 }
@@ -66,7 +67,7 @@ export async function saveDietDefaults(depId:string, items:DietDefaultItem[]): P
 export async function getAlt2(week:number): Promise<{ week:number; items: Alt2BulkItem[] }|null> {
   const key = etagKey("admin","alt2","week",week);
   try {
-    return await fetchWithEtag(key, `/api/admin/alt2?week=${week}`, {}, { method:"GET" });
+    return await fetchIfNoneMatch(key, `/api/admin/alt2?week=${week}`);
   } catch(e: any){ if(e && typeof e === "object" && (e as any).code === 404) return null; handleErr(e); }
   return null;
 }

@@ -1112,8 +1112,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             "openapi": "3.0.3",
             "info": {
                 "title": "Unified Platform API",
-                "version": "1.8.0",
-                "description": "Problem Details (RFC7807) is the canonical error format across all endpoints. Legacy ErrorXXX components have been removed per ADR-003. Admin Phase B adds write persistence (sites, departments, diet defaults, Alt2 bulk) with ETag/If-Match optimistic concurrency.",
+                "version": "1.9.0",
+                "description": "Problem Details (RFC7807) canonical errors. Admin Phase D adds conditional GET (If-None-Match/304) across admin collections & resources with cache-friendly weak ETags.",
             },
             "servers": [{"url": "/"}],
             "tags": [
@@ -1859,11 +1859,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
                 admin_path = os.path.join(base_dir, "openapi", "parts", "admin.yml")
                 extra = load_yaml(admin_path)
+                if not extra:
+                    app.logger.warning("admin.yml failed to load or was empty; skipping fallback now that spec is repaired")
                 if extra:
                     merge_openapi(spec, extra)
-                    app.logger.info("Merged admin.yml into OpenAPI")
+                    app.logger.info("Merged %s into OpenAPI", os.path.basename(admin_path))
                 else:
-                    app.logger.warning("Failed to load or empty admin.yml for OpenAPI merge: %s", admin_path)
+                    app.logger.warning("Failed to load admin OpenAPI part from %s", admin_path)
         except Exception:  # pragma: no cover
             app.logger.warning("OpenAPI parts merge failed", exc_info=True)
 

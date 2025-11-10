@@ -11,6 +11,7 @@ from flask import Flask
 from core.app_factory import create_app
 from core.db import create_all, get_session
 from core.models import Tenant
+from sqlalchemy import text
 
 
 def _enable_flag(app: Flask, name: str, enabled: bool = True):
@@ -25,11 +26,20 @@ def _enable_flag(app: Flask, name: str, enabled: bool = True):
 def _bootstrap_db(app: Flask):
     """Create schema and seed a tenant for testing."""
     with app.app_context():
+        # Use migration tables instead of bare metadata to ensure versioned tables exist
+        # Alembic migration 0008 creates sites/departments etc.; for tests we emulate minimal subset if absent.
         create_all()
         db = get_session()
         try:
+            # Ensure sites table exists (fallback if migration not run)
+            try:
+                db.execute(text("SELECT 1 FROM sites LIMIT 1"))
+            except Exception:
+                db.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL, version INTEGER DEFAULT 0, updated_at TEXT)"))
+            # Seed tenant if missing (legacy tests depend on tenant_id=1 existence for headers)
             if not db.query(Tenant).first():
-                db.add(Tenant(name="TestTenant"))
+                t = Tenant(name="TestTenant")
+                db.add(t)
                 db.commit()
         finally:
             db.close()
@@ -88,11 +98,10 @@ class TestAdminFeatureFlag:
         # Stats endpoint should work (not 404)
         response = client.get("/admin/stats", headers=headers)
         assert response.status_code == 200  # GET stats implemented in Phase A
-        
-    # Write endpoint now implemented: should return 201
-    response = client.post("/admin/sites", headers=headers, json={"name": "Test Site"})
-    assert response.status_code == 201
-    assert "ETag" in response.headers
+        # Write endpoint now implemented: should return 201
+        response = client.post("/admin/sites", headers=headers, json={"name": "Test Site"})
+        assert response.status_code == 201
+        assert "ETag" in response.headers
 
 
 class TestAdminRBAC:

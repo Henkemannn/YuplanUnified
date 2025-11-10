@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from contextlib import suppress
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+import os
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 
@@ -49,3 +50,58 @@ def create_all() -> (
     if _engine is None:
         raise RuntimeError("Engine not initialized")
     Base.metadata.create_all(_engine)
+    # Test/dev fallback: create raw admin tables when using sqlite and migrations aren't applied.
+    try:
+        if _engine.dialect.name == "sqlite":  # lightweight fallback for tests
+            # Guard to ensure this never runs in production by accident.
+            if os.getenv("YP_ENABLE_SQLITE_BOOTSTRAP", "0") not in ("1", "true", "yes"):  # pragma: no cover - env driven
+                return None
+            with _engine.connect() as conn:
+                # Sites table
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS sites (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        version INTEGER NOT NULL DEFAULT 0,
+                        notes TEXT NULL,
+                        updated_at TEXT
+                    )
+                """))
+                # Departments table
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS departments (
+                        id TEXT PRIMARY KEY,
+                        site_id TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        resident_count_mode TEXT NOT NULL,
+                        resident_count_fixed INTEGER NOT NULL DEFAULT 0,
+                        notes TEXT NULL,
+                        version INTEGER NOT NULL DEFAULT 0,
+                        updated_at TEXT
+                    )
+                """))
+                # Diet defaults table
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS department_diet_defaults (
+                        department_id TEXT NOT NULL,
+                        diet_type_id TEXT NOT NULL,
+                        default_count INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY (department_id, diet_type_id)
+                    )
+                """))
+                # Alt2 flags table
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS alt2_flags (
+                        site_id TEXT NOT NULL,
+                        department_id TEXT NOT NULL,
+                        week INTEGER NOT NULL,
+                        weekday INTEGER NOT NULL,
+                        enabled BOOLEAN NOT NULL DEFAULT 0,
+                        version INTEGER NOT NULL DEFAULT 0,
+                        updated_at TEXT,
+                        PRIMARY KEY (site_id, department_id, week, weekday)
+                    )
+                """))
+    except Exception:
+        # Silent fallback – tests will surface issues if schema still missing.
+        pass

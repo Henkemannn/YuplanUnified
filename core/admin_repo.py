@@ -22,6 +22,20 @@ class SitesRepo:
         try:
             sid = str(uuid.uuid4())
             if _is_sqlite(db):
+                # Ensure minimal admin tables exist for sqlite test/dev environments
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS sites (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            notes TEXT NULL,
+                            updated_at TEXT
+                        )
+                        """
+                    )
+                )
                 db.execute(
                     text(
                         """
@@ -49,6 +63,29 @@ class SitesRepo:
         finally:
             db.close()
 
+    def list_sites(self) -> list[dict]:
+        """List all sites (id, name, version)."""
+        db = get_session()
+        try:
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS sites (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            notes TEXT NULL,
+                            updated_at TEXT
+                        )
+                        """
+                    )
+                )
+            rows = db.execute(text("SELECT id, name, COALESCE(version,0) FROM sites ORDER BY name"))
+            return [{"id": r[0], "name": r[1], "version": int(r[2] or 0)} for r in rows.fetchall()]
+        finally:
+            db.close()
+
 
 class DepartmentsRepo:
     def create_department(
@@ -63,6 +100,23 @@ class DepartmentsRepo:
             did = str(uuid.uuid4())
             rc_fixed = int(resident_count_fixed or 0)
             if _is_sqlite(db):
+                # Ensure departments table exists (sqlite test/dev)
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS departments (
+                            id TEXT PRIMARY KEY,
+                            site_id TEXT NOT NULL,
+                            name TEXT NOT NULL,
+                            resident_count_mode TEXT NOT NULL,
+                            resident_count_fixed INTEGER NOT NULL DEFAULT 0,
+                            notes TEXT NULL,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            updated_at TEXT
+                        )
+                        """
+                    )
+                )
                 db.execute(
                     text(
                         """
@@ -141,6 +195,50 @@ class DepartmentsRepo:
         try:
             row = db.execute(text("SELECT version FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
             return int(row[0]) if row else None
+        finally:
+            db.close()
+
+    def list_for_site(self, site_id: str) -> list[dict]:
+        """List departments for a given site."""
+        db = get_session()
+        try:
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS departments (
+                            id TEXT PRIMARY KEY,
+                            site_id TEXT NOT NULL,
+                            name TEXT NOT NULL,
+                            resident_count_mode TEXT NOT NULL,
+                            resident_count_fixed INTEGER NOT NULL DEFAULT 0,
+                            notes TEXT NULL,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            updated_at TEXT
+                        )
+                        """
+                    )
+                )
+            rows = db.execute(
+                text(
+                    """
+                    SELECT id, site_id, name, resident_count_mode, resident_count_fixed, COALESCE(version,0)
+                    FROM departments WHERE site_id=:s ORDER BY name
+                    """
+                ),
+                {"s": site_id},
+            ).fetchall()
+            return [
+                {
+                    "id": r[0],
+                    "site_id": r[1],
+                    "name": r[2],
+                    "resident_count_mode": r[3],
+                    "resident_count_fixed": int(r[4] or 0),
+                    "version": int(r[5] or 0),
+                }
+                for r in rows
+            ]
         finally:
             db.close()
 
@@ -250,6 +348,19 @@ class DietDefaultsRepo:
     def list_for_department(self, dept_id: str) -> list[dict]:
         db = get_session()
         try:
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS department_diet_defaults (
+                            department_id TEXT NOT NULL,
+                            diet_type_id TEXT NOT NULL,
+                            default_count INTEGER NOT NULL DEFAULT 0,
+                            PRIMARY KEY (department_id, diet_type_id)
+                        )
+                        """
+                    )
+                )
             rows = db.execute(
                 text(
                     """
@@ -286,6 +397,23 @@ class Alt2Repo:
                     "enabled": bool(it["enabled"]),
                 }
                 if dialect == "sqlite":
+                    # Ensure table exists
+                    db.execute(
+                        text(
+                            """
+                            CREATE TABLE IF NOT EXISTS alt2_flags (
+                                site_id TEXT NOT NULL,
+                                department_id TEXT NOT NULL,
+                                week INTEGER NOT NULL,
+                                weekday INTEGER NOT NULL,
+                                enabled BOOLEAN NOT NULL DEFAULT 0,
+                                version INTEGER NOT NULL DEFAULT 0,
+                                updated_at TEXT,
+                                PRIMARY KEY (site_id, department_id, week, weekday)
+                            )
+                            """
+                        )
+                    )
                     # Do not update if no change (preserve version)
                     db.execute(
                         text(
@@ -293,7 +421,7 @@ class Alt2Repo:
                             INSERT INTO alt2_flags(site_id, department_id, week, weekday, enabled)
                             VALUES(:site_id, :department_id, :week, :weekday, :enabled)
                             ON CONFLICT(site_id, department_id, week, weekday)
-                            DO UPDATE SET enabled=excluded.enabled
+                            DO UPDATE SET enabled=excluded.enabled, version=alt2_flags.version+1, updated_at=CURRENT_TIMESTAMP
                             WHERE alt2_flags.enabled IS DISTINCT FROM excluded.enabled
                             """
                         ),
@@ -340,6 +468,23 @@ class Alt2Repo:
     def collection_version(self, week: int, site_id: str | None = None) -> int:
         db = get_session()
         try:
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS alt2_flags (
+                            site_id TEXT NOT NULL,
+                            department_id TEXT NOT NULL,
+                            week INTEGER NOT NULL,
+                            weekday INTEGER NOT NULL,
+                            enabled BOOLEAN NOT NULL DEFAULT 0,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            updated_at TEXT,
+                            PRIMARY KEY (site_id, department_id, week, weekday)
+                        )
+                        """
+                    )
+                )
             if site_id:
                 row = db.execute(
                     text(
@@ -358,4 +503,45 @@ class Alt2Repo:
 
     def current_collection_version_or_none(self, week: int) -> int:
         return self.collection_version(week)
+
+    def list_for_week(self, week: int) -> list[dict]:
+        """List alt2 flags for a given week."""
+        db = get_session()
+        try:
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS alt2_flags (
+                            site_id TEXT NOT NULL,
+                            department_id TEXT NOT NULL,
+                            week INTEGER NOT NULL,
+                            weekday INTEGER NOT NULL,
+                            enabled BOOLEAN NOT NULL DEFAULT 0,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            updated_at TEXT,
+                            PRIMARY KEY (site_id, department_id, week, weekday)
+                        )
+                        """
+                    )
+                )
+            rows = db.execute(
+                text(
+                    "SELECT site_id, department_id, week, weekday, enabled, COALESCE(version,0) FROM alt2_flags WHERE week=:w ORDER BY department_id, weekday"
+                ),
+                {"w": int(week)},
+            ).fetchall()
+            return [
+                {
+                    "site_id": r[0],
+                    "department_id": r[1],
+                    "week": int(r[2]),
+                    "weekday": int(r[3]),
+                    "enabled": bool(r[4]),
+                    "version": int(r[5] or 0),
+                }
+                for r in rows
+            ]
+        finally:
+            db.close()
 

@@ -3,7 +3,19 @@ import { listDepartments, updateDepartment, createDepartment } from "../../api/a
 import { etagKey } from "../../lib/etagStore";
 
 export function useDepartments(siteId: string) {
-  return useQuery({ queryKey: ["departments", siteId], queryFn: () => listDepartments(siteId) });
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["departments", siteId],
+    queryFn: async () => {
+      const r: any = await listDepartments(siteId);
+      if (r && r.__from304) {
+        return (qc.getQueryData(["departments", siteId]) as any) || [];
+      }
+      return r;
+    },
+    placeholderData: (prev:any) => prev,
+    staleTime: 60_000,
+  });
 }
 
 export function useUpdateDepartment(siteId: string) {

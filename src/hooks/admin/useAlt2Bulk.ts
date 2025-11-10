@@ -4,7 +4,19 @@ import { alt2ResourceKey } from "./useDepartments";
 import { getETag } from "../../lib/etagStore";
 
 export function useAlt2(week: number) {
-  return useQuery({ queryKey: ["alt2", week], queryFn: () => getAlt2(week) });
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["alt2", week],
+    queryFn: async () => {
+      const r: any = await getAlt2(week);
+      if (r && (r as any).__from304) {
+        return (qc.getQueryData(["alt2", week]) as any) || null;
+      }
+      return r;
+    },
+    placeholderData: (prev:any) => prev,
+    staleTime: 60_000,
+  });
 }
 
 export function useSaveAlt2(week: number) {

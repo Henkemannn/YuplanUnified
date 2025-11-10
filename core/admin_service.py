@@ -45,7 +45,7 @@ class AdminService:
 
     def update_department(self, dept_id: str, if_match: str | None, payload: dict) -> tuple[dict, str]:
         ns, kind, ident, version = parse_if_match(if_match)
-        if not version or ident != dept_id or kind != "dept" or ns != "admin":
+        if version is None or ident != dept_id or kind != "dept" or ns != "admin":
             raise ValueError("invalid_if_match")
         fields = {}
         if "name" in payload:
@@ -73,7 +73,7 @@ class AdminService:
 
     def update_department_notes(self, dept_id: str, if_match: str | None, notes: str | None) -> tuple[dict, str]:
         ns, kind, ident, version = parse_if_match(if_match)
-        if not version or ident != dept_id or kind != "dept" or ns != "admin":
+        if version is None or ident != dept_id or kind != "dept" or ns != "admin":
             raise ValueError("invalid_if_match")
         try:
             new_version = self.depts_repo.update_department(dept_id, version, notes=notes or None)
@@ -86,7 +86,7 @@ class AdminService:
         self, dept_id: str, if_match: str | None, items: Iterable[dict]
     ) -> tuple[list[dict], str]:
         ns, kind, ident, version = parse_if_match(if_match)
-        if not version or ident != dept_id or kind != "dept" or ns != "admin":
+        if version is None or ident != dept_id or kind != "dept" or ns != "admin":
             raise ValueError("invalid_if_match")
         # Validation
         sanitized: list[dict] = []
@@ -117,7 +117,7 @@ class AdminService:
         If-Match uses collection etag: W/"admin:alt2:week:{week}:v{n}".
         """
         ns, kind, ident, version = parse_if_match(if_match)
-        if not version or kind != "alt2" or ns != "admin" or ident != f"week:{week}":
+        if version is None or kind != "alt2" or ns != "admin" or ident != f"week:{week}":
             raise ValueError("invalid_if_match")
         # Concurrency check (collection etag)
         current_v = self.alt2_repo.collection_version(week)
