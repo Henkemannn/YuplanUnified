@@ -46,6 +46,9 @@ ci: lint test openapi spectral smoke
 ready:
 	$(PY) scripts/check_release_ready.py
 
+seed-varberg:
+	DATABASE_URL="${DATABASE_URL}" $(PY) -m scripts.seed_varberg_midsommar || exit 1
+
 clean:
 	rm -f openapi.json
 

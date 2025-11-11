@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from functools import wraps
 
-from flask import Blueprint, current_app, jsonify, make_response, request, session
+from flask import Blueprint, current_app, jsonify, make_response, request, session, redirect, Response
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_session
@@ -93,6 +93,19 @@ def require_roles(*roles: str):
 # --- Routes ---
 @bp.post("/login")
 def login():
+    # Staging simple auth shortcut (env flag) bypasses normal credential path.
+    if os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes"):
+        data = request.get_json(silent=True) or {}
+        role = (data.get("role") or "admin").strip().lower()
+        if role not in ("admin", "staff"):
+            role = "staff"
+        session["user_id"] = 99999  # demo user id placeholder
+        session["role"] = role
+        session["tenant_id"] = 51  # arbitrary demo tenant
+        resp = make_response(jsonify({"ok": True, "demo": True, "role": role}))
+        # Lightweight signed-ish cookie (not cryptographically strong; staging only)
+        resp.set_cookie("yp_demo", role, httponly=True, samesite="Lax")
+        return resp
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
@@ -186,6 +199,12 @@ def login():
 
 @bp.post("/logout")
 def logout():
+    if os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes"):
+        # Clear demo session quickly
+        session.clear()
+        resp = make_response(jsonify({"ok": True, "demo": True}))
+        resp.delete_cookie("yp_demo")
+        return resp
     # Accept refresh token or Authorization header, invalidate stored jti
     primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
     secrets_list = current_app.config.get("JWT_SECRETS") or []
@@ -216,6 +235,8 @@ def logout():
 
 @bp.post("/refresh")
 def refresh():
+    if os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes"):
+        return _json_error("refresh not supported in demo", 400)
     primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
     secrets_list = current_app.config.get("JWT_SECRETS") or []
     data = request.get_json(silent=True) or {}

@@ -20,6 +20,7 @@ import time
 import uuid
 from importlib import import_module
 from typing import Any
+import os
 
 from flask import Flask, g, jsonify, request, session
 from werkzeug.wrappers.response import Response
@@ -252,6 +253,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             "feature_enabled": feature_enabled,
             "csrf_token": csrf_token(),
             "csrf_token_input": csrf_token_input,
+            # Staging demo banner: enabled only when env flag is truthy
+            "staging_demo": os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"),
         }
 
     # --- Logging / timing middleware ---
