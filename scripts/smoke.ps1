@@ -56,7 +56,11 @@ if (-not $SiteId) {
     $newName = "Dept (smoke)"
     $body2 = (@{ name=$newName } | ConvertTo-Json -Compress)
   $resPut = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments/$($first.id)" -WebSession $session -Method Put -Headers $headers2 -Body $body2 -SkipHttpErrorCheck
-  if ($resPut.StatusCode -lt 200 -or $resPut.StatusCode -ge 300) { throw "rename_failed_$($resPut.StatusCode)" }
+    if ($resPut.StatusCode -lt 200 -or $resPut.StatusCode -ge 300) {
+      Write-Host "Rename response body:" -ForegroundColor Yellow
+      Write-Host $resPut.Content
+      throw "rename_failed_$($resPut.StatusCode)"
+    }
     Write-Host "Department PUT OK (If-Match)" -ForegroundColor Green
     # 2c) GET again -> collection ETag must bump
     $res2 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId" -WebSession $session -Method Get

@@ -622,6 +622,12 @@ def update_department(department_id: str):
             return resp, 412
         except Exception:
             return pb
+    except Exception as e:  # pragma: no cover – staging diagnostics
+        # Return problem+json with error detail to aid staging debugging instead of generic 500
+        try:
+            return problem(500, "internal_error", "Internal Server Error", detail=str(e))
+        except Exception:
+            raise
     resp = jsonify(rep)
     resp.headers["ETag"] = etag
     return resp
