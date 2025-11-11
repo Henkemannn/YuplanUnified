@@ -12,7 +12,10 @@ Summary
 
 Scope notes
 - Read-only UI. No new write endpoints or database changes.
-- CSV/XLSX export deliberately out-of-scope (will follow in a micro-PR if needed).
+
+Out of scope (explicit)
+- No CSV/XLSX export in this PR (will follow as a micro-PR if needed).
+- No change to Menyval API/IDs or backend semantics; only UI text uses "Menyval" instead of "Alt2".
 
 Acceptance checklist
 - [ ] DEMO_UI=1 set in staging; app deploys; /demo reachable with CSP header present
