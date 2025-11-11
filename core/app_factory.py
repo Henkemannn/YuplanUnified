@@ -66,7 +66,13 @@ MODULE_IMPORTS = {
 
 
 def create_app(config_override: dict[str, Any] | None = None) -> Flask:
-    app = Flask(__name__)
+    # Ensure Flask can find project-level templates/ and static/
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(base_dir, "templates"),
+        static_folder=os.path.join(base_dir, "static"),
+    )
     # --- Configuration ---
     cfg = Config.from_env()
     if config_override:
