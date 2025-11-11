@@ -1,0 +1,35 @@
+:root{
+  --yuplan-primary:#1f6feb;
+  --yuplan-accent:#e36209;
+  --yuplan-bg:#f6f8fa;
+  --yuplan-text:#24292f;
+}
+*{box-sizing:border-box}
+body{font-family:system-ui, Arial; margin:1.5rem; color:var(--yuplan-text); background:var(--yuplan-bg)}
+.demo-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.demo-header .logo{display:flex;align-items:center;gap:.5rem;font-weight:600;color:var(--yuplan-primary)}
+.demo-header .logo #ymark{display:none;place-items:center;width:28px;height:28px;background:var(--yuplan-primary);color:#fff;border-radius:6px;font-weight:700}
+.banner{background:#fff7d6;border:1px solid #e6c200;color:#5c4a00;padding:.5rem 1rem;border-radius:6px;margin-left:auto}
+.demo-tabs{display:flex;gap:.5rem;margin-bottom:1rem}
+.tab{padding:.4rem .8rem;border:1px solid #cfd8e3;border-radius:6px;background:#fff;color:#111;cursor:pointer}
+.tab--active{background:var(--yuplan-primary);color:#fff;border-color:var(--yuplan-primary)}
+.panel{display:none}
+.panel--active{display:block}
+.row{display:flex;gap:1.5rem;flex-wrap:wrap}
+.card{flex:1 1 420px;border:1px solid #ddd;border-radius:8px;padding:1rem;background:#fff}
+/* Report grid and cards */
+.report-cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.card{border-radius:12px;background:var(--panel-bg,#fff);box-shadow:0 6px 20px rgba(2,6,23,.06);padding:14px}
+.metric{font-size:28px;font-weight:700}
+.muted{color:#64748b}
+label{display:block;margin:.35rem 0}
+input[type=text], input[type=number]{padding:.3rem .5rem; width:100%; max-width:460px}
+button{padding:.4rem .8rem; cursor:pointer}
+.muted{color:#666}
+code{background:#f6f8fa;padding:.1rem .3rem;border-radius:4px}
+table{border-collapse:collapse;margin-top:.5rem}
+td,th{border:1px solid #ccc;padding:.25rem .5rem}
+.ok{color:#0a0}
+.err{color:#a00}
+.mono{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+.et{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size:.9em}

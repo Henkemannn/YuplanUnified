@@ -413,6 +413,18 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(health_bp)
     app.register_blueprint(home_bp)
     app.register_blueprint(dashboard_bp)
+    # Optional root redirect to /demo for staging demo environments (avoid affecting tests)
+    if os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes") and not app.config.get("TESTING"):
+        @app.before_request
+        def _demo_root_redirect():  # type: ignore
+            try:
+                if request.path == "/":
+                    from flask import redirect
+
+                    return redirect("/demo", code=302)
+            except Exception:
+                return None
+            return None
     # Minimal demo UI exposing ETag/CSRF flows for admin endpoints (env-guarded)
     try:
         if os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes"):
@@ -423,6 +435,41 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             app.logger.info("Demo UI disabled (set DEMO_UI=1 to enable)")
     except Exception:  # pragma: no cover
         app.logger.warning("Admin demo UI blueprint not loaded", exc_info=True)
+
+    # Simple route enumerator when demo UI enabled (helps staging verification without exposing full internals)
+    if os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes"):
+        @app.get("/_routes")
+        def _routes() -> dict[str, list[str]] | tuple[dict[str, str], int]:  # pragma: no cover - diagnostics
+            # Restrict access when enabled: allow if simple-auth cookie is present OR explicit header token
+            allowed = False
+            try:
+                # Simple auth cookie from staging demo login
+                if request.cookies.get("yp_demo"):
+                    allowed = True
+                # Debug override header for local checks
+                if request.headers.get("X-Demo-Debug") == "1":
+                    allowed = True
+                # Optional env token for CI/probes
+                token = os.getenv("DEMO_ROUTES_TOKEN")
+                if token and request.headers.get("X-Demo-Token") == token:
+                    allowed = True
+            except Exception:
+                allowed = False
+            if not allowed:
+                return {"error": "forbidden"}, 403
+            try:
+                rules: list[str] = []
+                for r in app.url_map.iter_rules():
+                    if r.endpoint.startswith("static"):
+                        continue
+                    methods = sorted(
+                        m for m in r.methods if m in ("GET", "POST", "PUT", "DELETE", "PATCH")
+                    )
+                    rules.append(f"{','.join(methods)} {r.rule}")
+                rules.sort()
+                return {"routes": rules}
+            except Exception:
+                return {"routes": []}
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 
@@ -545,6 +592,146 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             return base
 
         paths = {
+            # --- Admin Phase B minimal endpoints (namespaced under /api/admin) ---
+            "/api/admin/departments": {
+                "post": attach_problem(
+                    {
+                        "tags": ["admin"],
+                        "summary": "Create department (admin)",
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["site_id", "name", "resident_count_mode"],
+                                        "properties": {
+                                            "site_id": {"type": "string"},
+                                            "name": {"type": "string"},
+                                            "resident_count_mode": {"type": "string", "enum": ["fixed", "per_day_meal"]},
+                                            "resident_count_fixed": {"type": "integer", "nullable": True},
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {"201": {"description": "Created department"}},
+                    },
+                    ["400", "401", "403", "404", "412", "429", "500"],
+                )
+            },
+            "/api/admin/departments/{id}": {
+                "parameters": [
+                    {"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}
+                ],
+                "put": attach_problem(
+                    {
+                        "tags": ["admin"],
+                        "summary": "Update department (If-Match required)",
+                        "parameters": [
+                            {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}}
+                        ],
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "object"}
+                                }
+                            },
+                        },
+                        "responses": {"200": {"description": "Updated department"}},
+                    },
+                    ["400", "401", "403", "404", "412", "429", "500"],
+                ),
+            },
+            "/api/admin/departments/{id}/diet-defaults": {
+                "parameters": [
+                    {"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}
+                ],
+                "put": attach_problem(
+                    {
+                        "tags": ["admin"],
+                        "summary": "Upsert diet defaults (If-Match required)",
+                        "parameters": [
+                            {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}}
+                        ],
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "items": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "required": ["diet_type_id", "default_count"],
+                                                    "properties": {
+                                                        "diet_type_id": {"type": "string"},
+                                                        "default_count": {"type": "integer", "minimum": 0},
+                                                    },
+                                                },
+                                            }
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {"200": {"description": "Diet defaults updated"}},
+                    },
+                    ["400", "401", "403", "404", "412", "429", "500"],
+                ),
+            },
+            "/api/admin/alt2": {
+                "put": attach_problem(
+                    {
+                        "tags": ["admin"],
+                        "summary": "Bulk update alt2 flags (If-Match collection ETag required)",
+                        "parameters": [
+                            {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}}
+                        ],
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["week", "items"],
+                                        "properties": {
+                                            "week": {"type": "integer", "minimum": 1, "maximum": 53},
+                                            "items": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "required": ["department_id", "weekday", "enabled"],
+                                                    "properties": {
+                                                        "department_id": {"type": "string"},
+                                                        "weekday": {"type": "integer", "minimum": 1, "maximum": 7},
+                                                        "enabled": {"type": "boolean"},
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    }
+                                }
+                            },
+                        },
+                        "responses": {"200": {"description": "Alt2 flags updated"}},
+                    },
+                    ["400", "401", "403", "404", "412", "429", "500"],
+                ),
+            },
+            "/api/admin/stats": {
+                "get": attach_problem(
+                    {
+                        "tags": ["admin"],
+                        "summary": "Admin stats overview",
+                        "responses": {"200": {"description": "Stats listed"}},
+                    },
+                    ["400", "401", "403", "404", "429", "500"],
+                )
+            },
             "/features": {
                 "get": attach_problem(
                     {

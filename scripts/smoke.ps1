@@ -39,13 +39,14 @@ if (-not $SiteId) {
   try {
     $res = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId" -WebSession $session -Method Get
     $deptsEtag = $res.Headers['ETag']
+    if ($deptsEtag -is [System.Array]) { $deptsEtag = $deptsEtag[0] } else { $deptsEtag = [string]$deptsEtag }
     if (-not $deptsEtag) { throw 'no_depts_etag' }
     $data = $res.Content | ConvertFrom-Json
     $first = $data.items[0]
     Write-Host "Departments ETag: $deptsEtag" -ForegroundColor Gray
     # 2a) Conditional GET -> 304
     $headers = @{ 'If-None-Match' = $deptsEtag }
-    $res304 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId" -WebSession $session -Method Get -Headers $headers -ErrorAction SilentlyContinue
+  $res304 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId" -WebSession $session -Method Get -Headers $headers -SkipHttpErrorCheck
     if ($res304.StatusCode -ne 304) { throw "expected_304_got_$($res304.StatusCode)" }
     Write-Host "Departments 304 OK" -ForegroundColor Green
     # 2b) PUT rename first with If-Match
@@ -77,11 +78,12 @@ if (-not $SiteId) {
 try {
   $res = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get
   $alt2Etag = $res.Headers['ETag']
+  if ($alt2Etag -is [System.Array]) { $alt2Etag = $alt2Etag[0] } else { $alt2Etag = [string]$alt2Etag }
   if (-not $alt2Etag) { throw 'no_alt2_etag' }
   $alt2 = $res.Content | ConvertFrom-Json
   Write-Host "Alt2 ETag: $alt2Etag" -ForegroundColor Gray
   # 3a) Conditional GET 304
-  $res2 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get -Headers @{ 'If-None-Match'=$alt2Etag } -ErrorAction SilentlyContinue
+  $res2 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get -Headers @{ 'If-None-Match'=$alt2Etag } -SkipHttpErrorCheck
   if ($res2.StatusCode -ne 304) { throw "alt2_expected_304_got_$($res2.StatusCode)" }
   Write-Host "Alt2 304 OK" -ForegroundColor Green
   # 3b) Idempotent PUT
@@ -108,10 +110,10 @@ try {
     $etagAfterToggle = $res4b.Headers['ETag']
     if ($etagAfterToggle -eq $alt2Etag) { throw 'alt2_etag_not_bumped_after_toggle' }
     # 304 with new ETag
-    $res4c = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get -Headers @{ 'If-None-Match'=$etagAfterToggle } -ErrorAction SilentlyContinue
+  $res4c = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get -Headers @{ 'If-None-Match'=$etagAfterToggle } -SkipHttpErrorCheck
     if ($res4c.StatusCode -ne 304) { throw "alt2_expected_304_after_toggle_got_$($res4c.StatusCode)" }
     # 200 with stale
-    $res4d = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get -Headers @{ 'If-None-Match'=$alt2Etag } -ErrorAction SilentlyContinue
+  $res4d = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get -Headers @{ 'If-None-Match'=$alt2Etag } -SkipHttpErrorCheck
     if ($res4d.StatusCode -ne 200) { throw "alt2_expected_200_with_stale_got_$($res4d.StatusCode)" }
     Write-Host "Alt2 ETag bumped and conditional GET behavior OK" -ForegroundColor Green
   } else {

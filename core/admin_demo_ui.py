@@ -18,6 +18,8 @@ def _demo_csp(resp):  # type: ignore[override]
                 "style-src 'self' 'unsafe-inline'; "
                 "script-src 'self'"
             )
+            # Ensure demo pages are never cached to avoid stale ETags/state during demos
+            resp.headers["Cache-Control"] = "no-store"
     except Exception:
         pass
     return resp
@@ -34,3 +36,9 @@ def demo_index():
     # Surface an explicit flag so the page can show a banner in staging
     staging_demo = os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes")
     return render_template("demo_admin.html", staging_demo=staging_demo)
+
+
+@bp.get("/ping")
+def demo_ping() -> dict[str, str]:
+    """Lightweight ping for demo readiness checks."""
+    return {"ok": "true"}
