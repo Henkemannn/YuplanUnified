@@ -53,7 +53,9 @@ if (-not $SiteId) {
   # PowerShell-safe ETag construction (avoid escape pitfalls with -f)
   $ifMatch = ('W/"admin:dept:{0}:v{1}"' -f $first.id, $first.version)
     $headers2 = @{ 'If-Match'=$ifMatch; 'X-CSRF-Token'=$csrf; 'Content-Type'='application/json' }
-    $newName = "Dept (smoke)"
+  # Use a unique name per run to avoid potential unique constraints in staging
+  $suffix = (Get-Date).ToUniversalTime().ToString('HHmmss') + '-' + (Get-Random -Minimum 10 -Maximum 99)
+  $newName = "Dept (smoke) $suffix"
     $body2 = (@{ name=$newName } | ConvertTo-Json -Compress)
   $resPut = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments/$($first.id)" -WebSession $session -Method Put -Headers $headers2 -Body $body2 -SkipHttpErrorCheck
     if ($resPut.StatusCode -lt 200 -or $resPut.StatusCode -ge 300) {
