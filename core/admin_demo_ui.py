@@ -25,20 +25,12 @@ def _demo_csp(resp):  # type: ignore[override]
     return resp
 
 
-@bp.get("/")
-def demo_index():
-    """Minimal admin demo UI.
-
-    Shows simple-auth login, departments listing with ETag/If-None-Match demo,
-    and Alt2 week toggle flow. Uses fetch() against /admin endpoints and
-    includes X-CSRF-Token from cookie for writes.
-    """
-    # Surface an explicit flag so the page can show a banner in staging
+def _render_demo_index():
+    """Render the demo index page with safe fallback on errors."""
     staging_demo = os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes")
     try:
         return render_template("demo_admin.html", staging_demo=staging_demo)
     except Exception:
-        # Defensive fallback to avoid 500s in staging if template/rendering fails for any reason.
         try:
             current_app.logger.exception("/demo render failed; serving minimal fallback")
         except Exception:
@@ -51,15 +43,23 @@ def demo_index():
         return Response(html, mimetype="text/html")
 
 
-@bp.head("/")
-def demo_head_index():
-    """HEAD handler to ensure HEAD /demo/ returns headers without 500.
+@bp.route("/", methods=["GET", "HEAD"], strict_slashes=False)
+def demo_index():
+    """Serve demo index for both /demo and /demo/ without redirects.
 
-    Flask normally maps HEAD to GET automatically, but some proxy/client
-    combinations can surface edge-cases. Return an empty 200; after_request
-    will still attach CSP and Cache-Control headers.
+    HEAD returns empty 200 with headers; GET renders template with fallback.
     """
-    return "", 200
+    if request.method == "HEAD":
+        return "", 200
+    return _render_demo_index()
+
+
+@bp.route("", methods=["GET", "HEAD"], strict_slashes=False)
+def demo_index_noslash():
+    """Serve demo index at /demo (no trailing slash) to avoid redirect."""
+    if request.method == "HEAD":
+        return "", 200
+    return _render_demo_index()
 
 
 @bp.get("/ping")
