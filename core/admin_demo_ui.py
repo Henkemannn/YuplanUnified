@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, current_app, Response
 
 bp = Blueprint("admin_demo_ui", __name__, url_prefix="/demo")
 
@@ -35,7 +35,20 @@ def demo_index():
     """
     # Surface an explicit flag so the page can show a banner in staging
     staging_demo = os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes")
-    return render_template("demo_admin.html", staging_demo=staging_demo)
+    try:
+        return render_template("demo_admin.html", staging_demo=staging_demo)
+    except Exception:
+        # Defensive fallback to avoid 500s in staging if template/rendering fails for any reason.
+        try:
+            current_app.logger.exception("/demo render failed; serving minimal fallback")
+        except Exception:
+            pass
+        html = (
+            "<!doctype html><html><head><meta charset='utf-8'><title>Demo</title></head>"
+            "<body><h1>Demo UI</h1><p>Fallback view. /demo/ping is OK but template rendering failed."
+            " Check static assets and template loading. </p></body></html>"
+        )
+        return Response(html, mimetype="text/html")
 
 
 @bp.head("/")
