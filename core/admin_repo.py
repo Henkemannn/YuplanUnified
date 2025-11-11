@@ -158,13 +158,17 @@ class DepartmentsRepo:
             if "resident_count_fixed" in fields and fields["resident_count_fixed"] is not None:
                 sets.append("resident_count_fixed=:fixed")
                 params["fixed"] = int(fields["resident_count_fixed"])
+            if "notes" in fields and fields["notes"] is not None:
+                sets.append("notes=:notes")
+                params["notes"] = str(fields["notes"]).strip()
             if not sets:
                 # No-op: still bump version to reflect write intent
-                sets.append("version=version")
+                sets.append("version=version")  # sqlite path bumps separately; postgres will still increment
             if _is_sqlite(db):
                 sql = f"UPDATE departments SET {', '.join(sets)}, version=version+1, updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v"
             else:
-                sql = f"UPDATE departments SET {', '.join(sets)}, updated_at=now() WHERE id=:id AND version=:v RETURNING version"
+                # Always bump version for postgres as part of update to maintain optimistic concurrency & collection ETag semantics.
+                sql = f"UPDATE departments SET {', '.join(sets)}, version=version+1, updated_at=now() WHERE id=:id AND version=:v RETURNING version"
             res = db.execute(text(sql), params)
             if _is_sqlite(db):
                 if res.rowcount == 0:
@@ -298,7 +302,7 @@ class DepartmentsRepo:
                 row = db.execute(
                     text(
                         """
-                        UPDATE departments SET updated_at=now()
+                        UPDATE departments SET version=version+1, updated_at=now()
                         WHERE id=:id AND version=:v
                         RETURNING version
                         """
