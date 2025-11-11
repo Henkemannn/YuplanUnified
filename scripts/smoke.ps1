@@ -93,8 +93,9 @@ try {
   if ($res3.StatusCode -lt 200 -or $res3.StatusCode -ge 300) { throw "alt2_idem_failed_$($res3.StatusCode)" }
   Write-Host "Alt2 PUT idempotent OK" -ForegroundColor Green
   # ETag should remain the same after idempotent update
-  $res3b = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get
+  $res3b = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get -SkipHttpErrorCheck
   $etagAfterIdem = $res3b.Headers['ETag']
+  if ($etagAfterIdem -is [System.Array]) { $etagAfterIdem = $etagAfterIdem[0] } else { $etagAfterIdem = [string]$etagAfterIdem }
   if ($etagAfterIdem -ne $alt2Etag) { throw 'alt2_etag_changed_after_idempotent' }
   Write-Host "Alt2 ETag stable after idempotent: $etagAfterIdem" -ForegroundColor Green
   # 3c) Toggle first item and PUT
@@ -106,8 +107,9 @@ try {
     if ($res4.StatusCode -lt 200 -or $res4.StatusCode -ge 300) { throw "alt2_toggle_failed_$($res4.StatusCode)" }
     Write-Host "Alt2 PUT toggle OK" -ForegroundColor Green
     # ETag should change after toggle
-    $res4b = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get
-    $etagAfterToggle = $res4b.Headers['ETag']
+  $res4b = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get -SkipHttpErrorCheck
+  $etagAfterToggle = $res4b.Headers['ETag']
+  if ($etagAfterToggle -is [System.Array]) { $etagAfterToggle = $etagAfterToggle[0] } else { $etagAfterToggle = [string]$etagAfterToggle }
     if ($etagAfterToggle -eq $alt2Etag) { throw 'alt2_etag_not_bumped_after_toggle' }
     # 304 with new ETag
   $res4c = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2?week=$Week" -WebSession $session -Method Get -Headers @{ 'If-None-Match'=$etagAfterToggle } -SkipHttpErrorCheck

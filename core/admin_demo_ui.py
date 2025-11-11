@@ -38,6 +38,17 @@ def demo_index():
     return render_template("demo_admin.html", staging_demo=staging_demo)
 
 
+@bp.head("/")
+def demo_head_index():
+    """HEAD handler to ensure HEAD /demo/ returns headers without 500.
+
+    Flask normally maps HEAD to GET automatically, but some proxy/client
+    combinations can surface edge-cases. Return an empty 200; after_request
+    will still attach CSP and Cache-Control headers.
+    """
+    return "", 200
+
+
 @bp.get("/ping")
 def demo_ping() -> dict[str, str]:
     """Lightweight ping for demo readiness checks."""
