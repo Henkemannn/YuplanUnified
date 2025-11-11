@@ -6,7 +6,7 @@
     <title>Demo – Admin flows</title>
     <link rel="stylesheet" href="/static/demo.css"/>
   </head>
-  <body>
+  <body data-demo-ui="{% if demo_ui_enabled %}1{% else %}0{% endif %}">
     <header class="demo-header">
       <div class="logo">
         <!-- Yuplan logga (alla loggor finns i /static/logo/) -->
@@ -19,11 +19,11 @@
       {% endif %}
     </header>
 
-    <nav class="demo-tabs" role="tablist">
-      <button id="tab-weekview" class="tab tab--active" role="tab" aria-selected="true" data-tab="weekview">Weekview</button>
-      <button id="tab-admin" class="tab" role="tab" aria-selected="false" data-tab="admin">Admin</button>
-      <button id="tab-alt2" class="tab" role="tab" aria-selected="false" data-tab="alt2">Menyval</button>
-      <button id="tab-report" class="tab" role="tab" aria-selected="false" data-tab="report">Report</button>
+    <nav class="demo-tabs" role="tablist" aria-label="Yuplan demo tabs">
+      <button id="tab-weekview" class="tab tab--active" role="tab" aria-selected="true" tabindex="0" aria-controls="panel-weekview" data-tab="weekview">Weekview</button>
+      <button id="tab-admin" class="tab" role="tab" aria-selected="false" tabindex="-1" aria-controls="panel-admin" data-tab="admin">Admin</button>
+      <button id="tab-alt2" class="tab" role="tab" aria-selected="false" tabindex="-1" aria-controls="panel-alt2" data-tab="alt2">Menyval</button>
+      <button id="tab-report" class="tab" role="tab" aria-selected="false" tabindex="-1" aria-controls="panel-report" data-tab="report">Report</button>
     </nav>
 
     <section id="panel-weekview" class="panel panel--active" role="tabpanel" aria-labelledby="tab-weekview" data-panel="weekview">
@@ -85,6 +85,7 @@
           <label for="reportWeek">Vecka</label>
           <input id="reportWeek" type="number" min="1" max="53" />
           <button id="btnLoadReport" class="btn">Läs in</button>
+          <button id="btnExportCsv" class="btn" aria-label="Exportera CSV">Export CSV</button>
         </div>
       </header>
       <div id="reportSummary" class="report-cards"></div>

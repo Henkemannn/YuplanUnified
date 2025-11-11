@@ -28,8 +28,9 @@ def _demo_csp(resp):  # type: ignore[override]
 def _render_demo_index():
     """Render the demo index page with safe fallback on errors."""
     staging_demo = os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes")
+    demo_ui_enabled = os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes")
     try:
-        return render_template("demo_admin.html", staging_demo=staging_demo)
+        return render_template("demo_admin.html", staging_demo=staging_demo, demo_ui_enabled=demo_ui_enabled)
     except Exception:
         try:
             current_app.logger.exception("/demo render failed; serving minimal fallback")

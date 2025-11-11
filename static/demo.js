@@ -6,6 +6,8 @@ function etagStrongOrWeak(et){ return et && et.startsWith('W/') ? et : et }
 
 let lastDepts = null, lastDeptsEtag = null; // {site_id, items}
 let lastAlt2 = null, lastAlt2Etag = null;   // {week, items}
+let lastReportJson = null, lastReportWeek = null;
+const demoUiEnabled = (document.body?.dataset?.demoUi === '1');
 
 async function loginAdmin(){
   const res = await fetch('/auth/login', {
@@ -59,7 +61,8 @@ async function loadAlt2(){
 }
 function renderAlt2(data){
   const rows = (data.items||[]).map((it,i)=>{
-    return `<tr><td>${i+1}</td><td class="mono">${it.department_id}</td><td>${it.weekday}</td><td>${it.enabled?'true':'false'}</td></tr>`
+    const badge = demoUiEnabled && lastAlt2Etag ? ` <span class="alt2-etag" aria-label="Row ETag">${escapeHtml(lastAlt2Etag)}</span>` : '';
+    return `<tr><td>${i+1}</td><td class="mono">${it.department_id}</td><td>${it.weekday}</td><td>${it.enabled?'true':'false'}${badge}</td></tr>`
   }).join('');
   $('alt2').innerHTML = `<table><tr><th>#</th><th>department</th><th>weekday</th><th>enabled</th></tr>${rows}</table>`;
 }
@@ -97,6 +100,7 @@ function activateTab(name){
     const active = btn.getAttribute('data-tab')===name;
     btn.classList.toggle('tab--active', active);
     btn.setAttribute('aria-selected', active? 'true':'false');
+    btn.setAttribute('tabindex', active? '0':'-1');
   });
   document.querySelectorAll('.panel').forEach(sec=>{
     const active = sec.getAttribute('data-panel')===name;
@@ -116,6 +120,32 @@ document.addEventListener('click', (e)=>{
 
 // Initial tab
 activateTab('weekview');
+
+// ARIA keyboard navigation for tabs
+const tablist = document.querySelector('.demo-tabs[role="tablist"]');
+if(tablist){
+  tablist.addEventListener('keydown', (e)=>{
+    const tabs = Array.from(tablist.querySelectorAll('.tab[role="tab"]'));
+    const current = document.activeElement;
+    const idx = tabs.indexOf(current);
+    if(idx < 0) return;
+    let targetIdx = idx;
+    switch(e.key){
+      case 'ArrowLeft': targetIdx = (idx - 1 + tabs.length) % tabs.length; e.preventDefault(); break;
+      case 'ArrowRight': targetIdx = (idx + 1) % tabs.length; e.preventDefault(); break;
+      case 'Home': targetIdx = 0; e.preventDefault(); break;
+      case 'End': targetIdx = tabs.length - 1; e.preventDefault(); break;
+      case 'Enter':
+      case ' ':
+        const name = current.getAttribute('data-tab');
+        if(name){ activateTab(name); }
+        e.preventDefault();
+        return;
+      default: return;
+    }
+    tabs[targetIdx]?.focus();
+  });
+}
 
 // Existing event bindings
 const el = (id)=>document.getElementById(id);
@@ -168,6 +198,7 @@ el('btnAlt2Toggle')?.addEventListener('click', alt2_toggle);
       }
       etag = res.headers.get('ETag') || etag;
       const data = await res.json();
+      lastReportJson = data; lastReportWeek = w;
       const totals = safeTotals(data);
       box.innerHTML = renderCards(totals, w);
     }catch(e){
@@ -210,9 +241,61 @@ el('btnAlt2Toggle')?.addEventListener('click', alt2_toggle);
 
   function escapeHtml(s){
     const map = { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' };
-    return s.replace(/[&<>"']/g, m=>map[m]);
+    return String(s).replace(/[&<>"']/g, m=>map[m]);
   }
 
   btn.addEventListener('click', loadReport);
   document.getElementById('tab-report')?.addEventListener('click', loadReport);
+  const btnCsv = document.getElementById('btnExportCsv');
+  btnCsv?.addEventListener('click', ()=>{
+    if(!lastReportJson || !lastReportWeek){
+      box.innerHTML = `<div class="muted">Ingen rapport inläst ännu – klicka \"Läs in\" först.</div>`;
+      return;
+    }
+    exportReportCsv(lastReportJson, lastReportWeek);
+  });
 })();
+
+// CSV export utilities
+function exportReportCsv(reportJson, week){
+  const header = ["Department","Lunch special","Lunch normal","Evening special","Evening normal","Total"];
+  const rows = [];
+  const items = Array.isArray(reportJson?.rows) ? reportJson.rows
+    : (Array.isArray(reportJson?.departments) ? reportJson.departments : null);
+  if(items){
+    for(const r of items){
+      const dept = r.department || r.name || r.department_name || '';
+      const lunch = r.lunch || {};
+      const evening = r.evening || r.kväll || {};
+      const total = r.total ?? ((lunch.normal||0)+(lunch.special||0)+(evening.normal||0)+(evening.special||0));
+      rows.push([
+        dept,
+        lunch.special ?? lunch.specialkost ?? 0,
+        lunch.normal ?? lunch.normalkost ?? 0,
+        evening.special ?? evening.specialkost ?? 0,
+        evening.normal ?? evening.normalkost ?? 0,
+        total ?? 0
+      ]);
+    }
+  } else {
+    const t = (reportJson && reportJson.totals) || {};
+    const lunch = t.lunch || {};
+    const eve = t.evening || t.kväll || {};
+    const total = (lunch.normal||0)+(lunch.special||0)+(eve.normal||0)+(eve.special||0);
+    rows.push(['Totals', lunch.special||0, lunch.normal||0, eve.special||0, eve.normal||0, total]);
+  }
+  const out = [header, ...rows].map(cols => cols.map(csvEscape).join(',')).join('\r\n');
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + out], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `report_week_${week}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
+}
+function csvEscape(v){ return '"' + String(v ?? '').replace(/"/g,'""') + '"'; }
+
+// Escape HTML used in ETag badge
+// (duplicate guard) already defined above for cards; reused for ETag badge
