@@ -58,6 +58,60 @@ Examples
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
 
+## Staging quickstart
+- Access and demo guardrails: see `docs/staging-access.md` (simple auth, CSRF, DEMO_UI)
+- Smoke run log: see `docs/staging-smoke_2025-11-11.md`
+- One-liners (Windows):
+  - `make login-ps` (or `pwsh -File scripts/login.ps1`)
+  - `make smoke-ps` (or `pwsh -File scripts/smoke.ps1 -BaseUrl https://yuplan-unified-staging.fly.dev -SiteId <SITE_ID> -Week 51`)
+
+## Staging environment (Fly.io)
+
+Current staging URL: https://yuplan-unified-staging-icy-wave-9332.fly.dev/
+
+Landing page `/` links to health (`/health` + `/healthz`), docs (`/docs/`), and the OpenAPI spec (`/openapi.json`).
+
+### Database driver
+
+Staging runs on Postgres (Fly managed cluster) — preferred over SQLite for concurrency & realistic query planning. SQLite is still usable locally and in CI for light tests. Migrations are Alembic-driven; never rely on `create_all` in staging.
+
+### Initialize schema & minimal seed (local dev)
+
+PowerShell (Windows):
+```powershell
+python tools/init_db.py
+```
+
+Bash (macOS/Linux):
+```bash
+python tools/init_db.py
+```
+
+This runs all Alembic migrations (multi-head safe) and seeds tenant `demo` with units `Alpha`, `Bravo`.
+
+### Week view seed example
+
+PowerShell:
+```powershell
+python tools/seed_weekview.py --tenant demo --year 2025 --week 45 --departments Alpha Bravo
+```
+
+Bash:
+```bash
+python tools/seed_weekview.py --tenant demo --year 2025 --week 45 --departments Alpha Bravo
+```
+
+### Postgres staging runbook
+
+See `docs/staging_postgres_runbook.md` for end-to-end commands to:
+1. Provision a Fly Postgres cluster
+2. Attach and set `DATABASE_URL`
+3. Run migrations + seed inside the machine
+4. Validate health
+
+If switching to a fresh database or re-running migrations in-place, ensure no conflicting heads (we use `upgrade heads`).
+
+
 ## Contributing
 See CONTRIBUTING.md for branching, PR, and quality gates. Use the GitHub Issue templates for GA checklist and roadmap kickoff from the New Issue menu.
 
@@ -398,6 +452,79 @@ Kör `tools/sync_branch_protection.py` eller följ instruktionerna i `docs/branc
 
 ## Architecture Decisions
 
+## Staging deploy (v0.4)
+
+This release adds a containerized runtime and a simple health endpoint to make the app easy to deploy to a staging environment.
+
+Included:
+- Dockerfile (Python slim, non-root) running `gunicorn core.app_factory:create_app()` on port 8080
+- `gunicorn.conf.py` (timeout=60, loglevel=info)
+- Health endpoint at `GET /healthz` returning `{ "status": "ok" }`
+- `.env.example` with common variables
+- Optional tools: `tools/init_db.py` (alembic + minimal seed), `tools/seed_weekview.py` (dev-only weekview seed)
+- Fly.io manifest `fly.toml` (you can alternatively use Render with the same Dockerfile)
+
+### Environment variables
+
+Copy `.env.example` and set the following (names mirror staging defaults):
+
+- DATABASE_URL (e.g. `postgresql+psycopg://user:pass@host:5432/yuplan`)
+- SECRET_KEY (any random string for session signing)
+- FF_WEEKVIEW_ENABLED=true
+- FF_REPORT_ENABLED=true
+- FF_ADMIN_ENABLED=false
+
+Feature flags default here are for convenience; per-tenant DB overrides take precedence.
+
+### Deploy on Fly.io
+
+Prerequisites:
+- Fly CLI installed and authenticated
+- A Postgres instance (Fly Postgres or external)
+
+Steps:
+
+```powershell
+fly launch --no-deploy
+# Set secrets (examples):
+fly secrets set DATABASE_URL="postgresql+psycopg://user:pass@host:5432/yuplan" SECRET_KEY="change-me"
+# Deploy
+fly deploy
+```
+
+Health check: `GET /healthz` → 200 with `{ "status": "ok" }`.
+
+### Optional: Render
+
+If deploying on Render instead, use the Dockerfile, set the Health Check Path to `/healthz`, and configure environment variables from `.env.example`.
+
+### Database init (optional)
+
+Run Alembic and seed minimal data:
+
+```powershell
+$env:DATABASE_URL = "postgresql+psycopg://user:pass@host:5432/yuplan"
+python tools/init_db.py
+```
+
+Dev-only seed example for weekview data:
+
+```powershell
+$env:DATABASE_URL = "sqlite:///unified.db"  # or Postgres URL
+python tools/seed_weekview.py --year 2025 --week 45
+```
+
+### Smoke tests
+
+After deploy, validate the following:
+
+- GET `/healthz` → 200
+- GET `/api/weekview?...` → 200 + ETag
+- PATCH `/api/weekview` with If-Match → 200 + new ETag
+- GET `/api/weekview` with If-None-Match → 304
+- GET `/api/report?...` → 200 + ETag
+- GET `/api/report/export?...&format=csv|xlsx` → 200 + file
+
 - See ADR index: `adr/README.md`
 
 Current ADRs:
@@ -576,7 +703,15 @@ Example enable (admin session or test header injection):
 POST /features/set { "name": "openapi_ui", "enabled": true }
 ```
 
-The OpenAPI spec is currently a hand-maintained subset; extend `openapi.json` generation in `core/app_factory.py` for new endpoints.
+The OpenAPI spec is generated in `core/app_factory.py` and can merge modular parts:
+
+Environment toggle:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAPI_INCLUDE_PARTS` | `true` | When truthy merges `openapi/parts/admin.yml` (and future parts) into `/openapi.json`. Set to `0`/`false`/`no` to disable. |
+
+Admin endpoints and schemas live in `openapi/parts/admin.yml` and are automatically merged unless disabled.
 See docs/ for full architecture, data model, migration plan, module definitions, roadmap, deployment guidance.
 
 ### OpenAPI Baseline & Semantic Diff

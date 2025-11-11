@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin Module - Prototype</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: #fff;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 2rem;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-top: 5px;
+            font-size: 1rem;
+        }
+        
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .nav-tab {
+            padding: 12px 20px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: #495057;
+            font-weight: 500;
+        }
+        
+        .nav-tab:hover {
+            background: #e9ecef;
+            color: #2c3e50;
+        }
+        
+        .nav-tab.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .section {
+            background: #fff;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .section h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+        
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .btn-success {
+            background: #28a745;
+        }
+        
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+        
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .table th,
+        .table td {
+            text-align: left;
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-active {
+            background: #28a745;
+        }
+        
+        .status-inactive {
+            background: #dc3545;
+        }
+        
+        .status-pending {
+            background: #ffc107;
+        }
+        
+        .alert {
+            padding: 15px 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            border-left-color: #17a2b8;
+            color: #0c5460;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .job-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .job-status.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .job-status.processing {
+            background: #cce5ff;
+            color: #004085;
+        }
+        
+        .job-status.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .job-status.failed {
+            background: #f5c6cb;
+            color: #721c24;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #007bff;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+        
+        .filter-bar {
+            display: flex;
+            gap: 15px;
+            align-items: end;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-bar .form-group {
+            margin-bottom: 0;
+            min-width: 150px;
+        }
+        
+        @media (max-width: 768px) {
+            .nav-tabs {
+                flex-direction: column;
+            }
+            
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .filter-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .filter-bar .form-group {
+                min-width: unset;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Administration</h1>
+            <div class="subtitle">System administration and data management</div>
+        </header>
+
+        <nav class="nav-tabs">
+            <a href="#sites" class="nav-tab active" data-tab="sites">Sites</a>
+            <a href="#departments" class="nav-tab" data-tab="departments">Departments</a>
+            <a href="#diet-types" class="nav-tab" data-tab="diet-types">Diet Types</a>
+            <a href="#menu-import" class="nav-tab" data-tab="menu-import">Menu Import</a>
+            <a href="#alt2-bulk" class="nav-tab" data-tab="alt2-bulk">Alt2 Bulk</a>
+            <a href="#statistics" class="nav-tab" data-tab="statistics">Statistics</a>
+        </nav>
+
+        <!-- Sites Section -->
+        <div id="sites-section" class="section" data-section="sites">
+            <h2>Site Management</h2>
+            
+            <div class="alert alert-info">
+                <strong>Phase A:</strong> All write operations return 501 Not Implemented. Full functionality will be available in Phase B.
+            </div>
+            
+            <div class="form-grid">
+                <div>
+                    <h3>Create New Site</h3>
+                    <div class="form-group">
+                        <label for="site-name">Site Name</label>
+                        <input type="text" id="site-name" placeholder="Enter site name" data-field="site.name">
+                    </div>
+                    <button type="button" class="btn" data-action="create-site">Create Site</button>
+                </div>
+            </div>
+
+            <h3>Existing Sites</h3>
+            <table class="table" data-table="sites">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Departments</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody data-site-list>
+                    <tr data-site-id="uuid-1">
+                        <td>site-001</td>
+                        <td>Main Campus</td>
+                        <td><span class="status-indicator status-active"></span>Active</td>
+                        <td>5 departments</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="edit-site">Edit</button>
+                            <button type="button" class="btn btn-danger" data-action="delete-site">Delete</button>
+                        </td>
+                    </tr>
+                    <tr data-site-id="uuid-2">
+                        <td>site-002</td>
+                        <td>North Building</td>
+                        <td><span class="status-indicator status-active"></span>Active</td>
+                        <td>3 departments</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="edit-site">Edit</button>
+                            <button type="button" class="btn btn-danger" data-action="delete-site">Delete</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Departments Section -->
+        <div id="departments-section" class="section" data-section="departments" style="display: none;">
+            <h2>Department Management</h2>
+            
+            <div class="form-grid">
+                <div>
+                    <h3>Create Department</h3>
+                    <div class="form-group">
+                        <label for="dept-name">Department Name</label>
+                        <input type="text" id="dept-name" placeholder="Enter department name" data-field="department.name">
+                    </div>
+                    <div class="form-group">
+                        <label for="dept-site">Parent Site</label>
+                        <select id="dept-site" data-field="department.site_id">
+                            <option value="">Select site</option>
+                            <option value="uuid-1">Main Campus</option>
+                            <option value="uuid-2">North Building</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="dept-attendance">Default Attendance</label>
+                        <input type="number" id="dept-attendance" placeholder="50" data-field="department.default_attendance">
+                    </div>
+                    <button type="button" class="btn" data-action="create-department">Create Department</button>
+                </div>
+                
+                <div>
+                    <h3>Department Notes</h3>
+                    <div class="form-group">
+                        <label for="dept-select">Select Department</label>
+                        <select id="dept-select" data-field="notes.department_id">
+                            <option value="">Choose department</option>
+                            <option value="uuid-dept-1">Kitchen Alpha</option>
+                            <option value="uuid-dept-2">Kitchen Beta</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="dept-notes">Notes</label>
+                        <textarea id="dept-notes" placeholder="Department notes and instructions" data-field="notes.content"></textarea>
+                    </div>
+                    <button type="button" class="btn" data-action="update-notes">Update Notes</button>
+                </div>
+            </div>
+
+            <h3>Existing Departments</h3>
+            <table class="table" data-table="departments">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Site</th>
+                        <th>Default Attendance</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody data-department-list>
+                    <tr data-department-id="uuid-dept-1">
+                        <td>Kitchen Alpha</td>
+                        <td>Main Campus</td>
+                        <td>50</td>
+                        <td><span class="status-indicator status-active"></span>Active</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="edit-department">Edit</button>
+                            <button type="button" class="btn btn-secondary" data-action="view-notes">Notes</button>
+                        </td>
+                    </tr>
+                    <tr data-department-id="uuid-dept-2">
+                        <td>Kitchen Beta</td>
+                        <td>Main Campus</td>
+                        <td>35</td>
+                        <td><span class="status-indicator status-active"></span>Active</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="edit-department">Edit</button>
+                            <button type="button" class="btn btn-secondary" data-action="view-notes">Notes</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Diet Types Section -->
+        <div id="diet-types-section" class="section" data-section="diet-types" style="display: none;">
+            <h2>Dietary Types & Defaults</h2>
+            
+            <div class="form-grid">
+                <div>
+                    <h3>Dietary Defaults by Department</h3>
+                    <div class="form-group">
+                        <label for="diet-dept">Department</label>
+                        <select id="diet-dept" data-field="diet.department_id">
+                            <option value="">Select department</option>
+                            <option value="uuid-dept-1">Kitchen Alpha</option>
+                            <option value="uuid-dept-2">Kitchen Beta</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="diet-vegetarian">Vegetarian Count</label>
+                        <input type="number" id="diet-vegetarian" placeholder="0" data-field="diet.vegetarian">
+                    </div>
+                    <div class="form-group">
+                        <label for="diet-vegan">Vegan Count</label>
+                        <input type="number" id="diet-vegan" placeholder="0" data-field="diet.vegan">
+                    </div>
+                    <div class="form-group">
+                        <label for="diet-gluten-free">Gluten Free Count</label>
+                        <input type="number" id="diet-gluten-free" placeholder="0" data-field="diet.gluten_free">
+                    </div>
+                    <div class="form-group">
+                        <label for="diet-lactose-free">Lactose Free Count</label>
+                        <input type="number" id="diet-lactose-free" placeholder="0" data-field="diet.lactose_free">
+                    </div>
+                    <button type="button" class="btn" data-action="update-diet-defaults">Update Defaults</button>
+                </div>
+            </div>
+
+            <h3>Current Dietary Defaults</h3>
+            <table class="table" data-table="diet-defaults">
+                <thead>
+                    <tr>
+                        <th>Department</th>
+                        <th>Vegetarian</th>
+                        <th>Vegan</th>
+                        <th>Gluten Free</th>
+                        <th>Lactose Free</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody data-diet-defaults-list>
+                    <tr data-department-id="uuid-dept-1">
+                        <td>Kitchen Alpha</td>
+                        <td>12</td>
+                        <td>3</td>
+                        <td>8</td>
+                        <td>5</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="edit-diet-defaults">Edit</button>
+                        </td>
+                    </tr>
+                    <tr data-department-id="uuid-dept-2">
+                        <td>Kitchen Beta</td>
+                        <td>8</td>
+                        <td>2</td>
+                        <td>6</td>
+                        <td>3</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="edit-diet-defaults">Edit</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Menu Import Section -->
+        <div id="menu-import-section" class="section" data-section="menu-import" style="display: none;">
+            <h2>Menu Import</h2>
+            
+            <div class="form-grid">
+                <div>
+                    <h3>Upload Menu Data</h3>
+                    <div class="form-group">
+                        <label for="import-format">Data Format</label>
+                        <select id="import-format" data-field="import.format">
+                            <option value="csv">CSV</option>
+                            <option value="json">JSON</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="import-file">Menu Data File</label>
+                        <input type="file" id="import-file" accept=".csv,.json" data-field="import.file">
+                    </div>
+                    <button type="button" class="btn" data-action="start-import">Start Import</button>
+                </div>
+                
+                <div>
+                    <h3>Import Status</h3>
+                    <div class="form-group">
+                        <label for="job-id">Job ID</label>
+                        <input type="text" id="job-id" placeholder="Enter job ID to check status" data-field="import.job_id">
+                    </div>
+                    <button type="button" class="btn btn-secondary" data-action="check-status">Check Status</button>
+                </div>
+            </div>
+
+            <h3>Recent Import Jobs</h3>
+            <table class="table" data-table="import-jobs">
+                <thead>
+                    <tr>
+                        <th>Job ID</th>
+                        <th>Format</th>
+                        <th>Created</th>
+                        <th>Status</th>
+                        <th>Completed</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody data-import-jobs-list>
+                    <tr data-job-id="uuid-job-1">
+                        <td>job-001</td>
+                        <td>CSV</td>
+                        <td>2025-11-10 14:30:00</td>
+                        <td><span class="job-status completed">Completed</span></td>
+                        <td>2025-11-10 14:32:15</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="view-job">View Details</button>
+                        </td>
+                    </tr>
+                    <tr data-job-id="uuid-job-2">
+                        <td>job-002</td>
+                        <td>JSON</td>
+                        <td>2025-11-10 15:45:00</td>
+                        <td><span class="job-status processing">Processing</span></td>
+                        <td>-</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="view-job">View Details</button>
+                        </td>
+                    </tr>
+                    <tr data-job-id="uuid-job-3">
+                        <td>job-003</td>
+                        <td>CSV</td>
+                        <td>2025-11-09 09:15:00</td>
+                        <td><span class="job-status failed">Failed</span></td>
+                        <td>-</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="view-job">View Details</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Alt2 Bulk Section -->
+        <div id="alt2-bulk-section" class="section" data-section="alt2-bulk" style="display: none;">
+            <h2>Alt2 Bulk Operations</h2>
+            
+            <div class="form-grid">
+                <div>
+                    <h3>Bulk Alt2 Configuration</h3>
+                    <div class="form-group">
+                        <label for="alt2-year">Year</label>
+                        <input type="number" id="alt2-year" value="2025" min="1970" max="2100" data-field="alt2.year">
+                    </div>
+                    <div class="form-group">
+                        <label for="alt2-week">Week</label>
+                        <input type="number" id="alt2-week" value="45" min="1" max="53" data-field="alt2.week">
+                    </div>
+                    <div class="form-group">
+                        <label>Departments</label>
+                        <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: normal;">
+                                <input type="checkbox" value="uuid-dept-1" data-field="alt2.departments"> Kitchen Alpha
+                            </label>
+                            <label style="display: block; margin-bottom: 5px; font-weight: normal;">
+                                <input type="checkbox" value="uuid-dept-2" data-field="alt2.departments"> Kitchen Beta
+                            </label>
+                            <label style="display: block; margin-bottom: 5px; font-weight: normal;">
+                                <input type="checkbox" value="uuid-dept-3" data-field="alt2.departments"> Kitchen Gamma
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Alt2 Configuration</label>
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal;">
+                            <span class="toggle-switch">
+                                <input type="checkbox" data-field="alt2.enabled">
+                                <span class="toggle-slider"></span>
+                            </span>
+                            Enable Alt2 for selected departments
+                        </label>
+                    </div>
+                    <button type="button" class="btn" data-action="apply-bulk-alt2">Apply Bulk Configuration</button>
+                </div>
+                
+                <div>
+                    <h3>Preview Changes</h3>
+                    <div id="alt2-preview" data-preview="alt2">
+                        <p>Select departments and configuration to preview changes.</p>
+                    </div>
+                </div>
+            </div>
+
+            <h3>Recent Alt2 Operations</h3>
+            <table class="table" data-table="alt2-operations">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Week</th>
+                        <th>Departments</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                        <th>Conflicts</th>
+                    </tr>
+                </thead>
+                <tbody data-alt2-operations-list>
+                    <tr data-operation-id="uuid-op-1">
+                        <td>2025-11-10</td>
+                        <td>2025-W45</td>
+                        <td>3 departments</td>
+                        <td>Enable</td>
+                        <td><span class="status-indicator status-active"></span>Success</td>
+                        <td>0</td>
+                    </tr>
+                    <tr data-operation-id="uuid-op-2">
+                        <td>2025-11-09</td>
+                        <td>2025-W44</td>
+                        <td>2 departments</td>
+                        <td>Disable</td>
+                        <td><span class="status-indicator status-active"></span>Success</td>
+                        <td>1</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Statistics Section -->
+        <div id="statistics-section" class="section" data-section="statistics" style="display: none;">
+            <h2>System Statistics</h2>
+            
+            <div class="filter-bar" data-filters="statistics">
+                <div class="form-group">
+                    <label for="stats-year">Year</label>
+                    <input type="number" id="stats-year" value="2025" min="1970" max="2100" data-field="stats.year">
+                </div>
+                <div class="form-group">
+                    <label for="stats-week">Week</label>
+                    <input type="number" id="stats-week" value="45" min="1" max="53" data-field="stats.week">
+                </div>
+                <div class="form-group">
+                    <label for="stats-dept">Department</label>
+                    <select id="stats-dept" data-field="stats.department_id">
+                        <option value="">All departments</option>
+                        <option value="uuid-dept-1">Kitchen Alpha</option>
+                        <option value="uuid-dept-2">Kitchen Beta</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button type="button" class="btn" data-action="load-statistics">Load Statistics</button>
+                </div>
+            </div>
+
+            <div class="stats-grid" data-stats-overview>
+                <div class="stat-card">
+                    <div class="stat-number">8</div>
+                    <div class="stat-label">Total Departments</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">342</div>
+                    <div class="stat-label">Total Attendance</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">94%</div>
+                    <div class="stat-label">Menu Coverage</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">15</div>
+                    <div class="stat-label">Alt2 Enabled Days</div>
+                </div>
+            </div>
+
+            <h3>Department Breakdown</h3>
+            <table class="table" data-table="department-stats">
+                <thead>
+                    <tr>
+                        <th>Department</th>
+                        <th>Attendance</th>
+                        <th>Menu Coverage</th>
+                        <th>Alt2 Days</th>
+                        <th>Diet Specials</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody data-department-stats-list>
+                    <tr data-department-id="uuid-dept-1">
+                        <td>Kitchen Alpha</td>
+                        <td>156</td>
+                        <td>100%</td>
+                        <td>7</td>
+                        <td>28</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="view-dept-details">Details</button>
+                            <button type="button" class="btn btn-secondary" data-action="export-dept-stats">Export</button>
+                        </td>
+                    </tr>
+                    <tr data-department-id="uuid-dept-2">
+                        <td>Kitchen Beta</td>
+                        <td>108</td>
+                        <td>86%</td>
+                        <td>5</td>
+                        <td>19</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary" data-action="view-dept-details">Details</button>
+                            <button type="button" class="btn btn-secondary" data-action="export-dept-stats">Export</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div style="margin-top: 25px;">
+                <button type="button" class="btn btn-success" data-action="export-all-csv">Export All (CSV)</button>
+                <button type="button" class="btn btn-success" data-action="export-all-xlsx">Export All (XLSX)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple tab switching functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabs = document.querySelectorAll('.nav-tab');
+            const sections = document.querySelectorAll('.section');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Remove active class from all tabs
+                    tabs.forEach(t => t.classList.remove('active'));
+                    
+                    // Hide all sections
+                    sections.forEach(s => s.style.display = 'none');
+                    
+                    // Activate clicked tab
+                    this.classList.add('active');
+                    
+                    // Show corresponding section
+                    const targetSection = this.getAttribute('data-tab');
+                    const section = document.getElementById(targetSection + '-section');
+                    if (section) {
+                        section.style.display = 'block';
+                    }
+                });
+            });
+
+            // Add click handlers for all buttons with data-action attributes
+            document.addEventListener('click', function(e) {
+                const action = e.target.getAttribute('data-action');
+                if (action) {
+                    e.preventDefault();
+                    console.log('Action:', action);
+                    alert('Phase A: ' + action + ' will be implemented in Phase B');
+                }
+            });
+
+            // Show sites section by default
+            document.getElementById('sites-section').style.display = 'block';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+# fly.toml app configuration file generated for yuplan-unified-staging-icy-wave-9332 on 2025-11-06T21:06:12+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'yuplan-unified-staging'
+primary_region = 'arn'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  [http_service.concurrency]
+    type = 'requests'
+    hard_limit = 40
+    soft_limit = 20
+
+  [[http_service.checks]]
+    interval = '10s'
+    timeout = '2s'
+    grace_period = '5s'
+    method = 'GET'
+    path = '/health'
+    protocol = 'http'
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[deploy]
+  # Run DB migrations automatically on deploy
+  release_command = "alembic upgrade head"

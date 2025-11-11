@@ -6,7 +6,7 @@ PY ?= python
 PORT ?= 5000
 HOST ?= 127.0.0.1
 
-.PHONY: install dev test lint format spectral openapi smoke ci ready clean
+.PHONY: install dev test lint format spectral openapi smoke ci ready clean smoke-ps login-ps
 
 install:
 	$(PY) -m pip install --upgrade pip
@@ -41,10 +41,20 @@ smoke:
 		--data @/tmp/menu.json -o /tmp/smoke.json
 	test -s /tmp/smoke.json && echo "smoke ok"
 
+# Windows/PowerShell-friendly smoke against staging (requires pwsh in PATH)
+smoke-ps:
+	pwsh -File scripts/smoke.ps1
+
+login-ps:
+	pwsh -File scripts/login.ps1
+
 ci: lint test openapi spectral smoke
 
 ready:
 	$(PY) scripts/check_release_ready.py
+
+seed-varberg:
+	DATABASE_URL="${DATABASE_URL}" $(PY) -m scripts.seed_varberg_midsommar || exit 1
 
 clean:
 	rm -f openapi.json

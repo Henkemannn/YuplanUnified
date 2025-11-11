@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from typing import Optional
 
 
 class Base(DeclarativeBase):
@@ -38,8 +39,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(200), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(50))  # admin, unit_portal, cook, superuser
-    unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
-    refresh_token_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    unit_id: Mapped[Optional[int]] = mapped_column(ForeignKey("units.id"), nullable=True)
+    refresh_token_jti: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class Unit(Base):
@@ -47,7 +48,7 @@ class Unit(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     name: Mapped[str] = mapped_column(String(120))
-    default_attendance: Mapped[int | None] = mapped_column(Integer)
+    default_attendance: Mapped[Optional[int]] = mapped_column(Integer)
 
 
 # --- Menus & Dishes ---
@@ -56,7 +57,7 @@ class Dish(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     name: Mapped[str] = mapped_column(String(200))
-    category: Mapped[str | None] = mapped_column(String(50))
+    category: Mapped[Optional[str]] = mapped_column(String(50))
 
 
 class Recipe(Base):
@@ -64,7 +65,7 @@ class Recipe(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     title: Mapped[str] = mapped_column(String(200))
-    body: Mapped[str | None] = mapped_column(Text)
+    body: Mapped[Optional[str]] = mapped_column(Text)
 
 
 class Menu(Base):
@@ -82,18 +83,18 @@ class MenuVariant(Base):
     day: Mapped[str] = mapped_column(String(10))  # Mån..Sön canonical
     meal: Mapped[str] = mapped_column(String(20))  # Lunch, Kväll, etc.
     variant_type: Mapped[str] = mapped_column(String(20))  # alt1, alt2, dessert, kvall
-    dish_id: Mapped[int | None] = mapped_column(ForeignKey("dishes.id"), nullable=True)
+    dish_id: Mapped[Optional[int]] = mapped_column(ForeignKey("dishes.id"), nullable=True)
 
 
 class MenuOverride(Base):
     __tablename__ = "menu_overrides"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
-    unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"))
+    unit_id: Mapped[Optional[int]] = mapped_column(ForeignKey("units.id"))
     date: Mapped[date] = mapped_column(Date)
     meal: Mapped[str] = mapped_column(String(20))
     variant_type: Mapped[str] = mapped_column(String(20))
-    replacement_dish_id: Mapped[int | None] = mapped_column(ForeignKey("dishes.id"))
+    replacement_dish_id: Mapped[Optional[int]] = mapped_column(ForeignKey("dishes.id"))
     scope: Mapped[str] = mapped_column(String(20))  # global, unit, private
 
 
@@ -121,7 +122,7 @@ class Attendance(Base):
     date: Mapped[date] = mapped_column(Date)
     meal: Mapped[str] = mapped_column(String(20))
     count: Mapped[int] = mapped_column(Integer)
-    origin: Mapped[str | None] = mapped_column(String(20))  # default / overridden / propagated
+    origin: Mapped[Optional[str]] = mapped_column(String(20))  # default / overridden / propagated
 
 
 # --- Scheduling / Turnus ---
@@ -137,13 +138,13 @@ class ShiftSlot(Base):
     __tablename__ = "shift_slots"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
-    unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"))  # optional scope
-    template_id: Mapped[int | None] = mapped_column(ForeignKey("shift_templates.id"))
+    unit_id: Mapped[Optional[int]] = mapped_column(ForeignKey("units.id"))  # optional scope
+    template_id: Mapped[Optional[int]] = mapped_column(ForeignKey("shift_templates.id"))
     start_ts: Mapped[datetime] = mapped_column(DateTime)
     end_ts: Mapped[datetime] = mapped_column(DateTime)
-    role: Mapped[str | None] = mapped_column(String(80))
+    role: Mapped[Optional[str]] = mapped_column(String(80))
     status: Mapped[str] = mapped_column(String(20), default="planned")
-    notes: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
 
 
 # --- Tasks (Prep / Freezer) ---
@@ -151,18 +152,18 @@ class Task(Base):
     __tablename__ = "tasks"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
-    unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"))
+    unit_id: Mapped[Optional[int]] = mapped_column(ForeignKey("units.id"))
     task_type: Mapped[str] = mapped_column(String(30))  # prep / freezer / generic
     title: Mapped[str] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(
         String(20), default="todo"
     )  # todo|doing|blocked|done|cancelled
     done: Mapped[bool] = mapped_column(Boolean, default=False)
-    menu_id: Mapped[int | None] = mapped_column(ForeignKey("menus.id"), nullable=True)
-    dish_id: Mapped[int | None] = mapped_column(ForeignKey("dishes.id"), nullable=True)
+    menu_id: Mapped[Optional[int]] = mapped_column(ForeignKey("menus.id"), nullable=True)
+    dish_id: Mapped[Optional[int]] = mapped_column(ForeignKey("dishes.id"), nullable=True)
     private_flag: Mapped[bool] = mapped_column(Boolean, default=False)
-    assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    creator_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    assignee_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    creator_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
@@ -171,9 +172,9 @@ class TaskStatusTransition(Base):
     __tablename__ = "task_status_transitions"
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
-    from_status: Mapped[str | None] = mapped_column(String(20))
+    from_status: Mapped[Optional[str]] = mapped_column(String(20))
     to_status: Mapped[str] = mapped_column(String(20))
-    changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    changed_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     changed_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
@@ -182,7 +183,7 @@ class Message(Base):
     __tablename__ = "messages"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
-    sender_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    sender_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"))
     audience_type: Mapped[str] = mapped_column(String(30))  # all / unit / role
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"))
     subject: Mapped[str] = mapped_column(String(200))

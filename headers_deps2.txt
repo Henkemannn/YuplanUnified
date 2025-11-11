@@ -1,0 +1,20 @@
+HTTP/1.1 200 OK
+server: Fly/2c34dd22e (2025-11-07)
+date: Tue, 11 Nov 2025 09:26:59 GMT
+connection: close
+content-type: application/json
+content-length: 433
+etag: W/"admin:departments:site:5f8e2aea-9060-4981-9686-c70dbc723a11:v4"
+cache-control: private, max-age=0, must-revalidate
+x-request-id: 591bde28-3004-4f62-8a87-671deddd498c
+x-request-duration-ms: 2
+x-content-type-options: nosniff
+x-frame-options: DENY
+referrer-policy: strict-origin-when-cross-origin
+permissions-policy: geolocation=(), microphone=(), camera=()
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+content-security-policy: default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+vary: Cookie
+via: 1.1 fly.io
+fly-request-id: 01K9S3TVJBPK4FSPWR702TB49M-arn
+

@@ -20,6 +20,7 @@ import time
 import uuid
 from importlib import import_module
 from typing import Any
+import os
 
 from flask import Flask, g, jsonify, request, session
 from werkzeug.wrappers.response import Response
@@ -50,7 +51,12 @@ from .service_metrics_api import bp as metrics_api_bp
 from .service_recommendation_api import bp as service_recommendation_bp
 from .tasks_api import bp as tasks_bp
 from .turnus_api import bp as turnus_api_bp
+from .weekview_api import bp as weekview_api_bp
+from .report_api import bp as report_api_bp
 from .ui_blueprint import ui_bp
+from .dashboard_ui import bp as dashboard_bp
+from .health_api import bp as health_bp
+from .home import bp as home_bp
 
 # Map of module key -> import path:attr blueprint (for dynamic registration)
 MODULE_IMPORTS = {
@@ -92,6 +98,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- Feature flags ---
     feature_registry = FeatureRegistry()
+    # Enable admin module by default in staging/demo environments when simple auth flag is on.
+    try:
+        if os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
+            # Add and enable ff.admin.enabled if not present
+            if not feature_registry.has("ff.admin.enabled"):
+                feature_registry.add("ff.admin.enabled")
+            else:
+                feature_registry.set("ff.admin.enabled", True)
+    except Exception:
+        pass
     # Expose for tests manipulating registry directly
     app.feature_registry = feature_registry  # type: ignore[attr-defined]
 
@@ -247,6 +263,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             "feature_enabled": feature_enabled,
             "csrf_token": csrf_token(),
             "csrf_token_input": csrf_token_input,
+            # Staging demo banner: enabled only when env flag is truthy
+            "staging_demo": os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"),
         }
 
     # --- Logging / timing middleware ---
@@ -390,6 +408,21 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
     app.register_blueprint(ui_bp)
+    app.register_blueprint(weekview_api_bp)
+    app.register_blueprint(report_api_bp)
+    app.register_blueprint(health_bp)
+    app.register_blueprint(home_bp)
+    app.register_blueprint(dashboard_bp)
+    # Minimal demo UI exposing ETag/CSRF flows for admin endpoints (env-guarded)
+    try:
+        if os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes"):
+            from .admin_demo_ui import bp as admin_demo_ui_bp
+
+            app.register_blueprint(admin_demo_ui_bp)
+        else:  # pragma: no cover
+            app.logger.info("Demo UI disabled (set DEMO_UI=1 to enable)")
+    except Exception:  # pragma: no cover
+        app.logger.warning("Admin demo UI blueprint not loaded", exc_info=True)
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 
@@ -1025,7 +1058,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     }
                 },
             }
-            for code in ["400", "401", "403", "404", "409", "422", "429", "500"]
+            for code in ["400", "401", "403", "404", "409", "412", "422", "429", "500"]
         }
         # Populate representative examples (401, 422, 500 mandatory; others minimal)
         problem_responses["401"]["content"]["application/problem+json"]["examples"][
@@ -1102,8 +1135,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             "openapi": "3.0.3",
             "info": {
                 "title": "Unified Platform API",
-                "version": "0.3.0",
-                "description": "Problem Details (RFC7807) is the canonical error format across all endpoints. Legacy ErrorXXX components have been removed per ADR-003.",
+                "version": "1.9.0",
+                "description": "Problem Details (RFC7807) canonical errors. Admin Phase D adds conditional GET (If-None-Match/304) across admin collections & resources with cache-friendly weak ETags.",
             },
             "servers": [{"url": "/"}],
             "tags": [
@@ -1113,6 +1146,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 {"name": "System"},
                 {"name": "Notes"},
                 {"name": "Tasks"},
+                {"name": "weekview"},
+                {"name": "report"},
             ],
             "components": {
                 "securitySchemes": {
@@ -1383,7 +1418,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 ):
                     continue
                 responses = op.get("responses", {})
-                for ensure_code in ["400", "401", "403", "404", "409", "422", "429", "500"]:
+                for ensure_code in ["400", "401", "403", "404", "409", "412", "422", "429", "500"]:
                     if ensure_code not in responses:
                         responses[ensure_code] = {
                             "$ref": f"#/components/responses/Problem{ensure_code}"
@@ -1547,6 +1582,316 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
+        # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
+        spec["paths"]["/api/weekview"] = {
+            "get": {
+                "tags": ["weekview"],
+                "summary": "Get week view representation",
+                "parameters": [
+                    {"name": "year", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    {
+                        "name": "week",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "integer", "minimum": 1, "maximum": 53},
+                    },
+                    {
+                        "name": "department_id",
+                        "in": "query",
+                        "required": False,
+                        "schema": {"type": "string", "format": "uuid"},
+                    },
+                    {
+                        "name": "If-None-Match",
+                        "in": "header",
+                        "required": False,
+                        "schema": {"type": "string"},
+                        "description": "Return 304 Not Modified when matches current ETag",
+                    },
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Week view representation",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "Weak ETag for concurrency"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object"}}},
+                    },
+                    "304": {
+                        "description": "Not Modified",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "Weak ETag for cache validation"}
+                        },
+                    },
+                },
+            },
+            "patch": {
+                "tags": ["weekview"],
+                "summary": "Apply changes to week view (requires If-Match)",
+                "parameters": [
+                    {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}},
+                ],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["department_id", "year", "week", "operations"],
+                                "properties": {
+                                    "tenant_id": {"type": "string"},
+                                    "department_id": {"type": "string", "format": "uuid"},
+                                    "year": {"type": "integer"},
+                                    "week": {"type": "integer", "minimum": 1, "maximum": 53},
+                                    "operations": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": ["day_of_week", "meal", "diet_type", "marked"],
+                                            "properties": {
+                                                "day_of_week": {"type": "integer", "minimum": 1, "maximum": 7},
+                                                "meal": {"type": "string", "enum": ["lunch", "dinner"]},
+                                                "diet_type": {"type": "string"},
+                                                "marked": {"type": "boolean"}
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "examples": {
+                                "toggleOne": {
+                                    "value": {
+                                        "department_id": "00000000-0000-0000-0000-000000000000",
+                                        "year": 2025,
+                                        "week": 45,
+                                        "operations": [
+                                            {"day_of_week": 1, "meal": "lunch", "diet_type": "normal", "marked": True}
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "New weak ETag after mutation"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {"updated": {"type": "integer"}}}}}
+                    },
+                    "400": {"$ref": "#/components/responses/Problem400"},
+                    "403": {"$ref": "#/components/responses/Problem403"},
+                    "412": {"$ref": "#/components/responses/Problem412"},
+                },
+            },
+        }
+        spec["paths"]["/api/weekview/resolve"] = {
+            "get": {
+                "tags": ["weekview"],
+                "summary": "Resolve helper",
+                "parameters": [
+                    {"name": "site", "in": "query", "required": True, "schema": {"type": "string"}},
+                    {
+                        "name": "department_id",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "string", "format": "uuid"},
+                    },
+                    {"name": "date", "in": "query", "required": True, "schema": {"type": "string", "format": "date"}},
+                ],
+                "responses": {"200": {"description": "Resolution result"}},
+            }
+        }
+        # Residents counts mutation
+        spec["paths"]["/api/weekview/residents"] = {
+            "patch": {
+                "tags": ["weekview"],
+                "summary": "Set residents counts per day/meal (requires If-Match)",
+                "parameters": [
+                    {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}},
+                ],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["department_id", "year", "week", "items"],
+                                "properties": {
+                                    "tenant_id": {"type": "string"},
+                                    "department_id": {"type": "string", "format": "uuid"},
+                                    "year": {"type": "integer"},
+                                    "week": {"type": "integer", "minimum": 1, "maximum": 53},
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": ["day_of_week", "meal", "count"],
+                                            "properties": {
+                                                "day_of_week": {"type": "integer", "minimum": 1, "maximum": 7},
+                                                "meal": {"type": "string", "enum": ["lunch", "dinner"]},
+                                                "count": {"type": "integer", "minimum": 0},
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "New weak ETag after mutation"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {"updated": {"type": "integer"}}}}}
+                    },
+                    "400": {"$ref": "#/components/responses/Problem400"},
+                    "403": {"$ref": "#/components/responses/Problem403"},
+                    "412": {"$ref": "#/components/responses/Problem412"},
+                },
+            }
+        }
+        # Alt2 flags mutation
+        spec["paths"]["/api/weekview/alt2"] = {
+            "patch": {
+                "tags": ["weekview"],
+                "summary": "Set Alt2 days (requires If-Match)",
+                "parameters": [
+                    {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}},
+                ],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["department_id", "year", "week", "days"],
+                                "properties": {
+                                    "tenant_id": {"type": "string"},
+                                    "department_id": {"type": "string", "format": "uuid"},
+                                    "year": {"type": "integer"},
+                                    "week": {"type": "integer", "minimum": 1, "maximum": 53},
+                                    "days": {
+                                        "type": "array",
+                                        "items": {"type": "integer", "minimum": 1, "maximum": 7},
+                                    },
+                                },
+                            },
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "New weak ETag after mutation"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object", "properties": {"updated": {"type": "integer"}}}}}
+                    },
+                    "400": {"$ref": "#/components/responses/Problem400"},
+                    "403": {"$ref": "#/components/responses/Problem403"},
+                    "412": {"$ref": "#/components/responses/Problem412"},
+                },
+            }
+        }
+    # --- Report Paths (Phase A: read-only aggregation + conditional GET) ---
+        spec["paths"]["/api/report"] = {
+            "get": {
+                "tags": ["report"],
+                "summary": "Get weekly report (read-only)",
+                "parameters": [
+                    {"name": "year", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    {
+                        "name": "week",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "integer", "minimum": 1, "maximum": 53},
+                    },
+                    {
+                        "name": "department_id",
+                        "in": "query",
+                        "required": False,
+                        "schema": {"type": "string", "format": "uuid"},
+                    },
+                    {
+                        "name": "If-None-Match",
+                        "in": "header",
+                        "required": False,
+                        "schema": {"type": "string"},
+                        "description": "Return 304 Not Modified when matches current ETag",
+                    },
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Report payload",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "Weak ETag for concurrency"}
+                        },
+                        "content": {"application/json": {"schema": {"type": "object"}}},
+                    },
+                    "304": {
+                        "description": "Not Modified",
+                        "headers": {
+                            "ETag": {"schema": {"type": "string"}, "description": "Weak ETag for cache validation"}
+                        },
+                    },
+                },
+            }
+        }
+        # Report export
+        spec["paths"]["/api/report/export"] = {
+            "get": {
+                "tags": ["report"],
+                "summary": "Export weekly report as CSV or XLSX",
+                "parameters": [
+                    {"name": "year", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    {"name": "week", "in": "query", "required": True, "schema": {"type": "integer", "minimum": 1, "maximum": 53}},
+                    {"name": "department_id", "in": "query", "required": False, "schema": {"type": "string", "format": "uuid"}},
+                    {"name": "format", "in": "query", "required": True, "schema": {"type": "string", "enum": ["csv", "xlsx"]}},
+                    {"name": "If-None-Match", "in": "header", "required": False, "schema": {"type": "string"}, "description": "Return 304 Not Modified when matches current export ETag (format-specific)"}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Binary export file",
+                        "headers": {"ETag": {"schema": {"type": "string"}}},
+                        "content": {
+                            "text/csv": {"schema": {"type": "string", "format": "binary"}},
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {"schema": {"type": "string", "format": "binary"}},
+                        },
+                    },
+                    "304": {"description": "Not Modified", "headers": {"ETag": {"schema": {"type": "string"}}}},
+                },
+            }
+        }
+
+        # --- Merge OpenAPI parts (admin.yml) when enabled ---
+        try:
+            import os
+            from .openapi_merge import load_yaml, merge_openapi
+
+            include_parts = os.getenv("OPENAPI_INCLUDE_PARTS", "1").lower() not in (
+                "0",
+                "false",
+                "no",
+            )
+            if include_parts:
+                base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+                admin_path = os.path.join(base_dir, "openapi", "parts", "admin.yml")
+                extra = load_yaml(admin_path)
+                if not extra:
+                    app.logger.warning("admin.yml failed to load or was empty; skipping fallback now that spec is repaired")
+                if extra:
+                    merge_openapi(spec, extra)
+                    app.logger.info("Merged %s into OpenAPI", os.path.basename(admin_path))
+                else:
+                    app.logger.warning("Failed to load admin OpenAPI part from %s", admin_path)
+        except Exception:  # pragma: no cover
+            app.logger.warning("OpenAPI parts merge failed", exc_info=True)
+
         return spec
 
     # --- Feature flag management endpoints (regression restore) ---
