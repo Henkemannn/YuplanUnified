@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import inspect
 
-revision = "0005_update_tasks_add_prep_fields"
+revision = "0005_prep_fields"
 down_revision = "0004_add_notes"
 branch_labels = None
 depends_on = None
@@ -19,6 +19,8 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
+    dialect = conn.dialect.name if conn is not None else "sqlite"
+    false_def = sa.text("FALSE") if dialect == "postgresql" else sa.text("0")
     cols = {c["name"] for c in inspector.get_columns("tasks")}
 
     menu_missing = "menu_id" not in cols
@@ -35,7 +37,7 @@ def upgrade() -> None:
             if dish_missing:
                 batch.add_column(sa.Column("dish_id", sa.Integer(), nullable=True))
             if private_missing:
-                batch.add_column(sa.Column("private_flag", sa.Boolean(), server_default=sa.text("0"), nullable=False))
+                batch.add_column(sa.Column("private_flag", sa.Boolean(), server_default=false_def, nullable=False))
             if assignee_missing:
                 batch.add_column(sa.Column("assignee_id", sa.Integer(), nullable=True))
             if creator_missing:

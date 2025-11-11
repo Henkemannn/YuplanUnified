@@ -17,10 +17,21 @@ _engine: Engine | None = None
 _SessionFactory: scoped_session[Session] | None = None
 
 
+def _normalize_url(url: str) -> str:
+    # Normalize postgres schemes to ensure SQLAlchemy uses psycopg v3
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://") :]
+    if url.startswith("postgresql://") and "+" not in url.split("://",1)[1].split("@",1)[0]:
+        # no explicit driver specified (defaults may try psycopg2), force psycopg
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
+
+
 def init_engine(database_url: str, force: bool = False) -> Engine:
     """Initialize global engine (idempotent) or reinitialize when force=True."""
     global _engine, _SessionFactory
     if _engine is None:
+        database_url = _normalize_url(database_url)
         _engine = create_engine(database_url, future=True, echo=False)
         _SessionFactory = scoped_session(
             sessionmaker(bind=_engine, autoflush=False, autocommit=False)
@@ -28,6 +39,7 @@ def init_engine(database_url: str, force: bool = False) -> Engine:
         return _engine
     if force:
         _engine.dispose()
+        database_url = _normalize_url(database_url)
         _engine = create_engine(database_url, future=True, echo=False)
         if _SessionFactory is not None:
             with suppress(Exception):  # pragma: no cover

@@ -98,6 +98,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- Feature flags ---
     feature_registry = FeatureRegistry()
+    # Enable admin module by default in staging/demo environments when simple auth flag is on.
+    try:
+        if os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
+            # Add and enable ff.admin.enabled if not present
+            if not feature_registry.has("ff.admin.enabled"):
+                feature_registry.add("ff.admin.enabled")
+            else:
+                feature_registry.set("ff.admin.enabled", True)
+    except Exception:
+        pass
     # Expose for tests manipulating registry directly
     app.feature_registry = feature_registry  # type: ignore[attr-defined]
 
@@ -403,6 +413,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(health_bp)
     app.register_blueprint(home_bp)
     app.register_blueprint(dashboard_bp)
+    # Minimal demo UI exposing ETag/CSRF flows for admin endpoints (env-guarded)
+    try:
+        if os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes"):
+            from .admin_demo_ui import bp as admin_demo_ui_bp
+
+            app.register_blueprint(admin_demo_ui_bp)
+        else:  # pragma: no cover
+            app.logger.info("Demo UI disabled (set DEMO_UI=1 to enable)")
+    except Exception:  # pragma: no cover
+        app.logger.warning("Admin demo UI blueprint not loaded", exc_info=True)
     try:
         from .superuser_impersonation_api import bp as superuser_impersonation_bp
 

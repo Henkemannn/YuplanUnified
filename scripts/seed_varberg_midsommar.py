@@ -12,10 +12,10 @@ import sys
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from core.db import init_engine, get_session
-from core.admin_repo import SitesRepo, DepartmentsRepo, DietDefaultsRepo, Alt2Repo
-from core.notes_repo import NotesRepo  # if missing in project, adjust to actual notes repo import
+from core.admin_repo import SitesRepo, DepartmentsRepo, DietDefaultsRepo, Alt2Repo, _is_sqlite
 from core.etag import make_collection_etag
 
 SITE_NAME = "Varberg Midsommargården"
@@ -53,125 +53,192 @@ def run() -> int:
         return 1
 
     init_engine(url)
+    # Use repo instances; they manage sessions internally
+    sites_repo = SitesRepo()
+    depts_repo = DepartmentsRepo()
+    diet_repo = DietDefaultsRepo()
+    alt2_repo = Alt2Repo()
+
+    # 1) Create site (or fetch existing by name)
+    existing_sites = sites_repo.list_sites()
+    site = next((s for s in existing_sites if s.get("name") == SITE_NAME), None)
+    if site:
+        site_id = site["id"]
+    else:
+        created, _ = sites_repo.create_site(SITE_NAME)
+        site_id = created["id"]
+    print(f"Site: {SITE_NAME} -> id={site_id}")
+
+    # 2) Departments upsert
+    dept_ids: dict[str, str] = {}
+    current = {x["name"]: x for x in depts_repo.list_for_site(site_id)}
+    for d in DEPARTMENTS:
+        name = d["name"]
+        existing = current.get(name)
+        if existing:
+            dept_ids[name] = existing["id"]
+            # update resident fields only if changed
+            updates: dict[str, Any] = {}
+            if existing.get("resident_count_mode") != d["resident_count_mode"]:
+                updates["resident_count_mode"] = d["resident_count_mode"]
+            if int(existing.get("resident_count_fixed", 0)) != int(d.get("resident_count_fixed", 0)):
+                updates["resident_count_fixed"] = int(d.get("resident_count_fixed", 0))
+            if updates:
+                depts_repo.update_department(existing["id"], existing.get("version", 0), **updates)
+        else:
+            created, _ = depts_repo.create_department(
+                site_id,
+                name,
+                d.get("resident_count_mode", "fixed"),
+                int(d.get("resident_count_fixed", 0)),
+            )
+            dept_ids[name] = created["id"]
+    print("Departments:", dept_ids)
+
+    # 3) Diet types ensure (cross-dialect). For SQLite, create table; for Postgres, upsert rows.
     db = get_session()
     try:
-        # 1) Create site (or fetch)
-        site_id = None
-        # Prefer a deterministic id by slug when using sqlite for tests; otherwise rely on repo
-        try:
-            site_id = SitesRepo.get_or_create(db, SITE_SLUG, SITE_NAME)  # type: ignore[attr-defined]
-        except AttributeError:
-            # Fallback: try create_site/list_sites pattern
-            try:
-                existing = [s for s in SitesRepo.list_sites(db) if s.get("name") == SITE_NAME]
-                if existing:
-                    site_id = existing[0]["id"]
-                else:
-                    site = SitesRepo.create_site(db, SITE_NAME)
-                    site_id = site["id"] if isinstance(site, dict) else site
-            except Exception as ex:  # pragma: no cover
-                print(f"Failed to upsert site: {ex}", file=sys.stderr)
-                return 1
-        if not site_id:
-            print("Failed to ensure site", file=sys.stderr)
-            return 1
-        print(f"Site: {SITE_NAME} -> id={site_id}")
-
-        # 2) Departments upsert
-        dept_ids: dict[str, str] = {}
-        for d in DEPARTMENTS:
-            name = d["name"]
-            existing = DepartmentsRepo.list_for_site(db, site_id)
-            found = next((x for x in existing if x.get("name") == name), None)
-            if found:
-                dept_ids[name] = found["id"]
-                # update resident mode/fixed if changed
-                changed = False
-                if found.get("resident_count_mode") != d["resident_count_mode"]:
-                    found["resident_count_mode"] = d["resident_count_mode"]
-                    changed = True
-                if found.get("resident_count_fixed") != d["resident_count_fixed"]:
-                    found["resident_count_fixed"] = d["resident_count_fixed"]
-                    changed = True
-                if changed:
-                    DepartmentsRepo.update_department(db, found["id"], found)  # type: ignore[arg-type]
-            else:
-                created = DepartmentsRepo.create_department(
-                    db,
-                    site_id,
-                    name,
-                    d.get("resident_count_mode", "fixed"),
-                    int(d.get("resident_count_fixed", 0)),
+        if _is_sqlite(db):
+            db.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS diet_types (
+                        id TEXT PRIMARY KEY,
+                        name TEXT UNIQUE NOT NULL
+                    )
+                    """
                 )
-                dept_ids[name] = created["id"] if isinstance(created, dict) else created
-        print("Departments:", dept_ids)
-
-        # 3) Diet types ensure (if diet types are a separate table; otherwise skip)
-        try:
-            db.execute(text("""
-                CREATE TABLE IF NOT EXISTS diet_types (
-                    id TEXT PRIMARY KEY,
-                    name TEXT UNIQUE NOT NULL
-                )
-            """))
+            )
             for n in DIET_TYPES:
-                db.execute(text("INSERT OR IGNORE INTO diet_types (id, name) VALUES (:id,:name)"),
-                           {"id": n.lower(), "name": n})
-            db.commit()
-        except Exception:
-            # If project models diet types differently, we just continue.
-            db.rollback()
-
-        # 4) Diet defaults upsert
-        for dept_name, mapping in DIET_DEFAULTS.items():
-            dept_id = dept_ids.get(dept_name)
-            if not dept_id:
-                continue
-            # Fetch current defaults, then apply changes
-            current = {x.get("diet_type_id"): int(x.get("default_count", 0)) for x in (DietDefaultsRepo.list_for_department(db, dept_id) or [])}
-            # Merge
-            to_set = {**current}
-            for diet, cnt in mapping.items():
-                key = diet.lower()
-                to_set[key] = int(cnt)
-            # Persist via repo (assume repo has upsert-like method; otherwise, naive replace)
-            DietDefaultsRepo.replace_for_department(db, dept_id, to_set)  # type: ignore[attr-defined]
-        print("Diet defaults set")
-
-        # 5) Notes upsert (site + departments)
-        try:
-            NotesRepo.set_site_note(db, site_id, SITE_NOTE)  # type: ignore[attr-defined]
-            for dept_name, note in DEPT_NOTES.items():
-                did = dept_ids.get(dept_name)
-                if did:
-                    NotesRepo.set_department_note(db, did, note)  # type: ignore[attr-defined]
-            print("Notes upserted")
-        except Exception as ex:
-            print(f"Notes upsert skipped/failed: {ex}")
-
-        # 6) Alt2 flags for week
-        week = ALT2_WEEK
-        for dept_name, days in ALT2_FLAGS.items():
-            did = dept_ids.get(dept_name)
-            if not did:
-                continue
-            items = [{"department_id": did, "weekday": int(d), "enabled": True} for d in days]
-            Alt2Repo.bulk_upsert(db, week, items)  # type: ignore[arg-type]
-        # Print ETag for Alt2
-        alt2_version = Alt2Repo.collection_version(db, week)
-        alt2_etag = make_collection_etag("admin:alt2", f"week:{week}", alt2_version or 0)
-        print(f"Alt2 week={week} ETag={alt2_etag}")
-
-        # 7) Print departments collection ETag
-        # Use max version across departments in site
-        deps = DepartmentsRepo.list_for_site(db, site_id)
-        max_ver = max((int(x.get("version", 0)) for x in deps), default=0)
-        dep_etag = make_collection_etag("admin:departments", f"site:{site_id}", max_ver)
-        print(f"Departments(site={site_id}) ETag={dep_etag}")
-
-        return 0
+                db.execute(
+                    text("INSERT OR IGNORE INTO diet_types (id, name) VALUES (:id,:name)"),
+                    {"id": n.lower(), "name": n},
+                )
+        else:
+            # On Postgres, table exists from migrations with additional columns and defaults.
+            for n in DIET_TYPES:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO diet_types (id, name)
+                        VALUES (:id, :name)
+                        ON CONFLICT (id) DO NOTHING
+                        """
+                    ),
+                    {"id": n.lower(), "name": n},
+                )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
+
+    # Helper: ensure all required diet_type ids exist (cross-dialect)
+    def _ensure_diet_type_ids(ids: list[str]):
+        s = get_session()
+        try:
+            existing = {r[0] for r in s.execute(text("SELECT id FROM diet_types"))}
+            missing = [i for i in ids if i not in existing]
+            if missing:
+                for m in missing:
+                    s.execute(
+                        text(
+                            """
+                            INSERT INTO diet_types (id, name)
+                            VALUES (:id, :name)
+                            ON CONFLICT (id) DO NOTHING
+                            """
+                        ),
+                        {"id": m, "name": m.capitalize()},
+                    )
+                s.commit()
+        finally:
+            s.close()
+
+    # 4) Diet defaults upsert (via DepartmentsRepo optimistic bump)
+    all_needed_diet_ids = {diet.lower() for mapping in DIET_DEFAULTS.values() for diet in mapping.keys()}
+    _ensure_diet_type_ids(sorted(all_needed_diet_ids))
+    # Debug: list diet_types after ensure
+    dbg = get_session()
+    try:
+        rows = list(dbg.execute(text("SELECT id, name FROM diet_types ORDER BY id")))
+        print("Diet types existing:", [(r[0], r[1]) for r in rows])
+    finally:
+        dbg.close()
+    for dept_name, mapping in DIET_DEFAULTS.items():
+        dept_id = dept_ids.get(dept_name)
+        if not dept_id:
+            continue
+        items = [
+            {"diet_type_id": diet.lower(), "default_count": int(cnt)}
+            for diet, cnt in mapping.items()
+        ]
+        current_ver = depts_repo.get_version(dept_id) or 0
+        try:
+            depts_repo.upsert_department_diet_defaults(dept_id, current_ver, items)
+        except IntegrityError as ie:
+            # Fallback: create missing diet types then retry once
+            missing_ids = []
+            for it in items:
+                # Quick existence check
+                s2 = get_session()
+                try:
+                    row = s2.execute(text("SELECT 1 FROM diet_types WHERE id=:i"), {"i": it["diet_type_id"]}).fetchone()
+                    if not row:
+                        missing_ids.append(it["diet_type_id"])
+                finally:
+                    s2.close()
+            if missing_ids:
+                _ensure_diet_type_ids(missing_ids)
+                depts_repo.upsert_department_diet_defaults(dept_id, current_ver, items)
+    print("Diet defaults set")
+
+    # 5) Notes upsert (departments only, using department notes field if present)
+    for dept_name, note in DEPT_NOTES.items():
+        did = dept_ids.get(dept_name)
+        if not did:
+            continue
+        ver = depts_repo.get_version(did) or 0
+        try:
+            depts_repo.update_department_notes(did, ver, note)
+        except Exception:
+            # If notes column not present, skip gracefully
+            pass
+    print("Notes upserted (where supported)")
+
+    # 6) Alt2 flags for week
+    week = ALT2_WEEK
+    flags: list[dict] = []
+    for dept_name, days in ALT2_FLAGS.items():
+        did = dept_ids.get(dept_name)
+        if not did:
+            continue
+        for d in days:
+            flags.append(
+                {
+                    "site_id": site_id,
+                    "department_id": did,
+                    "week": week,
+                    "weekday": int(d),
+                    "enabled": True,
+                }
+            )
+    if flags:
+        alt2_repo.bulk_upsert(flags)
+    # Print ETag for Alt2
+    alt2_version = alt2_repo.collection_version(week)
+    alt2_etag = make_collection_etag("admin:alt2", f"week:{week}", alt2_version or 0)
+    print(f"Alt2 week={week} ETag={alt2_etag}")
+
+    # 7) Print departments collection ETag
+    # Use max version across departments in site
+    deps = depts_repo.list_for_site(site_id)
+    max_ver = max((int(x.get("version", 0)) for x in deps), default=0)
+    dep_etag = make_collection_etag("admin:departments", f"site:{site_id}", max_ver)
+    print(f"Departments(site={site_id}) ETag={dep_etag}")
+
+    return 0
 
 
 if __name__ == "__main__":

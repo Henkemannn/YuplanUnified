@@ -123,18 +123,32 @@ class AdminService:
         current_v = self.alt2_repo.collection_version(week)
         if version != current_v:
             raise ConcurrencyError("stale collection version")
+        # Infer site_id for each department (first lookup; all departments in seed share one site)
         sanitized: list[dict] = []
-        for it in items:
-            dept_id = str(it.get("department_id") or "").strip()
-            if not dept_id:
-                raise ValueError("department_id_required")
-            weekday = int(it.get("weekday", -1))
-            if weekday < 1 or weekday > 7:
-                raise ValueError("weekday_out_of_range")
-            enabled = bool(it.get("enabled", True))
-            # site_id is currently not passed – placeholder 'site' field or derive later; use dept_id as proxy for uniqueness
-            sanitized.append({"site_id": "site-placeholder", "department_id": dept_id, "week": week, "weekday": weekday, "enabled": enabled})
-        # Upsert flags
+        from .db import get_session
+        from sqlalchemy import text as _text
+        db = get_session()
+        try:
+            site_cache: dict[str, str] = {}
+            for it in items:
+                dept_id = str(it.get("department_id") or "").strip()
+                if not dept_id:
+                    raise ValueError("department_id_required")
+                weekday = int(it.get("weekday", -1))
+                if weekday < 1 or weekday > 7:
+                    raise ValueError("weekday_out_of_range")
+                enabled = bool(it.get("enabled", True))
+                site_id = site_cache.get(dept_id)
+                if site_id is None:
+                    row = db.execute(_text("SELECT site_id FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
+                    if not row:
+                        raise ValueError("department_not_found")
+                    site_id = str(row[0])
+                    site_cache[dept_id] = site_id
+                sanitized.append({"site_id": site_id, "department_id": dept_id, "week": week, "weekday": weekday, "enabled": enabled})
+        finally:
+            db.close()
+        # Upsert flags with real site ids
         updated = self.alt2_repo.bulk_upsert(sanitized)
         new_coll_version = self.alt2_repo.collection_version(week)
         etag = make_etag("admin", "alt2", f"week:{week}", new_coll_version)

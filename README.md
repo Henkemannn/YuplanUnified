@@ -58,6 +58,13 @@ Examples
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
 
+## Staging quickstart
+- Access and demo guardrails: see `docs/staging-access.md` (simple auth, CSRF, DEMO_UI)
+- Smoke run log: see `docs/staging-smoke_2025-11-11.md`
+- One-liners (Windows):
+  - `make login-ps` (or `pwsh -File scripts/login.ps1`)
+  - `make smoke-ps` (or `pwsh -File scripts/smoke.ps1 -BaseUrl https://yuplan-unified-staging.fly.dev -SiteId <SITE_ID> -Week 51`)
+
 ## Staging environment (Fly.io)
 
 Current staging URL: https://yuplan-unified-staging-icy-wave-9332.fly.dev/

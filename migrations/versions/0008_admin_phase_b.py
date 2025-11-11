@@ -43,6 +43,7 @@ TABLES_VERSIONED = [
 def _ensure_table_sites(inspector):
     if "sites" in inspector.get_table_names():
         return
+    # Sites has only inline unique constraint on name; no separate index needed.
     op.create_table(
         "sites",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -50,18 +51,22 @@ def _ensure_table_sites(inspector):
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.Column("version", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
+        sa.UniqueConstraint("name", name="uq_sites_name"),
     )
-    op.create_index("ix_sites_name", "sites", ["name"], unique=True)
+    # Inline unique constraint ensures uniqueness across dialects.
 
 
 def _ensure_table_diet_types(inspector):
     if "diet_types" in inspector.get_table_names():
         return
+    conn = op.get_bind()
+    dialect = conn.dialect.name if conn is not None else "sqlite"
+    false_def = sa.text("FALSE") if dialect == "postgresql" else sa.text("0")
     op.create_table(
         "diet_types",
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("name", sa.Text(), nullable=False, unique=True),
-        sa.Column("premarked", sa.Boolean(), server_default=sa.text("0"), nullable=False),
+        sa.Column("premarked", sa.Boolean(), server_default=false_def, nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
         sa.Column("version", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
@@ -71,6 +76,8 @@ def _ensure_table_diet_types(inspector):
 def _ensure_table_departments(inspector):
     if "departments" in inspector.get_table_names():
         return
+    conn = op.get_bind()
+    # Resident counts use INTEGER defaults; no dialect boolean handling needed here.
     op.create_table(
         "departments",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -90,6 +97,7 @@ def _ensure_table_departments(inspector):
 def _ensure_table_department_diet_defaults(inspector):
     if "department_diet_defaults" in inspector.get_table_names():
         return
+    conn = op.get_bind()
     op.create_table(
         "department_diet_defaults",
         sa.Column("department_id", sa.String(36), sa.ForeignKey("departments.id"), nullable=False),
@@ -146,16 +154,22 @@ def _create_postgres_function_and_triggers(conn):
 def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
-    # Create new tables
-    # Alt2 flags (Phase B bulk persistence)
+    # Create/ensure core tables first (FK deps)
+    _ensure_table_sites(inspector)
+    _ensure_table_diet_types(inspector)
+    _ensure_table_departments(inspector)
+    _ensure_table_department_diet_defaults(inspector)
+    # Alt2 flags (Phase B bulk persistence) after deps exist
     if "alt2_flags" not in inspector.get_table_names():
+        dialect = conn.dialect.name if conn is not None else "sqlite"
+        true_def = sa.text("TRUE") if dialect == "postgresql" else sa.text("1")
         op.create_table(
             "alt2_flags",
             sa.Column("site_id", sa.String(36), nullable=False),
             sa.Column("department_id", sa.String(36), nullable=False),
             sa.Column("week", sa.Integer(), nullable=False),
             sa.Column("weekday", sa.Integer(), nullable=False),
-            sa.Column("enabled", sa.Boolean(), server_default=sa.text("1"), nullable=False),
+            sa.Column("enabled", sa.Boolean(), server_default=true_def, nullable=False),
             sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
             sa.Column("version", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
             sa.PrimaryKeyConstraint("site_id", "department_id", "week", "weekday", name="pk_alt2_flags"),
@@ -166,10 +180,6 @@ def upgrade() -> None:
         )
         op.create_index("ix_alt2_flags_dept_week", "alt2_flags", ["department_id", "week"])
         op.create_index("ix_alt2_flags_week_dept_weekday", "alt2_flags", ["week", "department_id", "weekday"])
-    _ensure_table_sites(inspector)
-    _ensure_table_diet_types(inspector)
-    _ensure_table_departments(inspector)
-    _ensure_table_department_diet_defaults(inspector)
     # Ensure version columns on pre-existing tables
     _ensure_version_columns(inspector)
     # Postgres: triggers
@@ -185,7 +195,7 @@ def upgrade() -> None:
                 sa.Column("year", sa.Integer(), nullable=False),
                 sa.Column("week", sa.Integer(), nullable=False),
                 sa.Column("day_of_week", sa.Integer(), nullable=False),
-                sa.Column("is_alt2", sa.Integer(), server_default=sa.text("0"), nullable=False),
+                    sa.Column("is_alt2", sa.Integer(), server_default=sa.text("0"), nullable=False),
                 sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
                 sa.Column("version", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
             )
@@ -242,7 +252,7 @@ def downgrade() -> None:
     if "diet_types" in existing_tables:
         op.drop_table("diet_types")
     if "sites" in existing_tables:
-        op.drop_index("ix_sites_name", table_name="sites")
+        # Unique constraint dropped implicitly with table
         op.drop_table("sites")
     # Remove added columns (best-effort)
     for tbl in ["notes", "weekview_alt2_flags"]:

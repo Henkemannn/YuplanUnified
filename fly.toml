@@ -3,7 +3,7 @@
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'yuplan-unified-staging-icy-wave-9332'
+app = 'yuplan-unified-staging'
 primary_region = 'arn'
 
 [build]
@@ -27,10 +27,14 @@ primary_region = 'arn'
     timeout = '2s'
     grace_period = '5s'
     method = 'GET'
-    path = '/healthz'
+    path = '/health'
     protocol = 'http'
 
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+
+[deploy]
+  # Run DB migrations automatically on deploy
+  release_command = "alembic upgrade head"

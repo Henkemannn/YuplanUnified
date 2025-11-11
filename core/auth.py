@@ -197,6 +197,36 @@ def login():
         db.close()
 
 
+# Convenience GET /auth/login for staging simple auth (avoids MethodNotAllowed confusion)
+@bp.get("/login")
+def login_get():  # pragma: no cover
+    """Serve a minimal HTML form when STAGING_SIMPLE_AUTH is enabled.
+
+    Opening /auth/login directly in a browser issues GET. Previously this mapped
+    to a 404 ProblemDetails via 405->404 handler. This endpoint provides a
+    friendly form only for demo/staging environments. In other environments it
+    returns guidance JSON (405) preserving security expectations.
+    """
+    if os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
+        html = """<!doctype html><html lang='en'><head><meta charset='utf-8'>
+        <title>Demo Login</title><style>body{font-family:system-ui;margin:2rem}label{display:block;margin:.5rem 0}</style></head>
+        <body><h1>Demo Login</h1><p>Submit to establish a demo admin/staff session.</p>
+        <form method='post' action='/auth/login'>
+          <label>Role <select name='role'><option value='admin'>admin</option><option value='staff'>staff</option></select></label>
+          <button>Login</button>
+        </form>
+        <p>After login visit <a href='/demo'>/demo</a> to exercise ETag & CSRF flows.</p>
+        </body></html>"""
+        resp = make_response(html)
+        resp.headers["Content-Type"] = "text/html; charset=utf-8"
+        return resp
+    return jsonify({
+        "ok": False,
+        "error": "method_not_allowed",
+        "message": "Use POST /auth/login (email/password) or enable STAGING_SIMPLE_AUTH=1 for demo role login.",
+    }), 405
+
+
 @bp.post("/logout")
 def logout():
     if os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes"):

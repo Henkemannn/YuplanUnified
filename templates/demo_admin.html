@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Demo – Admin flows</title>
+    <style>
+      body{font-family: system-ui, Arial; margin: 1.5rem;}
+      header{margin-bottom:1rem}
+      .banner{background:#fff7d6;border:1px solid #e6c200;color:#5c4a00;padding:.5rem 1rem;border-radius:6px;margin-bottom:1rem}
+      .row{display:flex;gap:1.5rem;flex-wrap:wrap}
+      .card{flex:1 1 420px;border:1px solid #ddd; border-radius:8px; padding:1rem}
+      label{display:block;margin:.35rem 0}
+      input[type=text], input[type=number]{padding:.3rem .5rem; width: 100%; max-width: 460px}
+      button{padding:.4rem .8rem; cursor:pointer}
+      code{background:#f6f8fa;padding:.1rem .3rem;border-radius:4px}
+      .muted{color:#666}
+      table{border-collapse: collapse; margin-top:.5rem}
+      td,th{border:1px solid #ccc; padding:.25rem .5rem}
+      .ok{color:#0a0}
+      .err{color:#a00}
+      .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+      .et{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: .9em}
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Admin demo</h1>
+      {% if staging_demo %}
+        <div class="banner">Staging simple auth is enabled. Use the button below to log in as admin.</div>
+      {% endif %}
+    </header>
+
+    <div class="card">
+      <h3>1) Login (simple)</h3>
+      <p class="muted">Sends POST /auth/login {role:"admin"}. Required for cookies and CSRF token.</p>
+      <button id="btnLogin">Login as admin</button>
+      <span id="loginStatus"></span>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h3>2) Departments (ETag and If-None-Match)</h3>
+        <label>Site ID <input id="siteId" type="text" placeholder="enter site_id" /></label>
+        <div>
+          <button id="btnLoadDepts">Load departments</button>
+          <button id="btnDepts304">Conditional GET (If-None-Match)</button>
+        </div>
+        <div class="muted">Collection ETag: <span id="deptsEtag" class="et">—</span></div>
+        <div id="depts"></div>
+        <div style="margin-top:.5rem">
+          <label>Rename first department to <input id="deptNewName" type="text" placeholder="New name"/></label>
+          <button id="btnRename">PUT with If-Match</button>
+          <span id="renameStatus"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>3) Alt2 (idempotent PUT + toggle)</h3>
+        <label>Week <input id="week" type="number" value="51" min="1" max="53"/></label>
+        <div>
+          <button id="btnLoadAlt2">Load Alt2</button>
+          <button id="btnAlt2304">Conditional GET (If-None-Match)</button>
+        </div>
+        <div class="muted">Collection ETag: <span id="alt2Etag" class="et">—</span></div>
+        <div id="alt2"></div>
+        <div style="margin-top:.5rem">
+          <button id="btnAlt2Idem">PUT idempotent (no change)</button>
+          <button id="btnAlt2Toggle">Toggle first item</button>
+          <span id="alt2Status"></span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      function getCookie(name){
+        return (document.cookie||'').split('; ').map(v=>v.split('=')).find(v=>v[0]===name)?.[1] || '';
+      }
+      function etagStrongOrWeak(et){ return et && et.startsWith('W/') ? et : et }
+
+      let lastDepts = null, lastDeptsEtag = null; // {site_id, items}
+      let lastAlt2 = null, lastAlt2Etag = null;   // {week, items}
+
+      async function loginAdmin(){
+        const res = await fetch('/auth/login', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({role:'admin'})
+        });
+        $('loginStatus').textContent = res.ok ? 'OK' : 'Failed';
+      }
+
+      async function loadDepts(){
+        const siteId = $('siteId').value.trim();
+        if(!siteId){ alert('Enter site_id'); return; }
+        const res = await fetch(`/admin/departments?site_id=${encodeURIComponent(siteId)}`);
+        lastDeptsEtag = res.headers.get('ETag');
+        $('deptsEtag').textContent = lastDeptsEtag || '—';
+        lastDepts = await res.json();
+        renderDepts(lastDepts);
+      }
+      function renderDepts(data){
+        const rows = (data.items||[]).map((it,i)=>{
+          const et = `W/"admin:dept:${it.id}:v${it.version||0}"`;
+          return `<tr><td>${i+1}</td><td class="mono">${it.id}</td><td>${it.name}</td><td class="mono">${et}</td></tr>`
+        }).join('');
+        $('depts').innerHTML = `<table><tr><th>#</th><th>id</th><th>name</th><th>item ETag</th></tr>${rows}</table>`;
+      }
+      async function depts304(){
+        if(!lastDeptsEtag){ alert('Load departments first'); return; }
+        const res = await fetch(`/admin/departments?site_id=${encodeURIComponent(lastDepts.site_id)}`, { headers: {'If-None-Match': lastDeptsEtag} });
+        alert(`Status: ${res.status} (expected 304)`);
+      }
+      async function renameFirst(){
+        if(!lastDepts || (lastDepts.items||[]).length===0){ alert('Load departments first'); return; }
+        const item = lastDepts.items[0];
+        const newName = $('deptNewName').value.trim() || (item.name + ' (demo)');
+        const ifMatch = `W/"admin:dept:${item.id}:v${item.version||0}"`;
+        const csrf = decodeURIComponent(getCookie('csrf_token'));
+        const res = await fetch(`/admin/departments/${encodeURIComponent(item.id)}`, {
+          method: 'PUT', headers: {'Content-Type':'application/json', 'If-Match': ifMatch, 'X-CSRF-Token': csrf}, body: JSON.stringify({name:newName})
+        });
+        $('renameStatus').textContent = res.ok ? 'OK' : `Error ${res.status}`;
+        if(res.ok){ await loadDepts(); }
+      }
+
+      async function loadAlt2(){
+        const week = Number($('week').value || '0');
+        if(!(week>=1 && week<=53)){ alert('Enter valid week (1-53)'); return; }
+        const res = await fetch(`/admin/alt2?week=${week}`);
+        lastAlt2Etag = res.headers.get('ETag');
+        $('alt2Etag').textContent = lastAlt2Etag || '—';
+        lastAlt2 = await res.json();
+        renderAlt2(lastAlt2);
+      }
+      function renderAlt2(data){
+        const rows = (data.items||[]).map((it,i)=>{
+          return `<tr><td>${i+1}</td><td class="mono">${it.department_id}</td><td>${it.weekday}</td><td>${it.enabled?'true':'false'}</td></tr>`
+        }).join('');
+        $('alt2').innerHTML = `<table><tr><th>#</th><th>department</th><th>weekday</th><th>enabled</th></tr>${rows}</table>`;
+      }
+      async function alt2_304(){
+        if(!lastAlt2Etag){ alert('Load Alt2 first'); return; }
+        const res = await fetch(`/admin/alt2?week=${encodeURIComponent(lastAlt2.week)}`, { headers: {'If-None-Match': lastAlt2Etag} });
+        alert(`Status: ${res.status} (expected 304)`);
+      }
+      async function alt2_idem(){
+        if(!lastAlt2){ alert('Load Alt2 first'); return; }
+        const csrf = decodeURIComponent(getCookie('csrf_token'));
+        const res = await fetch('/admin/alt2', {
+          method: 'PUT', headers: {'Content-Type':'application/json', 'If-Match': lastAlt2Etag, 'X-CSRF-Token': csrf},
+          body: JSON.stringify({week: lastAlt2.week, items: lastAlt2.items})
+        });
+        $('alt2Status').textContent = `${res.ok ? 'OK' : 'Error'} (${res.status})`;
+        await loadAlt2();
+      }
+      async function alt2_toggle(){
+        if(!lastAlt2 || (lastAlt2.items||[]).length===0){ alert('Load Alt2 first'); return; }
+        const first = {...lastAlt2.items[0]};
+        first.enabled = !first.enabled;
+        const csrf = decodeURIComponent(getCookie('csrf_token'));
+        const res = await fetch('/admin/alt2', {
+          method: 'PUT', headers: {'Content-Type':'application/json', 'If-Match': lastAlt2Etag, 'X-CSRF-Token': csrf},
+          body: JSON.stringify({week: lastAlt2.week, items: [first]})
+        });
+        $('alt2Status').textContent = `${res.ok ? 'OK' : 'Error'} (${res.status})`;
+        await loadAlt2();
+      }
+
+      $('btnLogin').addEventListener('click', loginAdmin);
+      $('btnLoadDepts').addEventListener('click', loadDepts);
+      $('btnDepts304').addEventListener('click', depts304);
+      $('btnRename').addEventListener('click', renameFirst);
+      $('btnLoadAlt2').addEventListener('click', loadAlt2);
+      $('btnAlt2304').addEventListener('click', alt2_304);
+      $('btnAlt2Idem').addEventListener('click', alt2_idem);
+      $('btnAlt2Toggle').addEventListener('click', alt2_toggle);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+# Ruff configuration (baseline minimal)
+# This keeps existing style deviations from blocking CI after enabling Ruff.
+line-length = 100
+select = ["E","F","I","B","Q","UP","SIM"]
+ignore = [
+  # Allow existing unsorted imports, large diff avoidance
+  "I001",
+  # Allow existing quoting style (single quotes)
+  "Q000",
+]

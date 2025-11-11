@@ -1,0 +1,16 @@
+name: staging-smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PowerShell
+        uses: PowerShell/PowerShell@v1
+        with:
+          version: 'latest'
+      - name: Run smoke against staging
+        run: pwsh -File scripts/smoke.ps1 -BaseUrl https://yuplan-unified-staging.fly.dev -SiteId 5f8e2aea-9060-4981-9686-c70dbc723a11 -Week 51
