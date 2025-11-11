@@ -55,8 +55,8 @@ if (-not $SiteId) {
     $headers2 = @{ 'If-Match'=$ifMatch; 'X-CSRF-Token'=$csrf; 'Content-Type'='application/json' }
     $newName = "Dept (smoke)"
     $body2 = (@{ name=$newName } | ConvertTo-Json -Compress)
-    $resPut = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments/$($first.id)" -WebSession $session -Method Put -Headers $headers2 -Body $body2 -ErrorAction SilentlyContinue
-    if ($resPut.StatusCode -lt 200 -or $resPut.StatusCode -ge 300) { throw "rename_failed_$($resPut.StatusCode)" }
+  $resPut = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments/$($first.id)" -WebSession $session -Method Put -Headers $headers2 -Body $body2 -SkipHttpErrorCheck
+  if ($resPut.StatusCode -lt 200 -or $resPut.StatusCode -ge 300) { throw "rename_failed_$($resPut.StatusCode)" }
     Write-Host "Department PUT OK (If-Match)" -ForegroundColor Green
     # 2c) GET again -> collection ETag must bump
     $res2 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId" -WebSession $session -Method Get
@@ -89,7 +89,7 @@ try {
   # 3b) Idempotent PUT
   $headers3 = @{ 'If-Match'=$alt2Etag; 'X-CSRF-Token'=$csrf; 'Content-Type'='application/json' }
   $body3 = (@{ week=$Week; items=$alt2.items } | ConvertTo-Json -Compress)
-  $res3 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2" -WebSession $session -Method Put -Headers $headers3 -Body $body3 -ErrorAction SilentlyContinue
+  $res3 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2" -WebSession $session -Method Put -Headers $headers3 -Body $body3 -SkipHttpErrorCheck
   if ($res3.StatusCode -lt 200 -or $res3.StatusCode -ge 300) { throw "alt2_idem_failed_$($res3.StatusCode)" }
   Write-Host "Alt2 PUT idempotent OK" -ForegroundColor Green
   # ETag should remain the same after idempotent update
@@ -103,7 +103,7 @@ try {
     $first = $alt2.items[0]
     $first.enabled = -not [bool]$first.enabled
   $body4 = (@{ week=$Week; items=@($first) } | ConvertTo-Json -Compress)
-    $res4 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2" -WebSession $session -Method Put -Headers $headers3 -Body $body4 -ErrorAction SilentlyContinue
+  $res4 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/alt2" -WebSession $session -Method Put -Headers $headers3 -Body $body4 -SkipHttpErrorCheck
     if ($res4.StatusCode -lt 200 -or $res4.StatusCode -ge 300) { throw "alt2_toggle_failed_$($res4.StatusCode)" }
     Write-Host "Alt2 PUT toggle OK" -ForegroundColor Green
     # ETag should change after toggle
