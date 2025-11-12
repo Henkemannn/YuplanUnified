@@ -411,8 +411,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(turnus_api_bp)
     app.register_blueprint(admin_api_bp)
     try:
-        from .menu_choice_api import bp as menu_choice_bp
+        from .menu_choice_api import bp as menu_choice_bp, public_bp as menu_choice_public_bp
+        # Internal/admin-scoped endpoints
         app.register_blueprint(menu_choice_bp)
+        # Public alias (documented path)
+        app.register_blueprint(menu_choice_public_bp)
     except Exception:
         pass
     app.register_blueprint(admin_audit_bp)
@@ -1989,7 +1992,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         }
 
         # --- Pass B: Menu Choice (Alt1/Alt2) per department/week ---
-        spec["paths"]["/admin/menu-choice"] = {
+        # Publicly documented path
+        spec["paths"]["/menu-choice"] = {
             "get": {
                 "summary": "Get menu choice days for department/week",
                 "parameters": [

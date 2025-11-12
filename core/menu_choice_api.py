@@ -25,20 +25,21 @@ _REV_DAY_MAP = {v: k for k, v in _DAY_MAP.items()}
 _WEEKEND = {6, 7}
 
 
-def _current_version(department_id: str, week: int) -> int:
-    db = get_session()
-    try:
-        row = db.execute(
-            # max version across alt2_flags rows for this dept+week
-            # table created implicitly by Alt2Repo operations if needed
-            # returns 0 if no rows
-            # noqa: E501
-            "SELECT COALESCE(MAX(version),0) FROM alt2_flags WHERE department_id=:d AND week=:w",
-            {"d": department_id, "w": int(week)},
-        ).fetchone()
-        return int(row[0]) if row and row[0] is not None else 0
-    finally:
-        db.close()
+def _current_signature(department_id: str, week: int) -> int:
+    """Compute a deterministic integer signature for dept/week menu-choice.
+
+    Bitmask (1..7 -> mon..sun) with bit set when Alt2 is enabled for that day.
+    Default (no rows or all disabled) -> 0. Any change to choices changes signature.
+    """
+    repo = Alt2Repo()
+    rows = repo.list_for_department_week(department_id, week)
+    sig = 0
+    for r in rows:
+        if bool(r.get("enabled")):
+            day = int(r.get("weekday") or 0)
+            if 1 <= day <= 7:
+                sig |= 1 << (day - 1)
+    return sig
 
 
 def _make_coll_etag(department_id: str, week: int, version: int) -> str:
@@ -59,7 +60,7 @@ def get_menu_choice():  # type: ignore[return-value]
         return bad_request("department query param required")
 
     repo = Alt2Repo()
-    rows = [r for r in repo.list_for_week(week) if r["department_id"] == department_id]
+    rows = repo.list_for_department_week(department_id, week)
     # Build days mapping; default Alt1
     days: dict[str, str] = {v: "Alt1" for v in _DAY_MAP.values()}
     for r in rows:
@@ -67,7 +68,7 @@ def get_menu_choice():  # type: ignore[return-value]
             day_key = _DAY_MAP.get(int(r["weekday"]))
             if day_key:
                 days[day_key] = "Alt2"
-    version = _current_version(department_id, week)
+    version = _current_signature(department_id, week)
     etag = _make_coll_etag(department_id, week, version)
     if_none = request.headers.get("If-None-Match")
     if if_none and etag in [p.strip() for p in if_none.split(",") if p.strip()]:
@@ -113,6 +114,7 @@ def put_menu_choice():  # type: ignore[return-value]
             week=week,
             department=department_id,
             day=day,
+            instance="/menu-choice",
         )
 
     # Concurrency (If-Match)
@@ -121,7 +123,7 @@ def put_menu_choice():  # type: ignore[return-value]
     if version is None or ns != "admin" or kind != "menu-choice" or ident != f"{department_id}:{week}":
         from .http_errors import problem as _pb
         return _pb(412, "etag_mismatch", "Precondition Failed", "etag_mismatch")
-    current_v = _current_version(department_id, week)
+    current_v = _current_signature(department_id, week)
     if version != current_v:
         from .http_errors import problem as _pb
         cur_etag = _make_coll_etag(department_id, week, current_v)
@@ -162,7 +164,7 @@ def put_menu_choice():  # type: ignore[return-value]
             }
         ]
     )
-    new_version = _current_version(department_id, week)
+    new_version = _current_signature(department_id, week)
     new_etag = _make_coll_etag(department_id, week, new_version)
     from flask import Response
     resp = Response(status=204)
@@ -170,4 +172,17 @@ def put_menu_choice():  # type: ignore[return-value]
     return resp
 
 
-__all__ = ["bp"]
+# Public alias blueprint exposing same handlers at /menu-choice (no /admin prefix)
+public_bp = Blueprint("menu_choice_public", __name__)
+
+@public_bp.get("/menu-choice")
+@require_roles("admin", "editor")
+def public_get_menu_choice():  # type: ignore[return-value]
+    return get_menu_choice()
+
+@public_bp.put("/menu-choice")
+@require_roles("admin", "editor")
+def public_put_menu_choice():  # type: ignore[return-value]
+    return put_menu_choice()
+
+__all__ = ["bp", "public_bp"]
