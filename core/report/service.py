@@ -38,8 +38,10 @@ class ReportService:
         residents = self.repo.get_residents(tenant_id, year, week, department_id)
         marks = self.repo.get_marks(tenant_id, year, week, department_id)
         # Aggregate per dept -> meal
-    depts: dict[str, dict[str, dict[str, int]]] = defaultdict(lambda: {"lunch": defaultdict(int), "dinner": defaultdict(int)})
-    residents_totals: dict[tuple[str, str], int] = defaultdict(int)  # (dept, meal) -> total
+        depts: dict[str, dict[str, dict[str, int]]] = defaultdict(
+            lambda: {"lunch": defaultdict(int), "dinner": defaultdict(int)}
+        )
+        residents_totals: dict[tuple[str, str], int] = defaultdict(int)  # (dept, meal) -> total
         for r in residents:
             key = (r["department_id"], r["meal"])
             residents_totals[key] += int(r["count"]) if r["count"] is not None else 0
@@ -52,13 +54,18 @@ class ReportService:
             meal = m["meal"]
             depts[dep][meal][diet] += 1
         # Build departments section
-    department_ids: Iterable[str] = versions_map.keys() if department_id is None else ([department_id] if department_id else [])
+        department_ids: Iterable[str] = (
+            versions_map.keys() if department_id is None else ([department_id] if department_id else [])
+        )
         if not department_ids and not department_id:
             # If querying all but there are no versions, still produce empty list and zero totals
             department_ids = []
         meta = self.repo.get_dept_meta(tenant_id, department_ids)
         departments = []
-        totals_meals = {"lunch": {"normal": 0, "specials": defaultdict(int), "total": 0}, "dinner": {"normal": 0, "specials": defaultdict(int), "total": 0}}
+        totals_meals = {
+            "lunch": {"normal": 0, "specials": defaultdict(int), "total": 0},
+            "dinner": {"normal": 0, "specials": defaultdict(int), "total": 0},
+        }
         for dep in department_ids:
             lunch_specials = dict(depts[dep]["lunch"]) if dep in depts else {}
             dinner_specials = dict(depts[dep]["dinner"]) if dep in depts else {}

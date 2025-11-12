@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Iterable, Sequence
+from typing import Iterable
 
 from sqlalchemy import text
 
@@ -562,8 +562,6 @@ class Alt2Repo:
             ]
         finally:
             db.close()
-
-feat/menu-choice-pass-b
     def department_version(self, week: int, department_id: str) -> int:
         """Return max version for a department's week flags (0 if none)."""
         db = get_session()
@@ -635,6 +633,3 @@ feat/menu-choice-pass-b
             ]
         finally:
             db.close()
-
-
- master

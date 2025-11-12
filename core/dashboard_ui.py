@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, session, redirect, g, current_app, request
+from flask import Blueprint, render_template, session, redirect, g, current_app
 from .http_errors import forbidden, not_found
 
 bp = Blueprint("dashboard_ui", __name__)
