@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Admin API
   version: 1.9.0
-  description: Admin module endpoints (Phase B+C+D)
+  description: Admin module endpoints (merged when OPENAPI_INCLUDE_PARTS=1)
 tags:
   - name: admin
 paths:
@@ -10,7 +10,6 @@ paths:
     get:
       tags: [admin]
       summary: Get system statistics (admin/editor)
-      security: [ { BearerAuth: [] } ]
       parameters:
         - in: query
           name: year
@@ -35,9 +34,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdminStats'
         '304': { description: 'Empty body; ETag echoed' }
-        '400': { description: Bad Request }
-        '403': { description: Forbidden }
-        '404': { description: Admin module disabled }
 
   /api/admin/sites:
     get:
@@ -442,18 +438,6 @@ components:
       properties:
         id: { type: string }
         name: { type: string }
-    Site:
-      type: object
-      required: [id, name]
-      properties:
-        id: { type: string }
-        name: { type: string }
-        version: { type: integer }
-    CreateSiteRequest:
-      type: object
-      required: [name]
-      properties:
-        name: { type: string }
     Department:
       type: object
       required: [id, name, site_id, resident_count_mode]
@@ -479,11 +463,6 @@ components:
         name: { type: string }
         resident_count_mode: { type: string, enum: [fixed, per_day_meal] }
         resident_count_fixed: { type: integer, nullable: true }
-    UpdateDepartmentNotesRequest:
-      type: object
-      required: [notes]
-      properties:
-        notes: { type: string, nullable: true }
     UpdateDietDefaultsRequest:
       type: object
       required: [items]
@@ -492,6 +471,7 @@ components:
           type: array
           items:
             type: object
+            required: [diet_type_id, default_count]
             properties:
               diet_type_id: { type: string }
               default_count: { type: integer }
@@ -524,21 +504,6 @@ components:
               weekday: { type: integer }
               enabled: { type: boolean }
               etag: { type: string }
-      type: object
-      required: [week, items]
-      properties:
-        week: { type: integer }
-        items:
-          type: array
-          items: { $ref: '#/components/schemas/Alt2FlagResult' }
-    Alt2FlagResult:
-      type: object
-      required: [department_id, weekday, enabled, etag]
-      properties:
-        department_id: { type: string }
-        weekday: { type: integer }
-        enabled: { type: boolean }
-        etag: { type: string }openapi: 3.0.3
 info:
   title: Admin API (Phase A)
   version: 0.1.0

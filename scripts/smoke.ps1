@@ -70,8 +70,9 @@ if (-not $SiteId) {
     if (-not $newEtag) { throw 'no_new_depts_etag' }
     if ($newEtag -eq $deptsEtag) { throw "collection_etag_not_bumped" }
     Write-Host "Departments ETag bumped: $newEtag" -ForegroundColor Green
-    # 2d) Conditional GET with stale ETag -> 200
-    $res200 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId" -WebSession $session -Method Get -Headers @{ 'If-None-Match'=$deptsEtag } -ErrorAction SilentlyContinue
+  # 2d) Conditional GET with stale ETag -> 200
+  # Use -SkipHttpErrorCheck to avoid non-terminating Write-Error when a proxy or race returns 304; we'll assert status explicitly.
+  $res200 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId" -WebSession $session -Method Get -Headers @{ 'If-None-Match'=$deptsEtag } -SkipHttpErrorCheck
     if ($res200.StatusCode -ne 200) { throw "expected_200_with_stale_got_$($res200.StatusCode)" }
     Write-Host "Departments stale ETag => 200 OK" -ForegroundColor Green
   } catch {

@@ -29,8 +29,23 @@ def _render_demo_index():
     """Render the demo index page with safe fallback on errors."""
     staging_demo = os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes")
     demo_ui_enabled = os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes")
+    # Cache-busting token for static assets (read VERSION if present)
+    asset_version = "dev"
     try:
-        return render_template("demo_admin.html", staging_demo=staging_demo, demo_ui_enabled=demo_ui_enabled)
+        from flask import current_app as _ca
+        ver_path = os.path.join(_ca.root_path, "VERSION")
+        if os.path.exists(ver_path):
+            with open(ver_path, "r", encoding="utf-8") as f:
+                asset_version = f.read().strip() or asset_version
+    except Exception:
+        pass
+    try:
+        return render_template(
+            "demo_admin.html",
+            staging_demo=staging_demo,
+            demo_ui_enabled=demo_ui_enabled,
+            asset_version=asset_version,
+        )
     except Exception:
         try:
             current_app.logger.exception("/demo render failed; serving minimal fallback")

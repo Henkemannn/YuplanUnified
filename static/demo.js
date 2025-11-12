@@ -24,6 +24,15 @@ async function loadDepts(){
   $('deptsEtag').textContent = lastDeptsEtag || '—';
   lastDepts = await res.json();
   renderDepts(lastDepts);
+  // Populate header department select with loaded departments (no extra fetch)
+  const deptSel = $('header-dept-select');
+  if(deptSel){
+    while(deptSel.firstChild) deptSel.removeChild(deptSel.firstChild);
+    const blank = document.createElement('option'); blank.value=''; blank.textContent='—'; deptSel.appendChild(blank);
+    (lastDepts.items||[]).forEach(d=>{
+      const opt = document.createElement('option'); opt.value = d.id; opt.textContent = d.name || d.id; deptSel.appendChild(opt);
+    });
+  }
 }
 function renderDepts(data){
   const rows = (data.items||[]).map((it,i)=>{
@@ -94,58 +103,41 @@ async function alt2_toggle(){
   await loadAlt2();
 }
 
-// Wire up tab switching (no inline JS)
-function activateTab(name){
-  document.querySelectorAll('.tab').forEach(btn=>{
-    const active = btn.getAttribute('data-tab')===name;
-    btn.classList.toggle('tab--active', active);
-    btn.setAttribute('aria-selected', active? 'true':'false');
-    btn.setAttribute('tabindex', active? '0':'-1');
-  });
+// Hash-based routing (replaces tab UI)
+function activateRoute(name){
   document.querySelectorAll('.panel').forEach(sec=>{
     const active = sec.getAttribute('data-panel')===name;
     sec.classList.toggle('panel--active', active);
     if(active){ sec.removeAttribute('hidden'); } else { sec.setAttribute('hidden',''); }
   });
-}
-document.addEventListener('click', (e)=>{
-  const t = e.target;
-  if(t && t.classList && t.classList.contains('tab')){
-    const name = t.getAttribute('data-tab');
-    if(name){
-      activateTab(name);
-    }
-  }
-});
-
-// Initial tab
-activateTab('weekview');
-
-// ARIA keyboard navigation for tabs
-const tablist = document.querySelector('.demo-tabs[role="tablist"]');
-if(tablist){
-  tablist.addEventListener('keydown', (e)=>{
-    const tabs = Array.from(tablist.querySelectorAll('.tab[role="tab"]'));
-    const current = document.activeElement;
-    const idx = tabs.indexOf(current);
-    if(idx < 0) return;
-    let targetIdx = idx;
-    switch(e.key){
-      case 'ArrowLeft': targetIdx = (idx - 1 + tabs.length) % tabs.length; e.preventDefault(); break;
-      case 'ArrowRight': targetIdx = (idx + 1) % tabs.length; e.preventDefault(); break;
-      case 'Home': targetIdx = 0; e.preventDefault(); break;
-      case 'End': targetIdx = tabs.length - 1; e.preventDefault(); break;
-      case 'Enter':
-      case ' ':
-        const name = current.getAttribute('data-tab');
-        if(name){ activateTab(name); }
-        e.preventDefault();
-        return;
-      default: return;
-    }
-    tabs[targetIdx]?.focus();
+  document.querySelectorAll('.app-nav .nav-link').forEach(a=>{
+    const id = a.id || '';
+    const active = (id === `nav-${name}`);
+    a.classList.toggle('active', active);
+    if(active){ a.setAttribute('aria-current','page'); } else { a.removeAttribute('aria-current'); }
   });
 }
+function currentRoute(){ const h=(location.hash||'').replace(/^#/,''); return (['weekview','admin','alt2','report'].includes(h)?h:'weekview'); }
+window.addEventListener('hashchange', ()=> activateRoute(currentRoute()));
+document.addEventListener('DOMContentLoaded', ()=>{
+  const wkSel = $('header-week-select');
+  if(wkSel && wkSel.options.length===0){
+    for(let w=45; w<=55; w++){ const o=document.createElement('option'); o.value=String(w); o.textContent=`v${w}`; wkSel.appendChild(o); }
+    const initW = Number(($('week')?.value)||51); wkSel.value = String(Math.max(1, Math.min(53, initW)));
+  }
+  const deptSel = $('header-dept-select');
+  if(deptSel && deptSel.options.length===0){ const o=document.createElement('option'); o.value=''; o.textContent='—'; deptSel.appendChild(o); }
+  activateRoute(currentRoute());
+});
+
+// Keyboard navigation for side nav
+document.addEventListener('keydown', (e)=>{
+  const nav = document.querySelector('.app-nav'); if(!nav) return;
+  const links = Array.from(nav.querySelectorAll('.nav-link')); if(links.length===0) return;
+  const idx = links.indexOf(document.activeElement); if(idx<0) return;
+  if(e.key==='ArrowDown'){ e.preventDefault(); links[(idx+1)%links.length].focus(); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); links[(idx-1+links.length)%links.length].focus(); }
+});
 
 // Existing event bindings
 const el = (id)=>document.getElementById(id);

@@ -3,18 +3,27 @@
   --yuplan-accent:#82c91e;  /* grön */
   --yuplan-bg:#f8f9fa;      /* ljus bakgrund */
   --yuplan-text:#1f2937;    /* mörk text */
+  --yu-surface:#ffffff;
+  --space:16px;
 }
 *{box-sizing:border-box}
-body{font-family:system-ui, Arial; margin:1.5rem; color:var(--yuplan-text); background:var(--yuplan-bg)}
-.demo-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
-.demo-header .logo{display:flex;align-items:center;gap:.5rem;font-weight:600;color:var(--yuplan-primary)}
-.demo-header .logo #ymark{display:none;place-items:center;width:28px;height:28px;background:var(--yuplan-primary);color:#fff;border-radius:6px;font-weight:700}
-.banner{background:#fff7d6;border:1px solid #e6c200;color:#5c4a00;padding:.5rem 1rem;border-radius:6px;margin-left:auto}
-.demo-tabs{display:flex;gap:.5rem;margin-bottom:1rem}
-.tab{padding:.4rem .8rem;border:1px solid #cfd8e3;border-radius:6px;background:#fff;color:#111;cursor:pointer}
-.tab:focus{outline:3px solid color-mix(in srgb, var(--yuplan-primary) 40%, transparent); outline-offset:2px}
-.tab--active{background:var(--yuplan-primary);color:#fff;border-color:var(--yuplan-primary)}
-.panel{display:none}
+body{font-family:system-ui, Arial; margin:0; color:var(--yuplan-text); background:var(--yuplan-bg)}
+/* App layout */
+.app{min-height:100dvh; background:var(--yuplan-bg); display:flex; flex-direction:column}
+.app-header{position:sticky; top:0; z-index:10; display:flex; align-items:center; justify-content:space-between; padding:var(--space); background:var(--yu-surface); box-shadow:0 2px 10px rgba(2,6,23,.06)}
+.app-header .brand{display:flex;align-items:center;gap:.75rem}
+.app-header .brand .logo{height:40px;width:auto;display:block}
+.app-header .brand #ymark{display:none;place-items:center;width:40px;height:40px;background:var(--yuplan-primary);color:#fff;border-radius:6px;font-weight:700}
+.app-header h1{font-size:18px;margin:0;color:var(--yuplan-primary)}
+.app-header .controls{display:flex;gap:1rem;align-items:center}
+.app-body{display:grid; grid-template-columns: 240px 1fr; gap:0}
+.app-nav{padding:12px; background:transparent}
+.nav-link{display:block; padding:8px 10px; border-radius:8px; color:inherit; text-decoration:none}
+.nav-link:hover{background:#eef6ff}
+.nav-link[aria-current="page"], .nav-link.active{background:var(--yuplan-primary); color:#fff}
+.app-main{padding:var(--space)}
+section[hidden]{display:none}
+.panel{display:block}
 .panel--active{display:block}
 .row{display:flex;gap:1.5rem;flex-wrap:wrap}
 .card{flex:1 1 420px;border:1px solid #ddd;border-radius:8px;padding:1rem;background:#fff}

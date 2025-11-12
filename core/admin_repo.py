@@ -254,6 +254,20 @@ class DepartmentsRepo:
             if expected_version is None:
                 raise ConcurrencyError("missing version")
             # ensure department exists & optimistic concurrency check by bumping version at the end
+            # SQLite test/dev fallback: ensure table exists (mirrors create_all bootstrap semantics)
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS department_diet_defaults (
+                            department_id TEXT NOT NULL,
+                            diet_type_id TEXT NOT NULL,
+                            default_count INTEGER NOT NULL DEFAULT 0,
+                            PRIMARY KEY (department_id, diet_type_id)
+                        )
+                        """
+                    )
+                )
             for it in items:
                 diet_type_id = str(it["diet_type_id"]).strip()
                 default_count = int(it["default_count"])
@@ -438,7 +452,7 @@ class Alt2Repo:
                             INSERT INTO alt2_flags(site_id, department_id, week, weekday, enabled)
                             VALUES(:site_id, :department_id, :week, :weekday, :enabled)
                             ON CONFLICT(site_id, department_id, week, weekday)
-                            DO UPDATE SET enabled=EXCLUDED.enabled, updated_at=now()
+                            DO UPDATE SET enabled=EXCLUDED.enabled, version=alt2_flags.version+1, updated_at=now()
                             WHERE alt2_flags.enabled IS DISTINCT FROM EXCLUDED.enabled
                             """
                         ),
