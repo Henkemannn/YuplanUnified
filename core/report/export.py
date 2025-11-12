@@ -3,19 +3,19 @@ from __future__ import annotations
 import csv
 import io
 import json
-from typing import Dict, Any, List
+from typing import Any
 
 try:
-    from openpyxl import Workbook  # type: ignore
+    from openpyxl import Workbook
 except Exception:  # pragma: no cover - tests run with openpyxl installed per requirements
-    Workbook = None  # type: ignore
+    Workbook = None
 
 
-def _specials_json(obj: Dict[str, int]) -> str:
+def _specials_json(obj: dict[str, int]) -> str:
     return json.dumps({k: int(v) for k, v in sorted((obj or {}).items())}, separators=(",", ":"))
 
 
-def build_csv(report_payload: Dict[str, Any]) -> bytes:
+def build_csv(report_payload: dict[str, Any]) -> bytes:
     buf = io.StringIO(newline="")
     w = csv.writer(buf)
     # departments section
@@ -50,7 +50,7 @@ def build_csv(report_payload: Dict[str, Any]) -> bytes:
     return buf.getvalue().encode("utf-8")
 
 
-def build_xlsx(report_payload: Dict[str, Any]) -> bytes:
+def build_xlsx(report_payload: dict[str, Any]) -> bytes:
     if Workbook is None:  # pragma: no cover
         raise RuntimeError("openpyxl is required for XLSX export")
     wb = Workbook()

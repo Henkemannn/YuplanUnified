@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from flask import Blueprint, Response, current_app, jsonify, request, session, g, make_response
 
 from .auth import require_roles
-from .http_errors import bad_request, not_found, forbidden, problem
+from .http_errors import bad_request, not_found, problem
 from .weekview.service import WeekviewService, EtagMismatchError
 
 bp = Blueprint("weekview_api", __name__, url_prefix="/api")

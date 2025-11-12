@@ -66,6 +66,15 @@ td,th{border:1px solid #ccc;padding:.25rem .5rem}
 /* Weekview wrapper class (added dynamically) */
 .weekview .badge.alt2-active{background:rgba(255,200,80,.25);outline:1px solid rgba(255,200,80,.6);}
 
+/* Weekview grid + skeleton */
+.weekview{display:grid;gap:8px}
+.weekview-row{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.cell{min-height:44px; display:grid; place-items:center; border:1px solid #e5e7eb; border-radius:8px; background:#fff}
+.cell .badge{will-change:background}
+.cell.skel{background:repeating-linear-gradient(135deg,#f8fafc,#f8fafc 6px,#f1f5f9 6px,#f1f5f9 12px)}
+.cell:focus-visible{outline:2px solid color-mix(in oklab, var(--yuplan-primary) 60%, transparent); outline-offset:2px}
+.cell-content{display:inline-block; width:100%; text-align:center; opacity:.5}
+
 /* Flash banner */
 .flash{padding:.5rem .75rem;border-radius:8px;background:#fff8e1;border:1px solid #ffe29b;font-size:.9rem;margin:.5rem 0;animation:fadeIn .25s ease}
 .flash.flash-ok{background:#e6ffed;border-color:#b2f2bb}

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Sequence
-
-from .models import WeekView
+from typing import Sequence
 from .repo import WeekviewRepo
 
 
 class WeekviewService:
-    def __init__(self, repo: Optional[WeekviewRepo] = None) -> None:
+    def __init__(self, repo: WeekviewRepo | None = None) -> None:
         self.repo = repo or WeekviewRepo()
 
     def resolve(self, site: str, department_id: str, date: str) -> dict:
@@ -19,7 +17,7 @@ class WeekviewService:
         # Weak ETag format per spec
         return f'W/"weekview:dept:{department_id}:year:{year}:week:{week}:v{version}"'
 
-    def fetch_weekview(self, tenant_id: int | str, year: int, week: int, department_id: Optional[str]) -> tuple[dict, str]:
+    def fetch_weekview(self, tenant_id: int | str, year: int, week: int, department_id: str | None) -> tuple[dict, str]:
         dep = department_id or "__none__"
         version = 0 if not department_id else self.repo.get_version(tenant_id, year, week, department_id)
         payload = self.repo.get_weekview(tenant_id, year, week, department_id)
