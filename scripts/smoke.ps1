@@ -65,7 +65,13 @@ if (-not $SiteId) {
     }
     Write-Host "Department PUT OK (If-Match)" -ForegroundColor Green
     # 2c) GET again -> collection ETag must bump
-    $res2 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId" -WebSession $session -Method Get
+    # Use cache-busting query to avoid rare intermediary 304s
+    $cb = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+    $res2 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId&_=$cb" -WebSession $session -Method Get -SkipHttpErrorCheck
+    if ($res2.StatusCode -eq 304) {
+      # Fallback: retry without cache using no-cache header
+      $res2 = Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/admin/departments?site_id=$SiteId&_=$cb" -WebSession $session -Method Get -Headers @{ 'Cache-Control'='no-cache' } -SkipHttpErrorCheck
+    }
     $newEtag = $res2.Headers['ETag']
     if (-not $newEtag) { throw 'no_new_depts_etag' }
     if ($newEtag -eq $deptsEtag) { throw "collection_etag_not_bumped" }
