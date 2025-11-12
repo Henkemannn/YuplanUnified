@@ -563,3 +563,78 @@ class Alt2Repo:
         finally:
             db.close()
 
+feat/menu-choice-pass-b
+    def department_version(self, week: int, department_id: str) -> int:
+        """Return max version for a department's week flags (0 if none)."""
+        db = get_session()
+        try:
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS alt2_flags (
+                            site_id TEXT NOT NULL,
+                            department_id TEXT NOT NULL,
+                            week INTEGER NOT NULL,
+                            weekday INTEGER NOT NULL,
+                            enabled BOOLEAN NOT NULL DEFAULT 0,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            updated_at TEXT,
+                            PRIMARY KEY (site_id, department_id, week, weekday)
+                        )
+                        """
+                    )
+                )
+            row = db.execute(
+                text(
+                    "SELECT COALESCE(MAX(version),0) FROM alt2_flags WHERE department_id=:d AND week=:w"
+                ),
+                {"d": str(department_id), "w": int(week)},
+            ).fetchone()
+            return int(row[0]) if row and row[0] is not None else 0
+        finally:
+            db.close()
+
+    def list_for_department_week(self, department_id: str, week: int) -> list[dict]:
+        """List alt2 flags for a specific department and week."""
+        db = get_session()
+        try:
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS alt2_flags (
+                            site_id TEXT NOT NULL,
+                            department_id TEXT NOT NULL,
+                            week INTEGER NOT NULL,
+                            weekday INTEGER NOT NULL,
+                            enabled BOOLEAN NOT NULL DEFAULT 0,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            updated_at TEXT,
+                            PRIMARY KEY (site_id, department_id, week, weekday)
+                        )
+                        """
+                    )
+                )
+            rows = db.execute(
+                text(
+                    "SELECT site_id, department_id, week, weekday, enabled, COALESCE(version,0) FROM alt2_flags WHERE department_id=:d AND week=:w ORDER BY weekday"
+                ),
+                {"d": str(department_id), "w": int(week)},
+            ).fetchall()
+            return [
+                {
+                    "site_id": r[0],
+                    "department_id": r[1],
+                    "week": int(r[2]),
+                    "weekday": int(r[3]),
+                    "enabled": bool(r[4]),
+                    "version": int(r[5] or 0),
+                }
+                for r in rows
+            ]
+        finally:
+            db.close()
+
+
+ master

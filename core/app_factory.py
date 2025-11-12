@@ -104,6 +104,15 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- Feature flags ---
     feature_registry = FeatureRegistry()
+feat/menu-choice-pass-b
+    # Ensure ff.admin.enabled present for tests / staging convenience
+    if not feature_registry.has("ff.admin.enabled"):
+        feature_registry.add("ff.admin.enabled")
+    # Auto-enable admin module when running under TESTING or simple staging auth flag.
+    try:
+        if app.config.get("TESTING") or os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
+            feature_registry.set("ff.admin.enabled", True)
+
     # Enable admin module by default in staging/demo environments when simple auth flag is on.
     try:
         if os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
@@ -112,6 +121,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 feature_registry.add("ff.admin.enabled")
             else:
                 feature_registry.set("ff.admin.enabled", True)
+ master
     except Exception:
         pass
     # Expose for tests manipulating registry directly
@@ -410,6 +420,14 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(diet_api_bp)
     app.register_blueprint(turnus_api_bp)
     app.register_blueprint(admin_api_bp)
+    try:
+        from .menu_choice_api import bp as menu_choice_bp, public_bp as menu_choice_public_bp
+        # Internal/admin-scoped endpoints
+        app.register_blueprint(menu_choice_bp)
+        # Public alias (documented path)
+        app.register_blueprint(menu_choice_public_bp)
+    except Exception:
+        pass
     app.register_blueprint(admin_audit_bp)
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
@@ -1766,7 +1784,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
+ feat/menu-choice-pass-b
+    # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
+
         # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
+ master
         spec["paths"]["/api/weekview"] = {
             "get": {
                 "tags": ["weekview"],
@@ -1939,7 +1961,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
+ feat/menu-choice-pass-b
+    # Alt2 flags mutation
+
         # Alt2 flags mutation
+ master
         spec["paths"]["/api/weekview/alt2"] = {
             "patch": {
                 "tags": ["weekview"],
@@ -1982,6 +2008,71 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
+ feat/menu-choice-pass-b
+
+        # --- Pass B: Menu Choice (Alt1/Alt2) per department/week ---
+        # Publicly documented path
+        spec["paths"]["/menu-choice"] = {
+            "get": {
+                "summary": "Get menu choice days for department/week",
+                "parameters": [
+                    {"name": "week", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    {"name": "department", "in": "query", "required": True, "schema": {"type": "string"}},
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "headers": {"ETag": {"schema": {"type": "string"}}},
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["week", "department", "days"],
+                                    "properties": {
+                                        "week": {"type": "integer"},
+                                        "department": {"type": "string"},
+                                        "days": {
+                                            "type": "object",
+                                            "additionalProperties": {"type": "string", "enum": ["Alt1", "Alt2"]},
+                                        },
+                                    },
+                                }
+                            }
+                        },
+                    }
+                },
+            },
+            "put": {
+                "summary": "Set menu choice for a single day (requires If-Match)",
+                "parameters": [
+                    {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}},
+                ],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["week", "department", "day", "choice"],
+                                "properties": {
+                                    "week": {"type": "integer"},
+                                    "department": {"type": "string"},
+                                    "day": {"type": "string", "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
+                                    "choice": {"type": "string", "enum": ["Alt1", "Alt2"]},
+                                },
+                            }
+                        }
+                    },
+                },
+                "responses": {
+                    "204": {"description": "Updated"},
+                    "412": {"description": "Precondition Failed"},
+                    "422": {"description": "Alt2 not permitted on weekends"},
+                },
+            },
+        }
+
+ master
     # --- Report Paths (Phase A: read-only aggregation + conditional GET) ---
         spec["paths"]["/api/report"] = {
             "get": {

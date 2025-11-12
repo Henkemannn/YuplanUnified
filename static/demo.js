@@ -5,7 +5,12 @@ function getCookie(name){
 function etagStrongOrWeak(et){ return et && et.startsWith('W/') ? et : et }
 
 let lastDepts = null, lastDeptsEtag = null; // {site_id, items}
+ feat/menu-choice-pass-b
+let lastAlt2 = null, lastAlt2Etag = null;   // legacy alt2 demo
+let lastMenuChoice = null, lastMenuChoiceEtag = null; // {week, department, days}
+
 let lastAlt2 = null, lastAlt2Etag = null;   // {week, items}
+ master
 let lastReportJson = null, lastReportWeek = null;
 const demoUiEnabled = (document.body?.dataset?.demoUi === '1');
 
@@ -117,8 +122,18 @@ function activateRoute(name){
     if(active){ a.setAttribute('aria-current','page'); } else { a.removeAttribute('aria-current'); }
   });
 }
+ feat/menu-choice-pass-b
+function currentRoute(){
+  const h=(location.hash||'').replace(/^#/,'');
+  // alias legacy #alt2 -> #menyval
+  if(h==='alt2') return 'menyval';
+  return (['weekview','admin','menyval','report','alt2'].includes(h)?h:'weekview');
+}
+window.addEventListener('hashchange', ()=> { const r=currentRoute(); activateRoute(r); if(r==='menyval') loadMenuChoice(); });
+
 function currentRoute(){ const h=(location.hash||'').replace(/^#/,''); return (['weekview','admin','alt2','report'].includes(h)?h:'weekview'); }
 window.addEventListener('hashchange', ()=> activateRoute(currentRoute()));
+ master
 document.addEventListener('DOMContentLoaded', ()=>{
   const wkSel = $('header-week-select');
   if(wkSel && wkSel.options.length===0){
@@ -128,6 +143,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const deptSel = $('header-dept-select');
   if(deptSel && deptSel.options.length===0){ const o=document.createElement('option'); o.value=''; o.textContent='—'; deptSel.appendChild(o); }
   activateRoute(currentRoute());
+ feat/menu-choice-pass-b
+  // Initial auto-load menu choice if header has selections
+  maybeAutoLoadMenuChoice();
+
+ master
 });
 
 // Keyboard navigation for side nav
@@ -153,9 +173,13 @@ el('btnAlt2Toggle')?.addEventListener('click', alt2_toggle);
 // Fallback for logo if image fails (no inline onerror to satisfy CSP)
 (() => {
   const img = document.getElementById('ylogo');
+ feat/menu-choice-pass-b
+  // inline SVG now; fallback not required
+
   const mark = document.getElementById('ymark');
   if(!img || !mark) return;
   img.addEventListener('error', ()=>{ mark.style.display='grid'; img.style.display='none'; });
+ master
 })();
 
 // --- Report summary ---
@@ -291,3 +315,162 @@ function csvEscape(v){ return '"' + String(v ?? '').replace(/"/g,'""') + '"'; }
 
 // Escape HTML used in ETag badge
 // (duplicate guard) already defined above for cards; reused for ETag badge
+ feat/menu-choice-pass-b
+
+// --- Menyval (Pass B UI) ---
+function onHeaderStateChange(){
+  // Called when week or department header selects change
+  if(currentRoute()==='menyval'){
+    loadMenuChoice();
+  }
+  updateWeekviewAlt2Highlight();
+}
+
+// Attach listeners to header selects
+document.getElementById('header-week-select')?.addEventListener('change', onHeaderStateChange);
+document.getElementById('header-dept-select')?.addEventListener('change', onHeaderStateChange);
+
+async function loadMenuChoice(){
+  const weekSel = document.getElementById('header-week-select');
+  const deptSel = document.getElementById('header-dept-select');
+  if(!weekSel || !deptSel) return;
+  const w = Number(weekSel.value||'');
+  const dept = deptSel.value||'';
+  if(!w||w<1||w>53||!dept){ renderMenuChoicePlaceholder('Välj vecka och avdelning.'); return; }
+  const hdrs = {};
+  if(lastMenuChoiceEtag) hdrs['If-None-Match'] = lastMenuChoiceEtag;
+  try{
+    const res = await fetch(`/menu-choice?week=${w}&department=${encodeURIComponent(dept)}`);
+    if(res.status===304){ setStatus('menyvalStatus', 'Oförändrad (304)'); return; }
+    if(!res.ok){ setStatus('menyvalStatus', `Fel vid laddning (${res.status})`); return; }
+    lastMenuChoiceEtag = res.headers.get('ETag');
+    document.getElementById('menyvalEtag').textContent = lastMenuChoiceEtag || '—';
+    lastMenuChoice = await res.json();
+    renderMenuChoice(lastMenuChoice);
+    setStatus('menyvalStatus', 'Laddad');
+    updateWeekviewAlt2Highlight();
+  }catch(e){ setStatus('menyvalStatus', 'Nätverksfel'); }
+}
+
+function renderMenuChoicePlaceholder(msg){
+  const box = document.getElementById('menyvalControls');
+  if(box) box.innerHTML = `<div class="muted">${escapeHtml(msg)}</div>`;
+  document.getElementById('menyvalEtag').textContent = '—';
+}
+
+function renderMenuChoice(data){
+  const box = document.getElementById('menyvalControls'); if(!box) return;
+  const days = data?.days || {}; // {mon:"Alt1"|"Alt2", ...}
+  const order = ['mon','tue','wed','thu','fri','sat','sun'];
+  const labels = {mon:'Mån',tue:'Tis',wed:'Ons',thu:'Tors',fri:'Fre',sat:'Lör',sun:'Sön'};
+  box.innerHTML = order.map(day=>{
+    const choice = days[day]||'Alt1';
+    const weekend = (day==='sat'||day==='sun');
+    const alt2Allowed = !weekend; // per brief
+    const alt1Pressed = choice==='Alt1';
+    const alt2Pressed = choice==='Alt2';
+    const alt2Disabled = weekend; // weekend -> disabled + tooltip
+    const tooltipAlt2 = alt2Disabled? 'Alt 2 är endast tillåtet måndag–fredag.' : 'Visar alternativt menyval för dagen.';
+    return `<div class="day-control" data-day="${day}">
+      <span class="day-label">${labels[day]}</span>
+      <div class="segmented" role="group" aria-label="${labels[day]} menyval">
+        <button type="button" class="seg-btn" data-choice="Alt1" aria-pressed="${alt1Pressed}" ${alt1Pressed?'':'aria-describedby="menyvalHelp"'} title="Alt 1 är standardvalet.">${'Alt 1'}</button>
+        <button type="button" class="seg-btn" data-choice="Alt2" aria-pressed="${alt2Pressed}" ${alt2Disabled?'disabled':''} title="${escapeHtml(tooltipAlt2)}">${'Alt 2'}</button>
+      </div>
+    </div>`;
+  }).join('');
+  // Bind events
+  box.querySelectorAll('.day-control .seg-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const day = btn.closest('.day-control')?.dataset?.day;
+      const choice = btn.dataset.choice;
+      if(!day||!choice) return;
+      putMenuChoice(day, choice);
+    });
+    btn.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter' || e.key===' '){ e.preventDefault(); btn.click(); }
+    });
+  });
+}
+
+async function putMenuChoice(day, choice){
+  if(!lastMenuChoice || !lastMenuChoiceEtag){ setStatus('menyvalStatus','Ladda först'); return; }
+  const csrf = decodeURIComponent(getCookie('csrf_token'));
+  const body = {week:lastMenuChoice.week, department:lastMenuChoice.department, day, choice};
+  try{
+    const res = await fetch('/menu-choice', {
+      method:'PUT', headers:{'Content-Type':'application/json','If-Match':lastMenuChoiceEtag,'X-CSRF-Token':csrf}, body:JSON.stringify(body)
+    });
+    if(res.status===204){
+      // Refresh to pick up new ETag
+      await loadMenuChoice();
+      flash('menyvalFlash','Uppdaterad', 'ok');
+    } else if(res.status===412){
+      // Precondition failed; try extract current_etag
+      try{ const j=await res.json(); if(j.current_etag){ lastMenuChoiceEtag=j.current_etag; document.getElementById('menyvalEtag').textContent = lastMenuChoiceEtag; }
+      }catch(_e){}
+      setPanelStale();
+      flash('menyvalFlash','Uppdaterad version finns – laddar om', 'stale');
+      await loadMenuChoice();
+    } else if(res.status===422){
+      flash('menyvalFlash','Alt 2 är endast tillåtet måndag–fredag.', 'err');
+    } else {
+      flash('menyvalFlash',`Fel (${res.status})`, 'err');
+    }
+  }catch(e){ setStatus('menyvalStatus','Nätverksfel'); }
+}
+
+function setStatus(id,msg){ const el=document.getElementById(id); if(el) el.textContent=msg; }
+
+function maybeAutoLoadMenuChoice(){
+  // Auto-load when both selects have values
+  const w = document.getElementById('header-week-select')?.value;
+  const d = document.getElementById('header-dept-select')?.value;
+  if(w && d){ lastMenuChoice=null; lastMenuChoiceEtag=null; loadMenuChoice(); }
+}
+
+function updateWeekviewAlt2Highlight(){
+  // For now: simple badge list under weekview card
+  const container = document.querySelector('#panel-weekview .card');
+  if(!container) return;
+  let badgeRow = container.querySelector('.weekview-badges');
+  if(!badgeRow){
+    badgeRow = document.createElement('div');
+    badgeRow.className='weekview-badges';
+    container.appendChild(badgeRow);
+  }
+  if(!lastMenuChoice){ badgeRow.innerHTML=''; return; }
+  const days = lastMenuChoice.days||{};
+  const order=['mon','tue','wed','thu','fri','sat','sun'];
+  const labels={mon:'Mån',tue:'Tis',wed:'Ons',thu:'Tors',fri:'Fre',sat:'Lör',sun:'Sön'};
+  badgeRow.innerHTML = order.map(d=>{
+    const alt2 = days[d]==='Alt2';
+    return `<span class="badge ${alt2?'alt2-active':''}" aria-label="${labels[d]} ${alt2?'Alt 2':'Alt 1'}">${labels[d]}</span>`;
+  }).join('');
+}
+
+// End Menyval UI
+
+// Utilities
+function debounce(invoke, wait){
+  let timer=null;
+  return (fn)=>{
+    if(timer) clearTimeout(timer);
+    timer = setTimeout(()=>{ timer=null; invoke(fn); }, wait);
+  };
+}
+function flash(id, msg, kind='ok'){
+  const el=document.getElementById(id); if(!el) return;
+  el.textContent = msg;
+  el.classList.remove('flash-ok','flash-err','flash-stale');
+  el.classList.add('flash', kind==='ok'?'flash-ok':(kind==='err'?'flash-err':'flash-stale'));
+  el.hidden = false;
+  setTimeout(()=>{ el.hidden=true; }, 2000);
+}
+function setPanelStale(){
+  const panel=document.getElementById('panel-menyval'); if(!panel) return;
+  panel.setAttribute('data-status','stale');
+  setTimeout(()=>panel.removeAttribute('data-status'), 2000);
+}
+
+ master
