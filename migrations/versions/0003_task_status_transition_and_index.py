@@ -1,6 +1,6 @@
 """Add tasks.status index and task status transition audit table
 
-Revision ID: 0003_task_status_transition_and_index
+Revision ID: 0003_task_status_idx
 Revises: 0002_add_task_status
 Create Date: 2025-09-30
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers
-revision = "0003_task_status_transition_and_index"
+revision = "0003_task_status_idx"
 down_revision = "0002_add_task_status"
 branch_labels = None
 depends_on = None

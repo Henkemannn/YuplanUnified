@@ -16,10 +16,16 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
-    op.create_table("tenants",
+    conn = op.get_bind()
+    dialect = conn.dialect.name if conn is not None else "sqlite"
+    true_def = sa.text("TRUE") if dialect == "postgresql" else sa.text("1")
+    false_def = sa.text("FALSE") if dialect == "postgresql" else sa.text("0")
+    active_default = true_def
+    op.create_table(
+        "tenants",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("name", sa.String(length=120), nullable=False, unique=True),
-        sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.text("1"))
+        sa.Column("active", sa.Boolean(), nullable=False, server_default=active_default),
     )
     op.create_table("units",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -77,7 +83,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenants.id"), nullable=False),
         sa.Column("name", sa.String(length=120), nullable=False),
-        sa.Column("default_select", sa.Boolean(), server_default=sa.text("0"))
+        sa.Column("default_select", sa.Boolean(), server_default=false_def)
     )
     op.create_table("unit_diet_assignments",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -118,7 +124,7 @@ def upgrade() -> None:
         sa.Column("unit_id", sa.Integer(), sa.ForeignKey("units.id")),
         sa.Column("task_type", sa.String(length=30), nullable=False),
         sa.Column("title", sa.String(length=200), nullable=False),
-        sa.Column("done", sa.Boolean(), server_default=sa.text("0"))
+        sa.Column("done", sa.Boolean(), server_default=false_def)
     )
     op.create_table("messages",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -134,7 +140,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("tenant_id", sa.Integer(), sa.ForeignKey("tenants.id"), nullable=False),
         sa.Column("name", sa.String(length=80), nullable=False),
-        sa.Column("enabled", sa.Boolean(), server_default=sa.text("1"), nullable=False),
+        sa.Column("enabled", sa.Boolean(), server_default=true_def, nullable=False),
         sa.UniqueConstraint("tenant_id","name", name="uq_tenant_feature")
     )
     op.create_table("portion_guidelines",

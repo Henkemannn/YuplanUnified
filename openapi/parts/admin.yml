@@ -1,0 +1,1576 @@
+openapi: 3.0.3
+info:
+  title: Admin API
+  version: 1.9.0
+  description: Admin module endpoints (merged when OPENAPI_INCLUDE_PARTS=1)
+tags:
+  - name: admin
+paths:
+  /api/admin/stats:
+    get:
+      tags: [admin]
+      summary: Get system statistics (admin/editor)
+      parameters:
+        - in: query
+          name: year
+          required: false
+          schema: { type: integer, minimum: 1970, maximum: 2100 }
+        - in: query
+          name: week
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 53 }
+      responses:
+        '200':
+          description: System statistics
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:stats:y2025:w45:v0"'
+            Cache-Control:
+              schema: { type: string }
+              example: 'private, max-age=0, must-revalidate'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStats'
+        '304': { description: 'Empty body; ETag echoed' }
+
+  /api/admin/sites:
+    get:
+      tags: [admin]
+      summary: List sites (admin/editor)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: Return 304 if matches current collection ETag
+      responses:
+        '200':
+          description: Site list
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:sites:tenant:42:v7"'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Site' }
+        '304': { description: 'Empty body; ETag echoed' }
+    post:
+      tags: [admin]
+      summary: Create new site (admin only)
+      security: [ { BearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSiteRequest' }
+      responses:
+        '201':
+          description: Site created
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:site:123:v0"'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Site' }
+        '400': { description: Bad Request }
+        '403': { description: Forbidden }
+        '404': { description: Admin module disabled }
+
+  /api/admin/departments:
+    get:
+      tags: [admin]
+      summary: List departments for site (admin/editor)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: site
+          required: true
+          schema: { type: string }
+          description: Site ID
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: Return 304 if matches current collection ETag
+      responses:
+        '200':
+          description: Department list
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:departments:site:abc:v3"'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  site_id: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Department' }
+        '304': { description: 'Empty body; ETag echoed' }
+    post:
+      tags: [admin]
+      summary: Create department (admin only)
+      security: [ { BearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDepartmentRequest' }
+      responses:
+        '201':
+          description: Department created
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:dept:456:v0"'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Department' }
+        '400': { description: Bad Request }
+        '403': { description: Forbidden }
+        '404': { description: Admin module disabled }
+
+  /api/admin/departments/{id}:
+    put:
+      tags: [admin]
+      summary: Update department (admin only, requires If-Match)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+          example: 'W/"admin:dept:456:v3"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateDepartmentRequest' }
+      responses:
+        '200':
+          description: Department updated
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:dept:456:v4"'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Department' }
+        '400': { description: Bad Request }
+        '403': { description: Forbidden }
+        '404': { description: Not Found }
+        '412':
+          description: Precondition Failed (stale ETag)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+              examples:
+                stale:
+                  value:
+                    type: etag_mismatch
+                    title: Precondition Failed
+                    status: 412
+                    detail: Resource has been modified since last read
+                    current_etag: 'W/"admin:dept:456:v4"'
+
+  /api/admin/diet-defaults:
+    get:
+      tags: [admin]
+      summary: Get dietary defaults for department (admin/editor)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: department
+          required: true
+          schema: { type: string }
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Dietary defaults
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:dept:456:v6"'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  department_id: { type: string }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        diet_type_id: { type: string }
+                        default_count: { type: integer }
+        '304': { description: 'Empty body; ETag echoed' }
+
+  /api/admin/departments/{id}/diet-defaults:
+    put:
+      tags: [admin]
+      summary: Update dietary defaults (admin only, requires If-Match)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+          example: 'W/"admin:dept:456:v6"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateDietDefaultsRequest' }
+      responses:
+        '200':
+          description: Dietary defaults updated
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:dept:456:v7"'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  department_id: { type: string }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        diet_type_id: { type: string }
+                        default_count: { type: integer }
+        '400': { description: Bad Request }
+        '403': { description: Forbidden }
+        '404': { description: Not Found }
+        '412':
+          description: Precondition Failed (stale ETag)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  /api/admin/alt2:
+    get:
+      tags: [admin]
+      summary: Get Alt2 flags for week (admin/editor)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: week
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 53 }
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Alt2 flags
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:alt2:week:12:v4"'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  week: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        department_id: { type: string }
+                        weekday: { type: integer, minimum: 1, maximum: 7 }
+                        enabled: { type: boolean }
+        '304': { description: 'Empty body; ETag echoed' }
+    put:
+      tags: [admin]
+      summary: Bulk Alt2 configuration (admin only, requires If-Match)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+          description: Entity tag for week-level optimistic concurrency
+          example: 'W/"admin:alt2:week:45:v7"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkAlt2Request' }
+      responses:
+        '200':
+          description: Bulk Alt2 configuration applied
+          headers:
+            ETag:
+              schema: { type: string }
+              example: 'W/"admin:alt2:week:45:v8"'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkAlt2Response' }
+        '400': { description: Bad Request }
+        '403': { description: Forbidden }
+        '404': { description: Not Found }
+        '412':
+          description: Precondition Failed (stale ETag)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+              examples:
+                stale:
+                  value:
+                    type: etag_mismatch
+                    title: Precondition Failed
+                    status: 412
+                    detail: Resource has been modified since last read
+                    current_etag: 'W/"admin:alt2:week:45:v4"'
+
+  /api/admin/notes:
+    get:
+      tags: [admin]
+      summary: Get notes for department/site (ETag-aware)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: scope
+          required: true
+          schema: { type: string, enum: [site, department] }
+        - in: query
+          name: site_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: department_id
+          required: false
+          schema: { type: string }
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Notes
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  site_id: { type: string }
+                  department_id: { type: string }
+                  notes: { type: string, nullable: true }
+        '304': { description: 'Empty body; ETag echoed' }
+
+  /api/admin/menu-import:
+    post:
+      tags: [admin]
+      summary: Start menu import job (admin only)
+      security: [ { BearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MenuImportRequest' }
+      responses:
+        '202': { description: Import job accepted }
+        '400': { description: Bad Request (invalid payload) }
+        '403': { description: Forbidden }
+        '404': { description: Admin module disabled }
+        '501': { description: Not Implemented }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    ProblemDetails:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        request_id: { type: string }
+        current_etag: { type: string }
+    AdminStats:
+      type: object
+      required: [year, week, departments]
+      properties:
+        year: { type: integer }
+        week: { type: integer }
+        departments:
+          type: array
+          items: { $ref: '#/components/schemas/DepartmentStats' }
+    DepartmentStats:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+    Department:
+      type: object
+      required: [id, name, site_id, resident_count_mode]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        site_id: { type: string }
+        resident_count_mode: { type: string, enum: [fixed, per_day_meal] }
+        resident_count_fixed: { type: integer, nullable: true }
+        version: { type: integer }
+        notes: { type: string, nullable: true }
+    CreateDepartmentRequest:
+      type: object
+      required: [name, site_id, resident_count_mode]
+      properties:
+        name: { type: string }
+        site_id: { type: string }
+        resident_count_mode: { type: string, enum: [fixed, per_day_meal] }
+        resident_count_fixed: { type: integer, nullable: true }
+    UpdateDepartmentRequest:
+      type: object
+      properties:
+        name: { type: string }
+        resident_count_mode: { type: string, enum: [fixed, per_day_meal] }
+        resident_count_fixed: { type: integer, nullable: true }
+    UpdateDietDefaultsRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [diet_type_id, default_count]
+            properties:
+              diet_type_id: { type: string }
+              default_count: { type: integer }
+    BulkAlt2Request:
+      type: object
+      required: [week, items]
+      properties:
+        week: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [department_id, weekday, enabled]
+            properties:
+              department_id: { type: string }
+              weekday: { type: integer, minimum: 1, maximum: 7 }
+              enabled: { type: boolean }
+    BulkAlt2Response:
+      type: object
+      required: [week, items]
+      properties:
+        week: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [department_id, weekday, enabled, etag]
+            properties:
+              department_id: { type: string }
+              weekday: { type: integer }
+              enabled: { type: boolean }
+              etag: { type: string }
+info:
+  title: Admin API (Phase A)
+  version: 0.1.0
+  description: API surface for Admin module - system administration and data management
+tags:
+  - name: admin
+paths:
+  /api/admin/stats:
+    get:
+      tags: [admin]
+      summary: Get system statistics (admin/editor read access)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: year
+          required: false
+          schema: { type: integer, minimum: 1970, maximum: 2100 }
+          description: Filter by year (default current year)
+        - in: query
+          name: week
+          required: false  
+          schema: { type: integer, minimum: 1, maximum: 53 }
+          description: Filter by ISO week number (default current week)
+        - in: query
+          name: department_id
+          required: false
+          schema: { type: string, format: uuid }
+          description: Filter by specific department
+      responses:
+        '200':
+          description: System statistics
+          headers:
+            ETag:
+              description: Entity tag for caching
+              schema: { type: string }
+              example: 'W/"admin:stats:y2025:w45:v0"'
+            Cache-Control:
+              description: Caching directives
+              schema: { type: string }
+              example: "private, max-age=0, must-revalidate"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStats'
+        '304':
+          description: Not Modified (empty body)
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (insufficient permissions)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Admin module disabled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/admin/sites:
+    get:
+      tags: [admin]
+      summary: List sites (admin/editor)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: Return 304 if matches current collection ETag
+      responses:
+        '200':
+          description: Site list
+          headers:
+            ETag:
+              description: Collection ETag for sites
+              schema: { type: string }
+              example: 'W/"admin:sites:tenant:42:v7"'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Site' }
+        '304':
+          description: Not Modified (empty body; ETag echoed)
+          headers:
+            ETag:
+              schema: { type: string }
+    post:
+      tags: [admin]
+      summary: Create new site (admin only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteRequest'
+      responses:
+        '201':
+          description: Site created successfully
+          headers:
+            ETag:
+              description: Entity tag for new site
+              schema: { type: string }
+              example: 'W/"admin:site:123:v1"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Site'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (admin only)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Admin module disabled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '501':
+          description: Not Implemented (Phase A)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: "not_implemented_phase_a"
+                title: "Not Implemented"
+                status: 501
+                detail: "Site creation will be implemented in Phase B"
+
+  /api/admin/departments:
+    get:
+      tags: [admin]
+      summary: List departments for a site (admin/editor)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: site
+          required: true
+          schema: { type: string, format: uuid }
+          description: Site ID
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: Return 304 if matches current collection ETag
+      responses:
+        '200':
+          description: Department list
+          headers:
+            ETag:
+              description: Collection ETag departments for site
+              schema: { type: string }
+              example: 'W/"admin:departments:site:abc123:v9"'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  site_id: { type: string }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Department' }
+        '304':
+          description: Not Modified (empty body; ETag echoed)
+          headers:
+            ETag: { schema: { type: string } }
+    post:
+  /api/admin/diet-defaults:
+    get:
+      tags: [admin]
+      summary: Get diet defaults for department (admin/editor)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: department
+          required: true
+          schema: { type: string, format: uuid }
+          description: Department ID
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: Return 304 if matches current department ETag
+      responses:
+        '200':
+          description: Dietary defaults
+          headers:
+            ETag:
+              description: Department ETag (optimistic concurrency)
+              schema: { type: string }
+              example: 'W/"admin:dept:456:v6"'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  department_id: { type: string }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        diet_type_id: { type: string }
+                        default_count: { type: integer }
+        '304':
+          description: Not Modified (empty body; ETag echoed)
+          headers:
+            ETag: { schema: { type: string } }
+
+  /api/admin/alt2:
+    get:
+      tags: [admin]
+      summary: Get Alt2 flags for week (admin/editor)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: week
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 53 }
+          description: ISO week number
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: Return 304 if matches current collection ETag
+      responses:
+        '200':
+          description: Alt2 flags
+          headers:
+            ETag:
+              description: Collection ETag for Alt2 week
+              schema: { type: string }
+              example: 'W/"admin:alt2:week:12:v4"'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  week: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        department_id: { type: string }
+                        weekday: { type: integer, minimum: 1, maximum: 7 }
+                        enabled: { type: boolean }
+        '304':
+          description: Not Modified (empty body; ETag echoed)
+          headers:
+            ETag: { schema: { type: string } }
+
+  /api/admin/notes:
+    get:
+      tags: [admin]
+      summary: Get notes for scope (site|department)
+      security: [ { BearerAuth: [] } ]
+      parameters:
+        - in: query
+          name: scope
+          required: true
+          schema: { type: string, enum: [site, department] }
+          description: Scope type
+        - in: query
+          name: site_id
+          required: false
+          schema: { type: string, format: uuid }
+        - in: query
+          name: department_id
+          required: false
+          schema: { type: string, format: uuid }
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+          description: Return 304 if matches current entity tag
+      responses:
+        '200':
+          description: Notes payload
+          headers:
+            ETag:
+              description: Entity tag for notes resource
+              schema: { type: string }
+              example: 'W/"admin:dept:456:v7"'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      department_id: { type: string }
+                      notes: { type: string, nullable: true }
+                  - type: object
+                    properties:
+                      site_id: { type: string }
+                      notes: { type: string, nullable: true }
+        '304':
+          description: Not Modified (empty body; ETag echoed)
+          headers:
+            ETag: { schema: { type: string } }
+      tags: [admin] 
+      summary: Create new department (admin only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartmentRequest'
+      responses:
+        '201':
+          description: Department created successfully
+          headers:
+            ETag:
+              description: Entity tag for new department
+              schema: { type: string }
+              example: 'W/"admin:dept:456:v1"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (admin only)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Admin module disabled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '501':
+          description: Not Implemented (Phase A)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/admin/departments/{id}:
+    put:
+      tags: [admin]
+      summary: Update department (admin only, requires If-Match)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Department ID
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+          description: Entity tag for optimistic concurrency
+          example: 'W/"admin:dept:456:v3"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDepartmentRequest'
+      responses:
+        '200':
+          description: Department updated successfully
+          headers:
+            ETag:
+              description: Updated entity tag
+              schema: { type: string }
+              example: 'W/"admin:dept:456:v4"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (admin only)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Department not found or admin module disabled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '412':
+          description: Precondition Failed (stale ETag)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: "etag_mismatch"
+                title: "Precondition Failed"
+                status: 412
+                detail: "Resource has been modified since last read"
+                current_etag: 'W/"admin:dept:456:v4"'
+              example:
+                type: "etag_mismatch"
+                title: "Precondition Failed"
+                status: 412
+                detail: "Resource has been modified since last read"
+                current_etag: 'W/"admin:dept:456:v4"'
+        '501':
+          description: Not Implemented (Phase A)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/admin/departments/{id}/notes:
+    put:
+      tags: [admin]
+      summary: Update department notes (admin only, requires If-Match)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Department ID
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+          description: Entity tag for optimistic concurrency
+          example: 'W/"admin:dept:456:v5"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDepartmentNotesRequest'
+      responses:
+        '200':
+          description: Department notes updated successfully
+          headers:
+            ETag:
+              description: Updated entity tag
+              schema: { type: string }
+              example: 'W/"admin:dept:456:v6"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentNotes'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (admin only)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Department not found or admin module disabled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '412':
+          description: Precondition Failed (stale ETag)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: "etag_mismatch"
+                title: "Precondition Failed"
+                status: 412
+                detail: "Resource has been modified since last read"
+                current_etag: 'W/"admin:dept:456:v6"'
+        '501':
+          description: Not Implemented (Phase A)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/admin/departments/{id}/diet-defaults:
+    put:
+      tags: [admin]
+      summary: Update dietary defaults for department (admin only, requires If-Match)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Department ID
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+          description: Entity tag for optimistic concurrency
+          example: 'W/"admin:dept:456:diet:v7"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDietDefaultsRequest'
+      responses:
+        '200':
+          description: Dietary defaults updated successfully
+          headers:
+            ETag:
+              description: Updated entity tag
+              schema: { type: string }
+              example: 'W/"admin:dept:456:diet:v8"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DietDefaults'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (admin only)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Department not found or admin module disabled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '412':
+          description: Precondition Failed (stale ETag)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: "etag_mismatch"
+                title: "Precondition Failed"
+                status: 412
+                detail: "Resource has been modified since last read"
+                current_etag: 'W/"admin:dept:456:diet:v8"'
+        '501':
+          description: Not Implemented (Phase A)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/admin/menu-import:
+    post:
+      tags: [admin]
+      summary: Start menu import job (admin only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MenuImportRequest'
+      responses:
+        '202':
+          description: Import job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuImportJob'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (admin only)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Admin module disabled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '501':
+          description: Not Implemented (Phase A)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/admin/menu-import/{job_id}:
+    get:
+      tags: [admin]
+      summary: Get menu import job status (admin/editor access)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Menu import job ID
+      responses:
+        '200':
+          description: Import job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuImportJob'
+        '403':
+          description: Forbidden (admin/editor only)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Job not found or admin module disabled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '501':
+          description: Not Implemented (Phase A)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /api/admin/alt2:
+    put:
+      tags: [admin]
+      summary: Bulk Alt2 configuration (admin only, requires If-Match)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+          description: Entity tag for week-level optimistic concurrency
+          example: 'W/"admin:alt2:week:2025:45:v7"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkAlt2Request'
+      responses:
+        '200':
+          description: Bulk Alt2 configuration applied successfully
+          headers:
+            ETag:
+              description: Updated entity tag
+              schema: { type: string }
+              example: 'W/"admin:alt2:week:2025:45:v8"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkAlt2Response'
+        '400':
+          description: Bad Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden (admin only)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Admin module disabled
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '412':
+          description: Precondition Failed (stale ETag)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: "etag_mismatch"
+                title: "Precondition Failed"
+                status: 412
+                detail: "Resource has been modified since last read"
+                current_etag: 'W/"admin:alt2:week:45:v4"'
+        '501':
+          description: Not Implemented (Phase A)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    ProblemDetails:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: A URI reference that identifies the problem type
+        title:
+          type: string
+          description: A short, human-readable summary of the problem type
+        status:
+          type: integer
+          description: The HTTP status code
+        detail:
+          type: string
+          description: A human-readable explanation specific to this occurrence
+        instance:
+          type: string
+          format: uri
+          description: A URI reference that identifies the specific occurrence
+        request_id:
+          type: string
+          description: Unique identifier for this request
+        current_etag:
+          type: string
+          description: Current ETag when applicable (412 responses)
+
+    AdminStats:
+      type: object
+      required: [year, week, departments]
+        summary: Bulk Alt2 configuration (admin only, requires If-Match)
+        year:
+          type: integer
+          minimum: 1970
+          maximum: 2100
+          description: Statistics year
+        week:
+          type: integer
+          minimum: 1
+            example: 'W/"admin:alt2:week:45:v3"'
+          description: ISO week number
+        departments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepartmentStats'
+                $ref: '#/components/schemas/BulkAlt2Request'
+
+    DepartmentStats:
+      type: object
+      required: [id, name, attendance_total, menu_coverage]
+      properties:
+        id:
+          type: string
+                example: 'W/"admin:alt2:week:45:v4"'
+          description: Department ID
+        name:
+          type: string
+          description: Department name
+        attendance_total:
+          type: integer
+          minimum: 0
+          description: Total attendance for the period
+        menu_coverage:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Menu coverage ratio (0.0 to 1.0)
+
+    Site:
+      type: object
+      required: [id, name, tenant_id, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Site ID
+        name:
+          type: string
+          maxLength: 200
+          description: Site name
+        tenant_id:
+          type: integer
+          description: Tenant ID
+        active:
+          type: boolean
+          description: Site active status
+
+    CreateSiteRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          description: Site name
+
+    Department:
+      type: object
+      required: [id, name, site_id, resident_count_mode]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Department ID
+        name:
+          type: string
+          maxLength: 200
+          description: Department name
+        site_id:
+          type: string
+          format: uuid
+          description: Parent site ID
+        resident_count_mode:
+          type: string
+          enum: [fixed, per_day_meal]
+          description: Resident count mode
+        resident_count_fixed:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Fixed resident count (when mode=fixed)
+        notes:
+          type: string
+          nullable: true
+          description: Department notes
+
+    CreateDepartmentRequest:
+      type: object
+      required: [name, site_id, resident_count_mode]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          description: Department name
+        site_id:
+          type: string
+          format: uuid
+          description: Parent site ID
+        resident_count_mode:
+          type: string
+          enum: [fixed, per_day_meal]
+          description: Resident count mode
+        resident_count_fixed:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Fixed resident count (when mode=fixed)
+
+    UpdateDepartmentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          description: Department name
+        resident_count_mode:
+          type: string
+          enum: [fixed, per_day_meal]
+          description: Resident count mode
+        resident_count_fixed:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Fixed resident count (when mode=fixed)
+
+    DepartmentNotes:
+      type: object
+      required: [department_id, notes]
+      properties:
+        department_id:
+          type: string
+          format: uuid
+          description: Department ID
+        notes:
+          type: string
+          nullable: true
+          description: Department notes
+
+    UpdateDepartmentNotesRequest:
+      type: object
+      required: [notes]
+      properties:
+        notes:
+          type: string
+          nullable: true
+          description: Department notes
+
+    DietDefaults:
+      type: object
+      required: [department_id, dietary_counts]
+      properties:
+        department_id:
+          type: string
+          format: uuid
+          description: Department ID
+        dietary_counts:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+          description: 'Dietary type counts (e.g., {"vegetarian": 12, "vegan": 3})'
+
+    UpdateDietDefaultsRequest:
+      type: object
+      required: [dietary_counts]
+      properties:
+        dietary_counts:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+          description: Dietary type counts
+
+    MenuImportRequest:
+      type: object
+      required: [data_format, data]
+      properties:
+        data_format:
+          type: string
+          enum: [csv, json]
+          description: Import data format
+        data:
+          type: string
+          description: Menu data (CSV string or JSON string)
+
+    MenuImportJob:
+      type: object
+      required: [job_id, status, created_at]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          description: Job ID
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          description: Job status
+        created_at:
+          type: string
+          format: date-time
+          description: Job creation timestamp
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Job completion timestamp
+        error_message:
+          type: string
+          nullable: true
+          description: Error message if failed
+
+    BulkAlt2Request:
+      type: object
+      required: [week, items]
+      properties:
+        week:
+          type: integer
+          minimum: 1
+          maximum: 53
+          description: Target ISO week number
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alt2FlagItem'
+          description: Alt2 flag items
+
+    Alt2FlagItem:
+      type: object
+      required: [department_id, weekday, enabled]
+      properties:
+        department_id:
+            type: string
+            format: uuid
+            description: Department ID
+        weekday:
+            type: integer
+            minimum: 0
+            maximum: 6
+            description: Weekday (0=Mon .. 6=Sun)
+        enabled:
+            type: boolean
+            description: Alt2 enabled flag
+
+    BulkAlt2Response:
+      type: object
+      required: [week, items]
+      properties:
+        week:
+          type: integer
+          description: Target ISO week number
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alt2FlagResult'
+          description: Resulting Alt2 items with individual ETags
+
+    Alt2FlagResult:
+      type: object
+      required: [department_id, weekday, enabled, etag]
+      properties:
+        department_id: { type: string, format: uuid }
+        weekday: { type: integer, minimum: 0, maximum: 6 }
+        enabled: { type: boolean }
+        etag: { type: string, description: Per-item ETag }
+
+    Alt2Conflict:
+      type: object
+      required: [department_id, reason]
+      properties:
+        department_id:
+          type: string
+          format: uuid
+          description: Department ID with conflict
+        reason:
+          type: string
+          description: Conflict reason

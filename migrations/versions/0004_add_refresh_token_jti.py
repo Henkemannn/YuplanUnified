@@ -1,7 +1,7 @@
 """Add refresh_token_jti column to users
 
 Revision ID: 0004_add_refresh_token_jti
-Revises: 0003_task_status_transition_and_index
+Revises: 0003_task_status_idx
 Create Date: 2025-09-30
 """
 from __future__ import annotations
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0004_add_refresh_token_jti"
-down_revision = "0003_task_status_transition_and_index"
+down_revision = "0003_task_status_idx"
 branch_labels = None
 depends_on = None
 

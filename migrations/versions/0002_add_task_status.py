@@ -20,7 +20,11 @@ def upgrade() -> None:
     op.add_column("tasks", sa.Column("status", sa.String(length=20), nullable=True))
     # Backfill using done flag: done -> done else todo
     conn = op.get_bind()
-    conn.execute(sa.text("UPDATE tasks SET status = CASE WHEN done = 1 THEN 'done' ELSE 'todo' END"))
+    dialect = conn.dialect.name if conn is not None else "sqlite"
+    if dialect == "postgresql":
+        conn.execute(sa.text("UPDATE tasks SET status = CASE WHEN done IS TRUE THEN 'done' ELSE 'todo' END"))
+    else:
+        conn.execute(sa.text("UPDATE tasks SET status = CASE WHEN done = 1 THEN 'done' ELSE 'todo' END"))
     # Set any remaining NULL (shouldn't be) to todo
     conn.execute(sa.text("UPDATE tasks SET status = 'todo' WHERE status IS NULL"))
     # (Optionally) could alter to non-null, but keep nullable to avoid dialect-specific issues

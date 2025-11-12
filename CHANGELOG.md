@@ -174,3 +174,16 @@
 ### Fixed
 - Ruff auto-fixes applied ahead of RC tag.
 
+## [1.8.0] — 2025-11-10 (Admin Phase B)
+### Added
+- Admin: write persistence for Sites, Departments, Diet Defaults, Alt2 bulk (idempotent upsert) with optimistic concurrency (ETag/If-Match).
+- Alembic migration `0008_admin_phase_b.py` introducing tables (sites, departments, diet_types, department_diet_defaults, alt2_flags) and version/updated_at columns & triggers (Postgres/SQLite).
+- OpenAPI: collection ETag for Alt2 W/"admin:alt2:week:{week}:v{n}" and per-item ETags; headers documented across endpoints; 412 ProblemDetails includes `current_etag`.
+
+### Changed
+- OpenAPI info.version bumped to 1.8.0; Department schema updated to `resident_count_mode` (enum: fixed|per_day_meal) and `resident_count_fixed`.
+- Alt2: constraints and indexes for performance (CHECK week 1..53, weekday 1..7, FKs ON DELETE CASCADE; indexes on (department_id,week) and (week,department_id,weekday)).
+
+### Backward compatibility
+- Read endpoints and previously released clients remain unaffected; new write paths are additive and gated behind `ff.admin.enabled`.
+

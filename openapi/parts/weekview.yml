@@ -1,0 +1,204 @@
+openapi: 3.0.3
+info:
+  title: Weekview API (Draft)
+  version: 0.1.0
+  description: API surface for Weekview module (M1 draft, no server implementation yet)
+tags:
+  - name: weekview
+paths:
+  /api/weekview:
+    get:
+      tags: [weekview]
+      summary: Get week view representation
+      parameters:
+        - in: query
+          name: year
+          required: true
+          schema: { type: integer, minimum: 1970 }
+          description: ISO year (e.g., 2025)
+        - in: query
+          name: week
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 53 }
+          description: ISO week number (1..53)
+        - in: query
+          name: department_id
+          required: false
+          schema: { type: string, format: uuid }
+          description: Optional department id filter
+      responses:
+        '200':
+          description: Week view representation
+          headers:
+            ETag:
+              description: Entity tag for optimistic concurrency
+              schema: { type: string }
+              example: 'W/"weekview:dept:{uuid}:week:{int}:v{n+1}"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeekView'
+        '304':
+          description: Not Modified (empty body)
+    patch:
+      tags: [weekview]
+      summary: Apply changes to week view (admin/staff write; viewer forbidden)
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          schema: { type: string }
+          description: Required ETag precondition for optimistic concurrency
+          example: 'W/"weekview:dept:{uuid}:week:{int}:v{n}"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/JsonPatch'
+                - $ref: '#/components/schemas/WeekViewOps'
+      responses:
+        '200':
+          description: Updated representation
+          headers:
+            ETag:
+              description: New entity tag
+              schema: { type: string }
+              example: 'W/"weekview:dept:{uuid}:week:{int}:v{n+1}"'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeekView'
+        '403':
+          description: Forbidden (viewer role)
+        '400':
+          description: Invalid patch/ops
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '412':
+          description: Precondition Failed (ETag mismatch; problem.type=etag_mismatch)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/weekview/resolve:
+    get:
+      tags: [weekview]
+      summary: Resolve conflicts (idempotent helper). RBAC: admin/staff/viewer read if ff.weekview.enabled.
+      parameters:
+        - in: query
+          name: site
+          required: true
+          schema: { type: string }
+          description: Site identifier
+        - in: query
+          name: department_id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Department identifier (UUID)
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, format: date }
+          description: A date within the target week (ISO date)
+      responses:
+        '200':
+          description: Resolution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveResult'
+        '404':
+          description: Not resolvable for given parameters
+        '400':
+          description: Invalid payload
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+components:
+  schemas:
+    WeekView:
+      type: object
+      properties:
+        year: { type: integer, minimum: 1970 }
+        week: { type: integer, minimum: 1, maximum: 53 }
+        week_start: { type: string, format: date }
+        week_end: { type: string, format: date }
+        department_summaries:
+          type: array
+          items: { $ref: '#/components/schemas/DepartmentSummary' }
+    DepartmentSummary:
+      type: object
+      properties:
+        department_id: { type: string }
+        department_name: { type: string }
+        department_notes:
+          type: array
+          description: Display-only notes for the department
+          items: { type: string }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/DayPlan' }
+    DayPlan:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        day_of_week:
+          type: integer
+          description: ISO day-of-week (Mon=1..Sun=7)
+          enum: [1, 2, 3, 4, 5, 6, 7]
+        meals:
+          type: array
+          items: { $ref: '#/components/schemas/MealSlot' }
+    MealSlot:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [lunch, dinner]
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Item' }
+    Item:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        notes: { type: string, nullable: true }
+        diet_type:
+          type: string
+          description: Diet type (extensible). Examples: normal, gluten_free, lactose_free, vegetarian, texture_timbal
+        status:
+          type: string
+          enum: [planned, confirmed, canceled]
+        assigned_to: { type: string, nullable: true }
+    JsonPatch:
+      type: array
+      items:
+        type: object
+        properties:
+          op: { type: string }
+          path: { type: string }
+          value: {}
+    WeekViewOps:
+      type: object
+      description: Placeholder for typed operations model
+    ResolveRequest:
+      type: object
+      description: Placeholder resolve payload
+    ResolveResult:
+      type: object
+      description: Placeholder resolve result
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
