@@ -12,7 +12,7 @@ body{font-family:system-ui, Arial; margin:0; color:var(--yuplan-text); backgroun
 .app{min-height:100dvh; background:var(--yuplan-bg); display:flex; flex-direction:column}
 .app-header{position:sticky; top:0; z-index:10; display:flex; align-items:center; justify-content:space-between; padding:var(--space); background:var(--yu-surface); box-shadow:0 2px 10px rgba(2,6,23,.06)}
 .app-header .brand{display:flex;align-items:center;gap:.75rem}
-.app-header .brand .logo{height:40px;width:auto;display:block}
+.app-header .brand .logo{height:40px;width:auto;display:block;color:var(--logo-color, var(--yuplan-primary))}
 .app-header .brand #ymark{display:none;place-items:center;width:40px;height:40px;background:var(--yuplan-primary);color:#fff;border-radius:6px;font-weight:700}
 .app-header h1{font-size:18px;margin:0;color:var(--yuplan-primary)}
 .app-header .controls{display:flex;gap:1rem;align-items:center}
