@@ -7,8 +7,29 @@ exclude = [
   "legacy",
   "core/static",
   "core/templates",
+  "tests",
 ]
 extend-exclude = ["**/*.md"]
+
+# Compatibility for older Ruff versions (<0.4): duplicate lint keys at top-level
+select = ["E","F","I","UP","SIM","B","Q"]
+ignore = [
+  "E501",
+  "SIM105",
+]
+
+[tool.ruff.isort]
+known-first-party = ["core", "modules"]
+combine-as-imports = true
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+"migrations/env.py" = ["E402", "F401", "F403"]
+"migrations/versions/*.py" = ["E402", "F401", "F403"]
+"legacy/**" = ["E701", "E702", "E402"]
+"tests/**" = ["E701", "E702", "SIM105", "B011", "F401"]
+"tests/test_openapi_validator.py" = ["B017"]
+"scripts/*.py" = ["E402"]
 
 [tool.ruff.lint]
 # Baseline + expanded: bugbear (B), pyupgrade (UP), quotes (Q), plus pattern/simplification sets PIE & SIM.
@@ -41,6 +62,12 @@ quote-style = "preserve"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.ruff.flake8-quotes]
+# Compatibility for older Ruff versions (<0.4)
+inline-quotes = "double"
+multiline-quotes = "double"
+docstring-quotes = "double"
 
 [tool.ruff.lint.flake8-quotes]
 # Enforce double quotes consistently to reduce noisy Q000 violations.

@@ -270,6 +270,14 @@ el('btnAlt2Toggle')?.addEventListener('click', alt2_toggle);
     }
     exportReportCsv(lastReportJson, lastReportWeek);
   });
+  const btnPdf = document.getElementById('btnExportPdf');
+  btnPdf?.addEventListener('click', ()=>{
+    if(!lastReportJson || !lastReportWeek){
+      box.innerHTML = `<div class="muted">Ingen rapport inläst ännu – klicka \"Läs in\" först.</div>`;
+      return;
+    }
+    exportReportPdf(lastReportJson, lastReportWeek);
+  });
 })();
 
 // CSV export utilities
@@ -312,6 +320,84 @@ function exportReportCsv(reportJson, week){
   setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
 }
 function csvEscape(v){ return '"' + String(v ?? '').replace(/"/g,'""') + '"'; }
+
+// --- Report PDF export (Pass D) ---
+function exportReportPdf(reportJson, week){
+  // Build a print container dynamically with minimal styling relying on existing CSS
+  const existing = document.getElementById('printArea');
+  if(existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'printArea';
+  div.setAttribute('data-print','1');
+  div.style.position='absolute';
+  div.style.left='0'; div.style.top='0';
+  div.style.width='100%';
+  div.innerHTML = renderPrintReport(reportJson, week);
+  document.body.appendChild(div);
+  const prevFocus = document.activeElement;
+  window.print();
+  // cleanup after small delay (in some browsers print is blocking)
+  setTimeout(()=>{ div.remove(); if(prevFocus && typeof prevFocus.focus==='function') prevFocus.focus(); }, 250);
+}
+
+function renderPrintReport(reportJson, week){
+  const year = new Date().getFullYear();
+  const header = `<h1 style="margin:0 0 8px;font-size:20px">Rapport – Vecka ${week}, ${year}</h1>`;
+  const meta = `<div style="margin:0 0 12px;color:#555;font-size:12px">Genererad: ${new Date().toLocaleString()}</div>`;
+  const rows = buildReportRows(reportJson).map(r=>`<tr><td>${escapeHtml(r.department)}</td><td>${r.lunchSpecial}</td><td>${r.lunchNormal}</td><td>${r.eveSpecial}</td><td>${r.eveNormal}</td><td>${r.total}</td></tr>`).join('');
+  const table = `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th>Avdelning</th><th>Lunch spec</th><th>Lunch norm</th><th>Kväll spec</th><th>Kväll norm</th><th>Totalt</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const totals = safeTotals(reportJson);
+  const summary = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;font-size:12px">`
+    + `<div><strong>Totalt normalkost:</strong> ${totals.allNormal}</div>`
+    + `<div><strong>Totalt specialkost:</strong> ${totals.allSpecial}</div>`
+    + `<div><strong>Avdelningar:</strong> ${totals.departments}</div>`
+    + `</div>`;
+  const footer = `<div style="margin-top:18px;font-size:11px;color:#666">Yuplan – klientgenererad PDF (print). ETag-cache & CSRF aktiv i applikationen.</div>`;
+  return `<div style="padding:8px 4px">${header}${meta}${table}${summary}${footer}</div>`;
+}
+
+function buildReportRows(reportJson){
+  const items = Array.isArray(reportJson?.rows) ? reportJson.rows
+    : (Array.isArray(reportJson?.departments) ? reportJson.departments : null);
+  const rows = [];
+  if(items){
+    for(const r of items){
+      const lunch = r.lunch || {};
+      const evening = r.evening || r.kväll || {};
+      const total = r.total ?? ((lunch.normal||0)+(lunch.special||0)+(evening.normal||0)+(evening.special||0));
+      rows.push({
+        department: r.department || r.name || r.department_name || '',
+        lunchSpecial: lunch.special ?? lunch.specialkost ?? 0,
+        lunchNormal: lunch.normal ?? lunch.normalkost ?? 0,
+        eveSpecial: evening.special ?? evening.specialkost ?? 0,
+        eveNormal: evening.normal ?? evening.normalkost ?? 0,
+        total: total ?? 0
+      });
+    }
+  } else {
+    const t = (reportJson && reportJson.totals) || {};
+    const lunch = t.lunch || {};
+    const eve = t.evening || t.kväll || {};
+    const total = (lunch.normal||0)+(lunch.special||0)+(eve.normal||0)+(eve.special||0);
+    rows.push({
+      department: 'Totals',
+      lunchSpecial: lunch.special||0,
+      lunchNormal: lunch.normal||0,
+      eveSpecial: eve.special||0,
+      eveNormal: eve.normal||0,
+      total
+    });
+  }
+  return rows;
+}
+
+// Expose for tests (vitest in jsdom)
+if(typeof window !== 'undefined'){
+  window.__YU = Object.assign(window.__YU||{}, {
+    renderPrintReport,
+    buildReportRows
+  });
+}
 
 // Escape HTML used in ETag badge
 // (duplicate guard) already defined above for cards; reused for ETag badge
