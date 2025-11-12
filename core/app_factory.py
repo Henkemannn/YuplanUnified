@@ -410,6 +410,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(diet_api_bp)
     app.register_blueprint(turnus_api_bp)
     app.register_blueprint(admin_api_bp)
+    try:
+        from .menu_choice_api import bp as menu_choice_bp
+        app.register_blueprint(menu_choice_bp)
+    except Exception:
+        pass
     app.register_blueprint(admin_audit_bp)
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
@@ -1766,7 +1771,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
-        # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
+    # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
         spec["paths"]["/api/weekview"] = {
             "get": {
                 "tags": ["weekview"],
@@ -1939,7 +1944,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
-        # Alt2 flags mutation
+    # Alt2 flags mutation
         spec["paths"]["/api/weekview/alt2"] = {
             "patch": {
                 "tags": ["weekview"],
@@ -1981,6 +1986,67 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     "412": {"$ref": "#/components/responses/Problem412"},
                 },
             }
+        }
+
+        # --- Pass B: Menu Choice (Alt1/Alt2) per department/week ---
+        spec["paths"]["/admin/menu-choice"] = {
+            "get": {
+                "summary": "Get menu choice days for department/week",
+                "parameters": [
+                    {"name": "week", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    {"name": "department", "in": "query", "required": True, "schema": {"type": "string"}},
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "headers": {"ETag": {"schema": {"type": "string"}}},
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["week", "department", "days"],
+                                    "properties": {
+                                        "week": {"type": "integer"},
+                                        "department": {"type": "string"},
+                                        "days": {
+                                            "type": "object",
+                                            "additionalProperties": {"type": "string", "enum": ["Alt1", "Alt2"]},
+                                        },
+                                    },
+                                }
+                            }
+                        },
+                    }
+                },
+            },
+            "put": {
+                "summary": "Set menu choice for a single day (requires If-Match)",
+                "parameters": [
+                    {"name": "If-Match", "in": "header", "required": True, "schema": {"type": "string"}},
+                ],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["week", "department", "day", "choice"],
+                                "properties": {
+                                    "week": {"type": "integer"},
+                                    "department": {"type": "string"},
+                                    "day": {"type": "string", "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]},
+                                    "choice": {"type": "string", "enum": ["Alt1", "Alt2"]},
+                                },
+                            }
+                        }
+                    },
+                },
+                "responses": {
+                    "204": {"description": "Updated"},
+                    "412": {"description": "Precondition Failed"},
+                    "422": {"description": "Alt2 not permitted on weekends"},
+                },
+            },
         }
     # --- Report Paths (Phase A: read-only aggregation + conditional GET) ---
         spec["paths"]["/api/report"] = {
