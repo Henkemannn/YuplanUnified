@@ -310,6 +310,18 @@ unified_platform/
   - `bom=1` — prepend UTF-8 BOM for Excel
 * Streaming uses generator + `yield_per` for low memory footprint.
 
+### Rapport – Exportera PDF (Pass D)
+Klientside-PDF via webbläsarens print-funktion. Ingen serverändring krävs och CSP-respekteras.
+
+- UI: Knapp “Export PDF” i Rapport-panelen (disabled tills data finns via “Läs in”).
+- Funktion: `exportReportPdf(reportJson, week)` bygger en print-vy (rubrik, tabell, summering) och anropar `window.print()`.
+- CSS: `@media print` sätter A4, 12mm marginaler, döljer header/meny/knappar och justerar rutnätskort.
+- Tillgänglighet: Fokus återställs till knappen efter utskrift.
+
+Manuell verifikation:
+1) Öppna “Rapport”, välj vecka och klicka “Läs in”.
+2) Klicka “Export PDF” → Förhandsgranskning visar rubrik, tabell och totals. Avbryt/Skriv ut enligt behov.
+
 #### Feature Flag: `rate_limit_export`
 The export endpoints have an optional opt-in rate limit controlled per tenant via the `rate_limit_export` feature flag.
 
