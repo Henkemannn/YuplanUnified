@@ -14,3 +14,5 @@ jobs:
           version: 'latest'
       - name: Run smoke against staging
         run: pwsh -File scripts/smoke.ps1 -BaseUrl https://yuplan-unified-staging.fly.dev -SiteId 5f8e2aea-9060-4981-9686-c70dbc723a11 -Week 51
+      - name: Run menu-choice smoke
+        run: pwsh -File scripts/smoke/staging_menu_choice.ps1 -BaseUrl https://yuplan-unified-staging.fly.dev -Week 51 -VerboseLog
