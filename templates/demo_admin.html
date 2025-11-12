@@ -29,7 +29,7 @@
         <aside class="app-nav" role="navigation" aria-label="Huvudmeny">
           <a id="nav-weekview" href="#weekview" class="nav-link" aria-current="page">Veckovy</a>
           <a id="nav-admin"   href="#admin"   class="nav-link">Admin</a>
-          <a id="nav-alt2"    href="#alt2"    class="nav-link">Alt 2</a>
+          <a id="nav-menyval" href="#menyval" class="nav-link">Menyval</a>
           <a id="nav-report"  href="#report"  class="nav-link">Rapport</a>
         </aside>
         <main class="app-main">
@@ -64,6 +64,17 @@
             <span id="renameStatus"></span>
           </div>
         </div>
+      </div>
+    </section>
+
+  <section id="panel-menyval" class="panel" role="region" aria-labelledby="nav-menyval" data-panel="menyval" hidden>
+      <div class="card">
+        <h3>3) Menyval (Alt2 mån–fre; helg Alt1)</h3>
+        <div id="menyvalStatus" class="muted" aria-live="polite"></div>
+        <div id="menyvalFlash" class="flash" aria-live="polite" hidden></div>
+        <div id="menyvalControls" class="menyval-controls" aria-describedby="menyvalHelp"></div>
+        <p id="menyvalHelp" class="muted">Välj vecka och avdelning uppe i headern. Alt 2 är inte tillgängligt på helger.</p>
+        <div class="muted">ETag: <span id="menyvalEtag" class="et">—</span></div>
       </div>
     </section>
 

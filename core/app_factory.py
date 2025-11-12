@@ -104,14 +104,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- Feature flags ---
     feature_registry = FeatureRegistry()
-    # Enable admin module by default in staging/demo environments when simple auth flag is on.
+    # Ensure ff.admin.enabled present for tests / staging convenience
+    if not feature_registry.has("ff.admin.enabled"):
+        feature_registry.add("ff.admin.enabled")
+    # Auto-enable admin module when running under TESTING or simple staging auth flag.
     try:
-        if os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
-            # Add and enable ff.admin.enabled if not present
-            if not feature_registry.has("ff.admin.enabled"):
-                feature_registry.add("ff.admin.enabled")
-            else:
-                feature_registry.set("ff.admin.enabled", True)
+        if app.config.get("TESTING") or os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
+            feature_registry.set("ff.admin.enabled", True)
     except Exception:
         pass
     # Expose for tests manipulating registry directly
