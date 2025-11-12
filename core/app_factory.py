@@ -104,6 +104,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- Feature flags ---
     feature_registry = FeatureRegistry()
+feat/menu-choice-pass-b
     # Ensure ff.admin.enabled present for tests / staging convenience
     if not feature_registry.has("ff.admin.enabled"):
         feature_registry.add("ff.admin.enabled")
@@ -111,6 +112,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     try:
         if app.config.get("TESTING") or os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
             feature_registry.set("ff.admin.enabled", True)
+
+    # Enable admin module by default in staging/demo environments when simple auth flag is on.
+    try:
+        if os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
+            # Add and enable ff.admin.enabled if not present
+            if not feature_registry.has("ff.admin.enabled"):
+                feature_registry.add("ff.admin.enabled")
+            else:
+                feature_registry.set("ff.admin.enabled", True)
+ master
     except Exception:
         pass
     # Expose for tests manipulating registry directly
@@ -1773,7 +1784,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
+ feat/menu-choice-pass-b
     # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
+
+        # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
+ master
         spec["paths"]["/api/weekview"] = {
             "get": {
                 "tags": ["weekview"],
@@ -1946,7 +1961,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
+ feat/menu-choice-pass-b
     # Alt2 flags mutation
+
+        # Alt2 flags mutation
+ master
         spec["paths"]["/api/weekview/alt2"] = {
             "patch": {
                 "tags": ["weekview"],
@@ -1989,6 +2008,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             }
         }
+ feat/menu-choice-pass-b
 
         # --- Pass B: Menu Choice (Alt1/Alt2) per department/week ---
         # Publicly documented path
@@ -2051,6 +2071,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 },
             },
         }
+
+ master
     # --- Report Paths (Phase A: read-only aggregation + conditional GET) ---
         spec["paths"]["/api/report"] = {
             "get": {

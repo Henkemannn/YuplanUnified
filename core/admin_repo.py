@@ -563,6 +563,7 @@ class Alt2Repo:
         finally:
             db.close()
 
+feat/menu-choice-pass-b
     def department_version(self, week: int, department_id: str) -> int:
         """Return max version for a department's week flags (0 if none)."""
         db = get_session()
@@ -635,3 +636,5 @@ class Alt2Repo:
         finally:
             db.close()
 
+
+ master
