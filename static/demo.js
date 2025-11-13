@@ -280,6 +280,169 @@ el('btnAlt2Toggle')?.addEventListener('click', alt2_toggle);
   });
 })();
 
+// --- CSV Import (Pass F) ---
+(() => {
+  const openBtn = document.getElementById('btnCsvImportOpen');
+  const fileInp = document.getElementById('csvFileInput');
+  const dz = document.getElementById('csvDropZone');
+  const errBox = document.getElementById('csvError');
+  const mapWrap = document.getElementById('csvMapping');
+  const mapDay = document.getElementById('csvMapDay');
+  const mapLunch = document.getElementById('csvMapLunch');
+  const mapEve = document.getElementById('csvMapEve');
+  const prev = document.getElementById('csvPreview');
+  const summary = document.getElementById('csvSummary');
+  const moreWrap = document.getElementById('csvMoreWrap');
+  const btnMore = document.getElementById('csvShowMore');
+  if(!openBtn || !fileInp || !dz || !errBox || !mapWrap || !mapDay || !mapLunch || !mapEve || !prev || !summary || !moreWrap || !btnMore) return;
+
+  let parsed = { headers: [], rows: [] };
+  let shown = 50;
+  let mapping = { day: '', lunch: '', eve: '' };
+
+  function setError(msg){
+    if(!msg){ errBox.hidden = true; errBox.textContent=''; return; }
+    errBox.hidden = false; errBox.textContent = msg;
+  }
+
+  openBtn.addEventListener('click', () => fileInp.click());
+  fileInp.addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const text = await f.text();
+    handleCsvText(text);
+  });
+
+  dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('hover'); });
+  dz.addEventListener('dragleave', ()=> dz.classList.remove('hover'));
+  dz.addEventListener('drop', async (e)=>{
+    e.preventDefault(); dz.classList.remove('hover');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(!f) return; const text = await f.text(); handleCsvText(text);
+  });
+  dz.addEventListener('click', ()=> fileInp.click());
+  dz.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); fileInp.click(); } });
+
+  mapDay.addEventListener('change', ()=>{ mapping.day = mapDay.value; renderPreview(); renderSummary(); });
+  mapLunch.addEventListener('change', ()=>{ mapping.lunch = mapLunch.value; renderPreview(); renderSummary(); });
+  mapEve.addEventListener('change', ()=>{ mapping.eve = mapEve.value; renderPreview(); renderSummary(); });
+  btnMore.addEventListener('click', ()=>{ shown += 50; renderPreview(); });
+
+  function handleCsvText(text){
+    setError(''); shown = 50; mapping = {day:'',lunch:'',eve:''};
+    const t = stripBom(text||'');
+    try{
+      const delim = autodetectDelimiter(t);
+      parsed = parseCsv(t, delim);
+      if(parsed.headers.length===0){ setError('Kunde inte läsa rubriker.'); return; }
+      mapWrap.hidden = false; prev.hidden = false; moreWrap.hidden = false; summary.hidden = false;
+      populateMapping(parsed.headers);
+      renderPreview();
+      renderSummary();
+    }catch(e){ setError('Fel vid parsing av CSV. Kontrollera teckenkodning och delimiter.'); }
+  }
+
+  function populateMapping(headers){
+    function fill(sel){ sel.innerHTML = ''; const n = document.createElement('option'); n.value=''; n.textContent='—'; sel.appendChild(n); headers.forEach(h=>{ const o=document.createElement('option'); o.value=h; o.textContent=h; sel.appendChild(o); }); }
+    fill(mapDay); fill(mapLunch); fill(mapEve);
+    // Try simple auto-map by header names
+    const norm = headers.map(normalizeHeader);
+    mapping.day = headers[norm.findIndex(h=>/^(dag|day)$/.test(h))] || '';
+    mapping.lunch = headers[norm.findIndex(h=>/^lunch$/.test(h))] || '';
+    mapping.eve = headers[norm.findIndex(h=>/^(kväll|kvall|evening|dinner)$/.test(h))] || '';
+    mapDay.value = mapping.day; mapLunch.value = mapping.lunch; mapEve.value = mapping.eve;
+  }
+
+  function renderPreview(){
+    const h = parsed.headers; const rows = parsed.rows;
+    prev.innerHTML = '';
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    thead.innerHTML = `<tr>${h.map(x=>`<th>${escapeHtml(x)}</th>`).join('')}</tr>`;
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    const max = Math.min(shown, rows.length);
+    for(let i=0;i<max;i++){
+      const r = rows[i];
+      const tr = document.createElement('tr');
+      for(const col of h){ const td=document.createElement('td'); td.textContent = r[col] ?? ''; tr.appendChild(td); }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    prev.appendChild(table);
+  }
+
+  function renderSummary(){
+    const h = parsed.headers; const rows = parsed.rows;
+    summary.innerHTML = '';
+    const dcol = mapping.day; const lcol = mapping.lunch; const ecol = mapping.eve;
+    if(!dcol){ setError('Välj kolumn för Dag.'); return; }
+    setError('');
+    const res = summarizeMenu({ dayCol:dcol, lunchCol:lcol, eveCol:ecol }, rows);
+    const parts = [];
+    const weekdays = ['mån','tis','ons','tor','fre','lör','sön'];
+    for(let i=0;i<7;i++){
+      const key = String(i+1);
+      const item = res[key] || { lunch:'', eve:'' };
+      parts.push(`<div><strong>${weekdays[i]}:</strong> Lunch: ${escapeHtml(item.lunch||'(tomt)')} · Kväll: ${escapeHtml(item.eve||'(tomt)')}</div>`);
+    }
+    summary.innerHTML = parts.join(' ');
+  }
+})();
+
+function stripBom(text){ return text && text.charCodeAt(0)===0xFEFF ? text.slice(1) : text; }
+function autodetectDelimiter(text){
+  const lines = String(text||'').split(/\r?\n/).slice(0,5);
+  let sc=0, cc=0; for(const ln of lines){ sc += (ln.match(/;/g)||[]).length; cc += (ln.match(/,/g)||[]).length; }
+  return sc>=cc ? ';' : ',';
+}
+function normalizeHeader(h){ return String(h||'').toLowerCase().trim().replace(/\s+/g,' '); }
+function parseCsv(text, delim){
+  const out = []; const headers = [];
+  const d = delim || autodetectDelimiter(text);
+  const lines = String(text||'').split(/\r?\n/);
+  if(lines.length===0) return { headers:[], rows:[] };
+  const first = lines.shift(); if(first==null) return { headers:[], rows:[] };
+  const head = parseCsvLine(first, d); for(const h of head){ headers.push(h); }
+  for(const ln of lines){ if(!ln) continue; const cells = parseCsvLine(ln, d); if(cells.length===0) continue; const row={}; for(let i=0;i<headers.length;i++){ row[headers[i]] = cells[i] ?? ''; } out.push(row); }
+  return { headers, rows: out };
+}
+function parseCsvLine(line, d){
+  const res = []; let i=0; const n=line.length; const delim = d || ',';
+    while(i<n){ let ch=line[i]; if(ch==='"'){ // quoted
+      i++; let val=''; while(i<n){ const c=line[i]; if(c==='\\' && line[i+1]==='"'){ val+='"'; i+=2; continue; } if(c==='"'){ if(line[i+1]==='"'){ val+='"'; i+=2; continue; } i++; break; } val+=c; i++; } res.push(val);
+      if(line[i]===delim) i++; while(line[i]===' ') i++; // skip delim and spaces
+    } else {
+      let start=i; while(i<n && line[i]!==delim) i++; let val=line.slice(start,i).trim(); res.push(val); if(line[i]===delim) i++; while(line[i]===' ') i++;
+    }
+  }
+  return res;
+}
+
+function normalizeDay(val){
+  const s = String(val||'').trim().toLowerCase(); if(!s) return 0;
+  const map = {
+    'm':1,'må':1,'mån':1,'mon':1,'monday':1,
+    't':2,'ti':2,'tis':2,'tue':2,'tuesday':2,
+    'o':3,'on':3,'ons':3,'wed':3,'wednesday':3,
+    'to':4,'tors':4,'tor':4,'thu':4,'thursday':4,
+    'f':5,'fre':5,'fri':5,'friday':5,
+    'l':6,'lö':6,'lör':6,'sat':6,'saturday':6,
+    's':7,'sö':7,'sön':7,'sun':7,'sunday':7
+  };
+  if(map[s]) return map[s];
+  // Try first 2 letters where unique
+  const key = s.slice(0,2);
+  if(map[key]) return map[key];
+  return 0;
+}
+
+function summarizeMenu(cols, rows){
+  const out = { '1':{},'2':{},'3':{},'4':{},'5':{},'6':{},'7':{} };
+  const d = cols.dayCol, l = cols.lunchCol, e = cols.eveCol;
+  for(const r of rows||[]){ const day = normalizeDay(r[d]); if(!day) continue; out[String(day)] = { lunch: (r[l]||'').trim(), eve: (r[e]||'').trim() } }
+  return out;
+}
 // CSV export utilities
 function exportReportCsv(reportJson, week){
   const header = ["Department","Lunch special","Lunch normal","Evening special","Evening normal","Total"];
@@ -395,7 +558,14 @@ function buildReportRows(reportJson){
 if(typeof window !== 'undefined'){
   window.__YU = Object.assign(window.__YU||{}, {
     renderPrintReport,
-    buildReportRows
+    buildReportRows,
+    stripBom,
+    autodetectDelimiter,
+    parseCsv,
+    parseCsvLine,
+    normalizeDay,
+    summarizeMenu,
+    normalizeHeader
   });
 }
 

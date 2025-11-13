@@ -91,3 +91,14 @@ td,th{border:1px solid #ccc;padding:.25rem .5rem}
   .card{box-shadow:none;border:1px solid #999}
   @page{size:A4; margin:12mm}
 }
+
+/* CSV Import (Pass F) */
+.dropzone{margin-top:.5rem;border:2px dashed #94a3b8;border-radius:8px;padding:16px;color:#475569;background:#f8fafc;cursor:pointer}
+.dropzone:focus{outline:2px solid color-mix(in oklab, var(--yuplan-primary) 50%, transparent);outline-offset:2px}
+.csv-mapping{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:.75rem 0}
+.csv-preview{margin-top:.5rem;overflow:auto;border:1px solid #e5e7eb;border-radius:8px;background:#fff}
+.csv-preview table{width:100%;border-collapse:collapse}
+.csv-preview th,.csv-preview td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px}
+.csv-actions{margin-top:.5rem}
+.csv-controls .btn{margin-right:.5rem}
+.csv-bad{background:#fff1f2;border:1px solid #fecdd3;color:#9f1239;border-radius:8px;padding:6px 8px}
