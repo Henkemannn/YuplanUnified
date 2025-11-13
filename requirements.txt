@@ -11,6 +11,12 @@ openapi-spec-validator==0.7.1
 PyYAML>=6.0
 ruff==0.6.3
 mypy==1.11.2
+ feat/whitenoise-static-fallback
+gunicorn==21.2.0
+# Static files middleware for production WSGI
+whitenoise==6.6.0
+
 gunicorn==22.0.0
+ master
 # Bump to a widely available wheel series to support Windows/Python 3.13 locally
 psycopg[binary]==3.2.12
