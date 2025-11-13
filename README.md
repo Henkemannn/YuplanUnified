@@ -1335,5 +1335,5 @@ The script `scripts/set_superuser.py` no longer contains a hardcoded password. I
 
 Important: Never commit secrets. `.gitignore` already ignores `.env*`, `secrets.*`, and `credentials.*` files.
 
-<!-- doc lint rerun -->
+<!-- doc lint rerun 2 -->
 
