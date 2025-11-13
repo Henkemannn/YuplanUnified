@@ -13,6 +13,23 @@
     "README.md",
     "RELEASE_NOTES*.md",
     "SECURITY.md",
-    "SECURITY_SETUP.md"
+    "SECURITY_SETUP.md",
+    "docs/**",
+    "new_ideas/**",
+    "PR_*.md",
+    "pr_*.md",
+    "issue_*.md",
+    "GA_CHECKLIST.md",
+    ".github/**",
+    "adr/**",
+    "DECISIONS.md",
+    "CONTRIBUTING.md",
+    "COPILOT_INSTRUCTIONS.md",
+    "**/node_modules/**",
+    ".git/**",
+    ".venv/**",
+    "e2e/**",
+    "legacy/**",
+    "migrations/**"
   ]
 }
