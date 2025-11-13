@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="sv" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yuplan – Smarta måltidsflöden för kommun, offshore och storkök</title>
+  <meta name="description" content="Planera, producera och leverera måltider – effektivt och spårbart. Yuplan förenklar för kommun, offshore och hotell/storkök." />
+  <meta property="og:title" content="Yuplan – Smarta måltidsflöden" />
+  <meta property="og:description" content="Planera, producera och leverera måltider – effektivt och spårbart." />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#1c7ed6" />
+  <style>
+    :root{
+      --bg:#0b1020;            /* djup marinblå bakgrund */
+      --bg-2:#0f1530;          /* sek. bakgrund */
+      --card:#101728;          /* yta */
+      --text:#eef2ff;          /* huvudtext */
+      --muted:#a3aed0;         /* sekundär text */
+      --brand:#5cc8ff;         /* primär accent */
+      --brand-2:#82c91e;       /* sekundär accent */
+      --warning:#ffd166;
+      --ok:#2fd07b;
+      --maxw:1120px;
+      --radius:16px;
+      --shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    /* Light theme overrides */
+    :root[data-theme="light"]{
+      --bg:#f7f9fc;
+      --bg-2:#eef2f9;
+      --card:#ffffff;
+      --text:#0b1020;
+      --muted:#475569;
+      --brand:#1c7ed6;
+      --brand-2:#2fb344;
+      --warning:#d9480f;
+      --ok:#2f9e44;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; color:var(--text); background:var(--bg);}
+    /* Decorative gradients per theme */
+    :root[data-theme="dark"] body{background:
+      radial-gradient(1200px 700px at 10% -10%, rgba(92,200,255,.25), transparent 60%),
+      radial-gradient(900px 600px at 100% 0%, rgba(130,201,30,.15), transparent 50%),
+      linear-gradient(180deg, #0b1020 0%, #0a0f1d 100%)
+    }
+    :root[data-theme="light"] body{background:
+      radial-gradient(1200px 700px at 10% -10%, rgba(28,126,214,.15), transparent 60%),
+      radial-gradient(900px 600px at 100% 0%, rgba(47,179,68,.12), transparent 50%),
+      linear-gradient(180deg, #f7f9fc 0%, #eef2f9 100%)
+    }
+    a{color:inherit; text-decoration:none}
+    .container{max-width:var(--maxw); margin:0 auto; padding:0 20px}
+    header.nav{position:sticky; top:0; backdrop-filter:saturate(130%) blur(6px); background:color-mix(in oklab, var(--bg) 70%, transparent); border-bottom:1px solid rgba(0,0,0,.06); z-index:10}
+    .nav-inner{display:flex; align-items:center; justify-content:space-between; padding:16px 0}
+    .brand{display:flex; align-items:center; gap:12px}
+    .brand .logo{width:36px; height:36px; display:grid; place-items:center; background:linear-gradient(135deg, var(--brand), color-mix(in oklab, var(--brand) 65%, #fff)); color:#001; border-radius:10px; box-shadow:var(--shadow)}
+    .brand h1{font-size:18px; margin:0; letter-spacing:.3px; color:#e6f6ff}
+    .nav-cta a{display:inline-flex; align-items:center; gap:8px; background:var(--brand); color:#012; padding:10px 14px; border-radius:10px; font-weight:600; box-shadow:0 6px 20px rgba(92,200,255,.35)}
+    .nav-cta a:hover{transform:translateY(-1px)}
+    .nav-tools{display:flex; align-items:center; gap:10px}
+    .lang-select{appearance:none; background:var(--card); color:var(--text); border:1px solid rgba(0,0,0,.1); padding:8px 10px; border-radius:10px; font-weight:600}
+    .toggle{display:inline-flex; align-items:center; justify-content:center; width:40px; height:36px; border-radius:10px; border:1px solid rgba(0,0,0,.1); background:var(--card); cursor:pointer}
+    .toggle[aria-pressed="true"]{outline:2px solid color-mix(in oklab, var(--brand) 60%, transparent)}
+  .visually-hidden{position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
+
+    /* Hero */
+    .hero{padding:64px 0 24px}
+    .hero .wrap{display:grid; grid-template-columns:1.2fr .8fr; gap:28px}
+    .kicker{display:inline-block; padding:6px 12px; border:1px solid rgba(255,255,255,.12); border-radius:999px; color:var(--muted); font-size:14px}
+    h2{font-size:48px; line-height:1.1; margin:14px 0 12px}
+    .sub{font-size:18px; color:var(--muted); max-width:58ch}
+    .cta{margin-top:20px; display:flex; gap:12px; flex-wrap:wrap}
+    .btn{display:inline-flex; align-items:center; gap:10px; padding:12px 16px; border-radius:12px; border:1px solid rgba(255,255,255,.12)}
+    .btn.primary{background:var(--brand); color:#012; border-color:transparent; font-weight:700}
+    .btn.secondary{background:transparent; color:var(--text)}
+    .hero-card{background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.08); padding:18px; border-radius:14px}
+    .hero-metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:12px}
+    .metric{background:var(--card); border:1px solid rgba(255,255,255,.07); padding:14px; border-radius:12px}
+    .metric .n{font-size:22px; font-weight:800}
+    .metric .t{color:var(--muted); font-size:13px}
+
+    /* Trust bar */
+    .trust{padding:18px 0 6px; color:var(--muted); font-size:14px}
+    .logos{display:flex; gap:18px; flex-wrap:wrap; margin-top:10px}
+    .logo-pill{padding:8px 12px; border:1px dashed rgba(255,255,255,.15); color:#cbd5e1; border-radius:999px}
+
+    /* Cards / Sections */
+    section{padding:40px 0}
+    .grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:18px}
+    .grid-2{display:grid; grid-template-columns:repeat(2,1fr); gap:18px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015)); border:1px solid rgba(255,255,255,.08); border-radius:var(--radius); padding:18px}
+    .card h3{margin:0 0 6px}
+    .card p{margin:0; color:var(--muted)}
+    .badge{display:inline-flex; align-items:center; gap:8px; background:rgba(130,201,30,.18); color:#e8ffe0; padding:6px 10px; border-radius:999px; font-size:12px; border:1px solid rgba(130,201,30,.25)}
+
+    .features li{margin:.35rem 0}
+    .features svg{opacity:.9}
+
+    /* Split verticals */
+    .vert{display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start}
+    .vert h3{font-size:22px}
+    .muted{color:var(--muted)}
+
+    /* CTA */
+    .cta-panel{display:flex; justify-content:space-between; align-items:center; gap:18px; padding:22px; background:linear-gradient(90deg, rgba(92,200,255,.12), rgba(130,201,30,.10)); border:1px solid rgba(255,255,255,.08); border-radius:16px}
+
+    footer{padding:28px 0 40px; color:#cbd5e1; border-top:1px solid rgba(255,255,255,.06)}
+
+    /* Responsive */
+    @media (max-width:980px){ .hero .wrap{grid-template-columns:1fr} .grid-3{grid-template-columns:1fr 1fr} .vert{grid-template-columns:1fr} }
+    @media (max-width:640px){ .grid-3,.grid-2{grid-template-columns:1fr} h2{font-size:36px} }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="container nav-inner">
+      <div class="brand" aria-label="Yuplan">
+        <div class="logo" aria-hidden="true" title="Yuplan" style="background:transparent; box-shadow:none;">
+          <img src="/static/img/logo-proposal.svg" alt="Yuplan" width="36" height="36" style="display:block; border-radius:10px" />
+        </div>
+        <h1>Yuplan</h1>
+      </div>
+      <div class="nav-tools">
+        <label class="visually-hidden" for="langSelect">Språk</label>
+        <select id="langSelect" class="lang-select" aria-label="Språk">
+          <option value="sv">Sv</option>
+          <option value="no">No</option>
+          <option value="en">En</option>
+        </select>
+        <button id="themeToggle" class="toggle" aria-pressed="false" aria-label="Växla tema">
+          <svg id="iconSun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        </button>
+        <div class="nav-cta"><a data-i18n="nav.book_demo" href="#kontakt" aria-label="Boka demo">Boka demo</a></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container wrap">
+        <div>
+          <span class="kicker" data-i18n="hero.kicker">Planering • Produktion • Leverans</span>
+          <h2 data-i18n-html="hero.title">Smarta måltider för <span style="color:var(--brand)">kommun</span>, <span style="color:var(--brand)">offshore</span> & <span style="color:var(--brand)">storkök</span>.</h2>
+          <p class="sub" data-i18n="hero.sub">Ett modernt system som minskar svinn, säkrar specialkost och ger realtidsinsikt – från menyval till portion och rapport. Fungerar online och i krävande miljöer.</p>
+          <div class="cta">
+            <a class="btn primary" href="#kontakt" data-i18n="cta.book_demo">Boka demo</a>
+            <a class="btn secondary" href="#funktioner" data-i18n="cta.explore">Utforska funktioner</a>
+          </div>
+          <div class="trust">
+            <div data-i18n="trust.head">Förtroende i offentlig & industriell drift</div>
+            <div class="logos">
+              <span class="logo-pill" data-i18n="trust.elderly">Äldreomsorg</span>
+              <span class="logo-pill" data-i18n="trust.school">Skola</span>
+              <span class="logo-pill" data-i18n="trust.rigs">Riggar & fartyg</span>
+              <span class="logo-pill" data-i18n="trust.hotel">Hotell & konferens</span>
+            </div>
+          </div>
+        </div>
+        <div class="hero-card" aria-label="Snabböversikt">
+          <div class="hero-metrics">
+            <div class="metric"><div class="n">-25%</div><div class="t" data-i18n="metrics.waste">Matsvinn (mål)</div></div>
+            <div class="metric"><div class="n">100%</div><div class="t" data-i18n="metrics.trace">Spårbar specialkost</div></div>
+            <div class="metric"><div class="n">ETag</div><div class="t" data-i18n="metrics.http">Korrekt HTTP-caching</div></div>
+          </div>
+          <p class="muted" style="margin-top:10px" data-i18n="hero.note">Modern webb med säkra flöden (CSRF, ETag, 304/412) och enkel export (CSV/PDF).</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="varfor">
+      <div class="container">
+        <div class="grid-3">
+          <div class="card">
+            <span class="badge" data-i18n="why.efficiency.badge">Effektivitet</span>
+            <h3 data-i18n="why.efficiency.title">Planera snabbare</h3>
+            <p data-i18n="why.efficiency.text">Automatisk portionering, återanvändbara menyer och tydliga beställningsfönster.</p>
+          </div>
+          <div class="card">
+            <span class="badge" style="background:rgba(92,200,255,.18); border-color:rgba(92,200,255,.3); color:#e6f6ff" data-i18n="why.trace.badge">Spårbarhet</span>
+            <h3 data-i18n="why.trace.title">Kontroll på specialkost</h3>
+            <p data-i18n="why.trace.text">Allergener och individbehov hanteras konsekvent – från val till leverans.</p>
+          </div>
+          <div class="card">
+            <span class="badge" style="background:rgba(255,209,102,.18); border-color:rgba(255,209,102,.3); color:#fff6da" data-i18n="why.reliability.badge">Trygghet</span>
+            <h3 data-i18n="why.reliability.title">Byggt för drift</h3>
+            <p data-i18n="why.reliability.text">Stabilt i krävande miljöer med tydliga felmeddelanden och offline-tålighet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="funktioner">
+      <div class="container">
+        <h3 style="margin:0 0 14px" data-i18n="vert.head">Vertikaler & funktioner</h3>
+        <p class="muted" style="margin:0 0 18px" data-i18n="vert.sub">Välj din verksamhet – allt samlat i en plattform.</p>
+
+        <div class="vert card" style="margin-bottom:18px">
+          <div>
+            <h3 data-i18n="v.comm.title">Kommun – äldreomsorg & skola</h3>
+            <p class="muted" data-i18n="v.comm.text">Menyval per avdelning, specialkost, rapporter och export i ett. Följer offentlig kravbild.</p>
+            <ul class="features">
+              <li data-i18n="v.comm.f1">• Menyval (Alt 1/Alt 2) med helgregel och tydlig feedback</li>
+              <li data-i18n="v.comm.f2">• Specialkost & allergener (spårbarhet i varje led)</li>
+              <li data-i18n="v.comm.f3">• Rapporter & export (CSV, PDF) – Excelvänligt</li>
+              <li data-i18n="v.comm.f4">• Beställning & portionering med avräkning</li>
+              <li data-i18n="v.comm.f5">• Statistik, svinn och uppföljning</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4 style="margin:0 0 8px" data-i18n="v.comm.quick">Snabbnytta</h4>
+            <p class="muted" data-i18n="v.comm.quick_text">Enkel start i pilot – välj vecka och enhet, få ut beslutsunderlag på minuten.</p>
+          </div>
+        </div>
+
+        <div class="vert card" style="margin-bottom:18px">
+          <div>
+            <h3 data-i18n="v.off.title">Offshore – rigg & fartyg</h3>
+            <p class="muted" data-i18n="v.off.text">Skiftplaner, musterlistor och kostpreferenser – utan friktion vid väder och byten.</p>
+            <ul class="features">
+              <li data-i18n="v.off.f1">• Skift & bemanning kopplat till måltider</li>
+              <li data-i18n="v.off.f2">• Kostpreferenser & allergener per besättning</li>
+              <li data-i18n="v.off.f3">• Förhandsbeställning och köhantering</li>
+              <li data-i18n="v.off.f4">• Offline-tålighet och robusta vyer</li>
+              <li data-i18n="v.off.f5">• Rapporter för revision & säkerhet</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4 style="margin:0 0 8px" data-i18n="v.off.quick">Operativ kontroll</h4>
+            <p class="muted" data-i18n="v.off.quick_text">Snabba ändringar, tydliga listor och redundans minskar driftstopp.</p>
+          </div>
+        </div>
+
+        <div class="vert card">
+          <div>
+            <h3 data-i18n="v.hot.title">Hotell & storkök</h3>
+            <p class="muted" data-i18n="v.hot.text">Event-menyer, bufféplanering och leverans – anpassat för volym och variation.</p>
+            <ul class="features">
+              <li data-i18n="v.hot.f1">• Event & säsongsmenyer med kalkyler</li>
+              <li data-i18n="v.hot.f2">• Buffé/linje – portionsflöden & märkning</li>
+              <li data-i18n="v.hot.f3">• Inköp & leverans, enkel avstämning</li>
+              <li data-i18n="v.hot.f4">• Svinnmätning & förbättringsförslag</li>
+              <li data-i18n="v.hot.f5">• Export och integrationer vid behov</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4 style="margin:0 0 8px" data-i18n="v.hot.quick">Gästupplevelse</h4>
+            <p class="muted" data-i18n="v.hot.quick_text">Rätt rätt, i rätt mängd – samtidigt som köket får lugnare rytm.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section style="padding-top:10px">
+      <div class="container">
+        <div class="cta-panel" id="kontakt">
+          <div>
+            <h3 style="margin:0 0 6px" data-i18n="cta.panel.title">Låt oss visa hur Yuplan kan hjälpa er</h3>
+            <p class="muted" style="margin:0" data-i18n="cta.panel.sub">30 min demo – fokuserad på er verksamhet. Inga förpliktelser.</p>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap">
+            <a class="btn primary" href="mailto:sales@yuplan.se?subject=Boka%20demo%20Yuplan" data-i18n="cta.book_demo">Boka demo</a>
+            <a class="btn secondary" href="tel:+46100000000" data-i18n="cta.call">Ring oss</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container" style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap">
+      <div>
+        <div class="brand" style="gap:10px">
+          <div class="logo" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l6 10v10h-4v-6H10v6H6V12L12 2z" fill="#001"/></svg></div>
+          <strong>Yuplan</strong>
+        </div>
+        <div class="muted" style="margin-top:6px">© <span id="y"></span> Yuplan. Alla rättigheter förbehållna.</div>
+      </div>
+      <div class="muted" data-i18n="footer.links">Integritet • Villkor • Support</div>
+    </div>
+  </footer>
+  <script>
+    // Utilities: year, theme toggle, language i18n
+    document.getElementById('y').textContent = new Date().getFullYear();
+
+    const themeStorageKey = 'yuplan.theme';
+    const langStorageKey = 'yuplan.lang';
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    const root = document.documentElement;
+
+    function applyTheme(theme){
+      root.setAttribute('data-theme', theme);
+      if(theme === 'light') themeMeta.setAttribute('content', '#1c7ed6');
+      else themeMeta.setAttribute('content', '#1c7ed6');
+      const pressed = theme === 'dark';
+      const btn = document.getElementById('themeToggle');
+      if(btn) btn.setAttribute('aria-pressed', String(pressed));
+      localStorage.setItem(themeStorageKey, theme);
+    }
+
+    // init theme
+    (function(){
+      const stored = localStorage.getItem(themeStorageKey);
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      applyTheme(stored || (prefersDark ? 'dark' : 'light'));
+      const toggle = document.getElementById('themeToggle');
+      if (toggle) toggle.addEventListener('click', () => {
+        const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        applyTheme(next);
+      });
+    })();
+
+    // i18n dictionaries
+    const I18N = {
+      sv: {
+        doc: { title: 'Yuplan – Smarta måltidsflöden för kommun, offshore och storkök', desc: 'Planera, producera och leverera måltider – effektivt och spårbart. Yuplan förenklar för kommun, offshore och hotell/storkök.' },
+        nav: { book_demo: 'Boka demo' },
+        hero: {
+          kicker: 'Planering • Produktion • Leverans',
+          title: 'Smarta måltider för <span style="color:var(--brand)">kommun</span>, <span style="color:var(--brand)">offshore</span> & <span style="color:var(--brand)">storkök</span>.',
+          sub: 'Ett modernt system som minskar svinn, säkrar specialkost och ger realtidsinsikt – från menyval till portion och rapport. Fungerar online och i krävande miljöer.',
+          note: 'Modern webb med säkra flöden (CSRF, ETag, 304/412) och enkel export (CSV/PDF).'
+        },
+        cta: { book_demo: 'Boka demo', explore: 'Utforska funktioner', call: 'Ring oss', panel: { title: 'Låt oss visa hur Yuplan kan hjälpa er', sub: '30 min demo – fokuserad på er verksamhet. Inga förpliktelser.' } },
+        trust: { head: 'Förtroende i offentlig & industriell drift', elderly: 'Äldreomsorg', school: 'Skola', rigs: 'Riggar & fartyg', hotel: 'Hotell & konferens' },
+        metrics: { waste: 'Matsvinn (mål)', trace: 'Spårbar specialkost', http: 'Korrekt HTTP-caching' },
+        why: {
+          efficiency: { badge: 'Effektivitet', title: 'Planera snabbare', text: 'Automatisk portionering, återanvändbara menyer och tydliga beställningsfönster.' },
+          trace: { badge: 'Spårbarhet', title: 'Kontroll på specialkost', text: 'Allergener och individbehov hanteras konsekvent – från val till leverans.' },
+          reliability: { badge: 'Trygghet', title: 'Byggt för drift', text: 'Stabilt i krävande miljöer med tydliga felmeddelanden och offline-tålighet.' }
+        },
+        vert: { head: 'Vertikaler & funktioner', sub: 'Välj din verksamhet – allt samlat i en plattform.' },
+        v: {
+          comm: {
+            title: 'Kommun – äldreomsorg & skola', text: 'Menyval per avdelning, specialkost, rapporter och export i ett. Följer offentlig kravbild.',
+            f1: '• Menyval (Alt 1/Alt 2) med helgregel och tydlig feedback',
+            f2: '• Specialkost & allergener (spårbarhet i varje led)',
+            f3: '• Rapporter & export (CSV, PDF) – Excelvänligt',
+            f4: '• Beställning & portionering med avräkning',
+            f5: '• Statistik, svinn och uppföljning',
+            quick: 'Snabbnytta', quick_text: 'Enkel start i pilot – välj vecka och enhet, få ut beslutsunderlag på minuten.'
+          },
+          off: {
+            title: 'Offshore – rigg & fartyg', text: 'Skiftplaner, musterlistor och kostpreferenser – utan friktion vid väder och byten.',
+            f1: '• Skift & bemanning kopplat till måltider',
+            f2: '• Kostpreferenser & allergener per besättning',
+            f3: '• Förhandsbeställning och köhantering',
+            f4: '• Offline-tålighet och robusta vyer',
+            f5: '• Rapporter för revision & säkerhet',
+            quick: 'Operativ kontroll', quick_text: 'Snabba ändringar, tydliga listor och redundans minskar driftstopp.'
+          },
+          hot: {
+            title: 'Hotell & storkök', text: 'Event-menyer, bufféplanering och leverans – anpassat för volym och variation.',
+            f1: '• Event & säsongsmenyer med kalkyler',
+            f2: '• Buffé/linje – portionsflöden & märkning',
+            f3: '• Inköp & leverans, enkel avstämning',
+            f4: '• Svinnmätning & förbättringsförslag',
+            f5: '• Export och integrationer vid behov',
+            quick: 'Gästupplevelse', quick_text: 'Rätt rätt, i rätt mängd – samtidigt som köket får lugnare rytm.'
+          }
+        },
+        footer: { links: 'Integritet • Villkor • Support' }
+      },
+      no: {
+        doc: { title: 'Yuplan – Smarte måltidsflyter for kommune, offshore og storkjøkken', desc: 'Planlegg, produser og lever måltider – effektivt og sporbart. Yuplan forenkler for kommune, offshore og hotell/storkjøkken.' },
+        nav: { book_demo: 'Book demo' },
+        hero: {
+          kicker: 'Planlegging • Produksjon • Leveranse',
+          title: 'Smarte måltider for <span style="color:var(--brand)">kommune</span>, <span style="color:var(--brand)">offshore</span> & <span style="color:var(--brand)">storkjøkken</span>.',
+          sub: 'Et moderne system som reduserer matsvinn, sikrer spesialkost og gir sanntidsinnsikt – fra menyvalg til porsjon og rapport. Fungerer online og i krevende miljøer.',
+          note: 'Moderne web med sikre flyter (CSRF, ETag, 304/412) og enkel eksport (CSV/PDF).'
+        },
+        cta: { book_demo: 'Book demo', explore: 'Utforsk funksjoner', call: 'Ring oss', panel: { title: 'La oss vise hvordan Yuplan kan hjelpe dere', sub: '30 min demo – tilpasset deres behov. Ingen forpliktelser.' } },
+        trust: { head: 'Tillitt i offentlig og industriell drift', elderly: 'Eldreomsorg', school: 'Skole', rigs: 'Rigger & skip', hotel: 'Hotell & konferanse' },
+        metrics: { waste: 'Matsvinn (mål)', trace: 'Sporbar spesialkost', http: 'Korrekt HTTP-caching' },
+        why: {
+          efficiency: { badge: 'Effektivitet', title: 'Planlegg raskere', text: 'Automatisk porsjonering, gjenbrukbare menyer og tydelige bestillingsvinduer.' },
+          trace: { badge: 'Sporbarhet', title: 'Kontroll på spesialkost', text: 'Allergener og individuelle behov håndteres konsekvent – fra valg til levering.' },
+          reliability: { badge: 'Trygghet', title: 'Bygd for drift', text: 'Stabilt i krevende miljøer med tydelige feilmeldinger og offline-tålighet.' }
+        },
+        vert: { head: 'Vertikaler & funksjoner', sub: 'Velg din virksomhet – samlet i én plattform.' },
+        v: {
+          comm: {
+            title: 'Kommune – eldreomsorg & skole', text: 'Menyvalg per avdeling, spesialkost, rapporter og eksport i ett. Følger offentlig krav.',
+            f1: '• Menyvalg (Alt 1/Alt 2) med helgeregel og tydelig tilbakemelding',
+            f2: '• Spesialkost & allergener (sporbarhet i hvert ledd)',
+            f3: '• Rapporter & eksport (CSV, PDF) – Excel-vennlig',
+            f4: '• Bestilling & porsjonering med avregning',
+            f5: '• Statistikk, svinn og oppfølging',
+            quick: 'Rask nytte', quick_text: 'Enkel pilotstart – velg uke og enhet, få beslutningsgrunnlag på minutter.'
+          },
+          off: {
+            title: 'Offshore – rigg & skip', text: 'Skiftplaner, muster og kostpreferanser – uten friksjon ved vær og bytter.',
+            f1: '• Skift & bemanning koblet til måltider',
+            f2: '• Kostpreferanser & allergener per mannskap',
+            f3: '• Forhåndsbestilling og køhåndtering',
+            f4: '• Offline-tålighet og robuste visninger',
+            f5: '• Rapporter for revisjon & sikkerhet',
+            quick: 'Operativ kontroll', quick_text: 'Raske endringer, tydelige lister og redundans reduserer driftsstans.'
+          },
+          hot: {
+            title: 'Hotell & storkjøkken', text: 'Eventmenyer, buffetplanlegging og levering – for volum og variasjon.',
+            f1: '• Event & sesongmenyer med kalkyler',
+            f2: '• Buffet/linje – porsjonsflyt & merking',
+            f3: '• Innkjøp & levering, enkel avstemming',
+            f4: '• Svinnmåling & forbedringsforslag',
+            f5: '• Eksport og integrasjoner ved behov',
+            quick: 'Gjestopplevelse', quick_text: 'Rett rett, i rett mengde – og roligere rytme på kjøkkenet.'
+          }
+        },
+        footer: { links: 'Personvern • Vilkår • Support' }
+      },
+      en: {
+        doc: { title: 'Yuplan – Smart meal flows for municipalities, offshore and large kitchens', desc: 'Plan, produce and deliver meals – efficient and traceable. Yuplan simplifies operations for public sector, offshore, and hotels/catering.' },
+        nav: { book_demo: 'Book a demo' },
+        hero: {
+          kicker: 'Planning • Production • Delivery',
+          title: 'Smart meals for <span style="color:var(--brand)">municipalities</span>, <span style="color:var(--brand)">offshore</span> & <span style="color:var(--brand)">large kitchens</span>.',
+          sub: 'A modern system that reduces waste, secures special diets, and gives real‑time insight – from menu choice to portion and report. Works online and in demanding environments.',
+          note: 'Modern web with secure flows (CSRF, ETag, 304/412) and easy export (CSV/PDF).'
+        },
+        cta: { book_demo: 'Book a demo', explore: 'Explore features', call: 'Call us', panel: { title: 'Let us show how Yuplan can help', sub: '30 min demo – focused on your needs. No obligations.' } },
+        trust: { head: 'Trusted in public and industrial operations', elderly: 'Elderly care', school: 'Schools', rigs: 'Rigs & vessels', hotel: 'Hotels & conferences' },
+        metrics: { waste: 'Food waste (target)', trace: 'Traceable special diets', http: 'Correct HTTP caching' },
+        why: {
+          efficiency: { badge: 'Efficiency', title: 'Plan faster', text: 'Automatic portioning, reusable menus, and clear ordering windows.' },
+          trace: { badge: 'Traceability', title: 'Control special diets', text: 'Allergens and individual needs handled consistently – from choice to delivery.' },
+          reliability: { badge: 'Reliability', title: 'Built for operations', text: 'Stable in demanding environments with clear errors and offline resilience.' }
+        },
+        vert: { head: 'Verticals & features', sub: 'Pick your operation – all in one platform.' },
+        v: {
+          comm: {
+            title: 'Municipal – elderly care & schools', text: 'Menu choice per ward, special diets, reports and export in one. Meets public requirements.',
+            f1: '• Menu choice (Alt 1/Alt 2) with weekend rule and clear feedback',
+            f2: '• Special diets & allergens (traceability in every step)',
+            f3: '• Reports & export (CSV, PDF) – Excel‑friendly',
+            f4: '• Ordering & portioning with reconciliation',
+            f5: '• Statistics, waste and follow‑up',
+            quick: 'Quick value', quick_text: 'Start a pilot easily – pick week and unit, get decision support in minutes.'
+          },
+          off: {
+            title: 'Offshore – rigs & vessels', text: 'Shift plans, muster lists and dietary preferences – no friction with weather or rotations.',
+            f1: '• Shifts & staffing linked to meals',
+            f2: '• Dietary preferences & allergens per crew',
+            f3: '• Pre‑ordering and queue handling',
+            f4: '• Offline resilience and robust views',
+            f5: '• Reports for audits & safety',
+            quick: 'Operational control', quick_text: 'Fast changes, clear lists and redundancy reduce downtime.'
+          },
+          hot: {
+            title: 'Hotels & catering', text: 'Event menus, buffet planning and delivery – built for volume and variety.',
+            f1: '• Event & seasonal menus with costing',
+            f2: '• Buffet/line – portion flows & labeling',
+            f3: '• Purchasing & delivery, easy reconciliation',
+            f4: '• Waste measurement & improvements',
+            f5: '• Export and integrations as needed',
+            quick: 'Guest experience', quick_text: 'Right dish, right amount – while keeping the kitchen calm.'
+          }
+        },
+        footer: { links: 'Privacy • Terms • Support' }
+      }
+    };
+
+    function setLang(lang){
+      const dict = I18N[lang] || I18N.sv;
+      document.title = dict.doc.title;
+      const md = document.querySelector('meta[name="description"]');
+      if(md) md.setAttribute('content', dict.doc.desc);
+      const ogt = document.querySelector('meta[property="og:title"]');
+      if(ogt) ogt.setAttribute('content', dict.doc.title.replace(' – ', ' – '));
+      const ogd = document.querySelector('meta[property="og:description"]');
+      if(ogd) ogd.setAttribute('content', dict.doc.desc);
+
+      // simple [data-i18n] textContent replacement
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        const val = key.split('.').reduce((o,k)=> (o||{})[k], dict);
+        if(typeof val === 'string') el.textContent = val;
+      });
+      // elements that contain HTML
+      document.querySelectorAll('[data-i18n-html]').forEach(el => {
+        const key = el.getAttribute('data-i18n-html');
+        const val = key.split('.').reduce((o,k)=> (o||{})[k], dict);
+        if(typeof val === 'string') el.innerHTML = val;
+      });
+
+      document.documentElement.lang = lang;
+      localStorage.setItem(langStorageKey, lang);
+      const sel = document.getElementById('langSelect');
+      if(sel && sel.value !== lang) sel.value = lang;
+    }
+
+    (function(){
+      const stored = localStorage.getItem(langStorageKey) || 'sv';
+      setLang(stored);
+      const sel = document.getElementById('langSelect');
+      if(sel) sel.addEventListener('change', (e)=> setLang(e.target.value));
+    })();
+  </script>
+</body>
+</html>
