@@ -4,6 +4,10 @@
   "MD033": false,
   "MD041": { "level": 2 },
   "ignores": [
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "README.md",
+    "RELEASE_NOTES*.md",
+    "SECURITY.md",
+    "SECURITY_SETUP.md"
   ]
 }
