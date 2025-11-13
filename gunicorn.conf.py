@@ -1,5 +1,3 @@
-import multiprocessing
-
 workers = 3  # explicit workers per instruction
 threads = 1
 timeout = 60
