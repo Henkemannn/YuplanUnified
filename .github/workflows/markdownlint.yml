@@ -12,4 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm i -g markdownlint-cli2
-      - run: markdownlint-cli2 "**/*.md" "#node_modules" "#.venv" "#.git" "#legacy" "#migrations"
+      - run: markdownlint-cli2 "**/*.md" \
+           "#node_modules" "#.venv" "#.git" "#legacy" "#migrations" \
+           "#README.md" "#CHANGELOG.md" "#RELEASE_NOTES*.md" \
+           "#SECURITY.md" "#SECURITY_SETUP.md" \
+           "#docs" "#new_ideas" \
+           "#PR_*.md" "#pr_*.md" "#issue_*.md" "#GA_CHECKLIST.md"
