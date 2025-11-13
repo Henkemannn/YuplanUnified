@@ -23,6 +23,7 @@ from typing import Any
 import os
 
 from flask import Flask, g, jsonify, request, session
+import mimetypes
 from werkzeug.wrappers.response import Response
 
 from .admin_api import bp as admin_api_bp
@@ -73,6 +74,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         template_folder=os.path.join(base_dir, "templates"),
         static_folder=os.path.join(base_dir, "static"),
     )
+    # Ensure correct MIME type for PWA manifest
+    try:
+        mimetypes.add_type("application/manifest+json", ".webmanifest")
+    except Exception:
+        pass
     # --- Configuration ---
     cfg = Config.from_env()
     if config_override:
@@ -104,7 +110,6 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- Feature flags ---
     feature_registry = FeatureRegistry()
-feat/menu-choice-pass-b
     # Ensure ff.admin.enabled present for tests / staging convenience
     if not feature_registry.has("ff.admin.enabled"):
         feature_registry.add("ff.admin.enabled")
@@ -112,6 +117,8 @@ feat/menu-choice-pass-b
     try:
         if app.config.get("TESTING") or os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
             feature_registry.set("ff.admin.enabled", True)
+    except Exception:
+        pass
 
     # Enable admin module by default in staging/demo environments when simple auth flag is on.
     try:
@@ -121,7 +128,6 @@ feat/menu-choice-pass-b
                 feature_registry.add("ff.admin.enabled")
             else:
                 feature_registry.set("ff.admin.enabled", True)
- master
     except Exception:
         pass
     # Expose for tests manipulating registry directly
@@ -1783,12 +1789,8 @@ feat/menu-choice-pass-b
                     "429": {"$ref": "#/components/responses/Problem429"},
                 },
             }
-        }
- feat/menu-choice-pass-b
-    # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
-
-        # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
- master
+     }
+     # --- Weekview Paths (Phase C: conditional GET + residents/alt2 mutations) ---
         spec["paths"]["/api/weekview"] = {
             "get": {
                 "tags": ["weekview"],
@@ -1960,12 +1962,8 @@ feat/menu-choice-pass-b
                     "412": {"$ref": "#/components/responses/Problem412"},
                 },
             }
-        }
- feat/menu-choice-pass-b
-    # Alt2 flags mutation
-
-        # Alt2 flags mutation
- master
+     }
+     # Alt2 flags mutation
         spec["paths"]["/api/weekview/alt2"] = {
             "patch": {
                 "tags": ["weekview"],
@@ -2007,8 +2005,7 @@ feat/menu-choice-pass-b
                     "412": {"$ref": "#/components/responses/Problem412"},
                 },
             }
-        }
- feat/menu-choice-pass-b
+    }
 
         # --- Pass B: Menu Choice (Alt1/Alt2) per department/week ---
         # Publicly documented path
@@ -2071,8 +2068,6 @@ feat/menu-choice-pass-b
                 },
             },
         }
-
- master
     # --- Report Paths (Phase A: read-only aggregation + conditional GET) ---
         spec["paths"]["/api/report"] = {
             "get": {

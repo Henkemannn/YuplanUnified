@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run --environment jsdom",
-    "test:watch": "vitest --environment jsdom"
+    "test:watch": "vitest --environment jsdom",
+    "build:icons": "node scripts/assets/build_icons.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -27,6 +28,7 @@
     "@vitejs/plugin-react": "^4.3.3",
     "jsdom": "^27.1.0",
     "msw": "^2.6.4",
+    "sharp": "^0.33.3",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vitest": "^2.1.3",

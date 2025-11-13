@@ -4,15 +4,22 @@
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Demo – Admin flows</title>
-  <link rel="stylesheet" href="/static/demo.css?v={{ asset_version }}"/>
+  <link rel="stylesheet" href="/static/demo.css?v={{ asset_version|default('') }}"/>
+  <link rel="manifest" href="/static/manifest.webmanifest?v={{ asset_version|default('') }}">
+  <link rel="icon" href="/static/favicon.ico?v={{ asset_version|default('') }}">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ asset_version|default('') }}" sizes="180x180">
+  <link rel="mask-icon" href="/static/img/logo-mono-dark.svg?v={{ asset_version|default('') }}" color="#111827">
+  <meta name="theme-color" content="#f8f9fa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
   </head>
   <body data-demo-ui-flag="{{ '1' if demo_ui_enabled else '0' }}">
     <div class="app">
       <header class="app-header">
         <div class="brand">
           <picture>
-            <source media="(max-width: 480px)" srcset="/static/img/logo-compact.svg" />
-            <img src="/static/img/logo-proposal.svg" alt="Yuplan" width="40" height="40" style="border-radius:8px" />
+            <source media="(prefers-color-scheme: dark)" srcset="/static/img/logo-mono-dark.svg?v={{ asset_version|default('') }}" />
+            <source media="(max-width: 480px)" srcset="/static/img/logo-compact.svg?v={{ asset_version|default('') }}" />
+            <img src="/static/img/logo-proposal.svg?v={{ asset_version|default('') }}" alt="Yuplan" width="40" height="40" style="border-radius:8px" />
           </picture>
           <h1>Yuplan Unified</h1>
         </div>
