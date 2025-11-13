@@ -98,6 +98,37 @@
         </div>
       </div>
   </section>
+  <!-- CSV Import (Pass F) -->
+  <section class="panel" role="region" aria-label="Importera meny (CSV)" data-panel="admin" hidden>
+    <div class="card">
+      <h3>Importera meny (CSV)</h3>
+      <p class="muted">Klient-sida förhandsvisning och kolumn-mapping. Ingen server-skrivning ännu.</p>
+      <div class="csv-controls">
+        <button id="btnCsvImportOpen" class="btn" type="button">Importera CSV</button>
+        <input id="csvFileInput" type="file" accept=".csv" style="display:none" />
+      </div>
+      <div id="csvDropZone" class="dropzone" tabindex="0" aria-label="Släpp CSV här eller klicka för att välja">
+        Släpp CSV här, eller klicka på "Importera CSV".
+      </div>
+      <div id="csvError" class="flash flash-err" role="alert" hidden></div>
+      <div id="csvMapping" class="csv-mapping" hidden>
+        <label>Dag
+          <select id="csvMapDay"></select>
+        </label>
+        <label>Lunch
+          <select id="csvMapLunch"></select>
+        </label>
+        <label>Kväll
+          <select id="csvMapEve"></select>
+        </label>
+      </div>
+      <div id="csvSummary" class="muted" hidden></div>
+      <div id="csvPreview" class="csv-preview" hidden></div>
+      <div class="csv-actions" hidden id="csvMoreWrap">
+        <button id="csvShowMore" type="button">Visa fler</button>
+      </div>
+    </div>
+  </section>
   <section id="panel-menyval" class="panel" role="region" aria-labelledby="nav-menyval" data-panel="menyval" hidden>
       <div class="card">
         <h3>3) Menyval (Alt2 mån–fre; helg Alt1)</h3>
