@@ -5,12 +5,8 @@ function getCookie(name){
 function etagStrongOrWeak(et){ return et && et.startsWith('W/') ? et : et }
 
 let lastDepts = null, lastDeptsEtag = null; // {site_id, items}
- feat/menu-choice-pass-b
 let lastAlt2 = null, lastAlt2Etag = null;   // legacy alt2 demo
 let lastMenuChoice = null, lastMenuChoiceEtag = null; // {week, department, days}
-
-let lastAlt2 = null, lastAlt2Etag = null;   // {week, items}
- master
 let lastReportJson = null, lastReportWeek = null;
 const demoUiEnabled = (document.body?.dataset?.demoUi === '1');
 
@@ -122,7 +118,6 @@ function activateRoute(name){
     if(active){ a.setAttribute('aria-current','page'); } else { a.removeAttribute('aria-current'); }
   });
 }
- feat/menu-choice-pass-b
 function currentRoute(){
   const h=(location.hash||'').replace(/^#/,'');
   // alias legacy #alt2 -> #menyval
@@ -130,10 +125,7 @@ function currentRoute(){
   return (['weekview','admin','menyval','report','alt2'].includes(h)?h:'weekview');
 }
 window.addEventListener('hashchange', ()=> { const r=currentRoute(); activateRoute(r); if(r==='menyval') loadMenuChoice(); });
-
-function currentRoute(){ const h=(location.hash||'').replace(/^#/,''); return (['weekview','admin','alt2','report'].includes(h)?h:'weekview'); }
-window.addEventListener('hashchange', ()=> activateRoute(currentRoute()));
- master
+ 
 document.addEventListener('DOMContentLoaded', ()=>{
   const wkSel = $('header-week-select');
   if(wkSel && wkSel.options.length===0){
@@ -143,11 +135,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const deptSel = $('header-dept-select');
   if(deptSel && deptSel.options.length===0){ const o=document.createElement('option'); o.value=''; o.textContent='—'; deptSel.appendChild(o); }
   activateRoute(currentRoute());
- feat/menu-choice-pass-b
+  // Render initial Weekview skeleton once
+  try{ renderWeekviewSkeleton(); }catch(e){}
   // Initial auto-load menu choice if header has selections
   maybeAutoLoadMenuChoice();
-
- master
+ 
 });
 
 // Keyboard navigation for side nav
@@ -158,6 +150,18 @@ document.addEventListener('keydown', (e)=>{
   if(e.key==='ArrowDown'){ e.preventDefault(); links[(idx+1)%links.length].focus(); }
   else if(e.key==='ArrowUp'){ e.preventDefault(); links[(idx-1+links.length)%links.length].focus(); }
 });
+
+// --- Weekview skeleton & deferred render ---
+function renderWeekviewSkeleton(){
+  const root = document.getElementById('weekview');
+  if(!root) return;
+  // already present from HTML; ensure cell height stable and titles set
+  const cells = root.querySelectorAll('.cell');
+  cells.forEach((c,i)=>{
+    c.setAttribute('tabindex','0');
+    c.title = `Dag ${((i%7)+1)} · ${i<7?'Lunch':'Middag'}`;
+  });
+}
 
 // Existing event bindings
 const el = (id)=>document.getElementById(id);
@@ -173,13 +177,9 @@ el('btnAlt2Toggle')?.addEventListener('click', alt2_toggle);
 // Fallback for logo if image fails (no inline onerror to satisfy CSP)
 (() => {
   const img = document.getElementById('ylogo');
- feat/menu-choice-pass-b
-  // inline SVG now; fallback not required
-
   const mark = document.getElementById('ymark');
   if(!img || !mark) return;
   img.addEventListener('error', ()=>{ mark.style.display='grid'; img.style.display='none'; });
- master
 })();
 
 // --- Report summary ---
@@ -401,7 +401,6 @@ if(typeof window !== 'undefined'){
 
 // Escape HTML used in ETag badge
 // (duplicate guard) already defined above for cards; reused for ETag badge
- feat/menu-choice-pass-b
 
 // --- Menyval (Pass B UI) ---
 function onHeaderStateChange(){
@@ -558,5 +557,4 @@ function setPanelStale(){
   panel.setAttribute('data-status','stale');
   setTimeout(()=>panel.removeAttribute('data-status'), 2000);
 }
-
- master
+ 

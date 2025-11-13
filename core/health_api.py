@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import Blueprint, jsonify
+from flask import Blueprint
 
 bp = Blueprint("health_api", __name__)
 

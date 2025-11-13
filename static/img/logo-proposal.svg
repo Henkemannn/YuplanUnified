@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Bakgrundsgradient: blå -> turkos -->
+    <radialGradient id="bgGrad" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#2D9CDB"/>
+      <stop offset="100%" stop-color="#00BFA6"/>
+    </radialGradient>
+
+    <!-- Klippmask så allt hålls inne i cirkeln -->
+    <clipPath id="circleClip">
+      <circle cx="256" cy="256" r="240"/>
+    </clipPath>
+  </defs>
+
+  <!-- Bakgrundscirkel -->
+  <circle cx="256" cy="256" r="240" fill="url(#bgGrad)"/>
+
+  <!-- Subtilt rutnät (planeringskänsla) -->
+  <g clip-path="url(#circleClip)" opacity="0.15" stroke="#FFFFFF" stroke-width="4">
+    <!-- Vertikala linjer -->
+    <line x1="128" y1="16" x2="128" y2="496"/>
+    <line x1="256" y1="16" x2="256" y2="496"/>
+    <line x1="384" y1="16" x2="384" y2="496"/>
+
+    <!-- Horisontella linjer -->
+    <line x1="16" y1="144" x2="496" y2="144"/>
+    <line x1="16" y1="256" x2="496" y2="256"/>
+    <line x1="16" y1="368" x2="496" y2="368"/>
+  </g>
+
+  <!-- Gul hörna (accent, uppe till höger) -->
+  <g clip-path="url(#circleClip)">
+    <path d="M 512 0 L 512 190 L 320 0 Z" fill="#FFD166" opacity="0.95"/>
+  </g>
+
+  <!-- Y-symbolen -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Vänster arm -->
+    <path d="M 170 140 L 256 230"/>
+    <!-- Höger arm -->
+    <path d="M 342 140 L 256 230"/>
+    <!-- Stam nedåt -->
+    <path d="M 256 230 L 256 360"/>
+  </g>
+</svg>

@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from functools import wraps
 
-from flask import Blueprint, current_app, jsonify, make_response, request, session, redirect, Response
+from flask import Blueprint, current_app, jsonify, make_response, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_session

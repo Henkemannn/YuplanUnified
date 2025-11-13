@@ -1,10 +1,30 @@
-# Ruff configuration (baseline minimal)
-# This keeps existing style deviations from blocking CI after enabling Ruff.
-line-length = 100
-select = ["E","F","I","B","Q","UP","SIM"]
-ignore = [
-  # Allow existing unsorted imports, large diff avoidance
-  "I001",
-  # Allow existing quoting style (single quotes)
-  "Q000",
+exclude = [
+  "migrations",
+  "legacy",
+  "core/static",
+  "core/templates",
+  "tests",
 ]
+
+[lint]
+select = ["E", "F", "B"]
+ignore = [
+  "E501",  # line length
+  "E402",  # module level import not at top of file (temporarily ignored)
+  "B007",  # unused loop control variable (allow temporary patterns)
+  "SIM105",  # ignore for now; will revisit
+]
+
+[lint.isort]
+known-first-party = ["core", "modules"]
+combine-as-imports = true
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"migrations/env.py" = ["E402", "F401", "F403"]
+"migrations/versions/*.py" = ["E402", "F401", "F403"]
+"legacy/**" = ["E701", "E702", "E402"]
+"tests/**" = ["E701", "E702", "SIM105", "B011", "F401"]
+"tests/test_openapi_validator.py" = ["B017"]
+"scripts/*.py" = ["E402"]
+

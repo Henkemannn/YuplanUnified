@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import re
 from collections import defaultdict
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Iterable
 
 from .repo import ReportRepo
 
 
 class ReportService:
-    def __init__(self, repo: Optional[ReportRepo] = None) -> None:
+    def __init__(self, repo: ReportRepo | None = None) -> None:
         self.repo = repo or ReportRepo()
 
     def _build_etag_dept(self, department_id: str, year: int, week: int, version: int) -> str:
@@ -22,9 +21,9 @@ class ReportService:
         tenant_id: int | str,
         year: int,
         week: int,
-        department_id: Optional[str],
-        if_none_match: Optional[str] = None,
-    ) -> Tuple[bool, Dict, str]:
+        department_id: str | None,
+        if_none_match: str | None = None,
+    ) -> tuple[bool, dict, str]:
         """Return (not_modified, payload, etag)."""
         versions_map, vmax, n = self.repo.get_versions(tenant_id, year, week, department_id)
         # Build ETag
@@ -39,8 +38,10 @@ class ReportService:
         residents = self.repo.get_residents(tenant_id, year, week, department_id)
         marks = self.repo.get_marks(tenant_id, year, week, department_id)
         # Aggregate per dept -> meal
-        depts: Dict[str, Dict[str, Dict[str, int]]] = defaultdict(lambda: {"lunch": defaultdict(int), "dinner": defaultdict(int)})
-        residents_totals: Dict[Tuple[str, str], int] = defaultdict(int)  # (dept, meal) -> total
+        depts: dict[str, dict[str, dict[str, int]]] = defaultdict(
+            lambda: {"lunch": defaultdict(int), "dinner": defaultdict(int)}
+        )
+        residents_totals: dict[tuple[str, str], int] = defaultdict(int)  # (dept, meal) -> total
         for r in residents:
             key = (r["department_id"], r["meal"])
             residents_totals[key] += int(r["count"]) if r["count"] is not None else 0
@@ -53,13 +54,18 @@ class ReportService:
             meal = m["meal"]
             depts[dep][meal][diet] += 1
         # Build departments section
-        department_ids: Iterable[str] = versions_map.keys() if department_id is None else ([department_id] if department_id else [])
+        department_ids: Iterable[str] = (
+            versions_map.keys() if department_id is None else ([department_id] if department_id else [])
+        )
         if not department_ids and not department_id:
             # If querying all but there are no versions, still produce empty list and zero totals
             department_ids = []
         meta = self.repo.get_dept_meta(tenant_id, department_ids)
         departments = []
-        totals_meals = {"lunch": {"normal": 0, "specials": defaultdict(int), "total": 0}, "dinner": {"normal": 0, "specials": defaultdict(int), "total": 0}}
+        totals_meals = {
+            "lunch": {"normal": 0, "specials": defaultdict(int), "total": 0},
+            "dinner": {"normal": 0, "specials": defaultdict(int), "total": 0},
+        }
         for dep in department_ids:
             lunch_specials = dict(depts[dep]["lunch"]) if dep in depts else {}
             dinner_specials = dict(depts[dep]["dinner"]) if dep in depts else {}
