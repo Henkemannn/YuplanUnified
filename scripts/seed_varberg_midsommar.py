@@ -15,7 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from core.db import init_engine, get_session
-from core.admin_repo import SitesRepo, DepartmentsRepo, DietDefaultsRepo, Alt2Repo, _is_sqlite
+from core.admin_repo import SitesRepo, DepartmentsRepo, Alt2Repo, _is_sqlite
 from core.etag import make_collection_etag
 
 SITE_NAME = "Varberg Midsommargården"
@@ -56,7 +56,6 @@ def run() -> int:
     # Use repo instances; they manage sessions internally
     sites_repo = SitesRepo()
     depts_repo = DepartmentsRepo()
-    diet_repo = DietDefaultsRepo()
     alt2_repo = Alt2Repo()
 
     # 1) Create site (or fetch existing by name)
@@ -177,7 +176,7 @@ def run() -> int:
         current_ver = depts_repo.get_version(dept_id) or 0
         try:
             depts_repo.upsert_department_diet_defaults(dept_id, current_ver, items)
-        except IntegrityError as ie:
+        except IntegrityError:
             # Fallback: create missing diet types then retry once
             missing_ids = []
             for it in items:
