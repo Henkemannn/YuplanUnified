@@ -98,6 +98,7 @@
         </div>
       </div>
   </section>
+  {% if csv_import_preview_enabled %}
   <!-- CSV Import (Pass F) -->
   <section class="panel" role="region" aria-label="Importera meny (CSV)" data-panel="admin" hidden>
     <div class="card">
@@ -129,6 +130,7 @@
       </div>
     </div>
   </section>
+  {% endif %}
   <section id="panel-menyval" class="panel" role="region" aria-labelledby="nav-menyval" data-panel="menyval" hidden>
       <div class="card">
         <h3>3) Menyval (Alt2 mån–fre; helg Alt1)</h3>

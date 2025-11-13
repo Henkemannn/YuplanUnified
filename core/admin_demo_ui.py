@@ -7,7 +7,7 @@ bp = Blueprint("admin_demo_ui", __name__, url_prefix="/demo")
 
 
 @bp.after_request
-def _demo_csp(resp):  # type: ignore[override]
+def _demo_csp(resp):
     """Attach a conservative CSP for demo responses only."""
     try:
         # Only set for responses under this blueprint
@@ -29,6 +29,10 @@ def _render_demo_index():
     """Render the demo index page with safe fallback on errors."""
     staging_demo = os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes")
     demo_ui_enabled = os.getenv("DEMO_UI", "0").lower() in ("1", "true", "yes")
+    # Gate CSV import preview: enabled on staging by default, otherwise via env CSV_IMPORT_PREVIEW=1
+    csv_import_preview_enabled = staging_demo or (
+        os.getenv("CSV_IMPORT_PREVIEW", "0").lower() in ("1", "true", "yes")
+    )
     # Cache-busting token for static assets (read VERSION if present)
     asset_version = "dev"
     try:
@@ -44,6 +48,7 @@ def _render_demo_index():
             "demo_admin.html",
             staging_demo=staging_demo,
             demo_ui_enabled=demo_ui_enabled,
+            csv_import_preview_enabled=csv_import_preview_enabled,
             asset_version=asset_version,
         )
     except Exception:
