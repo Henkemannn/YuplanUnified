@@ -22,7 +22,7 @@ from importlib import import_module
 from typing import Any
 import os
 
-from flask import Flask, g, jsonify, request, session
+from flask import Flask, g, jsonify, request, session, send_from_directory, current_app
 import mimetypes
 from werkzeug.wrappers.response import Response
 
@@ -72,6 +72,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app = Flask(
         __name__,
         template_folder=os.path.join(base_dir, "templates"),
+        static_url_path="/static",
         static_folder=os.path.join(base_dir, "static"),
     )
     # Ensure correct MIME type for PWA manifest
@@ -551,6 +552,28 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         install_support_log_handler()
     except Exception:  # pragma: no cover
         app.logger.warning("Failed to install support log handler", exc_info=True)
+
+    # --- Static & asset routes (manifest, favicon, safari pinned) ---
+    @app.route("/static/<path:filename>")
+    def _static_files(filename: str):  # pragma: no cover - direct file serving
+        return send_from_directory(current_app.static_folder, filename)
+
+    @app.route("/manifest.webmanifest")
+    def webmanifest():  # pragma: no cover - simple file serve
+        resp = send_from_directory(current_app.static_folder, "manifest.webmanifest")
+        resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
+        resp.headers["Cache-Control"] = "public, max-age=3600"
+        return resp
+
+    @app.route("/favicon.ico")
+    def favicon():  # pragma: no cover - simple file serve
+        resp = send_from_directory(current_app.static_folder, "favicon.ico")
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+
+    @app.route("/static/safari-pinned-tab.svg")
+    def safari_pinned():  # pragma: no cover - simple file serve
+        return send_from_directory(current_app.static_folder, "safari-pinned-tab.svg")
 
     # --- OpenAPI Spec Endpoint ---
     @app.get("/health")
