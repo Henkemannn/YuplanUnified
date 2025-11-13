@@ -13,6 +13,12 @@
     "README.md",
     "RELEASE_NOTES*.md",
     "SECURITY.md",
-    "SECURITY_SETUP.md"
+    "SECURITY_SETUP.md",
+    "docs/**",
+    "new_ideas/**",
+    "PR_*.md",
+    "pr_*.md",
+    "issue_*.md",
+    "GA_CHECKLIST.md"
   ]
 }
