@@ -1,3 +1,23 @@
+## [0.3.0] - 2025-11-13 (Branding, Installability, Menyval, CSV Preview)
+
+### Added
+- Branding & PWA: `manifest.webmanifest`, favicon, apple-touch, and icon set wired into templates with cache-busting.
+- Static assets reliability: explicit Flask routes for `/manifest.webmanifest` and `/favicon.ico` with correct MIME; Safari pinned tab; optional WhiteNoise WSGI static fallback.
+- Pass B – Menyval: Client demo + focused smoke covering idempotence, mutation, weekend rule (422), and ETag 304 behavior.
+- Pass C – Report CSV export: Client-side CSV export with BOM and stable column layout; basic totals fallback.
+- Pass D – PDF print: Client-side print view using existing styles; quick one-click export.
+- Pass F – Admin CSV import (preview): Client-side parser (BOM stripping, delimiter autodetect, quoted fields), column mapping UI, preview table, and summary; unit tests with ÅÄÖ and escaping.
+
+### Changed
+- Demo HTML and JS wired to new branding assets; consolidated demo navigation; improved ARIA attributes and focus handling.
+- Smoke scripts updated to include CSRF on write requests and avoid false negatives with conditional requests.
+
+### Ops
+- Fly staging deploy recipe; staging smoke checklist green (root, /demo, manifest, favicon, icon, menu-choice).
+- Feature flag `csv_import_preview` added (environment-driven). Default OFF in production, ON in staging. The CSV import preview section is gated in `templates/demo_admin.html`.
+
+---
+
 ## [Unreleased]
 - Pilot scope clarification: Auth endpoints remain on legacy envelopes during the ProblemDetails pilot. Migration to ProblemDetails for auth will occur in a later sweep once clients/tests are updated.
 - Legacy 429 responses now include `retry_after` (JSON) and `Retry-After` (header), and when available a `limit` field indicating the symbolic rate limit name. This applies to non-pilot endpoints; pilot endpoints continue to emit RFC7807 with `retry_after`.
