@@ -11,6 +11,6 @@ openapi-spec-validator==0.7.1
 PyYAML>=6.0
 ruff==0.6.3
 mypy==1.11.2
-gunicorn==21.2.0
+gunicorn==22.0.0
 # Bump to a widely available wheel series to support Windows/Python 3.13 locally
 psycopg[binary]==3.2.12

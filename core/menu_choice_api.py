@@ -11,6 +11,7 @@ Weekend (sat/sun) does not allow Alt2 – returns 422 ProblemDetails.
 """
 
 from flask import Blueprint, request, jsonify
+from sqlalchemy import text
 
 from .auth import require_roles
 from .http_errors import bad_request, problem
@@ -143,7 +144,7 @@ def put_menu_choice():  # type: ignore[return-value]
     db = get_session()
     try:
         row = db.execute(
-            "SELECT site_id FROM departments WHERE id=:id", {"id": department_id}
+            text("SELECT site_id FROM departments WHERE id=:id"), {"id": department_id}
         ).fetchone()
         if not row:
             return bad_request("department_not_found")
