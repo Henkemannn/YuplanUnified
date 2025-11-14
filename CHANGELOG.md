@@ -1,3 +1,15 @@
+## [0.3.2] - 2025-11-13 (Hotfix: menu-choice + requirements cleanup)
+
+### Hotfix
+- Fix 500 error on PUT `/menu-choice` under SQLAlchemy 2.x by wrapping raw `SELECT` in `sqlalchemy.text()` (concurrency + idempotence tests all passing).
+
+### Tooling
+- Cleaned `requirements.txt` (removed stray branch markers / duplicate pins, kept `gunicorn==22.0.0`, restored `PyYAML>=6.0`) ensuring stable installs and green strict pockets (mypy) workflow.
+
+### Quality
+- Test suite: 353 passed, 7 skipped (menu-choice focused tests: 7/7).
+
+---
 ## [0.3.0] - 2025-11-13 (Branding, Installability, Menyval, CSV Preview)
 
 ### Added
