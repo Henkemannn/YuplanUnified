@@ -9,14 +9,19 @@ pytest==8.3.2
 pytest-cov==5.0.0
 openapi-spec-validator==0.7.1
 PyYAML>=6.0
+Flask==3.0.3
+SQLAlchemy==2.0.32
+alembic==1.13.2
+python-dotenv==1.0.1
+python-slugify==8.0.4
+python-docx==1.1.2
+openpyxl==3.1.5
+pytest==8.3.2
+pytest-cov==5.0.0
+openapi-spec-validator==0.7.1
+PyYAML>=6.0
 ruff==0.6.3
 mypy==1.11.2
- feat/whitenoise-static-fallback
-gunicorn==21.2.0
-# Static files middleware for production WSGI
-whitenoise==6.6.0
-
 gunicorn==22.0.0
- master
 # Bump to a widely available wheel series to support Windows/Python 3.13 locally
 psycopg[binary]==3.2.12
