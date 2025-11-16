@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import re
-from typing import Sequence
+from datetime import date
+from typing import Sequence, Any
+from flask import current_app
 from .repo import WeekviewRepo
 
 
@@ -21,6 +23,12 @@ class WeekviewService:
         dep = department_id or "__none__"
         version = 0 if not department_id else self.repo.get_version(tenant_id, year, week, department_id)
         payload = self.repo.get_weekview(tenant_id, year, week, department_id)
+        # Enrich with Phase 1 days[] structure for UI (backwards compatible)
+        try:
+            self._enrich_days(payload, tenant_id, year, week)
+        except Exception:
+            # Non-fatal: keep existing payload if enrichment fails
+            pass
         etag = self.build_etag(tenant_id, dep, year, week, version)
         return payload, etag
 
@@ -74,6 +82,10 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         if if_none_match and if_none_match == etag:
             return True, None, etag
         payload = self.repo.get_weekview(tenant_id, year, week, department_id)
+        try:
+            self._enrich_days(payload, tenant_id, year, week)
+        except Exception:
+            pass
         return False, payload, etag
 
     def update_residents_counts(
@@ -123,3 +135,104 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
             raise EtagMismatchError("etag_mismatch")
         new_v = self.repo.set_alt2_flags(tenant_id, year, week, department_id, days)
         return self.build_etag(tenant_id, department_id, year, week, new_v)
+
+    # --- Internal helpers ---
+    def _enrich_days(self, payload: dict, tenant_id: int | str, year: int, week: int) -> None:
+        """Populate department_summaries[*].days with Phase 1 fields.
+
+        Keeps existing keys (marks, residents_counts, alt2_days) for backward compatibility.
+        Adds per-day objects:
+          { day_of_week, date, weekday_name, menu_texts, alt2_lunch, residents }
+        """
+        try:
+            summaries: list[dict[str, Any]] = payload.get("department_summaries", [])  # type: ignore[assignment]
+        except Exception:
+            return
+        if not summaries:
+            return
+        # Resolve menu texts for the week (optional service)
+        menu_days: dict[str, Any] = {}
+        try:
+            svc = getattr(current_app, "menu_service", None)
+            if svc is not None:
+                mv = svc.get_week_view(int(tenant_id), week, year)
+                menu_days = dict(mv.get("days", {}))
+        except Exception:
+            menu_days = {}
+
+        # Helper maps
+        day_keys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        name_map = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+        for summary in summaries:
+            # Build quick indexes from existing aggregates
+            counts = summary.get("residents_counts", []) or []
+            alt2_days = set(summary.get("alt2_days", []) or [])
+            counts_idx: dict[tuple[int, str], int] = {}
+            try:
+                for r in counts:
+                    k = (int(r.get("day_of_week")), str(r.get("meal")))
+                    counts_idx[k] = int(r.get("count"))
+            except Exception:
+                counts_idx = {}
+
+            days_out: list[dict[str, Any]] = []
+            for dow in range(1, 8):
+                iso_date = None
+                try:
+                    iso_date = date.fromisocalendar(year, week, dow).isoformat()
+                except Exception:
+                    iso_date = None
+                dkey = day_keys[dow - 1]
+                # menu_texts lookup
+                menu_for_day = menu_days.get(dkey, {}) if isinstance(menu_days, dict) else {}
+                def _dish_name(meal: str, variant: str) -> str | None:
+                    try:
+                        v = menu_for_day.get(meal, {}).get(variant)
+                        if v is None:
+                            return None
+                        return v.get("dish_name")
+                    except Exception:
+                        return None
+
+                menu_texts = {}
+                # lunch always relevant in Phase 1
+                lunch_obj: dict[str, Any] = {}
+                a1 = _dish_name("lunch", "alt1")
+                a2 = _dish_name("lunch", "alt2")
+                if a1 is not None:
+                    lunch_obj["alt1"] = a1
+                if a2 is not None:
+                    lunch_obj["alt2"] = a2
+                # Optional dessert if modeled
+                dessert = _dish_name("lunch", "dessert")
+                if dessert is not None:
+                    lunch_obj["dessert"] = dessert
+                if lunch_obj:
+                    menu_texts["lunch"] = lunch_obj
+
+                # dinner (kväll) optional in Phase 1
+                dinner_obj: dict[str, Any] = {}
+                d1 = _dish_name("dinner", "alt1")
+                d2 = _dish_name("dinner", "alt2")
+                if d1 is not None:
+                    dinner_obj["alt1"] = d1
+                if d2 is not None:
+                    dinner_obj["alt2"] = d2
+                if dinner_obj:
+                    menu_texts["dinner"] = dinner_obj
+
+                days_out.append(
+                    {
+                        "day_of_week": dow,
+                        "date": iso_date,
+                        "weekday_name": name_map[dow - 1],
+                        "menu_texts": menu_texts,
+                        "alt2_lunch": (dow in alt2_days),
+                        "residents": {
+                            "lunch": counts_idx.get((dow, "lunch"), 0),
+                            "dinner": counts_idx.get((dow, "dinner"), 0),
+                        },
+                    }
+                )
+            summary["days"] = days_out
