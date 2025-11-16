@@ -39,8 +39,8 @@
       <th style="width:16%">Lunch Alt 2</th>
       <th style="width:12%">Dessert</th>
       {% if vm.has_dinner %}
-      <th style="width:16%">Middag Alt 1</th>
-      <th style="width:16%">Middag Alt 2</th>
+      <th style="width:16%">{{ meal_labels.dinner }} Alt 1</th>
+      <th style="width:16%">{{ meal_labels.dinner }} Alt 2</th>
       {% endif %}
       <th style="width:6%">Boende</th>
     </tr>
@@ -62,7 +62,7 @@
         <td>
           <div class="subtle">L {{ d.residents_lunch or 0 }}</div>
           {% if vm.has_dinner %}
-          <div class="subtle">M {{ d.residents_dinner or 0 }}</div>
+          <div class="subtle">{{ meal_labels.dinner[0] }} {{ d.residents_dinner or 0 }}</div>
           {% endif %}
         </td>
       </tr>

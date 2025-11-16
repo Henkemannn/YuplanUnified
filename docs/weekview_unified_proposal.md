@@ -36,6 +36,11 @@ För exakt JSON‑schema, se [Weekview API schema](weekview_api_schema.md).
   - `GET /api/weekview?department_id=<uuid>&year=YYYY&week=WW` med `If-None-Match` → 200/304 + `ETag`.
   - Menydata: utöka payload (se nedan) eller ny endpoint.
 
+## Site-översikt & Meal Labels (Phase 1.1)
+För site-översikt (en site, en vecka, alla avdelningar) se designen i: [Weekview Site Overview – Design](weekview_overview_design.md).
+
+Måltidsnamn i UI hämtas via `meal_labels` (Phase 1.1). Backend behåller neutrala fält `lunch`/`dinner`. Se dokumentation i [Meal Labels](meal_labels.md). Default label för `dinner` är "Kvällsmat" tills per‑site konfiguration införs (framtida steg Offshore → "Middag").
+
 ## API‑kontrakt (förslag)
 - Nuvarande svar från `GET /api/weekview` innehåller:
   - `department_summaries[0]`: `{ marks: [...], residents_counts: [...], alt2_days: [...] }`

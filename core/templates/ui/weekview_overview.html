@@ -74,7 +74,7 @@
               <a href="/ui/weekview?site_id={{ vm.site_id }}&department_id={{ row.department_id }}&year={{ vm.year }}&week={{ vm.week }}">{{ row.department_name }}</a>
             </td>
             <td class="totals">
-              Lunch: {{ row.residents_lunch_week }} <span class="sep">·</span> Middag: {{ row.residents_dinner_week }}
+              {{ meal_labels.lunch }}: {{ row.residents_lunch_week }} <span class="sep">·</span> {{ meal_labels.dinner }}: {{ row.residents_dinner_week }}
             </td>
             {% for d in row.days %}
               <td>
@@ -93,7 +93,7 @@
                           </dd>
                         {% endif %}
                         {% if d.menu.dinner_alt1 or d.menu.dinner_alt2 %}
-                          <dt>Middag</dt>
+                          <dt>{{ meal_labels.dinner }}</dt>
                           <dd>
                             {% if d.menu.dinner_alt1 %}Alt 1: {{ d.menu.dinner_alt1 }}{% endif %}
                             {% if d.menu.dinner_alt2 %}<br/>Alt 2: {{ d.menu.dinner_alt2 }}{% endif %}

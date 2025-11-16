@@ -13,6 +13,11 @@ ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="st
 SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 
 
+def get_meal_labels_for_site(site_id: str | None) -> dict[str, str]:
+    # Phase 1.1 default mapping (Kommun-style). TODO Phase 2: vary by site/offshore kind.
+    return {"lunch": "Lunch", "dinner": "Kvällsmat"}
+
+
 @ui_bp.get("/workspace")
 @require_roles(*SAFE_UI_ROLES)
 def workspace_ui():
@@ -141,7 +146,8 @@ def weekview_ui():
         "has_dinner": has_dinner,
         "days": day_vms,
     }
-    return render_template("ui/weekview.html", vm=vm)
+    meal_labels = get_meal_labels_for_site(site_id)
+    return render_template("ui/weekview.html", vm=vm, meal_labels=meal_labels)
 
 
 @ui_bp.get("/ui/weekview_overview")
@@ -176,6 +182,7 @@ def weekview_overview_ui():
         db.close()
 
     # No departments -> empty state
+    meal_labels = get_meal_labels_for_site(site_id)
     if not departments:
         vm = {
             "site_id": site_id,
@@ -186,7 +193,7 @@ def weekview_overview_ui():
             "departments": [],
         }
         _set_prev_next(vm)
-        return render_template("ui/weekview_overview.html", vm=vm)
+        return render_template("ui/weekview_overview.html", vm=vm, meal_labels=meal_labels)
 
     # Build rows by fetching department weekviews (Phase 1: simple N calls)
     tid = session.get("tenant_id")
@@ -250,7 +257,7 @@ def weekview_overview_ui():
         "has_any_dinner": has_any_dinner,
     }
     _set_prev_next(vm)
-    return render_template("ui/weekview_overview.html", vm=vm)
+    return render_template("ui/weekview_overview.html", vm=vm, meal_labels=meal_labels)
 
 
 def _set_prev_next(vm: dict) -> None:
