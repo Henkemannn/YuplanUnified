@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Weekview{% endblock %}
+{% block content %}
+<style>
+  .weekview-header { font-size: 1.25rem; margin: 0.5rem 0 1rem; }
+  .weekview-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .weekview-table th, .weekview-table td { border: 1px solid #e2e2e2; padding: 8px; vertical-align: top; }
+  .weekview-table th { background: #f7f7f7; text-align: left; }
+  .alt2-gul { background: #fff7bf; }
+  .subtle { color: #666; font-size: 0.875rem; }
+  .nav { margin: 0.5rem 0 1rem; }
+  .nav a { margin-right: 1rem; text-decoration: none; }
+</style>
+
+<div class="weekview-header">
+  {% if vm.days and vm.days|length > 0 %}
+    Vecka {{ vm.week }} – {{ vm.department_name }}, {{ vm.site_name }}
+  {% else %}
+    Vecka {{ vm.week }} – {{ vm.department_name }}, {{ vm.site_name }}
+  {% endif %}
+</div>
+
+{% set q = request.args %}
+{% set prev_week = (vm.week - 1) if vm.week > 1 else 53 %}
+{% set prev_year = (vm.year if vm.week > 1 else vm.year - 1) %}
+{% set next_week = (vm.week + 1) if vm.week < 53 else 1 %}
+{% set next_year = (vm.year if vm.week < 53 else vm.year + 1) %}
+<div class="nav">
+  <a href="/ui/weekview?site_id={{ q.get('site_id','') }}&department_id={{ q.get('department_id','') }}&year={{ prev_year }}&week={{ prev_week }}">« Föregående vecka</a>
+  <a href="/ui/weekview?site_id={{ q.get('site_id','') }}&department_id={{ q.get('department_id','') }}&year={{ next_year }}&week={{ next_week }}">Nästa vecka »</a>
+</div>
+
+{% if vm.days and vm.days|length > 0 %}
+<table class="weekview-table">
+  <thead>
+    <tr>
+      <th style="width:18%">Dag</th>
+      <th style="width:16%">Lunch Alt 1</th>
+      <th style="width:16%">Lunch Alt 2</th>
+      <th style="width:12%">Dessert</th>
+      {% if vm.has_dinner %}
+      <th style="width:16%">Middag Alt 1</th>
+      <th style="width:16%">Middag Alt 2</th>
+      {% endif %}
+      <th style="width:6%">Boende</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in vm.days %}
+      <tr>
+        <td>
+          <div><strong>{{ d.weekday_name }}</strong></div>
+          <div class="subtle">{{ d.date }}</div>
+        </td>
+        <td>{{ d.lunch_alt1 or '' }}</td>
+        <td class="{% if d.alt2_lunch %}alt2-gul{% endif %}">{{ d.lunch_alt2 or '' }}</td>
+        <td>{{ d.lunch_dessert or '' }}</td>
+        {% if vm.has_dinner %}
+        <td>{{ d.dinner_alt1 or '' }}</td>
+        <td>{{ d.dinner_alt2 or '' }}</td>
+        {% endif %}
+        <td>
+          <div class="subtle">L {{ d.residents_lunch or 0 }}</div>
+          {% if vm.has_dinner %}
+          <div class="subtle">M {{ d.residents_dinner or 0 }}</div>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div class="subtle">Ingen meny hittades för vecka {{ vm.week }}.</div>
+{% endif %}
+{% endblock %}
