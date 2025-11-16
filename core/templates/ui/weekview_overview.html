@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Weekview Översikt – Vecka {{ vm.week }} – {{ vm.site_name }}</title>
+  <style>
+    :root { --gap: 12px; --pad: 12px; --radius: 12px; --yellow: #fff59d; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+    .wrap { display: grid; gap: var(--gap); max-width: 1200px; margin: 0 auto; }
+    .weekview-overview-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .nav a { text-decoration: none; border:1px solid #ddd; padding:6px 10px; border-radius:10px; color:#111; background:#fff; }
+    .muted { color:#666; }
+
+    .weekview-overview-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+    .weekview-overview-table th, .weekview-overview-table td { text-align: left; padding: 10px; }
+    .weekview-overview-table thead th { font-weight: 600; color:#333; }
+    .row-card { background:#fff; border:1px solid #eee; border-radius: 12px; }
+
+    .dept-name a { color:#0a6; text-decoration:none; font-weight:600; }
+
+    .totals { white-space: nowrap; color:#222; font-size: 0.95rem; }
+    .totals .sep { color:#aaa; padding: 0 4px; }
+
+    .days-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .weekview-overview-day-cell { position: relative; border:1px solid #eee; border-radius: 8px; padding: 6px; min-height: 36px; display: flex; align-items: center; justify-content: center; gap: 6px; background:#fafafa; }
+    .weekview-overview-day-cell .menu-icon { font-size: 16px; cursor: pointer; }
+    .weekview-overview-day-cell .menu-popup { display: none; position: absolute; z-index: 10; top: 110%; left: 50%; transform: translateX(-50%); background:#fff; color:#111; border:1px solid #ccc; border-radius: 10px; min-width: 220px; max-width: 320px; padding: 8px 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+    .weekview-overview-day-cell .menu-popup h4 { margin: 0 0 6px; font-size: 0.95rem; }
+    .weekview-overview-day-cell .menu-popup dl { margin: 0; }
+    .weekview-overview-day-cell .menu-popup dt { font-weight:600; font-size: 0.9rem; margin-top: 6px; }
+    .weekview-overview-day-cell .menu-popup dd { margin: 0 0 6px; font-size: 0.9rem; }
+    .weekview-overview-day-cell.open .menu-popup { display: block; }
+
+    .alt2-gul { background: var(--yellow); color:#111; border-radius: 999px; padding: 2px 6px; font-size: 0.7rem; border: 1px solid #e7d96a; }
+
+    @media (max-width: 900px) {
+      .totals { font-size: 0.9rem; }
+      .weekview-overview-day-cell { padding: 6px 4px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="weekview-overview-header">
+      <h1>Vecka {{ vm.week }} – {{ vm.site_name }}</h1>
+      <nav class="nav">
+        <a href="/ui/weekview_overview?site_id={{ vm.site_id }}&year={{ vm.prev_week.year }}&week={{ vm.prev_week.week }}" aria-label="Föregående vecka">◀︎ Föregående</a>
+        <a href="/ui/weekview_overview?site_id={{ vm.site_id }}&year={{ vm.next_week.year }}&week={{ vm.next_week.week }}" aria-label="Nästa vecka" style="margin-left:6px;">Nästa ▶︎</a>
+      </nav>
+    </header>
+
+    {% if not vm.departments %}
+      <p class="muted">Ingen data hittades för vecka {{ vm.week }} på {{ vm.site_name }}.</p>
+    {% else %}
+      <table class="weekview-overview-table">
+        <thead>
+          <tr>
+            <th>Avdelning</th>
+            <th>Boende (vecka)</th>
+            <th style="width: 60%">Mån</th>
+            <th>Tis</th>
+            <th>Ons</th>
+            <th>Tors</th>
+            <th>Fre</th>
+            <th>Lör</th>
+            <th>Sön</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in vm.departments %}
+          <tr class="row-card">
+            <td class="dept-name">
+              <a href="/ui/weekview?site_id={{ vm.site_id }}&department_id={{ row.department_id }}&year={{ vm.year }}&week={{ vm.week }}">{{ row.department_name }}</a>
+            </td>
+            <td class="totals">
+              Lunch: {{ row.residents_lunch_week }} <span class="sep">·</span> Middag: {{ row.residents_dinner_week }}
+            </td>
+            {% for d in row.days %}
+              <td>
+                <div class="weekview-overview-day-cell" data-day="{{ d.weekday_name }}">
+                  {% if d.has_menu_icon %}
+                    <span class="menu-icon" role="button" aria-label="Visa meny" title="Visa dagens meny" onclick="togglePopup(this)">🍽</span>
+                    <div class="menu-popup" role="dialog" aria-label="Dagens meny">
+                      <h4>{{ d.weekday_name }}</h4>
+                      <dl>
+                        {% if d.menu.lunch_alt1 or d.menu.lunch_alt2 or d.menu.lunch_dessert %}
+                          <dt>Lunch</dt>
+                          <dd>
+                            {% if d.menu.lunch_alt1 %}Alt 1: {{ d.menu.lunch_alt1 }}{% endif %}
+                            {% if d.menu.lunch_alt2 %}<br/>Alt 2: {{ d.menu.lunch_alt2 }}{% endif %}
+                            {% if d.menu.lunch_dessert %}<br/>Efterrätt: {{ d.menu.lunch_dessert }}{% endif %}
+                          </dd>
+                        {% endif %}
+                        {% if d.menu.dinner_alt1 or d.menu.dinner_alt2 %}
+                          <dt>Middag</dt>
+                          <dd>
+                            {% if d.menu.dinner_alt1 %}Alt 1: {{ d.menu.dinner_alt1 }}{% endif %}
+                            {% if d.menu.dinner_alt2 %}<br/>Alt 2: {{ d.menu.dinner_alt2 }}{% endif %}
+                          </dd>
+                        {% endif %}
+                      </dl>
+                    </div>
+                  {% endif %}
+                  {% if d.alt2_lunch %}<span class="alt2-gul" title="Alt2 lunch">Alt2</span>{% endif %}
+                </div>
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+  <script>
+    function togglePopup(el){
+      const cell = el.closest('.weekview-overview-day-cell');
+      // Close other open popups in the same row to avoid clutter
+      const row = cell.closest('tr');
+      row && row.querySelectorAll('.weekview-overview-day-cell.open').forEach(c=>{ if(c!==cell) c.classList.remove('open'); });
+      cell.classList.toggle('open');
+      // Close when clicking outside
+      document.addEventListener('click', function onDocClick(e){
+        if(!cell.contains(e.target)) { cell.classList.remove('open'); document.removeEventListener('click', onDocClick); }
+      });
+    }
+  </script>
+</body>
+</html>
