@@ -4,6 +4,7 @@ import re
 from datetime import date
 from typing import Sequence, Any
 from flask import current_app
+from ..admin_repo import DietDefaultsRepo
 from .repo import WeekviewRepo
 
 
@@ -176,6 +177,27 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
             except Exception:
                 counts_idx = {}
 
+            # Resolve department id for diet defaults
+            dept_id = str(summary.get("department_id") or "").strip()
+            diet_defaults: dict[str, int] = {}
+            try:
+                if dept_id:
+                    repo = DietDefaultsRepo()
+                    items = repo.list_for_department(dept_id)
+                    diet_defaults = {str(it["diet_type_id"]): int(it.get("default_count", 0)) for it in items}
+            except Exception:
+                diet_defaults = {}
+
+            # Build mark index from raw marks list if present
+            marks = summary.get("marks", []) or []
+            marked_idx: set[tuple[int, str, str]] = set()
+            try:
+                for m in marks:
+                    if bool(m.get("marked")):
+                        marked_idx.add((int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type"))))
+            except Exception:
+                marked_idx = set()
+
             days_out: list[dict[str, Any]] = []
             for dow in range(1, 8):
                 iso_date = None
@@ -222,6 +244,20 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                 if dinner_obj:
                     menu_texts["dinner"] = dinner_obj
 
+                # Build diets list per meal using department defaults and marks
+                def _build_diets(meal_name: str) -> list[dict[str, Any]]:
+                    out: list[dict[str, Any]] = []
+                    for dt_id, default_cnt in sorted(diet_defaults.items()):
+                        out.append(
+                            {
+                                "diet_type_id": dt_id,
+                                "diet_name": dt_id,  # TODO: map id->human name via diet types registry
+                                "resident_count": int(default_cnt),
+                                "marked": (dow, meal_name, dt_id) in marked_idx,
+                            }
+                        )
+                    return out
+
                 days_out.append(
                     {
                         "day_of_week": dow,
@@ -232,6 +268,10 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                         "residents": {
                             "lunch": counts_idx.get((dow, "lunch"), 0),
                             "dinner": counts_idx.get((dow, "dinner"), 0),
+                        },
+                        "diets": {
+                            "lunch": _build_diets("lunch"),
+                            "dinner": _build_diets("dinner"),
                         },
                     }
                 )

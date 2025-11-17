@@ -79,6 +79,55 @@ def get_weekview() -> Response:
     return resp
 
 
+@bp.patch("/weekview/specialdiets/mark")
+@require_roles("admin", "editor")
+def patch_weekview_specialdiets_mark() -> Response:
+    """Toggle a single special diet mark for a given date+meal+diet.
+
+    Request JSON: { site_id, department_id, local_date (YYYY-MM-DD), meal: lunch|dinner, diet_type_id, marked: bool }
+    Uses If-Match with the department/week ETag, consistent with other Weekview mutations.
+    """
+    maybe = _require_weekview_enabled()
+    if maybe is not None:
+        return maybe
+    etag = request.headers.get("If-Match")
+    if not etag:
+        return bad_request("missing_if_match")
+    data = request.get_json(silent=True) or {}
+    tid = _tenant_id()
+    if tid is None:
+        return bad_request("tenant_missing")
+    department_id = (data.get("department_id") or "").strip()
+    local_date = (data.get("local_date") or "").strip()
+    meal = (data.get("meal") or "").strip()
+    diet_type_id = (data.get("diet_type_id") or "").strip()
+    marked = bool(data.get("marked", True))
+    if not department_id or not local_date or meal not in {"lunch", "dinner"} or not diet_type_id:
+        return bad_request("invalid_parameters")
+    try:
+        uuid.UUID(department_id)
+    except Exception:
+        return bad_request("invalid_department_id")
+    try:
+        from datetime import date as _d
+        d = _d.fromisoformat(local_date)
+        iso = d.isocalendar()
+        year = int(iso[0])
+        week = int(iso[1])
+        day_of_week = int(iso[2])
+    except Exception:
+        return bad_request("invalid_local_date")
+    # Reuse existing operations shape
+    op = {"day_of_week": day_of_week, "meal": meal, "diet_type": diet_type_id, "marked": marked}
+    try:
+        new_etag = _service.toggle_marks(tid, year, week, department_id, etag, [op])
+    except EtagMismatchError:
+        return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
+    resp = jsonify({"updated": 1})
+    resp.headers["ETag"] = new_etag
+    return resp
+
+
 @bp.get("/weekview/resolve")
 @require_roles("admin", "editor", "viewer")
 def resolve_weekview() -> Response:
