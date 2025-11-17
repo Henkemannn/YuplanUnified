@@ -10,9 +10,19 @@
   .subtle { color: #666; font-size: 0.875rem; }
   .nav { margin: 0.5rem 0 1rem; }
   .nav a { margin-right: 1rem; text-decoration: none; }
+  .weekview-diets-row .diet-label-cell { font-weight: 600; color: #333; }
+  .diet-pill { display: inline-flex; align-items: center; padding: 0.1rem 0.4rem; margin-right: 0.3rem; margin-bottom: 0.3rem; border-radius: 9999px; border: 1px solid transparent; font-size: 0.85rem; background: #fff; }
+  .diet-pill .diet-count { margin-left: 0.15rem; }
+  .diet-pill.diet-marked { border-color: #0f9d58; }
 </style>
 
-<div class="weekview-header">
+<div id="weekview-root"
+     class="weekview-header"
+     data-site-id="{{ vm.site_id }}"
+     data-department-id="{{ vm.department_id }}"
+     data-year="{{ vm.year }}"
+     data-week="{{ vm.week }}"
+     data-etag="{{ etag }}">
   {% if vm.days and vm.days|length > 0 %}
     Vecka {{ vm.week }} – {{ vm.department_name }}, {{ vm.site_name }}
   {% else %}
@@ -66,10 +76,97 @@
           {% endif %}
         </td>
       </tr>
+      <tr class="weekview-diets-row">
+        <td class="diet-label-cell">Specialkost – {{ meal_labels.lunch }}</td>
+        <td colspan="{% if vm.has_dinner %}6{% else %}4{% endif %}">
+          {% for diet in d.lunch_diets %}
+            <span class="diet-pill {% if diet.marked %}diet-marked{% endif %}"
+                  role="button"
+                  tabindex="0"
+                  data-diet-type-id="{{ diet.diet_type_id }}"
+                  data-meal="lunch"
+                  data-date="{{ d.date }}"
+                  data-marked="{{ 'true' if diet.marked else 'false' }}">
+              {{ diet.diet_name }} [<span class="diet-count">{{ diet.resident_count }}</span>]
+            </span>
+          {% else %}
+            <span class="subtle">Inga specialkoster</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% if vm.has_dinner %}
+      <tr class="weekview-diets-row">
+        <td class="diet-label-cell">Specialkost – {{ meal_labels.dinner }}</td>
+        <td colspan="6">
+          {% for diet in d.dinner_diets %}
+            <span class="diet-pill {% if diet.marked %}diet-marked{% endif %}"
+                  role="button"
+                  tabindex="0"
+                  data-diet-type-id="{{ diet.diet_type_id }}"
+                  data-meal="dinner"
+                  data-date="{{ d.date }}"
+                  data-marked="{{ 'true' if diet.marked else 'false' }}">
+              {{ diet.diet_name }} [<span class="diet-count">{{ diet.resident_count }}</span>]
+            </span>
+          {% else %}
+            <span class="subtle">Inga specialkoster</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endif %}
     {% endfor %}
   </tbody>
 </table>
 {% else %}
   <div class="subtle">Ingen meny hittades för vecka {{ vm.week }}.</div>
 {% endif %}
+<script>
+  (function(){
+    const root = document.getElementById('weekview-root');
+    if(!root) return;
+    function currentETag(){ return root.getAttribute('data-etag') || ''; }
+    function setETag(val){ if(val) root.setAttribute('data-etag', val); }
+    async function toggleDiet(el){
+      const siteId = root.getAttribute('data-site-id');
+      const depId = root.getAttribute('data-department-id');
+      const localDate = el.getAttribute('data-date');
+      const meal = el.getAttribute('data-meal');
+      const dietTypeId = el.getAttribute('data-diet-type-id');
+      const markedNow = (el.getAttribute('data-marked') === 'true');
+      const nextMarked = !markedNow;
+      const payload = { site_id: siteId, department_id: depId, local_date: localDate, meal: meal, diet_type_id: dietTypeId, marked: nextMarked };
+      try{
+        const res = await fetch('/api/weekview/specialdiets/mark', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'If-Match': currentETag() },
+          body: JSON.stringify(payload)
+        });
+        if(res.status === 412){
+          alert('Vyn är utdaterad, ladda om sidan.');
+          return;
+        }
+        if(!res.ok){
+          alert('Kunde inte uppdatera. Försök igen.');
+          return;
+        }
+        const et = res.headers.get('ETag');
+        if(et) setETag(et);
+        // Optimistically update UI
+        el.setAttribute('data-marked', String(nextMarked));
+        el.classList.toggle('diet-marked', nextMarked);
+      }catch(e){
+        alert('Nätverksfel vid uppdatering.');
+      }
+    }
+    document.addEventListener('click', function(e){
+      const pill = e.target.closest && e.target.closest('.diet-pill');
+      if(pill) toggleDiet(pill);
+    });
+    document.addEventListener('keydown', function(e){
+      if((e.key==='Enter' || e.key===' ') && e.target.classList && e.target.classList.contains('diet-pill')){
+        e.preventDefault(); toggleDiet(e.target);
+      }
+    });
+  })();
+  </script>
 {% endblock %}

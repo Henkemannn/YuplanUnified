@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}Menyval vecka {{ vecka }}{% endblock %}
+{% block head %}
+<style>
+  .radio-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    font-size: 1.1em;
+    margin-bottom: 8px;
+    padding: 0.75rem;
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+  }
+  .radio-label:hover {
+    background: var(--bg-accent);
+  }
+  .radio-label input[type="radio"] {
+    display: none;
+  }
+  .radio-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid #bbb;
+    margin-right: 12px;
+    background: #f3f3f3;
+    transition: var(--transition);
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
+  }
+  .radio-label input[type="radio"]:checked + .radio-circle.alt1 {
+    background: var(--success-color);
+    border-color: var(--success-color);
+    box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.2);
+  }
+  .radio-label input[type="radio"]:checked + .radio-circle.alt2 {
+    background: var(--warning-color);
+    border-color: var(--warning-color);
+    box-shadow: 0 0 0 4px rgba(255, 152, 0, 0.2);
+  }
+  .radio-circle.alt1 {
+    border-color: var(--success-color);
+  }
+  .radio-circle.alt2 {
+    border-color: var(--warning-color);
+  }
+  .menyval-dagcard {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+  }
+  .menyval-dagcard:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+  .status-complete {
+    color: var(--success-color);
+    font-weight: 600;
+  }
+  .status-incomplete {
+    color: var(--warning-color);
+    font-weight: 600;
+  }
+  .week-overview {
+    background: var(--bg-primary);
+    border-radius: var(--border-radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container">
+  <h1><i class="fas fa-utensils"></i> Menyval vecka {{ vecka }}</h1>
+  <p class="text-secondary mb-4"><i class="fas fa-building"></i> Avdelning: <strong>{{ avdelning_namn }}</strong></p>
+
+  <!-- Vecka-väljare -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h3 class="card-title"><i class="fas fa-calendar"></i> Välj vecka</h3>
+    </div>
+    <form method="get" class="form-group">
+      <label for="vecka_select" class="form-label">Växla till annan vecka:</label>
+      <select id="vecka_select" name="vecka" class="form-control" style="max-width: 200px;" onchange="this.form.submit()">
+        {% for v in veckostatus %}
+          <option value="{{ v.vecka }}" {% if v.vecka == vecka %}selected{% endif %}>Vecka {{ v.vecka }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+
+  {% if sparat_meddelande %}
+    <div class="alert alert-success">
+      <i class="fas fa-check-circle"></i> {{ sparat_meddelande }}
+    </div>
+  {% endif %}
+  {% if vecka_klar %}
+    <div class="alert alert-info">
+      <i class="fas fa-info-circle"></i> <strong>Veckan är nu färdigvalda!</strong> Alla dagar har val.
+    </div>
+  {% endif %}
+
+  <div class="week-overview mb-4">
+    <h3><i class="fas fa-chart-line"></i> Veckoöversikt</h3>
+    <table class="table table-striped">
+      <thead>
+        <tr>
+          <th><i class="fas fa-calendar-week"></i> Vecka</th>
+          <th><i class="fas fa-info-circle"></i> Status</th>
+          <th><i class="fas fa-mouse-pointer"></i> Välj</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in veckostatus %}
+        <tr {% if v.vecka == vecka %}class="table-active"{% endif %}>
+          <td>{{ v.vecka }}</td>
+          <td>
+            {% if v.status == 'Färdigvalda' %}
+              <span class="status-complete"><i class="fas fa-check"></i> Färdig</span>
+            {% else %}
+              <span class="status-incomplete"><i class="fas fa-exclamation-triangle"></i> Ej klar</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if v.vecka != vecka %}
+              <a href="?vecka={{ v.vecka }}" class="btn btn-sm btn-outline">Välj</a>
+            {% else %}
+              <span class="text-secondary"><i class="fas fa-arrow-right"></i> Aktiv</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form method="post">
+    <input type="hidden" name="vecka" value="{{ vecka }}">
+    <h3 class="mb-3"><i class="fas fa-utensils"></i> Gör dina menyval</h3>
+    <div class="menyval-dagar">
+      {% for dagdata in veckodata %}
+      <div class="menyval-dagcard mb-4 p-3">
+        <h4 class="mb-3 text-primary"><i class="fas fa-calendar-day"></i> {{ dagdata.dag }}</h4>
+        <div class="menyval-alternativrad">
+          <label class="radio-label">
+            <input type="radio" name="val_{{ dagdata.dag }}" value="Alt1" {% if not dagdata.markerad %}checked{% endif %}>
+            <span class="radio-circle alt1"></span>
+            <span><strong>Alternativ 1:</strong> {{ dagdata.menytext_alt1|default('Ingen Alt1-meny')|safe }}</span>
+          </label>
+        </div>
+        <div class="menyval-alternativrad">
+          <label class="radio-label">
+            <input type="radio" name="val_{{ dagdata.dag }}" value="Alt2" {% if dagdata.markerad %}checked{% endif %}>
+            <span class="radio-circle alt2"></span>
+            <span><strong>Alternativ 2:</strong> {{ dagdata.menytext_alt2|default('Ingen Alt2-meny')|safe }}</span>
+          </label>
+        </div>
+        <div class="mt-2" style="background: #f6f6f6; border-radius: 8px; padding: 0.5rem 1rem; opacity: 0.6;">
+          <div class="mb-1" style="color: #888;">
+            <i class="fas fa-ice-cream"></i> <strong>Dessert:</strong>
+            {% if dagdata.menytext_dessert %}
+              {{ dagdata.menytext_dessert }}
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </div>
+          <div style="color: #888;">
+            <i class="fas fa-moon"></i> <strong>Kväll:</strong>
+            {% if dagdata.menytext_kvall %}
+              {{ dagdata.menytext_kvall }}
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-primary btn-lg">
+      <i class="fas fa-save"></i> Spara menyval
+    </button>
+  </form>
+</div>
+{% endblock %}

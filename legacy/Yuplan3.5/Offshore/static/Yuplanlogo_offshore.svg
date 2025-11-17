@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="48" viewBox="0 0 180 48" role="img" aria-label="Yuplan Offshore">
+  <defs>
+    <linearGradient id="offshoreGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="55%" stop-color="#6610f2" />
+      <stop offset="100%" stop-color="#20c997" />
+    </linearGradient>
+    <linearGradient id="offshoreAccent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#0d3d91" />
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Background pill -->
+  <rect x="0" y="0" rx="14" ry="14" width="180" height="48" fill="#ffffff" />
+  <!-- Accent bar / icon mark -->
+  <g filter="url(#softGlow)">
+    <circle cx="30" cy="24" r="16" fill="url(#offshoreGradient)" />
+    <path d="M22 24c0-4.4 3.6-8 8-8 1.9 0 3.7.7 5.1 1.8l-2 2.2c-.9-.7-2-.9-3.1-.9-2.7 0-4.9 2.2-4.9 4.9s2.2 4.9 4.9 4.9c1.1 0 2.3-.4 3.1-.9l2 2.2A7.96 7.96 0 0 1 30 32c-4.4 0-8-3.6-8-8Z" fill="#ffffff" opacity=".9" />
+  </g>
+  <!-- Wordmark -->
+  <text x="56" y="31" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" font-weight="800" fill="#2563eb" letter-spacing=".5px">Yuplan</text>
+  <text x="130" y="31" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" fill="#0d3d91" letter-spacing=".5px">Offshore</text>
+</svg>

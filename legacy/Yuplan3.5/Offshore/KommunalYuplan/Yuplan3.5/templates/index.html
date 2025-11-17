@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block title %}Yuplan - Inloggning{% endblock %}
+
+{% block head %}
+<style>
+    .yuplan-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+        padding: 2.5rem 2rem;
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow-lg);
+        color: var(--text-light);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .yuplan-logo::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+        animation: shimmer 3s infinite;
+    }
+    
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
+    
+    .logo-icon {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        padding: 1.8rem;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(15px);
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        transition: var(--transition);
+        animation: pulse 2s infinite alternate;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .logo-icon:hover {
+        transform: scale(1.05);
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+    }
+    
+    @keyframes pulse {
+        0% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2), 0 0 0 0 rgba(255, 255, 255, 0.4); }
+        100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2), 0 0 0 20px rgba(255, 255, 255, 0); }
+    }
+    
+    .logo-icon img {
+        width: 4rem;
+        height: 4rem;
+        object-fit: contain;
+        filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.3));
+    }
+    
+    .logo-icon i {
+        font-size: 4rem;
+        color: var(--text-light);
+        display: block;
+        filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.3));
+    }
+    
+    .logo-text {
+        text-align: left;
+        z-index: 1;
+    }
+    
+    .logo-text h1 {
+        font-size: 3.5rem;
+        font-weight: 800;
+        margin-bottom: 0.5rem;
+        color: var(--text-light);
+        text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.4);
+        background: none;
+        -webkit-text-fill-color: inherit;
+        letter-spacing: -1px;
+    }
+    
+    .logo-text .tagline {
+        font-size: 1.2rem;
+        opacity: 0.95;
+        font-weight: 500;
+        color: var(--text-light);
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        font-size: 0.9rem;
+    }
+    
+    .welcome-header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+    }
+    
+    .welcome-header h2 {
+        font-size: 1.75rem;
+        color: var(--text-primary);
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .welcome-header p {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+    
+    .login-cards {
+        animation: fadeInUp 0.8s ease-out;
+    }
+    
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .yuplan-logo {
+            flex-direction: column;
+            text-align: center;
+            padding: 2rem 1.5rem;
+            gap: 1rem;
+        }
+        
+        .logo-text {
+            text-align: center;
+        }
+        
+        .logo-text h1 {
+            font-size: 2.8rem;
+        }
+        
+        .logo-icon {
+            padding: 1.5rem;
+        }
+        
+        .logo-icon img {
+            width: 3rem;
+            height: 3rem;
+        }
+        
+        .logo-icon i {
+            font-size: 2.5rem;
+        }
+        
+        .welcome-header h2 {
+            font-size: 1.5rem;
+        }
+        
+        .welcome-header p {
+            font-size: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 500px; margin: 3rem auto;">
+    <!-- Yuplan Logo -->
+    <div class="yuplan-logo">
+        <div class="logo-icon">
+            <img src="{{ url_for('static', filename='icons/Yuplanlogo.png') }}" alt="Yuplan Logo">
+        </div>
+        <div class="logo-text">
+            <h1>Yuplan</h1>
+            <p class="tagline">Smart kostregistrering</p>
+        </div>
+    </div>
+    
+    <div class="welcome-header">
+    <h2>Välkommen till Yuplan</h2>
+        <p>Hantera kostregistrering enkelt och effektivt</p>
+        <div class="alert alert-info" style="margin-top:1rem;">
+            <i class="fas fa-info-circle"></i>
+            <b>Tips:</b> Länken "Admin" i menyn syns alltid, men du måste logga in som administratör för att komma åt adminpanelen.
+        </div>
+    </div>
+
+    <div class="login-cards">
+        <!-- Admin Login -->
+        <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-user-shield"></i>
+                Administratörsinloggning
+            </h3>
+        </div>
+        
+        <form method="post" action="/admin">
+            <div class="form-group">
+                <label for="lösenord" class="form-label">Lösenord</label>
+                <input type="password" 
+                       id="lösenord" 
+                       name="lösenord" 
+                       class="form-control" 
+                       placeholder="Ange administratörslösenord" 
+                       required 
+                       autofocus>
+            </div>
+            
+            {% if fel %}
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{ fel }}
+            </div>
+            {% endif %}
+            
+            <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+                <i class="fas fa-sign-in-alt"></i>
+                Logga in som administratör
+            </button>
+        </form>
+    </div>
+
+    <!-- Password Change -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-key"></i>
+                Byt administratörslösenord
+            </h3>
+        </div>
+        
+        <form method="post" action="/byt_losenord">
+            <div class="form-group">
+                <label for="nuvarande_losenord" class="form-label">Nuvarande lösenord</label>
+                <input type="password" 
+                       id="nuvarande_losenord" 
+                       name="nuvarande_losenord" 
+                       class="form-control" 
+                       placeholder="Ange nuvarande lösenord" 
+                       required>
+            </div>
+            
+            <div class="form-group">
+                <label for="nytt_losenord" class="form-label">Nytt lösenord</label>
+                <input type="password" 
+                       id="nytt_losenord" 
+                       name="nytt_losenord" 
+                       class="form-control" 
+                       placeholder="Ange nytt lösenord" 
+                       required>
+            </div>
+            
+            <div class="form-group">
+                <label for="nytt_losenord2" class="form-label">Upprepa nytt lösenord</label>
+                <input type="password" 
+                       id="nytt_losenord2" 
+                       name="nytt_losenord2" 
+                       class="form-control" 
+                       placeholder="Upprepa det nya lösenordet" 
+                       required>
+            </div>
+            
+            {% if losenord_fel %}
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{ losenord_fel }}
+            </div>
+            {% endif %}
+            
+            {% if losenord_ok %}
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                {{ losenord_ok }}
+            </div>
+            {% endif %}
+            
+            <button type="submit" class="btn btn-secondary btn-lg" style="width: 100%;">
+                <i class="fas fa-sync-alt"></i>
+                Byt lösenord
+            </button>
+        </form>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="text-center mt-4">
+        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <a href="/avdelning_login" class="btn btn-outline btn-lg">
+                <i class="fas fa-users"></i>
+                Avdelningsinloggning
+            </a>
+            <a href="/veckovy" class="btn btn-success btn-lg">
+                <i class="fas fa-calendar-week"></i>
+                Personalingång (Veckovy)
+            </a>
+        </div>
+    </div>
+    </div> <!-- Stäng login-cards -->
+</div>
+{% endblock %}

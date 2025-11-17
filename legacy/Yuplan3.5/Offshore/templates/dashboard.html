@@ -1,0 +1,1174 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container" style="max-width:820px;">
+  <div class="dashboard-hero-logo mb-3">
+    <div class="logo-glow">
+  <img src="{{ url_for('static', filename='Yuplanlogo_offshore.svg') }}" alt="Yuplan" />
+    </div>
+  </div>
+  <div class="hero-welcome mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div class="title">Velkommen, {{ user.name }}!</div>
+      {% if rig_name %}
+        <div class="sub"><span class="badge bg-info">{{ rig_name }}</span></div>
+      {% endif %}
+    </div>
+  </div>
+  <!-- Start hub cards -->
+  <div class="row mb-4">
+    <div class="col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column align-items-center justify-content-center">
+          <div style="font-size:2.2rem;">🗓️</div>
+          <h5 class="card-title mt-2">Ditt schema</h5>
+          <p class="card-text text-center">Se dine neste seks vakter.</p>
+          {# Removed inline schedule list to keep the card clean #}
+          <a href="{{ url_for('me_schedule') }}" class="btn btn-primary mt-2">Vis schema</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column align-items-center justify-content-center">
+          <div style="font-size:2.2rem;">🍽️</div>
+          <h5 class="card-title mt-2">Menyer</h5>
+          <p class="card-text text-center">Alle 4 ukemenyer.</p>
+          <a href="{{ url_for('menus_overview') }}" class="btn btn-primary mt-2">Gå til menyer</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column align-items-center justify-content-center">
+          <div style="font-size:2.2rem;">🧰</div>
+          <h5 class="card-title mt-2">Planering</h5>
+          {% set anchor = arbeidsperiod_start or user_menu_anchor_date or (menu_days_period[0].date if menu_days_period and menu_days_period[0].date else today_str) %}
+          <p class="card-text text-center mb-3 small text-muted">Samlad navigasjon til alle planeringsverktøy.</p>
+          <a href="{{ url_for('planning_hub') }}" class="btn btn-primary btn-sm w-100" title="Åpne planering">Åpne planering →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Coverage + Recipes quick card row -->
+  <div class="row mb-4">
+    <div class="col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column justify-content-center align-items-center text-center">
+          <div style="font-size:2.2rem;">📈</div>
+          <h6 class="mt-2 mb-1">Recept coverage</h6>
+          {% if recipe_coverage and recipe_coverage.denominator > 0 %}
+            <div class="display-6" style="font-size:2.1rem; font-weight:600;">{{ recipe_coverage.percent }}%</div>
+            <div class="small text-muted">{{ recipe_coverage.numerator }} av {{ recipe_coverage.denominator }} aktive retter</div>
+            {% if recipe_coverage.percent < 100 %}
+              <a href="{{ url_for('recipes') }}?filter=missing" class="btn btn-sm btn-outline-primary mt-2">Mangler recept</a>
+            {% else %}
+              <span class="badge bg-success mt-2">Fullt dekket</span>
+            {% endif %}
+          {% else %}
+            <div class="small text-muted">Ingen retter ennå</div>
+            <a href="{{ url_for('recipes') }}" class="btn btn-sm btn-outline-secondary mt-2">Legg til</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column align-items-center justify-content-center">
+          <div style="font-size:2.2rem;">📖</div>
+          <h5 class="card-title mt-2">Recept & Metoder</h5>
+          <p class="card-text text-center">Oppskrifter, metoder og referanser.</p>
+          <a href="{{ url_for('recipes') }}" class="btn btn-primary mt-2">Gå til recept</a>
+          <button class="btn btn-outline-secondary btn-sm mt-3" data-bs-toggle="modal" data-bs-target="#serviceMetricsModal">Logga service ▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column align-items-center justify-content-center">
+          <div style="font-size:2.2rem;">📅</div>
+          <h5 class="card-title mt-2">Årskalender</h5>
+          <p class="card-text text-center">Se arbeidsmønster gjennom året.</p>
+          <a href="{{ url_for('me_calendar') }}" class="btn btn-primary mt-2">Åpne kalender</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column align-items-center justify-content-center">
+          <div style="font-size:2.2rem;">📖</div>
+          <h5 class="card-title mt-2">Recept & Metoder</h5>
+          <p class="card-text text-center">Oppskrifter, metoder og referanser.</p>
+          <a href="{{ url_for('recipes') }}" class="btn btn-primary mt-2">Gå til recept</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Manual date form removed: dashboard auto-detects next 2-week period for the logged-in cook -->
+  <h4 class="mb-3 text-center" style="font-weight:700;">Menykort for dagvakt (fre middag → fre lunsj)</h4>
+  {% if menu_days_period %}
+    <div class="container-fluid">
+      <div class="d-flex justify-content-end mb-2">
+        <button class="btn btn-sm btn-outline-secondary" onclick="window.print()">Skriv ut</button>
+      </div>
+      {% for d in menu_days_period %}
+        <div class="row g-2 align-items-stretch mb-3">
+          <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center small text-muted">
+              <div><strong>{{ d.weekday or '' }}</strong> • {{ d.date }} {% if d.label %}• {{ d.label }}{% endif %}</div>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary open-day-editor" data-date="{{ d.date }}" title="Edit day menu">✏️ Edit</button>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('menus_daily_docx') }}?date={{ d.date }}" title="Print DOCX">Print</a>
+                <button class="btn btn-sm btn-outline-success open-send-admin" data-date="{{ d.date }}" title="Send daily menu to admin">Send</button>
+                <button class="btn btn-sm btn-outline-danger reset-day-btn" data-date="{{ d.date }}" title="Tilbakestill endringer og allergener for denne dagen">Reset</button>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 d-flex">
+            <div class="card meal-card lunsj p-3 py-2 shadow-sm h-100 d-flex flex-column w-100">
+              <div class="fw-bold text-success mb-1">Lunsj</div>
+              <ul class="mb-0 ps-3 list-unstyled">
+                {% set _l = d.lunsj_cats or {} %}
+                {% set _lo = d.lunsj_overridden or [] %}
+                {% for cat_key in ['soppa','fisk','kott','extra'] %}
+                  {% set it = _l[cat_key] if _l and _l[cat_key] else None %}
+                  {% if it %}
+                  <li class="menu-item" data-date="{{ d.date }}" data-meal="lunsj" data-cat="{{ cat_key }}">
+                    <div class="d-flex align-items-start justify-content-between gap-2 w-100">
+                      <span class="dish-name flex-grow-1">{{ it }}</span>
+                      <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                        <button class="btn btn-sm btn-outline-success open-prep" data-date="{{ d.date }}" data-meal="lunsj" data-cat="{{ cat_key }}" data-dish="{{ it }}" title="Prepp/Frys" style="position:relative;">
+                          🧰<span class="prep-indicator position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size:0.55rem;">0</span>
+                        </button>
+                        {% if cat_key in _lo %}<span class="badge bg-warning text-dark" title="Endret av deg">✳</span>{% endif %}
+                      </div>
+                    </div>
+                  </li>
+                  {% endif %}
+                {% else %}
+                  <li class="text-muted">–</li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-6 d-flex">
+            <div class="card meal-card middag p-3 py-2 shadow-sm h-100 d-flex flex-column w-100">
+              <div class="fw-bold text-danger mb-1">Middag</div>
+              <ul class="mb-0 ps-3 list-unstyled">
+                {% set _m = d.middag_cats or {} %}
+                {% set _mo = d.middag_overridden or [] %}
+                {% for cat_key in ['soppa','fisk','kott','extra'] %}
+                  {% set it = _m[cat_key] if _m and _m[cat_key] else None %}
+                  {% if it %}
+                  <li class="menu-item" data-date="{{ d.date }}" data-meal="middag" data-cat="{{ cat_key }}">
+                    <div class="d-flex align-items-start justify-content-between gap-2 w-100">
+                      <span class="dish-name flex-grow-1">{{ it }}</span>
+                      <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                        <button class="btn btn-sm btn-outline-success open-prep" data-date="{{ d.date }}" data-meal="middag" data-cat="{{ cat_key }}" data-dish="{{ it }}" title="Prepp/Frys" style="position:relative;">
+                          🧰<span class="prep-indicator position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size:0.55rem;">0</span>
+                        </button>
+                        {% if cat_key in _mo %}<span class="badge bg-warning text-dark" title="Endret av deg">✳</span>{% endif %}
+                      </div>
+                    </div>
+                  </li>
+                  {% endif %}
+                {% else %}
+                  <li class="text-muted">–</li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="alert alert-warning text-center p-4 mt-4 shadow-sm rounded">
+      <div style="font-size:1.2em;">Ingen meny funnet for denne perioden. Sjekk at menyen er importert og at du har en kommende 2-ukers dagvakt.</div>
+    </div>
+  {% endif %}
+  </div>
+
+{# TURNUS-detaljer fjernet for å holde vyn ren. Kan legges tilbake bak en ekspander. #}
+
+<!-- Dish detail modal: override and allergens (affects only the selected day; original menu stays unchanged) -->
+<div class="modal fade" id="dishModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dishModalLabel">Rett</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Lukk"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2 small text-muted" id="dishMeta"></div>
+        <form id="dailyOverrideForm">
+          <input type="hidden" id="ovr-date" name="date">
+          <input type="hidden" id="ovr-meal" name="meal">
+          <div class="mb-2">
+            <label class="form-label">Kategori</label>
+            <select class="form-select" id="ovr-category" name="category">
+              <option value="">Velg kategori…</option>
+              <option value="soppa">Suppe</option>
+              <option value="fisk">Fisk</option>
+              <option value="kott">Kjøtt</option>
+              <option value="extra">3. rett/grønn rett</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Ny rett (overstyring)</label>
+            <input type="text" class="form-control" id="ovr-dish" name="dish" placeholder="Skriv in rätt…">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Allergener</label>
+            <div class="d-flex align-items-center gap-2">
+              <div class="dropdown" data-bs-auto-close="outside">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="ovr-allergens-btn">Velg</button>
+                <div class="dropdown-menu p-2" style="min-width: 260px;" id="ovr-allergens-menu"></div>
+              </div>
+              <span class="badge text-bg-light" id="ovr-allergens-count">0</span>
+            </div>
+            <div class="form-text">Klikk for å velge flere.</div>
+            <div class="mt-1" id="ovr-allergen-chips"></div>
+            <div class="mt-2" id="ovr-gluten-wrap" style="display:none;">
+              <label class="form-label">Gluten-typer</label>
+              <div class="dropdown" data-bs-auto-close="outside">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="ovr-gluten-btn">Velg</button>
+                <div class="dropdown-menu p-2" style="min-width: 240px;" id="ovr-gluten-menu"></div>
+              </div>
+            </div>
+            <input type="hidden" id="ovr-allergens" name="allergens">
+            <input type="hidden" id="ovr-gluten-types" name="gluten_types">
+          </div>
+          <div class="small text-muted">Endringer lagres kun for denne dagen. Originalmenyen endres ikke.</div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Lukk</button>
+        <button type="button" class="btn btn-primary" id="ovr-save">Lagre</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+<script>
+// Badge helper for chips display (used elsewhere on page)
+function badge(text, cls) {
+  const s = document.createElement('span');
+  s.className = `badge ${cls||'text-bg-secondary'} me-1`;
+  s.textContent = text;
+  return s;
+}
+</script>
+
+<!-- Service Metrics Modal -->
+<div class="modal fade" id="serviceMetricsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Logga måltid / service</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Lukk"></button>
+      </div>
+      <div class="modal-body">
+        <form id="serviceMetricsForm">
+          <div class="row g-2 mb-2">
+            <div class="col-md-4">
+              <label class="form-label">Dato</label>
+              <input type="date" class="form-control" id="sm-date" value="{{ today_str }}" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Måltid</label>
+              <select class="form-select" id="sm-meal" required>
+                <option value="lunsj">Lunsj</option>
+                <option value="middag">Middag</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Gäster</label>
+              <input type="number" class="form-control" id="sm-guests" min="1" placeholder="Antal" required>
+            </div>
+          </div>
+          <div class="table-responsive mb-2">
+            <table class="table table-sm align-middle" id="sm-dishes-table">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:90px;">Kategori</th>
+                  <th>Rett (valfri)</th>
+                  <th style="width:120px;">Prod kg</th>
+                  <th style="width:120px;">Leftover kg</th>
+                  <th style="width:140px;">Serv g/gäst</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </form>
+        <div class="small text-muted">Serv g/gäst beregnes efter lagring. Fyll i minst prod og leftover eller prod + serverat.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Lukk</button>
+        <button type="button" class="btn btn-primary" id="sm-save">Lagre</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Init dish rows (kategori-baseline endast nu)
+const SM_CATS = ['soppa','fisk','kott','extra'];
+function smRenderRows(){
+  const tb = document.querySelector('#sm-dishes-table tbody');
+  if(!tb) return; tb.innerHTML='';
+  SM_CATS.forEach(cat => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="badge text-bg-secondary">${cat}</span></td>
+      <td><input type="text" class="form-control form-control-sm" data-field="dish-name" data-cat="${cat}" placeholder="Rett (frivillig)"></td>
+      <td><input type="number" step="0.01" min="0" class="form-control form-control-sm" data-field="produced" data-cat="${cat}"></td>
+      <td><input type="number" step="0.01" min="0" class="form-control form-control-sm" data-field="leftover" data-cat="${cat}"></td>
+      <td class="text-muted" data-field="served-per-guest" data-cat="${cat}">–</td>`;
+    tb.appendChild(tr);
+  });
+}
+document.addEventListener('DOMContentLoaded', smRenderRows);
+
+document.getElementById('sm-save').addEventListener('click', async () => {
+  const date = document.getElementById('sm-date').value;
+  const meal = document.getElementById('sm-meal').value;
+  const guests = parseInt(document.getElementById('sm-guests').value,10);
+  if(!date || !meal || !guests){ alert('Fyll i dato, måltid, gäster'); return; }
+  const rows = [];
+  document.querySelectorAll('#sm-dishes-table tbody tr').forEach(tr => {
+    const cat = tr.querySelector('[data-field="produced"]').getAttribute('data-cat');
+    const prod = tr.querySelector('[data-field="produced"]').value;
+    const left = tr.querySelector('[data-field="leftover"]').value;
+    if(prod || left){
+      rows.push({ category: cat, produced_qty_kg: prod || null, leftover_qty_kg: left || null });
+    }
+  });
+  if(!rows.length){ if(!confirm('Ingen mengder fylt – lagre kun gästantal?')) return; }
+  const btn = document.getElementById('sm-save'); const orig = btn.textContent; btn.disabled=true; btn.textContent='Lagrer…';
+  try {
+    const res = await fetch('/service/log', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date, meal, guest_count: guests, dishes: rows }) });
+    const data = await res.json();
+    if(!data.ok){ throw new Error(data.error||'Feil'); }
+    if(window.showToast) window.showToast('success','Lagret'); else alert('Lagret');
+    // Hent recommendation direkte
+    const recRes = await fetch(`/service/recommendation?guest_count=${guests}`);
+    const recData = await recRes.json();
+    if(recData.ok){ console.log('Recommendation', recData.recommendations); }
+    const modalEl = document.getElementById('serviceMetricsModal');
+    const modal = bootstrap.Modal.getInstance(modalEl); if(modal) modal.hide();
+  } catch(err){
+    if(window.showToast) window.showToast('error','Feil: '+(err.message||err)); else alert('Feil: '+(err.message||err));
+  } finally { btn.disabled=false; btn.textContent=orig; }
+});
+</script>
+<script>
+// Legacy single dish modal opener (repurposed for overrides only; prep uses new modal)
+document.addEventListener('click', function(e) {
+  const a = e.target.closest('.open-prep-legacy');
+  if (!a) return; // kept for backward compatibility if needed
+});
+
+// --- Prep modal handling ---
+// Inject modal container at end of body if missing
+document.addEventListener('DOMContentLoaded', () => {
+  if (!document.getElementById('prepTasksModal')) {
+    const div = document.createElement('div');
+    div.innerHTML = `
+<div class="modal fade" id="prepTasksModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="prepTasksTitle">Prepp</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Lukk"></button>
+      </div>
+      <div class="modal-body">
+        <div class="small text-muted mb-2" id="prepTasksMeta"></div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <h6 class="fw-bold">Prepp</h6>
+            <form id="prepAddForm" class="d-flex gap-2 mb-2">
+              <input type="text" id="prepNewText" class="form-control" placeholder="Ny oppgave…" autocomplete="off" maxlength="140" />
+              <button class="btn btn-success" type="submit">+"</button>
+            </form>
+            <ul class="list-group mb-3" id="prepTasksList"></ul>
+          </div>
+          <div class="col-md-6">
+            <h6 class="fw-bold">Frysplock</h6>
+            <form id="frysAddForm" class="row g-1 align-items-end mb-2">
+              <div class="col-6"><input type="text" id="frysItemName" class="form-control" placeholder="Vare" autocomplete="off" maxlength="80" /></div>
+              <div class="col-3"><input type="number" step="0.01" id="frysQty" class="form-control" placeholder="Ant" /></div>
+              <div class="col-3"><input type="text" id="frysUnit" class="form-control" placeholder="Enhet" value="kg" maxlength="8" /></div>
+              <div class="col-12 d-grid"><button class="btn btn-primary" type="submit">Lägg till</button></div>
+            </form>
+            <ul class="list-group" id="frysItemsList"></ul>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Lukk</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+    document.body.appendChild(div.firstElementChild);
+  }
+});
+
+async function fetchPrepTasks(date, meal, category) {
+  const url = new URL('{{ url_for("prep_tasks_list") }}', window.location.origin);
+  url.searchParams.set('date', date);
+  url.searchParams.set('meal', meal);
+  url.searchParams.set('category', category);
+  const res = await fetch(url);
+  return await res.json();
+}
+
+async function fetchFrysItems(date, meal, category) {
+  const url = new URL('{{ url_for("frys_items_list") }}', window.location.origin);
+  url.searchParams.set('date', date); url.searchParams.set('meal', meal); url.searchParams.set('category', category);
+  const res = await fetch(url); return await res.json();
+}
+
+function renderPrepTasks(listEl, tasks) {
+  listEl.innerHTML = '';
+  if (!tasks.length) {
+    const li = document.createElement('li');
+    li.className = 'list-group-item text-muted';
+    li.textContent = 'Ingen oppgaver';
+    listEl.appendChild(li);
+    return;
+  }
+  tasks.forEach(t => {
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex align-items-center gap-2';
+    li.innerHTML = `
+      <input type="checkbox" class="form-check-input m-0 prep-toggle" data-id="${t.id}" ${t.done? 'checked':''} />
+      <span class="flex-grow-1 ${t.done? 'text-decoration-line-through text-muted':''}">${t.text}</span>
+    `;
+    listEl.appendChild(li);
+  });
+}
+
+function renderFrysItems(listEl, items) {
+  listEl.innerHTML = '';
+  if (!items.length) {
+    const li = document.createElement('li'); li.className='list-group-item text-muted'; li.textContent='Ingen frysplock'; listEl.appendChild(li); return;
+  }
+  items.forEach(it => {
+    const li = document.createElement('li');
+    li.className='list-group-item d-flex align-items-center gap-2';
+    const qtyPart = (it.qty!=null && it.qty!=='') ? (it.qty + (it.unit? ' ' + it.unit : '')) : '';
+    li.innerHTML = `
+      <input type="checkbox" class="form-check-input m-0 frys-toggle" data-id="${it.id}" ${it.done? 'checked':''} />
+      <span class="flex-grow-1 ${it.done? 'text-decoration-line-through text-muted':''}">${it.item_name}${qtyPart? ' ('+qtyPart+')':''}</span>
+    `;
+    listEl.appendChild(li);
+  });
+}
+
+async function openPrepModal(btn) {
+  const date = btn.getAttribute('data-date');
+  const meal = btn.getAttribute('data-meal');
+  const cat = btn.getAttribute('data-cat');
+  const dish = btn.getAttribute('data-dish') || '';
+  const modalEl = document.getElementById('prepTasksModal');
+  const titleEl = modalEl.querySelector('#prepTasksTitle');
+  const metaEl = modalEl.querySelector('#prepTasksMeta');
+  const listEl = modalEl.querySelector('#prepTasksList');
+  const frysListEl = modalEl.querySelector('#frysItemsList');
+  const frysForm = modalEl.querySelector('#frysAddForm');
+  const frysItemName = modalEl.querySelector('#frysItemName');
+  const frysQty = modalEl.querySelector('#frysQty');
+  const frysUnit = modalEl.querySelector('#frysUnit');
+  const formEl = modalEl.querySelector('#prepAddForm');
+  const inputEl = modalEl.querySelector('#prepNewText');
+  titleEl.textContent = 'Prepp';
+  metaEl.textContent = `${date} • ${meal} • ${cat}${dish? ' • ' + dish : ''}`;
+  listEl.innerHTML = '<li class="list-group-item text-muted">Laster…</li>';
+  formEl.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const txt = inputEl.value.trim();
+    if (!txt) return;
+    const payload = { date, meal, category: cat, text: txt };
+    const res = await fetch('{{ url_for("prep_tasks_add") }}', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Feil'); return; }
+    inputEl.value='';
+    const again = await fetchPrepTasks(date, meal, cat);
+    if (again.ok) renderPrepTasks(listEl, again.tasks || []);
+  };
+  frysForm.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const payload = { date, meal, category: cat, item_name: frysItemName.value.trim(), qty: frysQty.value, unit: frysUnit.value.trim() };
+    if (!payload.item_name) return;
+    const res = await fetch('{{ url_for("frys_items_add") }}', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || 'Feil'); return; }
+    frysItemName.value=''; frysQty.value='';
+    const againF = await fetchFrysItems(date, meal, cat);
+    if (againF.ok) renderFrysItems(frysListEl, againF.items||[]);
+    updateIndicators();
+  };
+  try {
+    const data = await fetchPrepTasks(date, meal, cat);
+    if (data.ok) renderPrepTasks(listEl, data.tasks || []);
+    else listEl.innerHTML = '<li class="list-group-item text-danger">Feil: ' + (data.error||'') + '</li>';
+    const frysData = await fetchFrysItems(date, meal, cat);
+    if (frysData.ok) renderFrysItems(frysListEl, frysData.items||[]);
+    else frysListEl.innerHTML = '<li class="list-group-item text-danger">Feil: ' + (frysData.error||'') + '</li>';
+  } catch (err) {
+    listEl.innerHTML = '<li class="list-group-item text-danger">Feil ved lasting</li>';
+    frysListEl.innerHTML = '<li class="list-group-item text-danger">Feil ved lasting</li>';
+  }
+  const modal = new bootstrap.Modal(modalEl);
+  modal.show();
+}
+
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.open-prep');
+  if (!btn) return;
+  e.preventDefault();
+  openPrepModal(btn);
+});
+
+document.addEventListener('change', async function(e) {
+  const chk = e.target.closest('.prep-toggle');
+  if (!chk) return;
+  const id = chk.getAttribute('data-id');
+  if (!id) return;
+  const res = await fetch('{{ url_for("prep_tasks_toggle") }}', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id }) });
+  const data = await res.json();
+  if (!data.ok) { alert(data.error || 'Feil'); return; }
+  // simple UI update: strike-through
+  const span = chk.parentElement.querySelector('span.flex-grow-1');
+  if (span) {
+    if (data.done) span.classList.add('text-decoration-line-through','text-muted');
+    else span.classList.remove('text-decoration-line-through','text-muted');
+  }
+});
+
+document.addEventListener('change', async function(e) {
+  const chk = e.target.closest('.frys-toggle');
+  if (!chk) return;
+  const id = chk.getAttribute('data-id'); if (!id) return;
+  const res = await fetch('{{ url_for("frys_items_toggle") }}', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id }) });
+  const data = await res.json();
+  if (!data.ok) { alert(data.error || 'Feil'); return; }
+  const span = chk.parentElement.querySelector('span.flex-grow-1');
+  if (span) {
+    if (data.done) span.classList.add('text-decoration-line-through','text-muted');
+    else span.classList.remove('text-decoration-line-through','text-muted');
+  }
+  updateIndicators();
+});
+
+async function updateIndicators() {
+  const buttons = Array.from(document.querySelectorAll('.open-prep'));
+  if (!buttons.length) return;
+  const items = buttons.map(b => ({ date: b.getAttribute('data-date'), meal: b.getAttribute('data-meal'), category: b.getAttribute('data-cat') }));
+  try {
+    const res = await fetch('{{ url_for("prep_status_batch") }}', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ items }) });
+    const data = await res.json();
+    if (!data.ok) return;
+    buttons.forEach(b => {
+      const key = `${b.getAttribute('data-date')}|${b.getAttribute('data-meal')}|${b.getAttribute('data-cat')}`;
+      const st = data.statuses[key];
+      const ind = b.querySelector('.prep-indicator');
+      if (!ind) return;
+      if (!st) { ind.classList.add('d-none'); return; }
+      const open = (st.prep_open || 0) + (st.frys_open || 0);
+      if (open > 0) {
+        ind.textContent = open; ind.classList.remove('d-none');
+      } else {
+        ind.classList.add('d-none');
+      }
+    });
+  } catch(err) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => { setTimeout(updateIndicators, 300); });
+
+// Handle per-day reset buttons
+document.addEventListener('click', async function(e) {
+  const btn = e.target.closest('.reset-day-btn');
+  if (!btn) return;
+  e.preventDefault();
+  const date = btn.getAttribute('data-date');
+  if (!date) return;
+  if (!confirm('Tilbakestill alle overstyringer og allergener for ' + date + '?')) return;
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '...';
+  try {
+    const res = await fetch('{{ url_for("menus_daily_reset") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Feil');
+  if (window.showToast) window.showToast('success', 'Dag tilbakestilt.');
+    // Refresh the UI for the day (fallback reload)
+    if (window.refreshDayCard) {
+      window.refreshDayCard(date);
+    } else {
+      location.reload();
+    }
+  } catch (err) {
+  if (window.showToast) window.showToast('error', 'Kunne ikke tilbakestille: ' + (err?.message||err)); else alert('Feil: ' + (err && err.message ? err.message : err));
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+});
+
+document.getElementById('ovr-save').addEventListener('click', async function() {
+  const form = document.getElementById('dailyOverrideForm');
+  const btn = this; const origTxt = btn.textContent; btn.disabled = true; btn.textContent = 'Lagrer…';
+  const date = form.querySelector('#ovr-date').value.trim();
+  const meal = form.querySelector('#ovr-meal').value.trim();
+  const category = form.querySelector('#ovr-category').value.trim();
+  const dish = form.querySelector('#ovr-dish').value.trim();
+  const allergens = form.querySelector('#ovr-allergens').value.trim();
+  if (!date || !meal || !category) {
+    alert('Dato, måltid og kategori må fylles ut.');
+    return;
+  }
+  try {
+  const res = await fetch('{{ url_for("menus_daily_update") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, meal, category, dish, allergens, gluten_types: document.getElementById('ovr-gluten-types').value })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Kunne ikke lagre');
+    // Close modal
+    const modalEl = document.getElementById('dishModal');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+    if (window.showToast) window.showToast('success', 'Rett lagret.');
+      // Refresh the day card so changes are visible immediately (fallback to reload)
+      if (date) {
+        if (window.refreshDayCard) {
+          window.refreshDayCard(date);
+        } else {
+          location.reload();
+        }
+      }
+  } catch (err) {
+    if (window.showToast) window.showToast('error', 'Feil ved lagring: ' + (err?.message || err)); else alert('Feil: ' + (err && err.message ? err.message : err));
+  }
+  finally { btn.disabled = false; btn.textContent = origTxt; }
+});
+</script>
+
+<!-- Bulk Day Editor Modal -->
+<div class="modal fade" id="dayEditorModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit daily menu</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2 small text-muted">Dato: <span id="de-date"></span></div>
+        <form id="dayEditorForm">
+          <input type="hidden" id="de-date-input" name="date">
+          <!-- Shared section for the day -->
+          <div class="border rounded p-3 mb-3 bg-light">
+            <h6 class="mb-2">Felles for dagen</h6>
+            <div id="de-shared"></div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <h6 class="text-success fw-bold">Lunsj</h6>
+              <div id="de-lunch"></div>
+            </div>
+            <div class="col-md-6">
+              <h6 class="text-primary fw-bold">Middag</h6>
+              <div id="de-dinner"></div>
+            </div>
+          </div>
+        </form>
+        <div class="mt-2 small text-muted">Endringer lagres kun for denne dagen. Originalmenyen endres ikke.</div>
+      </div>
+      <div class="modal-footer">
+  <button type="button" class="btn btn-outline-secondary" id="de-print">Skriv ut DOCX</button>
+  <button type="button" class="btn btn-outline-secondary" id="de-print-html">Skriv ut (HTML)</button>
+  <button type="button" class="btn btn-outline-success" id="de-send">Send</button>
+  
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Lukk</button>
+        <button type="button" class="btn btn-primary" id="de-save">Lagre</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+<script>
+// Allergen catalog (name->number)
+const ALLERGENS = [
+  { num: 1, name: 'Gluten' },
+  { num: 2, name: 'Shellfish' },
+  { num: 3, name: 'Eggs' },
+  { num: 4, name: 'Fish' },
+  { num: 5, name: 'Peanuts' },
+  { num: 6, name: 'Soybeans' },
+  { num: 7, name: 'Milk' },
+  { num: 8, name: 'Nuts' },
+  { num: 9, name: 'Celery' },
+  { num: 10, name: 'Mustard' },
+  { num: 11, name: 'Sesame' },
+  { num: 12, name: 'Sulphites' },
+  { num: 13, name: 'Lupin' },
+  { num: 14, name: 'Molluscs' },
+];
+const GLUTEN_SUBTYPES = ['Wheat','Rye','Barley','Oats','Spelt','Khorasan wheat'];
+
+function renderAllergenDropdown(scope, catKey, selectedCsv) {
+  const wrap = document.createElement('div');
+  wrap.className = 'dropdown';
+  wrap.setAttribute('data-bs-auto-close', 'outside');
+  wrap.innerHTML = `
+    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+      Allergener
+    </button>
+    <div class="dropdown-menu p-2" style="min-width: 260px;"></div>
+  `;
+  const menu = wrap.querySelector('.dropdown-menu');
+  const selected = new Set((selectedCsv||'').split(',').map(s=>s.trim()).filter(Boolean));
+  ALLERGENS.forEach(a => {
+    const id = `${scope}-${catKey}-alg-${a.num}`;
+    const item = document.createElement('div');
+    item.className = 'form-check';
+    item.innerHTML = `
+      <input class=\"form-check-input\" type=\"checkbox\" id=\"${id}\" value=\"${a.num}\" ${selected.has(String(a.num))? 'checked':''}>
+      <label class=\"form-check-label\" for=\"${id}\">${a.name} (${a.num})</label>
+    `;
+    menu.appendChild(item);
+  });
+  menu.addEventListener('click', (ev) => ev.stopPropagation());
+  wrap.setAttribute('data-scope', scope);
+  wrap.setAttribute('data-cat', catKey);
+  wrap.setAttribute('data-field', 'allergens-dropdown');
+  return wrap;
+}
+
+function renderGlutenDropdown(scope, catKey, selectedCsv, enabled) {
+  const wrap = document.createElement('div');
+  wrap.className = 'dropdown';
+  wrap.setAttribute('data-bs-auto-close', 'outside');
+  wrap.innerHTML = `
+    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" ${enabled? '':'disabled'}>
+      Gluten-typer
+    </button>
+    <div class="dropdown-menu p-2" style="min-width: 240px;"></div>
+  `;
+  const menu = wrap.querySelector('.dropdown-menu');
+  const selected = new Set((selectedCsv||'').split(',').map(s=>s.trim()).filter(Boolean));
+  GLUTEN_SUBTYPES.forEach(n => {
+    const safe = n.replace(/\s+/g,'-').toLowerCase();
+    const id = `${scope}-${catKey}-glu-${safe}`;
+    const item = document.createElement('div');
+    item.className = 'form-check';
+    item.innerHTML = `
+      <input class=\"form-check-input\" type=\"checkbox\" id=\"${id}\" value=\"${n}\" ${selected.has(n)? 'checked':''}>
+      <label class=\"form-check-label\" for=\"${id}\">${n}</label>
+    `;
+    menu.appendChild(item);
+  });
+  menu.addEventListener('click', (ev) => ev.stopPropagation());
+  wrap.setAttribute('data-scope', scope);
+  wrap.setAttribute('data-cat', catKey);
+  wrap.setAttribute('data-field', 'gluten-dropdown');
+  return wrap;
+}
+
+// Helper to render one category row (dish + compact dropdowns)
+function renderCatRow(scope, catKey, label, values) {
+  const wrap = document.createElement('div');
+  wrap.className = 'mb-2';
+  const defaultExtra = 'Varied types of side dishes.';
+  const placeholder = catKey === 'extra' ? defaultExtra : 'Rett';
+  wrap.innerHTML = `
+    <label class="form-label">${label}</label>
+    <input type="text" class="form-control mb-1" data-scope="${scope}" data-cat="${catKey}" data-field="dish" placeholder="${placeholder}" value="${(values?.dish||'').replaceAll('"','&quot;')}">
+    <div class="mb-1 d-flex align-items-center gap-2"><small class="text-muted">Allergener</small>
+      <span class="badge text-bg-light" data-scope="${scope}" data-cat="${catKey}" data-field="alg-count">0</span>
+    </div>
+    <div class="mb-2" data-scope="${scope}" data-cat="${catKey}" data-field="alg-chips"></div>
+  `;
+  const algWrap = renderAllergenDropdown(scope, catKey, values?.allergens || '');
+  const gluEnabled = (values?.allergens || '').split(',').map(s=>s.trim()).includes('1');
+  const gluWrap = renderGlutenDropdown(scope, catKey, values?.gluten_types || '', gluEnabled);
+  wrap.appendChild(algWrap);
+  wrap.appendChild(document.createElement('div')).className = 'mt-2';
+  wrap.appendChild(gluWrap);
+
+  // Wire up count badge and gluten enable/clear behavior inside the bulk editor row
+  const algMenu = algWrap.querySelector('.dropdown-menu');
+  const gluMenu = gluWrap.querySelector('.dropdown-menu');
+  const gluBtn = gluWrap.querySelector('button');
+  const countBadge = wrap.querySelector(`[data-scope="${scope}"][data-cat="${catKey}"][data-field="alg-count"]`);
+  const updateCounts = () => {
+    const selected = Array.from(algMenu.querySelectorAll('input[type="checkbox"]:checked')).map(i=>i.value);
+    if (countBadge) countBadge.textContent = String(selected.length);
+    const hasGluten = selected.includes('1');
+    if (gluBtn) gluBtn.disabled = !hasGluten;
+    if (!hasGluten && gluMenu) {
+      gluMenu.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.checked = false);
+    }
+    // Render allergen chips
+    const chipsWrap = wrap.querySelector(`[data-scope="${scope}"][data-cat="${catKey}"][data-field="alg-chips"]`);
+    if (chipsWrap) {
+      chipsWrap.innerHTML = '';
+      selected.forEach(num => {
+        const a = ALLERGENS.find(x => String(x.num) === String(num));
+        const name = a ? a.name : num;
+        chipsWrap.appendChild(badge(name, 'text-bg-warning'));
+      });
+    }
+  };
+  if (algMenu) {
+    algMenu.addEventListener('click', ev => ev.stopPropagation());
+    algMenu.addEventListener('change', updateCounts);
+    // initial
+    updateCounts();
+  }
+  if (gluMenu) {
+    gluMenu.addEventListener('click', ev => ev.stopPropagation());
+  }
+  return wrap;
+}
+
+document.addEventListener('click', async function(e) {
+  const btn = e.target.closest('.open-day-editor');
+  if (!btn) return;
+  e.preventDefault();
+  const date = btn.getAttribute('data-date');
+  const modalEl = document.getElementById('dayEditorModal');
+  modalEl.querySelector('#de-date').textContent = date;
+  modalEl.querySelector('#de-date-input').value = date;
+  const lunchBox = modalEl.querySelector('#de-lunch');
+  const dinnerBox = modalEl.querySelector('#de-dinner');
+  const sharedBox = modalEl.querySelector('#de-shared');
+  lunchBox.innerHTML = '';
+  dinnerBox.innerHTML = '';
+  sharedBox.innerHTML = '';
+  try {
+    const res = await fetch(`{{ url_for('menus_daily_get') }}?date=${encodeURIComponent(date)}`);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Kunde inte hämta');
+    // Shared soup (same for lunch and dinner)
+    const soupVal = (data?.dinner?.soppa && (data.dinner.soppa.dish || data.dinner.soppa.allergens || data.dinner.soppa.gluten_types))
+      ? data.dinner.soppa
+      : (data?.lunch?.soppa || { dish:'', allergens:'', gluten_types:'' });
+    sharedBox.appendChild(renderCatRow('shared', 'soppa', 'Dagens suppe (gjelder hele dagen)', soupVal));
+
+    // Other categories per meal
+    const cats = [
+      ['fisk','Dagens fisk'],
+      ['kott','Dagens kjøtt'],
+      ['extra','3. rett/grønn rett'],
+    ];
+    for (const [ck, label] of cats) {
+      lunchBox.appendChild(renderCatRow('lunch', ck, label, data.lunch[ck]));
+      dinnerBox.appendChild(renderCatRow('dinner', ck, label, data.dinner[ck]));
+    }
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  } catch (err) {
+    alert('Fel: ' + (err?.message || err));
+  }
+});
+
+document.getElementById('de-save').addEventListener('click', async function() {
+  const modalEl = document.getElementById('dayEditorModal');
+  const btn = this; const origTxt = btn.textContent; btn.disabled = true; btn.textContent = 'Lagrer…';
+  const date = modalEl.querySelector('#de-date-input').value;
+  const collect = (scope) => {
+    const obj = { soppa:{}, fisk:{}, kott:{}, extra:{} };
+    // dish inputs
+    modalEl.querySelectorAll(`input[data-scope="${scope}"][data-field="dish"]`).forEach(el => {
+      const cat = el.getAttribute('data-cat');
+      obj[cat].dish = el.value.trim();
+    });
+    // allergens dropdown -> CSV
+    modalEl.querySelectorAll(`.dropdown[data-scope="${scope}"][data-field="allergens-dropdown"]`).forEach(w => {
+      const cat = w.getAttribute('data-cat');
+      const vals = Array.from(w.querySelectorAll('.dropdown-menu input[type="checkbox"]:checked')).map(i=>i.value);
+      obj[cat].allergens = vals.join(',');
+    });
+    // gluten dropdown -> CSV
+    modalEl.querySelectorAll(`.dropdown[data-scope="${scope}"][data-field="gluten-dropdown"]`).forEach(w => {
+      const cat = w.getAttribute('data-cat');
+      const btn = w.querySelector('button');
+      if (btn && btn.hasAttribute('disabled')) { obj[cat].gluten_types = ''; return; }
+      const vals = Array.from(w.querySelectorAll('.dropdown-menu input[type="checkbox"]:checked')).map(i=>i.value);
+      obj[cat].gluten_types = vals.join(',');
+    });
+    return obj;
+  };
+  // Collect shared soup
+  const collectSharedSoup = () => {
+    const obj = { dish:'', allergens:'', gluten_types:'' };
+    // dish
+    const dishInput = modalEl.querySelector(`input[data-scope="shared"][data-cat="soppa"][data-field="dish"]`);
+    if (dishInput) obj.dish = dishInput.value.trim();
+    // allergens
+    const alsWrap = modalEl.querySelector(`.dropdown[data-scope="shared"][data-cat="soppa"][data-field="allergens-dropdown"]`);
+    if (alsWrap) {
+      const vals = Array.from(alsWrap.querySelectorAll('.dropdown-menu input[type="checkbox"]:checked')).map(i=>i.value);
+      obj.allergens = vals.join(',');
+    }
+    // gluten
+    const gluWrap = modalEl.querySelector(`.dropdown[data-scope="shared"][data-cat="soppa"][data-field="gluten-dropdown"]`);
+    if (gluWrap) {
+      const btn = gluWrap.querySelector('button');
+      if (btn && btn.hasAttribute('disabled')) obj.gluten_types = '';
+      else {
+        const vals = Array.from(gluWrap.querySelectorAll('.dropdown-menu input[type="checkbox"]:checked')).map(i=>i.value);
+        obj.gluten_types = vals.join(',');
+      }
+    }
+    return obj;
+  };
+  const payload = {
+    date,
+    lunch: collect('lunch'),
+    dinner: collect('dinner'),
+  };
+  const soup = collectSharedSoup();
+  payload.lunch.soppa = { ...(payload.lunch.soppa||{}), ...soup };
+  payload.dinner.soppa = { ...(payload.dinner.soppa||{}), ...soup };
+  try {
+    const res = await fetch('{{ url_for("menus_daily_bulk_update") }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Kunne ikke lagre');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+    if (window.showToast) window.showToast('success', 'Lagret for dagen.');
+    // Refresh the corresponding day card immediately (fallback to reload if helper missing)
+    if (date) {
+      if (window.refreshDayCard) {
+        window.refreshDayCard(date);
+      } else {
+        location.reload();
+      }
+    }
+  } catch (err) {
+    if (window.showToast) window.showToast('error', 'Feil ved lagring: ' + (err?.message || err)); else alert('Feil: ' + (err?.message || err));
+  }
+  finally { btn.disabled = false; btn.textContent = origTxt; }
+});
+
+// Populate single-dish modal dropdowns on page load
+document.addEventListener('DOMContentLoaded', () => {
+  const algMenu = document.getElementById('ovr-allergens-menu');
+  const algCount = document.getElementById('ovr-allergens-count');
+  const algChips = document.getElementById('ovr-allergen-chips');
+  const gluWrap = document.getElementById('ovr-gluten-wrap');
+  const gluMenu = document.getElementById('ovr-gluten-menu');
+  if (algMenu && algCount) {
+    algMenu.innerHTML = '';
+    ALLERGENS.forEach(a => {
+      const id = `ovr-alg-${a.num}`;
+      const item = document.createElement('div');
+      item.className = 'form-check';
+      item.innerHTML = `
+        <input class=\"form-check-input\" type=\"checkbox\" id=\"${id}\" value=\"${a.num}\">\n        <label class=\"form-check-label\" for=\"${id}\">${a.name} (${a.num})</label>
+      `;
+      algMenu.appendChild(item);
+    });
+    algMenu.addEventListener('click', (ev) => ev.stopPropagation());
+    const syncAlgUI = () => {
+      const selected = Array.from(algMenu.querySelectorAll('input[type="checkbox"]:checked')).map(i=>i.value);
+      document.getElementById('ovr-allergens').value = selected.join(',');
+      algCount.textContent = String(selected.length);
+      const hasGluten = selected.includes('1');
+      gluWrap.style.display = hasGluten ? '' : 'none';
+      if (!hasGluten) {
+        document.getElementById('ovr-gluten-types').value = '';
+        gluMenu.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.checked = false);
+      }
+      // Chips
+      if (algChips) {
+        algChips.innerHTML = '';
+        selected.forEach(num => {
+          const a = ALLERGENS.find(x => String(x.num) === String(num));
+          const name = a ? a.name : num;
+          algChips.appendChild(badge(name, 'text-bg-warning'));
+        });
+      }
+    };
+    algMenu.addEventListener('change', syncAlgUI);
+    // Initial sync in case defaults are pre-checked later
+    syncAlgUI();
+  }
+  if (gluMenu) {
+    gluMenu.innerHTML = '';
+    GLUTEN_SUBTYPES.forEach(n => {
+      const safe = n.replace(/\s+/g,'-').toLowerCase();
+      const id = `ovr-glu-${safe}`;
+      const item = document.createElement('div');
+      item.className = 'form-check';
+      item.innerHTML = `
+        <input class=\"form-check-input\" type=\"checkbox\" id=\"${id}\" value=\"${n}\">\n        <label class=\"form-check-label\" for=\"${id}\">${n}</label>
+      `;
+      gluMenu.appendChild(item);
+    });
+    gluMenu.addEventListener('click', (ev) => ev.stopPropagation());
+    gluMenu.addEventListener('change', () => {
+      const selected = Array.from(gluMenu.querySelectorAll('input[type="checkbox"]:checked')).map(i=>i.value);
+      document.getElementById('ovr-gluten-types').value = selected.join(',');
+    });
+  }
+});
+</script>
+
+<!-- Send to Admin Modal -->
+<div class="modal fade" id="sendAdminModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Send daily menu</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2 small text-muted">Date: <span id="sa-date-label"></span></div>
+        <input type="hidden" id="sa-date">
+        <div class="mb-2">
+          <label class="form-label">Recipient (admin)</label>
+          <select id="sa-admin" class="form-select" required>
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <div class="small text-muted">A DOCX will be generated and sent as an internal message with a download link.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-success" id="sa-send-btn">Send</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+<script>
+document.addEventListener('click', async function(e) {
+  const btn = e.target.closest('.open-send-admin');
+  if (!btn) return;
+  e.preventDefault();
+  const date = btn.getAttribute('data-date');
+  const modalEl = document.getElementById('sendAdminModal');
+  modalEl.querySelector('#sa-date').value = date;
+  modalEl.querySelector('#sa-date-label').textContent = date;
+  const sel = modalEl.querySelector('#sa-admin');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const res = await fetch("{{ url_for('list_admins_for_rig') }}");
+    const data = await res.json();
+    sel.innerHTML = '';
+    if (!data.ok || !Array.isArray(data.admins) || data.admins.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No admins found';
+      sel.appendChild(opt);
+    } else {
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Select admin…';
+      sel.appendChild(placeholder);
+      data.admins.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = `${a.name} <${a.email}>`;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (err) {
+    sel.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'Error loading admins';
+    sel.appendChild(opt);
+  }
+  const modal = new bootstrap.Modal(modalEl);
+  modal.show();
+});
+
+// Print and Send handlers inside the day editor modal
+document.getElementById('de-print').addEventListener('click', () => {
+  const date = document.getElementById('de-date-input').value;
+  if (!date) return;
+  window.open(`{{ url_for('menus_daily_docx') }}?date=${encodeURIComponent(date)}`, '_blank');
+});
+document.getElementById('de-print-html').addEventListener('click', () => {
+  const date = document.getElementById('de-date-input').value;
+  if (!date) return;
+  window.open(`{{ url_for('menus_daily_print') }}?date=${encodeURIComponent(date)}&autoprint=1`, '_blank');
+});
+document.getElementById('de-send').addEventListener('click', async () => {
+  const date = document.getElementById('de-date-input').value;
+  if (!date) return;
+  const modalEl = document.getElementById('sendAdminModal');
+  modalEl.querySelector('#sa-date').value = date;
+  modalEl.querySelector('#sa-date-label').textContent = date;
+  const sel = modalEl.querySelector('#sa-admin');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  try {
+    const res = await fetch("{{ url_for('list_admins_for_rig') }}");
+    const data = await res.json();
+    sel.innerHTML = '';
+    if (!data.ok || !Array.isArray(data.admins) || data.admins.length === 0) {
+      const opt = document.createElement('option'); opt.value = ''; opt.textContent = 'No admins found'; sel.appendChild(opt);
+    } else {
+      const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Select admin…'; sel.appendChild(placeholder);
+      data.admins.forEach(a => { const opt = document.createElement('option'); opt.value = a.id; opt.textContent = `${a.name} <${a.email}>`; sel.appendChild(opt); });
+    }
+  } catch (err) {
+    sel.innerHTML = ''; const opt = document.createElement('option'); opt.value = ''; opt.textContent = 'Error loading admins'; sel.appendChild(opt);
+  }
+  const modal = new bootstrap.Modal(modalEl); modal.show();
+});
+
+// CSV export removed
+
+document.getElementById('sa-send-btn').addEventListener('click', async function() {
+  const modalEl = document.getElementById('sendAdminModal');
+  const date = modalEl.querySelector('#sa-date').value;
+  const adminId = modalEl.querySelector('#sa-admin').value;
+  if (!adminId) { alert('Välj en admin.'); return; }
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = 'Sender…';
+  try {
+    const res = await fetch("{{ url_for('send_daily_menu_message') }}", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_id: Number(adminId), date })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Send failed');
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+    // Optional: prompt with download link
+    if (data.download_url) {
+      if (window.showToast) window.showToast('success', 'Meny sendt.');
+      window.open(data.download_url, '_blank');
+    } else {
+      if (window.showToast) window.showToast('success', 'Meny sendt.');
+    }
+  } catch (err) {
+    if (window.showToast) window.showToast('error', 'Feil ved sending: ' + (err?.message || err)); else alert('Feil: ' + (err?.message || err));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send';
+  }
+});
+</script>
+</div>
+{% endblock %}

@@ -1,0 +1,56 @@
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title"><i class="fas fa-utensils"></i> Menytext för vecka</h3>
+  </div>
+  <form method="post">
+    <div class="form-group">
+      <label for="veckomeny_vecka" class="form-label">Vecka:</label>
+      <select name="veckomeny_vecka" id="veckomeny_vecka" class="form-control" style="max-width:120px;">
+        {% for v in range(1, 54) %}
+          <option value="{{v}}" {% if v == valt_vecka %}selected{% endif %}>{{v}}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        var veckoselect = document.getElementById('veckomeny_vecka');
+        if (veckoselect) {
+          veckoselect.addEventListener('change', function() {
+            var vecka = this.value;
+            // Ladda om sidan med valt vecka som GET-parameter
+            var url = new URL(window.location.href);
+            url.searchParams.set('vecka', vecka);
+            window.location.href = url.toString();
+          });
+        }
+      });
+    </script>
+    
+    <div class="menu-days">
+      {% for dag in ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
+        <div class="menu-day card mb-3">
+          <div class="card-header">
+            <h4 class="card-title"><i class="fas fa-calendar-day"></i> {{dag}}</h4>
+          </div>
+          <div class="form-group">
+            <label for="menytext_{{dag}}_Alt1" class="form-label" style="color: var(--success-color);">
+              <i class="fas fa-circle"></i> Alternativ 1:
+            </label>
+            <textarea name="menytext_{{dag}}_Alt1" id="menytext_{{dag}}_Alt1" rows="2" class="form-control" placeholder="Meny för Alt1...">{{ veckomeny_map[dag ~ '_Alt1']|default('') }}</textarea>
+          </div>
+          <div class="form-group">
+            <label for="menytext_{{dag}}_Alt2" class="form-label" style="color: var(--warning-color);">
+              <i class="fas fa-circle"></i> Alternativ 2:
+            </label>
+            <textarea name="menytext_{{dag}}_Alt2" id="menytext_{{dag}}_Alt2" rows="2" class="form-control" placeholder="Meny för Alt2...">{{ veckomeny_map[dag ~ '_Alt2']|default('') }}</textarea>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    
+    <button type="submit" name="spara_veckomeny" class="btn btn-primary">
+      <i class="fas fa-save"></i> Spara menytext
+    </button>
+    <small class="text-secondary d-block mt-2">Du kan klistra in menyer från Word eller liknande. Spara för att göra dem valbara för personalen.</small>
+  </form>
+</div>

@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container print-container">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div><strong>Place of business:</strong> {{ rig_name }}</div>
+    <div><strong>Date:</strong> {{ date_str }}</div>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="border rounded p-3 h-100">
+        <div class="fw-bold mb-2">Lunch</div>
+        <div>{{ lunch_lines.soup }}</div>
+        <div>{{ lunch_lines.fish }}</div>
+        <div>{{ lunch_lines.meat }}</div>
+        <div class="mt-2">{{ lunch_lines.extra }}</div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="border rounded p-3 h-100">
+        <div class="fw-bold mb-2">Dinner</div>
+        <div>{{ dinner_lines.soup }}</div>
+        <div>{{ dinner_lines.fish }}</div>
+        <div>{{ dinner_lines.meat }}</div>
+        <div class="mt-2">{{ dinner_lines.extra }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="mt-3 d-print-none">
+    <button class="btn btn-secondary" onclick="window.history.back()">Tilbake</button>
+    <button class="btn btn-primary" onclick="window.print()">Skriv ut</button>
+  </div>
+</div>
+<style>
+@media print {
+  .navbar, .d-print-none { display: none !important; }
+  .print-container { max-width: 100%; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+<script>
+// Auto-open print dialog when opened directly from the editor modal's print button
+if (window.location.search.includes('autoprint=1')) {
+  setTimeout(() => window.print(), 200);
+}
+</script>
+{% endblock %}

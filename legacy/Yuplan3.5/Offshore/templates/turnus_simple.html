@@ -1,0 +1,69 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Enkel turnusgenerator</h2>
+<p>Rigg: {{ rig_name or rig_id }}</p>
+
+<form method="post" action="{{ url_for('turnus_simple_build_base') }}" class="mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label for="start_friday" class="form-label">Start-fredag (YYYY-MM-DD):</label>
+      <input type="date" id="start_friday" name="start_friday" value="{{ start_friday or '' }}" class="form-control" required>
+    </div>
+    <div class="col-auto">
+      <label for="preview_weeks" class="form-label">Forhåndsvis ukestarter</label>
+      <input type="number" id="preview_weeks" name="preview_weeks" min="1" max="104" value="{{ preview_weeks or 12 }}" class="form-control" style="max-width:140px;">
+      <div class="form-text">Vis plan for neste N fredager (Kokk 1–6 rullerer).</div>
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary">Bygg grunnplan (2 uker) + forhåndsvisning</button>
+    </div>
+  </div>
+</form>
+
+<div class="mb-3">
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('turnus_overview') }}">Se per-kokk perioder</a>
+</div>
+
+{% if base_slots %}
+  <h3>Grunnplan (BASE) for 2 uker</h3>
+  <table class="table table-sm">
+    <thead><tr><th>Start</th><th>Slutt</th><th>Note</th></tr></thead>
+    <tbody>
+    {% for s in base_slots %}
+      <tr>
+        <td>{{ s.start_ts }}</td>
+        <td>{{ s.end_ts }}</td>
+        <td>{{ s.note or '' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <form method="post" action="{{ url_for('turnus_simple_apply') }}">
+    <input type="hidden" name="start_friday" value="{{ start_friday }}">
+    <div class="mb-2">
+      <label for="weeks">Antall ukestarter å generere</label>
+      <input type="number" id="weeks" name="weeks" min="6" max="104" value="12" class="form-control" style="max-width:200px;">
+      <small class="text-muted">Hver uke starter neste Kokk. Kokk 1 får neste periode etter 6 uker. Velg ≥ 7 for å få en ny Kokk 1-periode fram i tid (anbefalt 12–52).</small>
+    </div>
+    <button type="submit">Bruk på 6 virtuelle kokker</button>
+  </form>
+{% endif %}
+
+{% if preview_slots %}
+  <h3 class="mt-4">Forhåndsvisning ({{ preview_weeks }} ukestarter)</h3>
+  <table class="table table-sm">
+    <thead><tr><th>Start</th><th>Slutt</th><th>Rolle</th><th>Note</th></tr></thead>
+    <tbody>
+    {% for s in preview_slots %}
+      <tr>
+        <td>{{ s.start_ts }}</td>
+        <td>{{ s.end_ts }}</td>
+        <td>{{ s.role }}</td>
+        <td>{{ s.note or '' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

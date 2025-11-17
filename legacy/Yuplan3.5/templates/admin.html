@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Login</title>
+</head>
+<body>
+    <h2>Admin Login</h2>
+    {% if fel %}
+        <p style="color:red;">{{ fel }}</p>
+    {% endif %}
+    <form method="post">
+        <input type="password" name="lösenord" placeholder="Lösenord">
+        <button type="submit">Logga in</button>
+    </form>
+</body>
+</html>

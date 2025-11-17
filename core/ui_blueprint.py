@@ -105,6 +105,8 @@ def weekview_ui():
     summaries = payload.get("department_summaries") or []
     if not summaries:
         vm = {
+            "site_id": site_id,
+            "department_id": department_id,
             "site_name": site_name,
             "department_name": dep_name,
             "year": year,
@@ -112,7 +114,7 @@ def weekview_ui():
             "has_dinner": False,
             "days": [],
         }
-        return render_template("ui/weekview.html", vm=vm)
+        return render_template("ui/weekview.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id), etag=_etag)
     days = summaries[0].get("days") or []
 
     # Build DayVM list
@@ -122,6 +124,9 @@ def weekview_ui():
         mt = d.get("menu_texts") or {}
         lunch = mt.get("lunch", {}) if isinstance(mt, dict) else {}
         dinner = mt.get("dinner", {}) if isinstance(mt, dict) else {}
+        diets = d.get("diets", {}) if isinstance(d, dict) else {}
+        lunch_diets = diets.get("lunch", []) if isinstance(diets, dict) else []
+        dinner_diets = diets.get("dinner", []) if isinstance(diets, dict) else []
         day_vm = {
             "date": d.get("date"),
             "weekday_name": d.get("weekday_name"),
@@ -133,12 +138,32 @@ def weekview_ui():
             "alt2_lunch": bool(d.get("alt2_lunch")),
             "residents_lunch": (d.get("residents", {}) or {}).get("lunch", 0),
             "residents_dinner": (d.get("residents", {}) or {}).get("dinner", 0),
+            "lunch_diets": [
+                {
+                    "diet_type_id": str(x.get("diet_type_id")),
+                    "diet_name": str(x.get("diet_name")),
+                    "resident_count": int(x.get("resident_count", 0) or 0),
+                    "marked": bool(x.get("marked")),
+                }
+                for x in (lunch_diets or [])
+            ],
+            "dinner_diets": [
+                {
+                    "diet_type_id": str(x.get("diet_type_id")),
+                    "diet_name": str(x.get("diet_name")),
+                    "resident_count": int(x.get("resident_count", 0) or 0),
+                    "marked": bool(x.get("marked")),
+                }
+                for x in (dinner_diets or [])
+            ],
         }
         if day_vm["dinner_alt1"] or day_vm["dinner_alt2"]:
             has_dinner = True
         day_vms.append(day_vm)
 
     vm = {
+        "site_id": site_id,
+        "department_id": department_id,
         "site_name": site_name,
         "department_name": dep_name,
         "year": year,
@@ -147,7 +172,7 @@ def weekview_ui():
         "days": day_vms,
     }
     meal_labels = get_meal_labels_for_site(site_id)
-    return render_template("ui/weekview.html", vm=vm, meal_labels=meal_labels)
+    return render_template("ui/weekview.html", vm=vm, meal_labels=meal_labels, etag=_etag)
 
 
 @ui_bp.get("/ui/weekview_overview")

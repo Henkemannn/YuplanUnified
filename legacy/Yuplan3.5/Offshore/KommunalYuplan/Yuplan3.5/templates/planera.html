@@ -1,0 +1,592 @@
+{% extends "base.html" %}
+{% block title %}Planera måltider – Vecka {{ vecka }}{% endblock %}
+{% block head %}
+<style>
+    .planning-header {
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+        color: var(--text-light);
+        padding: 2rem;
+        border-radius: var(--border-radius-lg);
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    .planning-header p {
+        color: var(--text-light);
+        font-size: 1.1rem;
+        line-height: 1.5;
+        margin-bottom: 0;
+        opacity: 0.95;
+    }
+    
+    .planning-form {
+        background: var(--bg-primary);
+        padding: 2rem;
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow-md);
+        margin-bottom: 2rem;
+    }
+    
+    .form-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .kostlista {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    
+    .kostlista label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        border-radius: var(--border-radius);
+        transition: var(--transition);
+        cursor: pointer;
+    }
+    
+    .kostlista label:hover {
+        background: var(--bg-accent);
+    }
+    
+    .kostlista input[type="checkbox"] {
+        transform: scale(1.2);
+    }
+    
+    .control-buttons {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 2rem;
+    }
+    
+    .sammanstallning {
+        background: var(--bg-primary);
+        border-radius: var(--border-radius-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow-md);
+        margin-bottom: 2rem;
+    }
+    
+    .alt12-section {
+        background: var(--bg-primary);
+        padding: 2rem;
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow-md);
+        margin-bottom: 2rem;
+    }
+    
+    .alt12-forms {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-top: 1.5rem;
+    }
+    
+    .alt-form {
+        padding: 1.5rem;
+        border: 2px solid var(--border-color);
+        border-radius: var(--border-radius-lg);
+        background: var(--bg-secondary);
+    }
+    
+    .alt1-form {
+        border-color: var(--success-color);
+    }
+    
+    .alt2-form {
+        border-color: var(--warning-color);
+    }
+    
+    .meny-forslag {
+        margin-top: 0.5rem;
+        padding: 0.75rem;
+        background: var(--info-light);
+        border-radius: var(--border-radius);
+        border-left: 4px solid var(--info-color);
+    }
+    
+    .meny-forslag .forslag-text {
+        font-style: italic;
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+    
+    .meny-forslag .btn {
+        margin-left: 0.5rem;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .alt12-flex {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+    }
+    
+    .alt12-block {
+        background: var(--bg-primary);
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow-sm);
+        padding: 1.5rem;
+        border: 2px solid var(--border-color);
+    }
+    
+    .alt1-block {
+        border-color: var(--success-color);
+    }
+    
+    .alt2-block {
+        border-color: var(--warning-color);
+        background: #fffde7;
+    }
+    
+    .alt12-block h4 {
+        margin-top: 0;
+        margin-bottom: 1rem;
+    }
+    
+    .alt1-block h4 {
+        color: var(--success-color);
+    }
+    
+    .alt2-block h4 {
+        color: var(--warning-color);
+    }
+    
+    @media print {
+        .control-buttons, .navbar, .planning-form, .alt12-section > form {
+            display: none !important;
+        }
+        body { background: #fff !important; color: #000 !important; }
+        .sammanstallning, .alt12-block {
+            box-shadow: none !important;
+            break-inside: avoid;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .alt12-forms {
+            grid-template-columns: 1fr;
+        }
+        .alt12-flex {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="control-buttons">
+    <a href="{{ url_for('veckovy', vecka=vecka) }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Tillbaka till veckovy
+    </a>
+    <button onclick="printSection('all', 'Planering – vecka {{ vecka }}')" class="btn btn-outline">
+        <i class="fas fa-print"></i> Skriv ut hela sidan
+    </button>
+    <button onclick="printSection('planering', 'Planering – vecka {{ vecka }}')" class="btn btn-outline">
+        <i class="fas fa-print"></i> Skriv ut planering
+    </button>
+    <button onclick="printSection('altval', 'Alt 1 / Alt 2 – vecka {{ vecka }}')" class="btn btn-outline">
+        <i class="fas fa-print"></i> Skriv ut Alt 1/Alt 2
+    </button>
+</div>
+
+<div class="planning-header">
+    <h1><i class="fas fa-calendar-plus"></i> Planera dagens specialkost – Vecka {{ vecka }}</h1>
+    <p>Här planerar du vilka specialkoster som behöver anpassas för varje dag och måltid. Välj dag och måltid, kryssa sedan i de kosttyper som krävs. Systemet visar automatiskt vilka avdelningar som påverkas och hur många portioner som behöver tillagas.</p>
+</div>
+
+<div id="planering">
+    <div class="planning-form">
+        <h3><i class="fas fa-utensils"></i> Specialkostplanering</h3>
+        <form method="POST">
+            <input type="hidden" name="vecka" value="{{ vecka }}">
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="dag" class="form-label">Dag:</label>
+                    <select name="dag" id="dag" required class="form-control">
+                        <option value="">--Välj dag--</option>
+                        {% for d in ['Mån', 'Tis', 'Ons', 'Tors', 'Fre', 'Lör', 'Sön'] %}
+                            <option value="{{ d }}" {% if vald_dag == d %}selected{% endif %}>{{ d }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="maltid" class="form-label">Måltid:</label>
+                    <select name="maltid" id="maltid" required class="form-control">
+                        <option value="">--Välj måltid--</option>
+                        <option value="Lunch" {% if vald_maltid == 'Lunch' %}selected{% endif %}>Lunch</option>
+                        <option value="Kväll" {% if vald_maltid == 'Kväll' %}selected{% endif %}>Kväll</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="anrattning" class="form-label">Anrättning / rätt:</label>
+                    <input type="text" name="anrattning" id="anrattning" value="{{ anrattning or '' }}" placeholder="Ex. Pannkaka" class="form-control">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Välj kosttyper/allergener:</label>
+                <div class="kostlista">
+                    {% for k in kosttyper %}
+                        <label>
+                            <input type="checkbox" name="kosttyp" value="{{ k.id }}" {% if k.id|string in valda_kosttyper %}checked{% endif %}>
+                            <span>{{ k.namn }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <div class="d-flex gap-2">
+                <button type="submit" name="visa_specialkost" value="1" class="btn btn-primary">
+                    <i class="fas fa-search"></i> Visa sammanställning
+                </button>
+                {% if sammanstallning %}
+                    <button type="submit" name="markera_alla" value="1" class="btn btn-success">
+                        <i class="fas fa-check"></i> Markera alla direkt i registret
+                    </button>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+    
+    {% if sammanstallning %}
+    <div class="sammanstallning">
+        <div class="card-header">
+            <h2 class="card-title">
+                <i class="fas fa-list"></i> Sammanställning för vecka {{ vecka }}
+                {% if vald_dag and vald_maltid %}, {{ vald_dag }} {{ vald_maltid }}{% endif %}
+                {% if anrattning %} – {{ anrattning }}{% endif %}
+            </h2>
+        </div>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th><i class="fas fa-building"></i> Avdelning</th>
+                    <th><i class="fas fa-utensils"></i> Kosttyper & antal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for avd in sammanstallning %}
+                    <tr>
+                        <td><strong>{{ avd.namn }}</strong></td>
+                        <td>
+                            {% for kost in avd.kostsummering %}
+                                <span class="badge" style="background: var(--primary-light); color: var(--text-light); margin-right: 0.5rem;">{{ kost.namn }} ({{ kost.antal }})</span><br>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+<div id="altval" class="alt12-section">
+    <h2><i class="fas fa-clipboard-list"></i> Alt 1 / Alt 2-dagsrapport</h2>
+    <form method="post">
+        <input type="hidden" name="vecka" value="{{ vecka }}">
+        
+        <div class="form-group mb-3">
+            <label for="dag_alt12" class="form-label">Välj dag:</label>
+            <select name="dag" id="dag_alt12" required class="form-control" style="max-width: 200px;">
+                <option value="">--Välj dag--</option>
+                <option value="Mån">Måndag</option>
+                <option value="Tis">Tisdag</option>
+                <option value="Ons">Onsdag</option>
+                <option value="Tors">Torsdag</option>
+                <option value="Fre">Fredag</option>
+                <option value="Lör">Lördag</option>
+                <option value="Sön">Söndag</option>
+            </select>
+        </div>
+        
+        <div class="alt12-forms">
+            <div class="alt-form alt1-form">
+                <h4><i class="fas fa-circle" style="color: var(--success-color);"></i> Alternativ 1</h4>
+                <div class="form-group">
+                    <label for="alt1_anrattning" class="form-label">Anrättning/rätt:</label>
+                    <input type="text" name="alt1_anrattning" id="alt1_anrattning" value="{{ alt1_anrattning or '' }}" placeholder="Ex. Köttbullar" class="form-control">
+                    <div id="alt1_meny_forslag" class="meny-forslag" style="display: none;">
+                        <small class="text-muted">
+                            <i class="fas fa-lightbulb"></i> Förslag från veckomeny: 
+                            <span class="forslag-text"></span>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="kopieraMenyForslag('alt1')">
+                                <i class="fas fa-copy"></i> Kopiera
+                            </button>
+                        </small>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kosttyper att dra bort (Alt 1):</label>
+                    <div class="kostlista">
+                        {% for k in kosttyper %}
+                            <label>
+                                <input type="checkbox" name="alt1_kosttyp" value="{{ k.id }}" {% if alt1_valda_kosttyper and k.id|string in alt1_valda_kosttyper %}checked{% endif %}>
+                                <span>{{ k.namn }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="alt-form alt2-form">
+                <h4><i class="fas fa-circle" style="color: var(--warning-color);"></i> Alternativ 2</h4>
+                <div class="form-group">
+                    <label for="alt2_anrattning" class="form-label">Anrättning/rätt:</label>
+                    <input type="text" name="alt2_anrattning" id="alt2_anrattning" value="{{ alt2_anrattning or '' }}" placeholder="Ex. Vegetarisk gryta" class="form-control">
+                    <div id="alt2_meny_forslag" class="meny-forslag" style="display: none;">
+                        <small class="text-muted">
+                            <i class="fas fa-lightbulb"></i> Förslag från veckomeny: 
+                            <span class="forslag-text"></span>
+                            <button type="button" class="btn btn-sm btn-outline" onclick="kopieraMenyForslag('alt2')">
+                                <i class="fas fa-copy"></i> Kopiera
+                            </button>
+                        </small>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kosttyper att dra bort (Alt 2):</label>
+                    <div class="kostlista">
+                        {% for k in kosttyper %}
+                            <label>
+                                <input type="checkbox" name="alt2_kosttyp" value="{{ k.id }}" {% if alt2_valda_kosttyper and k.id|string in alt2_valda_kosttyper %}checked{% endif %}>
+                                <span>{{ k.namn }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <button type="submit" name="visa_alt12" value="1" class="btn btn-primary mt-3">
+            <i class="fas fa-search"></i> Visa Alt1/Alt2-lista
+        </button>
+    </form>
+    
+    {% if alt1_alt2_resultat %}
+    <h3 class="mt-4"><i class="fas fa-check-circle"></i> Resultat för {{ alt1_alt2_resultat.dag }}</h3>
+    <div class="alt12-flex">
+        <div class="alt12-block alt1-block">
+            <h4><i class="fas fa-circle" style="color: var(--success-color);"></i> Alt 1{% if alt1_alt2_resultat.alt1_anrattning %}: {{ alt1_alt2_resultat.alt1_anrattning }}{% endif %}</h4>
+            {% if alt1_alt2_resultat.alt1_valda_kosttyper %}
+                <div class="text-secondary mb-2">
+                    <strong>Specialkost bortdraget:</strong> 
+                    {% for kid in alt1_alt2_resultat.alt1_valda_kosttyper %}{{ (kosttyper|selectattr('id', 'equalto', kid|int)|first).namn }}{% if not loop.last %}, {% endif %}{% endfor %}
+                </div>
+            {% endif %}
+            {% if alt1_alt2_resultat.alt1 %}
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Avdelning</th><th>Normalkost</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for avd in alt1_alt2_resultat.alt1 %}
+                            <tr><td>{{ avd.namn }}</td><td>{{ avd.normalkost }}</td></tr>
+                        {% endfor %}
+                        <tr class="table-active">
+                            <td><strong>Summa</strong></td>
+                            <td><strong>{{ alt1_alt2_resultat.sum_alt1 }}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="text-secondary">Inga avdelningar har valt Alt 1.</p>
+            {% endif %}
+        </div>
+        
+        <div class="alt12-block alt2-block">
+            <h4><i class="fas fa-circle" style="color: var(--warning-color);"></i> Alt 2{% if alt1_alt2_resultat.alt2_anrattning %}: {{ alt1_alt2_resultat.alt2_anrattning }}{% endif %}</h4>
+            {% if alt1_alt2_resultat.alt2_valda_kosttyper %}
+                <div class="text-secondary mb-2">
+                    <strong>Specialkost bortdraget:</strong> 
+                    {% for kid in alt1_alt2_resultat.alt2_valda_kosttyper %}{{ (kosttyper|selectattr('id', 'equalto', kid|int)|first).namn }}{% if not loop.last %}, {% endif %}{% endfor %}
+                </div>
+            {% endif %}
+            {% if alt1_alt2_resultat.alt2 %}
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Avdelning</th><th>Normalkost</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for avd in alt1_alt2_resultat.alt2 %}
+                            <tr><td>{{ avd.namn }}</td><td>{{ avd.normalkost }}</td></tr>
+                        {% endfor %}
+                        <tr class="table-active">
+                            <td><strong>Summa</strong></td>
+                            <td><strong>{{ alt1_alt2_resultat.sum_alt2 }}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="text-secondary">Inga avdelningar har valt Alt 2.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="meny-data" type="application/json">{{ (meny_forslag or {}) | tojson }}</script>
+<script>
+// Menyförslag från veckomeny (hämtas från separat JSON-script-tag)
+const menyForslag = (() => {
+    try { return JSON.parse(document.getElementById('meny-data').textContent || '{}'); }
+    catch(e) { console.warn('Kunde inte parsa meny_forslag JSON', e); return {}; }
+})();
+
+function visaMenyForslag() {
+    const dag = document.getElementById('alt12_dag').value;
+    const alt1ForslagDiv = document.getElementById('alt1_meny_forslag');
+    const alt2ForslagDiv = document.getElementById('alt2_meny_forslag');
+    
+    if (!dag) {
+        alt1ForslagDiv.style.display = 'none';
+        alt2ForslagDiv.style.display = 'none';
+        return;
+    }
+    
+    const dagLower = dag.toLowerCase();
+    const dagData = menyForslag[dagLower];
+    
+    if (dagData) {
+        // Visa Alt1 förslag
+        if (dagData.alt1) {
+            alt1ForslagDiv.querySelector('.forslag-text').textContent = dagData.alt1;
+            alt1ForslagDiv.style.display = 'block';
+        } else {
+            alt1ForslagDiv.style.display = 'none';
+        }
+        
+        // Visa Alt2 förslag
+        if (dagData.alt2) {
+            alt2ForslagDiv.querySelector('.forslag-text').textContent = dagData.alt2;
+            alt2ForslagDiv.style.display = 'block';
+        } else {
+            alt2ForslagDiv.style.display = 'none';
+        }
+    } else {
+        alt1ForslagDiv.style.display = 'none';
+        alt2ForslagDiv.style.display = 'none';
+    }
+}
+
+function kopieraMenyForslag(altTyp) {
+    const dag = document.getElementById('alt12_dag').value;
+    if (!dag) return;
+    
+    const dagLower = dag.toLowerCase();
+    const dagData = menyForslag[dagLower];
+    
+    if (dagData) {
+        const forslagText = altTyp === 'alt1' ? dagData.alt1 : dagData.alt2;
+        if (forslagText) {
+            const inputField = document.getElementById(altTyp + '_anrattning');
+            inputField.value = forslagText;
+            
+            // Visa bekräftelse
+            const button = event.target.closest('button');
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check"></i> Kopierat!';
+            button.style.background = 'var(--success-color)';
+            button.style.color = 'white';
+            
+            setTimeout(() => {
+                button.innerHTML = originalText;
+                button.style.background = '';
+                button.style.color = '';
+            }, 1500);
+        }
+    }
+}
+
+// Lägg till event listener för dagväljare
+document.addEventListener('DOMContentLoaded', function() {
+    const dagSelect = document.getElementById('alt12_dag');
+    if (dagSelect) {
+        dagSelect.addEventListener('change', visaMenyForslag);
+        // Visa förslag vid sidladdning om dag redan är vald
+        if (dagSelect.value) {
+            visaMenyForslag();
+        }
+    }
+});
+
+// Befintlig JavaScript
+function printSection(sectionId, title) {
+    let content = '';
+    if (sectionId === 'all') {
+        content = document.body.innerHTML;
+    } else {
+        const el = document.getElementById(sectionId);
+        if (!el) { alert('Kunde inte hitta sektionen!'); return; }
+        // Only print the result part, not the form
+        // For planering: print .sammanstallning, for altval: print the result block
+        let resultContent = '';
+        if (sectionId === 'planering') {
+            const res = el.querySelector('.sammanstallning');
+            if (res) resultContent = res.outerHTML;
+            else resultContent = '<p>Ingen sammanställning att skriva ut.</p>';
+        } else if (sectionId === 'altval') {
+            // Find the result block (h3 + .alt12-flex) anywhere inside #altval
+            const h3s = el.querySelectorAll('h3');
+            const flexes = el.querySelectorAll('.alt12-flex');
+            if (h3s.length > 0 && flexes.length > 0) {
+                // Print the first result block only
+                resultContent = h3s[0].outerHTML + flexes[0].outerHTML;
+            } else {
+                resultContent = '<p>Ingen Alt1/Alt2-lista att skriva ut.</p>';
+            }
+        } else {
+            resultContent = el.innerHTML;
+        }
+        content = resultContent;
+    }
+    const printWindow = window.open('', '', 'width=900,height=900');
+    const logoUrl = "{{ url_for('static', filename='icons/Yuplanlogo.png') }}";
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>${title}</title>
+            <style>
+                body { font-family: 'Inter', sans-serif; margin: 2rem; color: #000; }
+                h1, h2, h3, h4 { text-align: center; margin-bottom: 1rem; }
+                table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+                th, td { border: 1px solid #999; padding: 0.5rem; text-align: left; }
+                th { background: #f2f2f2; }
+                .small-text { font-size: 0.9rem; color: #666; }
+                @media print { .no-print { display: none !important; } }
+                .print-instr { text-align:center; margin-bottom:1.2em; color:#444; font-size:1.0em; }
+                .print-close { display:inline-block; margin:0 auto 1.2em auto; background:#e57373; color:#fff; border:none; border-radius:5px; padding:8px 18px; font-size:1.1em; cursor:pointer; }
+                /* Force side-by-side for Alt1/Alt2 in print */
+                .alt12-flex { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 1.2rem !important; }
+                .alt12-block { font-size: 0.97em !important; margin-bottom: 0 !important; }
+                .print-header-logo { display:block; margin:0 auto 0.5rem auto; max-height:90px; }
+            </style>
+        </head>
+        <body>
+            <img src="${logoUrl}" alt="Yuplan" class="print-header-logo" />
+            <div class="print-instr no-print">Tryck på <b>Skriv ut</b> eller <b>Ctrl+P</b> för att skriva ut.<br>På iPad: Dela → "Skriv ut".</div>
+            <button class="print-close no-print" onclick="window.close()">Stäng fönster</button>
+            <h1>${title}</h1>
+            ${content}
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    setTimeout(() => { printWindow.focus(); printWindow.print(); }, 300);
+}
+</script>
+{% endblock %}

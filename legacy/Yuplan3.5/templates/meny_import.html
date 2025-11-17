@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block title %}Menyimport - Yuplan{% endblock %}
+
+{% block head %}
+<style>
+    .upload-zone {
+        border: 3px dashed var(--border-color);
+        border-radius: var(--border-radius-lg);
+        padding: 3rem 2rem;
+        text-align: center;
+        background: var(--bg-secondary);
+        transition: var(--transition);
+        cursor: pointer;
+        margin-bottom: 2rem;
+    }
+    
+    .upload-zone:hover {
+        border-color: var(--primary-color);
+        background: var(--bg-primary);
+    }
+    
+    .upload-zone.dragover {
+        border-color: var(--success-color);
+        background: rgba(76, 175, 80, 0.1);
+    }
+    
+    .upload-icon {
+        font-size: 3rem;
+        color: var(--primary-color);
+        margin-bottom: 1rem;
+    }
+    
+    .upload-text {
+        font-size: 1.2rem;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+    }
+    
+    .upload-hint {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+    
+    .preview-section {
+        background: var(--bg-primary);
+        border-radius: var(--border-radius-lg);
+        padding: 2rem;
+        margin-top: 2rem;
+    }
+    
+    .day-menu {
+        background: var(--bg-secondary);
+        border-radius: var(--border-radius);
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-left: 4px solid var(--primary-color);
+    }
+    
+    .day-header {
+        font-weight: 600;
+        color: var(--primary-dark);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .alt-menu {
+        background: var(--bg-primary);
+        border-radius: var(--border-radius);
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid var(--border-color);
+    }
+    
+    .alt-header {
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .alt1-header {
+        color: var(--primary-color);
+    }
+    
+    .alt2-header {
+        color: var(--warning-color);
+    }
+    
+    .menu-text {
+        color: var(--text-secondary);
+        line-height: 1.5;
+        white-space: pre-line;
+    }
+    
+    .import-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-top: 2rem;
+    }
+    
+    .progress-bar {
+        width: 100%;
+        height: 6px;
+        background: var(--bg-secondary);
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background: var(--primary-color);
+        width: 0%;
+        transition: width 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-file-import"></i> Importera menyer</h1>
+        <a href="{{ url_for('adminpanel') }}" class="btn btn-outline">
+            <i class="fas fa-arrow-left"></i> Tillbaka till Admin
+        </a>
+    </div>
+
+    {% if success_message %}
+    <div class="alert alert-success">
+        <i class="fas fa-check-circle"></i>
+        {{ success_message }}
+    </div>
+    {% endif %}
+
+    {% if error_message %}
+    <div class="alert alert-danger">
+        <i class="fas fa-exclamation-triangle"></i>
+        {{ error_message }}
+    </div>
+    {% endif %}
+
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-cloud-upload-alt"></i> Ladda upp menydokument</h3>
+        </div>
+        <form enctype="multipart/form-data" id="uploadForm">
+            <div class="upload-zone" id="uploadZone">
+                <div class="upload-icon">
+                    <i class="fas fa-file-word"></i>
+                </div>
+                <div class="upload-text">Klicka här eller dra och släpp</div>
+                <div class="upload-hint">Word-dokument (.docx) upp till 10MB</div>
+                <input type="file" name="menu_file" id="menuFile" accept=".docx,.doc" style="display: none;" required>
+            </div>
+            <div id="progressSection" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="text-center">
+                    <span id="progressText">Analyserar dokument...</span>
+                </div>
+            </div>
+            <div class="text-center">
+                <button type="submit" class="btn btn-primary btn-lg" id="uploadBtn">
+                    <i class="fas fa-magic"></i> Analysera och importera
+                </button>
+            </div>
+        </form>
+    </div>
+    <div id="previewSection"></div>
+
+    <!-- Importinstruktioner -->
+    <div class="card">
+        <div class="card-header">
+            <h4><i class="fas fa-info-circle"></i> Instruktioner för import</h4>
+        </div>
+        <div class="card-body">
+            <ul>
+                <li>Ladda upp ett Word-dokument (.docx) med en meny för en vecka.</li>
+                <li>Varje dag ska börja med dagens namn, t.ex. "Måndag :".</li>
+                <li>Alternativ skrivs som "Alt 1:", "Alt 2:", "Dessert:", "Kväll:" på egna rader eller i samma cell.</li>
+                <li>Du kan förhandsgranska och redigera innan du sparar.</li>
+                <li>Veckonummer hämtas automatiskt om det står i dokumentet.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('menuFile');
+const uploadForm = document.getElementById('uploadForm');
+const progressSection = document.getElementById('progressSection');
+const progressFill = document.getElementById('progressFill');
+const progressText = document.getElementById('progressText');
+const uploadBtn = document.getElementById('uploadBtn');
+
+// Drag and drop funktionalitet
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('dragover'); });
+uploadZone.addEventListener('drop', (e) => { e.preventDefault(); uploadZone.classList.remove('dragover'); const files = e.dataTransfer.files; if (files.length > 0) { fileInput.files = files; updateFileName(files[0]); } });
+fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) { updateFileName(e.target.files[0]); } });
+function updateFileName(file) { const uploadText = uploadZone.querySelector('.upload-text'); uploadText.textContent = `Vald fil: ${file.name}`; uploadZone.style.borderColor = 'var(--success-color)'; }
+
+// Multiweek AJAX upload och preview
+uploadForm.addEventListener('submit', async function(event) {
+    event.preventDefault();
+    if (fileInput.files.length === 0) {
+        alert('Välj en fil först!');
+        return;
+    }
+    progressSection.style.display = 'block';
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Bearbetar...';
+    const formData = new FormData(uploadForm);
+    const response = await fetch('/upload_meny', { method: 'POST', body: formData });
+    uploadBtn.disabled = false;
+    uploadBtn.innerHTML = '<i class="fas fa-magic"></i> Analysera och importera';
+    progressSection.style.display = 'none';
+    if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+            renderMultiweekPreview(data.weeks_data);
+        } else {
+            alert('Fel vid uppladdning: ' + (data.error || 'Okänt fel'));
+        }
+    } else {
+        alert('Fel vid uppladdning.');
+    }
+});
+
+// Multiweek preview-rendering och spara
+let lastPreviewWeeksData = null;
+function renderMultiweekPreview(weeksData) {
+    lastPreviewWeeksData = weeksData;
+    const previewSection = document.getElementById('previewSection');
+    if (!weeksData || Object.keys(weeksData).length === 0) {
+        previewSection.innerHTML = '<p>Ingen förhandsgranskning tillgänglig.</p>';
+        return;
+    }
+    const days = ['måndag', 'tisdag', 'onsdag', 'torsdag', 'fredag', 'lördag', 'söndag'];
+    const menyTyper = [
+        { key: 'Alt1', label: '<span style="color: #28a745; font-weight: bold;">Alt 1</span>', icon: 'fa-utensils', class: '' },
+        { key: 'Alt2', label: '<span style="color: #ffc107; font-weight: bold;">Alt 2</span>', icon: 'fa-leaf', class: '' },
+        { key: 'Dessert', label: 'Dessert', icon: 'fa-ice-cream', class: '' },
+        { key: 'Kväll', label: 'Kväll', icon: 'fa-moon', class: '' },
+    ];
+    let html = `<div class='card preview-section'><div class='card-header'><h3 class='card-title'><i class='fas fa-eye'></i> Förhandsgranska importerade veckor</h3></div>`;
+    for (const vecka of Object.keys(weeksData)) {
+        const menyData = weeksData[vecka];
+        html += `<div class='mb-4'><h4 style='color:#007bff;'>Vecka ${vecka}</h4>`;
+        for (const dag of days) {
+            const menyer = menyData[dag] || {};
+            html += `<div class='day-menu'><div class='day-header'><i class='fas fa-calendar-day'></i> ${dag.charAt(0).toUpperCase() + dag.slice(1)}</div>`;
+            let found = false;
+            for (const typ of menyTyper) {
+                if (menyer[typ.key]) {
+                    found = true;
+                    html += `<div class='alt-menu'><div class='alt-header ${typ.class}'><i class='fas ${typ.icon}'></i> ${typ.label}</div><div class='menu-text'>${menyer[typ.key]}</div></div>`;
+                }
+            }
+            if (!found) {
+                html += `<div class='text-secondary'><i class='fas fa-info-circle'></i> Ingen meny hittades för denna dag</div>`;
+            }
+            html += `</div>`;
+        }
+        html += `</div>`;
+    }
+    html += `<div class='import-actions'><button id='saveMenuBtn' class='btn btn-success btn-lg'><i class='fas fa-check'></i> Bekräfta och spara alla veckor</button> <button id='cancelPreviewBtn' class='btn btn-secondary'><i class='fas fa-times'></i> Avbryt</button><div id='saveMenuMsg' style='margin-top:10px;'></div></div></div>`;
+    previewSection.innerHTML = html;
+}
+
+// Spara alla veckor via AJAX
+document.addEventListener('click', function(e) {
+    if (e.target && e.target.id === 'saveMenuBtn') {
+        e.preventDefault();
+        saveAllWeeksMenu();
+    } else if (e.target && e.target.id === 'cancelPreviewBtn') {
+        e.preventDefault();
+        window.location.reload();
+    }
+});
+
+async function saveAllWeeksMenu() {
+    if (!lastPreviewWeeksData) return;
+    const saveBtn = document.getElementById('saveMenuBtn');
+    const msgDiv = document.getElementById('saveMenuMsg');
+    saveBtn.disabled = true;
+    msgDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sparar...';
+    const response = await fetch('/spara_meny', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weeks_data: lastPreviewWeeksData })
+    });
+    if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+            msgDiv.innerHTML = `<span class='text-success'><i class='fas fa-check-circle'></i> ${data.message}</span>`;
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            msgDiv.innerHTML = `<span class='text-danger'><i class='fas fa-exclamation-triangle'></i> ${data.error}</span>`;
+            saveBtn.disabled = false;
+        }
+    } else {
+        msgDiv.innerHTML = `<span class='text-danger'>Fel vid sparande.</span>`;
+        saveBtn.disabled = false;
+    }
+}
+</script>
+{% endblock %}
+{% endblock %}
