@@ -109,5 +109,9 @@ def test_weekview_ui_renders_diets_and_mark_state(client_admin):
     assert "data-meal=\"lunch\"" in html
     assert "data-marked=\"true\"" in html
 
+    # Accessibility: pills expose role and keyboard focus
+    assert 'role="button"' in html
+    assert 'tabindex="0"' in html
+
     # Root ETag present
     assert "data-etag=\"" in html

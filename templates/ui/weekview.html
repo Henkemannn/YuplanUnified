@@ -11,9 +11,14 @@
   .nav { margin: 0.5rem 0 1rem; }
   .nav a { margin-right: 1rem; text-decoration: none; }
   .weekview-diets-row .diet-label-cell { font-weight: 600; color: #333; }
-  .diet-pill { display: inline-flex; align-items: center; padding: 0.1rem 0.4rem; margin-right: 0.3rem; margin-bottom: 0.3rem; border-radius: 9999px; border: 1px solid transparent; font-size: 0.85rem; background: #fff; }
+  .diet-pill { display: inline-flex; align-items: center; padding: 0.1rem 0.45rem; margin: 0.1rem 0.25rem 0.1rem 0; border-radius: 9999px; border: 1px solid transparent; font-size: 0.85rem; background: #fff; cursor: pointer; outline: none; }
   .diet-pill .diet-count { margin-left: 0.15rem; }
-  .diet-pill.diet-marked { border-color: #0f9d58; }
+  .diet-pill:hover { background-color: rgba(0,0,0,0.04); }
+  .diet-pill:focus-visible { box-shadow: 0 0 0 2px rgba(15,157,88,0.4); }
+  .diet-pill.diet-marked { border-color: #0f9d58; background-color: rgba(15,157,88,0.06); }
+  .weekview-message { min-height: 1.2rem; font-size: 0.85rem; margin-bottom: 0.5rem; }
+  .weekview-message--error { color: #b3261e; }
+  .weekview-message--info { color: #444; }
 </style>
 
 <div id="weekview-root"
@@ -39,6 +44,8 @@
   <a href="/ui/weekview?site_id={{ q.get('site_id','') }}&department_id={{ q.get('department_id','') }}&year={{ prev_year }}&week={{ prev_week }}">« Föregående vecka</a>
   <a href="/ui/weekview?site_id={{ q.get('site_id','') }}&department_id={{ q.get('department_id','') }}&year={{ next_year }}&week={{ next_week }}">Nästa vecka »</a>
 </div>
+
+<div id="weekview-message" class="weekview-message" aria-live="polite"></div>
 
 {% if vm.days and vm.days|length > 0 %}
 <table class="weekview-table">
@@ -81,13 +88,15 @@
         <td colspan="{% if vm.has_dinner %}6{% else %}4{% endif %}">
           {% for diet in d.lunch_diets %}
             <span class="diet-pill {% if diet.marked %}diet-marked{% endif %}"
-                  role="button"
-                  tabindex="0"
+              role="button"
+              tabindex="0"
+              aria-pressed="{{ 'true' if diet.marked else 'false' }}"
+              aria-label="{{ diet.diet_name }} {{ diet.resident_count }} för {{ meal_labels.lunch }} {{ d.weekday_name }}"
                   data-diet-type-id="{{ diet.diet_type_id }}"
                   data-meal="lunch"
                   data-date="{{ d.date }}"
                   data-marked="{{ 'true' if diet.marked else 'false' }}">
-              {{ diet.diet_name }} [<span class="diet-count">{{ diet.resident_count }}</span>]
+              {{ diet.diet_name }} [{{ diet.resident_count }}]
             </span>
           {% else %}
             <span class="subtle">Inga specialkoster</span>
@@ -100,13 +109,15 @@
         <td colspan="6">
           {% for diet in d.dinner_diets %}
             <span class="diet-pill {% if diet.marked %}diet-marked{% endif %}"
-                  role="button"
-                  tabindex="0"
+              role="button"
+              tabindex="0"
+              aria-pressed="{{ 'true' if diet.marked else 'false' }}"
+              aria-label="{{ diet.diet_name }} {{ diet.resident_count }} för {{ meal_labels.dinner }} {{ d.weekday_name }}"
                   data-diet-type-id="{{ diet.diet_type_id }}"
                   data-meal="dinner"
                   data-date="{{ d.date }}"
                   data-marked="{{ 'true' if diet.marked else 'false' }}">
-              {{ diet.diet_name }} [<span class="diet-count">{{ diet.resident_count }}</span>]
+              {{ diet.diet_name }} [{{ diet.resident_count }}]
             </span>
           {% else %}
             <span class="subtle">Inga specialkoster</span>
@@ -124,6 +135,14 @@
   (function(){
     const root = document.getElementById('weekview-root');
     if(!root) return;
+    const msgEl = document.getElementById('weekview-message');
+    function setWeekviewMessage(text, type){
+      if(!msgEl) return;
+      msgEl.textContent = text || '';
+      msgEl.classList.remove('weekview-message--error','weekview-message--info');
+      if(type==='error') msgEl.classList.add('weekview-message--error');
+      else if(type==='info') msgEl.classList.add('weekview-message--info');
+    }
     function currentETag(){ return root.getAttribute('data-etag') || ''; }
     function setETag(val){ if(val) root.setAttribute('data-etag', val); }
     async function toggleDiet(el){
@@ -142,11 +161,11 @@
           body: JSON.stringify(payload)
         });
         if(res.status === 412){
-          alert('Vyn är utdaterad, ladda om sidan.');
+          setWeekviewMessage('Vyn är utdaterad, ladda om sidan.', 'error');
           return;
         }
         if(!res.ok){
-          alert('Kunde inte uppdatera. Försök igen.');
+          setWeekviewMessage('Ett fel uppstod när specialkost skulle sparas. Försök igen.', 'error');
           return;
         }
         const et = res.headers.get('ETag');
@@ -154,8 +173,11 @@
         // Optimistically update UI
         el.setAttribute('data-marked', String(nextMarked));
         el.classList.toggle('diet-marked', nextMarked);
+        el.setAttribute('aria-pressed', String(nextMarked));
+        setWeekviewMessage('Ändring sparad.', 'info');
+        setTimeout(()=>{ setWeekviewMessage('', ''); }, 2000);
       }catch(e){
-        alert('Nätverksfel vid uppdatering.');
+        setWeekviewMessage('Nätverksfel vid uppdatering.', 'error');
       }
     }
     document.addEventListener('click', function(e){

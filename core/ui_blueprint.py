@@ -234,6 +234,8 @@ def weekview_overview_ui():
         days = (summaries[0].get("days") if summaries else []) or []
         res_l = 0
         res_d = 0
+        # Aggregate weekly diets by diet_type across all days & meals where marked
+        weekly_diets_idx: dict[str, dict[str, object]] = {}
         day_vms = []
         for d in days:
             mt = d.get("menu_texts") or {}
@@ -248,11 +250,35 @@ def weekview_overview_ui():
             r = (d.get("residents") or {})
             res_l += int(r.get("lunch", 0) or 0)
             res_d += int(r.get("dinner", 0) or 0)
+            # Per-day diet indicator: any marked diet in lunch or dinner
+            has_marked_diets = False
+            diets = d.get("diets") or {}
+            for meal_key in ("lunch", "dinner"):
+                rows_m = diets.get(meal_key) or []
+                for it in rows_m:
+                    try:
+                        if bool(it.get("marked")):
+                            has_marked_diets = True
+                            dtid = str(it.get("diet_type_id"))
+                            name = str(it.get("diet_name") or dtid)
+                            cnt = int(it.get("resident_count") or 0)
+                            acc = weekly_diets_idx.get(dtid)
+                            if not acc:
+                                weekly_diets_idx[dtid] = {
+                                    "diet_type_id": dtid,
+                                    "diet_name": name,
+                                    "total_marked_count": cnt,
+                                }
+                            else:
+                                acc["total_marked_count"] = int(acc["total_marked_count"]) + cnt  # type: ignore[index]
+                    except Exception:
+                        continue
             day_vms.append(
                 {
                     "weekday_name": d.get("weekday_name"),
                     "has_menu_icon": has_menu_icon,
                     "alt2_lunch": bool(d.get("alt2_lunch")),
+                    "has_marked_diets": has_marked_diets,
                     # Popup content (simple, derived values)
                     "menu": {
                         "lunch_alt1": lunch.get("alt1"),
@@ -263,12 +289,18 @@ def weekview_overview_ui():
                     },
                 }
             )
+        weekly_diets = list(weekly_diets_idx.values())
+        try:
+            weekly_diets.sort(key=lambda x: (-int(x.get("total_marked_count", 0) or 0), str(x.get("diet_name") or "")))
+        except Exception:
+            pass
         rows.append(
             {
                 "department_id": dep_id,
                 "department_name": dep_name,
                 "residents_lunch_week": res_l,
                 "residents_dinner_week": res_d,
+                "weekly_diets": weekly_diets,
                 "days": day_vms,
             }
         )

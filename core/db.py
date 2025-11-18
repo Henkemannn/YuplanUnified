@@ -56,6 +56,18 @@ def get_session() -> Session:  # to be used inside request handlers (later integ
     return _SessionFactory()
 
 
+def get_new_session() -> Session:
+    """Return a brand-new Session not bound to the thread-scoped registry.
+
+    Useful for internal services that want isolation and predictable lifetime
+    without affecting callers that might be using the scoped session.
+    """
+    if _engine is None:
+        raise RuntimeError("DB not initialized; call init_engine first")
+    factory = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
+    return factory()
+
+
 def create_all() -> (
     None
 ):  # dev helper ONLY for fresh ephemeral DBs (tests, scratch). Use Alembic in normal flows.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from .db import get_session
+from .db import get_new_session
 from .models import Dish, Menu, MenuVariant
 
 
@@ -36,7 +36,7 @@ class MenuServiceDB:
         pass
 
     def create_or_get_menu(self, tenant_id: int, week: int, year: int) -> Menu:
-        db = get_session()
+        db = get_new_session()
         try:
             existing: Menu | None = (
                 db.query(Menu).filter_by(tenant_id=tenant_id, week=week, year=year).first()
@@ -63,7 +63,7 @@ class MenuServiceDB:
         day = day.strip()
         meal = meal.strip()
         variant_type = variant_type.strip()
-        db = get_session()
+        db = get_new_session()
         try:
             # validate menu belongs to tenant
             menu = db.query(Menu).filter_by(id=menu_id, tenant_id=tenant_id).first()
@@ -87,7 +87,7 @@ class MenuServiceDB:
             db.close()
 
     def get_week_view(self, tenant_id: int, week: int, year: int) -> WeekView:
-        db = get_session()
+        db = get_new_session()
         try:
             menu = db.query(Menu).filter_by(tenant_id=tenant_id, week=week, year=year).first()
             if not menu:
