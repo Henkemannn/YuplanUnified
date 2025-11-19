@@ -54,6 +54,7 @@ from .tasks_api import bp as tasks_bp
 from .turnus_api import bp as turnus_api_bp
 from .weekview_api import bp as weekview_api_bp
 from .report_api import bp as report_api_bp
+from .weekview_report_api import bp as weekview_report_bp  # skeleton Phase 2.E
 from .ui_blueprint import ui_bp
 from .dashboard_ui import bp as dashboard_bp
 from .health_api import bp as health_bp
@@ -441,6 +442,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     app.register_blueprint(ui_bp)
     app.register_blueprint(weekview_api_bp)
     app.register_blueprint(report_api_bp)
+    app.register_blueprint(weekview_report_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(home_bp)
     app.register_blueprint(dashboard_bp)
