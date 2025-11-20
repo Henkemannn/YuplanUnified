@@ -125,4 +125,4 @@ Extend tests to verify real numbers
 
 This PR sets the foundation for the full Planera module.
 
-Closes #ISSUE_PLACEHOLDER
+Closes #54
