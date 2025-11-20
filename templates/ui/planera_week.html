@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Planera – vecka{% endblock %}
+{% block content %}
+<div class="planera-wrap" style="max-width:1100px;margin:0 auto;padding:1rem;font-family:system-ui,sans-serif;">
+  <h1>Planera – vecka {{ vm.week }}</h1>
+  {% if vm.disabled %}
+    <p>Planera är inte aktiverad.</p>
+  {% elif vm.error %}
+    <p class="error">Fel: {{ vm.error }}</p>
+  {% else %}
+    <h2>{{ vm.site_name }}</h2>
+    <table class="planera-week-table" style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+      <thead>
+        <tr style="border-bottom:1px solid #ddd;">
+          <th style="text-align:left;padding:6px 8px;">Dag</th>
+          <th style="text-align:left;padding:6px 8px;">Måltid</th>
+          <th style="text-align:left;padding:6px 8px;">Boende totalt</th>
+          <th style="text-align:left;padding:6px 8px;">Specialkost</th>
+          <th style="text-align:left;padding:6px 8px;">Normalkost</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in vm.days %}
+          {% for meal_key in ["lunch","dinner"] %}
+            {% set meal = day.meals[meal_key] %}
+            <tr style="border-bottom:1px solid #f0f0f0;">
+              <td style="padding:6px 8px;">{{ day.weekday_name }} ({{ day.date }})</td>
+              <td style="padding:6px 8px;">{{ meal_labels[meal_key] }}</td>
+              <td style="padding:6px 8px;">{{ meal.residents_total }}</td>
+              <td style="padding:6px 8px;">
+                {% for diet in meal.special_diets %}
+                  <div>{{ diet.diet_name }}: {{ diet.count }}</div>
+                {% else %}
+                  <span>–</span>
+                {% endfor %}
+              </td>
+              <td style="padding:6px 8px;">{{ meal.normal_diet_count }}</td>
+            </tr>
+          {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>
+{% endblock %}
