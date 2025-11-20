@@ -6,6 +6,7 @@ from sqlalchemy import text
 from .auth import require_roles
 from .db import get_session
 from .ui_blueprint import SAFE_UI_ROLES, get_meal_labels_for_site
+from .weekview_report_service import compute_weekview_report
 
 bp = Blueprint("weekview_report", __name__)
 
@@ -45,28 +46,10 @@ def weekview_report_api():  # TODO Phase 2.E.1: implement real aggregation per d
         db.close()
 
     meal_labels = get_meal_labels_for_site(site_id)
-
-    # Placeholder skeleton: all counts zero, no special diets yet.
-    dept_payload = []
-    for dep_id, dep_name in departments:
-        dept_payload.append(
-            {
-                "department_id": dep_id,
-                "department_name": dep_name,
-                "meals": {
-                    "lunch": {
-                        "residents_total": 0,
-                        "special_diets": [],
-                        "normal_diet_count": 0,
-                    },
-                    "dinner": {
-                        "residents_total": 0,
-                        "special_diets": [],
-                        "normal_diet_count": 0,
-                    },
-                },
-            }
-        )
+    tid = session.get("tenant_id")
+    if not tid:
+        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+    dept_payload = compute_weekview_report(tid, year, week, departments)
 
     payload = {
         "site_id": site_id,

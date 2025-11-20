@@ -349,18 +349,12 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
     finally:
         db.close()
     meal_labels = get_meal_labels_for_site(site_id)
-    # Placeholder shape mirroring API skeleton
-    dept_vms = [
-        {
-            "department_id": dep_id,
-            "department_name": dep_name,
-            "meals": {
-                "lunch": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0},
-                "dinner": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0},
-            },
-        }
-        for dep_id, dep_name in departments
-    ]
+    # Compute using same aggregation as API
+    from .weekview_report_service import compute_weekview_report  # local import to avoid cycles
+    tid = session.get("tenant_id")
+    if not tid:
+        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+    dept_vms = compute_weekview_report(tid, year, week, departments)
     vm = {
         "site_id": site_id,
         "site_name": site_name,

@@ -20,20 +20,41 @@
       <span class="report-meta">Alla avdelningar</span>
     {% endif %}
   </div>
-  <div class="coming">Coming soon – rapportaggregation (Phase 2.E.1). Detta är endast ett skelett.</div>
+  {% if not vm.departments %}
+    <p class="report-meta">Ingen statistik tillgänglig för vecka {{ vm.week }}.</p>
+  {% endif %}
 
   {% for d in vm.departments %}
     <div class="dept-card">
       <h2>{{ d.department_name }}</h2>
-      <p class="report-meta">Lunch & Kvällsmat placeholderdata (alla värden = 0).</p>
+      <table class="report-table" style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Måltid</th>
+            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Boende totalt</th>
+            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Specialkost</th>
+            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Normalkost</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for meal_key in ["lunch", "dinner"] %}
+            {% set meal = d.meals[meal_key] %}
+            <tr>
+              <td style="padding:6px 8px;">{{ meal_labels[meal_key] }}</td>
+              <td style="padding:6px 8px;">{{ meal.residents_total }}</td>
+              <td style="padding:6px 8px;">
+                {% if meal.special_diets and meal.special_diets|length > 0 %}
+                  {% for diet in meal.special_diets %}
+                    <div>{{ diet.diet_name }}: {{ diet.count }}</div>
+                  {% endfor %}
+                {% endif %}
+              </td>
+              <td style="padding:6px 8px;">{{ meal.normal_diet_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-  {% else %}
-    <p class="report-meta">Ingen statistik tillgänglig för vecka {{ vm.week }}.</p>
   {% endfor %}
-
-  <details>
-    <summary>Debug JSON</summary>
-    <pre class="debug">{{ vm | tojson(indent=2) }}</pre>
-  </details>
 </div>
 {% endblock %}

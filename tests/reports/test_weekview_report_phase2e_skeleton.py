@@ -62,4 +62,4 @@ def test_weekview_report_api_and_ui_skeleton(client_admin):
     r_ui = client_admin.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
     assert r_ui.status_code == 200
     html = r_ui.get_data(as_text=True)
-    assert "Statistik – vecka" in html and "Coming soon" in html
+    assert "Statistik – vecka" in html
