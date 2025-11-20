@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}Statistik - Yuplan{% endblock %}
+{% block head %}
+<style>
+@media print {
+  form, button, select, input, .control-panel, .navbar {
+    display: none !important;
+  }
+  body { background: #fff !important; color: #000 !important; }
+  .table { box-shadow: none !important; background: #fff !important; color: #000 !important; page-break-inside: avoid !important; }
+  tr, .avd-header, .sum-row { page-break-inside: avoid !important; break-inside: avoid !important; }
+  h1, h2, h3, h4, p { page-break-after: avoid !important; break-after: avoid !important; }
+}
+
+.sum-row {
+    background: var(--primary-color) !important;
+    color: var(--text-light) !important;
+    font-weight: bold;
+}
+.avd-separator {
+    border-top: 3px solid var(--primary-color);
+}
+.avd-header {
+    background: var(--bg-accent);
+    font-weight: bold;
+    text-align: left;
+    font-size: 1.1em;
+}
+
+.control-panel {
+    background: var(--bg-primary);
+    padding: 2rem;
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-md);
+    margin-bottom: 2rem;
+}
+
+.filter-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: end;
+}
+
+.report-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding: 2rem;
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: var(--text-light);
+    border-radius: var(--border-radius-lg);
+}
+
+.report-header p {
+    color: var(--text-light);
+    font-size: 1.1rem;
+    line-height: 1.5;
+    margin-bottom: 0;
+    opacity: 0.95;
+}
+
+.stats-table-container {
+    background: var(--bg-primary);
+    border-radius: var(--border-radius-lg);
+    overflow: auto;
+    box-shadow: var(--shadow-md);
+}
+
+.table th {
+    background: var(--primary-color);
+    color: var(--text-light);
+    position: sticky;
+    top: 48px;
+    z-index: 2;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.5px;
+}
+
+.table .topbar-sticky {
+    background: var(--primary-dark);
+    color: var(--text-light);
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.no-data {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    border-radius: var(--border-radius-lg);
+    border: 2px dashed var(--border-color);
+}
+
+@media (max-width: 768px) {
+    .filter-form {
+        grid-template-columns: 1fr;
+    }
+    .table {
+        font-size: 0.875rem;
+    }
+    .table th, .table td {
+        padding: 0.5rem 0.25rem;
+    }
+}
+</style>
+<style>
+/* Zebra-striping för tabellrader */
+.table tbody tr:not(.sum-row):nth-of-type(even) {
+    background: #f6f8fa;
+}
+/* Förhindra radbrytning för summeringsradens text */
+.sum-row td[colspan] {
+    white-space: nowrap;
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="report-header">
+    <h1><i class="fas fa-chart-bar"></i> Statistik för vecka {{ vecka_vald }}</h1>
+    <p>Statistik över registrerade special- och normalkoster för avdelning och vald period.</p>
+</div>
+
+<div class="control-panel">
+    <h3 class="mb-3"><i class="fas fa-filter"></i> Filtrera rapport</h3>
+    <form method="POST" class="filter-form">
+        <div class="form-group">
+            <label for="vecka" class="form-label">Välj vecka:</label>
+            <select name="vecka" id="vecka" required class="form-control">
+                {% for v in range(1, 54) %}
+                    <option value="{{ v }}" {% if vecka_vald|int == v %}selected{% endif %}>Vecka {{ v }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+
+        <div class="form-group">
+            <label for="avdelning" class="form-label">Avdelning:</label>
+            <select name="avdelning" id="avdelning" class="form-control">
+                <option value="alla">Alla avdelningar</option>
+                {% for avd in avdelningar %}
+                    <option value="{{ avd.id }}" {% if avdelning_vald and avdelning_vald|int == avd.id %}selected{% endif %}>{{ avd.namn }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="vytyp" class="form-label">Visa statistik:</label>
+            <select name="vytyp" id="vytyp" class="form-control">
+                <option value="dag" {% if vytyp == 'dag' %}selected{% endif %}>Dag för dag</option>
+                <option value="vecka" {% if vytyp == 'vecka' %}selected{% endif %}>Summerat per vecka</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-search"></i> Visa rapport
+            </button>
+        </div>
+    <!-- Export-knapp flyttas utanför filter-formuläret nedan -->
+</form>
+
+<!-- Exportformulär utanför filter-formuläret -->
+<div class="form-group" style="margin-top: -1rem; margin-bottom: 2rem;">
+    <form method="post" action="/export_rapport" target="_blank" style="display:inline">
+        <input type="hidden" name="vecka" value="{{ vecka_vald }}">
+        <input type="hidden" name="avdelning" value="{{ avdelning_vald }}">
+        <input type="hidden" name="vytyp" value="{{ vytyp }}">
+        <button type="submit" class="btn btn-success"><i class="fas fa-file-excel"></i> Exportera till Excel</button>
+    </form>
+</div>
+</div>
+
+{% if summerat_resultat %}
+<div class="stats-table-container">
+    <table class="table">
+        <thead>
+            <tr>
+                <th class="topbar-sticky" colspan="7">
+                    <i class="fas fa-chart-bar"></i> Statistik för vecka {{ vecka_vald }} – {{ avdelning_vald_namn if avdelning_vald_namn else 'Alla avdelningar' }}
+                </th>
+            </tr>
+            <tr>
+                <th><i class="fas fa-building"></i> Avdelning</th>
+                <th><i class="fas fa-calendar-day"></i> Veckodag</th>
+                {% if vytyp == 'dag' %}
+                    <th><i class="fas fa-users"></i> Boende Lunch</th>
+                    <th><i class="fas fa-users"></i> Boende Kväll</th>
+                {% else %}
+                    <th><i class="fas fa-users"></i> Boende</th>
+                {% endif %}
+                <th><i class="fas fa-utensils"></i> Lunch – Special</th>
+                <th><i class="fas fa-utensils"></i> Lunch – Normal</th>
+                <th><i class="fas fa-moon"></i> Kväll – Special</th>
+                <th><i class="fas fa-moon"></i> Kväll – Normal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for rad in summerat_resultat %}
+                {% if vytyp == 'dag' %}
+                    {% if '(SUMMA)' in rad.avdelning %}
+                        <tr class="sum-row avd-separator">
+                            <td colspan="2"><i class="fas fa-calculator"></i> <strong>Veckosummering för {{ rad.avdelning.replace(' (SUMMA)','') }}</strong></td>
+                            <td></td>
+                            <td></td>
+                            <td><strong>{{ rad.lunch_special }}</strong></td>
+                            <td><strong>{{ rad.lunch_normal }}</strong></td>
+                            <td><strong>{{ rad.kvall_special }}</strong></td>
+                            <td><strong>{{ rad.kvall_normal }}</strong></td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td>{{ rad.avdelning }}</td>
+                            <td>{{ rad.dag }}</td>
+                            <td>{{ rad.boende_lunch }}</td>
+                            <td>{{ rad.boende_kvall }}</td>
+                            <td>{{ rad.lunch_special }}</td>
+                            <td>{{ rad.lunch_normal }}</td>
+                            <td>{{ rad.kvall_special }}</td>
+                            <td>{{ rad.kvall_normal }}</td>
+                        </tr>
+                    {% endif %}
+                {% elif vytyp == 'vecka' %}
+                    <tr class="sum-row avd-separator">
+                        <td><i class="fas fa-building"></i> {{ rad.avdelning }}</td>
+                        <td><strong>SUMMA</strong></td>
+                        <td></td>
+                        <td><strong>{{ rad.lunch_special }}</strong></td>
+                        <td><strong>{{ rad.lunch_normal }}</strong></td>
+                        <td><strong>{{ rad.kvall_special }}</strong></td>
+                        <td><strong>{{ rad.kvall_normal }}</strong></td>
+                    </tr>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="no-data">
+    <i class="fas fa-chart-line" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+    <h3>Ingen statistik tillgänglig</h3>
+    <p>Det finns ingen data för vald vecka och avdelning.</p>
+</div>
+{% endif %}
+{% endblock %}

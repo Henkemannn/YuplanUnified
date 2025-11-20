@@ -10,9 +10,24 @@
   .subtle { color: #666; font-size: 0.875rem; }
   .nav { margin: 0.5rem 0 1rem; }
   .nav a { margin-right: 1rem; text-decoration: none; }
+  .weekview-diets-row .diet-label-cell { font-weight: 600; color: #333; }
+  .diet-pill { display: inline-flex; align-items: center; padding: 0.1rem 0.45rem; margin: 0.1rem 0.25rem 0.1rem 0; border-radius: 9999px; border: 1px solid transparent; font-size: 0.85rem; background: #fff; cursor: pointer; outline: none; }
+  .diet-pill .diet-count { margin-left: 0.15rem; }
+  .diet-pill:hover { background-color: rgba(0,0,0,0.04); }
+  .diet-pill:focus-visible { box-shadow: 0 0 0 2px rgba(15,157,88,0.4); }
+  .diet-pill.diet-marked { border-color: #0f9d58; background-color: rgba(15,157,88,0.06); }
+  .weekview-message { min-height: 1.2rem; font-size: 0.85rem; margin-bottom: 0.5rem; }
+  .weekview-message--error { color: #b3261e; }
+  .weekview-message--info { color: #444; }
 </style>
 
-<div class="weekview-header">
+<div id="weekview-root"
+     class="weekview-header"
+     data-site-id="{{ vm.site_id }}"
+     data-department-id="{{ vm.department_id }}"
+     data-year="{{ vm.year }}"
+     data-week="{{ vm.week }}"
+     data-etag="{{ etag }}">
   {% if vm.days and vm.days|length > 0 %}
     Vecka {{ vm.week }} – {{ vm.department_name }}, {{ vm.site_name }}
   {% else %}
@@ -30,6 +45,8 @@
   <a href="/ui/weekview?site_id={{ q.get('site_id','') }}&department_id={{ q.get('department_id','') }}&year={{ next_year }}&week={{ next_week }}">Nästa vecka »</a>
 </div>
 
+<div id="weekview-message" class="weekview-message" aria-live="polite"></div>
+
 {% if vm.days and vm.days|length > 0 %}
 <table class="weekview-table">
   <thead>
@@ -39,8 +56,8 @@
       <th style="width:16%">Lunch Alt 2</th>
       <th style="width:12%">Dessert</th>
       {% if vm.has_dinner %}
-      <th style="width:16%">Middag Alt 1</th>
-      <th style="width:16%">Middag Alt 2</th>
+      <th style="width:16%">{{ meal_labels.dinner }} Alt 1</th>
+      <th style="width:16%">{{ meal_labels.dinner }} Alt 2</th>
       {% endif %}
       <th style="width:6%">Boende</th>
     </tr>
@@ -62,14 +79,116 @@
         <td>
           <div class="subtle">L {{ d.residents_lunch or 0 }}</div>
           {% if vm.has_dinner %}
-          <div class="subtle">M {{ d.residents_dinner or 0 }}</div>
+          <div class="subtle">{{ meal_labels.dinner[0] }} {{ d.residents_dinner or 0 }}</div>
           {% endif %}
         </td>
       </tr>
+      <tr class="weekview-diets-row">
+        <td class="diet-label-cell">Specialkost – {{ meal_labels.lunch }}</td>
+        <td colspan="{% if vm.has_dinner %}6{% else %}4{% endif %}">
+          {% for diet in d.lunch_diets %}
+            <span class="diet-pill {% if diet.marked %}diet-marked{% endif %}"
+              role="button"
+              tabindex="0"
+              aria-pressed="{{ 'true' if diet.marked else 'false' }}"
+              aria-label="{{ diet.diet_name }} {{ diet.resident_count }} för {{ meal_labels.lunch }} {{ d.weekday_name }}"
+                  data-diet-type-id="{{ diet.diet_type_id }}"
+                  data-meal="lunch"
+                  data-date="{{ d.date }}"
+                  data-marked="{{ 'true' if diet.marked else 'false' }}">
+              {{ diet.diet_name }} [{{ diet.resident_count }}]
+            </span>
+          {% else %}
+            <span class="subtle">Inga specialkoster</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% if vm.has_dinner %}
+      <tr class="weekview-diets-row">
+        <td class="diet-label-cell">Specialkost – {{ meal_labels.dinner }}</td>
+        <td colspan="6">
+          {% for diet in d.dinner_diets %}
+            <span class="diet-pill {% if diet.marked %}diet-marked{% endif %}"
+              role="button"
+              tabindex="0"
+              aria-pressed="{{ 'true' if diet.marked else 'false' }}"
+              aria-label="{{ diet.diet_name }} {{ diet.resident_count }} för {{ meal_labels.dinner }} {{ d.weekday_name }}"
+                  data-diet-type-id="{{ diet.diet_type_id }}"
+                  data-meal="dinner"
+                  data-date="{{ d.date }}"
+                  data-marked="{{ 'true' if diet.marked else 'false' }}">
+              {{ diet.diet_name }} [{{ diet.resident_count }}]
+            </span>
+          {% else %}
+            <span class="subtle">Inga specialkoster</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endif %}
     {% endfor %}
   </tbody>
 </table>
 {% else %}
   <div class="subtle">Ingen meny hittades för vecka {{ vm.week }}.</div>
 {% endif %}
+<script>
+  (function(){
+    const root = document.getElementById('weekview-root');
+    if(!root) return;
+    const msgEl = document.getElementById('weekview-message');
+    function setWeekviewMessage(text, type){
+      if(!msgEl) return;
+      msgEl.textContent = text || '';
+      msgEl.classList.remove('weekview-message--error','weekview-message--info');
+      if(type==='error') msgEl.classList.add('weekview-message--error');
+      else if(type==='info') msgEl.classList.add('weekview-message--info');
+    }
+    function currentETag(){ return root.getAttribute('data-etag') || ''; }
+    function setETag(val){ if(val) root.setAttribute('data-etag', val); }
+    async function toggleDiet(el){
+      const siteId = root.getAttribute('data-site-id');
+      const depId = root.getAttribute('data-department-id');
+      const localDate = el.getAttribute('data-date');
+      const meal = el.getAttribute('data-meal');
+      const dietTypeId = el.getAttribute('data-diet-type-id');
+      const markedNow = (el.getAttribute('data-marked') === 'true');
+      const nextMarked = !markedNow;
+      const payload = { site_id: siteId, department_id: depId, local_date: localDate, meal: meal, diet_type_id: dietTypeId, marked: nextMarked };
+      try{
+        const res = await fetch('/api/weekview/specialdiets/mark', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'If-Match': currentETag() },
+          body: JSON.stringify(payload)
+        });
+        if(res.status === 412){
+          setWeekviewMessage('Vyn är utdaterad, ladda om sidan.', 'error');
+          return;
+        }
+        if(!res.ok){
+          setWeekviewMessage('Ett fel uppstod när specialkost skulle sparas. Försök igen.', 'error');
+          return;
+        }
+        const et = res.headers.get('ETag');
+        if(et) setETag(et);
+        // Optimistically update UI
+        el.setAttribute('data-marked', String(nextMarked));
+        el.classList.toggle('diet-marked', nextMarked);
+        el.setAttribute('aria-pressed', String(nextMarked));
+        setWeekviewMessage('Ändring sparad.', 'info');
+        setTimeout(()=>{ setWeekviewMessage('', ''); }, 2000);
+      }catch(e){
+        setWeekviewMessage('Nätverksfel vid uppdatering.', 'error');
+      }
+    }
+    document.addEventListener('click', function(e){
+      const pill = e.target.closest && e.target.closest('.diet-pill');
+      if(pill) toggleDiet(pill);
+    });
+    document.addEventListener('keydown', function(e){
+      if((e.key==='Enter' || e.key===' ') && e.target.classList && e.target.classList.contains('diet-pill')){
+        e.preventDefault(); toggleDiet(e.target);
+      }
+    });
+  })();
+  </script>
 {% endblock %}

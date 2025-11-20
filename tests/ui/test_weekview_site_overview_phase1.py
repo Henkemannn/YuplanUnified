@@ -122,9 +122,9 @@ def test_weekview_site_overview_phase1(client_admin):
     # Both department names
     assert "Avd A" in html and "Avd B" in html
 
-    # Weekly totals text for A and B
-    assert "Lunch: 10" in html and "Middag: 5" in html  # Dep A
-    assert "Middag: 8" in html  # Dep B
+    # Weekly totals text for A and B (updated dinner label)
+    assert "Lunch: 10" in html and "Kvällsmat: 5" in html  # Dep A
+    assert "Kvällsmat: 8" in html  # Dep B
 
     # Menu icons present for days with menu data (🍽 icon rendered with class menu-icon)
     assert html.count("menu-icon") >= 2  # Mon lunch, Tue dinner, Thu lunch at least

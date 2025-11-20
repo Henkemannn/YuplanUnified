@@ -99,8 +99,8 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
     assert "Köttbullar" in html and "Fiskgratäng" in html and "Vaniljpudding" in html
     # Alt2 highlight present on lunch alt2 cell
     assert "alt2-gul" in html
-    # Dinner columns present (we added a dinner dish on Tue)
-    assert "Middag Alt 1" in html
+    # Dinner columns present (we added a dinner dish on Tue) using new label
+    assert "Kvällsmat Alt 1" in html
 
 
 @pytest.mark.usefixtures("enable_weekview")
@@ -142,4 +142,4 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
     html = r_ui.get_data(as_text=True)
     assert "Vecka" in html and "Avd 2" in html and "Varberg" in html
     # Dinner columns hidden when no dinner data
-    assert "Middag Alt 1" not in html and "Middag Alt 2" not in html
+    assert "Kvällsmat Alt 1" not in html and "Kvällsmat Alt 2" not in html

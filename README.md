@@ -58,6 +58,11 @@ Examples
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
 
+### Supported Python
+
+- Target runtime is Python 3.11. Newer interpreters (e.g., 3.14) are currently unsupported due to upstream typing changes affecting SQLAlchemy 2.0.x. Use a 3.11 virtual environment locally or run via the Dockerfile.
+
+
 ## Staging quickstart
 - Access and demo guardrails: see `docs/staging-access.md` (simple auth, CSRF, DEMO_UI)
 - Smoke run log: see `docs/staging-smoke_2025-11-11.md`
@@ -246,9 +251,14 @@ unified_platform/
 ## Quick Start (Dev)
 1. Create virtualenv & install deps (or use `make install` / `Install-Deps`):
    ```
-   python -m venv .venv
-   .venv\Scripts\activate  # Windows
-   pip install -r requirements.txt
+  # Windows (ensure Python 3.11)
+  py -3.11 -m venv .venv
+  .venv\Scripts\activate
+  pip install -r requirements.txt
+  # macOS/Linux
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
    ```
 2. Copy .env.example to .env and adjust values.
 3. Run initial migrations (schema is migration-driven; DEV_CREATE_ALL is deprecated):

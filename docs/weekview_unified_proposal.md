@@ -36,6 +36,11 @@ För exakt JSON‑schema, se [Weekview API schema](weekview_api_schema.md).
   - `GET /api/weekview?department_id=<uuid>&year=YYYY&week=WW` med `If-None-Match` → 200/304 + `ETag`.
   - Menydata: utöka payload (se nedan) eller ny endpoint.
 
+## Site-översikt & Meal Labels (Phase 1.1)
+För site-översikt (en site, en vecka, alla avdelningar) se designen i: [Weekview Site Overview – Design](weekview_overview_design.md).
+
+Måltidsnamn i UI hämtas via `meal_labels` (Phase 1.1). Backend behåller neutrala fält `lunch`/`dinner`. Se dokumentation i [Meal Labels](meal_labels.md). Default label för `dinner` är "Kvällsmat" tills per‑site konfiguration införs (framtida steg Offshore → "Middag").
+
 ## API‑kontrakt (förslag)
 - Nuvarande svar från `GET /api/weekview` innehåller:
   - `department_summaries[0]`: `{ marks: [...], residents_counts: [...], alt2_days: [...] }`
@@ -114,6 +119,18 @@ För exakt JSON‑schema, se [Weekview API schema](weekview_api_schema.md).
    - Säkerställ PATCH‑vägarna är stabila (de finns redan) + CSRF.
 4. UI (Fas 2)
    - Cell‑toggle + boendeantal‑form (inline) + Alt2‑dagväljare med If‑Match och konflikthantering.
+
+## Weekview Report – Phase 2.E
+En fristående läs‑först rapportvy som summerar utfall (specialkost + normalkost) per vecka och avdelning. Design och skelett beskrivs i `weekview_report_phase2e.md`.
+
+Ny API‑rutt (förslag): `GET /api/reports/weekview?site_id=...&year=YYYY&week=WW[&department_id=...]` returnerar summeringar per måltid:
+- Total boende.
+- Specialkost summerad per diettyp (endast markerade).
+- Normalkost = total boende − summa specialkost.
+
+UI‑rutt (förslag): `/ui/reports/weekview` med iPad‑vänlig layout, kort per avdelning. Fas 2.E.1 implementerar logiken; denna fas (design) tillför endast dokumentation och skelett.
+
+Se detaljer: [Weekview Report – Phase 2.E](weekview_report_phase2e.md)
 
 ## Risker & Mitigering
 - Menydata saknas i Unified: börja med fallback från legacy tabell eller tillsvidare tom‑state i popup.

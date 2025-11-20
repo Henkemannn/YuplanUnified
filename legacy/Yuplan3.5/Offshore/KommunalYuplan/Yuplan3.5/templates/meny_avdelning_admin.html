@@ -1,0 +1,470 @@
+{% extends "base.html" %}
+{% block title %}Meny- och Avdelningsadministrering - Yuplan{% endblock %}
+
+{% block head %}
+<style>
+    /* Menyimport styles */
+    .upload-area {
+        border: 2px dashed var(--border-color);
+        border-radius: var(--border-radius-lg);
+        padding: 3rem 2rem;
+        text-align: center;
+        transition: var(--transition);
+        cursor: pointer;
+        background: var(--bg-secondary);
+    }
+    
+    .upload-area:hover,
+    .upload-area.dragover {
+        border-color: var(--primary-color);
+        background: var(--primary-light);
+    }
+    
+    .upload-content h4 {
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+    }
+    
+    .upload-icon {
+        font-size: 3rem;
+        color: var(--primary-color);
+        margin-bottom: 1rem;
+    }
+    
+    .upload-progress {
+        padding: 1rem;
+        background: var(--bg-primary);
+        border-radius: var(--border-radius);
+        border: 1px solid var(--border-color);
+    }
+    
+    .progress {
+        height: 20px;
+        background: var(--bg-secondary);
+        border-radius: 10px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+    
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        transition: width 0.3s ease;
+        border-radius: 10px;
+    }
+    
+    .upload-status {
+        text-align: center;
+        color: var(--text-secondary);
+        margin: 0;
+    }
+    
+    #preview-container {
+        padding: 1.5rem;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+        margin-top: 1rem;
+    }
+    
+    .preview-week {
+        background: var(--info-light);
+        color: var(--info-color);
+        padding: 0.5rem 1rem;
+        border-radius: var(--border-radius);
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    
+    .preview-day {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: var(--bg-secondary);
+        border-radius: var(--border-radius);
+        border-left: 4px solid var(--primary-color);
+    }
+    
+    .preview-day h6 {
+        color: var(--primary-color);
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .preview-alt {
+        background: var(--bg-primary);
+        padding: 0.75rem;
+        border-radius: var(--border-radius-sm);
+        margin-bottom: 0.5rem;
+        border: 1px solid var(--border-color);
+    }
+    
+    .preview-alt strong {
+        color: var(--primary-color);
+        display: block;
+        margin-bottom: 0.25rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-utensils"></i> Meny- och Avdelningsadministrering</h1>
+        <a href="{{ url_for('adminpanel') }}" class="btn btn-outline">
+            <i class="fas fa-arrow-left"></i> Tillbaka till Adminpanel
+        </a>
+    </div>
+
+    <!-- Avdelningslogin -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-user-lock"></i>
+                Avdelningsinloggning
+            </h3>
+        </div>
+        
+        <p class="text-secondary">Här kan du sätta användarnamn och lösenord för varje avdelning så att de kan logga in i personalvyn.</p>
+        
+        <form method="POST">
+            <input type="hidden" name="spara_avd_login" value="1">
+            
+            <div style="display: grid; gap: 1.5rem;">
+                {% for avd in avdelningar %}
+                <div class="card" style="margin-bottom: 0;">
+                    <div class="card-header">
+                        <h4 style="margin-bottom: 0;">{{ avd.namn }}</h4>
+                    </div>
+                    
+                    <input type="hidden" name="avd_login_id" value="{{ avd.id }}">
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label for="anvandarnamn_{{ avd.id }}" class="form-label">Användarnamn</label>
+                            <input type="text" 
+                                   name="anvandarnamn_{{ avd.id }}" 
+                                   id="anvandarnamn_{{ avd.id }}" 
+                                   class="form-control"
+                                   value="{{ avd.anvandarnamn or '' }}" 
+                                   placeholder="Användarnamn för {{ avd.namn }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="losenord_{{ avd.id }}" class="form-label">Nytt lösenord</label>
+                            <input type="password" 
+                                   name="losenord_{{ avd.id }}" 
+                                   id="losenord_{{ avd.id }}" 
+                                   class="form-control"
+                                   placeholder="Lämna tomt för att behålla nuvarande">
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="text-center mt-3">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save"></i> Spara avdelningslogin
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Menytext -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-utensils"></i>
+                Menytext för vecka
+            </h3>
+        </div>
+        
+        {% include 'adminpanel_menytext_section.html' %}
+    </div>
+
+    <!-- Länk till menyimport -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-file-import"></i>
+                Importera meny
+            </h3>
+        </div>
+        <div class="card-body text-center">
+            <a href="{{ url_for('meny_import') }}" class="btn btn-success btn-lg" style="font-size:1.25rem;">
+                <i class="fas fa-file-import"></i> Gå till menyimport
+            </a>
+            <p class="text-secondary mt-3">Ladda upp och förhandsgranska menyer från Word-dokument på ett enkelt sätt.</p>
+        </div>
+    </div>
+
+    <!-- Alt2 Markeringar -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-calendar-check"></i>
+                Alt2-markeringar per vecka
+            </h3>
+        </div>
+        
+        <p class="text-secondary">Markera vilka dagar varje avdelning ska ha Alt2 (alternativ meny) för vecka {{ valt_vecka }}.</p>
+        
+        <form method="POST">
+            <input type="hidden" name="spara_alt2" value="1">
+            <input type="hidden" name="vecka_alt2" value="{{ valt_vecka }}">
+            
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th style="min-width: 150px;">Avdelning</th>
+                            <th class="text-center">Mån</th>
+                            <th class="text-center">Tis</th>
+                            <th class="text-center">Ons</th>
+                            <th class="text-center">Tors</th>
+                            <th class="text-center">Fre</th>
+                            <th class="text-center">Lör</th>
+                            <th class="text-center">Sön</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for avd in avdelningar %}
+                        <tr>
+                            <td style="font-weight: 600;">{{ avd.namn }}</td>
+                            {% for dag in ['Mån', 'Tis', 'Ons', 'Tors', 'Fre', 'Lör', 'Sön'] %}
+                            <td class="text-center">
+                                <input type="checkbox" 
+                                       name="alt2_{{ avd.id }}_{{ dag }}"
+                                       {% if alt2_markeringar.get(avd.id, []) and dag in alt2_markeringar[avd.id] %}checked{% endif %}
+                                       style="transform: scale(1.2);">
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="text-center mt-3">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save"></i> Spara Alt2-markeringar
+                </button>
+            </div>
+        </form>
+        
+        <div class="mt-4 p-3" style="background: var(--bg-accent); border-radius: var(--border-radius);">
+            <h4><i class="fas fa-calendar-alt"></i> Byt vecka för Alt2-markeringar</h4>
+            <form method="GET" class="d-flex gap-2 align-items-center">
+                <label for="vecka" class="form-label" style="margin-bottom: 0; min-width: max-content;">Vecka:</label>
+                <input type="number" 
+                       name="vecka" 
+                       id="vecka"
+                       value="{{ valt_vecka }}" 
+                       min="1" 
+                       max="53" 
+                       class="form-control" 
+                       style="width: 100px;">
+                <button type="submit" class="btn btn-secondary">
+                    <i class="fas fa-search"></i> Visa vecka
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="text-center mt-4">
+        <a href="{{ url_for('adminpanel') }}" class="btn btn-outline btn-lg">
+            <i class="fas fa-arrow-left"></i> Tillbaka till Adminpanel
+        </a>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+    const progressContainer = document.getElementById('upload-progress');
+    const previewContainer = document.getElementById('preview-container');
+    const progressBar = document.querySelector('.progress-bar');
+    const uploadStatus = document.querySelector('.upload-status');
+    
+    let currentMenyData = null;
+    let currentVecka = null;
+    
+    // Upload area click handler
+    uploadArea.addEventListener('click', () => {
+        fileInput.click();
+    });
+    
+    // Drag and drop handlers
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+    
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFile(files[0]);
+        }
+    });
+    
+    // File input change handler
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFile(e.target.files[0]);
+        }
+    });
+    
+    function handleFile(file) {
+        // Validate file type
+        if (!file.name.match(/\.(docx|doc)$/i)) {
+            alert('Endast Word-dokument (.docx, .doc) är tillåtna.');
+            return;
+        }
+        
+        // Validate file size (10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            alert('Filen är för stor. Maximal storlek är 10MB.');
+            return;
+        }
+        
+        uploadFile(file);
+    }
+    
+    function uploadFile(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Show progress
+        uploadArea.style.display = 'none';
+        progressContainer.style.display = 'block';
+        previewContainer.style.display = 'none';
+        
+        // Reset progress
+        progressBar.style.width = '0%';
+        uploadStatus.textContent = 'Laddar upp...';
+        
+        // Upload with progress
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                progressBar.style.width = percentComplete + '%';
+            }
+        });
+        
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.success) {
+                        showPreview(response.meny_data, response.vecka);
+                    } else {
+                        showError(response.error);
+                    }
+                } else {
+                    showError('Fel vid uppladdning. Försök igen.');
+                }
+            }
+        };
+        
+        xhr.open('POST', '/upload_meny');
+        xhr.send(formData);
+    }
+    
+    function showPreview(menyData, vecka) {
+        progressContainer.style.display = 'none';
+        previewContainer.style.display = 'block';
+        
+        currentMenyData = menyData;
+        currentVecka = vecka;
+        
+        const previewContent = document.getElementById('preview-content');
+        let html = `<div class="preview-week"><i class="fas fa-calendar"></i> Vecka ${vecka}</div>`;
+        
+        const dagar = ['måndag', 'tisdag', 'onsdag', 'torsdag', 'fredag', 'lördag', 'söndag'];
+        
+        for (const dag of dagar) {
+            if (menyData[dag]) {
+                const dagNormalized = dag.toLowerCase();
+                html += `
+                    <div class="preview-day">
+                        <h6><i class="fas fa-calendar-day"></i> ${dag.charAt(0).toUpperCase() + dag.slice(1)}</h6>
+                        ${menyData[dag].alt1 ? `<div class="preview-alt"><strong>Alt1:</strong> ${menyData[dag].alt1}</div>` : ''}
+                        ${menyData[dag].alt2 ? `<div class="preview-alt"><strong>Alt2:</strong> ${menyData[dag].alt2}</div>` : ''}
+                    </div>
+                `;
+            }
+        }
+        
+        previewContent.innerHTML = html;
+    }
+    
+    function showError(message) {
+        progressContainer.style.display = 'none';
+        uploadArea.style.display = 'block';
+        alert('Fel: ' + message);
+    }
+    
+    // Save menu handler
+    document.getElementById('save-menu').addEventListener('click', function() {
+        if (!currentMenyData || !currentVecka) {
+            alert('Ingen menydata att spara.');
+            return;
+        }
+        
+        this.disabled = true;
+        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sparar...';
+        
+        fetch('/spara_meny', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                vecka: currentVecka,
+                meny_data: currentMenyData
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Menyn har sparats!');
+                resetUpload();
+            } else {
+                alert('Fel vid sparande: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Fel vid sparande: ' + error);
+        })
+        .finally(() => {
+            this.disabled = false;
+            this.innerHTML = '<i class="fas fa-save"></i> Spara meny';
+        });
+    });
+    
+    // Cancel import handler
+    document.getElementById('cancel-import').addEventListener('click', resetUpload);
+    
+    function resetUpload() {
+        uploadArea.style.display = 'block';
+        progressContainer.style.display = 'none';
+        previewContainer.style.display = 'none';
+        fileInput.value = '';
+        currentMenyData = null;
+        currentVecka = null;
+    }
+});
+</script>
+{% endblock %}
+
+{% endblock %}

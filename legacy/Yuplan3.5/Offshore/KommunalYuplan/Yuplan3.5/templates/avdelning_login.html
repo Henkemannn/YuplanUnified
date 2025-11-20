@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Avdelningsinloggning - Yuplan{% endblock %}
+{% block head %}
+<style>
+    .login-container {
+        max-width: 400px;
+        margin: 3rem auto;
+        background: var(--bg-primary);
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow-lg);
+        padding: 2rem;
+        border: 1px solid var(--border-color);
+    }
+    
+    .login-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    .login-header h2 {
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
+    }
+    
+    .login-header p {
+        color: var(--text-secondary);
+        margin-bottom: 0;
+    }
+    
+    .login-form .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .login-form .btn {
+        width: 100%;
+        padding: 0.75rem;
+        font-size: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .error-message {
+        background: var(--danger-color);
+        color: var(--text-light);
+        padding: 1rem;
+        border-radius: var(--border-radius);
+        text-align: center;
+        margin-bottom: 1.5rem;
+        border-left: 4px solid #d32f2f;
+    }
+    
+    .login-icon {
+        font-size: 3rem;
+        color: var(--primary-color);
+        margin-bottom: 1rem;
+    }
+    
+    @media (max-width: 480px) {
+        .login-container {
+            margin: 1rem;
+            padding: 1.5rem;
+        }
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="login-container">
+    <div class="login-header">
+        <div class="login-icon">
+            <i class="fas fa-building"></i>
+        </div>
+        <h2>Logga in som avdelning</h2>
+        <p>Logga in för att komma åt dina menyval</p>
+    </div>
+    
+    {% if fel %}
+        <div class="error-message">
+            <i class="fas fa-exclamation-triangle"></i> {{ fel }}
+        </div>
+    {% endif %}
+    
+    <form method="post" class="login-form">
+        <div class="form-group">
+            <label for="anvandarnamn" class="form-label">Användarnamn:</label>
+            <input type="text" name="anvandarnamn" id="anvandarnamn" required autofocus class="form-control" placeholder="Ange användarnamn">
+        </div>
+        
+        <div class="form-group">
+            <label for="losenord" class="form-label">Lösenord:</label>
+            <input type="password" name="losenord" id="losenord" required class="form-control" placeholder="Ange lösenord">
+        </div>
+        
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-sign-in-alt"></i> Logga in
+        </button>
+    </form>
+</div>
+{% endblock %}

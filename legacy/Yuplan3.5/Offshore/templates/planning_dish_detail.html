@@ -1,0 +1,88 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container" style="max-width:900px;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Planering för: {{ dish.name }}</h4>
+    <a href="{{ url_for('planning_overview') }}" class="btn btn-sm btn-outline-secondary">Tillbaka</a>
+  </div>
+  <div class="card mb-4">
+    <div class="card-body py-3">
+      <div class="d-flex justify-content-between flex-wrap gap-3 align-items-start">
+        <div>
+          <h6 class="fw-bold mb-1">Recept / Metod</h6>
+          {% if recipe %}
+            <div>🔗 Kopplat: <a href="{{ url_for('recipe_detail', recipe_id=recipe.id) }}">{{ recipe.title }}</a></div>
+          {% else %}
+            <div class="text-muted small">Ingen koppling ännu.</div>
+          {% endif %}
+        </div>
+        <div class="flex-grow-1" style="max-width:460px;">
+          <form method="post" action="{{ url_for('link_recipe_to_dish', dish_id=dish.id) }}" class="d-flex gap-2 align-items-center flex-wrap">
+            <select name="recipe_id" class="form-select form-select-sm" style="max-width:260px;">
+              <option value="">Välj recept...</option>
+              {% for c in candidates %}
+                <option value="{{ c.id }}" {% if recipe and c.id==recipe.id %}selected{% endif %}>{{ c.title }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-sm btn-primary">Koppla</button>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('recipe_new_form') }}">+ Nytt</a>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% if not has_any %}
+    <div class="alert alert-info">Ingen prepp eller frysplock skapad ännu för denna rätt.</div>
+  {% else %}
+    <div class="accordion" id="dishPlanAccordion">
+      {% for g in groups %}
+      {% set acc_id = 'grp' ~ loop.index %}
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="h{{ acc_id }}">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#c{{ acc_id }}" aria-expanded="false" aria-controls="c{{ acc_id }}">
+            {{ g.date }} • {{ g.meal }} • {{ g.category }}
+            <span class="ms-2 small text-muted">(Prepp: {{ g.prep|length }} / Frys: {{ g.frys|length }})</span>
+          </button>
+        </h2>
+        <div id="c{{ acc_id }}" class="accordion-collapse collapse" aria-labelledby="h{{ acc_id }}" data-bs-parent="#dishPlanAccordion">
+          <div class="accordion-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <h6 class="fw-bold">Prepp</h6>
+                {% if g.prep %}
+                  <ul class="list-group list-group-flush small">
+                  {% for p in g.prep %}
+                    <li class="list-group-item d-flex align-items-start gap-2">
+                      <span class="badge {{ 'bg-success' if p.done else 'bg-warning text-dark' }}">{{ '✔' if p.done else '•' }}</span>
+                      <span class="flex-grow-1 {{ 'text-decoration-line-through text-muted' if p.done }}">{{ p.text }}</span>
+                    </li>
+                  {% endfor %}
+                  </ul>
+                {% else %}
+                  <div class="text-muted small">Ingen prepp i denna grupp.</div>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <h6 class="fw-bold">Frysplock</h6>
+                {% if g.frys %}
+                  <ul class="list-group list-group-flush small">
+                  {% for f in g.frys %}
+                    <li class="list-group-item d-flex align-items-start gap-2">
+                      <span class="badge {{ 'bg-success' if f.done else 'bg-info text-dark' }}">{{ '✔' if f.done else '•' }}</span>
+                      <span class="flex-grow-1 {{ 'text-decoration-line-through text-muted' if f.done }}">{{ f.item_name }}{% if f.qty %} ({{ f.qty }} {{ f.unit or '' }}){% endif %}</span>
+                    </li>
+                  {% endfor %}
+                  </ul>
+                {% else %}
+                  <div class="text-muted small">Ingen frysplock i denna grupp.</div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

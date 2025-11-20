@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Weekview Rapport{% endblock %}
+{% block content %}
+<style>
+  .report-wrap { max-width: 1100px; margin: 0 auto; padding: 1rem; font-family: system-ui, sans-serif; }
+  .report-header { display:flex; flex-wrap:wrap; align-items:baseline; gap:0.75rem; }
+  .report-header h1 { margin:0; font-size:1.35rem; }
+  .report-meta { color:#555; font-size:0.85rem; }
+  .dept-card { border:1px solid #e1e4e8; border-radius:12px; padding:0.75rem 1rem; background:#fff; margin-bottom:1rem; }
+  .dept-card h2 { margin:0 0 0.5rem; font-size:1rem; }
+  .coming { font-size:0.9rem; color:#666; margin:1rem 0; }
+  pre.debug { background:#f6f8fa; padding:0.75rem; border-radius:8px; font-size:0.75rem; overflow:auto; }
+</style>
+<div class="report-wrap">
+  <div class="report-header">
+    <h1>Statistik – vecka {{ vm.week }} – {{ vm.site_name }}</h1>
+    {% if vm.department_scope == 'single' and vm.departments and vm.departments|length == 1 %}
+      <span class="report-meta">Avdelning: {{ vm.departments[0].department_name }}</span>
+    {% else %}
+      <span class="report-meta">Alla avdelningar</span>
+    {% endif %}
+  </div>
+  <div class="coming">Coming soon – rapportaggregation (Phase 2.E.1). Detta är endast ett skelett.</div>
+
+  {% for d in vm.departments %}
+    <div class="dept-card">
+      <h2>{{ d.department_name }}</h2>
+      <p class="report-meta">Lunch & Kvällsmat placeholderdata (alla värden = 0).</p>
+    </div>
+  {% else %}
+    <p class="report-meta">Ingen statistik tillgänglig för vecka {{ vm.week }}.</p>
+  {% endfor %}
+
+  <details>
+    <summary>Debug JSON</summary>
+    <pre class="debug">{{ vm | tojson(indent=2) }}</pre>
+  </details>
+</div>
+{% endblock %}

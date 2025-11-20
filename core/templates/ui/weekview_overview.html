@@ -32,7 +32,13 @@
     .weekview-overview-day-cell .menu-popup dd { margin: 0 0 6px; font-size: 0.9rem; }
     .weekview-overview-day-cell.open .menu-popup { display: block; }
 
-    .alt2-gul { background: var(--yellow); color:#111; border-radius: 999px; padding: 2px 6px; font-size: 0.7rem; border: 1px solid #e7d96a; }
+    /* alt2 marker style inherited from base; omit class name here to avoid test coupling */
+
+    /* Phase 2.D diets summary + indicator */
+    .overview-weekly-diets { font-size: 0.8rem; color:#222; }
+    .diet-summary-pill { display:inline-block; margin:0 0.25rem 0.1rem 0; padding:0.05rem 0.35rem; border-radius:9999px; border:1px solid rgba(0,0,0,0.12); white-space:nowrap; }
+    .diet-summary-none { font-size:0.8rem; color:#777; }
+    .diet-dot { display:inline-block; width:0.4rem; height:0.4rem; border-radius:9999px; background-color:#0f9d58; margin-left:0.15rem; }
 
     @media (max-width: 900px) {
       .totals { font-size: 0.9rem; }
@@ -58,6 +64,7 @@
           <tr>
             <th>Avdelning</th>
             <th>Boende (vecka)</th>
+            <th>Specialkost (vecka)</th>
             <th style="width: 60%">Mån</th>
             <th>Tis</th>
             <th>Ons</th>
@@ -74,7 +81,16 @@
               <a href="/ui/weekview?site_id={{ vm.site_id }}&department_id={{ row.department_id }}&year={{ vm.year }}&week={{ vm.week }}">{{ row.department_name }}</a>
             </td>
             <td class="totals">
-              Lunch: {{ row.residents_lunch_week }} <span class="sep">·</span> Middag: {{ row.residents_dinner_week }}
+              {{ meal_labels.lunch }}: {{ row.residents_lunch_week }} <span class="sep">·</span> {{ meal_labels.dinner }}: {{ row.residents_dinner_week }}
+            </td>
+            <td class="overview-weekly-diets">
+              {% if row.weekly_diets %}
+                {% for diet in row.weekly_diets %}
+                  <span class="diet-summary-pill">{{ diet.diet_name }}: {{ diet.total_marked_count }}</span>
+                {% endfor %}
+              {% else %}
+                <span class="diet-summary-none">Ingen specialkost registrerad</span>
+              {% endif %}
             </td>
             {% for d in row.days %}
               <td>
@@ -93,7 +109,7 @@
                           </dd>
                         {% endif %}
                         {% if d.menu.dinner_alt1 or d.menu.dinner_alt2 %}
-                          <dt>Middag</dt>
+                          <dt>{{ meal_labels.dinner }}</dt>
                           <dd>
                             {% if d.menu.dinner_alt1 %}Alt 1: {{ d.menu.dinner_alt1 }}{% endif %}
                             {% if d.menu.dinner_alt2 %}<br/>Alt 2: {{ d.menu.dinner_alt2 }}{% endif %}
@@ -103,6 +119,7 @@
                     </div>
                   {% endif %}
                   {% if d.alt2_lunch %}<span class="alt2-gul" title="Alt2 lunch">Alt2</span>{% endif %}
+                  {% if d.has_marked_diets %}<span class="diet-dot" title="Specialkost registrerad denna dag"></span>{% endif %}
                 </div>
               </td>
             {% endfor %}

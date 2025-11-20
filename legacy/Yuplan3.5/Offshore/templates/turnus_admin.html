@@ -1,0 +1,65 @@
+{% extends 'admin_layout.html' %}
+{% set breadcrumb_current = 'Turnus' %}
+{% block admin_content %}
+  <style>
+    .modern-panel { background: #fff; border-radius: 16px; box-shadow: 0 2px 16px #0001; padding: 1.25rem; }
+    .panel-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+    .panel-header h1 { font-size: 1.6rem; font-weight: 700; color: #222; margin: 0; }
+    .card { border: 1px solid #e0e0e0; border-radius: 12px; padding: 1.25rem; background: #f9f9f9; box-shadow: 0 1px 4px #0001; margin-bottom: 1rem; }
+    label { display:block; margin-top:.4rem; font-weight:500; }
+    input, select { width: 100%; padding:.5rem; margin-top:.2rem; border-radius:6px; border:1px solid #ccc; }
+    .muted { color:#666; font-size: .95rem; }
+  </style>
+  <div class="modern-panel">
+    <div class="panel-header">
+  <img src="{{ url_for('static', filename='Yuplanlogo_offshore.svg') }}" alt="Yuplan" style="height:36px;">
+      <h1>Turnus – Adminpanel</h1>
+    </div>
+    <div>
+      <div class="alert alert-info" role="alert">
+        Denne siden bruker kun den nye enkle motoren. Generer slots direkte nedenfor.
+      </div>
+      <div class="card" style="max-width:1024px;">
+        <h3 style="margin-top:0; font-size:1.1rem;">Generer slots</h3>
+        <form method="post" action="{{ url_for('turnus_generate') }}" class="row g-2">
+          <div class="col-3">
+            <label>Rigg-ID</label>
+            <input name="rig_id" type="number" value="{{ rig_id }}" required>
+          </div>
+          <div class="col-4">
+            <label>Start-fredag</label>
+            <input name="start_friday" type="date" required>
+          </div>
+          <div class="col-3">
+            <label>Uker</label>
+            <input name="weeks" type="number" min="1" max="52" value="6">
+          </div>
+          <div class="col-2">
+            <label>Status</label>
+            <select name="status" class="form-select">
+              <option value="planned">planned</option>
+              <option value="published">published</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <button class="btn btn-primary" type="submit">Generer</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="modern-panel mt-3">
+    <details>
+      <summary style="cursor:pointer; font-weight:600;">Hjelp: Turnus visningsendepunkter</summary>
+      <div class="mt-2">
+        <p class="muted">Appen eksponerer to read-only endepunkter for å hente slots i et tidsintervall:</p>
+        <ul>
+          <li><code>/turnus/preview?rig_id=ID&start=YYYY-MM-DD[THH:MM]&end=YYYY-MM-DD[THH:MM]</code> – returnerer ALLE slots uansett status.</li>
+          <li><code>/turnus/view?rig_id=ID&start=YYYY-MM-DD[THH:MM]&end=YYYY-MM-DD[THH:MM]</code> – returnerer KUN publiserte slots.</li>
+        </ul>
+        <p class="muted">Datoformat: skriv enten dato (<code>2025-09-08</code>) eller dato+tid (<code>2025-09-08T07:00</code>). Intervaller avgrenses inklusivt fra start til slutt.</p>
+      </div>
+    </details>
+  </div>
+{% endblock %}

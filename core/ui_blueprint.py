@@ -13,6 +13,11 @@ ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="st
 SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 
 
+def get_meal_labels_for_site(site_id: str | None) -> dict[str, str]:
+    # Phase 1.1 default mapping (Kommun-style). TODO Phase 2: vary by site/offshore kind.
+    return {"lunch": "Lunch", "dinner": "Kvällsmat"}
+
+
 @ui_bp.get("/workspace")
 @require_roles(*SAFE_UI_ROLES)
 def workspace_ui():
@@ -100,6 +105,8 @@ def weekview_ui():
     summaries = payload.get("department_summaries") or []
     if not summaries:
         vm = {
+            "site_id": site_id,
+            "department_id": department_id,
             "site_name": site_name,
             "department_name": dep_name,
             "year": year,
@@ -107,7 +114,7 @@ def weekview_ui():
             "has_dinner": False,
             "days": [],
         }
-        return render_template("ui/weekview.html", vm=vm)
+        return render_template("ui/weekview.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id), etag=_etag)
     days = summaries[0].get("days") or []
 
     # Build DayVM list
@@ -117,6 +124,9 @@ def weekview_ui():
         mt = d.get("menu_texts") or {}
         lunch = mt.get("lunch", {}) if isinstance(mt, dict) else {}
         dinner = mt.get("dinner", {}) if isinstance(mt, dict) else {}
+        diets = d.get("diets", {}) if isinstance(d, dict) else {}
+        lunch_diets = diets.get("lunch", []) if isinstance(diets, dict) else []
+        dinner_diets = diets.get("dinner", []) if isinstance(diets, dict) else []
         day_vm = {
             "date": d.get("date"),
             "weekday_name": d.get("weekday_name"),
@@ -128,12 +138,32 @@ def weekview_ui():
             "alt2_lunch": bool(d.get("alt2_lunch")),
             "residents_lunch": (d.get("residents", {}) or {}).get("lunch", 0),
             "residents_dinner": (d.get("residents", {}) or {}).get("dinner", 0),
+            "lunch_diets": [
+                {
+                    "diet_type_id": str(x.get("diet_type_id")),
+                    "diet_name": str(x.get("diet_name")),
+                    "resident_count": int(x.get("resident_count", 0) or 0),
+                    "marked": bool(x.get("marked")),
+                }
+                for x in (lunch_diets or [])
+            ],
+            "dinner_diets": [
+                {
+                    "diet_type_id": str(x.get("diet_type_id")),
+                    "diet_name": str(x.get("diet_name")),
+                    "resident_count": int(x.get("resident_count", 0) or 0),
+                    "marked": bool(x.get("marked")),
+                }
+                for x in (dinner_diets or [])
+            ],
         }
         if day_vm["dinner_alt1"] or day_vm["dinner_alt2"]:
             has_dinner = True
         day_vms.append(day_vm)
 
     vm = {
+        "site_id": site_id,
+        "department_id": department_id,
         "site_name": site_name,
         "department_name": dep_name,
         "year": year,
@@ -141,7 +171,8 @@ def weekview_ui():
         "has_dinner": has_dinner,
         "days": day_vms,
     }
-    return render_template("ui/weekview.html", vm=vm)
+    meal_labels = get_meal_labels_for_site(site_id)
+    return render_template("ui/weekview.html", vm=vm, meal_labels=meal_labels, etag=_etag)
 
 
 @ui_bp.get("/ui/weekview_overview")
@@ -176,6 +207,7 @@ def weekview_overview_ui():
         db.close()
 
     # No departments -> empty state
+    meal_labels = get_meal_labels_for_site(site_id)
     if not departments:
         vm = {
             "site_id": site_id,
@@ -186,7 +218,7 @@ def weekview_overview_ui():
             "departments": [],
         }
         _set_prev_next(vm)
-        return render_template("ui/weekview_overview.html", vm=vm)
+        return render_template("ui/weekview_overview.html", vm=vm, meal_labels=meal_labels)
 
     # Build rows by fetching department weekviews (Phase 1: simple N calls)
     tid = session.get("tenant_id")
@@ -202,6 +234,8 @@ def weekview_overview_ui():
         days = (summaries[0].get("days") if summaries else []) or []
         res_l = 0
         res_d = 0
+        # Aggregate weekly diets by diet_type across all days & meals where marked
+        weekly_diets_idx: dict[str, dict[str, object]] = {}
         day_vms = []
         for d in days:
             mt = d.get("menu_texts") or {}
@@ -216,11 +250,35 @@ def weekview_overview_ui():
             r = (d.get("residents") or {})
             res_l += int(r.get("lunch", 0) or 0)
             res_d += int(r.get("dinner", 0) or 0)
+            # Per-day diet indicator: any marked diet in lunch or dinner
+            has_marked_diets = False
+            diets = d.get("diets") or {}
+            for meal_key in ("lunch", "dinner"):
+                rows_m = diets.get(meal_key) or []
+                for it in rows_m:
+                    try:
+                        if bool(it.get("marked")):
+                            has_marked_diets = True
+                            dtid = str(it.get("diet_type_id"))
+                            name = str(it.get("diet_name") or dtid)
+                            cnt = int(it.get("resident_count") or 0)
+                            acc = weekly_diets_idx.get(dtid)
+                            if not acc:
+                                weekly_diets_idx[dtid] = {
+                                    "diet_type_id": dtid,
+                                    "diet_name": name,
+                                    "total_marked_count": cnt,
+                                }
+                            else:
+                                acc["total_marked_count"] = int(acc["total_marked_count"]) + cnt  # type: ignore[index]
+                    except Exception:
+                        continue
             day_vms.append(
                 {
                     "weekday_name": d.get("weekday_name"),
                     "has_menu_icon": has_menu_icon,
                     "alt2_lunch": bool(d.get("alt2_lunch")),
+                    "has_marked_diets": has_marked_diets,
                     # Popup content (simple, derived values)
                     "menu": {
                         "lunch_alt1": lunch.get("alt1"),
@@ -231,12 +289,18 @@ def weekview_overview_ui():
                     },
                 }
             )
+        weekly_diets = list(weekly_diets_idx.values())
+        try:
+            weekly_diets.sort(key=lambda x: (-int(x.get("total_marked_count", 0) or 0), str(x.get("diet_name") or "")))
+        except Exception:
+            pass
         rows.append(
             {
                 "department_id": dep_id,
                 "department_name": dep_name,
                 "residents_lunch_week": res_l,
                 "residents_dinner_week": res_d,
+                "weekly_diets": weekly_diets,
                 "days": day_vms,
             }
         )
@@ -250,7 +314,62 @@ def weekview_overview_ui():
         "has_any_dinner": has_any_dinner,
     }
     _set_prev_next(vm)
-    return render_template("ui/weekview_overview.html", vm=vm)
+    return render_template("ui/weekview_overview.html", vm=vm, meal_labels=meal_labels)
+
+
+@ui_bp.get("/ui/reports/weekview")
+@require_roles(*SAFE_UI_ROLES)
+def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently placeholder
+    site_id = (request.args.get("site_id") or "").strip()
+    department_id = (request.args.get("department_id") or "").strip() or None
+    try:
+        year = int(request.args.get("year", ""))
+        week = int(request.args.get("week", ""))
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Invalid year/week"}), 400
+    if year < 2000 or year > 2100:
+        return jsonify({"error": "bad_request", "message": "Invalid year"}), 400
+    if week < 1 or week > 53:
+        return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = row[0] if row else None
+        if not site_name:
+            return jsonify({"error": "not_found", "message": "Site not found"}), 404
+        departments: list[tuple[str, str]] = []
+        if department_id:
+            r = db.execute(text("SELECT id, name FROM departments WHERE id=:d AND site_id=:s"), {"d": department_id, "s": site_id}).fetchone()
+            if not r:
+                return jsonify({"error": "not_found", "message": "Department not found"}), 404
+            departments = [(str(r[0]), str(r[1]))]
+        else:
+            rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            departments = [(str(r[0]), str(r[1])) for r in rows]
+    finally:
+        db.close()
+    meal_labels = get_meal_labels_for_site(site_id)
+    # Placeholder shape mirroring API skeleton
+    dept_vms = [
+        {
+            "department_id": dep_id,
+            "department_name": dep_name,
+            "meals": {
+                "lunch": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0},
+                "dinner": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0},
+            },
+        }
+        for dep_id, dep_name in departments
+    ]
+    vm = {
+        "site_id": site_id,
+        "site_name": site_name,
+        "department_scope": ("single" if department_id else "all"),
+        "year": year,
+        "week": week,
+        "departments": dept_vms,
+    }
+    return render_template("ui/weekview_report.html", vm=vm, meal_labels=meal_labels)
 
 
 def _set_prev_next(vm: dict) -> None:

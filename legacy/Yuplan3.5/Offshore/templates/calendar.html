@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="mb-3">Årskalender {{ year }}</h2>
+<p class="text-muted">Klikkbare datoer kommer senere. Dager med vakt er markert.</p>
+<div class="row g-3">
+  {% for m in range(1,13) %}
+  <div class="col-md-4">
+    <div class="card shadow-sm">
+      <div class="card-header">{{ ['Jan','Feb','Mar','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Des'][m-1] }}</div>
+      <div class="card-body">
+        <div class="d-flex flex-wrap" style="gap:6px;">
+          {% set days = (31 if m in [1,3,5,7,8,10,12] else (30 if m in [4,6,9,11] else (29 if (year%4==0 and (year%100!=0 or year%400==0)) else 28))) %}
+          {% for d in range(1, days+1) %}
+            {% set iso = (year|string) + '-' + (('%02d' % m)) + '-' + (('%02d' % d)) %}
+            <a href="{{ url_for('day_detail', date_s=iso) }}" class="badge text-decoration-none {% if iso in covered %}text-bg-success{% else %}text-bg-light{% endif %}" style="min-width:36px;">{{ d }}</a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

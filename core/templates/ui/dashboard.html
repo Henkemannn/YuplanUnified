@@ -55,6 +55,57 @@
         </ul>
       </div>
 
+      <div class="card" id="widget-weekview-launch">
+        <h3>Veckovy (parametrar)</h3>
+        <p class="muted">Fyll i Site + Avdelning + År + Vecka. Kräver att feature flag <code>ff.weekview.enabled</code> är aktiv och data finns.</p>
+        <form id="weekview-form" novalidate style="display:flex;flex-direction:column;gap:.5rem;">
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <label style="flex:1;min-width:120px;">Site ID
+              <input name="site_id" required pattern="^[A-Za-z0-9-]+$" placeholder="t.ex. UUID" />
+            </label>
+            <label style="flex:1;min-width:120px;">Avd ID
+              <input name="department_id" required pattern="^[A-Za-z0-9-]+$" placeholder="t.ex. UUID" />
+            </label>
+            <label style="flex:1;min-width:100px;">År
+              <input name="year" required pattern="^[0-9]{4}$" inputmode="numeric" value="2025" />
+            </label>
+            <label style="flex:1;min-width:90px;">Vecka
+              <input name="week" required pattern="^[0-9]{1,2}$" inputmode="numeric" value="47" />
+            </label>
+          </div>
+          <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+            <button type="submit" class="button">Öppna veckovy</button>
+            <span id="weekview-error" class="muted" aria-live="polite"></span>
+            <a class="button subtle" href="/admin/feature_flags" target="_blank" rel="noopener">Visa aktiva feature flags</a>
+          </div>
+        </form>
+        <script>
+        (function(){
+          const form = document.getElementById('weekview-form');
+          const errEl = document.getElementById('weekview-error');
+          form.addEventListener('submit', function(ev){
+            ev.preventDefault();
+            errEl.textContent='';
+            const fd = new FormData(form);
+            const site_id = fd.get('site_id')?.trim();
+            const department_id = fd.get('department_id')?.trim();
+            const year = fd.get('year')?.trim();
+            const week = fd.get('week')?.trim();
+            // Basic validation
+            if(!site_id || !department_id || !year || !week){
+              errEl.textContent='Alla fält krävs.'; return;
+            }
+            if(!/^[A-Za-z0-9-]+$/.test(site_id) || !/^[A-Za-z0-9-]+$/.test(department_id)) { errEl.textContent='Ogiltigt ID-format.'; return; }
+            if(!/^\d{4}$/.test(year)) { errEl.textContent='År måste vara 4 siffror.'; return; }
+            const w = parseInt(week,10);
+            if(!(w>=1 && w<=53)) { errEl.textContent='Vecka måste vara 1-53.'; return; }
+            const url = `/ui/weekview?site_id=${encodeURIComponent(site_id)}&department_id=${encodeURIComponent(department_id)}&year=${encodeURIComponent(year)}&week=${encodeURIComponent(week)}`;
+            window.location.href = url;
+          });
+        })();
+        </script>
+      </div>
+
       <div class="card" id="widget-dept-notes">
         <h3>Avdelningsnotiser</h3>
         <ul>
@@ -83,6 +134,16 @@
       <div class="card" id="widget-shortcuts">
         <h3>Om</h3>
         <p class="muted">Denna dashboard är en enkel skalvy som kan utökas med widgetar och realtidsdata.</p>
+      </div>
+      <div class="card" id="widget-next">
+        <h3>Nästa steg UI</h3>
+        <ul class="muted" style="font-size:.85rem;line-height:1.3;">
+          <li>Dynamisk laddning av veckodata (fetch) med skeleton-state.</li>
+          <li>Global toppmeny (Veckovy, Rapport, Export, Inställningar).</li>
+          <li>Tillgänglighet: ARIA-landmarks + fokusindikatorer.</li>
+          <li>Responsiv layout: stapla kort på mobil.</li>
+          <li>Feature flag badges & snabb toggling (admin).</li>
+        </ul>
       </div>
     </section>
   </div>
