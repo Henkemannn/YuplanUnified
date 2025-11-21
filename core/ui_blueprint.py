@@ -7,6 +7,8 @@ from .auth import require_roles
 from .db import get_session
 from .models import Note, Task, User
 from .weekview.service import WeekviewService
+from datetime import date as _date
+import uuid
 
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
 
@@ -16,6 +18,20 @@ SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 def get_meal_labels_for_site(site_id: str | None) -> dict[str, str]:
     # Phase 1.1 default mapping (Kommun-style). TODO Phase 2: vary by site/offshore kind.
     return {"lunch": "Lunch", "dinner": "Kvällsmat"}
+
+
+def _feature_enabled(name: str) -> bool:
+    try:
+        from flask import g, current_app
+        override = getattr(g, "tenant_feature_flags", {}).get(name)
+        if override is not None:
+            return bool(override)
+        reg = getattr(current_app, "feature_registry", None)
+        if reg is not None:
+            return bool(reg.enabled(name))
+    except Exception:
+        return False
+    return False
 
 
 @ui_bp.get("/workspace")
@@ -349,18 +365,12 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
     finally:
         db.close()
     meal_labels = get_meal_labels_for_site(site_id)
-    # Placeholder shape mirroring API skeleton
-    dept_vms = [
-        {
-            "department_id": dep_id,
-            "department_name": dep_name,
-            "meals": {
-                "lunch": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0},
-                "dinner": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0},
-            },
-        }
-        for dep_id, dep_name in departments
-    ]
+    # Compute using same aggregation as API
+    from .weekview_report_service import compute_weekview_report  # local import to avoid cycles
+    tid = session.get("tenant_id")
+    if not tid:
+        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+    dept_vms = compute_weekview_report(tid, year, week, departments)
     vm = {
         "site_id": site_id,
         "site_name": site_name,
@@ -370,6 +380,121 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
         "departments": dept_vms,
     }
     return render_template("ui/weekview_report.html", vm=vm, meal_labels=meal_labels)
+
+
+@ui_bp.get("/ui/planera/day")
+@require_roles(*SAFE_UI_ROLES)
+def planera_day_ui():
+    if not _feature_enabled("ff.planera.enabled"):
+        from flask import abort
+        return abort(404)
+    site_id = (request.args.get("site_id") or "").strip()
+    date_str = (request.args.get("date") or "").strip()
+    department_id = (request.args.get("department_id") or "").strip() or None
+    if not site_id or not date_str:
+        return render_template("ui/planera_day.html", vm={"error": "invalid_parameters"})
+    try:
+        uuid.UUID(site_id)
+        if department_id:
+            uuid.UUID(department_id)
+        _date.fromisoformat(date_str)
+    except Exception:
+        return render_template("ui/planera_day.html", vm={"error": "invalid_parameters"})
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = row[0] if row else None
+        if not site_name:
+            return render_template("ui/planera_day.html", vm={"error": "not_found"})
+        deps_q = "SELECT id, name FROM departments WHERE site_id=:s"
+        params = {"s": site_id}
+        if department_id:
+            deps_q += " AND id=:d"
+            params["d"] = department_id
+        rows = db.execute(text(deps_q), params).fetchall()
+        if department_id and not rows:
+            return render_template("ui/planera_day.html", vm={"error": "not_found"})
+        from .planera_service import PlaneraService
+        svc = PlaneraService()
+        agg = svc.compute_day(
+            session.get("tenant_id", 0),
+            site_id,
+            date_str,
+            [(str(r[0]), str(r[1])) for r in rows],
+        )
+        departments = agg["departments"]
+        totals = agg["totals"]
+    finally:
+        db.close()
+    vm = {
+        "site_id": site_id,
+        "site_name": site_name,
+        "date": date_str,
+        "departments": departments,
+        "totals": totals,
+    }
+    return render_template("ui/planera_day.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id))
+
+
+@ui_bp.get("/ui/planera/week")
+@require_roles(*SAFE_UI_ROLES)
+def planera_week_ui():
+    if not _feature_enabled("ff.planera.enabled"):
+        from flask import abort
+        return abort(404)
+    site_id = (request.args.get("site_id") or "").strip()
+    try:
+        year = int(request.args.get("year", ""))
+        week = int(request.args.get("week", ""))
+    except Exception:
+        return render_template("ui/planera_week.html", vm={"error": "invalid_parameters"})
+    department_id = (request.args.get("department_id") or "").strip() or None
+    if not site_id or year < 2000 or year > 2100 or week < 1 or week > 53:
+        return render_template("ui/planera_week.html", vm={"error": "invalid_parameters"})
+    try:
+        uuid.UUID(site_id)
+        if department_id:
+            uuid.UUID(department_id)
+    except Exception:
+        return render_template("ui/planera_week.html", vm={"error": "invalid_parameters"})
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = row[0] if row else None
+        if not site_name:
+            return render_template("ui/planera_week.html", vm={"error": "not_found"})
+    finally:
+        db.close()
+    # Department filter groundwork: if provided and valid, restrict aggregation to that department.
+    departments: list[tuple[str, str]] = []
+    db = get_session()
+    try:
+        if department_id:
+            row = db.execute(text("SELECT id, name FROM departments WHERE id=:d AND site_id=:s"), {"d": department_id, "s": site_id}).fetchone()
+            if row:
+                departments = [(str(row[0]), str(row[1]))]
+            else:
+                # Invalid department for site -> treat as not found
+                from flask import abort
+                return abort(404)
+        else:
+            rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s"), {"s": site_id}).fetchall()
+            departments = [(str(r[0]), str(r[1])) for r in rows]
+    finally:
+        db.close()
+    from .planera_service import PlaneraService
+    svc = PlaneraService()
+    agg = svc.compute_week(session.get("tenant_id", 0), site_id, year, week, departments)
+    days = agg["days"]
+    vm = {
+        "site_id": site_id,
+        "site_name": site_name,
+        "year": year,
+        "week": week,
+        "days": days,
+        "department_filter_id": department_id if department_id else None,  # groundwork field for future UI controls
+    }
+    return render_template("ui/planera_week.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id))
 
 
 def _set_prev_next(vm: dict) -> None:
