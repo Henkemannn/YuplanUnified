@@ -386,7 +386,8 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
 @require_roles(*SAFE_UI_ROLES)
 def planera_day_ui():
     if not _feature_enabled("ff.planera.enabled"):
-        return render_template("ui/planera_day.html", vm={"error": "planera_disabled"})
+        from flask import abort
+        return abort(404)
     site_id = (request.args.get("site_id") or "").strip()
     date_str = (request.args.get("date") or "").strip()
     department_id = (request.args.get("department_id") or "").strip() or None
@@ -439,7 +440,8 @@ def planera_day_ui():
 @require_roles(*SAFE_UI_ROLES)
 def planera_week_ui():
     if not _feature_enabled("ff.planera.enabled"):
-        return render_template("ui/planera_week.html", vm={"error": "planera_disabled"})
+        from flask import abort
+        return abort(404)
     site_id = (request.args.get("site_id") or "").strip()
     try:
         year = int(request.args.get("year", ""))
@@ -463,15 +465,26 @@ def planera_week_ui():
             return render_template("ui/planera_week.html", vm={"error": "not_found"})
     finally:
         db.close()
+    # Department filter groundwork: if provided and valid, restrict aggregation to that department.
+    departments: list[tuple[str, str]] = []
+    db = get_session()
+    try:
+        if department_id:
+            row = db.execute(text("SELECT id, name FROM departments WHERE id=:d AND site_id=:s"), {"d": department_id, "s": site_id}).fetchone()
+            if row:
+                departments = [(str(row[0]), str(row[1]))]
+            else:
+                # Invalid department for site -> treat as not found
+                from flask import abort
+                return abort(404)
+        else:
+            rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s"), {"s": site_id}).fetchall()
+            departments = [(str(r[0]), str(r[1])) for r in rows]
+    finally:
+        db.close()
     from .planera_service import PlaneraService
     svc = PlaneraService()
-    agg = svc.compute_week(
-        session.get("tenant_id", 0),
-        site_id,
-        year,
-        week,
-        [],  # TODO(P1.1.1): support optional department filter for week UI similar to API
-    )
+    agg = svc.compute_week(session.get("tenant_id", 0), site_id, year, week, departments)
     days = agg["days"]
     vm = {
         "site_id": site_id,
@@ -479,6 +492,7 @@ def planera_week_ui():
         "year": year,
         "week": week,
         "days": days,
+        "department_filter_id": department_id if department_id else None,  # groundwork field for future UI controls
     }
     return render_template("ui/planera_week.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id))
 
