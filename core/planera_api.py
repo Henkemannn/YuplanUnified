@@ -4,13 +4,33 @@ import uuid
 from datetime import date as _date
 from typing import Any
 
-from flask import Blueprint, jsonify, request, session, make_response
+from flask import Blueprint, jsonify, request, session, make_response, current_app, g
 
 from .auth import require_roles
 from .http_errors import bad_request, not_found
 from .db import get_session
 
 bp = Blueprint("planera_api", __name__, url_prefix="/api")
+_service: "PlaneraService | None" = None
+
+
+def _feature_enabled(name: str) -> bool:
+    override = getattr(g, "tenant_feature_flags", {}).get(name)
+    if override is not None:
+        return bool(override)
+    try:
+        reg = getattr(current_app, "feature_registry", None)
+        if reg is not None:
+            return bool(reg.enabled(name))
+    except Exception:
+        pass
+    return False
+
+
+def _require_planera_enabled():
+    if not _feature_enabled("ff.planera.enabled"):
+        return not_found("planera_disabled")
+    return None
 
 
 def _tenant_id() -> Any:
@@ -20,9 +40,14 @@ def _tenant_id() -> Any:
     return tid
 
 
-def _build_etag(kind: str, parts: list[str]) -> str:
-    base = ":".join(parts)
-    return f'W/"planera:{kind}:{base}"'
+def _build_etag(kind: str, payload: dict) -> str:
+    import json, hashlib
+    try:
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    except Exception:
+        canonical = kind
+    h = hashlib.sha1(canonical.encode()).hexdigest()[:16]
+    return f'W/"planera:{kind}:{h}"'
 
 
 def _conditional(etag: str) -> Any:
@@ -76,6 +101,9 @@ def _empty_meal() -> dict[str, Any]:
 @bp.get("/planera/day")
 @require_roles("admin", "editor", "viewer")
 def get_planera_day():
+    maybe = _require_planera_enabled()
+    if maybe is not None:
+        return maybe
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
@@ -95,26 +123,21 @@ def get_planera_day():
     if not ok:
         return not_found("site_or_department_not_found")
     site_name, deps = ok
+    global _service
+    if _service is None:
+        from .planera_service import PlaneraService
+        _service = PlaneraService()
     meal_labels = _meal_labels(site_id)
-    departments_out = []
-    for d in deps:
-        departments_out.append(
-            {
-                "department_id": d["department_id"],
-                "department_name": d["department_name"],
-                "meals": {"lunch": _empty_meal(), "dinner": _empty_meal()},
-            }
-        )
-    totals = {"lunch": _empty_meal(), "dinner": _empty_meal()}
+    agg = _service.compute_day(tid, site_id, date_str, [(d["department_id"], d["department_name"]) for d in deps])
     payload = {
         "site_id": site_id,
         "site_name": site_name,
         "date": date_str,
         "meal_labels": meal_labels,
-        "departments": departments_out,
-        "totals": totals,
+        "departments": agg["departments"],
+        "totals": agg["totals"],
     }
-    etag = _build_etag("day", [site_id, date_str])
+    etag = _build_etag("day", payload)
     maybe = _conditional(etag)
     if maybe is not None:
         return maybe
@@ -127,6 +150,9 @@ def get_planera_day():
 @bp.get("/planera/week")
 @require_roles("admin", "editor", "viewer")
 def get_planera_week():
+    maybe = _require_planera_enabled()
+    if maybe is not None:
+        return maybe
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
@@ -149,36 +175,22 @@ def get_planera_week():
     if not ok:
         return not_found("site_or_department_not_found")
     site_name, deps = ok
+    global _service
+    if _service is None:
+        from .planera_service import PlaneraService
+        _service = PlaneraService()
     meal_labels = _meal_labels(site_id)
-    departments_ids = [d["department_id"] for d in deps]
-    # Build days array (dummy data)
-    day_objs: list[dict[str, Any]] = []
-    weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    for dow in range(1, 8):
-        date_str = None
-        try:
-            date_str = _date.fromisocalendar(year, week, dow).isoformat()
-        except Exception:
-            date_str = ""
-        day_objs.append(
-            {
-                "day_of_week": dow,
-                "date": date_str,
-                "weekday_name": weekday_names[dow - 1],
-                "meals": {"lunch": _empty_meal(), "dinner": _empty_meal()},
-            }
-        )
-    weekly_totals = {"lunch": _empty_meal(), "dinner": _empty_meal()}
+    agg = _service.compute_week(tid, site_id, year, week, [(d["department_id"], d["department_name"]) for d in deps])
     payload = {
         "site_id": site_id,
         "site_name": site_name,
         "year": year,
         "week": week,
         "meal_labels": meal_labels,
-        "days": day_objs,
-        "weekly_totals": weekly_totals,
+        "days": agg["days"],
+        "weekly_totals": agg["weekly_totals"],
     }
-    etag = _build_etag("week", [site_id, str(year), str(week), ":".join(departments_ids)])
+    etag = _build_etag("week", payload)
     maybe = _conditional(etag)
     if maybe is not None:
         return maybe

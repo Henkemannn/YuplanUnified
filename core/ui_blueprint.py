@@ -385,7 +385,8 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
 @ui_bp.get("/ui/planera/day")
 @require_roles(*SAFE_UI_ROLES)
 def planera_day_ui():
-    # Skeleton: treat feature as enabled even if flag absent.
+    if not _feature_enabled("ff.planera.enabled"):
+        return render_template("ui/planera_day.html", vm={"error": "planera_disabled"})
     site_id = (request.args.get("site_id") or "").strip()
     date_str = (request.args.get("date") or "").strip()
     department_id = (request.args.get("department_id") or "").strip() or None
@@ -412,17 +413,18 @@ def planera_day_ui():
         rows = db.execute(text(deps_q), params).fetchall()
         if department_id and not rows:
             return render_template("ui/planera_day.html", vm={"error": "not_found"})
-        departments = [
-            {
-                "department_id": str(r[0]),
-                "department_name": str(r[1]),
-                "meals": {"lunch": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0}, "dinner": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0}},
-            }
-            for r in rows
-        ]
+        from .planera_service import PlaneraService
+        svc = PlaneraService()
+        agg = svc.compute_day(
+            session.get("tenant_id", 0),
+            site_id,
+            date_str,
+            [(str(r[0]), str(r[1])) for r in rows],
+        )
+        departments = agg["departments"]
+        totals = agg["totals"]
     finally:
         db.close()
-    totals = {"lunch": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0}, "dinner": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0}}
     vm = {
         "site_id": site_id,
         "site_name": site_name,
@@ -436,7 +438,8 @@ def planera_day_ui():
 @ui_bp.get("/ui/planera/week")
 @require_roles(*SAFE_UI_ROLES)
 def planera_week_ui():
-    # Skeleton: treat feature as enabled even if flag absent.
+    if not _feature_enabled("ff.planera.enabled"):
+        return render_template("ui/planera_week.html", vm={"error": "planera_disabled"})
     site_id = (request.args.get("site_id") or "").strip()
     try:
         year = int(request.args.get("year", ""))
@@ -460,23 +463,16 @@ def planera_week_ui():
             return render_template("ui/planera_week.html", vm={"error": "not_found"})
     finally:
         db.close()
-    # Dummy days
-    weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    days = []
-    for dow in range(1, 8):
-        dt_str = ""
-        try:
-            dt_str = _date.fromisocalendar(year, week, dow).isoformat()
-        except Exception:
-            dt_str = ""
-        days.append(
-            {
-                "day_of_week": dow,
-                "date": dt_str,
-                "weekday_name": weekday_names[dow - 1],
-                "meals": {"lunch": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0}, "dinner": {"residents_total": 0, "special_diets": [], "normal_diet_count": 0}},
-            }
-        )
+    from .planera_service import PlaneraService
+    svc = PlaneraService()
+    agg = svc.compute_week(
+        session.get("tenant_id", 0),
+        site_id,
+        year,
+        week,
+        [],  # TODO(P1.1.1): support optional department filter for week UI similar to API
+    )
+    days = agg["days"]
     vm = {
         "site_id": site_id,
         "site_name": site_name,

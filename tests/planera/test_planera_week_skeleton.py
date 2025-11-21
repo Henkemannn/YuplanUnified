@@ -24,6 +24,11 @@ def test_planera_week_api_and_ui_skeleton(client_admin):
         finally:
             db.close()
 
+    # Enable feature flag
+    with app.app_context():
+        reg = getattr(app, "feature_registry", None)
+        if reg and not reg.has("ff.planera.enabled"):
+            reg.add("ff.planera.enabled")
     # API
     r_api = client_admin.get(f"/api/planera/week?site_id={site_id}&year={year}&week={week}", headers=_h("admin"))
     assert r_api.status_code == 200

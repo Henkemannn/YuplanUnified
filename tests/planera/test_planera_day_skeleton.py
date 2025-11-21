@@ -28,7 +28,12 @@ def test_planera_day_api_and_ui_skeleton(client_admin):
         finally:
             db.close()
 
-    # API (feature flag not enforced yet in skeleton)
+    # Enable feature flag
+    with app.app_context():
+        reg = getattr(app, "feature_registry", None)
+        if reg and not reg.has("ff.planera.enabled"):
+            reg.add("ff.planera.enabled")
+    # API
     r_api = client_admin.get(f"/api/planera/day?site_id={site_id}&date={d}&department_id={dep_id}", headers=_h("admin"))
     assert r_api.status_code == 200
     data = r_api.get_json()
