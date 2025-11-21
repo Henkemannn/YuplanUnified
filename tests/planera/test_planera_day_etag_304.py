@@ -26,8 +26,11 @@ def test_planera_day_etag_304(client_admin):
         finally:
             db.close()
         reg = getattr(app, "feature_registry", None)
-        if reg and not reg.has("ff.planera.enabled"):
-            reg.add("ff.planera.enabled")
+        if reg:
+            # Force enable irrespective of prior state
+            if not reg.has("ff.planera.enabled"):
+                reg.add("ff.planera.enabled")
+            reg.set("ff.planera.enabled", True)
 
     r1 = client_admin.get(f"/api/planera/day?site_id={site_id}&date={d}&department_id={dep_id}", headers=_h("admin"))
     assert r1.status_code == 200
