@@ -1,0 +1,286 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block page_title %}Avdelningar{% endblock %}
+
+{% block content %}
+
+<div class="departments-container">
+    
+    <div class="departments-header">
+        <div class="header-content">
+            <h1 class="departments-heading">Avdelningar</h1>
+            {% if vm.site_name %}
+            <p class="departments-subtitle">{{ vm.site_name }}</p>
+            {% endif %}
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('ui.admin_departments_new_form') }}" class="yp-button yp-button-primary">
+                <span class="btn-icon">➕</span>
+                Lägg till avdelning
+            </a>
+        </div>
+    </div>
+    
+    {% if vm.departments %}
+    <div class="departments-table-wrapper">
+        <table class="yp-table departments-table">
+            <thead>
+                <tr>
+                    <th>NAMN</th>
+                    <th>ANTAL BOENDE</th>
+                    <th class="actions-column">ÅTGÄRDER</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dept in vm.departments %}
+                <tr>
+                    <td class="dept-name">{{ dept.name }}</td>
+                    <td class="dept-residents">{{ dept.resident_count_fixed }}</td>
+                    <td class="dept-actions">
+                        <a href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}" 
+                           class="yp-button yp-button-secondary btn-action"
+                           title="Redigera">
+                            ✏️ Redigera
+                        </a>
+                        <form method="POST" 
+                              action="{{ url_for('ui.admin_departments_delete', dept_id=dept.id) }}"
+                              style="display: inline;"
+                              onsubmit="return confirm('Är du säker på att du vill ta bort avdelningen {{ dept.name }}?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="yp-button yp-button-danger btn-action" title="Ta bort">
+                                🗑️ Ta bort
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h3 class="empty-title">Inga avdelningar än</h3>
+        <p class="empty-description">
+            Skapa din första avdelning för att komma igång.
+        </p>
+        <a href="{{ url_for('ui.admin_departments_new_form') }}" class="yp-button yp-button-primary">
+            <span class="btn-icon">➕</span>
+            Lägg till avdelning
+        </a>
+    </div>
+    {% endif %}
+    
+</div>
+
+<style>
+.departments-container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.departments-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-xl);
+    gap: var(--spacing-lg);
+}
+
+.header-content {
+    flex: 1;
+}
+
+.departments-heading {
+    margin: 0 0 var(--spacing-xs) 0;
+    font-size: var(--font-size-xxl);
+    font-weight: 700;
+    color: var(--admin-text-primary);
+}
+
+.departments-subtitle {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    color: var(--admin-text-secondary);
+}
+
+.header-actions {
+    flex-shrink: 0;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    border: none;
+    cursor: pointer;
+    font-size: var(--font-size-base);
+}
+
+.btn-primary {
+    background-color: var(--admin-accent);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--admin-accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.btn-icon {
+    font-size: var(--font-size-lg);
+    font-weight: bold;
+}
+
+.departments-table-wrapper {
+    background-color: var(--admin-bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 4px var(--admin-shadow);
+    overflow: hidden;
+}
+
+.departments-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.departments-table thead {
+    background-color: var(--admin-bg-page);
+}
+
+.departments-table th {
+    padding: var(--spacing-md) var(--spacing-lg);
+    text-align: left;
+    font-weight: 600;
+    color: var(--admin-text-secondary);
+    font-size: var(--font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.departments-table tbody tr {
+    border-top: 1px solid var(--admin-border);
+    transition: background-color var(--transition-fast);
+}
+
+.departments-table tbody tr:hover {
+    background-color: rgba(52, 152, 219, 0.05);
+}
+
+.departments-table td {
+    padding: var(--spacing-lg);
+}
+
+.dept-name {
+    font-weight: 600;
+    color: var(--admin-text-primary);
+}
+
+.dept-residents {
+    color: var(--admin-text-secondary);
+}
+
+.actions-column {
+    width: 250px;
+    text-align: right;
+}
+
+.dept-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: flex-end;
+}
+
+.btn-action {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    border: 1px solid;
+    cursor: pointer;
+    background: none;
+}
+
+.btn-edit {
+    color: var(--admin-accent);
+    border-color: var(--admin-accent);
+}
+
+.btn-edit:hover {
+    background-color: var(--admin-accent);
+    color: white;
+}
+
+.btn-delete {
+    color: #e74c3c;
+    border-color: #e74c3c;
+}
+
+.btn-delete:hover {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-xxl) var(--spacing-xl);
+    background-color: var(--admin-bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 4px var(--admin-shadow);
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: var(--spacing-lg);
+    opacity: 0.3;
+}
+
+.empty-title {
+    margin: 0 0 var(--spacing-sm) 0;
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--admin-text-primary);
+}
+
+.empty-description {
+    margin: 0 0 var(--spacing-xl) 0;
+    color: var(--admin-text-secondary);
+}
+
+@media (max-width: 768px) {
+    .departments-header {
+        flex-direction: column;
+    }
+    
+    .header-actions {
+        width: 100%;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .departments-table-wrapper {
+        overflow-x: auto;
+    }
+    
+    .dept-actions {
+        flex-direction: column;
+    }
+    
+    .btn-action {
+        width: 100%;
+    }
+}
+</style>
+
+{% endblock %}

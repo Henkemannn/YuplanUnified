@@ -28,9 +28,31 @@ _RATE_LIMIT_STORE: dict[str, dict[str, float | int]] = {}
 
 # --- Helpers ---
 
+# TODO[P7A-auth-inventory]: Contracts extracted from tests
+# - Endpoints: POST `/auth/login`, POST `/auth/refresh`, GET `/auth/me`.
+# - Login JSON: `{ok: true, access_token, refresh_token, token_type: "Bearer", expires_in, csrf_token}`.
+# - Refresh JSON: rotates refresh; reusing old refresh_token yields 401 `invalid token`.
+# - CSRF cookie: name `csrf_token`, `SameSite=Strict`, `HttpOnly=false`, `Secure` depends on `TESTING` (off in tests).
+# - Rate limit: failed login attempts return 429 with `Retry-After` header and `{error:"rate_limited"}` envelope.
+# - Unauthorized/Forbidden: use legacy `{ok:false|missing, error|message}` style; 401 `auth required`, 403 includes required role in message.
+# - RBAC adapter: map roles via `roles.to_canonical`; `cook->viewer`, `unit_portal->editor`.
+# - Bearer header should override session when present on protected routes.
+
 
 def _json_error(msg: str, code: int = 400):
     return jsonify({"error": msg, "message": msg}), code
+
+
+def set_csrf_cookie(resp, token: str):
+    """Set CSRF cookie with flags differing for test/dev vs prod.
+
+    Tests expect SameSite=Strict, HttpOnly=false; Secure off in testing.
+    We reuse `set_secure_cookie` to handle Secure based on DEBUG/TESTING,
+    and explicitly set httponly=False, samesite="Strict".
+    """
+    from .cookies import set_secure_cookie
+
+    set_secure_cookie(resp, current_app.config.get("CSRF_COOKIE_NAME", "csrf_token"), token, httponly=False, samesite="Strict")
 
 
 def require_roles(*roles: str):
@@ -94,7 +116,12 @@ def require_roles(*roles: str):
 @bp.post("/login")
 def login():
     # Staging simple auth shortcut (env flag) bypasses normal credential path.
-    if os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes"):
+    # Disabled during TESTING to avoid interfering with auth tests.
+    if (
+        os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes")
+        and current_app.config.get("DEMO_AUTH_ENABLED") is True
+        and not current_app.config.get("TESTING")
+    ):
         data = request.get_json(silent=True) or {}
         role = (data.get("role") or "admin").strip().lower()
         if role not in ("admin", "staff"):
@@ -109,8 +136,17 @@ def login():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
+    # Always issue a CSRF cookie for clients (tests assert cookie presence even on errors)
+    csrf_cookie_name = current_app.config.get("CSRF_COOKIE_NAME", "csrf_token")
+    csrf_token = request.cookies.get(csrf_cookie_name)
+    if not csrf_token:
+        import secrets
+
+        csrf_token = secrets.token_hex(16)
     if not email or not password:
-        return _json_error("missing credentials", 400)
+        resp = make_response(jsonify({"error": "missing credentials", "message": "missing credentials"}), 400)
+        set_csrf_cookie(resp, csrf_token)
+        return resp
     # Rate limiting (simple in-memory). Key by email + remote addr.
     rl_cfg = current_app.config.get(
         "AUTH_RATE_LIMIT", {"window_sec": 300, "max_failures": 5, "lock_sec": 600}
@@ -148,8 +184,11 @@ def login():
                     jsonify({"error": "rate_limited", "message": "rate_limited"}), 429
                 )
                 resp.headers["Retry-After"] = str(lock_sec)
+                set_csrf_cookie(resp, csrf_token)
                 return resp
-            return _json_error("invalid credentials", 401)
+            resp = make_response(jsonify({"error": "invalid credentials", "message": "invalid credentials"}), 401)
+            set_csrf_cookie(resp, csrf_token)
+            return resp
         secrets_list = current_app.config.get("JWT_SECRETS") or []
         primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
         signing_secret = select_signing_secret(primary, secrets_list)
@@ -171,12 +210,7 @@ def login():
         session["role"] = user.role
         session["tenant_id"] = user.tenant_id
         # CSRF token issuance (double submit). Provide if not present already.
-        csrf_cookie_name = current_app.config.get("CSRF_COOKIE_NAME", "csrf_token")
-        csrf_token = request.cookies.get(csrf_cookie_name)
-        if not csrf_token:
-            import secrets
-
-            csrf_token = secrets.token_hex(16)
+        # csrf_token already prepared above
         resp = make_response(
             jsonify(
                 {
@@ -186,12 +220,11 @@ def login():
                     "token_type": "Bearer",
                     "expires_in": DEFAULT_ACCESS_TTL,
                     "csrf_token": csrf_token,
+                    "role": user.role,
                 }
             )
         )
-        from .cookies import set_secure_cookie
-
-        set_secure_cookie(resp, csrf_cookie_name, csrf_token, httponly=False, samesite="Strict")
+        set_csrf_cookie(resp, csrf_token)
         return resp
     finally:
         db.close()
@@ -265,7 +298,11 @@ def logout():
 
 @bp.post("/refresh")
 def refresh():
-    if os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes"):
+    if (
+        os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes")
+        and current_app.config.get("DEMO_AUTH_ENABLED") is True
+        and not current_app.config.get("TESTING")
+    ):
         return _json_error("refresh not supported in demo", 400)
     primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
     secrets_list = current_app.config.get("JWT_SECRETS") or []
@@ -305,6 +342,7 @@ def refresh():
                 "refresh_token": new_refresh,
                 "token_type": "Bearer",
                 "expires_in": DEFAULT_ACCESS_TTL,
+                "role": user.role,
             }
         )
     finally:

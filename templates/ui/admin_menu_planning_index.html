@@ -1,0 +1,99 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block title %}Menyplanering - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Menyplanering</h1>
+    <p class="subtitle">Välj vecka för att visa och redigera Alt 2-val per avdelning</p>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2>Veckoväljare</h2>
+    </div>
+    <div class="card-body">
+        <form method="get" action="{{ url_for('ui.admin_menu_planning_view', year=0, week=0) }}" id="weekForm">
+            <div class="form-group">
+                <label for="year">År</label>
+                <input 
+                    type="number" 
+                    id="year" 
+                    name="year" 
+                    value="{{ vm.current_year }}" 
+                    min="2000" 
+                    max="2100" 
+                    required
+                    class="form-control"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="week">Vecka</label>
+                <input 
+                    type="number" 
+                    id="week" 
+                    name="week" 
+                    value="{{ vm.current_week }}" 
+                    min="1" 
+                    max="53" 
+                    required
+                    class="form-control"
+                >
+                <small class="form-text">ISO-vecka (1-53)</small>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn btn-primary">Visa vecka</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="info-box">
+    <h3>Om menyplanering</h3>
+    <p>
+        I menyplaneringsverktyget kan du:
+    </p>
+    <ul>
+        <li>Se menyer för alla avdelningar för en given vecka</li>
+        <li>Ange vilka avdelningar som använder Alt 2 för varje dag</li>
+        <li>Uppdateringar syns direkt i Weekview-vyn</li>
+    </ul>
+</div>
+
+<script>
+document.getElementById('weekForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const year = document.getElementById('year').value;
+    const week = document.getElementById('week').value;
+    window.location.href = `/ui/admin/menu-planning/week/${year}/${week}`;
+});
+</script>
+
+<style>
+.info-box {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 30px;
+}
+
+.info-box h3 {
+    margin-top: 0;
+    color: #495057;
+    font-size: 1.1rem;
+}
+
+.info-box ul {
+    margin: 10px 0 0 0;
+    padding-left: 20px;
+}
+
+.info-box li {
+    margin-bottom: 8px;
+    color: #6c757d;
+}
+</style>
+{% endblock %}

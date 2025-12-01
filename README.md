@@ -62,6 +62,53 @@ This repository scaffold is the starting point for merging the Municipal (Kommun
 
 - Target runtime is Python 3.11. Newer interpreters (e.g., 3.14) are currently unsupported due to upstream typing changes affecting SQLAlchemy 2.0.x. Use a 3.11 virtual environment locally or run via the Dockerfile.
 
+### Local Dev: Stable Startup (Department Portal)
+
+To avoid repeated reinstall of dependencies and 403 errors on the portal UI:
+
+1. Create the virtual environment once (Python 3.11):
+  ```powershell
+  py -3.11 -m venv .venv
+  ```
+2. Activate for each new terminal/session:
+  ```powershell
+  .\.venv\Scripts\Activate.ps1
+  ```
+3. Install dependencies only when `requirements.txt` changes:
+  ```powershell
+  pip install -r requirements.txt
+  ```
+4. Persist the department portal fallback by adding to `.env` (already appended):
+  ```dotenv
+  DEV_DEPARTMENT_ID=11111111-2222-3333-4444-555555555555
+  ```
+  The app now auto-loads `.env` (via `python-dotenv`) so the debug reloader keeps this value.
+5. Start the app:
+  ```powershell
+  python run.py
+  ```
+6. Visit the portal week view:
+  - UI (HTML): `http://127.0.0.1:5000/ui/portal/department/week?year=2025&week=47`
+  - JSON API (silent refresh): `http://127.0.0.1:5000/portal/department/week?year=2025&week=47`
+
+### Demo Mode (First-Time Evaluation)
+Add `&demo=1` to the UI URL for a smoother first impression when only seed data exists:
+
+`http://127.0.0.1:5000/ui/portal/department/week?year=2025&week=47&demo=1`
+
+In demo mode:
+- Silent refresh runs automatically and a single auto-retry of a menuval sparning (Alt1/Alt2) happens after en konflikt (412).
+- Konfliktmeddelandet använder mildare text (fokus på uppdatering i stället för att blockera).
+- Du slipper direkt behöva klicka “Ladda om” om testdata är äldre än din vy.
+
+Omit `demo=1` to test the full optimistic concurrency & manual konfliktflöde.
+
+If you see a 403 on the UI page it means `DEV_DEPARTMENT_ID` was not loaded—confirm it exists in `.env` and you are running under Python 3.11 with the venv activated. Avoid deleting `.venv` unless changing Python major version.
+
+### Why Not Python 3.14 Yet?
+SQLAlchemy 2.0.x introduces forward-typing assumptions that are unstable under 3.14 preview builds, causing internal type errors in dev. Sticking to 3.11 ensures stable imports, consistent test results (387 passing), and avoids unnecessary environment rebuilds.
+
+
 
 ## Staging quickstart
 - Access and demo guardrails: see `docs/staging-access.md` (simple auth, CSRF, DEMO_UI)

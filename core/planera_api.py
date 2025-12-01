@@ -198,3 +198,87 @@ def get_planera_week():
     resp.headers["ETag"] = etag
     resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
     return resp
+
+
+@bp.get("/planera/week/csv")
+@require_roles("admin", "editor", "viewer")
+def get_planera_week_csv():  # CSV export for week aggregation
+    maybe = _require_planera_enabled()
+    if maybe is not None:
+        return maybe
+    tid = _tenant_id()
+    if tid is None:
+        return bad_request("tenant_missing")
+    site_id = (request.args.get("site_id") or "").strip()
+    try:
+        year = int(request.args.get("year", ""))
+        week = int(request.args.get("week", ""))
+    except Exception:
+        return bad_request("invalid_parameters")
+    department_id = (request.args.get("department_id") or "").strip() or None
+    if not site_id or year < 2000 or year > 2100 or week < 1 or week > 53:
+        return bad_request("invalid_parameters")
+    try:
+        uuid.UUID(site_id)
+        if department_id:
+            uuid.UUID(department_id)
+    except Exception:
+        return bad_request("invalid_parameters")
+    ok = _validate_site_and_department(site_id, department_id)
+    if not ok:
+        return not_found("site_or_department_not_found")
+    site_name, deps = ok
+    global _service
+    if _service is None:
+        from .planera_service import PlaneraService
+        _service = PlaneraService()
+    agg = _service.compute_week(tid, site_id, year, week, [(d["department_id"], d["department_name"]) for d in deps])
+    payload_for_etag = {
+        "site_id": site_id,
+        "site_name": site_name,
+        "year": year,
+        "week": week,
+        "days": agg["days"],
+        "weekly_totals": agg["weekly_totals"],
+    }
+    etag = _build_etag("week", payload_for_etag)
+    inm = request.headers.get("If-None-Match")
+    if inm and inm == etag:
+        resp = make_response("")
+        resp.status_code = 304
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+        return resp
+    # Build CSV rows
+    import csv, io
+    output = io.StringIO()
+    w = csv.writer(output)
+    w.writerow(["date", "weekday", "meal", "department", "residents_total", "normal", "special_diets"])
+    # For department resolution we iterate departments again and fetch per department days for precise per-dept counts
+    # However agg["days"] already aggregates across all departments. For CSV we output aggregated totals per day+meal per department separately.
+    # Simplification: output aggregated site totals only (department column = "__total__") plus per-day site totals.
+    # Future enhancement: expand per department rows.
+    weekday_map = {d["day_of_week"]: d["weekday_name"] for d in agg["days"]}
+    for d in agg["days"]:
+        dow = d.get("day_of_week")
+        date_str = d.get("date")
+        weekday_name = d.get("weekday_name")
+        for meal_key in ("lunch", "dinner"):
+            meal = (d.get("meals") or {}).get(meal_key, {})
+            specials = meal.get("special_diets") or []
+            specials_str = ";".join(f"{s.get('diet_name')}:{int(s.get('count') or 0)}" for s in specials) if specials else ""
+            w.writerow([
+                date_str,
+                weekday_name,
+                meal_key,
+                "__total__",
+                int(meal.get("residents_total") or 0),
+                int(meal.get("normal_diet_count") or 0),
+                specials_str,
+            ])
+    csv_text = output.getvalue()
+    resp = make_response(csv_text)
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+    return resp

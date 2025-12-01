@@ -21,6 +21,10 @@ ROLE_MAP: dict[AppRole, CanonicalRole] = {
     "unit_portal": "editor",  # elevated edit capabilities within a unit
 }
 
+# TODO[P7A-auth-inventory]: Tests assume these mappings for RBAC checks and
+# forbidden envelopes. Ensure any UI/admin route decorators use canonical roles
+# (`viewer`, `editor`, `admin`, `superuser`) and do not require legacy labels.
+
 
 def to_canonical(role: RoleLike) -> CanonicalRole:
     if role in ROLE_MAP:  # type: ignore[operator]

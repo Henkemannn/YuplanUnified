@@ -2,7 +2,17 @@
 {% block title %}Planera – vecka{% endblock %}
 {% block content %}
 <div class="planera-wrap" style="max-width:1100px;margin:0 auto;padding:1rem;font-family:system-ui,sans-serif;">
-  <h1>Planera – vecka {{ vm.week }}</h1>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+    <h1 style="margin:0;">Planera – vecka {{ vm.week }}</h1>
+    <div style="display:flex;gap:0.5rem;">
+      {% set q_params = {'site_id': vm.site_id, 'year': vm.year, 'week': vm.week} %}
+      {% if vm.department_filter_id %}
+        {% set q_params = {'site_id': vm.site_id, 'year': vm.year, 'week': vm.week, 'department_id': vm.department_filter_id} %}
+      {% endif %}
+      <a href="/api/planera/week/csv?site_id={{ q_params.site_id }}&year={{ q_params.year }}&week={{ q_params.week }}{% if q_params.department_id %}&department_id={{ q_params.department_id }}{% endif %}" class="export-csv-btn" style="font-size:0.75rem;padding:6px 10px;border:1px solid #888;border-radius:4px;text-decoration:none;background:#fafafa;">Exportera CSV</a>
+      <button onclick="window.print()" class="print-button" style="font-size:0.75rem;padding:6px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;">Skriv ut</button>
+    </div>
+  </div>
   {% if vm.disabled %}
     <p>Planera är inte aktiverad.</p>
   {% elif vm.error %}
@@ -42,4 +52,5 @@
     </table>
   {% endif %}
 </div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/planera_print.css') }}" media="print">
 {% endblock %}

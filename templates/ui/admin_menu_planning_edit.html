@@ -1,0 +1,278 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block title %}Redigera Vecka {{ vm.week }}/{{ vm.year }} - Menyplanering{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <div class="header-flex">
+        <div>
+            <h1>Redigera Menyschema – Vecka {{ vm.week }}, {{ vm.year }}</h1>
+            <p class="subtitle">Välj Alt 2 för avdelningar och dagar</p>
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('ui.admin_menu_planning_view', year=vm.year, week=vm.week) }}" class="yp-button yp-button-secondary">
+                ✖ Avbryt
+            </a>
+        </div>
+    </div>
+</div>
+
+{% if vm.departments|length == 0 %}
+<div class="empty-state">
+    <p>Inga avdelningar hittades.</p>
+    <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-primary">➕ Skapa avdelningar</a>
+</div>
+{% else %}
+<form method="POST" action="{{ url_for('ui.admin_menu_planning_save', year=vm.year, week=vm.week) }}" class="edit-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+    
+    <div class="card">
+        <div class="card-header">
+            <h2>Alt 2-inställningar</h2>
+            <p class="help-text">Markera de dagar där varje avdelning ska använda alternativ 2. Dagar utan markering använder alternativ 1 (standard).</p>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="yp-table menu-planning-edit-table">
+                    <thead>
+                        <tr>
+                            <th class="dept-col">AVDELNING</th>
+                            {% for day in vm.days %}
+                            <th class="day-col">
+                                <div class="day-header">
+                                    <span class="weekday">{{ day.weekday_name }}</span>
+                                    <span class="date">{{ day.date }}</span>
+                                </div>
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dept in vm.departments %}
+                        <tr>
+                            <td class="dept-name">
+                                {{ dept.name }}
+                                <input type="hidden" name="departments[]" value="{{ dept.id }}" />
+                            </td>
+                            {% for day in vm.days %}
+                            <td class="checkbox-cell">
+                                <div class="checkbox-wrapper">
+                                    <input 
+                                        type="checkbox" 
+                                        name="alt2[{{ dept.id }}][{{ day.dow }}]" 
+                                        id="alt2_{{ dept.id }}_{{ day.dow }}"
+                                        class="yp-checkbox"
+                                        {% if dept.alt2_days[day.dow] %}checked{% endif %}
+                                    />
+                                    <label for="alt2_{{ dept.id }}_{{ day.dow }}" class="sr-only">
+                                        Alt 2 för {{ dept.name }} {{ day.weekday_name }}
+                                    </label>
+                                </div>
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="yp-button yp-button-primary">
+            💾 Spara ändringar
+        </button>
+        <a href="{{ url_for('ui.admin_menu_planning_view', year=vm.year, week=vm.week) }}" class="yp-button yp-button-secondary">
+            ✖ Avbryt
+        </a>
+    </div>
+</form>
+
+<div class="instructions-box">
+    <h3>Tips</h3>
+    <ul>
+        <li>Markera kryssrutor för dagar där avdelningen ska använda <strong>alternativ 2</strong>.</li>
+        <li>Tomma rutor betyder att avdelningen använder <strong>alternativ 1</strong> (standardalternativet).</li>
+        <li>Ändringar sparas först när du klickar "Spara ändringar".</li>
+        <li>Dessa inställningar visas automatiskt i veckobilden för respektive avdelning.</li>
+    </ul>
+</div>
+{% endif %}
+
+<style>
+.header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.help-text {
+    margin: 10px 0 0 0;
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.menu-planning-edit-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.menu-planning-edit-table th,
+.menu-planning-edit-table td {
+    padding: 12px 8px;
+    text-align: center;
+    border: 1px solid #dee2e6;
+}
+
+.menu-planning-edit-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.dept-col {
+    min-width: 150px;
+    text-align: left !important;
+}
+
+.day-col {
+    min-width: 100px;
+}
+
+.day-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.weekday {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.date {
+    font-size: 11px;
+    color: #6c757d;
+}
+
+.dept-name {
+    font-weight: 500;
+    text-align: left !important;
+}
+
+.checkbox-cell {
+    background: #fff;
+}
+
+.checkbox-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.checkbox-wrapper input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+.form-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.btn-lg {
+    padding: 12px 24px;
+    font-size: 1rem;
+}
+
+.instructions-box {
+    margin-top: 20px;
+    padding: 15px;
+    background: #e7f3ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 8px;
+}
+
+.instructions-box h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    color: #004085;
+}
+
+.instructions-box ul {
+    margin: 10px 0 0 0;
+    padding-left: 20px;
+}
+
+.instructions-box li {
+    margin-bottom: 8px;
+    color: #004085;
+}
+
+@media (max-width: 768px) {
+    .header-flex {
+        flex-direction: column;
+    }
+
+    .header-actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .menu-planning-edit-table {
+        font-size: 12px;
+    }
+
+    .menu-planning-edit-table th,
+    .menu-planning-edit-table td {
+        padding: 8px 4px;
+    }
+
+    .dept-col {
+        min-width: 120px;
+    }
+
+    .day-col {
+        min-width: 80px;
+    }
+
+    .checkbox-wrapper input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .btn-lg {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}

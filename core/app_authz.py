@@ -1,6 +1,14 @@
 """Pocket 6 - Authorization helpers.
 
-Copilot prompt: Refactor require_roles(*roles) to raise AuthzError(403) with required_role (canonical) instead of returning a Response. Map RoleLike→Canonical via roles.to_canonical. Remove Response unions.
+Copilot prompt: Refactor require_roles(*roles) to raise AuthzError(403) with
+required_role (canonical) instead of returning a Response. Map RoleLike→Canonical
+via roles.to_canonical. Remove Response unions.
+
+TODO[P7A-auth-inventory]: Expectations from tests
+- RBAC mapping must use canonical roles; `cook->viewer`, `unit_portal->editor`.
+- 403 handling should expose `required_role` (canonical) for envelope builders.
+- Session absence should raise centralized unauthorized for 401 with problem-details style in non-auth routes.
+- Keep compatibility with legacy auth endpoints that use `{ok:false,error,message}`.
 """
 
 from __future__ import annotations

@@ -1,0 +1,205 @@
+{% extends "_base.html" %}
+{% block title %}Avdelningsportal – Vecka {{ vm.week }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portal_department_week.css') }}">
+{% endblock %}
+{% block content %}
+<div id="portal-dept-week-root" class="portal-dept-week"
+  {% if request.args.get('demo') == '1' %}data-disable-conflict="1"{% endif %}
+  data-year="{{ vm.year }}"
+  data-week="{{ vm.week }}"
+  data-menu-choice-etag="{{ vm.etag_map.menu_choice }}">
+  <header class="portal-header">
+    <div>
+      <h1>Vecka {{ vm.week }} – {{ vm.department_name }}</h1>
+      <p class="portal-subtitle">{{ vm.site_name }}</p>
+    </div>
+    <div class="portal-week-nav">
+      <a href="{{ url_for('portal_dept_ui.portal_department_week_ui', year=vm.year, week=vm.week-1) }}">← Föregående vecka</a>
+      <span>|</span>
+      <a href="{{ url_for('portal_dept_ui.portal_department_week_ui', year=vm.year, week=vm.week+1) }}">Nästa vecka →</a>
+    </div>
+  </header>
+
+  <section class="portal-facts">
+    <h2>Faktaruta</h2>
+    {% if vm.facts.note %}
+      <p>{{ vm.facts.note }}</p>
+    {% else %}
+      <p class="portal-facts-empty">Ingen särskild information angiven.</p>
+    {% endif %}
+    <div class="portal-facts-residents">
+      {% if vm.facts.residents_default_lunch %}
+        <span>Standard lunch: {{ vm.facts.residents_default_lunch }} boende</span>
+      {% endif %}
+      {% if vm.facts.residents_default_dinner %}
+        <span>Standard kväll: {{ vm.facts.residents_default_dinner }} boende</span>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="portal-progress">
+    <p>Valda dagar: {{ vm.progress.days_with_choice }} / {{ vm.progress.total_days }}</p>
+  </section>
+
+  <div class="portal-week-status" aria-label="Översikt valda dagar" aria-live="polite">
+    <div class="portal-week-status-label">Valda dagar:</div>
+    <div class="portal-week-dots" role="list">
+      {% for day in vm.days %}
+        <div class="portal-week-dot{% if day.choice.selected_alt %} chosen{% endif %}" role="listitem" aria-label="{{ day.weekday_name }}{% if day.choice.selected_alt %} vald{% else %} ej vald{% endif %}"></div>
+      {% endfor %}
+    </div>
+    <div class="portal-week-status-count">{{ vm.progress.days_with_choice }} / {{ vm.progress.total_days }}</div>
+    <div id="portal-sync-indicator" class="portal-sync-indicator">Synkad</div>
+  </div>
+
+  <section class="portal-week-table-wrapper">
+    <table class="portal-week-table">
+      <thead>
+        <tr>
+          <th>Dag</th>
+          <th>Meny</th>
+          <th>Alt 1</th>
+          <th>Alt 2</th>
+          <th>Dessert</th>
+          <th>Kvällsmat</th>
+          <th>Boende (Lunch/Kväll)</th>
+          <th>Specialkost</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for day in vm.days %}
+          {% set menu = day.menu %}
+          {% set choice = day.choice %}
+          {% set flags = day.flags %}
+          {% set residents = day.residents %}
+          {% set diets = day.diets_summary %}
+          <tr class="portal-day-row">
+            <td class="portal-day-name">
+              <div>{{ day.weekday_name }}</div>
+              <div class="portal-day-date">{{ day.date }}</div>
+              {% if flags.alt2_lunch %}
+                <div class="portal-badge-alt2">ALT2 DRIFT</div>
+              {% endif %}
+            </td>
+            <td class="portal-menu-cell">
+              <button
+                type="button"
+                class="portal-menu-btn"
+                data-weekday="{{ day.weekday_name }}"
+                data-date="{{ day.date }}"
+                data-lunch-alt1="{{ menu.lunch_alt1 or '' }}"
+                data-lunch-alt2="{{ menu.lunch_alt2 or '' }}"
+                data-dessert="{{ menu.dessert or '' }}"
+                data-kvallsmat="{{ menu.dinner or '' }}"
+                aria-label="Visa meny för {{ day.weekday_name }}"
+              >🍽</button>
+            </td>
+            <td
+              class="portal-alt-cell portal-alt1-cell {% if choice.selected_alt == 'Alt1' %}portal-alt-selected{% endif %}"
+              data-weekday="{{ day.weekday_name }}"
+              data-selected-alt="Alt1"
+              role="button"
+              tabindex="0"
+              aria-pressed="{{ 'true' if choice.selected_alt == 'Alt1' else 'false' }}"
+              aria-label="Välj Alt 1 för {{ day.weekday_name }}"
+            >
+              {{ menu.lunch_alt1 or "Ingen menytext" }}
+            </td>
+            <td
+              class="portal-alt-cell portal-alt2-cell {% if choice.selected_alt == 'Alt2' %}portal-alt-selected{% endif %}"
+              data-weekday="{{ day.weekday_name }}"
+              data-selected-alt="Alt2"
+              role="button"
+              tabindex="0"
+              aria-pressed="{{ 'true' if choice.selected_alt == 'Alt2' else 'false' }}"
+              aria-label="Välj Alt 2 för {{ day.weekday_name }}"
+            >
+              {{ menu.lunch_alt2 or "Ingen menytext" }}
+            </td>
+            <td class="portal-dessert-cell">
+              {{ menu.dessert or "Ingen dessert" }}
+            </td>
+            <td class="portal-dinner-cell">
+              {{ menu.dinner or "Ingen kvällsmat" }}
+            </td>
+            <td class="portal-residents-cell">
+              Lunch: {{ residents.lunch }}<br>
+              Kväll: {{ residents.dinner }}
+            </td>
+            <td class="portal-diets-cell">
+              {% if diets.lunch or diets.dinner %}
+                {% if diets.lunch %}
+                  <div><strong>Lunch:</strong>
+                    {% for d in diets.lunch %}
+                      {{ d.diet_name }} [{{ d.count }}]{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if diets.dinner %}
+                  <div><strong>Kväll:</strong>
+                    {% for d in diets.dinner %}
+                      {{ d.diet_name }} [{{ d.count }}]{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              {% else %}
+                <span>Ingen specialkost registrerad.</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div id="portal-status-message" class="portal-status" aria-live="polite"></div>
+    <!-- Menu overlay temporarily removed for demo/dev -->
+    <!--
+    <div id="portal-menu-overlay" class="portal-menu-overlay" hidden>
+      <div class="portal-menu-modal" role="dialog" aria-modal="true" aria-labelledby="portal-menu-title" tabindex="-1">
+        <div class="portal-menu-modal-header">
+          <h2 id="portal-menu-title">Meny</h2>
+          <button type="button" class="portal-menu-close-btn" aria-label="Stäng meny">✕</button>
+        </div>
+        <div class="portal-menu-modal-body">
+          <p class="portal-menu-day"></p>
+          <div class="portal-menu-section">
+            <h3>Lunch – Alt 1</h3>
+            <p class="portal-menu-lunch-alt1"></p>
+          </div>
+          <div class="portal-menu-section">
+            <h3>Lunch – Alt 2</h3>
+            <p class="portal-menu-lunch-alt2"></p>
+          </div>
+          <div class="portal-menu-section">
+            <h3>Dessert</h3>
+            <p class="portal-menu-dessert"></p>
+          </div>
+          <div class="portal-menu-section">
+            <h3>Kvällsmat</h3>
+            <p class="portal-menu-kvallsmat"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+    -->
+  </section>
+  <!-- Conflict overlay permanently removed for demo/dev -->
+  <!--
+  <div id="portal-conflict-overlay" class="portal-conflict-overlay" hidden style="display:none">
+    <div class="portal-conflict-modal" role="dialog" aria-modal="true" aria-labelledby="portal-conflict-title" aria-describedby="portal-conflict-desc">
+      <h2 id="portal-conflict-title">Informationen är utdaterad</h2>
+      <p id="portal-conflict-desc">En annan användare har gjort ändringar. Ladda om sidan för att fortsätta.</p>
+      <p id="portal-conflict-info" class="portal-conflict-info" hidden></p>
+      <div class="portal-conflict-actions">
+        <button id="portal-conflict-try-refresh" type="button">Försök igen</button>
+        <button id="portal-conflict-reload" type="button" autofocus>Ladda om</button>
+        <button id="portal-conflict-dismiss" type="button">Fortsätt ändå</button>
+      </div>
+    </div>
+  </div>
+  -->
+</div>
+{% endblock %}
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/portal_department_week.js') }}" defer></script>
+{% endblock %}

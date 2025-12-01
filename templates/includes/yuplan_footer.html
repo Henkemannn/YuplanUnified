@@ -1,0 +1,24 @@
+{# Global Yuplan Unified Footer Macro #}
+{% macro yuplan_footer(build_info=None) %}
+<footer class="yp-global-footer" role="contentinfo">
+  <div class="yp-global-footer__container">
+    {# Left: Copyright + Product Name #}
+    <div class="yp-global-footer__copyright">
+      <strong>Yuplan Unified</strong> · © 2025 · För pilotbruk
+    </div>
+
+    {# Center: Build Info (if available) #}
+    {% if build_info %}
+      <div class="yp-global-footer__build">
+        <span class="yp-global-footer__build-label">Build:</span>
+        <span class="yp-global-footer__build-value">{{ build_info }}</span>
+      </div>
+    {% endif %}
+
+    {# Right: Support Hint #}
+    <div class="yp-global-footer__support">
+      Support: kontakta systemansvarig eller Yuplan
+    </div>
+  </div>
+</footer>
+{% endmacro %}

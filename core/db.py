@@ -73,7 +73,65 @@ def create_all() -> (
 ):  # dev helper ONLY for fresh ephemeral DBs (tests, scratch). Use Alembic in normal flows.
     if _engine is None:
         raise RuntimeError("Engine not initialized")
+    # For sqlite test runs we want a clean schema each invocation to avoid
+    # primary key collisions when tests call create_all() multiple times.
+    if _engine.dialect.name == "sqlite":
+        try:
+            Base.metadata.drop_all(_engine)
+        except Exception:
+            pass
     Base.metadata.create_all(_engine)
+    # Align SQLite test schema with production migrations for specific tables
+    try:
+        if _engine.dialect.name == "sqlite":
+            with _engine.connect() as conn:
+                # Helper: get existing columns for a table
+                def _cols(table: str) -> set[str]:
+                    rows = conn.execute(text(f"PRAGMA table_info('{table}')")).fetchall()
+                    return {str(r[1]) for r in rows}
+
+                # MENUS: add status + updated_at if missing
+                try:
+                    if "menus" in {r[0] for r in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}:
+                        mcols = _cols("menus")
+                        if "status" not in mcols:
+                            conn.execute(text("ALTER TABLE menus ADD COLUMN status TEXT NOT NULL DEFAULT 'draft'"))
+                        if "updated_at" not in mcols:
+                            conn.execute(text("ALTER TABLE menus ADD COLUMN updated_at TEXT NULL"))
+                        # Ensure existing rows have a non-null updated_at to support ETag generation
+                        conn.execute(text("UPDATE menus SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP) WHERE updated_at IS NULL"))
+                except Exception:
+                    pass
+
+                # USERS: add username, full_name, is_active if missing; ensure unique(username)
+                try:
+                    if "users" in {r[0] for r in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}:
+                        ucols = _cols("users")
+                        if "username" not in ucols:
+                            conn.execute(text("ALTER TABLE users ADD COLUMN username TEXT"))
+                        if "full_name" not in ucols:
+                            conn.execute(text("ALTER TABLE users ADD COLUMN full_name TEXT NULL"))
+                        if "is_active" not in ucols:
+                            conn.execute(text("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"))
+                        # Create a unique index for username if it doesn't exist
+                        try:
+                            idx_rows = conn.execute(text("SELECT name FROM sqlite_master WHERE type='index' AND name='ux_users_username'"))
+                            has_idx = idx_rows.fetchone() is not None
+                        except Exception:
+                            has_idx = False
+                        if not has_idx:
+                            # Only create the index if column exists now
+                            if "username" in _cols("users"):
+                                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_username ON users(username)"))
+                        # Backfill is_active to 1 where NULL (defensive if prior partial rows exist)
+                        conn.execute(text("UPDATE users SET is_active = COALESCE(is_active, 1) WHERE is_active IS NULL"))
+                except Exception:
+                    pass
+
+                conn.commit()
+    except Exception:
+        # Silent: tests that rely on these columns will reveal issues if misaligned
+        pass
     # Test/dev fallback: create raw admin tables when using sqlite and migrations aren't applied.
     try:
         if _engine.dialect.name == "sqlite":  # lightweight fallback for tests
@@ -126,6 +184,34 @@ def create_all() -> (
                         PRIMARY KEY (site_id, department_id, week, weekday)
                     )
                 """))
+                # Weekview Alt2 flags table (legacy/weekview compatibility)
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
+                        tenant_id TEXT NOT NULL,
+                        department_id TEXT NOT NULL,
+                        year INTEGER NOT NULL,
+                        week INTEGER NOT NULL,
+                        day_of_week INTEGER NOT NULL,
+                        is_alt2 INTEGER NOT NULL DEFAULT 0,
+                        UNIQUE (tenant_id, department_id, year, week, day_of_week)
+                    )
+                """))
+                # Weekview items table (for menus)
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS weekview_items (
+                        id TEXT PRIMARY KEY,
+                        tenant_id INTEGER NOT NULL,
+                        department_id TEXT NOT NULL,
+                        local_date TEXT NOT NULL,
+                        meal TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        notes TEXT,
+                        status TEXT,
+                        version INTEGER NOT NULL DEFAULT 0,
+                        updated_at TEXT
+                    )
+                """))
+                conn.commit()
     except Exception:
         # Silent fallback – tests will surface issues if schema still missing.
         pass

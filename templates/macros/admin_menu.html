@@ -1,0 +1,76 @@
+{#
+  Admin Menu Import UI Macros
+  Shared components for menu-import admin templates
+#}
+
+{# Flash messages macro with consistent styling and reload link for conflicts #}
+{% macro render_flash_messages() %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="admin-flash admin-flash-{{ category }}">
+                    {{ message }}
+                    {% if 'Konflikt:' in message %}
+                        <a href="#" class="reload-link" data-action="reload">Ladda om sidan</a>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+{% endmacro %}
+
+{# Status banner for week view showing draft/published state #}
+{% macro render_status_banner(menu_status, year, week, etag, csrf_token) %}
+    <div class="admin-status-banner">
+        <div>
+            {% if menu_status == 'published' %}
+                <span class="admin-status-badge admin-status-published">
+                    ✓ Status: Publicerad
+                </span>
+            {% else %}
+                <span class="admin-status-badge admin-status-draft">
+                    ⚠ Status: Utkast
+                </span>
+            {% endif %}
+        </div>
+        <div class="admin-actions-group">
+            <a href="{{ url_for('admin_ui.admin_menu_import_week_edit', year=year, week=week) }}" class="admin-btn-primary">Redigera meny</a>
+            
+            {% if menu_status == 'draft' %}
+                <form action="{{ url_for('admin_ui.admin_menu_import_week_publish', year=year, week=week) }}" method="POST" class="admin-form-protect" style="display: inline;">
+                    {{ csrf_token | safe }}
+                    <input type="hidden" name="_etag" value="{{ etag }}">
+                    <button type="submit" class="admin-btn-primary" style="background-color: #28a745;">Publicera vecka</button>
+                </form>
+            {% elif menu_status == 'published' %}
+                <form action="{{ url_for('admin_ui.admin_menu_import_week_unpublish', year=year, week=week) }}" method="POST" class="admin-form-protect" style="display: inline;">
+                    {{ csrf_token | safe }}
+                    <input type="hidden" name="_etag" value="{{ etag }}">
+                    <button type="submit" class="admin-btn-secondary">Återgå till utkast</button>
+                </form>
+            {% endif %}
+            
+            <a href="{{ url_for('admin_ui.admin_menu_import') }}" class="admin-btn-secondary">Tillbaka</a>
+        </div>
+    </div>
+{% endmacro %}
+
+{# Page header with title and optional subtitle #}
+{% macro render_page_header(title, subtitle=none) %}
+    <div class="admin-header">
+        <h1>{{ title }}</h1>
+        {% if subtitle %}
+            <p class="admin-subtitle">{{ subtitle }}</p>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{# Card container for sections #}
+{% macro render_card(title=none) %}
+    <section class="admin-card">
+        {% if title %}
+            <h3>{{ title }}</h3>
+        {% endif %}
+        {{ caller() }}
+    </section>
+{% endmacro %}

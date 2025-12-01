@@ -36,9 +36,12 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
+    username: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True)
     email: Mapped[str] = mapped_column(String(200), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(50))  # admin, unit_portal, cook, superuser
+    full_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     unit_id: Mapped[Optional[int]] = mapped_column(ForeignKey("units.id"), nullable=True)
     refresh_token_jti: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
@@ -74,6 +77,8 @@ class Menu(Base):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     week: Mapped[int] = mapped_column(Integer)
     year: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class MenuVariant(Base):

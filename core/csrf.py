@@ -30,6 +30,7 @@ FORM_FIELD = "csrf_token"
 # Endpoint (blueprint) prefixes to enforce (incremental rollout)
 ENFORCED_PREFIXES = [
     "/diet/",
+    "/ui/admin/menu-import/",
 ]
 
 EXEMPT_PREFIXES = [
