@@ -1,0 +1,54 @@
+:root {
+  /* Reuse existing design tokens from unified_ui.css; override if needed */
+}
+
+.portal-layout {
+  background: var(--yp-color-bg, #fafafa);
+  color: var(--yp-color-fg, #222);
+  font-family: system-ui, sans-serif;
+  padding: var(--yp-gap, 1rem);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.portal-header { margin-bottom: var(--yp-gap, 1rem); }
+.portal-title { font-size: var(--yp-font-size-large, 1.6rem); margin: 0 0 .25rem; }
+.portal-subtitle { margin: 0 0 .25rem; font-weight: 500; }
+.portal-date { font-size: .9rem; color: var(--yp-color-muted, #666); }
+
+.portal-day-grid {
+  display: grid;
+  gap: var(--yp-gap, 1rem);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.portal-day-card {
+  padding: var(--yp-gap, 1rem);
+  border-radius: var(--yp-radius, 8px);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+.portal-day-card.is-today { outline: 3px solid var(--yp-color-primary, #0b74de); }
+.day-header { border-bottom: 1px solid #eee; padding-bottom: .25rem; }
+.day-heading { font-size: 1rem; margin: 0; display:flex; justify-content:space-between; align-items:center; }
+.day-date { font-size: .75rem; color: var(--yp-color-muted, #666); }
+
+.meal-block { display: flex; flex-direction: column; gap: .4rem; }
+.meal-label { font-size: .8rem; letter-spacing:.5px; text-transform: uppercase; margin:0; color: var(--yp-color-muted,#555); }
+.meal-dish { font-weight: 600; margin:0; }
+.meal-alt2, .meal-dessert { font-size:.85rem; margin:0; color:#444; }
+.meal-meta { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; font-size:.75rem; }
+.residents { font-weight:500; }
+.diets-row { display:flex; flex-wrap:wrap; gap:.3rem; }
+.diet-pill { font-size:.65rem; background:#f4f4f4; }
+
+.portal-footer { margin-top: 2rem; }
+.portal-actions { display:flex; flex-wrap:wrap; gap:.75rem; }
+.portal-actions .yp-button { min-height:48px; display:inline-flex; align-items:center; }
+
+@media (max-width: 640px) {
+  .portal-layout { padding: .75rem; }
+  .portal-day-grid { gap: .75rem; }
+  .portal-day-card { padding: .75rem; }
+}

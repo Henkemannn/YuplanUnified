@@ -278,6 +278,135 @@ def weekview_ui():
     return render_template("ui/unified_weekview.html", vm=vm, meal_labels=meal_labels)
 
 
+# ============================================================================
+# Department Portal (Phase 1) - Read-only week view for a single department
+# ============================================================================
+
+@ui_bp.get("/portal/week")
+@require_roles(*SAFE_UI_ROLES)
+def portal_week():
+    """Tablet-first, read-only department week view.
+
+    Query params:
+      site_id, department_id, year, week (year/week optional -> default current ISO week)
+    RBAC: admin, superuser, cook, unit_portal -> 200; viewer blocked via decorator.
+    """
+    site_id = (request.args.get("site_id") or "").strip()
+    department_id = (request.args.get("department_id") or "").strip()
+
+    # Default year/week to current ISO week if missing
+    today = _date.today()
+    iso = today.isocalendar()
+    current_year, current_week = iso[0], iso[1]
+    try:
+        year = int(request.args.get("year", current_year))
+        week = int(request.args.get("week", current_week))
+    except Exception:
+        year, week = current_year, current_week
+
+    # Resolve site & department names (same pattern as weekview_ui)
+    db = get_session()
+    try:
+        site_name = None
+        dep_name = None
+        if site_id:
+            row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
+            site_name = row[0] if row else None
+        if department_id:
+            row = db.execute(text("SELECT name FROM departments WHERE id = :id"), {"id": department_id}).fetchone()
+            dep_name = row[0] if row else None
+        if not site_name or not dep_name:
+            return jsonify({"error": "not_found", "message": "Site or department not found"}), 404
+    finally:
+        db.close()
+
+    tid = session.get("tenant_id")
+    if not tid:
+        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+
+    svc = WeekviewService()
+    payload, _etag = svc.fetch_weekview(tid, year, week, department_id)
+    summaries = payload.get("department_summaries") or []
+    days_raw = (summaries[0].get("days") if summaries else []) or []
+
+    # Meal registrations (read-only flags)
+    reg_repo = MealRegistrationRepo()
+    try:
+        reg_repo.ensure_table_exists()
+        regs = reg_repo.get_registrations_for_week(tid, site_id, department_id, year, week)
+    except Exception:
+        regs = []
+    reg_map = {(r["date"], r["meal_type"]): bool(r.get("registered")) for r in regs}
+
+    day_vms = []
+    has_dinner = False
+    for d in days_raw:
+        date_str = d.get("date")
+        dow = d.get("day_of_week")
+        weekday_name = d.get("weekday_name")
+        menu_texts = d.get("menu_texts") or {}
+        lunch = menu_texts.get("lunch", {})
+        dinner = menu_texts.get("dinner", {})
+        if dinner.get("alt1") or dinner.get("alt2"):
+            has_dinner = True
+
+        # Residents counts
+        residents_map = d.get("residents", {}) or {}
+        residents_lunch = int(residents_map.get("lunch", 0) or 0)
+        residents_dinner = int(residents_map.get("dinner", 0) or 0)
+
+        # Registration flags
+        lunch_registered = reg_map.get((date_str, "lunch"), False)
+        dinner_registered = reg_map.get((date_str, "dinner"), False)
+
+        # Default diets from enriched days (lunch meal list)
+        default_diets: list[dict] = []
+        diets_obj = d.get("diets", {}) or {}
+        lunch_diets = diets_obj.get("lunch") or []
+        try:
+            for it in lunch_diets:
+                cnt = int(it.get("resident_count") or 0)
+                if cnt > 0:
+                    default_diets.append({"name": str(it.get("diet_name") or it.get("diet_type_id")), "count": cnt})
+        except Exception:
+            pass
+        # Sort diets by count desc then name
+        try:
+            default_diets.sort(key=lambda x: (-int(x.get("count", 0) or 0), str(x.get("name") or "")))
+        except Exception:
+            pass
+
+        day_vms.append(
+            {
+                "day_of_week": dow,
+                "date": date_str,
+                "weekday_name": weekday_name,
+                "menu": {
+                    "lunch": {k: v for k, v in lunch.items() if k in ("alt1", "alt2", "dessert")},
+                    "dinner": {k: v for k, v in dinner.items() if k in ("alt1", )},
+                },
+                "alt2_lunch": bool(d.get("alt2_lunch")),
+                "residents": {"lunch": residents_lunch, "dinner": residents_dinner},
+                "registered": {"lunch": lunch_registered, "dinner": dinner_registered},
+                "default_diets": default_diets,
+                "is_today": (date_str == today.isoformat()),
+            }
+        )
+
+    vm = {
+        "site_id": site_id,
+        "department_id": department_id,
+        "site_name": site_name,
+        "department_name": dep_name,
+        "year": year,
+        "week": week,
+        "current_date": today.isoformat(),
+        "days": day_vms,
+        "has_dinner": has_dinner,
+    }
+    return render_template("portal_week.html", vm=vm)
+
+
 @ui_bp.post("/ui/weekview/registration")
 @require_roles(*SAFE_UI_ROLES)
 def weekview_registration_save():
