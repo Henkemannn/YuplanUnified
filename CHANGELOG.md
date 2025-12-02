@@ -50,6 +50,15 @@
 - Gate ensuring pilot endpoints emit `application/problem+json` when flag enabled
 ## Unreleased
 
+### Added
+- Unified Portal – Department Week View (Phase 2 UI)
+	- New `templates/unified_portal_week.html` template wired to existing vm/route
+	- Unified design tokens, responsive 1/2/3 column layout
+	- Accessibility improvements (role/button/tabindex/aria-label)
+	- Resilient scroll-to-today and keyboard interactions
+	- Added `docs/portal_department_week.md` and screenshot placeholders
+	- Phase 2 UI test suite (subset 58/58 passed)
+
 ### Features
 - feat(core): RFC7807 full adoption — all endpoints return ProblemDetails. Standardized 429 includes `Retry-After` header and `retry_after` body field; 401/403 carry appropriate details, 422 includes `errors[]`, and 500 emits `incident_id`.
 
