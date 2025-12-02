@@ -404,7 +404,7 @@ def portal_week():
         "days": day_vms,
         "has_dinner": has_dinner,
     }
-    return render_template("portal_week.html", vm=vm)
+    return render_template("unified_portal_week.html", vm=vm)
 
 
 @ui_bp.post("/ui/weekview/registration")
