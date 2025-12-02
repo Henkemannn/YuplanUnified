@@ -1391,3 +1391,6 @@ The script `scripts/set_superuser.py` no longer contains a hardcoded password. I
     - `env: { YUPLAN_SUPERUSER_PASSWORD: ${{ secrets.YUPLAN_SUPERUSER_PASSWORD }} }`
 
 Important: Never commit secrets. `.gitignore` already ignores `.env*`, `secrets.*`, and `credentials.*` files.
+
+### Unified Portal – Department Week View
+See `docs/portal_department_week.md` for the unified portal department week view (Avdelningsvy/Veckovy).
