@@ -12,7 +12,7 @@
 </head>
 <body>
 <header class="yp-header">
-  <div class="yp-header__title">Avdelningsvy</div>
+  <div class="yp-header__title">Avdelningsportalen</div>
   <div class="yp-header__meta">
     <span>Vecka {{ vm.week }}, {{ vm.year }}</span>
     <span>• {{ vm.department_name }}</span>
@@ -67,6 +67,9 @@
         {% if day.menu.lunch.dessert %}
         <div class="meal-text meal-text--dessert">{{ day.menu.lunch.dessert }}</div>
         {% endif %}
+         {% if day.residents.lunch and day.residents.lunch > 0 %}
+         <div class="residents-count">Boende: {{ day.residents.lunch }}</div>
+         {% endif %}
         {% if day.default_diets and day.default_diets|length > 0 %}
         <div class="meal-diets" aria-hidden="true">
           {% for d in day.default_diets %}

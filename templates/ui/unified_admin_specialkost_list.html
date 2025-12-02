@@ -1,0 +1,50 @@
+{% extends "ui/unified_admin_base.html" %}
+{% block page_title %}Specialkost{% endblock %}
+{% block content %}
+<div class="admin-header">
+  <h1>Specialkost</h1>
+  <div class="header-actions">
+    <a href="{{ url_for('ui.admin_specialkost_new_form') }}" class="yp-button yp-button-primary">Lägg till ny kosttyp</a>
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-messages">
+    {% for category, message in messages %}
+    <div class="flash flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+<div class="card">
+  <div class="card-body">
+    <table class="yp-table">
+      <thead>
+        <tr>
+          <th>Namn</th>
+          <th>Förinställd</th>
+          <th>Åtgärder</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in vm.diet_types %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td>{{ "✓" if row.default_select else "" }}</td>
+          <td>
+            <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}">Redigera</a>
+            <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" style="display:inline">
+              <button type="submit" class="yp-button yp-button-danger">Ta bort</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3">Inga kosttyper hittades.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
