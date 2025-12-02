@@ -59,6 +59,12 @@
 	- Added `docs/portal_department_week.md` and screenshot placeholders
 	- Phase 2 UI test suite (subset 58/58 passed)
 
+- Unified Portal – Department Week View (Phase 3 navigation)
+	- Meal blocks now navigate to `/ui/planera/day` using existing route and vm data
+	- No backend/API changes; target route remains behind `ff.planera.enabled`
+	- Navigation implemented via `openMealDetails(dayKey, mealType)` in `static/unified_portal.js`
+	- UI tests extended in `tests/ui/test_portal_department_week_ui_phase3.py` (subset 59/59 passed)
+
 ### Features
 - feat(core): RFC7807 full adoption — all endpoints return ProblemDetails. Standardized 429 includes `Retry-After` header and `retry_after` body field; 401/403 carry appropriate details, 422 includes `errors[]`, and 500 emits `incident_id`.
 
