@@ -1,0 +1,111 @@
+{% from 'macros/admin_menu.html' import render_flash_messages %}
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redigera Meny Vecka {{ vm.week }}/{{ vm.year }} - Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    <style>
+        .edit-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        .edit-table th {
+            background-color: #f5f5f5;
+            padding: 0.75rem;
+            text-align: left;
+            border: 1px solid #ddd;
+            font-weight: 600;
+        }
+        .edit-table td {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+        }
+        .edit-table input[type="text"] {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .edit-table input[type="text"]:focus {
+            outline: none;
+            border-color: #0066cc;
+        }
+        .day-header {
+            background-color: #e8f4f8;
+            font-weight: 600;
+            padding: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <h2>Redigera meny för vecka {{ vm.week }}, {{ vm.year }}</h2>
+        
+        {{ render_flash_messages() }}
+        
+        <p style="color: #666; margin-bottom: 1.5rem;">
+            Redigera rätterna nedan. Tomma fält tillåts (rätten tas bort).
+        </p>
+        
+        <!-- Edit form -->
+        <form action="{{ url_for('admin_ui.admin_menu_import_week_save', year=vm.year, week=vm.week) }}" method="POST" class="admin-form admin-form-protect">
+            {{ csrf_token_input() | safe }}
+            <input type="hidden" name="_etag" value="{{ vm.etag }}">
+            
+            {% set days = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"] %}
+            {% set meals_variants = [
+                ("Lunch", "alt1", "Alt 1"),
+                ("Lunch", "alt2", "Alt 2"),
+                ("Lunch", "dessert", "Dessert"),
+                ("Kväll", "kvall", "Kvällsmat")
+            ] %}
+            
+            <table class="edit-table">
+                <thead>
+                    <tr>
+                        <th style="width: 15%;">Dag</th>
+                        <th style="width: 15%;">Måltid</th>
+                        <th style="width: 70%;">Rätt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for day in days %}
+                        {% for meal, variant_type, display_name in meals_variants %}
+                            {% set day_data = vm.days.get(day, {}) %}
+                            {% set meal_data = day_data.get(meal, {}) %}
+                            {% set variant_info = meal_data.get(variant_type, {}) %}
+                            {% set current_dish = variant_info.get('dish_name', '') %}
+                            
+                            <tr>
+                                {% if loop.first %}
+                                    <td rowspan="4" class="day-header">{{ day }}</td>
+                                {% endif %}
+                                <td>{{ display_name }}</td>
+                                <td>
+                                    <input 
+                                        type="text" 
+                                        name="{{ day }}_{{ meal }}_{{ variant_type }}"
+                                        value="{{ current_dish }}"
+                                        placeholder="Ange rättens namn..."
+                                    >
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            <!-- Action buttons -->
+            <div class="admin-form-actions" style="margin-top: 2rem; display: flex; gap: 1rem;">
+                <button type="submit" class="admin-btn-primary">Spara ändringar</button>
+                <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week) }}" class="admin-btn-secondary">Avbryt</a>
+            </div>
+        </form>
+    </div>
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+</body>
+</html>

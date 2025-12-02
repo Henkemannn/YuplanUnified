@@ -395,6 +395,134 @@ class DietDefaultsRepo:
             db.close()
 
 
+class DietTypesRepo:
+    """Repository for managing dietary types (specialkost)."""
+
+    def list_all(self, tenant_id: int = 1) -> list[dict]:
+        """List all dietary types for a tenant."""
+        db = get_session()
+        try:
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS dietary_types (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            tenant_id INTEGER NOT NULL,
+                            name TEXT NOT NULL,
+                            default_select INTEGER NOT NULL DEFAULT 0
+                        )
+                        """
+                    )
+                )
+            rows = db.execute(
+                text("SELECT id, name, default_select FROM dietary_types WHERE tenant_id=:t ORDER BY name"),
+                {"t": tenant_id},
+            ).fetchall()
+            return [
+                {"id": int(r[0]), "name": str(r[1]), "default_select": bool(r[2])}
+                for r in rows
+            ]
+        finally:
+            db.close()
+
+    def get_by_id(self, diet_type_id: int) -> dict | None:
+        """Get a single dietary type by ID."""
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT id, tenant_id, name, default_select FROM dietary_types WHERE id=:id"),
+                {"id": diet_type_id},
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "id": int(row[0]),
+                "tenant_id": int(row[1]),
+                "name": str(row[2]),
+                "default_select": bool(row[3]),
+            }
+        finally:
+            db.close()
+
+    def create(self, tenant_id: int, name: str, default_select: bool = False) -> int:
+        """Create a new dietary type, return ID."""
+        db = get_session()
+        try:
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS dietary_types (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            tenant_id INTEGER NOT NULL,
+                            name TEXT NOT NULL,
+                            default_select INTEGER NOT NULL DEFAULT 0
+                        )
+                        """
+                    )
+                )
+                db.execute(
+                    text(
+                        "INSERT INTO dietary_types(tenant_id, name, default_select) VALUES(:t, :n, :d)"
+                    ),
+                    {"t": tenant_id, "n": name, "d": 1 if default_select else 0},
+                )
+                row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
+                new_id = int(row[0]) if row else 0
+            else:
+                res = db.execute(
+                    text(
+                        "INSERT INTO dietary_types(tenant_id, name, default_select) VALUES(:t, :n, :d) RETURNING id"
+                    ),
+                    {"t": tenant_id, "n": name, "d": default_select},
+                )
+                row = res.fetchone()
+                new_id = int(row[0]) if row else 0
+            db.commit()
+            return new_id
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def update(self, diet_type_id: int, name: str | None = None, default_select: bool | None = None) -> None:
+        """Update dietary type name and/or default_select. TODO: Add ETag concurrency."""
+        db = get_session()
+        try:
+            sets = []
+            params: dict = {"id": diet_type_id}
+            if name is not None:
+                sets.append("name=:name")
+                params["name"] = name
+            if default_select is not None:
+                sets.append("default_select=:ds")
+                params["ds"] = 1 if default_select else 0
+            if not sets:
+                return
+            sql = f"UPDATE dietary_types SET {', '.join(sets)} WHERE id=:id"
+            db.execute(text(sql), params)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def delete(self, diet_type_id: int) -> None:
+        """Delete a dietary type by ID."""
+        db = get_session()
+        try:
+            db.execute(text("DELETE FROM dietary_types WHERE id=:id"), {"id": diet_type_id})
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+
 class Alt2Repo:
     def bulk_upsert(self, flags: Iterable[dict]) -> list[dict]:
         """Idempotent bulk upsert for alt2 flags.

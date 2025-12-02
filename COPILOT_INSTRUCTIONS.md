@@ -2,6 +2,35 @@
 
 This file gives the AI assistant (Copilot) the full context needed to continue implementing the unified Yuplan platform without re-reading legacy repos.
 
+---
+
+## ⚡ YUPLAN UNIFIED – BRANDING RULES (DO NOT VIOLATE)
+
+### 1. Logo
+- **Use ONLY:** `{{ url_for('static', filename='img/logo-proposal.svg') }}`
+- In all headers, wrap it in `.yp-header-brand` and set `class="yp-logo"`.
+- **Desktop/tablet:** height 28px, max 32px, width auto, object-fit: contain.
+- **Mobile:** height 22px, max 24px.
+- **Never** stretch the logo, never scale by percentage, never create new logo files.
+
+### 2. Colors
+- **Use ONLY CSS variables** from `unified_ui.css` (see `BRANDING.md`).
+- **Do NOT hardcode new hex colors** in components.
+
+### 3. Layout
+- All main pages must have:
+  - `.yp-global-header` with logo + "Yuplan Unified".
+  - `.yp-global-footer` with © 2025 and support text.
+- Use `.yp-card`, `.yp-button*`, `.yp-table`, `.yp-badge*`, `.yp-form`, `.yp-input`, `.yp-checkbox` everywhere.
+
+### 4. No new branding
+- **Do NOT invent** new palettes, gradients, or logos.
+- Follow `BRANDING.md` exactly.
+
+**📖 Full spec:** See `BRANDING.md` in project root.
+
+---
+
 ## 1. Mission
 Merge two legacy Flask+SQLite apps (Municipal & Offshore) into a single multi-tenant, modular platform. Core provides menus, diets, attendance, users, tenants, import/export. Optional modules add: turnus scheduling, waste metrics, prep/freezer tasks, messaging, alt1/alt2 workflow.
 

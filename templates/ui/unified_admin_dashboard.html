@@ -1,0 +1,95 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block page_title %}Översikt{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-container">
+    
+    <div class="dashboard-welcome">
+        <h1 class="dashboard-heading">Välkommen till Adminpanelen</h1>
+        <p class="dashboard-subtitle">
+            Hantera meny, avdelningar, användare och inställningar från en plats.
+        </p>
+    </div>
+    
+    <!-- Quick Links Grid -->
+    <div class="quick-links-grid">
+        
+        <!-- Card 1: Menu Import -->
+        <article class="quick-link-card">
+            <div class="card-icon">📋</div>
+            <h3 class="card-title">Menyimport & Veckomeny</h3>
+            <p class="card-description">
+                Importera meny från Excel och granska veckomeny.
+            </p>
+            <a href="#" class="card-action disabled" title="Kommer snart">
+                Öppna →
+            </a>
+        </article>
+        
+        <!-- Card 2: Departments -->
+        <article class="quick-link-card">
+            <div class="card-icon">🏢</div>
+            <h3 class="card-title">Avdelningar</h3>
+            <p class="card-description">
+                Se och redigera avdelningar och boendetal.
+            </p>
+            <a href="{{ url_for('ui.admin_departments_list') }}" class="card-action">
+                Öppna →
+            </a>
+        </article>
+        
+        <!-- Card 3: Users -->
+        <article class="quick-link-card">
+            <div class="card-icon">👥</div>
+            <h3 class="card-title">Användare</h3>
+            <p class="card-description">
+                Hantera användarkonton och roller.
+            </p>
+            <a href="#" class="card-action disabled" title="Kommer snart">
+                Öppna →
+            </a>
+        </article>
+        
+        <!-- Card 4: Reports -->
+        <article class="quick-link-card">
+            <div class="card-icon">📊</div>
+            <h3 class="card-title">Rapporter</h3>
+            <p class="card-description">
+                Exportera rapporter för registreringar och portioner.
+            </p>
+            <a href="#" class="card-action disabled" title="Kommer snart">
+                Öppna →
+            </a>
+        </article>
+        
+        <!-- Card 5: Settings -->
+        <article class="quick-link-card">
+            <div class="card-icon">⚙️</div>
+            <h3 class="card-title">Inställningar</h3>
+            <p class="card-description">
+                Konfigurera systemet och preferenser.
+            </p>
+            <a href="#" class="card-action disabled" title="Kommer snart">
+                Öppna →
+            </a>
+        </article>
+        
+        <!-- Card 6: Back to Weekview -->
+        <article class="quick-link-card quick-link-secondary">
+            <div class="card-icon">📅</div>
+            <h3 class="card-title">Tillbaka till Veckovy</h3>
+            <p class="card-description">
+                Gå tillbaka till veckoregistrering.
+            </p>
+            <a href="{{ url_for('ui.weekview_ui') }}" class="card-action">
+                Öppna →
+            </a>
+        </article>
+        
+    </div>
+    
+</div>
+
+{% endblock %}

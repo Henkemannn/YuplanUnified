@@ -1,0 +1,42 @@
+{% extends "_base.html" %}
+{% block title %}Redigera Kosttyp – Admin{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+{% block content %}
+<div class="admin-container">
+  <header class="admin-header">
+    <h1>Redigera Kosttyp</h1>
+    <p class="admin-subtitle">{{ vm.diet_type.name }}</p>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="admin-flash-messages">
+        {% for category, message in messages %}
+          <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" class="admin-form">
+    <div class="admin-form-group">
+      <label for="name">Kosttypsnamn</label>
+      <input type="text" id="name" name="name" value="{{ vm.diet_type.name }}" required>
+    </div>
+
+    <div class="admin-form-group">
+      <label>
+        <input type="checkbox" id="default_select" name="default_select" {% if vm.diet_type.default_select %}checked{% endif %}>
+        Förinställd (förvalt vid ny användare)
+      </label>
+    </div>
+
+    <div class="admin-form-actions">
+      <button type="submit" class="admin-btn-primary">Spara</button>
+      <a href="{{ url_for('admin_ui.admin_specialkost_list') }}" class="admin-btn-secondary">Avbryt</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

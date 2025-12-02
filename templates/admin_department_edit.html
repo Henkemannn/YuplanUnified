@@ -1,0 +1,45 @@
+{% extends "_base.html" %}
+{% block title %}Redigera Avdelning – Admin{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+{% block content %}
+<div class="admin-container">
+  <header class="admin-header">
+    <h1>Redigera Avdelning</h1>
+    <p class="admin-subtitle">{{ vm.department.name }}</p>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="admin-flash-messages">
+        {% for category, message in messages %}
+          <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" class="admin-form">
+    <div class="admin-form-group">
+      <label for="name">Avdelningsnamn</label>
+      <input type="text" id="name" name="name" value="{{ vm.department.name }}" required>
+    </div>
+
+    <div class="admin-form-group">
+      <label for="resident_count_fixed">Boendeantal (fast antal)</label>
+      <input type="number" id="resident_count_fixed" name="resident_count_fixed" value="{{ vm.department.resident_count_fixed }}" min="0">
+    </div>
+
+    <div class="admin-form-group">
+      <label for="notes">Faktaruta / Anteckningar</label>
+      <textarea id="notes" name="notes" rows="5">{{ vm.department.notes }}</textarea>
+    </div>
+
+    <div class="admin-form-actions">
+      <button type="submit" class="admin-btn-primary">Spara</button>
+      <a href="{{ url_for('admin_ui.admin_departments_list') }}" class="admin-btn-secondary">Avbryt</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

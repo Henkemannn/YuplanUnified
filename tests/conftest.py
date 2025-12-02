@@ -83,16 +83,42 @@ def app_session(tmp_path_factory):
     create_app, create_all, Tenant = _lazy_imports()
     db_file = tmp_path_factory.mktemp("db") / "test_app.db"
     url = f"sqlite:///{db_file}"
+    
+    # Enable SQLite bootstrap for test environments
+    os.environ["YP_ENABLE_SQLITE_BOOTSTRAP"] = "1"
+    
     app = create_app(
         {"TESTING": True, "SECRET_KEY": "test", "database_url": url, "FORCE_DB_REINIT": True}
     )
     with app.app_context():
         create_all()
-        # Seed a tenant with id=1
+        
+        # MANUAL MIGRATION: Add Phase 3 user management columns
+        # Required because Python 3.14 incompatibility prevents updating models
         from core.db import get_session
-
+        from sqlalchemy import text
+        
         db = get_session()
         try:
+            # Check if username column exists, if not add Phase 3 columns
+            cursor = db.execute(text("PRAGMA table_info(users)"))
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if "username" not in columns:
+                # Add new columns
+                db.execute(text("ALTER TABLE users ADD COLUMN username VARCHAR(100)"))
+                db.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR(200)"))
+                db.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1"))
+                
+                # Update existing users to have username = email
+                db.execute(text("UPDATE users SET username = email WHERE username IS NULL"))
+                
+                # Create unique index
+                db.execute(text("CREATE UNIQUE INDEX ix_users_username_unique ON users(username)"))
+                
+                db.commit()
+            
+            # Seed a tenant with id=1
             if not db.query(Tenant).first():
                 db.add(Tenant(name="TestTenant"))
                 db.commit()
@@ -101,24 +127,39 @@ def app_session(tmp_path_factory):
     return app
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def client_admin(app_session):
-    return app_session.test_client()
+    c = app_session.test_client()
+    # Ensure clean base environ to avoid leakage of test_claims between tests
+    c.environ_base = {}
+    return c
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def client_user(app_session):
-    return app_session.test_client()
+    c = app_session.test_client()
+    c.environ_base = {}
+    return c
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def client_superuser(app_session):
-    return app_session.test_client()
+    c = app_session.test_client()
+    c.environ_base = {}
+    return c
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def client_no_tenant(app_session):
     c = app_session.test_client()
+    c.environ_base = {}
+    return c
+
+
+@pytest.fixture(scope="function")
+def client_cook(app_session):
+    c = app_session.test_client()
+    c.environ_base = {}
     return c
 
 

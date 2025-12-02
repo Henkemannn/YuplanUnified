@@ -1,0 +1,59 @@
+{% extends "_base.html" %}
+{% block title %}Specialkost – Admin{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+{% block content %}
+<div class="admin-container">
+  <header class="admin-header">
+    <h1>Specialkost</h1>
+    <p class="admin-subtitle">Hantera kosttyper och förinställningar</p>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="admin-flash-messages">
+        {% for category, message in messages %}
+          <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="admin-actions" style="margin-bottom: 1rem;">
+    <a href="{{ url_for('admin_ui.admin_specialkost_new') }}" class="admin-btn-primary">Lägg till ny kosttyp</a>
+  </div>
+
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Namn</th>
+        <th>Förinställd</th>
+        <th>Åtgärder</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for dt in vm.diet_types %}
+      <tr>
+        <td>{{ dt.name }}</td>
+        <td>{% if dt.default_select %}Ja{% else %}Nej{% endif %}</td>
+        <td>
+          <a href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" class="admin-link-btn">Redigera</a>
+          <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" style="display:inline;" onsubmit="return confirm('Är du säker på att du vill ta bort denna kosttyp?');">
+            <button type="submit" class="admin-link-btn admin-btn-danger">Ta bort</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="3" class="admin-empty">Inga kosttyper hittades.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="admin-actions">
+    <a href="{{ url_for('admin_ui.admin_dashboard') }}" class="admin-btn-secondary">Tillbaka till Dashboard</a>
+  </div>
+</div>
+{% endblock %}

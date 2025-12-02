@@ -1,0 +1,668 @@
+/**
+ * Unified Weekview - Phase 3 Styles
+ * Now uses unified design system tokens from unified_ui.css
+ * Includes Phase 2 (registration) and Phase 3 (usability) enhancements
+ */
+
+:root {
+  /* Weekview-specific colors (using unified tokens where possible) */
+  --wv-color-primary: var(--yp-color-success);
+  --wv-color-primary-hover: var(--yp-color-success-dark);
+  --wv-color-alt2-bg: var(--yp-color-warning-light);
+  --wv-color-alt2-border: var(--yp-color-warning);
+  --wv-color-alt2-text: var(--yp-color-warning-dark);
+  --wv-color-border: var(--yp-color-border);
+  --wv-color-text: var(--yp-color-text);
+  --wv-color-text-muted: var(--yp-color-text-muted);
+  --wv-color-bg-card: var(--yp-color-bg-elevated);
+  --wv-color-bg-hover: var(--yp-color-bg-alt);
+  --wv-color-bg-light: var(--yp-color-bg-alt);
+  --wv-color-border-light: var(--yp-color-divider);
+  --wv-color-success: var(--yp-color-success);
+  
+  /* Registration badge colors - WCAG AA compliant (using unified tokens) */
+  --wv-color-registered-bg: var(--yp-color-success-light);
+  --wv-color-registered-border: var(--yp-color-success);
+  --wv-color-registered-text: var(--yp-color-success-dark);
+  --wv-color-unregistered-bg: var(--yp-color-secondary-light);
+  --wv-color-unregistered-border: var(--yp-color-secondary);
+  --wv-color-unregistered-text: var(--yp-color-secondary-hover);
+  
+  /* Spacing - Phase 3: Larger touch targets (using unified tokens) */
+  --wv-spacing-xs: var(--yp-gap-sm);
+  --wv-spacing-sm: var(--yp-gap-sm);
+  --wv-spacing-md: var(--yp-gap);
+  --wv-spacing-lg: var(--yp-gap-lg);
+  --wv-spacing-xl: var(--yp-gap-xl);
+  --wv-spacing-xxl: 3rem;
+  
+  /* Phase 3: Enhanced spacing for tablet */
+  --wv-cell-padding: 1.25rem;
+  --wv-meal-gap: var(--yp-gap-lg);
+}
+
+/* Container */
+.weekview-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--wv-spacing-lg);
+}
+
+/* Header */
+.weekview-header {
+  margin-bottom: var(--wv-spacing-xl);
+}
+
+.weekview-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--wv-color-text);
+  margin: 0 0 var(--wv-spacing-xs);
+}
+
+.weekview-subtitle {
+  font-size: 1.125rem;
+  color: var(--wv-color-text-muted);
+  margin: 0;
+}
+
+/* Navigation - Phase 3: Larger touch targets */
+.weekview-nav {
+  display: flex;
+  gap: var(--wv-spacing-md);
+  margin: var(--wv-spacing-lg) 0;
+  flex-wrap: wrap;
+}
+
+.weekview-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.875rem 1.5rem; /* Phase 3: Increased from 0.5rem 1rem */
+  background: var(--wv-color-bg-card);
+  border: 2px solid var(--wv-color-border); /* Phase 3: Thicker border */
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--wv-color-text);
+  font-weight: 600; /* Phase 3: Bolder */
+  font-size: 1rem; /* Phase 3: Larger text */
+  transition: all 0.2s ease;
+  min-height: 44px; /* Phase 3: iOS minimum touch target */
+}
+
+.weekview-nav-btn:hover {
+  background: var(--wv-color-bg-hover);
+  border-color: var(--wv-color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.weekview-nav-btn--primary {
+  background: var(--wv-color-primary);
+  color: white;
+  border-color: var(--wv-color-primary);
+}
+
+.weekview-nav-btn--primary:hover {
+  background: var(--wv-color-primary-hover);
+  border-color: var(--wv-color-primary-hover);
+}
+
+.weekview-nav-btn--secondary {
+  background: #9b59b6;
+  color: white;
+  border-color: #9b59b6;
+}
+
+.weekview-nav-btn--secondary:hover {
+  background: #8e44ad;
+  border-color: #8e44ad;
+}
+
+/* Department Card - Premium Design with Unified Tokens */
+.department-card {
+  background: var(--yp-color-bg-elevated);
+  border-radius: var(--yp-radius-lg);
+  box-shadow: var(--yp-shadow-md);
+  margin-bottom: var(--yp-gap-xl);
+  overflow: hidden;
+  border: 1px solid var(--yp-color-divider);
+}
+
+.department-header {
+  background: linear-gradient(to right, var(--yp-color-primary), var(--yp-color-primary-hover));
+  padding: var(--yp-gap-lg);
+  border-bottom: none;
+}
+
+.department-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--yp-gap);
+}
+
+.department-name {
+  font-size: var(--yp-font-size-2xl);
+  font-weight: var(--yp-font-weight-bold);
+  color: white;
+  margin: 0;
+}
+
+.department-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-gap-sm);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: var(--yp-font-size-sm);
+  background: rgba(255, 255, 255, 0.15);
+  padding: var(--yp-gap-sm) var(--yp-gap);
+  border-radius: var(--yp-radius);
+  backdrop-filter: blur(10px);
+}
+
+.summary-label {
+  font-weight: var(--yp-font-weight-semibold);
+}
+
+.summary-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.summary-registered {
+  color: rgba(255, 255, 255, 1);
+  font-weight: var(--yp-font-weight-bold);
+}
+
+.summary-separator {
+  opacity: 0.7;
+}
+
+.summary-total {
+  opacity: 0.9;
+}
+
+.summary-divider {
+  opacity: 0.5;
+  margin: 0 0.5rem;
+}
+
+/* Week Grid - Enhanced with Better Spacing */
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--yp-gap);
+  padding: var(--yp-gap-lg);
+  background: var(--yp-color-bg-alt);
+  overflow-x: auto;
+}
+
+/* Day Cell - Premium Card Design */
+.day-cell {
+  background: var(--yp-color-bg-elevated);
+  padding: var(--yp-gap);
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--yp-radius);
+  border: 1px solid var(--yp-color-divider);
+  box-shadow: var(--yp-shadow-sm);
+  transition: var(--yp-transition-base);
+}
+
+.day-cell:hover {
+  box-shadow: var(--yp-shadow);
+  transform: translateY(-2px);
+}
+
+.day-header {
+  font-weight: var(--yp-font-weight-bold);
+  color: var(--yp-color-text);
+  margin-bottom: var(--yp-gap-sm);
+  font-size: var(--yp-font-size-base);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.day-date {
+  font-size: var(--yp-font-size-sm);
+  color: var(--yp-color-text-muted);
+  margin-bottom: var(--yp-gap);
+  padding-bottom: var(--yp-gap-sm);
+  border-bottom: 2px solid var(--yp-color-divider);
+}
+
+/* Meal Section - Premium Polish with Unified Tokens */
+.meal-section {
+  margin-bottom: var(--yp-gap-lg);
+  padding: var(--yp-gap);
+  border-radius: var(--yp-radius);
+  background: var(--yp-color-bg);
+  border: 1px solid var(--yp-color-divider);
+  cursor: pointer;
+  transition: var(--yp-transition-base);
+  min-height: 44px; /* WCAG touch target */
+}
+
+.meal-section:last-child {
+  margin-bottom: 0;
+}
+
+.meal-section:hover {
+  background: var(--yp-color-bg-alt);
+  border-color: var(--yp-color-primary);
+  box-shadow: var(--yp-shadow-sm);
+}
+
+.meal-section:focus {
+  outline: 3px solid var(--yp-color-primary);
+  outline-offset: 2px;
+}
+
+.meal-section:active {
+  transform: scale(0.98);
+}
+
+/* Meal Header - Labels and Badges */
+.meal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--yp-gap-sm);
+}
+
+.meal-label {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-gap-sm);
+  font-size: var(--yp-font-size-xs);
+  font-weight: var(--yp-font-weight-bold);
+  text-transform: uppercase;
+  color: var(--yp-color-text-muted);
+  letter-spacing: 1px;
+}
+
+.meal-icon {
+  font-size: var(--yp-font-size-base);
+}
+
+/* Premium Badges using Unified Design System */
+.registration-badge {
+  font-size: var(--yp-font-size-xs);
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+}
+
+.alt2-badge {
+  font-size: var(--yp-font-size-xs);
+  padding: 0.25rem 0.5rem;
+  margin-bottom: var(--yp-gap-sm);
+  display: inline-block;
+}
+
+.meal-text {
+  font-size: var(--yp-font-size-base);
+  line-height: 1.6;
+  color: var(--yp-color-text);
+  margin-bottom: var(--yp-gap-sm);
+}
+
+.meal-text--empty {
+  color: var(--yp-color-text-muted);
+  font-style: italic;
+}
+/* Unified variants for secondary text */
+.meal-text--alt2 {
+  font-size: var(--yp-font-size-sm);
+  color: var(--yp-color-text-muted);
+}
+
+.meal-text--dessert {
+  font-size: var(--yp-font-size-sm);
+  color: var(--yp-color-text-muted);
+}
+
+/* Residents Count */
+.residents-count {
+  font-size: var(--yp-font-size-sm);
+  color: var(--yp-color-text-muted);
+  margin-top: auto;
+  padding-top: var(--yp-gap-sm);
+  border-top: 1px solid var(--yp-color-divider);
+}
+
+/* Meal Summary (Daily) */
+.meal-summary {
+  font-size: var(--yp-font-size-xs);
+  color: var(--yp-color-text-muted);
+  margin-top: var(--yp-gap-sm);
+  padding-top: var(--yp-gap-sm);
+  border-top: 1px solid var(--yp-color-divider);
+}
+
+.summary-registered {
+  color: var(--yp-color-success);
+  font-weight: var(--yp-font-weight-bold);
+}
+
+.summary-total {
+  font-weight: var(--yp-font-weight-semibold);
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: var(--wv-spacing-xxl); /* Phase 3: More padding */
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+  margin-bottom: var(--wv-spacing-lg);
+}
+
+.modal-title {
+  font-size: 1.5rem; /* Phase 3: Larger */
+  font-weight: 600;
+  color: var(--wv-color-text);
+  margin: 0 0 var(--wv-spacing-xs);
+}
+
+.modal-subtitle {
+  font-size: 1rem; /* Phase 3: Larger */
+  color: var(--wv-color-text-muted);
+  margin: 0;
+}
+
+.modal-body {
+  margin-bottom: var(--wv-spacing-lg);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--wv-spacing-md); /* Phase 3: More gap */
+  padding: var(--wv-spacing-lg); /* Phase 3: More padding */
+  border: 2px solid var(--wv-color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 60px; /* Phase 3: Larger touch target */
+}
+
+.checkbox-label:hover {
+  border-color: var(--wv-color-primary);
+  background: var(--wv-color-bg-hover);
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 24px; /* Phase 3: Larger */
+  height: 24px;
+  cursor: pointer;
+}
+
+.checkbox-label-text {
+  font-size: 1.125rem; /* Phase 3: Larger */
+  font-weight: 500;
+  color: var(--wv-color-text);
+}
+
+.modal-actions {
+  display: flex;
+  gap: var(--wv-spacing-md);
+  justify-content: flex-end;
+}
+
+.modal-btn {
+  padding: 0.875rem 1.5rem; /* Phase 3: Larger */
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid var(--wv-color-border);
+  min-height: 44px;
+}
+
+.modal-btn--cancel {
+  background: white;
+  color: var(--wv-color-text);
+}
+
+.modal-btn--cancel:hover {
+  background: var(--wv-color-bg-hover);
+}
+
+.modal-btn--save {
+  background: var(--wv-color-primary);
+  color: white;
+  border-color: var(--wv-color-primary);
+}
+
+.modal-btn--save:hover {
+  background: var(--wv-color-primary-hover);
+}
+
+/* No Menu Message */
+.no-menu-message {
+  padding: var(--wv-spacing-xxl); /* Phase 3: More padding */
+  text-align: center;
+  color: var(--wv-color-text-muted);
+  font-size: 1.125rem;
+}
+
+/* Phase 4: Daily and Weekly Summaries */
+.meal-summary {
+  font-size: 0.75rem;
+  color: var(--wv-color-text-muted);
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--wv-color-border-light);
+}
+
+.summary-registered {
+  color: var(--wv-color-success);
+  font-weight: 600;
+}
+
+.summary-total {
+  color: var(--wv-color-text);
+  font-weight: 500;
+}
+
+.department-footer {
+  padding: var(--wv-spacing-lg);
+  background: var(--wv-color-bg-light);
+  border-top: 2px solid var(--wv-color-border);
+}
+
+.week-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wv-spacing-sm);
+}
+
+.week-summary-item {
+  font-size: 0.875rem;
+  color: var(--wv-color-text-muted);
+}
+
+.week-summary-item strong {
+  color: var(--wv-color-text);
+}
+
+/* Responsive Design - Tablet and Mobile Optimization */
+@media (max-width: 1024px) {
+  .week-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  
+  .day-cell {
+    min-height: 240px;
+  }
+  
+  .department-header-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .weekview-container {
+    padding: var(--yp-gap);
+  }
+  
+  .weekview-title {
+    font-size: var(--yp-font-size-xl);
+  }
+  
+  .week-grid {
+    grid-template-columns: 1fr;
+    gap: var(--yp-gap);
+    padding: var(--yp-gap);
+  }
+  
+  .day-cell {
+    min-height: 200px;
+  }
+  
+  .weekview-nav {
+    flex-direction: column;
+  }
+  
+  .weekview-nav-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .department-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+  }
+  
+  .summary-divider {
+    display: none;
+  }
+}
+
+/* Touch Device Enhancements */
+@media (hover: none) and (pointer: coarse) {
+  .meal-section {
+    min-height: 48px; /* Larger touch target for tablets */
+  }
+  
+  .weekview-nav-btn {
+    min-height: 48px;
+  }
+  
+  .modal-btn {
+    min-height: 48px;
+  }
+}
+
+/* Toast Notifications - Phase 2 Visual Polish */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.yp-toast {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  background: var(--yp-color-success);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: var(--yp-radius);
+  box-shadow: var(--yp-shadow-lg);
+  z-index: 9999;
+  font-weight: var(--yp-font-weight-semibold);
+  animation: slideInRight 0.3s ease, fadeOut 0.3s ease 2.7s;
+}
+
+.yp-toast--error {
+  background: var(--yp-color-danger);
+}
+
+.yp-toast--info {
+  background: var(--yp-color-info);
+}
+
+/* Phase 3: Accessibility - Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Phase 3: Tooltip styles */
+.tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip-text {
+  visibility: hidden;
+  width: 200px;
+  background-color: #1e293b;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 0.5rem;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -100px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-size: 0.875rem;
+}
+
+.tooltip:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}

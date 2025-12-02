@@ -1,3 +1,8 @@
+# Legacy Rigplan reference (keep locally, ignore in repo)
+Rigplan1.0/
+Rigplan1.0.zip
+Rigplan1.0*
+legacy/Rigplan1.0
 # Python
 __pycache__/
 *.py[cod]

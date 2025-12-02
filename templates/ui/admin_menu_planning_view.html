@@ -1,0 +1,231 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block title %}Vecka {{ vm.week }}/{{ vm.year }} - Menyplanering{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <div class="header-flex">
+        <div>
+            <h1>Menyschema – Vecka {{ vm.week }}, {{ vm.year }}</h1>
+            <p class="subtitle">{{ vm.days|length }} dagar, {{ vm.departments|length }} avdelningar</p>
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('ui.admin_menu_planning_index') }}" class="yp-button yp-button-secondary">
+                ← Välj annan vecka
+            </a>
+            <a href="{{ url_for('ui.admin_menu_planning_edit', year=vm.year, week=vm.week) }}" class="yp-button yp-button-primary">
+                ✏️ Redigera vecka
+            </a>
+        </div>
+    </div>
+</div>
+
+{% if vm.departments|length == 0 %}
+<div class="empty-state">
+    <p>Inga avdelningar hittades.</p>
+    <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-primary">➕ Skapa avdelningar</a>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-header">
+        <h2>Alt 2-översikt</h2>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="yp-table menu-planning-table">
+                <thead>
+                    <tr>
+                        <th class="dept-col">AVDELNING</th>
+                        {% for day in vm.days %}
+                        <th class="day-col">
+                            <div class="day-header">
+                                <span class="weekday">{{ day.weekday_name }}</span>
+                                <span class="date">{{ day.date }}</span>
+                            </div>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dept in vm.departments %}
+                    <tr>
+                        <td class="dept-name">{{ dept.name }}</td>
+                        {% for day in vm.days %}
+                        <td class="alt2-cell {% if dept.alt2_days[day.dow] %}alt2-active{% endif %}">
+                            {% if dept.alt2_days[day.dow] %}
+                            <span class="yp-badge yp-badge-warning">⚡ Alt 2</span>
+                            {% else %}
+                            <span class="yp-badge yp-badge-muted">Alt 1</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="legend-box">
+    <h3>Förklaring</h3>
+    <div class="legend-items">
+        <div class="legend-item">
+            <span class="yp-badge yp-badge-warning">⚡ Alt 2</span>
+            <span>Avdelningen använder alternativ 2</span>
+        </div>
+        <div class="legend-item">
+            <span class="yp-badge yp-badge-muted">Alt 1</span>
+            <span>Avdelningen använder alternativ 1 (standard)</span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.menu-planning-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.menu-planning-table th,
+.menu-planning-table td {
+    padding: 12px 8px;
+    text-align: center;
+    border: 1px solid #dee2e6;
+}
+
+.menu-planning-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+}
+
+.dept-col {
+    min-width: 150px;
+    text-align: left !important;
+}
+
+.day-col {
+    min-width: 100px;
+}
+
+.day-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.weekday {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.date {
+    font-size: 11px;
+    color: #6c757d;
+}
+
+.dept-name {
+    font-weight: 500;
+    text-align: left !important;
+}
+
+.alt2-cell {
+    background: #fff;
+}
+
+.alt2-cell.alt2-active {
+    background: #fff3cd;
+}
+
+.alt2-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.alt2-badge.alt2-active {
+    background: #ffd966;
+    color: #856404;
+}
+
+.alt2-badge.alt2-inactive {
+    background: #e9ecef;
+    color: #6c757d;
+}
+
+.legend-box {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+}
+
+.legend-box h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    color: #495057;
+}
+
+.legend-items {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+@media (max-width: 768px) {
+    .header-flex {
+        flex-direction: column;
+    }
+
+    .header-actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .menu-planning-table {
+        font-size: 12px;
+    }
+
+    .menu-planning-table th,
+    .menu-planning-table td {
+        padding: 8px 4px;
+    }
+
+    .dept-col {
+        min-width: 120px;
+    }
+
+    .day-col {
+        min-width: 80px;
+    }
+}
+</style>
+{% endblock %}

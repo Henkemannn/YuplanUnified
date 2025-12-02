@@ -1,0 +1,16 @@
+/* Planera print stylesheet (Phase P1.2) */
+@page { size: A4 portrait; margin: 12mm; }
+
+@media print {
+  body { font-size: 12px; line-height: 1.3; }
+  .sidebar, .nav, .export-csv-btn, .non-print, .print-button:not(:first-of-type) { display: none !important; }
+  .planera-wrap { padding: 0; }
+  table.planera-table, table.planera-week-table { font-size: 12px; }
+  table.planera-table th, table.planera-table td,
+  table.planera-week-table th, table.planera-week-table td { padding: 4px 6px; }
+  table.planera-table thead tr, table.planera-week-table thead tr { display: table-header-group; }
+  a { text-decoration: none; color: #000; }
+}
+
+/* Screen refinements for buttons */
+.print-button, .export-csv-btn { font-family: system-ui, sans-serif; }

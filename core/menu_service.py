@@ -4,6 +4,7 @@ from typing import TypedDict
 
 from .db import get_new_session
 from .models import Dish, Menu, MenuVariant
+from datetime import datetime, timezone
 
 
 class _VariantInfo(TypedDict, total=False):
@@ -43,7 +44,7 @@ class MenuServiceDB:
             )
             if existing is not None:
                 return existing
-            new_menu = Menu(tenant_id=tenant_id, week=week, year=year)
+            new_menu = Menu(tenant_id=tenant_id, week=week, year=year, updated_at=datetime.now(timezone.utc))
             db.add(new_menu)
             db.commit()
             db.refresh(new_menu)
@@ -86,12 +87,50 @@ class MenuServiceDB:
         finally:
             db.close()
 
+    def publish_menu(self, tenant_id: int, menu_id: int) -> None:
+        """Set menu status to 'published'."""
+        db = get_new_session()
+        try:
+            menu = db.query(Menu).filter_by(id=menu_id, tenant_id=tenant_id).first()
+            if not menu:
+                raise ValueError("menu not found for tenant")
+            menu.status = "published"
+            menu.updated_at = datetime.now(timezone.utc)
+            db.commit()
+        finally:
+            db.close()
+    
+    def unpublish_menu(self, tenant_id: int, menu_id: int) -> None:
+        """Set menu status to 'draft'."""
+        db = get_new_session()
+        try:
+            menu = db.query(Menu).filter_by(id=menu_id, tenant_id=tenant_id).first()
+            if not menu:
+                raise ValueError("menu not found for tenant")
+            menu.status = "draft"
+            menu.updated_at = datetime.now(timezone.utc)
+            db.commit()
+        finally:
+            db.close()
+
     def get_week_view(self, tenant_id: int, week: int, year: int) -> WeekView:
         db = get_new_session()
         try:
-            menu = db.query(Menu).filter_by(tenant_id=tenant_id, week=week, year=year).first()
+            # TODO: If multiple versions exist, prefer published over draft
+            # For now, prefer published status when querying
+            menu = (
+                db.query(Menu)
+                .filter_by(tenant_id=tenant_id, week=week, year=year)
+                .order_by(Menu.status.desc())  # 'published' > 'draft' alphabetically
+                .first()
+            )
             if not menu:
-                return {"menu_id": None, "days": {}}  # type: ignore[return-value]
+                return {"menu_id": None, "menu_status": None, "updated_at": None, "days": {}}  # type: ignore[return-value]
+            # Ensure updated_at populated (older seed data may have NULL)
+            if menu.updated_at is None:
+                menu.updated_at = datetime.now(timezone.utc)
+                db.commit()
+                db.refresh(menu)
             variants = (
                 db.query(MenuVariant, Dish)
                 .join(Dish, Dish.id == MenuVariant.dish_id, isouter=True)
@@ -104,6 +143,6 @@ class MenuServiceDB:
                     "dish_id": mv.dish_id,
                     "dish_name": dish.name if dish else None,
                 }
-            return {"menu_id": menu.id, "days": structure}  # type: ignore[return-value]
+            return {"menu_id": menu.id, "menu_status": menu.status, "updated_at": menu.updated_at, "days": structure}  # type: ignore[return-value]
         finally:
             db.close()

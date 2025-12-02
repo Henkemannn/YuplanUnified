@@ -1,0 +1,65 @@
+{% from 'macros/admin_menu.html' import render_flash_messages %}
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menyimport - Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+</head>
+<body>
+    <div class="admin-container">
+        <h2>Menyimport</h2>
+        
+        {{ render_flash_messages() }}
+        
+        <!-- File upload form -->
+        <section class="admin-card">
+            <h3>Ladda upp menyfil</h3>
+            <form action="{{ url_for('admin_ui.admin_menu_import_upload') }}" method="POST" enctype="multipart/form-data" class="admin-form">
+                <div class="admin-form-group">
+                    <label for="menu_file">Välj fil (.pdf, .docx, .xlsx, .csv)</label>
+                    <input type="file" id="menu_file" name="menu_file" accept=".pdf,.docx,.xlsx,.csv" required>
+                </div>
+                <div class="admin-form-actions">
+                    <button type="submit" class="admin-btn-primary">Ladda upp</button>
+                </div>
+            </form>
+        </section>
+        
+        <!-- List of weeks with menu data -->
+        <section class="admin-card">
+            <h3>Importerade menyer</h3>
+            {% if vm.weeks %}
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>År</th>
+                            <th>Vecka</th>
+                            <th>Åtgärder</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for w in vm.weeks %}
+                            <tr>
+                                <td>{{ w.year }}</td>
+                                <td>{{ w.week }}</td>
+                                <td>
+                                    <a href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}" class="admin-link-btn">Visa / Redigera</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p style="color: #666; font-style: italic;">Inga importerade menyer ännu.</p>
+            {% endif %}
+        </section>
+        
+        <!-- Back to dashboard -->
+        <div style="margin-top: 2rem;">
+            <a href="{{ url_for('admin_ui.admin_dashboard') }}" class="admin-btn-secondary">Tillbaka till Admin</a>
+        </div>
+    </div>
+</body>
+</html>

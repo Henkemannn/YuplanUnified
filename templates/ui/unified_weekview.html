@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}Yuplan Unified{% endblock %}
+
+{% block head %}
+  <!-- Unified Design System -->
+  <link rel="stylesheet" href="/static/unified_ui.css">
+  
+  <link rel="stylesheet" href="/static/css/unified_weekview.css">
+{% endblock %}
+
+{% block content %}
+
+<div class="weekview-container">
+  <!-- Page Header -->
+  <div class="weekview-header">
+    <h1 class="weekview-title">Veckovy</h1>
+    <p class="weekview-subtitle">Vecka {{ vm.week }}, {{ vm.year }}</p>
+    {% if vm.site_name %}
+      <p class="weekview-subtitle">{{ vm.site_name }}</p>
+    {% endif %}
+  </div>
+
+  <!-- Week Navigation -->
+  <div class="weekview-nav">
+    {% set prev_week = (vm.week - 1) if vm.week > 1 else 53 %}
+    {% set prev_year = (vm.year if vm.week > 1 else vm.year - 1) %}
+    {% set next_week = (vm.week + 1) if vm.week < 53 else 1 %}
+    {% set next_year = (vm.year if vm.week < 53 else vm.year + 1) %}
+    
+    <a href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, department_id=vm.department_id, year=prev_year, week=prev_week) }}" 
+       class="weekview-nav-btn"
+       data-nav="prev-week">
+      ← Föregående vecka
+    </a>
+    
+    <a href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, department_id=vm.department_id, year=vm.current_year, week=vm.current_week) }}" 
+       class="weekview-nav-btn weekview-nav-btn--primary">
+      Denna vecka
+    </a>
+    
+    <a href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, department_id=vm.department_id, year=next_year, week=next_week) }}" 
+       class="weekview-nav-btn"
+       data-nav="next-week">
+      Nästa vecka →
+    </a>
+    
+    {% if session.role in ['admin', 'superuser'] %}
+    <a href="{{ url_for('ui.admin_dashboard') }}" 
+       class="weekview-nav-btn weekview-nav-btn--secondary"
+       title="Öppna Adminpanel">
+      ⚙️ Admin
+    </a>
+    {% endif %}
+  </div>
+
+  {% if vm.days and vm.days|length > 0 %}
+    <!-- Department Card with Premium Design -->
+    <div class="yp-card department-card">
+      <div class="department-header">
+        <div class="department-header-content">
+          <h2 class="department-name">{{ vm.department_name }}</h2>
+          {% if vm.week_summary %}
+          <div class="department-summary">
+            <span class="summary-label">Lunch:</span>
+            <span class="summary-count">
+              <strong class="summary-registered">{{ vm.week_summary.lunch.registered }}</strong>
+              <span class="summary-separator">/</span>
+              <span class="summary-total">{{ vm.week_summary.lunch.total }}</span>
+            </span>
+            {% if vm.week_summary.dinner %}
+            <span class="summary-divider">•</span>
+            <span class="summary-label">Kväll:</span>
+            <span class="summary-count">
+              <strong class="summary-registered">{{ vm.week_summary.dinner.registered }}</strong>
+              <span class="summary-separator">/</span>
+              <span class="summary-total">{{ vm.week_summary.dinner.total }}</span>
+            </span>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      
+      <!-- Week Grid -->
+      <div class="week-grid">
+        {% for day in vm.days %}
+          <div class="day-cell">
+            <div class="day-header">{{ day.weekday_name }}</div>
+            <div class="day-date">{{ day.date }}</div>
+            
+            <!-- Lunch Section -->
+            <div class="meal-section meal-section--lunch"
+                 data-meal-cell
+                 data-date="{{ day.date }}"
+                 data-meal-type="lunch"
+                 data-registered="{{ 'true' if day.lunch_registered else 'false' }}"
+                 tabindex="0"
+                 role="button"
+                 aria-label="Lunch {{ day.weekday_name }} {{ day.date }}: {{ day.lunch_alt1 or 'Ingen meny' }}{% if day.lunch_registered %}, Registrerad{% else %}, Ej registrerad{% endif %}">
+              
+              <div class="meal-header">
+                <div class="meal-label">
+                  <span class="meal-icon">🍴</span>
+                  <span>LUNCH</span>
+                </div>
+                
+                <!-- Premium Registration Badge -->
+                {% if day.lunch_registered %}
+                  <span class="yp-badge yp-badge-success registration-badge">✓ Registrerad</span>
+                {% else %}
+                  <span class="yp-badge yp-badge-muted registration-badge">Ej gjord</span>
+                {% endif %}
+              </div>
+              
+              <!-- Alt2 Badge -->
+              {% if day.alt2_lunch %}
+                <span class="yp-badge yp-badge-warning alt2-badge">⚡ ALT 2</span>
+              {% endif %}
+              
+              <!-- Meal Content -->
+              {% if day.lunch_alt1 or day.lunch_alt2 %}
+                {% if day.lunch_alt1 %}
+                  <div class="meal-text">{{ day.lunch_alt1 }}</div>
+                {% endif %}
+                {% if day.lunch_alt2 and not day.alt2_lunch %}
+                  <div class="meal-text meal-text--alt2">Alt 2: {{ day.lunch_alt2 }}</div>
+                {% elif day.lunch_alt2 and day.alt2_lunch %}
+                  <div class="meal-text">{{ day.lunch_alt2 }}</div>
+                {% endif %}
+                {% if day.lunch_dessert %}
+                  <div class="meal-text meal-text--dessert">Dessert: {{ day.lunch_dessert }}</div>
+                {% endif %}
+              {% else %}
+                <div class="meal-text meal-text--empty">Ingen meny</div>
+              {% endif %}
+              {% if day.residents_lunch > 0 %}
+                <div class="residents-count">
+                  Boende: {{ day.residents_lunch }}
+                </div>
+              {% endif %}
+              
+              <!-- Phase 4: Daily Summary -->
+              {% if day.summary and day.summary.lunch %}
+                <div class="meal-summary">
+                  Registrerad: 
+                  <span class="summary-registered">{{ day.summary.lunch.registered }}</span>
+                  /
+                  <span class="summary-total">{{ day.summary.lunch.total_residents }}</span>
+                </div>
+              {% endif %}
+            </div>
+            
+            <!-- Dinner Section (if applicable) -->
+            {% if vm.has_dinner %}
+              <div class="meal-section meal-section--dinner"
+                   data-meal-cell
+                   data-date="{{ day.date }}"
+                   data-meal-type="dinner"
+                   data-registered="{{ 'true' if day.dinner_registered else 'false' }}"
+                   tabindex="0"
+                   role="button"
+                   aria-label="Kväll {{ day.weekday_name }} {{ day.date }}: {{ day.dinner_alt1 or 'Ingen meny' }}{% if day.dinner_registered %}, Registrerad{% else %}, Ej registrerad{% endif %}">
+                
+                <div class="meal-header">
+                  <div class="meal-label">
+                    <span class="meal-icon">🌙</span>
+                    <span>KVÄLL</span>
+                  </div>
+                  
+                  <!-- Premium Registration Badge -->
+                  {% if day.dinner_registered %}
+                    <span class="yp-badge yp-badge-success registration-badge">✓ Registrerad</span>
+                  {% else %}
+                    <span class="yp-badge yp-badge-muted registration-badge">Ej gjord</span>
+                  {% endif %}
+                </div>
+                
+                <!-- Alt2 Badge -->
+                {% if day.alt2_dinner %}
+                  <span class="yp-badge yp-badge-warning alt2-badge">⚡ ALT 2</span>
+                {% endif %}
+                
+                <!-- Meal Content -->
+                {% if day.dinner_alt1 or day.dinner_alt2 %}
+                  {% if day.dinner_alt1 %}
+                    <div class="meal-text">{{ day.dinner_alt1 }}</div>
+                  {% endif %}
+                  {% if day.dinner_alt2 %}
+                    <div class="meal-text meal-text--alt2">Alt 2: {{ day.dinner_alt2 }}</div>
+                  {% endif %}
+                {% else %}
+                  <div class="meal-text meal-text--empty">Ingen meny</div>
+                {% endif %}
+                {% if day.residents_dinner > 0 %}
+                  <div class="residents-count">
+                    Boende: {{ day.residents_dinner }}
+                  </div>
+                {% endif %}
+                
+                <!-- Phase 4: Daily Summary -->
+                {% if day.summary and day.summary.dinner %}
+                  <div class="meal-summary">
+                    Registrerad: 
+                    <span class="summary-registered">{{ day.summary.dinner.registered }}</span>
+                    /
+                    <span class="summary-total">{{ day.summary.dinner.total_residents }}</span>
+                  </div>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      
+      <!-- Phase 4: Weekly Department Summary -->
+      {% if vm.week_summary %}
+        <div class="department-footer">
+          <div class="week-summary">
+            <div class="week-summary-item">
+              <strong>{{ meal_labels.lunch }}:</strong> 
+              <span class="summary-registered">{{ vm.week_summary.lunch.registered }}</span> av 
+              <span class="summary-total">{{ vm.week_summary.lunch.total }}</span> registrerade denna vecka
+            </div>
+            {% if vm.week_summary.dinner %}
+              <div class="week-summary-item">
+                <strong>{{ meal_labels.dinner }}:</strong> 
+                <span class="summary-registered">{{ vm.week_summary.dinner.registered }}</span> av 
+                <span class="summary-total">{{ vm.week_summary.dinner.total }}</span> registrerade denna vecka
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="no-menu-message">
+      Ingen meny för denna vecka ännu.
+    </div>
+  {% endif %}
+</div>
+
+<!-- Phase 2: Registration Modal -->
+<div id="registrationModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 class="modal-title">Registrera måltid</h3>
+      <p class="modal-subtitle" id="modalSubtitle"></p>
+    </div>
+    
+    <form method="POST" action="{{ url_for('ui.weekview_registration_save') }}" id="registrationForm">
+      {{ csrf_token_input() | safe }}
+      <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+      <input type="hidden" name="department_id" value="{{ vm.department_id }}">
+      <input type="hidden" name="year" value="{{ vm.year }}">
+      <input type="hidden" name="week" value="{{ vm.week }}">
+      <input type="hidden" name="date" id="modalDate">
+      <input type="hidden" name="meal_type" id="modalMealType">
+      
+      <div class="modal-body">
+        <label class="checkbox-label">
+          <input type="checkbox" name="registered" id="modalRegistered" value="1">
+          <span class="checkbox-label-text">Måltid registrerad</span>
+        </label>
+      </div>
+      
+      <div class="modal-actions">
+        <button type="button" class="modal-btn modal-btn--cancel" data-action="close-modal">
+          Avbryt
+        </button>
+        <button type="submit" class="modal-btn modal-btn--save">
+          Spara
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Unified UI JS -->
+<script src="{{ url_for('static', filename='unified_ui.js') }}"></script>
+
+<script src="{{ url_for('static', filename='js/unified_weekview.js') }}"></script>
+{% endblock %}

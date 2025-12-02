@@ -1,0 +1,64 @@
+{# Global Yuplan Unified Header Macro #}
+{% macro yuplan_header(current_user=None, current_site=None, current_week=None, current_year=None, env=None) %}
+<header class="yp-global-header" role="banner">
+  <div class="yp-global-header__container">
+    {# Left: Logo + Product Name #}
+    <div class="yp-global-header__brand">
+      <a href="{{ url_for_home() }}" class="yp-header-brand" aria-label="Gå till startsidan för Yuplan Unified">
+        <img src="{{ url_for('static', filename='img/logo-proposal.svg') }}" 
+             alt="Yuplan Unified" 
+             class="yp-logo">
+        <span class="yp-brand-text">Yuplan Unified</span>
+      </a>
+    </div>
+
+    {# Center: Context Info (site, week, etc) #}
+    <div class="yp-global-header__context">
+      {% if current_site %}
+        <span class="yp-global-header__context-item">
+          <span class="yp-global-header__context-label">Site:</span>
+          <span class="yp-global-header__context-value">{{ current_site }}</span>
+        </span>
+      {% endif %}
+      {% if current_week and current_year %}
+        <span class="yp-global-header__context-item">
+          <span class="yp-global-header__context-label">Vecka:</span>
+          <span class="yp-global-header__context-value">{{ current_week }}, {{ current_year }}</span>
+        </span>
+      {% endif %}
+    </div>
+
+    {# Right: User Info + Environment Badge #}
+    <div class="yp-global-header__actions">
+      {# User Info #}
+      {% if current_user %}
+        <span class="yp-global-header__user">
+          <svg class="yp-global-header__user-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2 1a4 4 0 1 1-8 0 4 4 0 0 1 8 0z"/>
+            <path d="M0 13s1-1 8-1 8 1 8 1v2H0v-2z"/>
+          </svg>
+          <span class="yp-global-header__username">{{ current_user }}</span>
+        </span>
+      {% endif %}
+
+      {# Environment Badge #}
+      {% set env_value = env or 'LOCAL' %}
+      <span class="yp-global-header__env-badge yp-global-header__env-badge--{{ env_value|lower }}" 
+            aria-label="Miljö: {{ env_value }}">
+        {{ env_value }}
+      </span>
+    </div>
+  </div>
+</header>
+{% endmacro %}
+
+{# Helper function to determine home URL based on role #}
+{% macro url_for_home() %}
+{%- if session and session.get('role') in ['admin', 'superuser'] -%}
+{{ url_for('ui.admin_dashboard') }}
+{%- elif session and session.get('role') in ['cook', 'unit_portal'] -%}
+{{ url_for('ui.cook_dashboard') }}
+{%- else -%}
+{{ url_for('ui.cook_dashboard') }}
+{%- endif -%}
+{% endmacro %}
