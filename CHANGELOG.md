@@ -105,6 +105,14 @@
 
 ### Notes
 - TaskStatus utökad: `"todo" | "doing" | "blocked" | "done" | "cancelled"`.
+# Unreleased
+
+### Added
+- Unified Portal – Meal Details (Planera Day) Phase 1–2
+	- Adds `templates/ui/unified_planera_day.html` for `/ui/planera/day?ui=unified`.
+	- Shows menu, special diets (specialkost) with counts, registrations, and Alt 2 for a single site/department/date/meal.
+	- Adds read-only placeholders for future modules: Prepp, Inköp, Frys, Recept.
+	- Covered by `tests/ui/test_unified_planera_day_phase1.py` and `tests/ui/test_unified_planera_day_phase2.py`.
 # Changelog
 
 ## [0.3.0] - 2025-09-30 (Auth Hardening & Security)

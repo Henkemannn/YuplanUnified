@@ -1394,3 +1394,4 @@ Important: Never commit secrets. `.gitignore` already ignores `.env*`, `secrets.
 
 ### Unified Portal – Department Week View
 See `docs/portal_department_week.md` for the unified portal department week view (Avdelningsvy/Veckovy).
+See `docs/planera_day_unified.md` for the unified meal/day details view.
