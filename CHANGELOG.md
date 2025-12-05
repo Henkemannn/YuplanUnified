@@ -1,3 +1,21 @@
+## Kitchen Weekly Grid – Phase 2 (2025-12-05)
+
+Status: ✅ Klar, testad (745 passed, 8 skipped)
+
+En ny köksvy som visar hela veckans specialkostbehov per avdelning i ett värmekartat grid.
+
+Huvudfunktioner:
+- Veckovy – kök: Avdelningskort med namn, antal boende och faktaruta. Tabell med dagar vågrätt (mån–sön) och specialkoster lodrätt. Celler visar antal och markerar `markerad`, `gulmarkerad`, `kväll` samt heatmap-klasser `heat-low/medium/high`.
+- Menyikon + popup: Ikon i dagshuvudet öppnar popup med Alt 1, Alt 2, kvällsmat och dessert.
+- Fokusdag-läge: Klick på dagshuvud → hela kolumnen highlightas + summering för lunch visas.
+- Länk till Planera Day (Phase 2): Per dag-länk till `/ui/planera/day?ui=unified&date=YYYY-MM-DD&meal=lunch`.
+- Smart week-jump: Om vecka = innevarande, auto-fokus på dagens kolumn och scroll.
+
+Åtkomst & roll:
+- Endast för kök/administratör enligt RBAC. Levereras i unified portal-vy med `vm.show_kost_grid=True`.
+
+Tester:
+- `tests/ui/test_kitchen_veckovy_grid_mode.py` och full svit `pytest -q` → 745 passed, 8 skipped, 3 warnings.
 ## [0.3.2] - 2025-11-13 (Hotfix: menu-choice + requirements cleanup)
 
 ### Hotfix

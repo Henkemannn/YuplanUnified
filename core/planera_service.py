@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import date as _date
+from datetime import date as _date, timedelta, date
+from dataclasses import dataclass
 from typing import Any, Iterable, List, Dict, Tuple
 
 from .weekview.service import WeekviewService
@@ -16,17 +18,45 @@ class PlaneraService:
         self._weekview = weekview or WeekviewService()
 
     # =============================
-    # Phase 2: Day/Meal plan overview
+    # Planera Weekly Phase 3 VMs
     # =============================
+
+    @dataclass
+    class PlaneraWeeklyDepartmentRowVM:
+        department_id: str
+        department_name: str
+        residents_count: int
+        normal_count: int
+        specials_by_diet: dict[str, int]
+        is_done: bool
+
+    @dataclass
+    class PlaneraWeeklyDayOptionVM:
+        date: date
+        weekday_index: int
+        weekday_label: str
+
+    @dataclass
+    class PlaneraWeeklyVM:
+        site_id: str
+        site_name: str
+        year: int
+        week: int
+        selected_date: date
+        selected_meal: str
+        day_options: List[PlaneraWeeklyDayOptionVM]
+        meal_options: List[str]
+        departments: List[PlaneraWeeklyDepartmentRowVM]
+        total_normal: int
+        total_specials_by_diet: dict[str, int]
+
     def get_plan_view(self, tenant_id: int, site_id: str, date: _date, meal: str, department_id: str | None = None) -> Dict[str, Any]:
         year, week, _ = date.isocalendar()
-        # List departments for the site and resolve site name
         from sqlalchemy import text
         from .db import get_session
         db = get_session()
         try:
             dep_rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s"), {"s": site_id}).fetchall()
-            # If a specific department_id is provided, ensure it's included
             if department_id:
                 row = db.execute(text("SELECT id, name FROM departments WHERE id=:d"), {"d": department_id}).fetchone()
                 if row:
@@ -43,20 +73,16 @@ class PlaneraService:
             seen.add(rid)
             departments.append((rid, rn))
         site_name = site_row[0] if site_row else "Site"
-        # Compute per-department meal payloads using existing Phase 1 logic
         day_vm = self.compute_day(tenant_id, site_id, date.isoformat(), departments)
         dep_payloads: Dict[str, Dict[str, Any]] = {d["department_id"]: d for d in day_vm.get("departments", [])}
-        # Pull registrations to reflect "Klar" status
         from .meal_registration_repo import MealRegistrationRepo
         reg_repo = MealRegistrationRepo()
         reg_repo.ensure_table_exists()
         is_done_map: Dict[Tuple[str, str], bool] = {}
         for dep_id, _dep_name in departments:
             reg_list = reg_repo.get_registrations_for_week(tenant_id, site_id, dep_id, year, week)
-            # Index by (date, meal)
             idx = {(str(it["date"]), str(it["meal_type"])): bool(it["registered"]) for it in reg_list}
             is_done_map[(dep_id, date.isoformat())] = bool(idx.get((date.isoformat(), meal)))
-        # Build rows
         rows: List[Dict[str, Any]] = []
         totals_normalkost = 0
         totals_specials_acc: Dict[str, int] = {}
@@ -126,7 +152,6 @@ class PlaneraService:
                         residents_total = int((day.get("residents") or {}).get(meal, 0) or 0)
                     except Exception:
                         residents_total = 0
-                    # Include menu texts per meal from Weekview enrichment
                     try:
                         mt = day.get("menu_texts") or {}
                         mtm = mt.get(meal, {}) if isinstance(mt, dict) else {}
@@ -163,13 +188,11 @@ class PlaneraService:
                 normal = residents_total - total_special
                 if normal < 0:
                     normal = 0
-                # Alt2 choice indicator: for lunch, derive from day flag; dinner optional/None in Phase 1
                 alt_choice = None
                 try:
                     if meal == "lunch":
                         alt_choice = "Alt2" if bool(day.get("alt2_lunch")) else ("Alt1" if alt1_text else None)
                     else:
-                        # If dinner alt2 text exists, prefer Alt2; otherwise Alt1 when present
                         alt_choice = "Alt2" if alt2_text else ("Alt1" if alt1_text else None)
                 except Exception:
                     alt_choice = None
@@ -328,3 +351,148 @@ class PlaneraService:
             if d.get("date") == iso_date:
                 return d
         return None
+
+def _iso_week_dates(year: int, week: int) -> list[date]:
+    jan4 = _date(year, 1, 4)
+    week1_monday = jan4 - timedelta(days=jan4.weekday())
+    week_monday = week1_monday + timedelta(weeks=week - 1)
+    return [(week_monday + timedelta(days=i)) for i in range(7)]
+
+class PlaneraWeeklyService:
+        def __init__(self):
+            from .weekview.service import WeekviewService
+            from .meal_registration_repo import MealRegistrationRepo
+            self.weekview = WeekviewService()
+            self.reg_repo = MealRegistrationRepo()
+
+        def get_weekly_view(
+            self,
+            tenant_id: int,
+            site_id: str,
+            year: int | None,
+            week: int | None,
+            date_value: date | None,
+            meal: str | None,
+        ) -> PlaneraWeeklyVM:
+            today = _date.today()
+            if not year or not week:
+                iso = today.isocalendar()
+                year = int(iso[0])
+                week = int(iso[1])
+            # Build day options
+            week_dates = _iso_week_dates(year, week)
+            dow_labels = ["Måndag","Tisdag","Onsdag","Torsdag","Fredag","Lördag","Söndag"]
+            day_options = [PlaneraService.PlaneraWeeklyDayOptionVM(d, d.isocalendar()[2], dow_labels[i]) for i, d in enumerate(week_dates)]
+            # Selected day
+            selected_date = date_value
+            if not selected_date:
+                if today in week_dates:
+                    selected_date = today
+                else:
+                    selected_date = week_dates[0]
+            selected_meal = meal or "lunch"
+            # Resolve site name
+            from .db import get_session
+            from sqlalchemy import text
+            db = get_session()
+            try:
+                row = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+                site_name = row[0] if row else site_id
+                dep_rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+                departments = [(str(r[0]), str(r[1])) for r in dep_rows]
+            finally:
+                db.close()
+            # Aggregate per department for selected date/meal
+            total_normal = 0
+            total_specials: dict[str, int] = {}
+            dept_vms: List[PlaneraService.PlaneraWeeklyDepartmentRowVM] = []
+            for dep_id, dep_name in departments:
+                payload, _etag = self.weekview.fetch_weekview(tenant_id, year, week, dep_id)
+                summaries = payload.get("department_summaries") or []
+                dep = summaries[0] if summaries else {}
+                # Find the day
+                day = next((d for d in (dep.get("days") or []) if str(d.get("date")) == selected_date.isoformat()), None)
+                residents_count = 0
+                normal = 0
+                specials_by_diet: dict[str, int] = {}
+                is_done = False
+                if day:
+                    res_map = (day.get("residents") or {})
+                    residents_count = int(res_map.get(selected_meal, 0) or 0)
+                    # diets list for selected meal
+                    diets_list = ((day.get("diets") or {}).get(selected_meal) or [])
+                    marked_any = True
+                    for it in diets_list:
+                        name = str(it.get("diet_name") or str(it.get("diet_type_id")))
+                        cnt = int(it.get("resident_count") or 0)
+                        if cnt > 0:
+                            specials_by_diet[name] = specials_by_diet.get(name, 0) + cnt
+                        if not bool(it.get("marked")):
+                            marked_any = False
+                    # normal = residents - sum specials
+                    specials_total = sum(specials_by_diet.values())
+                    normal = max(0, residents_count - specials_total)
+                    # done = marked for all diets with counts OR existing registration mark
+                    is_done = marked_any
+                    # If registration exists for (date, meal), treat as done
+                    try:
+                        self.reg_repo.ensure_table_exists()
+                        regs = self.reg_repo.get_registrations_for_week(tenant_id, site_id, dep_id, year, week)
+                        reg_map = {(r["date"], r["meal_type"]): bool(r.get("registered")) for r in regs}
+                        if reg_map.get((selected_date.isoformat(), selected_meal)):
+                            is_done = True
+                    except Exception:
+                        pass
+                # totals
+                total_normal += normal
+                for n, c in specials_by_diet.items():
+                    total_specials[n] = total_specials.get(n, 0) + c
+                dept_vms.append(PlaneraService.PlaneraWeeklyDepartmentRowVM(
+                    department_id=dep_id,
+                    department_name=dep_name,
+                    residents_count=residents_count,
+                    normal_count=normal,
+                    specials_by_diet=specials_by_diet,
+                    is_done=is_done,
+                ))
+            return PlaneraService.PlaneraWeeklyVM(
+                site_id=site_id,
+                site_name=site_name,
+                year=year,
+                week=week,
+                selected_date=selected_date,
+                selected_meal=selected_meal,
+                day_options=day_options,
+                meal_options=["lunch","dinner"],
+                departments=dept_vms,
+                total_normal=total_normal,
+                total_specials_by_diet=total_specials,
+            )
+
+        def mark_all_done(
+            self,
+            tenant_id: int,
+            site_id: str,
+            date: date,
+            meal: str,
+            department_ids: list[str],
+        ) -> None:
+            try:
+                self.reg_repo.ensure_table_exists()
+                for dep_id in department_ids:
+                    self.reg_repo.mark_registration(
+                        tenant_id=tenant_id,
+                        site_id=site_id,
+                        department_id=dep_id,
+                        date_value=date,
+                        meal_type=meal,
+                        registered=True,
+                    )
+            except Exception:
+                # Best-effort; consistent with day-phase handler behavior
+                pass
+    # =============================
+    # Phase 2: Day/Meal plan overview
+    # =============================
+
+    

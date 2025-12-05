@@ -1,0 +1,129 @@
+{% extends "_base.html" %}
+
+<!-- Planera – vecka -->
+{% block title %}Planera – vecka · Planering –
+ vecka {{ vm.week }}{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_print.css') }}" media="print">
+{% endblock %}
+
+{% block content %}
+<section class="planera-week">
+  <p>Planera – vecka</p>
+  <header class="planera-week__header">
+    <div class="sr-only">Planera – vecka</div>
+    <h1>Planering – vecka {{ vm.week }} ({{ vm.year }}) – {{ vm.site_name }}</h1>
+    <div class="planera-week__actions" style="display:flex;gap:8px;align-items:center;">
+      <button type="button" class="yp-button" onclick="window.print()">Skriv ut</button>
+      <a class="yp-button" href="/api/planera/week/csv?site_id={{ vm.site_id }}&year={{ vm.year }}&week={{ vm.week }}">Exportera CSV</a>
+    </div>
+
+    <form method="get"
+          action="{{ url_for('ui.planera_week_ui_unified') }}"
+          class="planera-week__filters">
+      <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+
+      <label>
+        Vecka
+        <input type="number" name="week" value="{{ vm.week }}" min="1" max="53">
+      </label>
+
+      <label>
+        Dag
+        <select name="date">
+          {% for day in vm.day_options %}
+            <option value="{{ day.date.isoformat() }}"
+                    {% if day.date == vm.selected_date %}selected{% endif %}>
+              {{ day.weekday_label }} ({{ day.date.isoformat() }})
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        Måltid
+        <select name="meal">
+          {% for m in vm.meal_options %}
+            <option value="{{ m }}" {% if m == vm.selected_meal %}selected{% endif %}>
+              {{ m|capitalize }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <button type="submit" class="yp-button">Visa sammanställning</button>
+    </form>
+  </header>
+
+  <section class="planera-week__summary">
+    <h2>Sammanfattning</h2>
+    <p>Normalkost totalt: {{ vm.total_normal }}</p>
+    <ul>
+      {% for name, count in vm.total_specials_by_diet.items() %}
+        <li>{{ name }}: {{ count }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <form method="post"
+        action="{{ url_for('ui.planera_week_mark_all_unified') }}"
+        class="planera-week__departments">
+    {{ csrf_token_input() | safe }}
+    <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+    <input type="hidden" name="date" value="{{ vm.selected_date.isoformat() }}">
+    <input type="hidden" name="meal" value="{{ vm.selected_meal }}">
+
+    <table class="yp-table">
+      <thead>
+        <tr>
+          <th>Markera</th>
+          <th>Avdelning</th>
+          <th>Boende</th>
+          <th>Normalkost</th>
+          <th>Specialkoster</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in vm.departments %}
+        <tr>
+          <td>
+            <input type="checkbox"
+                   name="department_ids"
+                   value="{{ row.department_id }}">
+          </td>
+          <td>{{ row.department_name }}</td>
+          <td>{{ row.residents_count }}</td>
+          <td>{{ row.normal_count }}</td>
+          <td>
+            {% if row.specials_by_diet %}
+              {% for name, count in row.specials_by_diet.items() %}
+                <span class="yp-badge">{{ name }}: {{ count }}</span>
+              {% endfor %}
+            {% else %}
+              {% set specials_total = (row.residents_count - row.normal_count) %}
+              {% if specials_total > 0 %}
+                <span class="yp-badge">Special: {{ specials_total }}</span>
+              {% else %}
+                <span class="yp-badge">Boende: {{ row.residents_count }}</span>
+              {% endif %}
+            {% endif %}
+          </td>
+          <td>
+            {% if row.is_done %}
+              <span class="yp-badge yp-badge--success">Klar</span>
+            {% else %}
+              <span class="yp-badge yp-badge--neutral">Ej klar</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <button type="submit" class="yp-button yp-button--primary">
+      Markera valda som klara
+    </button>
+  </form>
+</section>
+{% endblock %}

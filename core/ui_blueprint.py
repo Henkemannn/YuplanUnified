@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash
+from datetime import date as date
 from sqlalchemy import text
 
 from .auth import require_roles
@@ -238,6 +239,87 @@ def test_login():
     session["username"] = f"test_{role}"
     
     return redirect(destination)
+
+@ui_bp.get("/ui/planera/week")
+@require_roles(*ADMIN_ROLES)
+def planera_week_ui_unified():
+    # Respect feature flag; UI returns 404 when disabled
+    from flask import current_app, g
+    reg = getattr(current_app, "feature_registry", None)
+    tenant_overrides = getattr(g, "tenant_feature_flags", {})
+    if tenant_overrides.get("ff.planera.enabled") is False:
+        from flask import abort
+        return abort(404)
+    if not reg or not reg.has("ff.planera.enabled") or not bool(reg.enabled("ff.planera.enabled")):
+        from flask import abort
+        return abort(404)
+    from .planera_service import PlaneraWeeklyService
+    tenant_id = int(session.get("tenant_id") or 1)
+    # Resolve site from query or default to first site like reports
+    site_id = (request.args.get("site_id") or "").strip()
+    if not site_id:
+        db = get_session()
+        try:
+            row = db.execute(text("SELECT id FROM sites ORDER BY name LIMIT 1")).fetchone()
+            if row:
+                site_id = str(row[0])
+        finally:
+            db.close()
+    year = request.args.get("year", type=int)
+    week = request.args.get("week", type=int)
+    date_str = request.args.get("date")
+    meal = request.args.get("meal", default="lunch")
+    selected_date = date.fromisoformat(date_str) if date_str else None
+    svc = PlaneraWeeklyService()
+    vm = svc.get_weekly_view(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        year=year,
+        week=week,
+        date_value=selected_date,
+        meal=meal,
+    )
+    return render_template("planera_week_phase3.html", vm=vm)
+
+@ui_bp.post("/ui/planera/week/mark_all")
+@require_roles(*ADMIN_ROLES)
+def planera_week_mark_all_unified():
+    # Block when feature is disabled
+    from flask import current_app, g
+    reg = getattr(current_app, "feature_registry", None)
+    tenant_overrides = getattr(g, "tenant_feature_flags", {})
+    if tenant_overrides.get("ff.planera.enabled") is False:
+        from flask import abort
+        return abort(404)
+    if not reg or not reg.has("ff.planera.enabled") or not bool(reg.enabled("ff.planera.enabled")):
+        from flask import abort
+        return abort(404)
+    from .planera_service import PlaneraWeeklyService
+    tenant_id = int(session.get("tenant_id") or 1)
+    site_id = (request.form.get("site_id") or request.args.get("site_id") or "").strip()
+    date_str = request.form.get("date")
+    meal = request.form.get("meal")
+    department_ids = request.form.getlist("department_ids")
+    if not date_str or not meal or not department_ids:
+        return jsonify({"error": "bad_request", "message": "missing_parameters"}), 400
+    selected_date = date.fromisoformat(date_str)
+    iso = selected_date.isocalendar()
+    svc = PlaneraWeeklyService()
+    svc.mark_all_done(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        date=selected_date,
+        meal=meal,
+        department_ids=department_ids,
+    )
+    return redirect(url_for(
+        "ui.planera_week_ui_unified",
+        site_id=site_id,
+        year=int(iso[0]),
+        week=int(iso[1]),
+        date=selected_date.isoformat(),
+        meal=meal,
+    ))
 
 
 def get_meal_labels_for_site(site_id: str | None) -> dict[str, str]:
