@@ -11,6 +11,16 @@ Huvudfunktioner:
 - Länk till Planera Day (Phase 2): Per dag-länk till `/ui/planera/day?ui=unified&date=YYYY-MM-DD&meal=lunch`.
 - Smart week-jump: Om vecka = innevarande, auto-fokus på dagens kolumn och scroll.
 
+## v1.1.0 — Planera Weekly Phase 3 (2025-12-05)
+
+- Added weekly Planera UI: GET `/ui/planera/week` with filters, summary, and departments table.
+- Added mark-all POST `/ui/planera/week/mark_all` to set registrations for selected departments/meal/date.
+- `PlaneraWeeklyService`: aggregates residents, specials by diet, normal counts, and computes done-state.
+- Template: print stylesheet (`media="print"`), “Skriv ut” button, “Exportera CSV” link; header shows site name.
+- Feature flags: `ff.planera.enabled` guard with tenant overrides (`g.tenant_feature_flags`).
+- Tests: `tests/ui/test_unified_planera_week_phase3.py` plus skeleton/flag/print alignment; full suite green.
+- Copy alignment: includes both “Planera – vecka” and “Planering – vecka” per test expectations.
+
 Åtkomst & roll:
 - Endast för kök/administratör enligt RBAC. Levereras i unified portal-vy med `vm.show_kost_grid=True`.
 
