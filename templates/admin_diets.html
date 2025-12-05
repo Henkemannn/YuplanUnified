@@ -1,0 +1,28 @@
+{% extends "_base.html" %}
+{% block title %}Specialkost – {{ vm.site.name }}{% endblock %}
+{% block content %}
+<div class="wrap">
+  <h1>Specialkost – {{ vm.site.name }}</h1>
+  <section>
+    <h2>Specialkosttyper</h2>
+    <table>
+      <thead>
+        <tr><th>Namn</th></tr>
+      </thead>
+      <tbody>
+        {% for d in vm.diets %}
+        <tr><td>{{ d.name }}</td></tr>
+        {% endfor %}
+        {% if not vm.diets %}
+        <tr><td class="muted">Inga specialkosttyper upplagda ännu.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    <h3>Skapa ny specialkosttyp</h3>
+    <form method="post" action="{{ url_for('ui.admin_diets_create', site_id=vm.site.id) }}">
+      <label>Namn<br><input type="text" name="name" required></label>
+      <button class="btn" type="submit">Skapa</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

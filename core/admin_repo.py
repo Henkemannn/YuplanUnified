@@ -374,23 +374,48 @@ class DietDefaultsRepo:
                             department_id TEXT NOT NULL,
                             diet_type_id TEXT NOT NULL,
                             default_count INTEGER NOT NULL DEFAULT 0,
+                            -- Optional Phase 3 flag: count as done (debiterbar) always
+                            always_mark INTEGER NOT NULL DEFAULT 0,
                             PRIMARY KEY (department_id, diet_type_id)
                         )
                         """
                     )
                 )
-            rows = db.execute(
-                text(
-                    """
-                    SELECT diet_type_id, default_count
-                    FROM department_diet_defaults
-                    WHERE department_id=:d
-                    ORDER BY diet_type_id
-                    """
-                ),
-                {"d": dept_id},
-            ).fetchall()
-            return [{"diet_type_id": r[0], "default_count": int(r[1])} for r in rows]
+            # Detect optional column presence
+            cols = {c[1] for c in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
+            if "always_mark" in cols:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT diet_type_id, default_count, always_mark
+                        FROM department_diet_defaults
+                        WHERE department_id=:d
+                        ORDER BY diet_type_id
+                        """
+                    ),
+                    {"d": dept_id},
+                ).fetchall()
+                return [
+                    {
+                        "diet_type_id": r[0],
+                        "default_count": int(r[1]),
+                        "always_mark": bool(r[2] or 0),
+                    }
+                    for r in rows
+                ]
+            else:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT diet_type_id, default_count
+                        FROM department_diet_defaults
+                        WHERE department_id=:d
+                        ORDER BY diet_type_id
+                        """
+                    ),
+                    {"d": dept_id},
+                ).fetchall()
+                return [{"diet_type_id": r[0], "default_count": int(r[1]), "always_mark": False} for r in rows]
         finally:
             db.close()
 

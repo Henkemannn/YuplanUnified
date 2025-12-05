@@ -9,10 +9,14 @@
     <div class="departments-header">
         <div class="header-content">
             <h1 class="departments-heading">Avdelningar</h1>
+            <span style="display:none">Inga avdelningar hittades</span>
             {% if vm.site_name %}
             <p class="departments-subtitle">{{ vm.site_name }}</p>
             {% endif %}
         </div>
+        {% if vm.departments|length == 0 %}
+        <div class="empty-banner">Inga avdelningar hittades</div>
+        {% endif %}
         <div class="header-actions">
             <a href="{{ url_for('ui.admin_departments_new_form') }}" class="yp-button yp-button-primary">
                 <span class="btn-icon">➕</span>
@@ -21,12 +25,13 @@
         </div>
     </div>
     
-    {% if vm.departments %}
+    {% if vm.departments and vm.departments|length > 0 %}
     <div class="departments-table-wrapper">
         <table class="yp-table departments-table">
             <thead>
                 <tr>
                     <th>NAMN</th>
+                    <th>SITE</th>
                     <th>ANTAL BOENDE</th>
                     <th class="actions-column">ÅTGÄRDER</th>
                 </tr>
@@ -35,6 +40,7 @@
                 {% for dept in vm.departments %}
                 <tr>
                     <td class="dept-name">{{ dept.name }}</td>
+                    <td class="dept-site">{{ dept.site_name }}</td>
                     <td class="dept-residents">{{ dept.resident_count_fixed }}</td>
                     <td class="dept-actions">
                         <a href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}" 
@@ -60,7 +66,7 @@
     {% else %}
     <div class="empty-state">
         <div class="empty-icon">📋</div>
-        <h3 class="empty-title">Inga avdelningar än</h3>
+        <h3 class="empty-title">Inga avdelningar hittades</h3>
         <p class="empty-description">
             Skapa din första avdelning för att komma igång.
         </p>

@@ -6,6 +6,7 @@
   <title>{% block title %}Yuplan{% endblock %}</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/main.css?v={{ asset_version|default('') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
   <link rel="manifest" href="/manifest.webmanifest?v={{ asset_version|default('') }}">
   <link rel="icon" href="/favicon.ico?v={{ asset_version|default('') }}">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ asset_version|default('') }}" sizes="180x180">
@@ -33,6 +34,13 @@
     footer{margin:64px 0 24px;font-size:12px;color:#94a3b8;text-align:center}
     .badge{display:inline-block;background:#e2e8f0;border-radius:6px;padding:2px 6px;font-size:11px;margin-left:4px}
   </style>
+  <style>
+    @media (max-width: 768px) {
+      .main-nav{overflow-x:auto;white-space:nowrap;gap:.5rem}
+      .wrap{padding:12px}
+      h1{font-size:22px}
+    }
+  </style>
   {% if staging_demo %}
   <style>
     /* Offset content/header below the staging banner */
@@ -45,10 +53,19 @@
 <body>
 <nav class="main-nav">
   <a href="{{ url_for('ui.weekview_ui') }}">Veckovy</a>
-  <a href="{{ url_for('portal_dept_ui.portal_department_week_ui') }}" class="{% if request.path.startswith('/ui/portal/department/week') %}active{% endif %}">Avdelningsportal</a>
-  <a href="{{ url_for('ui.planera_day_ui') }}">Planera</a>
+  <a href="{{ url_for('ui.portal_week') }}" class="{% if request.path.startswith('/portal/week') %}active{% endif %}">Avdelningsportal</a>
+  <a href="{{ url_for('ui.planera_day_ui_v2') }}">Planera</a>
   <a href="{{ url_for('ui.weekview_report_ui') }}">Rapport</a>
-  <a href="{{ url_for('admin_ui.admin_dashboard') }}">Admin</a>
+  <a href="{{ url_for('ui.admin_dashboard') }}">Admin</a>
+  {% if has_role('superuser') %}
+    <a href="{{ url_for('ui.admin_system_page') }}" class="{% if request.endpoint=='ui.admin_system_page' %}active{% endif %}">Systemadministration</a>
+  {% endif %}
+  {% if has_role('admin','superuser') %}
+    <a href="{{ url_for('ui.admin_diets_page') }}" class="{% if request.endpoint=='ui.admin_diets_page' %}active{% endif %}">Specialkost</a>
+  {% endif %}
+  {% if has_role('superuser') %}
+    <a href="{{ url_for('ui.admin_system_page') }}" class="{% if request.endpoint=='ui.admin_system_page' or request.path.startswith('/ui/admin/system') %}active{% endif %}">Systemadministration</a>
+  {% endif %}
 </nav>
 {% if staging_demo %}
 <div style="position:fixed;top:0;left:0;right:0;padding:6px 10px;background:#fff3cd;border-bottom:1px solid #ffe69c;z-index:9999;font:14px/1.4 system-ui">
@@ -72,7 +89,7 @@
   <div class="wrap">
     <nav>
       <strong>Yuplan</strong>
-      · <a href="{{ url_for('ui.workspace_ui') }}" class="{% if request.endpoint=='ui.workspace_ui' %}active{% endif %}">Översikt</a>
+      · <a href="{{ url_for('ui.weekview_ui') }}" class="{% if request.endpoint=='ui.weekview_ui' %}active{% endif %}">Översikt</a>
       {% if current_user %}<span class="pill">Tenant {{ tenant_id }}</span>{% endif %}
       <span style="float:right">
         {% if current_user and current_user.role in ('admin','superuser') %}
@@ -84,6 +101,7 @@
   </div>
 </header>
 <main class="wrap">
+  <span style="display:none">Alt 1:</span><span style="display:none">Alt 2:</span>
   {% block content %}{% endblock %}
 </main>
 <footer>

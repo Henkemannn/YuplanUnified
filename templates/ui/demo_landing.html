@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <title>Demo – Snabbåtkomst</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
+  <style>
+    .container{max-width:860px;margin:2rem auto;padding:1.5rem}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1rem;margin-bottom:1rem}
+    .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
+    .btn{display:inline-block;padding:.75rem 1rem;border-radius:10px;text-decoration:none;border:2px solid #2563eb;color:#2563eb}
+    .btn:hover{background:#2563eb;color:#fff}
+    .muted{color:#6b7280}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Yuplan Unified – Demo</h1>
+    <p class="muted">Förifyllda länkar med demo-ID:n för snabb kontroll.</p>
+
+    <div class="card">
+      <p><strong>Site:</strong> {{ vm.site_id }} &nbsp; <strong>Avdelning:</strong> {{ vm.department_id }}</p>
+      <p><strong>År/Vecka:</strong> {{ vm.year }} / {{ vm.week }}</p>
+    </div>
+
+    <div class="grid">
+      <a class="btn" href="{{ url_for('ui.portal_week', site_id=vm.site_id, department_id=vm.department_id, year=vm.year, week=vm.week) }}">Öppna Portal Week</a>
+      <a class="btn" href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, department_id=vm.department_id, year=vm.year, week=vm.week) }}">Öppna Weekview</a>
+      <a class="btn" href="{{ url_for('ui.weekview_report_ui', site_id=vm.site_id, year=vm.year, week=vm.week) }}">Visa Rapport</a>
+    </div>
+  </div>
+</body>
+</html>

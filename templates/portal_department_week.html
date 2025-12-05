@@ -11,8 +11,8 @@
   data-menu-choice-etag="{{ vm.etag_map.menu_choice }}">
   <header class="portal-header">
     <div>
-      <h1>Vecka {{ vm.week }} – {{ vm.department_name }}</h1>
-      <p class="portal-subtitle">{{ vm.site_name }}</p>
+      <h1>{{ vm.site_name }} – {{ vm.department_name }}</h1>
+      <p class="portal-subtitle">År {{ vm.year }} • Vecka {{ vm.week }}</p>
     </div>
     <div class="portal-week-nav">
       <a href="{{ url_for('portal_dept_ui.portal_department_week_ui', year=vm.year, week=vm.week-1) }}">← Föregående vecka</a>
@@ -104,7 +104,7 @@
               aria-pressed="{{ 'true' if choice.selected_alt == 'Alt1' else 'false' }}"
               aria-label="Välj Alt 1 för {{ day.weekday_name }}"
             >
-              {{ menu.lunch_alt1 or "Ingen menytext" }}
+              {{ menu.lunch_alt1 or "Ingen rätt" }}
             </td>
             <td
               class="portal-alt-cell portal-alt2-cell {% if choice.selected_alt == 'Alt2' %}portal-alt-selected{% endif %}"
@@ -115,20 +115,33 @@
               aria-pressed="{{ 'true' if choice.selected_alt == 'Alt2' else 'false' }}"
               aria-label="Välj Alt 2 för {{ day.weekday_name }}"
             >
-              {{ menu.lunch_alt2 or "Ingen menytext" }}
+              {{ menu.lunch_alt2 or "Ingen rätt" }}
             </td>
             <td class="portal-dessert-cell">
               {{ menu.dessert or "Ingen dessert" }}
             </td>
             <td class="portal-dinner-cell">
-              {{ menu.dinner or "Ingen kvällsmat" }}
+              {{ menu.dinner or "Ingen rätt" }}
             </td>
             <td class="portal-residents-cell">
-              Lunch: {{ residents.lunch }}<br>
+              Lunch: {{ residents.lunch }}
+              {% if (residents.lunch or 0) > 0 %}
+                <span class="yp-badge-success">Registrerad</span>
+              {% else %}
+                <span class="yp-badge-muted">Ej gjord</span>
+              {% endif %}
+              <br>
               Kväll: {{ residents.dinner }}
+              {% if (residents.dinner or 0) > 0 %}
+                <span class="yp-badge-success">Registrerad</span>
+              {% else %}
+                <span class="yp-badge-muted">Ej gjord</span>
+              {% endif %}
             </td>
             <td class="portal-diets-cell">
-              {% if diets.lunch or diets.dinner %}
+              {% if day.has_diets %}
+                <span class="yuplan-diet-pill" aria-label="Specialkost registrerad">🍽 Specialkost</span>
+                {% if diets.lunch or diets.dinner %}
                 {% if diets.lunch %}
                   <div><strong>Lunch:</strong>
                     {% for d in diets.lunch %}
@@ -142,6 +155,7 @@
                       {{ d.diet_name }} [{{ d.count }}]{% if not loop.last %}, {% endif %}
                     {% endfor %}
                   </div>
+                {% endif %}
                 {% endif %}
               {% else %}
                 <span>Ingen specialkost registrerad.</span>
@@ -182,6 +196,18 @@
       </div>
     </div>
     -->
+  </section>
+  <section class="portal-summary">
+    <h2>Summering</h2>
+    <p>Registrerad lunch: {{ vm.summary.registered_lunch_days }} dagar</p>
+    <p>Registrerad kväll: {{ vm.summary.registered_dinner_days }} dagar</p>
+    {% if vm.summary.diet_days_count is not none %}
+      <p>Dagar med specialkost: {{ vm.summary.diet_days_count }}</p>
+    {% endif %}
+    <div class="portal-actions">
+      <a class="yp-btn" href="{{ vm.links.weekview }}">Öppna veckovy</a>
+      <a class="yp-btn yp-btn-secondary" href="{{ vm.links.report_weekview }}">Visa rapport</a>
+    </div>
   </section>
   <!-- Conflict overlay permanently removed for demo/dev -->
   <!--

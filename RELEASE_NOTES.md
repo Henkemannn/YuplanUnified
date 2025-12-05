@@ -1,3 +1,9 @@
+### Ändrat – Weekview-rapport / debiterbar specialkost
+
+- Rapporter (UI, CSV, XLSX) använder nu fältet "debiterbar specialkost" i stället för generisk `special_count`.
+- Debiterbar specialkost = antal måltider som faktiskt behövt specialanpassas (baserat på marks + "markeras alltid"), inte bara antal boende med specialkost.
+- Normalkost i exporterna beräknas som `boendeantal − debiterbar_specialkost`.
+- XLSX-kolumnrubriker uppdaterade till: Site, Avdelning, År, Vecka, Måltid, Boende totalt, Gjorda specialkoster, Normalkost.
 # v1.0.0 (GA) — Release Notes
 
 ## Highlights

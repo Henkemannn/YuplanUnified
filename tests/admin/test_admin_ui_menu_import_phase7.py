@@ -56,8 +56,8 @@ def app_with_menu(app_session: Flask):
     
     # Seed menu for week 48/2025
     conn.execute(
-        text("INSERT INTO menus (tenant_id, week, year) VALUES (:tid, :week, :year)"),
-        {"tid": 1, "week": 48, "year": 2025}
+        text("INSERT INTO menus (tenant_id, week, year, status) VALUES (:tid, :week, :year, :status)"),
+        {"tid": 1, "week": 48, "year": 2025, "status": "draft"}
     )
     menu_id = conn.execute(text("SELECT last_insert_rowid()")).fetchone()[0]
     

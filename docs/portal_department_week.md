@@ -26,6 +26,16 @@ En enkel, läsbar avdelningsvy för omsorgs-/avdelningspersonal och kök. Sidan 
   - `T` scrollar till dagens kort (om markerat).
   - `Enter`/`Space` på ett fokuserat måltidsblock triggar samma händelse som klick.
 
+## Navigation
+- Klick på lunch- eller kvällsblock navigerar till befintlig dagvy-rutt: `/ui/planera/day`.
+- URL-format:
+  `/ui/planera/day?site_id={site_id}&department_id={department_id}&date={YYYY-MM-DD}&meal={lunch|dinner}&year={year}&week={week}`
+- Parametrar:
+  - `site_id`, `department_id`, `year`, `week`, `date` kommer från `vm` som renderas på sidan.
+  - `meal` härleds från klickat block (`lunch`/`dinner`).
+- Målroute skyddas av feature-flaggan `ff.planera.enabled` vid körning.
+- Phase 3 kopplar endast UI → befintlig route; inga backend/API-ändringar.
+
 ## Skärmdumpar
 
 ![Portal week desktop](screenshots/portal_week_desktop.png)

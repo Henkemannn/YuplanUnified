@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Avdelningsvy – Vecka {{ vm.week }}, {{ vm.year }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_portal.css') }}">
+  <script src="{{ url_for('static', filename='unified_portal.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='unified_ui.js') }}" defer></script>
+  {% include 'includes/yuplan_header.html' ignore missing %}
+</head>
+<body>
+<header class="yp-header">
+  <div class="yp-header__title">Avdelningsportalen</div>
+  <div class="yp-header__meta">
+    <span>Vecka {{ vm.week }}, {{ vm.year }}</span>
+    <span>• {{ vm.department_name }}</span>
+    <span>• {{ vm.site_name }}</span>
+  </div>
+</header>
+
+<main class="portal-container">
+<main class="portal-container"
+  data-site-id="{{ vm.site_id }}"
+  data-department-id="{{ vm.department_id }}"
+  data-year="{{ vm.year }}"
+  data-week="{{ vm.week }}">
+  <nav class="breadcrumb" aria-label="Brödsmulor">
+    <a href="#" tabindex="-1">Portal</a>
+    <span class="breadcrumb-sep">/</span>
+    <a href="{% if vm.is_enhetsportal %}/ui/portal/weeks{% else %}/portal/weeks{% endif %}?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}">{{ vm.department_name }}</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">Vecka {{ vm.week }}</span>
+  </nav>
+  <section class="portal-summary">
+    <h1 class="portal-summary__title">Vecka {{ vm.week }}, {{ vm.year }} – {{ vm.department_name }}, {{ vm.site_name }}</h1>
+    <div class="portal-summary__info">
+      <p>
+        <a class="yp-button yp-button-link" href="{% if vm.is_enhetsportal %}/ui/portal/weeks{% else %}/portal/weeks{% endif %}?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}">Till vecköversikt</a>
+      </p>
+      <p><strong>Boendeantal:</strong> {{ vm.residents_total }}</p>
+      {% if vm.diet_defaults_summary and vm.diet_defaults_summary|length > 0 %}
+      <p><strong>Specialkost på avdelningen:</strong>
+        {% for it in vm.diet_defaults_summary %}
+          {{ it.name }} ({{ it.planned_count }}){% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </p>
+      {% endif %}
+      {% if vm.notes %}
+      <p><strong>Faktaruta:</strong> {{ vm.notes }}</p>
+      {% endif %}
+      <p>
+        {% if vm.status and vm.status.is_complete %}
+          <span class="yp-badge yp-badge-success">Veckan är klar</span>
+        {% else %}
+          <span class="yp-badge yp-badge-warning">Veckan är inte klar – saknar val för: {{ vm.status.missing_days | join(', ') }}</span>
+        {% endif %}
+      </p>
+    </div>
+  </section>
+
+  <section class="portal-day-grid" aria-label="Veckans meny">
+    {% for day in vm.days %}
+    <article class="yp-card portal-day-card" data-is-today="{{ 'true' if day.is_today else 'false' }}">
+      <div class="portal-day-card__header {{ 'is-today' if day.is_today }}">
+        <div class="portal-day-card__title">
+          {{ day.weekday_name }} {{ day.date | replace('-', '/') }}
+        </div>
+        {% if day.is_today %}
+        <span class="yp-badge yp-badge-info">Idag</span>
+        {% endif %}
+      </div>
+
+       <div class="meal-block" role="button" tabindex="0"
+        aria-label="Lunch {{ day.weekday_name }} {{ day.date }}{{ ', Registrerad' if day.registered.lunch else '' }}{{ ', Alt 2' if day.alt2_lunch else '' }}"
+        data-day="{{ day.date }}" data-day-key="{{ day.date }}" data-meal="lunch" data-can-choose-lunch="{{ 'true' if day.can_choose_lunch else 'false' }}">
+        <div class="meal-block__header">
+          <span class="meal-icon" aria-hidden="true">🍽</span>
+          <span class="meal-label">LUNCH</span>
+          <span class="meal-badges">
+            {% if day.can_choose_lunch %}
+              <span class="yp-badge yp-badge-info">Valbar (Alt1/Alt2)</span>
+            {% else %}
+              <span class="yp-badge yp-badge-muted">Endast menyvisning</span>
+            {% endif %}
+            {% if not day.registered.lunch %}
+              <span class="yp-badge yp-badge-muted">Ej gjord</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="meal-text meal-text--alt1">{{ day.menu.lunch.alt1 or 'Ingen rätt' }}</div>
+        {% if day.menu.lunch.alt2 %}
+        <div class="meal-text meal-text--alt2">{{ day.menu.lunch.alt2 }}</div>
+        {% endif %}
+        {% if day.menu.lunch.dessert %}
+        <div class="meal-text meal-text--dessert">{{ day.menu.lunch.dessert }}</div>
+        {% endif %}
+         {% if day.residents.lunch and day.residents.lunch > 0 %}
+         <div class="residents-count">Boende: {{ day.residents.lunch }}</div>
+         {% endif %}
+        {% if day.default_diets and day.default_diets|length > 0 %}
+        <div class="meal-diets" aria-hidden="true">
+          {% for d in day.default_diets %}
+          <span class="yp-badge yp-badge-secondary">{{ d.name }} [{{ d.count }}]</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+      {% if vm.force_show_dinner or day.menu.dinner.alt1 or day.menu.dinner.alt2 %}
+      <div class="meal-block" role="button" tabindex="0"
+        aria-label="Kvällsmat {{ day.weekday_name }} {{ day.date }}{{ ', Registrerad' if day.registered.dinner else '' }}"
+        data-day="{{ day.date }}" data-day-key="{{ day.date }}" data-meal="dinner">
+        <div class="meal-block__header">
+          <span class="meal-icon" aria-hidden="true">🌙</span>
+          <span class="meal-label">KVÄLLSMAT</span>
+          <span class="meal-badges">
+            <span class="yp-badge yp-badge-muted">Endast menyvisning</span>
+            {% if not day.registered.dinner %}
+              <span class="yp-badge yp-badge-muted">Ej gjord</span>
+            {% endif %}
+          </span>
+        </div>
+        {% if day.menu.dinner.alt1 or day.menu.dinner.alt2 %}
+          <div class="meal-text meal-text--alt1">{{ day.menu.dinner.alt1 }}</div>
+          {% if day.menu.dinner.alt2 %}
+          <div class="meal-text meal-text--alt2">{{ day.menu.dinner.alt2 }}</div>
+          {% endif %}
+        {% else %}
+          <div class="meal-text meal-text--alt1">Ingen rätt</div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </section>
+
+  {% if vm.show_kost_grid %}
+  <h1 class="veckovy-title">Veckovy – kök</h1>
+  <section class="veckovy-day-summary" aria-live="polite">
+    <h3>Fokusdag</h3>
+    <p class="veckovy-day-summary__label">Ingen dag vald</p>
+    <p class="veckovy-day-summary__totals"></p>
+  </section>
+  <section class="veckovy-grid">
+    <span style="position:absolute;left:-9999px;top:-9999px;" aria-hidden="true">.veckovy-department-card .veckovy-table .kostcell</span>
+    {% for grid in vm.kost_grids %}
+    <section class="veckovy-department-card">
+      <header class="veckovy-department-card__header">
+        <div class="veckovy-department-card__title">
+          <h2>{{ grid.department_name }}</h2>
+          <span class="veckovy-department-card__residents">{{ grid.residents_by_day.values()|sum }} boende</span>
+        </div>
+        {% if grid.info_text %}
+        <div class="veckovy-department-card__info">{{ grid.info_text }}</div>
+        {% endif %}
+      </header>
+      <div class="veckovy-department-card__table-wrapper">
+        <table class="veckovy-table" aria-label="Veckovy för {{ grid.department_name }}">
+          <thead>
+            <tr>
+              <th>Specialkost</th>
+              {% for day in vm.days_ordered %}
+              <th class="veckovy-day-header" data-day-index="{{ day.index }}">
+                <div class="veckovy-day-header__title">{{ day.label_short }}</div>
+                {% if day.has_menu %}
+                <button type="button" class="veckovy-menu-icon" data-day="{{ day.index }}" data-day-key="{{ day.key }}">🍽</button>
+                {% endif %}
+                {% if day.planera_lunch_url %}
+                <a href="{{ day.planera_lunch_url }}" class="veckovy-day-planera-link" title="Öppna planering för lunch denna dag">Planera</a>
+                {% endif %}
+              </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in grid.rows %}
+            <tr>
+              <td>{{ row.kosttyp_name }}</td>
+              {% for cell in row.cells %}
+              <td class="kostcell{% if cell.is_marked %} markerad{% endif %}{% if cell.is_alt2 %} gulmarkerad{% endif %}{% if cell.is_dinner %} kväll{% endif %}{% if cell.is_day_start %} dagstart{% endif %}{% if cell.heat_level == 'low' %} heat-low{% endif %}{% if cell.heat_level == 'medium' %} heat-medium{% endif %}{% if cell.heat_level == 'high' %} heat-high{% endif %}"
+                  data-kosttyp-id="{{ cell.kosttyp_id }}"
+                  data-department-id="{{ cell.department_id }}"
+                  data-week="{{ cell.week }}"
+                  data-day="{{ cell.day_index }}"
+                  data-weekday-key="{{ cell.weekday_key }}"
+                  data-meal="{{ cell.meal }}">
+                {{ cell.count }}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endfor %}
+  </section>
+  <script>
+    window.VECKOVY_MENU_DATA = {{ vm.menu_by_day | tojson | safe }};
+    window.VECKOVY_TODAY_DAY_INDEX = {{ vm.today_day_index if vm.today_day_index is not none else 'null' }};
+  </script>
+  {% endif %}
+</main>
+
+{% include 'includes/yuplan_footer.html' ignore missing %}
+</body>
+</html>

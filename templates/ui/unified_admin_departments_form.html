@@ -1,6 +1,6 @@
 {% extends "ui/unified_admin_base.html" %}
 
-{% block page_title %}{{ 'Ny avdelning' if vm.mode == 'new' else 'Redigera avdelning' }}{% endblock %}
+{% block page_title %}{{ 'Ny avdelning' if vm.mode == 'new' else 'Redigera Avdelning' }}{% endblock %}
 
 {% block content %}
 
@@ -58,6 +58,14 @@
                        aria-required="true"
                        placeholder="0">
                 <p class="yp-form-help">Totalt antal boende på avdelningen</p>
+            </div>
+
+            <div class="yp-form-field">
+                <label for="notes" class="yp-label">
+                    📝 Faktaruta
+                </label>
+                <textarea id="notes" name="notes" class="yp-input" rows="4" placeholder="Valfri beskrivning">{% if vm.department %}{{ vm.department.notes }}{% endif %}</textarea>
+                <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
             </div>
             
             <div class="form-actions">

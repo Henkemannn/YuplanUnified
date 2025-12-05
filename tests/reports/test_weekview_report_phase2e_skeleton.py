@@ -50,7 +50,7 @@ def test_weekview_report_api_and_ui_skeleton(client_admin):
     assert dept["department_id"] == dep_id
     assert "meals" in dept and "lunch" in dept["meals"] and "dinner" in dept["meals"]
     lunch = dept["meals"]["lunch"]
-    assert set(lunch.keys()) == {"residents_total", "special_diets", "normal_diet_count"}
+    assert set(lunch.keys()) == {"residents_total", "debiterbar_specialkost_count", "normal_diet_count"}
 
     # API all departments
     r_api_all = client_admin.get(f"/api/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=_h("admin"))

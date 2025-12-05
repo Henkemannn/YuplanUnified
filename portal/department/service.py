@@ -143,6 +143,7 @@ def _build_days(
         dinner_diets = [
             {"diet_type_id": k.lower(), "diet_name": k, "count": v} for k, v in dinner_diets_raw.items()
         ]
+        has_diets = bool(lunch_diets) or bool(dinner_diets)
         days.append(
             {
                 "date": dt.date().isoformat(),
@@ -157,6 +158,7 @@ def _build_days(
                 "flags": {"alt2_lunch": weekday_num in alt2_days},
                 "residents": {"lunch": lunch_count, "dinner": dinner_count},
                 "diets_summary": {"lunch": lunch_diets, "dinner": dinner_diets},
+                "has_diets": has_diets,
             }
         )
     return days
@@ -170,6 +172,18 @@ def build_department_week_payload(
 ) -> DepartmentPortalWeekPayload:
     # Fetch meta
     dep_id, dep_name, site_id, note_val = _fetch_department_meta(department_id)
+    # Resolve site name for header display (best-effort)
+    site_name_val = ""
+    try:
+        dbn = get_session()
+        try:
+            row_site = dbn.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": site_id}).fetchone()
+            if row_site and row_site[0]:
+                site_name_val = str(row_site[0])
+        finally:
+            dbn.close()
+    except Exception:
+        site_name_val = ""
 
     # Weekview core data
     repo = WeekviewRepo()
@@ -205,6 +219,11 @@ def build_department_week_payload(
     days_with_choice = sum(1 for d in days if d["choice"].get("selected_alt") is not None)
     progress: PortalProgress = {"days_with_choice": days_with_choice, "total_days": len(days)}
 
+    # Simple summary counts for registered lunch/dinner days (count > 0 considered registered)
+    registered_lunch_days = sum(1 for d in days if (d.get("residents", {}).get("lunch") or 0) > 0)
+    registered_dinner_days = sum(1 for d in days if (d.get("residents", {}).get("dinner") or 0) > 0)
+    diet_days_count = sum(1 for d in days if d.get("has_diets"))
+
     # ETag map signatures
     menu_sig = _menu_choice_sig(department_id, week)
     # Weekview signature: hash of counts + marked diets + alt2 days
@@ -232,13 +251,14 @@ def build_department_week_payload(
         "department_id": dep_id,
         "department_name": dep_name,
         "site_id": site_id,
-        "site_name": "",  # site name could be joined if needed later
+        "site_name": site_name_val,
         "year": year,
         "week": week,
         "facts": facts,
         "progress": progress,
         "etag_map": etag_map,
         "days": days,
+        "summary": {"registered_lunch_days": registered_lunch_days, "registered_dinner_days": registered_dinner_days, "diet_days_count": diet_days_count},
     }
     from portal.department.models import validate_portal_week_payload
     validate_portal_week_payload(payload)

@@ -265,6 +265,11 @@ def patch_weekview_residents() -> Response:
 @bp.patch("/weekview/alt2")
 @require_roles("admin", "editor")
 def patch_weekview_alt2() -> Response:
+    """Toggle alt2 flags for lunch across specific days.
+
+    NOTE: Flags are persisted via WeekviewRepo.set_alt2_flags and surface in UI through
+    WeekviewService enrichment (`day.alt2_lunch`). Portal and weekview UIs render badges accordingly.
+    """
     maybe = _require_weekview_enabled()
     if maybe is not None:
         return maybe

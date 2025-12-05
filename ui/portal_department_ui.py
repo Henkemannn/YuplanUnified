@@ -74,6 +74,11 @@ def portal_department_week_ui():  # type: ignore[override]
         "progress": payload["progress"],
         "days": payload["days"],
         "etag_map": payload["etag_map"],
+        "summary": payload.get("summary", {"registered_lunch_days": 0, "registered_dinner_days": 0}),
+        "links": {
+            "weekview": f"/ui/weekview?site_id={payload['site_id']}&department_id={payload['department_id']}&year={payload['year']}&week={payload['week']}",
+            "report_weekview": f"/ui/reports/weekview?site_id={payload['site_id']}&year={payload['year']}&week={payload['week']}",
+        },
     }
     return render_template("portal_department_week.html", vm=vm)
 
