@@ -15,6 +15,89 @@ class PlaneraService:
     def __init__(self, weekview: WeekviewService | None = None) -> None:
         self._weekview = weekview or WeekviewService()
 
+    # =============================
+    # Phase 2: Day/Meal plan overview
+    # =============================
+    def get_plan_view(self, tenant_id: int, site_id: str, date: _date, meal: str, department_id: str | None = None) -> Dict[str, Any]:
+        year, week, _ = date.isocalendar()
+        # List departments for the site and resolve site name
+        from sqlalchemy import text
+        from .db import get_session
+        db = get_session()
+        try:
+            dep_rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s"), {"s": site_id}).fetchall()
+            # If a specific department_id is provided, ensure it's included
+            if department_id:
+                row = db.execute(text("SELECT id, name FROM departments WHERE id=:d"), {"d": department_id}).fetchone()
+                if row:
+                    dep_rows = dep_rows + [row]
+            site_row = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        finally:
+            db.close()
+        departments: List[Tuple[str, str]] = []
+        seen: set[str] = set()
+        for r in dep_rows:
+            rid = str(r[0]); rn = str(r[1])
+            if rid in seen:
+                continue
+            seen.add(rid)
+            departments.append((rid, rn))
+        site_name = site_row[0] if site_row else "Site"
+        # Compute per-department meal payloads using existing Phase 1 logic
+        day_vm = self.compute_day(tenant_id, site_id, date.isoformat(), departments)
+        dep_payloads: Dict[str, Dict[str, Any]] = {d["department_id"]: d for d in day_vm.get("departments", [])}
+        # Pull registrations to reflect "Klar" status
+        from .meal_registration_repo import MealRegistrationRepo
+        reg_repo = MealRegistrationRepo()
+        reg_repo.ensure_table_exists()
+        is_done_map: Dict[Tuple[str, str], bool] = {}
+        for dep_id, _dep_name in departments:
+            reg_list = reg_repo.get_registrations_for_week(tenant_id, site_id, dep_id, year, week)
+            # Index by (date, meal)
+            idx = {(str(it["date"]), str(it["meal_type"])): bool(it["registered"]) for it in reg_list}
+            is_done_map[(dep_id, date.isoformat())] = bool(idx.get((date.isoformat(), meal)))
+        # Build rows
+        rows: List[Dict[str, Any]] = []
+        totals_normalkost = 0
+        totals_specials_acc: Dict[str, int] = {}
+        for dep_id, dep_name in departments:
+            dep = dep_payloads.get(dep_id) or {}
+            meals = dep.get("meals", {})
+            m = meals.get(meal, {}) if isinstance(meals, dict) else {}
+            residents_total = int(m.get("residents_total") or 0)
+            specials_arr = m.get("special_diets") or []
+            specials_map: Dict[str, int] = {}
+            for it in specials_arr:
+                nm = str(it.get("diet_name") or "")
+                cnt = int(it.get("count") or 0)
+                if nm and cnt > 0:
+                    specials_map[nm] = specials_map.get(nm, 0) + cnt
+                    totals_specials_acc[nm] = totals_specials_acc.get(nm, 0) + cnt
+            normal_cnt = int(m.get("normal_diet_count") or 0)
+            totals_normalkost += normal_cnt
+            rows.append({
+                "department_id": dep_id,
+                "department_name": dep_name or "Avdelning",
+                "residents_count": residents_total,
+                "specials": specials_map,
+                "is_done": bool(is_done_map.get((dep_id, date.isoformat()))),
+            })
+        return {
+            "date": date,
+            "meal": meal,
+            "site_name": site_name,
+            "rows": rows,
+            "totals_normalkost": totals_normalkost,
+            "totals_specials": totals_specials_acc,
+        }
+
+    def mark_done(self, tenant_id: int, site_id: str, date: _date, meal: str, department_ids: List[str]) -> None:
+        from .meal_registration_repo import MealRegistrationRepo
+        repo = MealRegistrationRepo()
+        repo.ensure_table_exists()
+        for dep_id in department_ids:
+            repo.upsert_registration(tenant_id=tenant_id, site_id=site_id, department_id=dep_id, date_str=date.isoformat(), meal_type=meal, registered=True)
+
     def compute_day(
         self,
         tenant_id: int | str,
@@ -43,6 +126,17 @@ class PlaneraService:
                         residents_total = int((day.get("residents") or {}).get(meal, 0) or 0)
                     except Exception:
                         residents_total = 0
+                    # Include menu texts per meal from Weekview enrichment
+                    try:
+                        mt = day.get("menu_texts") or {}
+                        mtm = mt.get(meal, {}) if isinstance(mt, dict) else {}
+                        alt1_text = mtm.get("alt1")
+                        alt2_text = mtm.get("alt2")
+                        dessert_text = mtm.get("dessert") if meal == "lunch" else None
+                    except Exception:
+                        alt1_text = None
+                        alt2_text = None
+                        dessert_text = None
                     diets_arr = ((day.get("diets") or {}).get(meal)) or []
                     for it in diets_arr:
                         try:
@@ -69,10 +163,24 @@ class PlaneraService:
                 normal = residents_total - total_special
                 if normal < 0:
                     normal = 0
+                # Alt2 choice indicator: for lunch, derive from day flag; dinner optional/None in Phase 1
+                alt_choice = None
+                try:
+                    if meal == "lunch":
+                        alt_choice = "Alt2" if bool(day.get("alt2_lunch")) else ("Alt1" if alt1_text else None)
+                    else:
+                        # If dinner alt2 text exists, prefer Alt2; otherwise Alt1 when present
+                        alt_choice = "Alt2" if alt2_text else ("Alt1" if alt1_text else None)
+                except Exception:
+                    alt_choice = None
                 meals_payload[meal] = {
                     "residents_total": residents_total,
                     "special_diets": specials_arr,
                     "normal_diet_count": normal,
+                    "alt1": alt1_text,
+                    "alt2": alt2_text,
+                    "dessert": dessert_text,
+                    "alt_choice": alt_choice,
                 }
                 total_residents[meal] += residents_total
                 for dtid, cnt in special_counts.items():

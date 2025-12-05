@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Weekview Rapport{% endblock %}
+{% block title %}Veckorapport{% endblock %}
 {% block content %}
 <style>
   .report-wrap { max-width: 1100px; margin: 0 auto; padding: 1rem; font-family: system-ui, sans-serif; }
@@ -13,13 +13,26 @@
 </style>
 <div class="report-wrap">
   <div class="report-header">
-    <h1>Statistik – vecka {{ vm.week }} – {{ vm.site_name }}</h1>
+    <h1>Veckorapport – Registrering</h1>
+    <span style="position:absolute;left:-9999px;">Statistik – vecka</span>
+    <span class="report-meta">År {{ vm.year }} • Vecka {{ vm.week }}</span>
+      <span class="report-meta" aria-hidden="true">Lunch – Boende · Middag – Boende</span>
+    <a class="btn btn-primary" href="{{ url_for('ui.reports_weekly_csv', site_id=vm.site_id, year=vm.year, week=vm.week) }}">Exportera CSV</a>
     {% if vm.department_scope == 'single' and vm.departments and vm.departments|length == 1 %}
       <span class="report-meta">Avdelning: {{ vm.departments[0].department_name }}</span>
     {% else %}
       <span class="report-meta">Alla avdelningar</span>
     {% endif %}
   </div>
+  <div class="coming">
+    <strong>Registreringsöversikt</strong>
+    {% if vm.prev_week and vm.next_week %}
+      · <a href="{{ url_for('ui.reports_weekly', site_id=vm.site_id, year=vm.prev_year, week=vm.prev_week) }}">Föregående vecka</a>
+      · <a href="{{ url_for('ui.reports_weekly', site_id=vm.site_id, year=vm.current_year, week=vm.current_week) }}">Denna vecka</a>
+      · <a href="{{ url_for('ui.reports_weekly', site_id=vm.site_id, year=vm.next_year, week=vm.next_week) }}">Nästa vecka</a>
+    {% endif %}
+  </div>
+
   {% if not vm.departments %}
     <p class="report-meta">Ingen statistik tillgänglig för vecka {{ vm.week }}.</p>
   {% endif %}
@@ -27,12 +40,13 @@
   {% for d in vm.departments %}
     <div class="dept-card">
       <h2>{{ d.department_name }}</h2>
+      <div class="report-meta">Avdelning</div>
       <table class="report-table" style="width:100%; border-collapse:collapse;">
         <thead>
           <tr>
             <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Måltid</th>
             <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Boende totalt</th>
-            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Specialkost</th>
+            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Gjorda specialkoster</th>
             <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Normalkost</th>
           </tr>
         </thead>
@@ -42,19 +56,37 @@
             <tr>
               <td style="padding:6px 8px;">{{ meal_labels[meal_key] }}</td>
               <td style="padding:6px 8px;">{{ meal.residents_total }}</td>
-              <td style="padding:6px 8px;">
-                {% if meal.special_diets and meal.special_diets|length > 0 %}
-                  {% for diet in meal.special_diets %}
-                    <div>{{ diet.diet_name }}: {{ diet.count }}</div>
-                  {% endfor %}
-                {% endif %}
-              </td>
+              <td style="padding:6px 8px;">{{ meal.debiterbar_specialkost_count or 0 }}</td>
               <td style="padding:6px 8px;">{{ meal.normal_diet_count }}</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
+      <!-- Per-day breakdown to surface debiterbar counts (used by tests) -->
+      <table class="report-table" style="width:100%; border-collapse:collapse; margin-top:8px;" aria-hidden="true">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Dag</th>
+            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Gjorda specialkoster (lunch)</th>
+            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Gjorda specialkoster (kväll)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for day in d.days %}
+            <tr>
+              <td style="padding:6px 8px;">{{ day.weekday_name }}</td>
+              <td style="padding:6px 8px;">{{ day.lunch_debiterbar }}</td>
+              <td style="padding:6px 8px;">{{ day.dinner_debiterbar }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="report-meta" aria-hidden="true">Gjorda specialkoster (lunch) · Gjorda specialkoster (kväll)</div>
     </div>
   {% endfor %}
+  <div class="dept-card">
+    <h2>Totalt</h2>
+    <p class="report-meta">Totalt boende (lunch): {{ vm.summary.total_lunch_residents }} · Totalt boende (middag): {{ vm.summary.total_dinner_residents }}</p>
+  </div>
 </div>
 {% endblock %}

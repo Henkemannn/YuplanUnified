@@ -50,3 +50,104 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+
+// Kitchen grid: lightweight menu popup for .veckovy-menu-icon
+document.addEventListener('DOMContentLoaded', () => {
+  // Only activate if grid is present and menu data exists
+  const hasGrid = document.querySelector('.veckovy-grid');
+  if (!hasGrid || typeof window.VECKOVY_MENU_DATA === 'undefined') return;
+
+  function buildMenuDialog(dayKey, openerBtn) {
+    const data = window.VECKOVY_MENU_DATA[dayKey] || {};
+    const overlay = document.createElement('div');
+    overlay.className = 'veckovy-menu-overlay';
+    overlay.setAttribute('role', 'presentation');
+
+    const dialog = document.createElement('div');
+    dialog.className = 'veckovy-menu-dialog';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('tabindex', '-1');
+
+    const title = document.createElement('h3');
+    const weekday = data.weekday || '';
+    const date = data.date || dayKey;
+    title.textContent = `Meny – ${weekday} (${date})`;
+
+    const list = document.createElement('div');
+    list.className = 'veckovy-menu-list';
+
+    function row(label, value) {
+      const r = document.createElement('div');
+      r.className = 'veckovy-menu-row';
+      const l = document.createElement('span');
+      l.className = 'veckovy-menu-label';
+      l.textContent = label;
+      const v = document.createElement('span');
+      v.className = 'veckovy-menu-value';
+      v.textContent = value || '-';
+      r.appendChild(l); r.appendChild(v);
+      return r;
+    }
+
+    list.appendChild(row('Alt 1', data.alt1));
+    list.appendChild(row('Alt 2', data.alt2));
+    list.appendChild(row('Kvällsmat', data.dinner));
+    list.appendChild(row('Dessert', data.dessert));
+
+    const actions = document.createElement('div');
+    actions.className = 'veckovy-menu-actions';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'veckovy-menu-close';
+    closeBtn.textContent = 'Stäng';
+
+    actions.appendChild(closeBtn);
+
+    dialog.appendChild(title);
+    dialog.appendChild(list);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+
+    function closeDialog() {
+      try { document.body.removeChild(overlay); } catch (_) {}
+      if (openerBtn) openerBtn.focus();
+      document.removeEventListener('keydown', onKey);
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') closeDialog();
+      if (e.key === 'Tab') {
+        // Basic focus trap: keep focus within dialog
+        const focusables = dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeDialog(); });
+    closeBtn.addEventListener('click', closeDialog);
+    document.addEventListener('keydown', onKey);
+
+    document.body.appendChild(overlay);
+    // Move focus to dialog
+    setTimeout(() => { try { dialog.focus(); } catch (_) {} }, 0);
+  }
+
+  document.querySelectorAll('.veckovy-menu-icon').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const dayKey = btn.getAttribute('data-day-key') || btn.getAttribute('data-day');
+      buildMenuDialog(dayKey, btn);
+    });
+  });
+});
+
+/* Minimal styles injected by CSS file; ensure classes exist:
+   .veckovy-menu-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+   .veckovy-menu-dialog { background: #fff; max-width: 480px; width: 90%; padding: 16px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+   .veckovy-menu-row { display:flex; justify-content: space-between; margin: 6px 0; }
+   .veckovy-menu-actions { margin-top: 12px; text-align: right; }
+*/

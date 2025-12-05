@@ -116,6 +116,7 @@ SQLAlchemy 2.0.x introduces forward-typing assumptions that are unstable under 3
 - One-liners (Windows):
   - `make login-ps` (or `pwsh -File scripts/login.ps1`)
   - `make smoke-ps` (or `pwsh -File scripts/smoke.ps1 -BaseUrl https://yuplan-unified-staging.fly.dev -SiteId <SITE_ID> -Week 51`)
+ - See `docs/staging_demo_kommun_core.md` for how to seed the Demo Kommun environment locally and on Fly.io.
 
 ## Staging environment (Fly.io)
 
@@ -782,6 +783,11 @@ Environment toggle:
 
 Admin endpoints and schemas live in `openapi/parts/admin.yml` and are automatically merged unless disabled.
 See docs/ for full architecture, data model, migration plan, module definitions, roadmap, deployment guidance.
+
+### Weekly Report Exports
+- CSV: see `docs/report_weekly_export_csv.md` (if present)
+- Excel (XLSX): see `docs/report_weekly_export_excel.md`
+ - PDF: see `docs/report_weekly_export_pdf.md`
 
 ### OpenAPI Baseline & Semantic Diff
 To guard against accidental breaking API changes, CI enforces a committed baseline at `specs/openapi.baseline.json` (HARD policy – build fails if missing) and performs a semantic diff:

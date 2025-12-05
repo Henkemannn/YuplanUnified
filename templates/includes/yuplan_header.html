@@ -5,10 +5,12 @@
     {# Left: Logo + Product Name #}
     <div class="yp-global-header__brand">
       <a href="{{ url_for_home() }}" class="yp-header-brand" aria-label="Gå till startsidan för Yuplan Unified">
-        <img src="{{ url_for('static', filename='img/logo-proposal.svg') }}" 
-             alt="Yuplan Unified" 
+           {# Prefer dynamic branding logo if provided in g, otherwise default asset #}
+           {% set _logo = (g.brand_logo_url if g is defined and g.brand_logo_url else url_for('static', filename='img/logo-proposal.svg')) %}
+           <img src="{{ _logo }}" 
+             alt="Yuplan" 
              class="yp-logo">
-        <span class="yp-brand-text">Yuplan Unified</span>
+           <span class="yp-brand-text">Yuplan</span>
       </a>
     </div>
 

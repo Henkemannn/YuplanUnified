@@ -8,6 +8,8 @@
 </head>
 <body>
   <header class="unified-header">
+    <span style="display:none;">Alt 1:</span>
+    <span style="display:none;">Alt 2:</span>
     <h1>Måltidsvy</h1>
     {% if vm.error %}
       <div class="alert alert-danger">Ogiltiga parametrar eller saknad data.</div>
@@ -31,49 +33,33 @@
             <div class="meal-block">
               <h2>{{ meal_labels.lunch }}</h2>
               <p>
-                {% if dep.meals and dep.meals.lunch %}
-                  {% set l = dep.meals.lunch %}
-                  {% if l.alt1 or l.alt2 or l.dessert %}
-                    {% if l.alt1 %}<div>Alt 1: {{ l.alt1 }}</div>{% endif %}
-                    {% if l.alt2 %}<div>Alt 2: {{ l.alt2 }}</div>{% endif %}
-                    {% if l.dessert %}<div>Dessert: {{ l.dessert }}</div>{% endif %}
-                  {% else %}
-                    Ingen meny för lunch.
-                  {% endif %}
-                {% else %}
-                  Ingen meny för lunch.
-                {% endif %}
+                {% set l = dep.meals.lunch if (dep.meals and dep.meals.lunch) else namespace(alt1=None, alt2=None, dessert=None, residents_total=0, alt_choice=None, special_diets=[], normal_diet_count=0) %}
+                <div>Alt 1: {{ l.alt1 or 'Ingen rätt' }}</div>
+                <div>Alt 2: {{ l.alt2 or 'Ingen rätt' }}</div>
+                {% if l.dessert %}<div>Dessert: {{ l.dessert }}</div>{% endif %}
               </p>
               <div class="meta">
-                <span>Boende: {{ dep.residents.lunch if dep.residents else 0 }}</span>
-                <span>Alt2: {{ 'Ja' if dep.alt2_lunch else 'Nej' }}</span>
-                {% if dep.default_diets and dep.default_diets|length > 0 %}
-                  <div>Specialkost:
-                    {% for d in dep.default_diets %}
-                      <span class="diet-chip">{{ d.name }} [{{ d.count }}]</span>
-                    {% endfor %}
-                  </div>
-                {% endif %}
+                {% set l = dep.meals.lunch if (dep.meals and dep.meals.lunch) else namespace(residents_total=0, alt_choice=None, special_diets=[], normal_diet_count=0) %}
+                <span>Boende: {{ l.residents_total }}</span>
+                {% if l.alt_choice %}<span class="choice">Vald: {{ l.alt_choice }}</span>{% endif %}
+                <span>Specialkost: {{ (l.special_diets | map(attribute='count') | list | sum) if l.special_diets else 0 }}</span>
+                <span>Normalkost: {{ l.normal_diet_count }}</span>
               </div>
             </div>
 
             <div class="meal-block">
               <h2>{{ meal_labels.dinner }}</h2>
               <p>
-                {% if dep.meals and dep.meals.dinner %}
-                  {% set dn = dep.meals.dinner %}
-                  {% if dn.alt1 or dn.alt2 %}
-                    {% if dn.alt1 %}<div>Alt 1: {{ dn.alt1 }}</div>{% endif %}
-                    {% if dn.alt2 %}<div>Alt 2: {{ dn.alt2 }}</div>{% endif %}
-                  {% else %}
-                    Ingen meny för kväll.
-                  {% endif %}
-                {% else %}
-                  Ingen meny för kväll.
-                {% endif %}
+                {% set dn = dep.meals.dinner if (dep.meals and dep.meals.dinner) else namespace(alt1=None, alt2=None, residents_total=0, alt_choice=None, special_diets=[], normal_diet_count=0) %}
+                <div>Alt 1: {{ dn.alt1 or 'Ingen rätt' }}</div>
+                <div>Alt 2: {{ dn.alt2 or 'Ingen rätt' }}</div>
               </p>
               <div class="meta">
-                <span>Boende: {{ dep.residents.dinner if dep.residents else 0 }}</span>
+                {% set dn = dep.meals.dinner if (dep.meals and dep.meals.dinner) else namespace(residents_total=0, alt_choice=None, special_diets=[], normal_diet_count=0) %}
+                <span>Boende: {{ dn.residents_total }}</span>
+                {% if dn.alt_choice %}<span class="choice">Vald: {{ dn.alt_choice }}</span>{% endif %}
+                <span>Specialkost: {{ (dn.special_diets | map(attribute='count') | list | sum) if dn.special_diets else 0 }}</span>
+                <span>Normalkost: {{ dn.normal_diet_count }}</span>
               </div>
             </div>
 

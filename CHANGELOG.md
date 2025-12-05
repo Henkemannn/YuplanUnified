@@ -50,6 +50,18 @@
 - Gate ensuring pilot endpoints emit `application/problem+json` when flag enabled
 ## Unreleased
 
+- Weekly Report – Export Phase 2 (Excel)
+	- Adds an “Exportera Excel” action on the weekly report view
+	- New route `/ui/reports/weekly.xlsx` exporting coverage data for a given `site_id`/`year`/`week` as `.xlsx`
+	- Uses the same coverage data source as the HTML weekly report and the CSV export
+	- Covered by `tests/ui/test_unified_report_weekly_export_excel_phase2.py`
+
+- Weekly Report – Export Phase 3 (PDF)
+	- Adds an “Exportera PDF” action to the weekly report view
+	- New route `/ui/reports/weekly.pdf` returning a print-friendly PDF using the unified weekly print template
+	- Uses the same coverage data as the HTML/CSV/Excel reports
+	- Covered by `tests/ui/test_unified_report_weekly_export_pdf_phase3.py`
+
 ### Added
 - Unified Portal – Department Week View (Phase 2 UI)
 	- New `templates/unified_portal_week.html` template wired to existing vm/route
@@ -67,6 +79,9 @@
 
 ### Features
 - feat(core): RFC7807 full adoption — all endpoints return ProblemDetails. Standardized 429 includes `Retry-After` header and `retry_after` body field; 401/403 carry appropriate details, 422 includes `errors[]`, and 500 emits `incident_id`.
+
+### Maintenance
+- Legacy `templates/portal_week.html` retired. Both `/portal/week` (legacy path) and `/ui/portal/week` (enhetsportal) now render `templates/unified_portal_week.html`, with behavior controlled by VM flags (e.g., `force_show_dinner`).
 
 
 ### Added

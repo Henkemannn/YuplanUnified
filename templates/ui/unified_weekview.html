@@ -107,6 +107,11 @@
                   <span class="meal-icon">🍴</span>
                   <span>LUNCH</span>
                 </div>
+                <a
+                  class="meal-action-link"
+                  href="/ui/register/meal?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&date={{ day.date }}&meal=lunch"
+                  title="Öppna registreringsvy (lunch)"
+                >Registrera</a>
                 
                 <!-- Premium Registration Badge -->
                 {% if day.lunch_registered %}
@@ -185,6 +190,11 @@
                     <span class="meal-icon">🌙</span>
                     <span>KVÄLL</span>
                   </div>
+                  <a
+                    class="meal-action-link"
+                    href="/ui/register/meal?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&date={{ day.date }}&meal=dinner"
+                    title="Öppna registreringsvy (kväll)"
+                  >Registrera</a>
                   
                   <!-- Premium Registration Badge -->
                   {% if day.dinner_registered %}

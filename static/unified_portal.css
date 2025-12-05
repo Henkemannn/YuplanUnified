@@ -1,4 +1,15 @@
-:root {}
+:root {
+  --week-card-border: #e3e3e3;
+  --week-card-bg: #fff;
+  --week-card-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  --week-card-shadow-hover: 0 4px 12px rgba(0,0,0,0.10);
+  --status-done-bg: #d1f7d6;
+  --status-done-fg: #116c2e;
+  --status-inprog-bg: #fff4cc;
+  --status-inprog-fg: #6a4e00;
+  --status-neutral-bg: #f1f1f1;
+  --status-neutral-fg: #666666;
+}
 
 /* Page header styling aligned with unified weekview */
 .yp-header {
@@ -21,6 +32,13 @@
   margin: 0 auto;
   padding: var(--yp-gap);
 }
+
+/* Breadcrumbs */
+.breadcrumb { color: var(--yp-color-text-muted); font-size: 0.9rem; margin: 6px 0 var(--yp-gap); }
+.breadcrumb a { color: var(--yp-color-text); text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb-sep { margin: 0 6px; color: var(--yp-color-text-muted); }
+.breadcrumb-current { color: var(--yp-color-text-muted); }
 
 /* Day grid responsive: 1 / 2 / 3 cols */
 .portal-day-grid {
@@ -85,3 +103,37 @@
 .portal-footer { margin-top: var(--yp-gap); }
 .portal-actions { display:flex; flex-wrap:wrap; gap:.75rem; }
 .portal-actions .yp-button { min-height:48px; display:inline-flex; align-items:center; }
+
+/* Weeks overview grid */
+.weeks-grid { display: grid; gap: var(--yp-gap); grid-template-columns: 1fr; }
+@media (min-width: 600px) { .weeks-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px) { .weeks-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1200px) { .weeks-grid { grid-template-columns: repeat(4, 1fr); } }
+
+.weeks-legend { display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.9rem; margin: 8px 0 var(--yp-gap); }
+
+.week-card {
+  display: block;
+  padding: calc(var(--yp-gap) * 0.75);
+  border-radius: var(--yp-radius);
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--week-card-border);
+  background: var(--week-card-bg);
+  box-shadow: var(--week-card-shadow);
+  transition: box-shadow .2s ease, transform .2s ease, background-color .2s ease;
+}
+.week-card:hover { box-shadow: var(--week-card-shadow-hover); }
+.week-card:focus { outline: 3px solid var(--yp-color-primary); outline-offset: 2px; }
+.week-card--current { border-color: var(--yp-color-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--yp-color-primary) 20%, transparent); }
+
+.week-card__header { display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; }
+.week-card__title { font-weight: 600; }
+.week-card__dates { color: var(--yp-color-text-muted); font-size: 0.95rem; }
+.week-card__status { margin-top: 4px; }
+.week-card__current { color: var(--yp-color-primary); font-size: 0.85rem; margin-bottom: 4px; }
+
+.status-pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; display:inline-block; }
+.status-pill--done { background: var(--status-done-bg); color: var(--status-done-fg); }
+.status-pill--in-progress { background: var(--status-inprog-bg); color: var(--status-inprog-fg); }
+.status-pill--not-started { background: var(--status-neutral-bg); color: var(--status-neutral-fg); }
