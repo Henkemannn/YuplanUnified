@@ -168,6 +168,44 @@ If switching to a fresh database or re-running migrations in-place, ensure no co
 ## Contributing
 See CONTRIBUTING.md for branching, PR, and quality gates. Use the GitHub Issue templates for GA checklist and roadmap kickoff from the New Issue menu.
 
+## Planera – Weekly (Phase 3)
+
+Planera Weekly är kökets veckovy för planering av specialkost.
+
+**Endpoint**
+- UI: `/ui/planera/week`
+- Endast åtkomlig för kök/admin (`ADMIN_ROLES`) och när `ff.planera.enabled = true`.
+
+**Funktioner**
+- Välj vecka, dag och måltid (lunch/middag).
+- Se sammanställning per avdelning:
+  - antal boende
+  - normalkost
+  - specialkost per kosttyp
+  - status: Klar / Ej klar
+- Markera flera avdelningar och klicka på "Markera valda som klara" för att registrera att specialkosten är gjord.
+- Snabböversikt i toppen:
+  - total normalkost för vald dag/måltid
+  - totalsumma per specialkosttyp.
+
+**Feature flag**
+
+Planera Weekly styrs av samma flagga som Planera Day:
+
+```text
+ff.planera.enabled = true
+```
+
+När flaggan är på, finns både:
+
+- `/ui/planera/day?ui=unified` (dagvy)
+- `/ui/planera/week` (veckovy)
+
+**Rekommenderat flöde för kök**
+
+1. Öppna Kitchen Weekly Grid (Veckovy – kök) för att se vecka och belastning.
+2. Klicka vidare till Planera Weekly (`/ui/planera/week`) för detaljerad dag/måltid-sammanställning.
+3. Använd Planera Day (`/ui/planera/day?ui=unified`) vid behov för mer granular uppföljning.
 ## Quick reference (OpenAPI)
 * PowerShell helpers: `./scripts/dev.ps1; Invoke-OpenAPIWorkflow` fetches spec, semantic diff, optional spectral lint, focused tests.
 * Fetch only: `./scripts/dev.ps1; Get-OpenAPISpec` writes `openapi.json` (badge workflow in CI consumes semantic diff artifacts).
