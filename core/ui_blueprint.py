@@ -665,8 +665,18 @@ def portal_week():
                 "alt2": lunch.get("alt2"),
                 "dessert": lunch.get("dessert"),
                 "dinner": dinner_m.get("alt1"),
+                "weekday": day_vm.get("weekday_name"),
+                "date": day_vm.get("date"),
             }
-        days_ordered.append({"index": idx, "label_short": label, "key": key, "has_menu": has_menu_flag})
+        # planera link for lunch
+        planera_lunch_url = url_for("ui.planera_day_ui_v2") + f"?ui=unified&site_id={site_id}&department_id={department_id}&date={day_vm.get('date') if day_vm else ''}&meal=lunch"
+        # today index for smart jump
+        is_today = False
+        try:
+            is_today = bool(day_vm and (day_vm.get("date") == today.isoformat()))
+        except Exception:
+            is_today = False
+        days_ordered.append({"index": idx, "label_short": label, "key": key, "has_menu": has_menu_flag, "date": (day_vm.get("date") if day_vm else None), "planera_lunch_url": planera_lunch_url})
 
     vm = {
         "site_id": site_id,
@@ -679,6 +689,7 @@ def portal_week():
         "days": day_vms,
         "days_ordered": days_ordered,
         "menu_by_day": menu_by_day,
+        "today_day_index": next((d["index"] for d in days_ordered if (menu_by_day.get(d["index"]) or {}).get("date") == today.isoformat()), None),
         "has_dinner": has_dinner,
         "residents_total": residents_base,
         "diet_defaults_summary": defaults_summary,
@@ -725,6 +736,16 @@ def kitchen_veckovy_week():
     summaries = payload.get("department_summaries") or []
     dep = summaries[0] if summaries else {}
     days = dep.get("days") or []
+    if not days:
+        # Build minimal placeholder days for the week to render grid structure
+        from datetime import date as _d, timedelta as _td
+        jan4 = _d(year, 1, 4)
+        week1_monday = jan4 - _td(days=jan4.weekday())
+        week_monday = week1_monday + _td(weeks=week - 1)
+        days = [
+            {"date": (week_monday + _td(days=i)).isoformat(), "weekday_name": ["Måndag","Tisdag","Onsdag","Torsdag","Fredag","Lördag","Söndag"][i], "menu_texts": {}, "diets": {"lunch": [], "dinner": []}, "residents": {"lunch": 0, "dinner": 0}}
+            for i in range(7)
+        ]
     has_any_registration = False
     # Meal registrations map for markerad cells
     reg_repo = MealRegistrationRepo()
@@ -816,6 +837,14 @@ def kitchen_veckovy_week():
                 if d_date:
                     if reg_map.get((d_date, "dinner")):
                         is_marked_d = True
+            # Heat level for lunch
+            heat_level = 'none'
+            if lunch_count >= 8:
+                heat_level = 'high'
+            elif lunch_count >= 4:
+                heat_level = 'medium'
+            elif lunch_count >= 1:
+                heat_level = 'low'
             cells.append({
                 "day_index": idx,
                 "meal": "lunch",
@@ -824,6 +853,7 @@ def kitchen_veckovy_week():
                 "is_alt2": is_alt2,
                 "is_dinner": False,
                 "is_day_start": True,
+                "heat_level": heat_level,
                 "kosttyp_id": dtid,
                 "department_id": department_id,
                 "week": week,

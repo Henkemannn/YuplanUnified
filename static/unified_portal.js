@@ -143,6 +143,58 @@ document.addEventListener('DOMContentLoaded', () => {
       buildMenuDialog(dayKey, btn);
     });
   });
+
+  // Day focus: click header to focus column and update summary
+  function updateDaySummary(labelText, totalsText) {
+    const labelEl = document.querySelector('.veckovy-day-summary__label');
+    const totalsEl = document.querySelector('.veckovy-day-summary__totals');
+    if (labelEl) labelEl.textContent = labelText || 'Ingen dag vald';
+    if (totalsEl) totalsEl.textContent = totalsText || '';
+  }
+
+  function focusDayColumn(dayIndex) {
+    // Remove previous focus
+    document.querySelectorAll('.kostcell').forEach((td) => td.classList.remove('veckovy-day--focused'));
+    document.querySelectorAll('.veckovy-day-header').forEach((th) => th.classList.remove('veckovy-day--focused'));
+    // Add focus to header
+    const header = document.querySelector(`.veckovy-day-header[data-day-index="${dayIndex}"]`);
+    if (header) header.classList.add('veckovy-day--focused');
+    // Add focus to all cells in that column (both lunch and dinner rows)
+    document.querySelectorAll(`.kostcell[data-day="${dayIndex}"]`).forEach((td) => td.classList.add('veckovy-day--focused'));
+    // Compute totals: sum lunch counts for the column across all rows
+    let lunchTotal = 0;
+    document.querySelectorAll(`.kostcell[data-day="${dayIndex}"][data-meal="lunch"]`).forEach((td) => {
+      const n = parseInt(td.textContent.trim(), 10);
+      if (!isNaN(n)) lunchTotal += n;
+    });
+    // Build label using VECKOVY_MENU_DATA if available to get date
+    let labelText = 'Ingen dag vald';
+    try {
+      const map = window.VECKOVY_MENU_DATA || {};
+      const dayKey = ['mon','tue','wed','thu','fri','sat','sun'][dayIndex - 1];
+      const info = map[dayIndex] || map[dayKey] || {};
+      const weekday = info.weekday || header?.querySelector('.veckovy-day-header__title')?.textContent || '';
+      const date = info.date || '';
+      labelText = date ? `${weekday} (${date})` : weekday;
+    } catch (_) {}
+    updateDaySummary(labelText, `Specialkoster lunch: ${lunchTotal}`);
+  }
+
+  document.querySelectorAll('.veckovy-day-header').forEach((th) => {
+    th.addEventListener('click', () => {
+      const idx = parseInt(th.getAttribute('data-day-index'), 10);
+      if (!isNaN(idx)) focusDayColumn(idx);
+    });
+  });
+
+  // Smart week-jump: auto focus today’s column if provided
+  if (typeof window.VECKOVY_TODAY_DAY_INDEX !== 'undefined' && window.VECKOVY_TODAY_DAY_INDEX) {
+    try {
+      focusDayColumn(window.VECKOVY_TODAY_DAY_INDEX);
+      const header = document.querySelector(`.veckovy-day-header[data-day-index="${window.VECKOVY_TODAY_DAY_INDEX}"]`);
+      header?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    } catch (_) {}
+  }
 });
 
 /* Minimal styles injected by CSS file; ensure classes exist:
