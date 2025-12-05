@@ -23,8 +23,8 @@ def seeded_week_48(app_session):
         
         # Create menu for week 48
         db.execute(
-            text("INSERT INTO menus (id, tenant_id, week, year) VALUES (:id, :tid, :week, :year)"),
-            {"id": 100, "tid": 1, "week": 48, "year": 2025}
+            text("INSERT INTO menus (id, tenant_id, week, year, status) VALUES (:id, :tid, :week, :year, :status)"),
+            {"id": 100, "tid": 1, "week": 48, "year": 2025, "status": "draft"}
         )
         
         # Create dishes

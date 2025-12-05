@@ -145,9 +145,9 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
     lunch = dept_a["meals"]["lunch"]
     dinner = dept_a["meals"]["dinner"]
     assert lunch["residents_total"] == 18
-    assert any(d["diet_type_id"] == "Gluten" and d["count"] == 4 for d in lunch["special_diets"])  # 2+2
+    assert lunch["debiterbar_specialkost_count"] == 4  # Gluten default 2 marked twice (Mon+Wed lunch)
     assert dinner["residents_total"] == 5
-    assert any(d["diet_type_id"] == "Laktos" and d["count"] == 1 for d in dinner["special_diets"])  # 1
+    assert dinner["debiterbar_specialkost_count"] == 1  # Laktos default 1 marked once (Tue dinner)
     assert dinner["normal_diet_count"] == 4  # 5 - 1
 
     # API all departments
@@ -157,7 +157,7 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
     assert {dep_a, dep_b}.issubset({d["department_id"] for d in data_all["departments"]})
     dep_b_meals = [d for d in data_all["departments"] if d["department_id"] == dep_b][0]["meals"]
     assert dep_b_meals["dinner"]["residents_total"] == 7
-    assert any(d["diet_type_id"] == "Timbal" and d["count"] == 3 for d in dep_b_meals["dinner"]["special_diets"])  # default 3 once
+    assert dep_b_meals["dinner"]["debiterbar_specialkost_count"] == 3  # Timbal default 3 marked once
 
     # UI template renders
     r_ui = client_admin.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=_h("admin"))

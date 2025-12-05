@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <title>Avdelningsinställningar</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Avdelningsinställningar</h1>
+    <p><strong>Avdelning:</strong> {{ vm.department_name }} &nbsp; <span class="muted">(ID: {{ vm.department_id }})</span></p>
+
+    <form method="post" action="/ui/admin/departments/{{ vm.department_id }}/settings">
+      <section>
+        <h2>Boendeantal</h2>
+        <label for="residents_base_count">Antal boende totalt:</label>
+        <input type="number" id="residents_base_count" name="residents_base_count" value="{{ vm.residents_base_count }}" min="0">
+      </section>
+
+      <section>
+        <h2>Specialkost på avdelningen</h2>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Specialkosttyp</th>
+              <th>Antal boende</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in vm.diet_defaults %}
+            <tr>
+              <td>
+                {{ item.diet_type_id }}
+                <input type="hidden" name="diet_type_id[]" value="{{ item.diet_type_id }}">
+              </td>
+              <td>
+                <input type="number" name="planned_count[]" value="{{ item.planned_count }}" min="0">
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Faktaruta / särskild info för avdelningen</h2>
+        <label for="notes">Faktaruta:</label>
+        <textarea id="notes" name="notes" rows="4" style="width:100%;">{{ vm.notes }}</textarea>
+      </section>
+
+      <div style="margin-top: 1rem;">
+        <button type="submit" class="btn btn-primary">Spara inställningar</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

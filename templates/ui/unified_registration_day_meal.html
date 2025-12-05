@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registrering – måltid</title>
+  <link rel="stylesheet" href="/static/unified.css">
+</head>
+<body>
+  <header class="unified-header">
+    <h1>Registrering</h1>
+    {% if vm.error %}
+      <div class="alert alert-danger">Ogiltiga parametrar eller saknad data.</div>
+    {% else %}
+      <div class="header-sub">
+        <span class="site">{{ vm.site_name }}</span>
+        <span>–</span>
+        <span class="department">{{ vm.department_name }}</span>
+        <div class="muted">{{ vm.weekday_name }} – {{ vm.meal_name }}</div>
+      </div>
+    {% endif %}
+  </header>
+
+  {% if not vm.error %}
+  <main class="container">
+    <section class="card">
+      <div class="card-header"><strong>Sammanfattning</strong></div>
+      <div class="card-body" data-weekview-etag="{{ vm.etag }}">
+        <div class="summary-grid">
+          <div>Boende: {{ vm.residents }}</div>
+          <div>Specialkost totalt: {{ vm.total_special }}</div>
+          <div>Normalkost: {{ vm.normal_count }}</div>
+          <div>Status: {{ 'Registrerad' if vm.is_complete else 'Ej registrerad' }}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:12px;">
+      <div class="card-header"><strong>Kosttyper</strong></div>
+      <div class="card-body">
+        <table class="reg-table" style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:6px 8px;border-bottom:1px solid #eee;">Kosttyp</th>
+              <th style="text-align:left;padding:6px 8px;border-bottom:1px solid #eee;">Planerat</th>
+              <th style="text-align:left;padding:6px 8px;border-bottom:1px solid #eee;">Standard</th>
+              {% if vm.phase2_toggle_enabled %}
+              <th style="text-align:left;padding:6px 8px;border-bottom:1px solid #eee;">Åtgärd</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for diet in vm.diet_rows %}
+              <tr>
+                <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">{{ diet.name }}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">
+                  <span class="diet-count {% if diet.is_marked %}diet-count--marked{% endif %}">{{ diet.planned_count or 0 }}</span>
+                </td>
+                <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">{% if diet.is_default %}(standard){% else %}&nbsp;{% endif %}</td>
+                {% if vm.phase2_toggle_enabled %}
+                <td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">
+                  <form method="post" action="{{ url_for('ui.register_meal_toggle_mark') }}" style="display:inline">
+                    {{ csrf_token_input() | safe }}
+                    <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+                    <input type="hidden" name="department_id" value="{{ vm.department_id }}">
+                    <input type="hidden" name="date" value="{{ vm.date }}">
+                    <input type="hidden" name="meal" value="{{ vm.meal }}">
+                    <input type="hidden" name="diet_type_id" value="{{ diet.diet_type_id }}">
+                    <input type="hidden" name="_etag" value="{{ vm.etag }}">
+                    <button type="submit" class="btn btn-link" aria-label="Växla markering {{ diet.name }}">{% if diet.is_marked %}Avmarkera{% else %}Markera{% endif %}</button>
+                  </form>
+                </td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  {% endif %}
+
+  <footer class="unified-footer">
+    <a href="/ui/admin" class="admin-btn-secondary">Tillbaka till Admin</a>
+  </footer>
+
+  <style>
+    .diet-count { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid transparent; }
+    .diet-count--marked { border-color:#16a34a; color:#166534; box-shadow:0 0 0 2px rgba(22,163,74,0.15) inset; }
+  </style>
+</body>
+</html>

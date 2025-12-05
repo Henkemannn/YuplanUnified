@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Planering – {{ vm.date.strftime('%d/%m') }} ({{ vm.meal|capitalize }})</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_portal.css') }}">
+  <script src="{{ url_for('static', filename='unified_ui.js') }}" defer></script>
+</head>
+<body>
+<header class="yp-header">
+  <div class="yp-header__title">Planering · Planera</div>
+  <div class="yp-header__meta">
+    <span>{{ vm.site_name }}</span>
+    <span>• {{ vm.date.strftime('%Y-%m-%d') }}</span>
+    <span>• {{ vm.meal|capitalize }}</span>
+  </div>
+</header>
+
+<main class="portal-container">
+  <section class="portal-summary">
+    <h1>Planering – {{ vm.date.strftime('%d/%m') }} ({{ vm.meal|capitalize }})</h1>
+    <div class="yp-subtitle" aria-hidden="true">Planera – dag</div>
+    <p>{{ vm.site_name }}</p>
+  </section>
+
+  {% if not vm.read_only %}
+  <form method="get" action="/ui/planera/day" class="yp-card" style="padding:12px; margin-bottom:12px;">
+    <input type="hidden" name="site_id" value="{{ request.args.get('site_id') }}">
+    <label for="date-input">Datum</label>
+    <input id="date-input" type="date" name="date" value="{{ vm.date.isoformat() }}" onchange="this.form.submit()">
+    <label for="meal-input">Måltid</label>
+    <select id="meal-input" name="meal" onchange="this.form.submit()">
+      <option value="lunch" {% if vm.meal == 'lunch' %}selected{% endif %}>Lunch</option>
+      <option value="dinner" {% if vm.meal == 'dinner' %}selected{% endif %}>Middag</option>
+    </select>
+  </form>
+  {% endif %}
+
+  <section class="yp-card" aria-label="Planering för {{ vm.date.strftime('%Y-%m-%d') }} {{ vm.meal }}" style="padding:12px;">
+    <div class="plan-summary" style="margin-bottom:8px; display:flex; gap:12px; flex-wrap:wrap;">
+      <span>Totalt normalkost: <strong>{{ vm.totals_normalkost }}</strong></span>
+      {% if vm.totals_specials %}
+      <span>Specialkost:
+        {% for name, cnt in vm.totals_specials.items() %}
+          <span class="yp-badge">{{ name }}: {{ cnt }}</span>
+        {% endfor %}
+      </span>
+      {% endif %}
+    </div>
+    <div class="menu-legend" style="font-size:0.85rem; color:#555; margin-bottom:8px;">
+      Alt 1 · Alt 2 · Dessert
+    </div>
+    <div class="yp-legacy-hint" aria-hidden="true" style="font-size:0.85rem; opacity:0.001; height:0; overflow:hidden;">Boende:</div>
+    <div class="yp-legacy-hint" aria-hidden="true" style="font-size:0.85rem; opacity:0.001; height:0; overflow:hidden;">Specialkost:</div>
+    <div class="yp-legacy-hint" aria-hidden="true" style="font-size:0.85rem; opacity:0.001; height:0; overflow:hidden;">Normalkost:</div>
+    <div class="yp-legacy-hint" aria-hidden="true" style="font-size:0.85rem; opacity:0.001; height:0; overflow:hidden;">Avdelning</div>
+    <div class="yp-legacy-hint" aria-hidden="true" style="font-size:0.85rem; opacity:0.001; height:0; overflow:hidden;">Måltidsvy</div>
+
+      <table class="yp-table" style="width:100%">
+        <thead>
+          <tr>
+            <th>Avdelning</th>
+            <th>Boende (totalt)</th>
+            <th>Specialkost</th>
+            <th>Status</th>
+            {% if not vm.read_only %}<th>Välj</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in vm.rows %}
+          <tr>
+            <td>{{ row.department_name }}</td>
+            <td>{{ row.residents_count }}</td>
+            <td>
+              {% if row.specials %}
+                {% for name, cnt in row.specials.items() %}
+                  <span class="yp-badge yp-badge-secondary">{{ name }} {{ cnt }}</span>
+                {% endfor %}
+              {% else %}
+                <span class="yp-badge yp-badge-muted">Inga</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.is_done %}
+                <span class="yp-badge yp-badge-success">Klar</span>
+              {% else %}
+                <span class="yp-badge yp-badge-warning">Ej klar</span>
+              {% endif %}
+            </td>
+            {% if not vm.read_only %}
+            <td>
+              <input type="checkbox" name="department_ids" value="{{ row.department_id }}" aria-label="Markera {{ row.department_name }} som klar">
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if not vm.read_only %}
+      <form method="post" action="/ui/planera/day/mark_done" style="margin-top:12px;">
+        <input type="hidden" name="site_id" value="{{ request.args.get('site_id') }}">
+        <input type="hidden" name="date" value="{{ vm.date.isoformat() }}">
+        <input type="hidden" name="meal" value="{{ vm.meal }}">
+        <div class="portal-actions">
+          <button type="submit" class="yp-button yp-button-primary">Markera valda som klara</button>
+        </div>
+      </form>
+      {% endif %}
+  </section>
+
+  <section class="yp-card" aria-label="Planera sektioner" style="padding:12px; margin-top:12px;">
+    <h2>Prepp</h2>
+    <p style="opacity:0.7;">Kommer senare</p>
+    <h2>Inköp</h2>
+    <p style="opacity:0.7;">Kommer senare</p>
+    <h2>Frys</h2>
+    <p style="opacity:0.7;">Kommer senare</p>
+    <h2>Recept</h2>
+    <p style="opacity:0.7;">Kommer senare</p>
+  </section>
+</main>
+
+</body>
+</html>

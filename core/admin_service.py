@@ -176,3 +176,76 @@ class AdminService:
     def get_alt2_collection_etag(self, week: int) -> str:
         v = self.alt2_repo.collection_version(week)
         return make_etag("admin", "alt2", f"week:{week}", v)
+
+    # --- Department Settings (Phase 1) ---
+    def get_department_settings(self, department_id: str) -> dict:
+        """Build VM for department settings: base residents, diet defaults, and notes."""
+        from .db import get_session
+        from sqlalchemy import text as _text
+        db = get_session()
+        try:
+            row = db.execute(
+                _text(
+                    "SELECT d.id, d.site_id, d.name, d.resident_count_fixed, COALESCE(d.notes,'') FROM departments d WHERE d.id=:id"
+                ),
+                {"id": department_id},
+            ).fetchone()
+            if not row:
+                raise ValueError("department_not_found")
+            dept = {
+                "department_id": str(row[0]),
+                "site_id": str(row[1]),
+                "department_name": str(row[2]),
+                "residents_base_count": int(row[3] or 0),
+                "notes": str(row[4] or ""),
+            }
+            # Diet defaults
+            defaults = self.diet_repo.list_for_department(department_id)
+            dept["diet_defaults"] = [
+                {
+                    "diet_type_id": it["diet_type_id"],
+                    "planned_count": int(it.get("default_count") or 0),
+                    "always_mark": bool(it.get("always_mark") or False),
+                }
+                for it in defaults
+            ]
+            return dept
+        finally:
+            db.close()
+
+    def save_department_settings(self, department_id: str, payload: dict) -> None:
+        """Persist base residents count, notes, and diet defaults.
+
+        This updates defaults (not marks). Uses optimistic concurrency via department version.
+        """
+        # Get current etag/version
+        current_etag = self.get_department_current_etag(department_id)
+        ns, kind, ident, version = parse_if_match(current_etag)
+        if version is None or ident != department_id or kind != "dept" or ns != "admin":
+            # Fallback: fetch version directly
+            version = self.depts_repo.get_version(department_id) or 0
+        # Update department base fields
+        fields = {}
+        if "residents_base_count" in payload and payload["residents_base_count"] is not None:
+            rcf = int(payload["residents_base_count"]) if str(payload["residents_base_count"]).strip() != "" else 0
+            if rcf < 0:
+                raise ValueError("resident_count_fixed_negative")
+            fields["resident_count_fixed"] = rcf
+        if "notes" in payload:
+            fields["notes"] = str(payload.get("notes") or "")
+        if fields:
+            self.depts_repo.update_department(department_id, int(version), **fields)
+            # refresh version after update
+            version = self.depts_repo.get_version(department_id) or int(version)
+        # Update diet defaults list
+        items = []
+        for it in (payload.get("diet_defaults") or []):
+            diet_type_id = str(it.get("diet_type_id") or "").strip()
+            if not diet_type_id:
+                raise ValueError("diet_type_id_required")
+            planned = int(it.get("planned_count") or 0)
+            if planned < 0:
+                raise ValueError("default_count_negative")
+            items.append({"diet_type_id": diet_type_id, "default_count": planned})
+        if items:
+            self.depts_repo.upsert_department_diet_defaults(department_id, int(version), items)

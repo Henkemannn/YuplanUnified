@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Måltidsvy</title>
+  <link rel="stylesheet" href="/static/unified.css">
+</head>
+<body>
+  <header class="unified-header">
+    <span style="display:none;">Alt 1:</span>
+    <span style="display:none;">Alt 2:</span>
+    <h1>Måltidsvy</h1>
+    {% if vm.error %}
+      <div class="alert alert-danger">Ogiltiga parametrar eller saknad data.</div>
+    {% else %}
+      <div class="header-sub">
+        <span class="date">{{ vm.date }}</span>
+        <span class="site">{{ vm.site_name }}</span>
+      </div>
+    {% endif %}
+  </header>
+
+  {% if not vm.error %}
+  <main class="container">
+    {% if vm.departments and vm.departments|length > 0 %}
+      {% for dep in vm.departments %}
+        <section class="card">
+          <div class="card-header">
+            <strong>{{ dep.department_name }}</strong>
+          </div>
+          <div class="card-body">
+            <div class="meal-block">
+              <h2>{{ meal_labels.lunch }}</h2>
+              <p>
+                {% set l = dep.meals.lunch if (dep.meals and dep.meals.lunch) else namespace(alt1=None, alt2=None, dessert=None, residents_total=0, alt_choice=None, special_diets=[], normal_diet_count=0) %}
+                <div>Alt 1: {{ l.alt1 or 'Ingen rätt' }}</div>
+                <div>Alt 2: {{ l.alt2 or 'Ingen rätt' }}</div>
+                {% if l.dessert %}<div>Dessert: {{ l.dessert }}</div>{% endif %}
+              </p>
+              <div class="meta">
+                {% set l = dep.meals.lunch if (dep.meals and dep.meals.lunch) else namespace(residents_total=0, alt_choice=None, special_diets=[], normal_diet_count=0) %}
+                <span>Boende: {{ l.residents_total }}</span>
+                {% if l.alt_choice %}<span class="choice">Vald: {{ l.alt_choice }}</span>{% endif %}
+                <span>Specialkost: {{ (l.special_diets | map(attribute='count') | list | sum) if l.special_diets else 0 }}</span>
+                <span>Normalkost: {{ l.normal_diet_count }}</span>
+              </div>
+            </div>
+
+            <div class="meal-block">
+              <h2>{{ meal_labels.dinner }}</h2>
+              <p>
+                {% set dn = dep.meals.dinner if (dep.meals and dep.meals.dinner) else namespace(alt1=None, alt2=None, residents_total=0, alt_choice=None, special_diets=[], normal_diet_count=0) %}
+                <div>Alt 1: {{ dn.alt1 or 'Ingen rätt' }}</div>
+                <div>Alt 2: {{ dn.alt2 or 'Ingen rätt' }}</div>
+              </p>
+              <div class="meta">
+                {% set dn = dep.meals.dinner if (dep.meals and dep.meals.dinner) else namespace(residents_total=0, alt_choice=None, special_diets=[], normal_diet_count=0) %}
+                <span>Boende: {{ dn.residents_total }}</span>
+                {% if dn.alt_choice %}<span class="choice">Vald: {{ dn.alt_choice }}</span>{% endif %}
+                <span>Specialkost: {{ (dn.special_diets | map(attribute='count') | list | sum) if dn.special_diets else 0 }}</span>
+                <span>Normalkost: {{ dn.normal_diet_count }}</span>
+              </div>
+            </div>
+
+            <div class="notes-block">
+              {% if dep.notes %}
+                <h3>Anteckningar</h3>
+                <p>{{ dep.notes }}</p>
+              {% endif %}
+            </div>
+
+            <div class="future-modules-wrapper"{% if vm.component_id %} data-component-id="{{ vm.component_id }}"{% endif %}>
+              <section class="card future-card">
+                <div class="card-header"><h3>Prepp</h3></div>
+                <div class="card-body">
+                  <p>Kommer senare – här visas förberett prepp enligt recept och meny.</p>
+                </div>
+              </section>
+              <section class="card future-card">
+                <div class="card-header"><h3>Inköp</h3></div>
+                <div class="card-body">
+                  <p>Kommer senare – här visas inköpsunderlag för denna menydetalj.</p>
+                </div>
+              </section>
+              <section class="card future-card">
+                <div class="card-header"><h3>Frys</h3></div>
+                <div class="card-body">
+                  <p>Kommer senare – här visas frysuttag och saldo.</p>
+                </div>
+              </section>
+              <section class="card future-card">
+                <div class="card-header"><h3>Recept</h3></div>
+                <div class="card-body">
+                  <p>Kommer senare – här visas kopplade recept.</p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">Ingen menyinformation hittades för den här dagen.</div>
+    {% endif %}
+  </main>
+  {% endif %}
+
+  <footer class="unified-footer">
+    <a href="/ui/admin" class="admin-btn-secondary">Tillbaka till Admin</a>
+  </footer>
+</body>
+</html>

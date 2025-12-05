@@ -80,6 +80,7 @@
             display: grid;
             gap: var(--yp-gap);
             margin-bottom: var(--yp-gap-lg);
+            grid-template-columns: 1fr 1fr;
         }
         
         .role-button {
@@ -167,13 +168,20 @@
             font-size: 0.875rem;
             color: #1e40af;
         }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .login-container { padding: var(--yp-gap-lg); max-width: 420px; }
+            .role-grid { grid-template-columns: 1fr; }
+            .role-button { padding: var(--yp-gap); }
+        }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <!-- Yuplan Logo -->
+        <!-- Yuplan Logo (canonical asset per branding spec) -->
         <div class="login-logo">
-            <img src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan Unified" class="yp-logo">
+            <img src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" class="yp-logo">
         </div>
         
         <h1>Yuplan Unified – Test Login</h1>
@@ -186,6 +194,8 @@
         </div>
         
         <form method="POST" action="/test-login" id="loginForm">
+            {# Include CSRF token when strict CSRF is enabled (safe no-op otherwise) #}
+            {{ csrf_token_input() }}
             <div class="destination-section">
                 <label class="destination-label">Var vill du gå?</label>
                 <select name="destination" class="destination-select" id="destSelect">
@@ -194,7 +204,7 @@
                     <option value="/ui/admin">🏢 Admin Dashboard</option>
                     <option value="/ui/admin/departments">📋 Avdelningar</option>
                     <option value="/ui/admin/users">👥 Användare</option>
-                    <option value="/ui/reports/weekly">📊 Rapporter</option>
+                    <option value="/ui/reports/weekview">📊 Rapporter</option>
                 </select>
             </div>
             
