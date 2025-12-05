@@ -60,6 +60,7 @@ class AdminUserRepo:
                 {"uid": user_id}
             ).fetchone()
             
+            
             if not row:
                 return None
             

@@ -40,7 +40,11 @@ _RATE_LIMIT_STORE: dict[str, dict[str, float | int]] = {}
 
 
 def _json_error(msg: str, code: int = 400):
-    return jsonify({"error": msg, "message": msg}), code
+    # Standardize unauthorized detail expected by tests
+    normalized = msg
+    if code == 401 and msg == "auth required":
+        normalized = "authentication required"
+    return jsonify({"error": normalized, "message": normalized}), code
 
 
 def set_csrf_cookie(resp, token: str):

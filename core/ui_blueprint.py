@@ -16,6 +16,7 @@ ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="st
 
 SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 ADMIN_ROLES = ("admin", "superuser")
+COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 # ============================================================================
 # Systemadmin (Superuser) – Sites + Departments (Phase 1)
 # ============================================================================
@@ -1673,6 +1674,26 @@ def reports_weekly_csv():
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = f"attachment; filename=veckorapport_v{week}_{year}.csv"
     return resp
+# Cook Dashboard (Phase 5) – Unified cook view
+@ui_bp.get("/ui/cook/dashboard")
+@require_roles("cook", "admin", "superuser", "unit_portal")
+def cook_dashboard_ui():
+    from .cook_dashboard_service import CookDashboardService
+    tenant_id = int(session.get("tenant_id") or 1)
+    # Resolve site
+    site_id = (request.args.get("site_id") or "").strip()
+    if not site_id:
+        db = get_session()
+        try:
+            row = db.execute(text("SELECT id FROM sites ORDER BY name LIMIT 1")).fetchone()
+            if row:
+                site_id = str(row[0])
+        finally:
+            db.close()
+    today = _date.today()
+    svc = CookDashboardService()
+    vm = svc.get_view(tenant_id=tenant_id, site_id=site_id, today=today)
+    return render_template("cook_dashboard.html", vm=vm)
 
 
 @ui_bp.get("/ui/reports/weekly.xlsx")
@@ -2043,11 +2064,8 @@ def register_meal_toggle_mark():
 # Cook Dashboard (Phase 4) - Tablet-first, ultra-simple overview
 # ============================================================================
 
-COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
-
-
 @ui_bp.get("/ui/cook")
-@require_roles(*COOK_ALLOWED_ROLES)
+@require_roles("cook", "admin", "superuser", "unit_portal")
 def cook_dashboard():
     """
     Cook Dashboard - Simple, visual overview for kitchen staff.

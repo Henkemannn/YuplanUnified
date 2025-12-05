@@ -21,19 +21,26 @@ def test_admin_limits_unauthorized():
     # No auth headers -> 401 (handled by auth system before route logic)
     rv = c.get("/admin/limits")
     assert rv.status_code == 401
-    data = rv.get_json()
-    # Central auth adapter returns custom message prior to standard error handler
-    assert data["error"] in ("unauthorized", "auth required")
+    body = rv.get_json()
+    # Assert RFC7807 ProblemDetails shape
+    assert isinstance(body, dict)
+    assert body.get("title") == "Unauthorized"
+    assert body.get("status") == 401
+    # Central auth adapter returns custom message in detail
+    assert body.get("detail") == "authentication required"
 
 
 def test_admin_limits_forbidden_role():
     app = _make_app()
     c = app.test_client()
     # Provide viewer role (not admin) -> 403
-    rv = c.get("/admin/limits", headers={"X-User-Role": "viewer"})
+    # Provide viewer role with tenant context -> 403 Forbidden
+    rv = c.get("/admin/limits", headers={"X-User-Role": "viewer", "X-Tenant-Id": "1"})
     assert rv.status_code == 403
-    data = rv.get_json()
-    assert data["error"] == "forbidden"
+    body = rv.get_json()
+    assert isinstance(body, dict)
+    assert body.get("title") == "Forbidden"
+    assert body.get("status") == 403
 
 
 def test_admin_limits_defaults_listing():

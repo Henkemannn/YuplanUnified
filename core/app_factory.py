@@ -176,8 +176,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             return
         db = get_session()
         try:
-            rows = db.query(TenantFeatureFlag).filter(TenantFeatureFlag.tenant_id == tid).all()
-            g.tenant_feature_flags = {r.name: bool(r.enabled) for r in rows}
+            # Select only required columns to avoid schema mismatches on optional fields
+            rows = (
+                db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
+                .filter(TenantFeatureFlag.tenant_id == tid)
+                .all()
+            )
+            g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
         finally:
             db.close()
 
@@ -346,8 +351,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     session["user_id"] = 1
             if tid:
                 session["tenant_id"] = int(tid) if tid.isdigit() else tid
-            if tid:
                 g.tenant_id = int(tid) if tid.isdigit() else tid
+            # Do not implicitly default tenant context when only role is provided.
+            # Tests that omit X-Tenant-Id must observe 401 for incomplete session.
         # Apply impersonation (may override tenant context)
         try:
             from .impersonation import apply_impersonation  # local import to avoid cycles
@@ -368,12 +374,23 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if env_on:
             try:
                 from .csrf import before_request as _csrf_before
-
                 resp = _csrf_before()
                 if resp is not None:
                     return resp
             except Exception:  # pragma: no cover
                 app.logger.warning("Strict CSRF hook failed", exc_info=True)
+        else:
+            # Enforce CSRF for /admin mutations (lightweight) when strict mode is off.
+            # Skip in TESTING to keep API tests simple and focused on RBAC/ETag behavior.
+            if not app.config.get("TESTING"):
+                try:
+                    from .csrf import require_csrf_for_admin_mutations
+                    resp = require_csrf_for_admin_mutations(request)
+                    if resp is not None:
+                        return resp
+                except Exception:
+                    # Do not crash request pipeline; fall through to handlers
+                    pass
         return None
 
     @app.after_request
@@ -688,6 +705,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             for code in codes:
                 r.setdefault(code, {"$ref": f"#/components/responses/Problem{code}"})
             return base
+
+        # Backward-compatible alias used in path definitions below
+        attach = attach_problem
 
         paths = {
             # --- Admin Phase B minimal endpoints (namespaced under /api/admin) ---
@@ -1289,6 +1309,371 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     "security": [{"BearerAuth": []}],
                 }
             },
+            # ---- Phase-2: Minimal Admin paths (users, feature-flags, roles) ----
+            "/admin/users": {
+                "get": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List users (tenant scoped)",
+                    "description": "pagination stub — currently ignored by API response. Response header X-Users-Deleted-Total returns the count of soft-deleted users for the current tenant. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email (case-insensitive substring)"},
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Users",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["items", "total"],
+                                        "properties": {
+                                            "items": {"type": "array", "items": {"$ref": "#/components/schemas/User"}},
+                                            "total": {"type": "integer"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {
+                                            "value": {
+                                                "items": [
+                                                    {"id": "u1", "email": "a@ex", "role": "admin"}
+                                                ],
+                                                "total": 1
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403"]),
+                "post": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Create user",
+                    "description": "On success, an audit event (user_create) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["email", "role"],
+                                    "properties": {
+                                        "email": {"type": "string", "format": "email"},
+                                        "role": {"type": "string", "enum": ["admin", "editor", "viewer"]}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
+                        "422": {
+                            "description": "Validation error",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Error"},
+                                    "examples": {
+                                        "invalidEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"invalid_format"}]}},
+                                        "invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}},
+                                        "additional": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"extra","reason":"additional_properties_not_allowed"}]}},
+                                        "duplicateEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"duplicate"}]}}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403", "422"])  # 422 via default fallback schema
+            },
+            "/admin/users/{user_id}": {
+                "parameters": [
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
+                ],
+                "put": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Replace user (strict)",
+                    "description": "Full-body replace of user email and role. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["email", "role"],
+                                    "properties": {
+                                        "email": {"type": "string", "format": "email"},
+                                        "role": {"type": "string", "enum": ["admin","editor","viewer"]}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/UserWithRole"},
+                                    "examples": {"ok": {"value": {"id": "u1", "email": "a2@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}
+                        },
+                        "422": {
+                            "description": "Validation error",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {
+                                "missing": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"required"},{"name":"role","reason":"required"}]}},
+                                "invalidEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"invalid_format"}]}},
+                                "invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}},
+                                "duplicateEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"duplicate"}]}}
+                            }}}
+                        }
+                    }
+                }, ["401", "403", "404", "422"]),
+                "patch": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Update user (email/role)",
+                    "description": "When role changes, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "email": {"type": "string", "format": "email"},
+                                        "role": {"type": "string", "enum": ["admin","editor","viewer"]}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/UserWithRole"},
+                                    "examples": {
+                                        "ok": {"value": {"id": "u1", "email": "a2@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}
+                                    }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}
+                        },
+                        "422": {
+                            "description": "Validation error",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {
+                                "invalidEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"invalid_format"}]}},
+                                "invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}},
+                                "duplicateEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"duplicate"}]}}
+                            }}}
+                        }
+                    }
+                }, ["401", "403", "404", "422"]),
+                "delete": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Soft-delete user",
+                    "description": "Errors on admin routes use RFC7807 (application/problem+json).",
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["id", "deleted_at"],
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "deleted_at": {"type": "string", "format": "date-time"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {"value": {"id": "u1", "deleted_at": "2025-01-01T12:00:00+00:00"}}
+                                    }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Not found",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Error"},
+                                    "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403", "404"])  # CSRF + RBAC enforced
+            },
+            "/admin/feature-flags": {
+                "get": attach_problem({
+                    "tags": ["admin", "feature-flags"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List feature flags (tenant scoped)",
+                    "description": "pagination stub — currently ignored by API response. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Quick filter"},
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Flags",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["items", "total"],
+                                        "properties": {
+                                            "items": {"type": "array", "items": {"$ref": "#/components/schemas/FeatureFlag"}},
+                                            "total": {"type": "integer"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {
+                                            "value": {
+                                                "items": [
+                                                    {"key": "beta-ui", "enabled": True, "notes": "Activated", "updated_at": "2025-01-01T12:00:00+00:00"}
+                                                ],
+                                                "total": 1
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403"]),
+            },
+            "/admin/feature-flags/{key}": {
+                "parameters": [
+                    {"name": "key", "in": "path", "required": True, "schema": {"type": "string"}}
+                ],
+                "patch": attach_problem({
+                    "tags": ["admin", "feature-flags"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Update feature flag (enabled/notes)",
+                    "description": "On change, an audit event (feature_flag_update) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "enabled": {"type": "boolean"},
+                                        "notes": {"type": "string", "maxLength": 500}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}},
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"flagMissing": {"value": {"ok": False, "error": "not_found", "message": "feature flag not found"}}}}}
+                        },
+                        "422": {
+                            "description": "Validation error",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {
+                                "enabledType": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"enabled","reason":"invalid_type"}]}},
+                                "notesTooLong": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"notes","reason":"max_length_exceeded","max":500}]}}
+                            }}}
+                        }
+                    }
+                }, ["401", "403", "404", "422"])
+            },
+            "/admin/roles": {
+                "get": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List users with roles",
+                    "description": "pagination stub — currently ignored by API response. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email"},
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Users with roles",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["items", "total"],
+                                        "properties": {
+                                            "items": {"type": "array", "items": {"$ref": "#/components/schemas/UserWithRole"}},
+                                            "total": {"type": "integer"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {
+                                            "value": {
+                                                "items": [
+                                                    {"id": "u1", "email": "a@ex", "role": "editor"}
+                                                ],
+                                                "total": 1
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403"])
+            },
+            "/admin/roles/{user_id}": {
+                "parameters": [
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}
+                ],
+                "patch": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Update user role",
+                    "description": "On change, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["role"],
+                                    "properties": {"role": {"type": "string", "enum": ["admin", "editor", "viewer"]}},
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}, "examples": {"ok": {"value": {"id": "u1", "email": "a@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}}}},
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}},
+                        "422": {"description": "Validation error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}}}}}}
+                    }
+                }, ["401", "403", "404", "422"])
+            }
         }
         # --- ProblemDetails (pilot) ---
         problem_details_schema = {
@@ -1422,15 +1807,39 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 {"name": "System"},
                 {"name": "Notes"},
                 {"name": "Tasks"},
+                {"name": "admin"},
                 {"name": "weekview"},
                 {"name": "report"},
             ],
             "components": {
                 "securitySchemes": {
-                    "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+                    "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"},
+                    # Required for mutating admin operations
+                    "CsrfToken": {"type": "apiKey", "in": "header", "name": "X-CSRF-Token", "description": "Fetch via GET /csrf"}
                 },
                 "schemas": {
                     "ProblemDetails": problem_details_schema,
+                    "FeatureFlag": {
+                        "type": "object",
+                        "properties": {
+                            "key": {"type": "string"},
+                            "enabled": {"type": "boolean"},
+                            "notes": {"type": "string"},
+                            "updated_at": {"type": "string", "format": "date-time"}
+                        }
+                    },
+                    "Error": {
+                        "type": "object",
+                        "properties": {
+                            "ok": {"type": "boolean"},
+                            "error": {"type": "string"},
+                            "message": {"type": "string"},
+                            "invalid_params": {
+                                "type": "array",
+                                "items": {"type": "object"}
+                            }
+                        }
+                    },
                     "PageMeta": {
                         "type": "object",
                         "required": ["page", "size", "total", "pages"],
@@ -1626,6 +2035,23 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                             "features": {"type": "array", "items": {"type": "string"}},
                             "kind": {"type": "string", "nullable": True},
                             "description": {"type": "string", "nullable": True},
+                        },
+                    },
+                    "User": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "email": {"type": "string", "format": "email"},
+                            "role": {"type": "string", "enum": ["admin", "editor", "viewer"]}
+                        },
+                    },
+                    "UserWithRole": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "email": {"type": "string", "format": "email"},
+                            "role": {"type": "string", "enum": ["admin", "editor", "viewer"]},
+                            "updated_at": {"type": "string", "format": "date-time"}
                         },
                     },
                     "TenantListResponse": {

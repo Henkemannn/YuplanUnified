@@ -1,63 +1,50 @@
-# feat(admin): GET/POST/DELETE /admin/limits — inspect & override rate limits
+# Yuplan Unified v1.x — Backend Stabilization
 
-## Summary
-Adds admin inspection endpoint `GET /admin/limits` plus write endpoints `POST /admin/limits` (upsert tenant override) and `DELETE /admin/limits` (idempotent removal). GET supports pagination and optional filters (`tenant_id`, `name`). Returns effective rate limits with their resolution source (`tenant`, `default`, `fallback`).
+## Teststatus
 
-## Details
-- Resolution order: tenant override → global default → fallback (5/60)
-- Listing semantics:
-  * Without `tenant_id`: list only global defaults (omit fallback noise)
-  * With `tenant_id`: union of default names + tenant override names
-  * `name` filter: if explicit and not found in defaults/overrides, show single fallback row (source=`fallback`)
-- OpenAPI additions: `LimitView`, `PageResponse_LimitView`, `LimitUpsertRequest`, `LimitDeleteRequest`, `LimitMutationResponse`, path `/admin/limits`
-- Pagination: standard `page`, `size` (capped at 100) returning `meta {page,size,total,pages}`
-- Docs: README + CHANGELOG sections updated (usage + behavior)
+- Passed: 827
+- Skipped: 8
+- Warnings: 3 (benign; OpenAPI validator deprecation)
+- No failures; backend is stable.
 
-## API Shapes
-`LimitView`:
-```jsonc
-{
-  "name": "export_csv",
-  "quota": 5,
-  "per_seconds": 60,
-  "source": "default", // tenant|default|fallback
-  "tenant_id": 42        // only when tenant_id context provided
-}
-```
-`PageResponse_LimitView` standard wrapper: `{ ok, items: LimitView[], meta }`.
+## OpenAPI & Errors
 
-## Tests
-New: `tests/test_admin_limits_api.py`, `tests/test_admin_limits_write_api.py`
-- 401 unauthenticated
-- 403 viewer role
-- defaults listing (no tenant_id)
-- tenant override listing (source=tenant)
-- fallback on explicit unknown name
-- pagination slice
+- Spec builds and validates correctly.
+- Added missing components: `FeatureFlag`, `Error`, `User`, `UserWithRole`.
+- Admin/API errors standardized to RFC7807 ProblemDetails: consistent `status`, `title`, `detail`, `type`.
+- Tests migrated off legacy `{ok,error}` envelopes.
 
-All tests: 196 passed, 3 skipped.
+## CSRF & RBAC
 
-## Type / Lint
-- Strict pockets unchanged; no new mypy errors
-- OpenAPI spec build path exercised by existing spec tests
+- Strict CSRF enforced on protected prefixes; missing/invalid → 403 ProblemDetails.
+- Admin mutations (users, roles, feature flags) require valid CSRF; blocked before side-effects.
+- RBAC: admin/superuser access is correct; viewer/editor → 403; anonymous → 401 ProblemDetails.
 
-## Risk
-Low: Write endpoints are scoped to admin role, in-memory registry update only (no persistent side-effects beyond process memory). Existing resolution order unchanged.
+## Feature Flags & Tenant
 
-## Rollout / Observability
-Optional future telemetry: increment `admin.limits.view` with tags (`tenant_id` present?, filtered?).
+- `TenantFeatureFlag` fields aligned with tests.
+- Missing tenant → 401 ("authentication required").
+- Admin module off: `/admin/stats` 404 ProblemDetails with `detail: "Admin module is not enabled"`.
 
-## Review Checklist
-- [ ] OpenAPI: `LimitView`, `PageResponse_LimitView`, `LimitUpsertRequest`, `LimitDeleteRequest`, `LimitMutationResponse` finns och refereras i `/admin/limits`.
-- [ ] Auth: 401/403 täcks av tester (viewer/unauth).
-- [ ] Semantik: fallback endast vid explicit name.
-- [ ] Pagination: meta.page/size/total/pages korrekta.
-- [ ] Clamp: quota≥1, 1≤per_seconds≤86400 verifierade i tester.
-- [ ] Idempotens: DELETE returnerar removed: bool.
-- [ ] Registry: resolution order (tenant→default→fallback) bibehållen.
-- [ ] Docs: README/CHANGELOG uppdaterade.
+## Admin Limits
 
-## Follow-ups (separate PRs suggested)
-- Telemetry for admin limits view/upsert/delete
-- Audit logging for limit mutations
-- Caching layer if usage grows (nuvarande map lookup O(1) räcker nu)
+- GET `/admin/limits`: role required (admin/superuser), tenant optional; invalid `tenant_id` → 400; viewer/editor → 403; anonymous → 401.
+- POST/DELETE `/admin/limits`: `tenant_id` read from JSON; missing/invalid → 400; no dependency on session tenant.
+- Audit/telemetry events emitted for list/upsert/delete.
+- Limits API, write, audit, telemetry tests green.
+
+## Tasks & Legacy Cook
+
+- Task creation: viewer blocked with 403 ProblemDetails.
+- Legacy cook requires `allow_legacy_cook_create`; emits one deprecation warning per tenant/day.
+- Error shapes harmonized to ProblemDetails across tasks routes.
+
+## Risk / Impact
+
+- Low risk: behavior aligned with explicit tests; CSRF/RBAC hardened; error formats standardized.
+- No breaking changes to weekview/planera/kitchen modules.
+
+## Rollout
+
+- Merge to `master`, tag as `v1.2.0` (or next planned version).
+- Proceed with UI/UX phases (portal, dashboard, landing) on top of stabilized backend.

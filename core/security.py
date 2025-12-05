@@ -40,6 +40,15 @@ TEST_EXEMPT = PROD_EXEMPT | {
     "/diet/",
 }
 
+# Strict CSRF enforcement paths (prefix match). State-changing methods under these
+# prefixes must include a valid double-submit token; origin fallback does NOT apply.
+STRICT_CSRF_PATHS: tuple[str, ...] = (
+    "/ui/admin",
+    "/api/admin",
+    "/ui/systemadmin",
+    "/api/system",
+)
+
 _CSRF_COUNTERS = {"missing": 0, "mismatch": 0, "origin": 0}
 if metrics:
     try:
@@ -149,17 +158,19 @@ def _csrf_check(app: Flask):
         _CSRF_COUNTERS["mismatch"] += 1
         if _csrf_blocked_counter:
             _csrf_blocked_counter.add(1, {"reason": "mismatch"})
-        return _problem_forbidden("csrf_mismatch")
+        # Strict mode response format for CSRF invalid
+        return _problem_forbidden("invalid_csrf")
     # no token pair; fallback to origin policy
-    if same_origin:
+    # If under strict paths, origin policy does NOT allow bypass; require token
+    if same_origin and not any(path.startswith(p) for p in STRICT_CSRF_PATHS):
         return
     # classify reason (missing vs origin mismatch)
     reason = "origin" if origin and not same_origin else "missing"
     _CSRF_COUNTERS[reason] += 1
     if _csrf_blocked_counter:
         _csrf_blocked_counter.add(1, {"reason": reason})
-    mapped = "origin_mismatch" if reason == "origin" else "csrf_missing"
-    return _problem_forbidden(mapped)
+    # Strict mode maps all failures to a unified problem detail
+    return _problem_forbidden("invalid_csrf")
 
 
 def init_security(app: Flask):

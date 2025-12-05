@@ -23,6 +23,7 @@ from .audit import log_task_status_transition
 from .db import get_session
 from .deprecation import apply_deprecation
 from .deprecation_warn import should_warn, warn_phase_enabled
+from .http_errors import forbidden as forbidden_response
 from .errors import APIError, NotFoundError
 from .metrics import increment
 from .models import Task
@@ -121,36 +122,34 @@ def list_tasks() -> Response:
 def create_task() -> TaskCreateResponse | Response:
     tid = _tenant_id()
     data = request.get_json(silent=True) or {}
-    # Legacy cook (raw role 'cook') should be allowed though it maps to canonical viewer.
-    # Canonical viewer (non-cook) remains forbidden for creation.
+    # Require full session and enforce role semantics for creation
     sess = require_session(session)
     canonical = to_canonical(sess["role"])  # type: ignore[arg-type]
     if canonical == "viewer":
-        # Feature flag gate for legacy cook allowance
-        allow_cook = False
-        if sess["role"] == "cook":
-            # feature flag resolution: per-tenant via g.tenant_feature_flags (populated in app_factory)
-            tenant_flags = getattr(g, "tenant_feature_flags", {})
-            allow_cook = bool(tenant_flags.get("allow_legacy_cook_create", False))
-        if sess["role"] == "cook" and allow_cook:
-            tags = {
-                "tenant_id": str(sess["tenant_id"]),
-                "user_id": str(sess["user_id"]),
-                "role": str(sess["role"]),
-                "canonical": "viewer",
-            }
-            if warn_phase_enabled():
-                tags["deprecated"] = "soon"
-            increment("tasks.create.legacy_cook", tags)
+        # Only legacy raw 'cook' may create when tenant flag enabled; block other viewers
+        if sess["role"] != "cook":
+            return forbidden_response("forbidden", problem_type="https://example.com/problems/forbidden", required_role="editor")
+        tenant_flags = getattr(g, "tenant_feature_flags", {})
+        allow_cook = bool(tenant_flags.get("allow_legacy_cook_create", False))
+        if not allow_cook:
+            return forbidden_response("forbidden", problem_type="Legacy cook creation flag disabled", required_role="editor")
+        # Emit deprecation warning once per tenant/day when env flag enabled
+        try:
+            from .deprecation_warn import should_warn
             if should_warn(int(sess["tenant_id"])):
-                current_app.logger.warning(
-                    "deprecated_legacy_cook_create used tenant=%s user=%s",
-                    sess["tenant_id"],
-                    sess["user_id"],
-                )
-        else:
-            # canonical viewer or cook without flag blocked
-            raise AuthzError("forbidden", required="editor")
+                current_app.logger.warning("deprecated_legacy_cook_create")
+        except Exception:
+            pass
+        # Telemetry for allowed legacy cook creates
+        tags = {
+            "tenant_id": str(sess["tenant_id"]),
+            "user_id": str(sess["user_id"]),
+            "role": str(sess["role"]),
+            "canonical": "viewer",
+        }
+        if warn_phase_enabled():
+            tags["deprecated"] = "soon"
+        increment("tasks.create.legacy_cook", tags)
     # Rate limit
     try:
         allow(
