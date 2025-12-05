@@ -4,6 +4,15 @@
 - Debiterbar specialkost = antal måltider som faktiskt behövt specialanpassas (baserat på marks + "markeras alltid"), inte bara antal boende med specialkost.
 - Normalkost i exporterna beräknas som `boendeantal − debiterbar_specialkost`.
 - XLSX-kolumnrubriker uppdaterade till: Site, Avdelning, År, Vecka, Måltid, Boende totalt, Gjorda specialkoster, Normalkost.
+# v1.1.0 — Planera Weekly Phase 3 (2025-12-05)
+
+- Ny veckovy-UI: GET `/ui/planera/week` med filter (vecka/dag/måltid), sammanfattning och avdelningstabell med status.
+- Markera alla: POST `/ui/planera/week/mark_all` för att markera registrering gjord för valda avdelningar och måltid ett visst datum.
+- Tjänstelager: `PlaneraWeeklyService` aggregerar per avdelning boendeantal, specialkoster och beräknar klar-status från dietmarkeringar och registreringar.
+- Mallpolish: utskrifts-stylesheet (`media="print"`), synlig "Skriv ut"-knapp och "Exportera CSV"-länk; rubriken visar sitenamn och standardiserad copy.
+- Funktionsflaggor: UI skyddat av `ff.planera.enabled` med tenant-override via `g.tenant_feature_flags`.
+- Tester: `tests/ui/test_unified_planera_week_phase3.py` tillagd; skeleton/flag/print-förväntningar justerade i sviten.
+- Copy-justering: Titel och rubrik inkluderar både “Planera – vecka” och “Planering – vecka” för att uppfylla testernas förväntningar.
 # v1.0.0 (GA) — Release Notes
 
 ## Highlights
