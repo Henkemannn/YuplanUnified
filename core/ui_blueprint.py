@@ -1049,34 +1049,21 @@ def _render_portal_weeks(is_enhetsportal: bool):
 
     from core.portal_weeks_service import PortalWeeksOverviewService
     svc = PortalWeeksOverviewService()
-    vm_core = svc.get_department_weeks_overview(tenant_id=1, department_id=department_id, site_name=site_name, department_name=dep_name, base_date=today, span_weeks=12)
-
+    vm_core = svc.get_department_weeks_overview(
+        tenant_id=1,
+        department_id=department_id,
+        site_name=site_name,
+        department_name=dep_name,
+        base_date=today,
+        span_weeks=12,
+    )
+    # Adjust URLs to correct base path and include site/department params
     base_path = "/ui/portal/week" if is_enhetsportal else "/portal/week"
-    items_out = []
     for it in vm_core.items:
-        url = f"{base_path}?site_id={site_id}&department_id={department_id}&year={it.year}&week={it.week}"
-        items_out.append({
-            "year": it.year,
-            "week": it.week,
-            "label": it.label,
-            "start_date": it.start_date,
-            "end_date": it.end_date,
-            "status": it.status,
-            "is_future": it.is_future,
-            "is_current": it.is_current,
-            "url": url,
-        })
+        it.url = f"{base_path}?site_id={site_id}&department_id={department_id}&year={it.year}&week={it.week}"
 
-    vm = {
-        "site_id": site_id,
-        "department_id": department_id,
-        "site_name": vm_core.site_name,
-        "department_name": vm_core.department_name,
-        "is_enhetsportal": is_enhetsportal,
-        "generated_at": today.isoformat(),
-        "items": items_out,
-    }
-    return render_template("unified_portal_weeks.html", vm=vm)
+    # Pass through the enriched VM directly
+    return render_template("unified_portal_weeks.html", vm=vm_core)
 
 # ============================================================================
 # Admin: Specialkost (Diet Types) – List/New/Edit/Delete

@@ -119,7 +119,7 @@ class CookDashboardService:
 
             # Build URLs via url_for
             planera_lunch_url = url_for(
-                "ui.planera_day_ui",
+                "ui.planera_day_ui_v2",
                 ui="unified",
                 date=today.isoformat(),
                 meal="lunch",
@@ -127,7 +127,7 @@ class CookDashboardService:
                 department_id=dep_id,
             )
             planera_dinner_url = url_for(
-                "ui.planera_day_ui",
+                "ui.planera_day_ui_v2",
                 ui="unified",
                 date=today.isoformat(),
                 meal="dinner",
@@ -137,7 +137,7 @@ class CookDashboardService:
             iso = today.isocalendar()
             year, week = iso[0], iso[1]
             veckovy_url = url_for(
-                "ui.kitchen_weekview",
+                "ui.kitchen_veckovy_week",
                 site_id=site_id,
                 department_id=dep_id,
                 year=year,
