@@ -1,0 +1,205 @@
+{% extends "unified_base.html" %}
+{% block title %}Veckovy – Vecka {{ vecka }}{% endblock %}
+{% block content %}
+<main class="cook-week" data-etag="{{ etag or '' }}">
+  <header class="cook-week-header control-bar">
+    <div class="vecka-form">
+      <form method="get" action="{{ url_for('ui.cook_week_overview_unified', year=request.args.get('year', 2025), week=vecka or 1) }}">
+        <label for="vecka" class="form-label">Vecka:</label>
+        <select id="vecka" name="week" class="form-control" style="width: auto; display: inline-block;">
+          {% for v in range(1, 53) %}
+          <option value="{{ v }}" {% if v == vecka %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">Byt</button>
+      </form>
+    </div>
+    <div class="actions">
+      <button onclick="window.print()" class="btn btn-secondary btn-sm">
+        <i class="fas fa-print"></i> Skriv ut
+      </button>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('ui.planera_day_ui_v2', week=vecka) }}">
+        <i class="fas fa-calendar-plus"></i> Planera måltider
+      </a>
+      <a class="btn btn-secondary btn-sm" href="{{ url_for('ui.reports_weekview') }}">
+        <i class="fas fa-chart-bar"></i> Statistik
+      </a>
+    </div>
+  </header>
+
+  {% for avd in avdelningar %}
+  <section class="cook-week-department container">
+    <h2><i class="fas fa-building"></i> {{ avd.namn }}</h2>
+    {% if avd.faktaruta %}
+    <p class="text-secondary mb-3 cook-week-faktaruta"><i class="fas fa-info-circle"></i> {{ avd.faktaruta }}</p>
+    {% endif %}
+
+    <table class="table table-striped">
+      <tr class="avdelning-rad">
+        <td>{{ avd.namn }}</td>
+        {% for dag in ['Mån', 'Tis', 'Ons', 'Tors', 'Fre', 'Lör', 'Sön'] %}
+        <td colspan="2" class="veckodag-header dagstart dag-med-meny">{{ dag }}</td>
+        {% endfor %}
+      </tr>
+      <tr>
+        <td></td>
+        {% for dag in ['Mån', 'Tis', 'Ons', 'Tors', 'Fre', 'Lör', 'Sön'] %}
+        <td class="lunch dagstart {% if alt2_markeringar and avd.id in alt2_markeringar and dag in alt2_markeringar[avd.id] %}gulmarkerad{% endif %}">🍽️</td>
+        <td class="kväll">🌙</td>
+        {% endfor %}
+      </tr>
+      <tr class="boende-rad">
+        <td><i class="fas fa-users"></i> Boende</td>
+        {% for dag in ['Mån', 'Tis', 'Ons', 'Tors', 'Fre', 'Lör', 'Sön'] %}
+        <td class="dagstart {% if alt2_markeringar and avd.id in alt2_markeringar and dag in alt2_markeringar[avd.id] %}gulmarkerad{% endif %}">
+          {{ avd.antal_boende_per_dag.get((dag, 'Lunch'), (0, False))[0] }}
+        </td>
+        <td class="kväll">
+          {{ avd.antal_boende_per_dag.get((dag, 'Kväll'), (0, False))[0] }}
+        </td>
+        {% endfor %}
+      </tr>
+      {% for kost in avd.kosttyper %}
+      <tr>
+        <td>{{ kost.namn }}</td>
+        {% for cell in kost.celler %}
+        <td class="kostcell {% if loop.index0 is divisibleby 2 %}dagstart{% endif %}{% if cell.markerad %} markerad{% endif %}{% if cell.maltid == 'Kväll' %} kväll{% endif %}{% if cell.alt2_gul %} gulmarkerad{% endif %}"
+          data-department-id="{{ avd.id }}"
+          data-diet-id="{{ kost.diet_id }}"
+          data-week="{{ vecka }}"
+          data-year="{{ year if year else '' }}"
+          data-weekday="{{ cell.dag }}"
+          data-meal="{{ cell.maltid }}"
+          data-current-state="{{ '1' if cell.markerad else '0' }}">
+          {{ cell.antal }}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </table>
+  </section>
+  {% endfor %}
+
+  <!-- Meny popup -->
+  <div class="meny-popup-overlay" id="menyPopupOverlay"></div>
+  <div class="meny-popup" id="menyPopup">
+    <div class="meny-popup-header">
+      <h4 id="menyPopupTitle">Meny för dagen</h4>
+      <button class="meny-popup-close" id="menyPopupClose">&times;</button>
+    </div>
+    <div id="menyPopupContent"></div>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const vecka = Number("{{ vecka }}");
+  const menyData = {{ meny_data | tojson | safe }};
+  function getMenyForDag(dag) {
+    const dagMapping = { 'Måndag': 'mån', 'Tisdag': 'tis', 'Onsdag': 'ons', 'Torsdag': 'tors', 'Fredag': 'fre', 'Lördag': 'lör', 'Söndag': 'sön' };
+    const menuKey = dagMapping[dag];
+    if (!menyData || typeof menyData !== 'object') return null;
+    return menuKey && menyData[menuKey] ? menyData[menuKey] : null;
+  }
+  function showMenyPopup(dag) {
+    const popup = document.getElementById('menyPopup');
+    const overlay = document.getElementById('menyPopupOverlay');
+    const title = document.getElementById('menyPopupTitle');
+    const content = document.getElementById('menyPopupContent');
+    title.textContent = `Meny för ${dag}`;
+    const menuData = getMenyForDag(dag);
+    let contentHtml = '';
+    if (menuData) {
+      contentHtml += `
+        <div class="meny-alt alt1">
+          <h5>Alternativ 1</h5>
+          <p>${menuData.alt1 || ''}</p>
+        </div>
+        <div class="meny-alt alt2">
+          <h5>Alternativ 2</h5>
+          <p>${menuData.alt2 || ''}</p>
+        </div>
+        <div class="meny-alt">
+          <h5>Dessert</h5>
+          <p>${menuData.dessert || menuData['dessert'] || ''}</p>
+        </div>
+        <div class="meny-alt">
+          <h5>Kväll</h5>
+          <p>${menuData.kväll || menuData.kvall || ''}</p>
+        </div>
+      `;
+    } else {
+      contentHtml = '<p class="text-muted">Ingen meny finns för denna dag eller vecka ännu.</p>';
+    }
+    content.innerHTML = contentHtml;
+    overlay.style.display = 'block';
+    popup.style.display = 'block';
+  }
+  function hideMenyPopup() {
+    const popup = document.getElementById('menyPopup');
+    const overlay = document.getElementById('menyPopupOverlay');
+    overlay.style.display = 'none';
+    popup.style.display = 'none';
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const closeBtn = document.getElementById('menyPopupClose');
+    const overlay = document.getElementById('menyPopupOverlay');
+    if (closeBtn) closeBtn.addEventListener('click', hideMenyPopup);
+    if (overlay) overlay.addEventListener('click', hideMenyPopup);
+    document.addEventListener('keydown', function(event) { if (event.key === 'Escape') hideMenyPopup(); });
+    const dagHeaders = document.querySelectorAll('.veckodag-header');
+    dagHeaders.forEach((header) => {
+      const dagText = header.textContent.trim();
+      const dagAbbr = dagText.split(' ')[0];
+      const map = { 'Mån': 'Måndag', 'Tis': 'Tisdag', 'Ons': 'Onsdag', 'Tors': 'Torsdag', 'Fre': 'Fredag', 'Lör': 'Lördag', 'Sön': 'Söndag' };
+      const fullDagName = map[dagAbbr] || dagAbbr;
+      header.classList.add('dag-header-klickbar');
+      header.addEventListener('click', function() { showMenyPopup(fullDagName); });
+    });
+
+    // Click-to-toggle special diet mark on kost cells (ETag-safe integration to be wired server-side)
+    const kostCells = document.querySelectorAll('.kostcell');
+    kostCells.forEach((cell) => {
+      cell.addEventListener('click', async () => {
+        const desiredState = cell.dataset.currentState === '1' ? false : true;
+        const payload = {
+          year: Number(cell.dataset.year || 0),
+          week: Number(cell.dataset.week || 0),
+          department_id: cell.dataset.departmentId,
+          diet_type_id: cell.dataset.dietId,
+          weekday_abbr: cell.dataset.weekday,
+          meal: cell.dataset.meal,
+          desired_state: desiredState,
+        };
+        try {
+          const root = document.querySelector('.cook-week');
+          const currentEtag = root && root.dataset ? (root.dataset.etag || null) : null;
+          const res = await fetch('/api/weekview/specialdiets/mark', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              // Include CSRF header if available in page context
+              'X-CSRF-Token': window.CSRF_TOKEN || '',
+              ...(currentEtag ? { 'If-Match': currentEtag } : {})
+            },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) {
+            cell.dataset.currentState = desiredState ? '1' : '0';
+            cell.classList.toggle('markerad', desiredState);
+            const newEtag = res.headers.get('ETag');
+            if (newEtag && root) {
+              root.dataset.etag = newEtag;
+            }
+          } else if (res.status === 412) {
+            alert('Vyn är inaktuell, ladda om sidan och försök igen.');
+          }
+        } catch (e) {
+          console.error('Mark toggle failed', e);
+        }
+      });
+    });
+  });
+</script>
+{% endblock %}

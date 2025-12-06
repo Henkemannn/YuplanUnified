@@ -46,6 +46,18 @@ class CookDashboardVM:
     weekday_name: str
     meals: List[CookDashboardMealVM]
     sites: List[CookDashboardSiteVM]
+    department_portal_status: List["DepartmentPortalStatusVM"]
+
+
+@dataclass
+class DepartmentPortalStatusVM:
+    department_id: int
+    department_name: str
+    week: int
+    is_complete: bool
+    completed_days: int
+    total_days: int
+    year: int
 
 
 class CookDashboardService:
@@ -200,5 +212,30 @@ class CookDashboardService:
 
         day_names = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
         weekday_name = day_names[today.isoweekday() - 1]
-        vm = CookDashboardVM(date=today, weekday_name=weekday_name, meals=meals, sites=[site_vm])
+        # Build portal status list for this site/week
+        dept_status_list: List[DepartmentPortalStatusVM] = []
+        if site_id:
+            try:
+                from views.portal_department_week import build_department_week_vm
+                # list departments again (already available as `departments`)
+                for dep in departments:
+                    week_vm = build_department_week_vm(tenant_id=tenant_id, year=year, week=week, department_id=dep["id"], site_id=site_id)
+                    total_days = len(week_vm.days)
+                    completed_days = sum(1 for d in week_vm.days if getattr(d, "is_complete", False))
+                    is_complete = (total_days > 0 and completed_days == total_days)
+                    dept_status_list.append(
+                        DepartmentPortalStatusVM(
+                            department_id=int(dep["id"]) if str(dep["id"]).isdigit() else 0,
+                            department_name=dep["name"],
+                            week=week,
+                            is_complete=is_complete,
+                            completed_days=completed_days,
+                            total_days=total_days,
+                            year=year,
+                        )
+                    )
+            except Exception:
+                dept_status_list = []
+
+        vm = CookDashboardVM(date=today, weekday_name=weekday_name, meals=meals, sites=[site_vm], department_portal_status=dept_status_list)
         return vm

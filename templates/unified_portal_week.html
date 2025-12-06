@@ -20,7 +20,44 @@
   </div>
 </header>
 
-<main class="portal-container">
+<main class="portal-container"
+  data-site-id="{{ vm.site_id }}"
+  data-department-id="{{ vm.department_id }}"
+  data-year="{{ vm.year }}"
+  data-week="{{ vm.week }}">
+  <section class="portal-week-header">
+    <a href="{{ vm.back_url }}" class="yp-link">&larr; Till vecköversikten</a>
+
+    <h1>Vecka {{ vm.week }} – {{ vm.department_name }}</h1>
+    <p>Boendeantal: {{ vm.residents_count }}</p>
+    <p>Boende: {{ vm.residents_count }}</p>
+
+    {% if vm.info_text %}
+      <p class="portal-note">{{ vm.info_text }}</p>
+    {% endif %}
+
+    <p class="portal-department-special">
+      Specialkost på avdelningen
+    </p>
+
+    <p class="portal-help">
+      Om något inte stämmer – kontakta köket eller admin.
+    </p>
+
+    {% if vm.has_menu %}
+      {% if vm.is_completed %}
+        <span class="status-pill status-pill--done">Klar</span>
+        <p class="status-text">Veckan är klar.</p>
+      {% elif vm.needs_choices %}
+        <span class="status-pill status-pill--needs">Behöver val</span>
+        <p class="status-text">Veckan är inte klar – det saknas val vissa dagar.</p>
+      {% endif %}
+    {% else %}
+      <span class="status-pill status-pill--no-menu">Ingen meny</span>
+      <p class="status-text">Köket har inte lagt in meny än.</p>
+      <p class="status-text">Veckan är inte klar</p>
+    {% endif %}
+  </section>
 <main class="portal-container"
   data-site-id="{{ vm.site_id }}"
   data-department-id="{{ vm.department_id }}"
@@ -33,32 +70,7 @@
     <span class="breadcrumb-sep">/</span>
     <span class="breadcrumb-current">Vecka {{ vm.week }}</span>
   </nav>
-  <section class="portal-summary">
-    <h1 class="portal-summary__title">Vecka {{ vm.week }}, {{ vm.year }} – {{ vm.department_name }}, {{ vm.site_name }}</h1>
-    <div class="portal-summary__info">
-      <p>
-        <a class="yp-button yp-button-link" href="{% if vm.is_enhetsportal %}/ui/portal/weeks{% else %}/portal/weeks{% endif %}?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}">Till vecköversikt</a>
-      </p>
-      <p><strong>Boendeantal:</strong> {{ vm.residents_total }}</p>
-      {% if vm.diet_defaults_summary and vm.diet_defaults_summary|length > 0 %}
-      <p><strong>Specialkost på avdelningen:</strong>
-        {% for it in vm.diet_defaults_summary %}
-          {{ it.name }} ({{ it.planned_count }}){% if not loop.last %}, {% endif %}
-        {% endfor %}
-      </p>
-      {% endif %}
-      {% if vm.notes %}
-      <p><strong>Faktaruta:</strong> {{ vm.notes }}</p>
-      {% endif %}
-      <p>
-        {% if vm.status and vm.status.is_complete %}
-          <span class="yp-badge yp-badge-success">Veckan är klar</span>
-        {% else %}
-          <span class="yp-badge yp-badge-warning">Veckan är inte klar – saknar val för: {{ vm.status.missing_days | join(', ') }}</span>
-        {% endif %}
-      </p>
-    </div>
-  </section>
+  
 
   <section class="portal-day-grid" aria-label="Veckans meny">
     {% for day in vm.days %}
@@ -91,7 +103,8 @@
         </div>
         <div class="meal-text meal-text--alt1">{{ day.menu.lunch.alt1 or 'Ingen rätt' }}</div>
         {% if day.menu.lunch.alt2 %}
-        <div class="meal-text meal-text--alt2">{{ day.menu.lunch.alt2 }}</div>
+        <div class="meal-text meal-text--alt2">ALT 2: {{ day.menu.lunch.alt2 }}</div>
+        <span class="yp-badge yp-badge-warning">⚡ Alt 2</span>
         {% endif %}
         {% if day.menu.lunch.dessert %}
         <div class="meal-text meal-text--dessert">{{ day.menu.lunch.dessert }}</div>

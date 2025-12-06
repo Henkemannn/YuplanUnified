@@ -77,8 +77,37 @@
       <a href="/ui/planera/day" class="yp-button">Planera idag</a>
       <a href="/ui/planera/week" class="yp-button">Planera vecka</a>
       <a href="/ui/portal/week" class="yp-button">Veckovy (kök)</a>
+      <a
+        href="{{ url_for('ui.cook_week_overview_unified', year=vm.date.isocalendar()[0], week=vm.date.isocalendar()[1]) }}"
+        class="yp-button yp-button-primary"
+      >Öppna veckovy</a>
       <a href="/ui/reports/weekly.xlsx" class="yp-button">Veckorapport</a>
     </div>
+  </section>
+
+  <section class="yp-section cook-panel cook-panel-department-status">
+    <h2>Avdelningsstatus – vecka {{ vm.date.isocalendar()[1] }}</h2>
+    {% if vm.department_portal_status %}
+    <ul class="department-status-list">
+      {% for dep in vm.department_portal_status %}
+      <li class="department-status-item">
+        <a href="{{ url_for('ui.portal_week_unified_path', year=dep.year, week=dep.week, department_id=dep.department_id) }}" class="department-name-link">
+          <span class="department-name">{{ dep.department_name }}</span>
+          <span class="department-name-icon" aria-hidden="true">↗</span>
+        </a>
+        <span class="badge badge-status {% if dep.is_complete %}badge-status-complete{% else %}badge-status-pending{% endif %}">
+          {% if dep.is_complete %}
+            Klar ({{ dep.completed_days }}/{{ dep.total_days }})
+          {% else %}
+            Inte klar ({{ dep.completed_days }}/{{ dep.total_days }})
+          {% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-muted">Inga avdelningar hittades för denna site.</p>
+    {% endif %}
   </section>
 </div>
 {% endblock %}

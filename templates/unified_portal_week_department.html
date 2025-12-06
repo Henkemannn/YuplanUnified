@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Avdelningsvy – Vecka {{ vm.week }}, {{ vm.year }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
+</head>
+<body>
+<main class="portal-week">
+  <section class="portal-week-header">
+    <h1>Vecka {{ vm.week }} – {{ vm.department_name }}</h1>
+    <p>Boendeantal: {{ vm.residents }}</p>
+    <p>Boende: {{ vm.residents }}</p>
+    <p>{{ vm.status_text }}</p>
+  </section>
+
+  <ul class="portal-week-days" aria-label="Veckans dagar">
+    {% for day in vm.days %}
+    <li class="portal-week-day">
+      <header>
+        <span class="portal-week-day-name">{{ day.name }}</span>
+        <span class="portal-week-day-date">{{ day.date }}</span>
+      </header>
+      <div class="portal-week-meals">
+        <div class="portal-week-meal">
+          <strong>Lunch</strong>
+          <div>Alt 1: {{ day.lunch_alt1 or "Ingen rätt" }}</div>
+          <div>Alt 2: {{ day.lunch_alt2 or "Ingen rätt" }}</div>
+          {% if day.alt2_marked %}
+            <span class="badge badge-alt2">Alt 2 vald</span>
+          {% endif %}
+        </div>
+        <div class="portal-week-meal">
+          <strong>Middag</strong>
+          <div>{{ day.dinner or "Ingen rätt" }}</div>
+        </div>
+      </div>
+      <footer class="portal-week-day-footer">
+        <span class="badge badge-status {% if day.is_complete %}badge-status-complete{% else %}badge-status-pending{% endif %}">
+          {% if day.is_complete %}
+            Klar
+          {% else %}
+            Inte klar
+          {% endif %}
+        </span>
+        <a href="{{ url_for('ui.portal_department_day_view', year=vm.year, week=vm.week, department_id=vm.department_id, day_index=day.index) }}" class="btn btn-primary">
+          {% if day.is_complete %}
+            Visa val
+          {% else %}
+            Gör val
+          {% endif %}
+        </a>
+      </footer>
+    </li>
+    {% endfor %}
+  </ul>
+</main>
+</body>
+</html>

@@ -46,27 +46,28 @@
   </div>
 
   <section class="weeks-grid" aria-label="Veckor">
-    {% for week in vm.items %}
-    <div class="week-card">
-      <h2>Vecka {{ week.week }}</h2>
-      <p class="week-dates">{{ week.start_date }} – {{ week.end_date }}</p>
-
-      {% if week.has_menu %}
-        {% if week.is_completed %}
+    {% for item in vm.items %}
+    <a href="{{ item.url }}"
+       class="week-card week-card--{{ 'done' if item.is_completed else ('needs' if item.needs_choices else ('no-menu' if not item.has_menu else 'in-progress')) }}{% if item.is_current %} week-card--current{% endif %}"
+       data-year="{{ item.year }}" data-week="{{ item.week }}"
+       aria-label="Öppna vecka {{ item.week }} ({{ item.start_date.strftime('%d/%m') }} – {{ item.end_date.strftime('%d/%m') }})">
+      <div class="week-card__header">
+        <div class="week-card__title">Vecka {{ item.week }}</div>
+        <div class="week-card__dates">{{ item.start_date.strftime('%Y-%m-%d') }} – {{ item.end_date.strftime('%Y-%m-%d') }}</div>
+      </div>
+      {% if item.has_menu %}
+        {% if item.is_completed %}
           <span class="status-pill status-pill--done">Klar</span>
           <p class="status-text">Valen för denna vecka är gjorda.</p>
-          <a href="{{ week.url }}" class="yp-button yp-button--secondary">Visa val</a>
         {% else %}
           <span class="status-pill status-pill--needs">Behöver val</span>
           <p class="status-text">Det saknas val vissa dagar.</p>
-          <a href="{{ week.url }}" class="yp-button yp-button--primary">Gör val</a>
         {% endif %}
       {% else %}
         <span class="status-pill status-pill--no-menu">Ingen meny</span>
         <p class="status-text">Köket har inte lagt in meny än.</p>
-        <button class="yp-button yp-button--disabled" disabled>Ingen meny</button>
       {% endif %}
-    </div>
+    </a>
     {% endfor %}
   </section>
 </main>
