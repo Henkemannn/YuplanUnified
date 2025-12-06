@@ -5,16 +5,14 @@ from flask import Blueprint, render_template, redirect, session, g, current_app
 bp = Blueprint("home", __name__, template_folder="templates", static_folder="static")
 
 
-@bp.get("/")
-def index():  # pragma: no cover - tiny landing
+@bp.get("/home")
+def index():  # pragma: no cover - legacy landing retained under /home
     try:
-        # If user is logged in and dashboard feature flag is on -> redirect to /dashboard
+        # Preserve original behavior under /home for manual access
         role = session.get("role")
         tid = session.get("tenant_id")
         if role and tid is not None:
-            # Check feature flag ff.dashboard.enabled
             try:
-                # Prefer tenant override via g.tenant_feature_flags if present
                 ff = getattr(g, "tenant_feature_flags", {})
                 enabled = ff.get("ff.dashboard.enabled")
                 if enabled is None:
@@ -24,8 +22,6 @@ def index():  # pragma: no cover - tiny landing
                     return redirect("/dashboard")
             except Exception:
                 pass
-        # Otherwise render simple landing page
         return render_template("home.html")
     except Exception:
-        # In case templates not available for some reason, soft-fallback to /docs
         return redirect("/docs/")

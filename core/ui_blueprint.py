@@ -17,6 +17,87 @@ ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="st
 SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 ADMIN_ROLES = ("admin", "superuser")
 COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
+
+# ----------------------------------------------------------------------------
+# Landing: default dashboard selection + public root page
+# ----------------------------------------------------------------------------
+
+def _default_dashboard_for_user(user) -> str:
+    # Prefer explicit user.has_role when available
+    try:
+        if getattr(user, "has_role", None):
+            if user.has_role("superuser"):
+                return url_for("ui.admin_dashboard")
+            if user.has_role("admin"):
+                return url_for("ui.admin_dashboard")
+            if user.has_role("kitchen") or user.has_role("cook"):
+                return url_for("ui.cook_dashboard_ui")
+            if user.has_role("department") or user.has_role("staff") or user.has_role("unit_portal"):
+                return url_for("ui.portal_week")
+    except Exception:
+        pass
+    # Fallback based on session role
+    role = (session.get("role") or "").strip().lower()
+    if role in ("superuser", "admin"):
+        return url_for("ui.admin_dashboard")
+    if role in ("kitchen", "cook"):
+        return url_for("ui.cook_dashboard_ui")
+    if role in ("department", "staff", "unit_portal"):
+        return url_for("ui.portal_week")
+    # Safe default: portal week
+    return url_for("ui.portal_week")
+
+
+@ui_bp.get("/")
+def landing_root():
+    # If the user is logged in → redirect to their default dashboard
+    if session.get("user_id"):
+        # Respect ff.dashboard.enabled feature gate (redirect to /dashboard when on)
+        try:
+            from flask import g, current_app
+            ff = getattr(g, "tenant_feature_flags", {})
+            enabled = ff.get("ff.dashboard.enabled")
+            if enabled is None:
+                reg = getattr(current_app, "feature_registry", None)
+                enabled = reg.enabled("ff.dashboard.enabled") if reg else False
+            if enabled:
+                return redirect("/dashboard")
+        except Exception:
+            pass
+        return redirect(_default_dashboard_for_user(None))
+    # In tests or bearer-based auth, honor Authorization header to infer identity
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        if not session.get("user_id") and auth_header.lower().startswith("bearer "):
+            from flask import current_app
+            from .jwt_utils import decode as jwt_decode
+
+            token = auth_header.split(None, 1)[1].strip()
+            primary = current_app.config.get("JWT_SECRET", None)
+            secrets_list = current_app.config.get("JWT_SECRETS") or []
+            payload = jwt_decode(token, secret=primary, secrets_list=secrets_list)
+            session["user_id"] = payload.get("sub")
+            session["role"] = payload.get("role")
+            session["tenant_id"] = payload.get("tenant_id")
+            # After inferring identity, re-apply feature flag redirect if enabled
+            try:
+                from flask import g, current_app
+                ff = getattr(g, "tenant_feature_flags", {})
+                enabled = ff.get("ff.dashboard.enabled")
+                if enabled is None:
+                    reg = getattr(current_app, "feature_registry", None)
+                    enabled = reg.enabled("ff.dashboard.enabled") if reg else False
+                if enabled:
+                    return redirect("/dashboard")
+            except Exception:
+                pass
+            return redirect(_default_dashboard_for_user(None))
+    except Exception:
+        # Ignore decoding errors for public landing
+        pass
+
+    # Public landing page otherwise
+    return render_template("landing_public.html")
 # ============================================================================
 # Systemadmin (Superuser) – Sites + Departments (Phase 1)
 # ============================================================================
@@ -1676,24 +1757,19 @@ def reports_weekly_csv():
     return resp
 # Cook Dashboard (Phase 5) – Unified cook view
 @ui_bp.get("/ui/cook/dashboard")
-@require_roles("cook", "admin", "superuser", "unit_portal")
+@require_roles("cook", "admin", "superuser")
 def cook_dashboard_ui():
     from .cook_dashboard_service import CookDashboardService
     tenant_id = int(session.get("tenant_id") or 1)
-    # Resolve site
     site_id = (request.args.get("site_id") or "").strip()
-    if not site_id:
-        db = get_session()
-        try:
-            row = db.execute(text("SELECT id FROM sites ORDER BY name LIMIT 1")).fetchone()
-            if row:
-                site_id = str(row[0])
-        finally:
-            db.close()
-    today = _date.today()
+    date_str = (request.args.get("date") or "").strip()
+    try:
+        today = _date.fromisoformat(date_str) if date_str else _date.today()
+    except Exception:
+        today = _date.today()
     svc = CookDashboardService()
-    vm = svc.get_view(tenant_id=tenant_id, site_id=site_id, today=today)
-    return render_template("cook_dashboard.html", vm=vm)
+    vm = svc.get_view(tenant_id=tenant_id, site_id=site_id or None, today=today)
+    return render_template("ui/unified_cook_dashboard_phase5.html", vm=vm)
 
 
 @ui_bp.get("/ui/reports/weekly.xlsx")

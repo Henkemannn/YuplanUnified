@@ -4,7 +4,7 @@
   <div class="yp-global-header__container">
     {# Left: Logo + Product Name #}
     <div class="yp-global-header__brand">
-      <a href="{{ url_for_home() }}" class="yp-header-brand" aria-label="Gå till startsidan för Yuplan Unified">
+      <a href="{{ url_for('ui.landing_root') }}" class="yp-header-brand" aria-label="Gå till startsidan för Yuplan Unified">
            {# Prefer dynamic branding logo if provided in g, otherwise default asset #}
            {% set _logo = (g.brand_logo_url if g is defined and g.brand_logo_url else url_for('static', filename='img/logo-proposal.svg')) %}
            <img src="{{ _logo }}" 
@@ -56,11 +56,5 @@
 
 {# Helper function to determine home URL based on role #}
 {% macro url_for_home() %}
-{%- if session and session.get('role') in ['admin', 'superuser'] -%}
-{{ url_for('ui.admin_dashboard') }}
-{%- elif session and session.get('role') in ['cook', 'unit_portal'] -%}
-{{ url_for('ui.cook_dashboard') }}
-{%- else -%}
-{{ url_for('ui.cook_dashboard') }}
-{%- endif -%}
+{{ url_for('ui.landing_root') }}
 {% endmacro %}

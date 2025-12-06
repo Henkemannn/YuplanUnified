@@ -1,0 +1,83 @@
+{% extends "ui/unified_admin_base.html" %}
+{% block title %}Kockvy – {{ vm.date }}{% endblock %}
+{% block content %}
+<div class="yp-page">
+  <div class="yp-page-header">
+    <h1>Kockvy</h1>
+    <p>Dagens överblick – {{ vm.weekday_name }} {{ vm.date }}</p>
+  </div>
+
+  <section class="yp-section">
+    <h2>Dagens totals</h2>
+    <div class="yp-grid yp-grid--cols-2">
+      {% for meal in vm.meals %}
+      <div class="yp-card">
+        <h3>{{ meal.name }}</h3>
+        <p><strong>Normalkost:</strong> {{ meal.totals_normalkost }}</p>
+        <p><strong>Specialkost:</strong> {{ meal.totals_specials }}</p>
+        {% if meal.alt2_count is not none %}
+        <p><strong>Alt2:</strong> {{ meal.alt2_count }}</p>
+        {% endif %}
+        {% if meal.status == 'done' %}
+        <span class="yp-badge yp-badge--success">Klar</span>
+        {% elif meal.status == 'partial' %}
+        <span class="yp-badge yp-badge--warning">Delvis klar</span>
+        {% else %}
+        <span class="yp-badge yp-badge--neutral">Ej klar</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="yp-section">
+    <h2>Per arbetsplats/avdelning</h2>
+    {% for site in vm.sites %}
+      <div class="yp-card">
+        <h3>{{ site.site_name }}</h3>
+        <table class="yp-table">
+          <thead>
+            <tr>
+              <th>Avdelning</th>
+              <th>Lunch</th>
+              <th>Kväll</th>
+              <th>Åtgärder</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for dep in site.departments %}
+            <tr>
+              <td>{{ dep.name }}</td>
+              <td>
+                Normalkost: {{ dep.residents_lunch - dep.specials_lunch }}
+                <span class="badge">Special: {{ dep.specials_lunch }}</span>
+                {% if dep.alt2_today %}<span class="badge">Alt2</span>{% endif %}
+              </td>
+              <td>
+                Normalkost: {{ dep.residents_dinner - dep.specials_dinner }}
+                <span class="badge">Special: {{ dep.specials_dinner }}</span>
+              </td>
+              <td>
+                <a href="{{ dep.planera_lunch_url }}" class="yp-link">Planera lunch</a>
+                <a href="{{ dep.planera_dinner_url }}" class="yp-link">Planera kväll</a>
+                <a href="{{ dep.veckovy_url }}" class="yp-link">Veckovy</a>
+                <a href="{{ dep.report_url }}" class="yp-link">Rapport</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endfor %}
+  </section>
+
+  <section class="yp-section">
+    <h2>Snabblänkar</h2>
+    <div class="yp-actions">
+      <a href="/ui/planera/week" class="yp-button">Planera vecka</a>
+      <a href="/ui/portal/week" class="yp-button">Veckovy (kök)</a>
+      <a href="/ui/reports/weekly.xlsx" class="yp-button">Veckorapport</a>
+    </div>
+  </section>
+</div>
+{% endblock %}

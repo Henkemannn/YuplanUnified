@@ -2,68 +2,203 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date as _date
-from typing import Dict
+from typing import List, Dict, Any
 
+from .weekview.service import WeekviewService
+from .meal_registration_repo import MealRegistrationRepo
 from .db import get_session
 from sqlalchemy import text
+from flask import url_for
+
+
+@dataclass
+class CookDashboardDepartmentVM:
+    name: str
+    residents_lunch: int
+    residents_dinner: int
+    specials_lunch: int
+    specials_dinner: int
+    alt2_today: bool
+    planera_lunch_url: str
+    planera_dinner_url: str
+    veckovy_url: str
+    report_url: str
+
+
+@dataclass
+class CookDashboardSiteVM:
+    site_name: str
+    departments: List[CookDashboardDepartmentVM]
+
+
+@dataclass
+class CookDashboardMealVM:
+    name: str
+    totals_normalkost: int
+    totals_specials: int
+    alt2_count: int | None
+    status: str  # "done" | "partial" | "not_done"
 
 
 @dataclass
 class CookDashboardVM:
-    site_id: str
-    site_name: str
     date: _date
-    iso_year: int
-    iso_week: int
-
-    menu_today: Dict[str, str]
-    total_residents_today: int
-    total_specials_today: int
-    total_normal_today: int
-
-    links: Dict[str, str]
+    weekday_name: str
+    meals: List[CookDashboardMealVM]
+    sites: List[CookDashboardSiteVM]
 
 
 class CookDashboardService:
-    def get_view(self, tenant_id: int, site_id: str, today: _date | None = None) -> CookDashboardVM:
-        d = today or _date.today()
-        iso = d.isocalendar()
-        year, week = int(iso[0]), int(iso[1])
+    def get_view(self, tenant_id: int, site_id: str | None, today: _date) -> CookDashboardVM:
+        svc = WeekviewService()
+        iso = today.isocalendar()
+        year, week = iso[0], iso[1]
 
+        # Fallback: resolve a site if none provided
+        if not site_id:
+            db = get_session()
+            try:
+                row = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
+                if row:
+                    site_id = str(row[0])
+                else:
+                    site_id = ""
+            finally:
+                db.close()
+
+        # Departments for site
         db = get_session()
         try:
-            row = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-            site_name = row[0] if row else site_id
+            deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            departments = [{"id": str(d[0]), "name": str(d[1] or "")} for d in deps]
+            site_name_row = db.execute(text("SELECT name FROM sites WHERE id=:s"), {"s": site_id}).fetchone()
+            site_name = str(site_name_row[0] or "") if site_name_row else ""
         finally:
             db.close()
 
-        menu_today = {
-            "lunch_alt1": "",
-            "lunch_alt2": "",
-            "dinner": "",
-            "dessert": "",
-        }
+        # Registrations table may be absent; ignore errors
+        reg_repo = MealRegistrationRepo()
+        try:
+            reg_repo.ensure_table_exists()
+        except Exception:
+            pass
 
-        total_residents_today = 0
-        total_specials_today = 0
-        total_normal_today = 0
+        total_norm_lunch = 0
+        total_spec_lunch = 0
+        total_norm_dinner = 0
+        total_spec_dinner = 0
+        alt2_count_today = 0
+        lunch_done_count = 0
+        dinner_done_count = 0
 
-        links = {
-            "kitchen_grid": f"/ui/portal/week?site_id={site_id}&show_kost_grid=1&year={year}&week={week}",
-            "planera_week": f"/ui/planera/week?site_id={site_id}&year={year}&week={week}&date={d.isoformat()}&meal=lunch",
-            "planera_day": f"/ui/planera/day?ui=unified&site_id={site_id}&date={d.isoformat()}&meal=lunch",
-            "week_report": f"/ui/reports/weekly?site_id={site_id}&year={year}&week={week}",
-        }
+        site_vm = CookDashboardSiteVM(site_name=site_name, departments=[])
+        for dep in departments:
+            payload, _etag = svc.fetch_weekview(tenant_id, year, week, dep_id:=dep["id"])  # type: ignore[name-defined]
+            summaries = payload.get("department_summaries") or []
+            days = summaries[0].get("days") if summaries else []
+            today_entry = next((d for d in days if d.get("date") == today.isoformat()), None)
+            residents = (today_entry.get("residents") if today_entry else {}) or {}
+            menu_texts = (today_entry.get("menu_texts") if today_entry else {}) or {}
+            alt2 = False
+            try:
+                alt2 = bool(menu_texts.get("lunch", {}).get("alt2"))
+            except Exception:
+                alt2 = False
 
-        return CookDashboardVM(
-            site_id=site_id,
-            site_name=site_name,
-            date=d,
-            iso_year=year,
-            iso_week=week,
-            menu_today=menu_today,
-            total_residents_today=total_residents_today,
-            total_specials_today=total_specials_today,
-            total_normal_today=total_normal_today,
-            links=links,
-        )
+            rl = int(residents.get("lunch", 0) or 0)
+            rd = int(residents.get("dinner", 0) or 0)
+            specials_lunch = int((today_entry.get("specials", {}) or {}).get("lunch", 0)) if today_entry else 0
+            specials_dinner = int((today_entry.get("specials", {}) or {}).get("dinner", 0)) if today_entry else 0
+
+            total_norm_lunch += max(0, rl - specials_lunch)
+            total_spec_lunch += specials_lunch
+            total_norm_dinner += max(0, rd - specials_dinner)
+            total_spec_dinner += specials_dinner
+            if alt2:
+                alt2_count_today += 1
+
+            # Build URLs via url_for
+            planera_lunch_url = url_for(
+                "ui.planera_day_ui",
+                ui="unified",
+                date=today.isoformat(),
+                meal="lunch",
+                site_id=site_id,
+                department_id=dep_id,
+            )
+            planera_dinner_url = url_for(
+                "ui.planera_day_ui",
+                ui="unified",
+                date=today.isoformat(),
+                meal="dinner",
+                site_id=site_id,
+                department_id=dep_id,
+            )
+            iso = today.isocalendar()
+            year, week = iso[0], iso[1]
+            veckovy_url = url_for(
+                "ui.kitchen_weekview",
+                site_id=site_id,
+                department_id=dep_id,
+                year=year,
+                week=week,
+            )
+            report_url = url_for(
+                "ui.weekview_report_ui",
+                site_id=site_id,
+                year=year,
+                week=week,
+            )
+
+            # Simple meal completion heuristics: done when specials recorded
+            if specials_lunch > 0 or rl > 0:
+                lunch_done_count += 1
+            if specials_dinner > 0 or rd > 0:
+                dinner_done_count += 1
+
+            dep_vm = CookDashboardDepartmentVM(
+                name=dep["name"],
+                residents_lunch=rl,
+                residents_dinner=rd,
+                specials_lunch=specials_lunch,
+                specials_dinner=specials_dinner,
+                alt2_today=alt2,
+                planera_lunch_url=planera_lunch_url,
+                planera_dinner_url=planera_dinner_url,
+                veckovy_url=veckovy_url,
+                report_url=report_url,
+            )
+            site_vm.departments.append(dep_vm)
+
+        # Compute meal status across departments
+        dep_count = len(site_vm.departments)
+        def status_for(done_count: int) -> str:
+            if dep_count == 0:
+                return "not_done"
+            if done_count >= dep_count:
+                return "done"
+            if done_count > 0:
+                return "partial"
+            return "not_done"
+
+        meals = [
+            CookDashboardMealVM(
+                name="Lunch",
+                totals_normalkost=total_norm_lunch,
+                totals_specials=total_spec_lunch,
+                alt2_count=alt2_count_today,
+                status=status_for(lunch_done_count),
+            ),
+            CookDashboardMealVM(
+                name="Kvällsmat",
+                totals_normalkost=total_norm_dinner,
+                totals_specials=total_spec_dinner,
+                alt2_count=None,
+                status=status_for(dinner_done_count),
+            ),
+        ]
+
+        day_names = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
+        weekday_name = day_names[today.isoweekday() - 1]
+        vm = CookDashboardVM(date=today, weekday_name=weekday_name, meals=meals, sites=[site_vm])
+        return vm
