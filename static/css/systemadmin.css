@@ -1,0 +1,51 @@
+.sa-root{min-height:100vh;display:grid;grid-template-columns:260px minmax(0,1fr);background:radial-gradient(circle at top,#101530 0,#050816 55%,#02010a 100%);color:#f5f7ff}
+/* Sidebar */
+.sa-sidebar{border-right:1px solid rgba(255,255,255,.06);padding:1.5rem 1.25rem;display:flex;flex-direction:column;justify-content:space-between}
+.sa-sidebar-logo{margin-bottom:2rem}
+.sa-nav{display:flex;flex-direction:column;gap:.5rem}
+.sa-nav-item{padding:.5rem .75rem;border-radius:.5rem;font-size:.9rem;color:#c9cff9;text-decoration:none}
+.sa-nav-item:hover{background:rgba(255,255,255,.04)}
+.sa-nav-item-active{background:linear-gradient(135deg,#4f8cff,#7b5cff);color:#f9fbff}
+.sa-sidebar-footer{font-size:.75rem;color:#8a90c6}
+/* Main area */
+.sa-main{padding:2rem 2.5rem;display:flex;flex-direction:column;gap:2rem}
+.sa-main-header{display:flex;justify-content:space-between;align-items:flex-start;gap:2rem}
+.sa-main-header h1{color:#ffffff;font-weight:800;font-size:1.9rem;margin:0}
+.sa-main-header p{color:#e6ebff;margin:.25rem 0 0}
+.sa-main-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.3fr);grid-auto-rows:minmax(0,auto);gap:1.5rem}
+.sa-card{background:rgba(10,12,24,.96);border-radius:1rem;padding:1.5rem 1.75rem;box-shadow:0 18px 45px rgba(0,0,0,.7)}
+.sa-card-wide{grid-column:1 / -1}
+.sa-card-header h2{color:#fff;font-weight:700;margin:0}
+.sa-card-header p{color:#e6ebff;margin:.25rem 0 1rem}
+.sa-customers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.9rem}
+.sa-customer-card{padding:.9rem 1rem;border-radius:.75rem;background:rgba(18,22,46,.95);display:flex;flex-direction:column;gap:.35rem}
+.sa-customer-card h3{color:#fff;font-weight:600;margin:0}
+.sa-customer-meta{font-size:.8rem;color:#9ca4e0}
+.sa-status-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.4rem}
+.sa-status-item{display:flex;justify-content:space-between;font-size:.85rem}
+.sa-status-pill{padding:.2rem .6rem;border-radius:999px;font-size:.75rem}
+.sa-status-pill-on{background:rgba(86,214,140,.18);color:#56d68c}
+.sa-status-pill-off{background:rgba(214,120,86,.18);color:#ff9e7a}
+.sa-btn-small{padding:.35rem .6rem;border-radius:.5rem}
+.systemadmin-root{min-height:100vh;padding:2rem 3rem;background:radial-gradient(circle at top,#101530 0,#050816 55%,#02010a 100%);color:#ffffff;display:flex;flex-direction:column;gap:2rem}
+.systemadmin-header{display:flex;justify-content:space-between;align-items:flex-start;gap:2rem}
+.systemadmin-greeting h1{margin:0;font-size:1.8rem;color:#ffffff;font-weight:700}
+.systemadmin-card h2{color:#ffffff;font-weight:700;margin:0 0 .75rem}
+.systemadmin-customer-card h3{color:#ffffff;font-weight:600;margin:0}
+.systemadmin-header-text p{color:#e6ebff}
+.systemadmin-header-widgets{display:flex;gap:12px;align-items:center}
+.systemadmin-clock{display:flex;flex-direction:column;align-items:flex-end}
+.systemadmin-main-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.5fr);gap:1.5rem}
+.systemadmin-card{background:rgba(10,12,24,.96);border-radius:1rem;padding:1.5rem 1.75rem;box-shadow:0 18px 45px rgba(0,0,0,.7);color:#f2f6ff}
+.systemadmin-customers{display:flex;flex-direction:column;gap:.75rem}
+.systemadmin-customer-card{padding:.8rem 1rem;border-radius:.75rem;background:rgba(18,22,46,.95);display:flex;justify-content:space-between;align-items:center;gap:1rem}
+.systemadmin-site-name{color:#e6ebff;margin:4px 0 8px}
+.systemadmin-customer-meta{color:#e6ebff}
+.sa-theme-toggle-btn{border:1px solid #4c5a8a;background:#0a1530;border-radius:8px;padding:8px 10px;cursor:pointer;color:#ffffff}
+.systemadmin-theme-light{background:#0b1220;color:#f5f7ff}
+.systemadmin-theme-dark{background:#02010a;color:#e5e7eb}
+.systemadmin-theme-dark .systemadmin-card{background:#0f172a;border-color:#1f2937}
+.systemadmin-theme-dark .systemadmin-customer-card{background:#111827;border-color:#1f2937}
+.systemadmin-flags{list-style:none;margin:0;padding:0}
+.systemadmin-flags li{padding:4px 0;color:#e6ebff}
+@media (max-width:768px){.systemadmin-greeting h1{font-size:1.25rem}.systemadmin-root{padding:1.25rem}}

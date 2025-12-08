@@ -13,44 +13,11 @@
   <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ asset_version|default('') }}" color="#111827">
   <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
-  <style>
-    :root{--brand:#2cbf4f;--ink:#111827;--muted:#64748b}
-    *{box-sizing:border-box}
-  body{font-family:Inter,system-ui,sans-serif;margin:0;color:#1f2937;background:#fafafa}
-    header{position:sticky;top:0;background:#fff;border-bottom:1px solid #eee;z-index:10}
-    .wrap{max-width:1080px;margin:auto;padding:16px}
-    nav a{margin-right:12px;text-decoration:none;color:#374151}
-    nav a.active{font-weight:600;color:#111827}
-    .pill{background:#eef9f1;border:1px solid #d5f2de;padding:4px 10px;border-radius:999px;font-size:12px;margin-left:8px}
-    table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}
-    th,td{border-bottom:1px solid #eee;padding:8px 6px;vertical-align:top}
-    th{background:#f8fafc;text-align:left;font-weight:600;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:#475569}
-    h1{font-size:28px;margin:0 0 8px}
-    h2{margin-top:32px;font-size:20px}
-    .muted{color:var(--muted);font-size:14px;margin-top:0}
-    .right{text-align:right;font-variant-numeric:tabular-nums}
-    .btn{display:inline-block;background:var(--brand);color:#fff;padding:8px 12px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px}
-    .grid{display:grid;gap:32px}
-    footer{margin:64px 0 24px;font-size:12px;color:#94a3b8;text-align:center}
-    .badge{display:inline-block;background:#e2e8f0;border-radius:6px;padding:2px 6px;font-size:11px;margin-left:4px}
-  </style>
-  <style>
-    @media (max-width: 768px) {
-      .main-nav{overflow-x:auto;white-space:nowrap;gap:.5rem}
-      .wrap{padding:12px}
-      h1{font-size:22px}
-    }
-  </style>
-  {% if staging_demo %}
-  <style>
-    /* Offset content/header below the staging banner */
-    body{padding-top:38px}
-    header{top:38px}
-  </style>
-  {% endif %}
+  <!-- Inline styles removed for CSP; rely on external CSS -->
   {% block head %}{% endblock %}
 </head>
 <body>
+{% if not hide_global_nav %}
 <nav class="main-nav">
   {% set is_systemadmin_ctx = (request.endpoint=='ui.admin_system_page' or request.path.startswith('/ui/admin/system')) %}
   {% if is_systemadmin_ctx and has_role('superuser') %}
@@ -71,24 +38,26 @@
     {% endif %}
   {% endif %}
 </nav>
-{% if staging_demo %}
-<div style="position:fixed;top:0;left:0;right:0;padding:6px 10px;background:#fff3cd;border-bottom:1px solid #ffe69c;z-index:9999;font:14px/1.4 system-ui">
+{% endif %}
+{% if staging_demo and not hide_global_nav %}
+<div class="staging-banner">
   <strong>Staging Demo</strong> — ETag/If-Match/If-None-Match aktiverat. Data kan rensas.
-  <span style="float:right;color:#7a5d00;font-size:12px">Ej produktion</span>
+  <span class="staging-note">Ej produktion</span>
   </div>
 {% endif %}
 {% if g.get('impersonating') %}
-<div style="background:#b45309;color:#fff;padding:8px 16px;font-size:14px;font-family:Inter,system-ui,sans-serif">
-  <strong>Impersonering aktiv</strong>
-  · Tenant {{ tenant_id }}
-  · Återstående {{ g.get('impersonation_remaining', '?') }}s
-  {% if g.get('impersonation_reason') %}· Orsak: {{ g.get('impersonation_reason') }}{% endif %}
-  <form method="post" action="/superuser/impersonate/stop" style="display:inline;margin-left:12px">
+<div class="impersonation-banner">
+  <strong>Du är inloggad som admin för {{ current_site_name or ('tenant ' ~ tenant_id) }} (impersonering).</strong>
+  <span style="margin-left:8px">Återstående {{ g.get('impersonation_remaining', '?') }}s</span>
+  {% if g.get('impersonation_reason') %}<span style="margin-left:8px">Orsak: {{ g.get('impersonation_reason') }}</span>{% endif %}
+  <form id="imp-stop" method="post" action="/superuser/impersonate/stop" class="inline-form">
     {% if g.features.get('strict_csrf') %}{{ csrf_token_input()|safe }}{% endif %}
-    <button style="background:#fff;color:#b45309;border:1px solid #fff;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px">Stoppa</button>
+    <button class="impersonation-stop-btn">Stoppa impersonering</button>
   </form>
 </div>
+<!-- Inline script removed for CSP; form posts normally -->
 {% endif %}
+{% if not hide_global_nav %}
 <header>
   <div class="wrap">
     <nav>
@@ -104,15 +73,15 @@
     </nav>
   </div>
 </header>
+{% endif %}
 <main class="wrap">
-  <span style="display:none">Alt 1:</span><span style="display:none">Alt 2:</span>
+  <!-- layout markers removed to satisfy CSP -->
   {% block content %}{% endblock %}
 </main>
 <footer>
   Yuplan &copy; {{ 2025 }} • Request ID: <span id="reqid">{{ g.request_id if g.request_id else '' }}</span>
-  <button style="margin-left:8px;font-size:11px;padding:4px 8px;border:1px solid #cbd5e1;background:#f1f5f9;border-radius:6px;cursor:pointer" onclick="(function(){const id=document.getElementById('reqid').innerText.trim(); if(!id)return; navigator.clipboard.writeText('ReqID:'+id); const btn=this; const old=btn.innerText; btn.innerText='Kopierad'; setTimeout(()=>btn.innerText=old,1500);}).call(this)">Kopiera supportinfo</button>
   {% if has_role('admin','superuser') %}
-    <a style="margin-left:12px;font-size:11px;text-decoration:none;border:1px solid #cbd5e1;padding:4px 8px;border-radius:6px;background:#eef2ff;color:#1e3a8a" href="{{ url_for('support.support_home').replace('/admin/support/', '/admin/support/ui') }}" target="_blank" rel="noopener">Support</a>
+    <a class="support-link" href="{{ url_for('support.support_home').replace('/admin/support/', '/admin/support/ui') }}" target="_blank" rel="noopener">Support</a>
   {% endif %}
 </footer>
 {% block scripts %}{% endblock %}
