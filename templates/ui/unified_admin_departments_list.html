@@ -1,6 +1,7 @@
 {% extends "ui/unified_admin_base.html" %}
 
-{% block page_title %}Avdelningar{% endblock %}
+{% block admin_title %}Avdelningar{% endblock %}
+{% block admin_subtitle %}{% if vm.site_name %}{{ vm.site_name }}{% else %}Hantera avdelningar{% endif %}{% endblock %}
 
 {% block admin_main %}
 

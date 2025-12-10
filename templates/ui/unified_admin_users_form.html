@@ -1,12 +1,7 @@
 {% extends "ui/unified_admin_base.html" %}
 
-{% block title %}
-{% if vm.mode == 'new' %}
-Ny användare - Unified Admin
-{% else %}
-Redigera användare - Unified Admin
-{% endif %}
-{% endblock %}
+{% block admin_title %}{% if vm.mode == 'new' %}Ny användare{% else %}Redigera användare{% endif %}{% endblock %}
+{% block admin_subtitle %}Administrera användarkonton och behörigheter{% endblock %}
 
 {% block admin_main %}
 <section class="ua-section">
