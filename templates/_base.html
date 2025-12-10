@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="sv">
 <head>
   <meta charset="utf-8">
@@ -74,7 +74,7 @@
   <!-- layout markers removed to satisfy CSP -->
   {% block content %}{% endblock %}
 </main>
-<footer>
+<footer role="contentinfo">
   Yuplan &copy; {{ 2025 }} • Request ID: <span id="reqid">{{ g.request_id if g.request_id else '' }}</span>
   {% if has_role('admin','superuser') %}
     <a class="support-link" href="{{ url_for('support.support_home').replace('/admin/support/', '/admin/support/ui') }}" target="_blank" rel="noopener">Support</a>

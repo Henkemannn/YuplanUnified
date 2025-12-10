@@ -2470,14 +2470,67 @@ def admin_dashboard():
     finally:
         db.close()
 
+    # Build dummy VM for Dashboard v1 (no specialkost logic yet)
+    # Today label in Swedish-like format: "Tisdag 10 mars"
+    try:
+        WEEKDAY_SE = {1: "Måndag", 2: "Tisdag", 3: "Onsdag", 4: "Torsdag", 5: "Fredag", 6: "Lördag", 7: "Söndag"}
+        MONTH_SE = {1: "januari", 2: "februari", 3: "mars", 4: "april", 5: "maj", 6: "juni", 7: "juli", 8: "augusti", 9: "september", 10: "oktober", 11: "november", 12: "december"}
+        today_label = f"{WEEKDAY_SE.get(today.isoweekday(), '')} {today.day} {MONTH_SE.get(today.month, '')}"
+    except Exception:
+        today_label = today.strftime("%Y-%m-%d")
+
+    # Last week number (ISO)
+    try:
+        last_week_dt = today - timedelta(weeks=1)
+        last_week = int(last_week_dt.isocalendar()[1])
+    except Exception:
+        last_week = max(1, current_week - 1)
+
+    # Menu forward dummy weeks
+    try:
+        w1 = int((today + timedelta(weeks=1)).isocalendar()[1])
+        w2 = int((today + timedelta(weeks=2)).isocalendar()[1])
+        w3 = int((today + timedelta(weeks=3)).isocalendar()[1])
+        w4 = int((today + timedelta(weeks=4)).isocalendar()[1])
+    except Exception:
+        w1, w2, w3, w4 = current_week + 1, current_week + 2, current_week + 3, current_week + 4
+
     vm = {
         "tenant_name": tenant_name,
         "site_name": site_name,
         "current_year": current_year,
         "current_week": current_week,
         "user_role": role,
+        # Old fields kept for compatibility
         "departments": departments,
         "department_count": len(departments),
+        # Dashboard v1 fields
+        "today_label": today_label,
+        "today": {
+            "lunch_name": None,
+            "lunch_portions": None,
+            "dinner_name": None,
+            "dinner_portions": None,
+        },
+        "status": {
+            "residents": True,
+            "menu": True,
+            "report_last_week": False,
+        },
+        "last_week": last_week,
+        "menu_forward": {
+            "ready_weeks_count": 2,
+            "weeks": [
+                {"week": w1, "status_label": "✔ Meny inläst"},
+                {"week": w2, "status_label": "✔ Meny inläst"},
+                {"week": w3, "status_label": "⚠ Delvis"},
+                {"week": w4, "status_label": "⛔ Ingen meny"},
+            ],
+        },
+        "order_reminders": [
+            {"text": "Beställ mer timbalbas"},
+            {"text": "Kaffefilter vecka 15"},
+        ],
     }
     
     return render_template("ui/unified_admin_dashboard.html", vm=vm)

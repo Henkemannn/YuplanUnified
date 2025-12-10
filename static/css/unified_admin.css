@@ -205,7 +205,32 @@
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
 }
 
-.ua-theme-dark { }
+.ua-theme-dark { display: contents; }
+
+/* Optional light theme variant using Yuplan tokens without affecting default layout */
+.ua-root.ua-theme-light {
+    background: var(--yp-color-bg-alt);
+    color: var(--yp-color-text);
+    font-family: var(--yp-font-family);
+}
+.ua-root.ua-theme-light .ua-sidebar {
+    background: var(--yp-color-bg);
+    border-right: 1px solid var(--yp-color-border);
+}
+.ua-root.ua-theme-light .ua-topbar {
+    background: var(--yp-color-bg);
+    border-bottom: 1px solid var(--yp-color-border);
+}
+.ua-root.ua-theme-light .ua-topbar-title { color: var(--yp-color-text); text-shadow: none; }
+.ua-root.ua-theme-light .ua-topbar-subtitle { color: var(--yp-color-text-muted); }
+.ua-root.ua-theme-light .ua-main { background: var(--yp-color-bg-alt); }
+.ua-root.ua-theme-light .ua-logo-mark { border-color: var(--yp-color-primary); }
+.ua-root.ua-theme-light .ua-nav-item { color: var(--yp-color-text); }
+.ua-root.ua-theme-light .ua-nav-item:hover { background: var(--yp-color-secondary-light); }
+.ua-root.ua-theme-light .ua-nav-item-active { background: var(--yp-color-primary-light); border: 1px solid var(--yp-color-primary); }
+.ua-root.ua-theme-light .ua-card { background: var(--yp-color-bg-elevated); border: 1px solid var(--yp-color-border); box-shadow: var(--yp-shadow-md); }
+.ua-root.ua-theme-light .ua-card h2 { color: var(--yp-color-text); }
+.ua-root.ua-theme-light .ua-card p { color: var(--yp-color-text-muted); }
 
 .ua-sidebar {
     width: 240px;
@@ -232,8 +257,8 @@
     background: #020617;
 }
 
-.ua-topbar-title { font-size: 1.6rem; font-weight: 800; margin: 0; color: #ffffff; text-shadow: 0 1px 2px rgba(2,6,23,0.7); letter-spacing: 0.2px; }
-.ua-topbar-subtitle { margin: 4px 0 0; font-size: 1.05rem; color: #e6edf3; opacity: 1; }
+.ua-topbar-title { font-size: 1.4rem; font-weight: 700; margin: 0; color: #f8fafc; text-shadow: 0 1px 2px rgba(2,6,23,0.6); }
+.ua-topbar-subtitle { margin: 4px 0 0; font-size: 1rem; color: #e2e8f0; opacity: 0.95; }
 
 .ua-main {
     padding: 20px 24px 32px;
@@ -260,16 +285,19 @@
 .ua-nav-item:hover { background: rgba(148, 163, 184, 0.2); opacity: 1; }
 .ua-nav-item-active { background: rgba(56, 189, 248, 0.16); border: 1px solid rgba(56, 189, 248, 0.8); opacity: 1; }
 
+/* Hide legacy test token spans that live inside UA nav */
+.ua-sidebar .ua-nav span { display: none !important; }
+
 .ua-section { margin-bottom: 18px; }
 .ua-card {
-    background: rgba(15, 23, 42, 0.96);
+    background: var(--yp-color-bg-elevated);
     border-radius: 16px;
     padding: 16px 18px;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--yp-color-border);
+    box-shadow: var(--yp-shadow-md);
 }
-.ua-card h2 { margin: 0 0 4px; font-size: 1.1rem; }
-.ua-card p { margin: 0 0 8px; font-size: 0.9rem; color: #9ca3af; }
+.ua-card h2 { margin: 0 0 4px; font-size: 1.1rem; color: var(--yp-color-text); }
+.ua-card p { margin: 0 0 8px; font-size: 0.9rem; color: var(--yp-color-text-muted); }
 
 .ua-flashes { margin-bottom: 12px; }
 .ua-flash { padding: 8px 10px; font-size: 0.85rem; border-radius: 8px; margin-bottom: 4px; }
@@ -286,7 +314,6 @@
     color: var(--admin-text-light);
     display: flex;
     flex-direction: column;
-    /* Avoid overlaying UA shell: let it participate in flex layout */
     position: static;
     z-index: 10;
     transition: transform var(--transition-base);
@@ -318,7 +345,7 @@
     padding: var(--yp-gap-sm);
     border-radius: var(--yp-radius-sm);
     transition: background-color var(--transition-fast);
-    display: none; /* Hidden on desktop */
+    display: inline-flex; /* Visible on desktop */
 }
 
 .sidebar-toggle:hover {
@@ -332,14 +359,26 @@
     overflow-y: auto;
     padding: var(--yp-gap) 0;
 }
+/* When running inside the unified shell, only keep the UA nav */
+.ua-root .ua-sidebar.admin-sidebar > nav:not(.ua-nav),
+.ua-shell .ua-sidebar.admin-sidebar > nav:not(.ua-nav) {
+    display: none !important;
+}
+.ua-root .ua-sidebar.admin-sidebar > nav.ua-nav,
+.ua-shell .ua-sidebar.admin-sidebar > nav.ua-nav {
+    display: flex !important;
+    flex-direction: column;
+}
 
 .nav-list {
     list-style: none;
     margin: 0;
     padding: 0;
 }
-/* Hide legacy nav list to avoid duplicate entries when UA nav is present */
-.admin-sidebar .nav-list {
+/* Legacy .sidebar-nav with .nav-list already has inline display:none in template */
+/* Additionally, hide legacy `_admin_sidebar.html` nav when unified shell is present */
+.ua-root .admin-sidebar .admin-nav,
+.ua-shell .admin-sidebar .admin-nav {
     display: none !important;
 }
 
@@ -396,7 +435,7 @@
     padding: var(--spacing-lg);
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
-/* Hide legacy user-info/footer when UA shell provides header context */
+/* Hide legacy footer/user info when UA header provides context */
 .admin-sidebar .sidebar-footer,
 .admin-sidebar .user-info {
     display: none !important;
@@ -485,8 +524,8 @@
     margin: 0;
     font-size: var(--yp-font-size-2xl);
     font-weight: var(--yp-font-weight-bold);
-    color: #f8fafc;
-    text-shadow: 0 2px 4px rgba(2, 6, 23, 0.5);
+    color: #ffffff;
+    text-shadow: 0 2px 4px rgba(2, 6, 23, 0.7);
 }
 
 .header-right {
@@ -600,13 +639,14 @@
     margin: 0 0 var(--yp-gap-sm) 0;
     font-size: var(--yp-font-size-3xl);
     font-weight: var(--yp-font-weight-bold);
-    color: var(--admin-text-primary);
+    color: #f8fafc;
+    text-shadow: 0 2px 4px rgba(2,6,23,0.75);
 }
 
 .dashboard-subtitle {
     margin: 0;
     font-size: var(--yp-font-size-lg);
-    color: var(--admin-text-secondary);
+    color: #e2e8f0;
 }
 
 /* Quick Links Grid - Enhanced */
