@@ -56,7 +56,21 @@ def set_csrf_cookie(resp, token: str):
     """
     from .cookies import set_secure_cookie
 
-    set_secure_cookie(resp, current_app.config.get("CSRF_COOKIE_NAME", "csrf_token"), token, httponly=False, samesite="Strict")
+    # In DEBUG/TESTING use Lax to reduce local cross-site blocking; Strict in other modes
+    samesite_val = "Strict"
+    try:
+        import os as _os
+        if not current_app.config.get("TESTING") and _os.getenv("DEV_CSRF_LAX", "0") in ("1", "true", "yes"):
+            samesite_val = "Lax"
+    except Exception:
+        pass
+    set_secure_cookie(
+        resp,
+        current_app.config.get("CSRF_COOKIE_NAME", "csrf_token"),
+        token,
+        httponly=False,
+        samesite=samesite_val,
+    )
 
 
 def require_roles(*roles: str):
@@ -138,6 +152,9 @@ def login():
         resp.set_cookie("yp_demo", role, httponly=True, samesite="Lax")
         return resp
     data = request.get_json(silent=True) or {}
+    # Fallback to form fields when JSON isn't provided (browser form posts)
+    if not data:
+        data = {"email": request.form.get("email"), "password": request.form.get("password")}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
     # Always issue a CSRF cookie for clients (tests assert cookie presence even on errors)
@@ -463,5 +480,79 @@ def ensure_bootstrap_superuser():
             current_app.logger.info("Bootstrap superuser created: %s", email)
         except Exception:
             pass
+    finally:
+        db.close()
+
+
+# --- Dev Seed: Named Superuser (Henrik) ---
+def ensure_dev_superuser_henrik():
+    """Ensure a developer superuser exists for local runs.
+
+    Controlled by env flags: if either DEV_CREATE_ALL or YUPLAN_SEED_HENRIK is truthy,
+    create (or update) a superuser with the specified credentials. Safe no-op if tables
+    are missing and auto-create not allowed.
+    """
+    import os as _os
+    from werkzeug.security import generate_password_hash as _gph
+
+    seed_enabled = (
+        _os.getenv("YUPLAN_SEED_HENRIK", "0").lower() in ("1", "true", "yes")
+        or _os.getenv("DEV_CREATE_ALL", "0").lower() in ("1", "true", "yes")
+    )
+    if not seed_enabled:
+        return
+    try:
+        db = get_session()
+    except Exception:
+        return
+    try:
+        # Optionally create schema
+        try:
+            if _os.getenv("DEV_CREATE_ALL", "0").lower() in ("1", "true", "yes"):
+                from .db import create_all as _create_all
+
+                _create_all()
+        except Exception:
+            pass
+        # Ensure basic tables exist by best-effort inspection
+        try:
+            from sqlalchemy import inspect as _sa_inspect  # type: ignore
+
+            insp = _sa_inspect(db.bind)
+            if not (insp.has_table("users") and insp.has_table("tenants")):
+                return
+        except Exception:
+            pass
+        # Seed tenant if missing
+        try:
+            t = db.query(Tenant).first()
+            if not t:
+                t = Tenant(name="Primary")
+                db.add(t)
+                db.flush()
+        except Exception:
+            return
+        # Upsert Henrik user
+        email = "Henrik.Jonsson@Yuplan.se"
+        password = "G0teb0rg031"
+        user = db.query(User).filter(User.email == email.lower()).first()
+        if not user:
+            user = User(
+                tenant_id=t.id,
+                email=email.lower(),
+                username=email.lower(),
+                password_hash=_gph(password),
+                role="superuser",
+                full_name="Henrik Jonsson",
+                is_active=True,
+                unit_id=None,
+            )
+            db.add(user)
+        else:
+            # Keep idempotent but ensure role remains superuser
+            user.role = "superuser"
+            if not user.full_name:
+                user.full_name = "Henrik Jonsson"
+        db.commit()
     finally:
         db.close()

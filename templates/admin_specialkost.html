@@ -1,30 +1,41 @@
-{% extends "_base.html" %}
-{% block title %}Specialkost – Admin{% endblock %}
-{% block head %}
+{% extends "ui/unified_admin_base.html" %}
+{% block admin_title %}Specialkost{% endblock %}
+{% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 {% endblock %}
-{% block content %}
-<div class="admin-container">
-  <header class="admin-header">
-    <h1>Specialkost</h1>
-    <p class="admin-subtitle">Hantera kosttyper och förinställningar</p>
-  </header>
+{% block admin_main %}
+  <section class="ua-section">
+    <div class="ua-card">
+      <h1>Specialkost</h1>
+      <p class="admin-subtitle">Hantera kosttyper och förinställningar</p>
+    </div>
+  </section>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="admin-flash-messages">
-        {% for category, message in messages %}
-          <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
-        {% endfor %}
-      </div>
+      <section class="ua-section">
+        <div class="ua-card">
+          <div class="admin-flash-messages">
+            {% for category, message in messages %}
+              <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
     {% endif %}
   {% endwith %}
 
-  <div class="admin-actions" style="margin-bottom: 1rem;">
-    <a href="{{ url_for('admin_ui.admin_specialkost_new') }}" class="admin-btn-primary">Lägg till ny kosttyp</a>
-  </div>
+  <section class="ua-section">
+    <div class="ua-card">
+      <div class="admin-actions" style="margin-bottom: 1rem;">
+        <a href="{{ url_for('admin_ui.admin_specialkost_new') }}" class="admin-btn-primary">Lägg till ny kosttyp</a>
+      </div>
+    </div>
+  </section>
 
-  <table class="admin-table">
+  <section class="ua-section">
+    <div class="ua-card">
+      <table class="admin-table">
     <thead>
       <tr>
         <th>Namn</th>
@@ -50,10 +61,15 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+      </table>
+    </div>
+  </section>
 
-  <div class="admin-actions">
-    <a href="{{ url_for('admin_ui.admin_dashboard') }}" class="admin-btn-secondary">Tillbaka till Dashboard</a>
-  </div>
-</div>
+  <section class="ua-section">
+    <div class="ua-card">
+      <div class="admin-actions">
+        <a href="{{ url_for('admin_ui.admin_dashboard') }}" class="admin-btn-secondary">Tillbaka till Dashboard</a>
+      </div>
+    </div>
+  </section>
 {% endblock %}

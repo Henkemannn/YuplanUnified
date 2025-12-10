@@ -6,8 +6,48 @@ from core.db import get_session
 from core.admin_repo import DepartmentsRepo, SitesRepo, DietTypesRepo
 from core.menu_service import MenuServiceDB
 from sqlalchemy import text
+from werkzeug.security import generate_password_hash
+from core.models import Tenant, User
+from core.impersonation import start_impersonation
 
 admin_ui_bp = Blueprint("admin_ui", __name__)
+@admin_ui_bp.get("/ui/systemadmin/dashboard")
+@require_roles("superuser")
+def systemadmin_dashboard():
+    from flask import session as _sess
+    user_name = "superuser"
+    try:
+        user_name = _sess.get("full_name") or _sess.get("user_email") or "superuser"
+    except Exception:
+        user_name = "superuser"
+    db = get_session()
+    customers: list[dict[str, str]] = []
+    try:
+        # Be robust to legacy schemas without tenant_id on sites
+        rows = db.execute(text("SELECT id, name FROM sites ORDER BY name")).fetchall()
+        # UI-only filter: hide obvious test/demo sites
+        def _is_visible(name: str) -> bool:
+            n = (name or "").strip()
+            low = n.lower()
+            return not (low.startswith("test ") or low.startswith("demo "))
+        visible = [(str(r[0]), str(r[1] or "")) for r in rows if _is_visible(str(r[1] or ""))]
+        for sid, sname in visible:
+            customers.append({
+                "tenant_id": "1",
+                "tenant_name": "",
+                "site_id": sid,
+                "site_name": sname,
+                "admin_emails": [],
+                "customer_type": "",
+                "status": "Aktiv",
+            })
+    finally:
+        db.close()
+    vm = {
+        "user_name": user_name,
+        "customers": customers,
+    }
+    return render_template("systemadmin_dashboard.html", vm=vm)
 
 @admin_ui_bp.get("/ui/admin/dashboard")
 @require_roles("admin","superuser")
@@ -85,8 +125,141 @@ def admin_departments_list() -> str:  # type: ignore[override]
                 "notes": "",  # TODO: fetch notes from department_notes table if needed
             })
     
-    vm = {"departments": all_departments}
+    # Determine current ISO year/week
+    import datetime as _dt
+    today = _dt.date.today()
+    iso_year, iso_week, _ = today.isocalendar()
+    vm = {"departments": all_departments, "current_year": iso_year, "current_week": iso_week}
     return render_template("admin_departments.html", vm=vm)
+
+
+@admin_ui_bp.route("/ui/admin/departments/<department_id>/residents/<int:year>/<int:week>", methods=["GET", "POST"])
+@require_roles("admin", "superuser")
+def admin_department_residents_week(department_id: str, year: int, week: int) -> str:
+    """Edit residents counts per weekday/meal for a department and week."""
+    # Resolve department name and site_id
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT name, site_id FROM departments WHERE id=:id"), {"id": department_id}
+        ).fetchone()
+    finally:
+        db.close()
+    if not row:
+        flash("Avdelning hittades inte.", "danger")
+        return redirect(url_for("admin_ui.admin_departments_list"))
+    dept_name = str(row[0])
+    site_id = str(row[1])
+
+    # Ensure storage table exists
+    db2 = get_session()
+    try:
+        db2.execute(text(
+            """
+            CREATE TABLE IF NOT EXISTS department_residents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL,
+                site_id TEXT NOT NULL,
+                department_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                meal_type TEXT NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(tenant_id, site_id, department_id, date, meal_type)
+            )
+            """
+        ))
+        db2.commit()
+    finally:
+        db2.close()
+
+    # Compute dates for the ISO week (Mon..Sun)
+    from datetime import date as _date, timedelta
+    jan4 = _date(year, 1, 4)
+    week1_monday = jan4 - timedelta(days=jan4.weekday())
+    target_monday = week1_monday + timedelta(weeks=week - 1)
+    dates = [target_monday + timedelta(days=i) for i in range(7)]
+    labels = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"]
+    keys = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    if request.method == "POST":
+        # Save all 14 fields
+        dbs = get_session()
+        try:
+            for i, d in enumerate(dates):
+                for meal in ("Lunch", "Dinner"):
+                    field = f"{keys[i]}_{meal}"
+                    raw = request.form.get(field) or "0"
+                    try:
+                        val = int(raw)
+                    except ValueError:
+                        val = 0
+                    meal_type = "lunch" if meal == "Lunch" else "dinner"
+                    dbs.execute(text(
+                        """
+                        INSERT INTO department_residents(tenant_id, site_id, department_id, date, meal_type, count)
+                        VALUES(:tid,:sid,:did,:date,:meal,:count)
+                        ON CONFLICT(tenant_id, site_id, department_id, date, meal_type)
+                        DO UPDATE SET count=:count
+                        """
+                    ), {
+                        "tid": 1,
+                        "sid": site_id,
+                        "did": department_id,
+                        "date": d.isoformat(),
+                        "meal": meal_type,
+                        "count": val,
+                    })
+            dbs.commit()
+            flash("Boendeantal uppdaterade.", "success")
+        except Exception as e:
+            try:
+                dbs.rollback()
+            except Exception:
+                pass
+            flash(f"Fel vid sparande: {e}", "danger")
+        finally:
+            dbs.close()
+        return redirect(url_for("admin_ui.admin_department_residents_week", department_id=department_id, year=year, week=week))
+
+    # GET: load existing counts
+    db3 = get_session()
+    try:
+        rows = db3.execute(text(
+            """
+            SELECT date, meal_type, count FROM department_residents
+            WHERE tenant_id=:tid AND site_id=:sid AND department_id=:did
+              AND date IN (:d0,:d1,:d2,:d3,:d4,:d5,:d6)
+            """
+        ), {
+            "tid": 1,
+            "sid": site_id,
+            "did": department_id,
+            "d0": dates[0].isoformat(),
+            "d1": dates[1].isoformat(),
+            "d2": dates[2].isoformat(),
+            "d3": dates[3].isoformat(),
+            "d4": dates[4].isoformat(),
+            "d5": dates[5].isoformat(),
+            "d6": dates[6].isoformat(),
+        }).fetchall()
+    finally:
+        db3.close()
+    # Build map
+    m: dict[tuple[str, str], int] = {}
+    for r in rows:
+        m[(str(r[0]), str(r[1]))] = int(r[2] or 0)
+    # Prepare VM days
+    vm_days = []
+    for i, d in enumerate(dates):
+        iso = d.isoformat()
+        vm_days.append({
+            "key": keys[i],
+            "label": labels[i],
+            "lunch": m.get((iso, "lunch"), 0),
+            "dinner": m.get((iso, "dinner"), 0),
+        })
+    vm = {"department_id": department_id, "department_name": dept_name, "year": year, "week": week, "days": vm_days}
+    return render_template("admin_department_residents_week.html", vm=vm)
 
 
 @admin_ui_bp.route("/ui/admin/departments/<department_id>/edit", methods=["GET", "POST"])
@@ -555,3 +728,239 @@ def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: igno
 
 
 __all__ = ["admin_ui_bp"]
+from core.app_authz import require_roles
+from flask import session
+@admin_ui_bp.get("/ui/systemadmin/customers/new")
+@require_roles("superuser")
+def systemadmin_customer_new_step1():
+    from flask import session
+    data = session.get("wizard_new_customer", {})
+    vm = {"data": data}
+    return render_template("systemadmin_customer_new_step1.html", vm=vm)
+
+@admin_ui_bp.post("/ui/systemadmin/customers/new/step1")
+@require_roles("superuser")
+def systemadmin_customer_new_step1_post():
+    from flask import session
+    tenant_name = (request.form.get("tenant_name") or "").strip()
+    site_name = (request.form.get("site_name") or "").strip()
+    customer_type = (request.form.get("customer_type") or "").strip()
+    if not tenant_name or not site_name or not customer_type:
+        flash("Fyll i kundnamn, site och kundtyp.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
+    data = session.get("wizard_new_customer", {})
+    data.update({
+        "tenant_name": tenant_name,
+        "site_name": site_name,
+        "customer_type": customer_type,
+        "contact_name": (request.form.get("contact_name") or "").strip(),
+        "contact_email": (request.form.get("contact_email") or "").strip(),
+        "contact_phone": (request.form.get("contact_phone") or "").strip(),
+    })
+    session["wizard_new_customer"] = data
+    return redirect(url_for("admin_ui.systemadmin_customer_new_step2"))
+
+@admin_ui_bp.get("/ui/systemadmin/customers/new/contract")
+@require_roles("superuser")
+def systemadmin_customer_new_step2():
+    from flask import session
+    data = session.get("wizard_new_customer")
+    if not data:
+        flash("Fyll i kundinformation först.", "warning")
+        return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
+    vm = {"data": data}
+    return render_template("systemadmin_customer_new_step2.html", vm=vm)
+
+@admin_ui_bp.post("/ui/systemadmin/customers/new/contract")
+@require_roles("superuser")
+def systemadmin_customer_new_step2_post():
+    from flask import session
+    data = session.get("wizard_new_customer", {})
+    data.update({
+        "contract_start": (request.form.get("contract_start") or "").strip(),
+        "contract_end": (request.form.get("contract_end") or "").strip(),
+        "billing_model": (request.form.get("billing_model") or "").strip(),
+        "contract_url": (request.form.get("contract_url") or "").strip(),
+        "internal_notes": (request.form.get("internal_notes") or "").strip(),
+    })
+    session["wizard_new_customer"] = data
+    return redirect(url_for("admin_ui.systemadmin_customer_new_step3"))
+
+@admin_ui_bp.get("/ui/systemadmin/customers/new/modules")
+@require_roles("superuser")
+def systemadmin_customer_new_step3():
+    from flask import session
+    data = session.get("wizard_new_customer")
+    if not data:
+        flash("Fyll i kundinformation först.", "warning")
+        return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
+    vm = {"data": data}
+    return render_template("systemadmin_customer_new_step3.html", vm=vm)
+
+@admin_ui_bp.post("/ui/systemadmin/customers/new/modules")
+@require_roles("superuser")
+def systemadmin_customer_new_step3_post():
+    from flask import session
+    selected_modules = []
+    names = [
+        "weekview","planera","portal","report","menu_import","specialkost",
+        "recipes","prep","freeze","husk_bestill","integrations",
+    ]
+    for n in names:
+        field = f"modules_{n}"
+        if request.form.get(field):
+            selected_modules.append(n)
+    data = session.get("wizard_new_customer", {})
+    data["modules"] = selected_modules
+    session["wizard_new_customer"] = data
+    return redirect(url_for("admin_ui.systemadmin_customer_new_step4"))
+
+@admin_ui_bp.get("/ui/systemadmin/customers/new/admin")
+@require_roles("superuser")
+def systemadmin_customer_new_step4():
+    from flask import session
+    data = session.get("wizard_new_customer")
+    if not data:
+        flash("Fyll i kundinformation först.", "warning")
+        return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
+    vm = {"data": data}
+    return render_template("systemadmin_customer_new_step4.html", vm=vm)
+
+@admin_ui_bp.post("/ui/systemadmin/customers/create")
+@require_roles("superuser")
+def systemadmin_customer_create():
+    """Final submission endpoint: reuse existing create logic, then redirect.
+    Note: We leverage the existing POST handler systemadmin_create_customer.
+    """
+    # Delegate to existing handler, prefer session wizard values
+    from flask import session
+    wiz = session.get("wizard_new_customer") or {}
+    # Inject form defaults from session if missing
+    if not request.form.get("tenant_name") and wiz.get("tenant_name"):
+        request.form = request.form.copy()
+        request.form["tenant_name"] = wiz.get("tenant_name")
+    if not request.form.get("site_name") and wiz.get("site_name"):
+        request.form = request.form.copy()
+        request.form["site_name"] = wiz.get("site_name")
+    resp = systemadmin_create_customer()
+    try:
+        session.pop("wizard_new_customer", None)
+    except Exception:
+        pass
+    # Existing handler redirects to customers list; preserve that behavior
+    return resp
+
+@admin_ui_bp.get("/ui/systemadmin/customers")
+@require_roles("superuser")
+def systemadmin_customers():
+    """Enterprise-style customers view with UI-only filtering of test/demo sites."""
+    db = get_session()
+    try:
+        rows = db.execute(text("SELECT id, name FROM sites ORDER BY name")).fetchall()
+        def _is_visible(name: str) -> bool:
+            n = (name or "").strip()
+            low = n.lower()
+            return not (low.startswith("test ") or low.startswith("demo "))
+        customers = []
+        for r in rows:
+            sid = str(r[0])
+            sname = str(r[1] or "")
+            if not _is_visible(sname):
+                continue
+            customers.append({
+                "site_id": sid,
+                "site_name": sname,
+                "tenant_name": "",
+                "customer_type": "",
+                "status": "Aktiv",
+            })
+    finally:
+        db.close()
+    vm = {"customers": customers}
+    return render_template("systemadmin_customers.html", vm=vm)
+
+# Legacy single-form create page removed to avoid route collision with wizard.
+
+def systemadmin_create_customer():
+    """Create a new customer: site + optional admin email/password (stub).
+    Minimal safe implementation: create site; admin user creation deferred to existing flows.
+    """
+    tenant_name = (request.form.get("tenant_name") or "").strip()
+    site_name = (request.form.get("site_name") or "").strip()
+    admin_email = (request.form.get("admin_email") or "").strip()
+    admin_password = (request.form.get("admin_password") or "").strip()
+
+    if not tenant_name or not site_name or not admin_email or not admin_password:
+        flash("Alla fält måste fyllas i.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customers"))
+
+    # Create tenant, admin user, and site record
+    site_id = site_name.lower().replace(" ", "-")
+    db = get_session()
+    try:
+        # Create tenant
+        tenant = Tenant(name=tenant_name)
+        db.add(tenant)
+        db.flush()
+
+        # Create admin user for tenant
+        pw_hash = generate_password_hash(admin_password)
+        user = User(
+            tenant_id=tenant.id,
+            email=admin_email.lower(),
+            password_hash=pw_hash,
+            role="admin",
+            unit_id=None,
+        )
+        db.add(user)
+
+        # Ensure sites table exists and has tenant_id
+        db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER)"))
+        # Try to add tenant_id column if table existed without it
+        try:
+            db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+        except Exception:
+            pass
+
+        # Insert site row
+        db.execute(
+            text("INSERT OR REPLACE INTO sites(id,name,version,tenant_id) VALUES(:id,:name,0,:tenant_id)"),
+            {"id": site_id, "name": site_name, "tenant_id": tenant.id},
+        )
+        db.commit()
+        flash("Kund skapad.", "success")
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        flash(f"Fel vid skapande: {e}", "danger")
+    finally:
+        db.close()
+
+    return redirect(url_for("admin_ui.systemadmin_customers"))
+
+
+@admin_ui_bp.get("/ui/systemadmin/switch-site/<site_id>")
+@require_roles("superuser")
+def systemadmin_switch_site(site_id: str):
+    """Start impersonation for the tenant mapped to given site, then go to admin dashboard."""
+    db = get_session()
+    tenant_id = None
+    try:
+        row = db.execute(text("SELECT tenant_id FROM sites WHERE id=:id"), {"id": site_id}).fetchone()
+        if row and row[0] is not None:
+            tenant_id = int(row[0])
+    finally:
+        db.close()
+    if tenant_id is None:
+        flash("Kunde inte hitta tenant för vald site.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customers"))
+    try:
+        start_impersonation(tenant_id, f"switch-site:{site_id}")
+    except Exception:
+        flash("Kunde inte starta impersonation.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customers"))
+    # Preserve selected site in dashboard
+    return redirect(url_for("admin_ui.admin_dashboard", site_id=site_id))
+

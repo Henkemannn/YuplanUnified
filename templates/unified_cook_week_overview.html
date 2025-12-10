@@ -2,6 +2,15 @@
 {% block title %}Veckovy – Vecka {{ vecka }}{% endblock %}
 {% block content %}
 <main class="cook-week" data-etag="{{ etag or '' }}">
+  <div id="flash-success" class="flash flash-success" style="display: none;">
+    Markeringen har sparats ✔
+  </div>
+  <div id="flash-error" class="flash flash-error" style="display: none;">
+    Konflikt – vyn är inaktuell. Ladda om sidan.
+    <button type="button" id="flash-reload-button" class="flash-reload-button">
+      Ladda om
+    </button>
+  </div>
   <header class="cook-week-header control-bar">
     <div class="vecka-form">
       <form method="get" action="{{ url_for('ui.cook_week_overview_unified', year=request.args.get('year', 2025), week=vecka or 1) }}">
@@ -172,6 +181,19 @@
           meal: cell.dataset.meal,
           desired_state: desiredState,
         };
+        const showFlashSuccess = () => {
+          const el = document.getElementById('flash-success');
+          if (!el) return;
+          el.style.display = 'block';
+          setTimeout(() => { el.style.display = 'none'; }, 2000);
+        };
+        const showFlashError = () => {
+          const el = document.getElementById('flash-error');
+          if (!el) return;
+          el.style.display = 'block';
+          const btn = document.getElementById('flash-reload-button');
+          if (btn) btn.onclick = () => window.location.reload();
+        };
         try {
           const root = document.querySelector('.cook-week');
           const currentEtag = root && root.dataset ? (root.dataset.etag || null) : null;
@@ -192,8 +214,9 @@
             if (newEtag && root) {
               root.dataset.etag = newEtag;
             }
+            showFlashSuccess();
           } else if (res.status === 412) {
-            alert('Vyn är inaktuell, ladda om sidan och försök igen.');
+            showFlashError();
           }
         } catch (e) {
           console.error('Mark toggle failed', e);

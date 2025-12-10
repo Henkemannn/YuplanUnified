@@ -1,26 +1,34 @@
 {% from 'macros/admin_menu.html' import render_flash_messages, render_status_banner %}
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meny Vecka {{ vm.week }}/{{ vm.year }} - Admin</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
-</head>
-<body>
-    <div class="admin-container">
-        <h2>Meny för vecka {{ vm.week }}, {{ vm.year }}</h2>
-        
-        {{ render_status_banner(vm.menu_status, vm.year, vm.week, vm.etag, csrf_token_input()) }}
-        
-        {{ render_flash_messages() }}
-        
-        <!-- Menu data display -->
-        {% if vm.days %}
-            {% for day_name, meals in vm.days.items() %}
-                <section class="admin-card">
-                    <h3>{{ day_name }}</h3>
-                    
+{% extends "ui/unified_admin_base.html" %}
+{% block admin_title %}Meny Vecka {{ vm.week }}/{{ vm.year }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+{% block admin_main %}
+    <section class="ua-section">
+        <div class="ua-card">
+            <h1>Meny för vecka {{ vm.week }}, {{ vm.year }}</h1>
+            <p class="admin-intro">Importera och granska veckomeny. Backendfält och texter bibehålls.</p>
+        </div>
+    </section>
+
+    <section class="ua-section">
+        <div class="ua-card">
+            {{ render_status_banner(vm.menu_status, vm.year, vm.week, vm.etag, csrf_token_input()) }}
+        </div>
+    </section>
+
+    <section class="ua-section">
+        <div class="ua-card">
+            {{ render_flash_messages() }}
+        </div>
+    </section>
+
+    {% if vm.days %}
+        {% for day_name, meals in vm.days.items() %}
+            <section class="ua-section">
+                <div class="ua-card">
+                    <h2>{{ day_name }}</h2>
                     {% if meals %}
                         <table class="admin-table">
                             <thead>
@@ -45,12 +53,14 @@
                     {% else %}
                         <p style="color: #666; font-style: italic;">Ingen menydata för denna dag.</p>
                     {% endif %}
-                </section>
-            {% endfor %}
-        {% else %}
-            <p style="color: #666; font-style: italic;">Ingen menydata tillgänglig för denna vecka.</p>
-        {% endif %}
-    </div>
-    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
-</body>
-</html>
+                </div>
+            </section>
+        {% endfor %}
+    {% else %}
+        <section class="ua-section">
+            <div class="ua-card">
+                <p style="color: #666; font-style: italic;">Ingen menydata tillgänglig för denna vecka.</p>
+            </div>
+        </section>
+    {% endif %}
+{% endblock %}

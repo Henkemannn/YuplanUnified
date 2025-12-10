@@ -1,56 +1,65 @@
-{% extends "_base.html" %}
-{% block title %}Avdelningar – Admin{% endblock %}
-{% block head %}
+{% extends "ui/unified_admin_base.html" %}
+{% block page_title %}Avdelningar{% endblock %}
+{% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 {% endblock %}
-{% block content %}
-<div class="admin-container">
-  <header class="admin-header">
-    <h1>Avdelningar</h1>
-    <p class="admin-subtitle">Hantera avdelningar och deras inställningar</p>
-  </header>
+{% block admin_main %}
+  <section class="ua-section">
+    <div class="ua-card">
+      <h1>Avdelningar</h1>
+      <p class="admin-intro">Hantera avdelningar, boendeantal och specialkost för den här enheten.</p>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="admin-flash-messages">
-        {% for category, message in messages %}
-          <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
-        {% endfor %}
-      </div>
+      <section class="admin-card">
+        <div class="admin-flash-messages">
+          {% for category, message in messages %}
+            <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      </section>
     {% endif %}
   {% endwith %}
 
-  <table class="admin-table">
-    <thead>
-      <tr>
-        <th>Avdelning</th>
-        <th>Enhet/Site</th>
-        <th>Boendeantal</th>
-        <th>Faktaruta</th>
-        <th>Åtgärder</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for dept in vm.departments %}
-      <tr>
-        <td>{{ dept.name }}</td>
-        <td>{{ dept.site_name }}</td>
-        <td>{{ dept.resident_count_fixed }}</td>
-        <td>{{ dept.notes[:50] }}{% if dept.notes|length > 50 %}...{% endif %}</td>
-        <td>
-          <a href="{{ url_for('admin_ui.admin_department_edit', department_id=dept.id) }}" class="admin-link-btn">Redigera</a>
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="5" class="admin-empty">Inga avdelningar hittades.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <section class="ua-section">
+    <div class="ua-card">
+      <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Avdelning</th>
+          <th>Enhet/Site</th>
+          <th>Boendeantal</th>
+          <th>Faktaruta</th>
+          <th>Åtgärder</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for dept in vm.departments %}
+        <tr>
+          <td>{{ dept.name }}</td>
+          <td>{{ dept.site_name }}</td>
+          <td>{{ dept.resident_count_fixed }}</td>
+          <td>{{ dept.notes[:50] }}{% if dept.notes|length > 50 %}...{% endif %}</td>
+          <td>
+            <a href="{{ url_for('admin_ui.admin_department_edit', department_id=dept.id) }}" class="admin-link-btn">Redigera</a>
+            <a href="{{ url_for('admin_ui.admin_department_residents_week', department_id=dept.id, year=vm.current_year, week=vm.current_week) }}" class="admin-link-btn" style="margin-left:8px">Boendeantal</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="admin-empty">Inga avdelningar hittades.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      </table>
+    </div>
+  </section>
 
-  <div class="admin-actions">
-    <a href="{{ url_for('admin_ui.admin_dashboard') }}" class="admin-btn-secondary">Tillbaka till Dashboard</a>
-  </div>
-</div>
+  <section class="ua-section">
+    <div class="ua-card">
+      <div class="admin-actions">
+        <a href="{{ url_for('admin_ui.admin_dashboard') }}" class="admin-btn-secondary">Tillbaka till Dashboard</a>
+      </div>
+    </div>
+  </section>
 {% endblock %}

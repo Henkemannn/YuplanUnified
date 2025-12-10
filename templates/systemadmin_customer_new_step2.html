@@ -1,0 +1,70 @@
+{% extends "_base.html" %}
+{% set hide_global_nav = True %}
+{% block title %}SystemAdmin · Ny kund · Steg 2{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+{% endblock %}
+{% block content %}
+<main class="sa-root sa-theme-dark">
+  <aside class="sa-sidebar">
+    <div class="sa-sidebar-header">
+      <img class="sa-logo-mark" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="32" height="32">
+      <div class="sa-logo-sub">Yuplan Örnnästet</div>
+    </div>
+    <nav class="sa-nav">
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_dashboard') }}"><span class="sa-icon">📊</span> Översikt</a>
+      <a class="sa-nav-item sa-active" href="{{ url_for('admin_ui.systemadmin_customer_new_step2') }}"><span class="sa-icon">📑</span> Avtal</a>
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_customers') }}"><span class="sa-icon">📋</span> Kunder</a>
+    </nav>
+    <div class="sa-sidebar-footer"><span>v1.0 · Dev</span></div>
+  </aside>
+
+  <section class="sa-main">
+    <header class="sa-header">
+      <div>
+        <h1>Steg 2 · Avtal</h1>
+        <p class="sa-subtitle">Detaljer om kontrakt och avtal.</p>
+      </div>
+    </header>
+
+    <section class="sa-grid">
+      <article class="sa-card sa-card-wide">
+        <form method="post" action="{{ url_for('admin_ui.systemadmin_customer_new_step2_post') }}" class="sa-form">
+          {{ csrf_token_input()|safe }}
+          <div class="admin-form-row">
+            <label for="contract_start">Startdatum</label>
+            <input type="date" id="contract_start" name="contract_start" value="{{ vm.data.contract_start or '' }}">
+          </div>
+          <div class="admin-form-row">
+            <label for="contract_end">Slutdatum</label>
+            <input type="date" id="contract_end" name="contract_end" value="{{ vm.data.contract_end or '' }}">
+          </div>
+          <div class="admin-form-row">
+            <label for="billing_model">Faktureringsmodell</label>
+            {% set bm = vm.data.billing_model or '' %}
+            <select id="billing_model" name="billing_model">
+              <option value="Fast månadsavgift" {% if bm=='Fast månadsavgift' %}selected{% endif %}>Fast månadsavgift</option>
+              <option value="Per portion" {% if bm=='Per portion' %}selected{% endif %}>Per portion</option>
+              <option value="Per site" {% if bm=='Per site' %}selected{% endif %}>Per site</option>
+              <option value="Hybrid" {% if bm=='Hybrid' %}selected{% endif %}>Hybrid</option>
+            </select>
+          </div>
+          <div class="admin-form-row">
+            <label for="contract_url">Kontrakt-URL</label>
+            <input type="url" id="contract_url" name="contract_url" value="{{ vm.data.contract_url or '' }}">
+          </div>
+          <div class="admin-form-row">
+            <label for="internal_notes">Interna anteckningar</label>
+            <textarea id="internal_notes" name="internal_notes">{{ vm.data.internal_notes or '' }}</textarea>
+          </div>
+          <button type="submit" class="sa-btn sa-btn-primary">Nästa steg</button>
+          <a class="sa-btn sa-btn-secondary" href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}">Tillbaka</a>
+        </form>
+      </article>
+    </section>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/systemadmin.js') }}"></script>
+{% endblock %}

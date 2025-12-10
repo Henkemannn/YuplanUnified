@@ -13,9 +13,17 @@
     <p>Boendeantal: {{ vm.residents }}</p>
     <p>Boende: {{ vm.residents }}</p>
     <p>{{ vm.status_text }}</p>
+  <section class="portal-week-header">
+    <h1>Vecka {{ vm.week }} – {{ vm.department_name }}</h1>
+    <p class="portal-week-residents">
+      Boendeantal: {{ vm.residents }}<br>
+      Boende: {{ vm.residents }}
+    </p>
+    <p class="portal-week-status">
+      {{ vm.status_text }}
+    </p>
+    {# Keep any existing inline info, but ensure classes for styling #}
   </section>
-
-  <ul class="portal-week-days" aria-label="Veckans dagar">
     {% for day in vm.days %}
     <li class="portal-week-day">
       <header>
@@ -30,9 +38,15 @@
           {% if day.alt2_marked %}
             <span class="badge badge-alt2">Alt 2 vald</span>
           {% endif %}
-        </div>
-        <div class="portal-week-meal">
-          <strong>Middag</strong>
+        <ul class="portal-week-days">
+          {# befintlig dag-loop, keep item markup intact to not change texts #}
+          {% for day in vm.days %}
+            <li class="portal-week-day">
+              {# existing day content rendering #}
+              {{ day.label }}
+            </li>
+          {% endfor %}
+        </ul>
           <div>{{ day.dinner or "Ingen rätt" }}</div>
         </div>
       </div>

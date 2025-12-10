@@ -1,0 +1,71 @@
+{% extends "_base.html" %}
+{% set hide_global_nav = True %}
+{% block title %}SystemAdmin · Ny kund · Steg 4{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+{% endblock %}
+{% block content %}
+<main class="sa-root sa-theme-dark">
+  <aside class="sa-sidebar">
+    <div class="sa-sidebar-header">
+      <img class="sa-logo-mark" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="32" height="32">
+      <div class="sa-logo-sub">Yuplan Örnnästet</div>
+    </div>
+    <nav class="sa-nav">
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_dashboard') }}"><span class="sa-icon">📊</span> Översikt</a>
+      <a class="sa-nav-item sa-active" href="{{ url_for('admin_ui.systemadmin_customer_new_step4') }}"><span class="sa-icon">🔐</span> Admin</a>
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_customers') }}"><span class="sa-icon">📋</span> Kunder</a>
+    </nav>
+    <div class="sa-sidebar-footer"><span>v1.0 · Dev</span></div>
+  </aside>
+
+  <section class="sa-main">
+    <header class="sa-header">
+      <div>
+        <h1>Steg 4 · Adminkonto</h1>
+        <p class="sa-subtitle">Skapa administratör för kunden.</p>
+      </div>
+    </header>
+
+    <section class="sa-grid">
+      <article class="sa-card sa-card-wide">
+        <div class="sa-summary">
+          {% set d = vm.data or {} %}
+          <p><strong>Kund:</strong> {{ d.tenant_name or '-' }} · <strong>Site:</strong> {{ d.site_name or '-' }}</p>
+          <p><strong>Typ:</strong> {{ d.customer_type or '-' }}</p>
+          <p><strong>Fakturamodell:</strong> {{ d.billing_model or '-' }}</p>
+          {% if d.modules %}
+          <p><strong>Moduler:</strong>
+            {% for m in d.modules %}<span class="sa-pill sa-pill-on" style="margin-right:6px">{{ m }}</span>{% endfor %}
+          </p>
+          {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('admin_ui.systemadmin_customer_create') }}" class="sa-form">
+          {{ csrf_token_input()|safe }}
+          <div class="admin-form-row">
+            <label for="tenant_name">Kundnamn</label>
+            <input type="text" id="tenant_name" name="tenant_name" value="{{ vm.data.tenant_name or '' }}" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="site_name">Site / enhet</label>
+            <input type="text" id="site_name" name="site_name" value="{{ vm.data.site_name or '' }}" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="admin_email">Admin e-post</label>
+            <input type="email" id="admin_email" name="admin_email" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="admin_password">Admin lösenord</label>
+            <input type="password" id="admin_password" name="admin_password" required>
+          </div>
+          <button type="submit" class="sa-btn sa-btn-primary">Skapa kund</button>
+          <a class="sa-btn sa-btn-secondary" href="{{ url_for('admin_ui.systemadmin_customers') }}">Avbryt</a>
+        </form>
+      </article>
+    </section>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/systemadmin.js') }}"></script>
+{% endblock %}
