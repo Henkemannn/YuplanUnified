@@ -1,7 +1,8 @@
 {% extends "ui/unified_admin_base.html" %}
 {% block page_title %}Lägg till kosttyp{% endblock %}
-{% block content %}
-<div class="admin-header">
+{% block admin_main %}
+<section class="ua-section">
+<div class="ua-card admin-header">
   <h1>Lägg till kosttyp</h1>
 </div>
 
@@ -28,4 +29,6 @@
     <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_specialkost_list') }}">Avbryt</a>
   </div>
 </form>
+</div>
+</section>
 {% endblock %}

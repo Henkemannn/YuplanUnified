@@ -1,7 +1,8 @@
 {% extends "ui/unified_admin_base.html" %}
 {% block page_title %}Specialkost{% endblock %}
-{% block content %}
-<div class="admin-header">
+{% block admin_main %}
+<section class="ua-section">
+<div class="ua-card admin-header">
   <h1>Specialkost</h1>
   <div class="header-actions">
     <a href="{{ url_for('ui.admin_specialkost_new_form') }}" class="yp-button yp-button-primary">Lägg till ny kosttyp</a>
@@ -18,7 +19,7 @@
   {% endif %}
 {% endwith %}
 
-<div class="card">
+<div class="ua-card card">
   <div class="card-body">
     <table class="yp-table">
       <thead>
@@ -47,4 +48,5 @@
     </table>
   </div>
 </div>
+</section>
 {% endblock %}

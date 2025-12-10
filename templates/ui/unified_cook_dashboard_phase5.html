@@ -1,6 +1,8 @@
 {% extends "ui/unified_admin_base.html" %}
-{% block title %}Kockvy – {{ vm.date }}{% endblock %}
-{% block content %}
+{% block admin_title %}Kockvy – {{ vm.date }}{% endblock %}
+{% block admin_subtitle %}Överblick och totals för dagens måltider.{% endblock %}
+{% block admin_main %}
+<section class="ua-section"><div class="ua-card">
 <div class="yp-page">
   <div class="yp-page-header">
     <h1>Kockvy</h1>
@@ -110,4 +112,5 @@
     {% endif %}
   </section>
 </div>
+</div></section>
 {% endblock %}

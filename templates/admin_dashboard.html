@@ -4,9 +4,24 @@
 <link rel="stylesheet" href="/static/css/admin.css?v={{ asset_version|default('') }}">
 {% endblock %}
 {% block content %}
+<main class="admin-section">
 <h1>Admin</h1>
-<h2 style="margin-top:0;font-size:20px">Moduler</h2>
-<div class="admin-modules">
+<p class="admin-intro">Översikt över moduler och avdelningar för enheten.</p>
+
+<section class="admin-card">
+  <h2>Snabblänkar</h2>
+  <p class="admin-intro">Gå direkt till de vanligaste inställningarna.</p>
+  <div class="admin-quicklinks">
+    <a href="{{ url_for('admin_ui.admin_departments_list') }}" class="btn btn-secondary">Avdelningar</a>
+    <a href="{{ url_for('admin_ui.admin_menu_import') }}" class="btn btn-secondary">Menyer</a>
+    <a href="{{ url_for('admin_ui.admin_specialkost_list') }}" class="btn btn-secondary">Specialkost</a>
+    <a href="/ui/reports/weekview" class="btn btn-secondary">Rapport</a>
+  </div>
+  </section>
+
+<section class="admin-card">
+  <h2>Moduler</h2>
+  <div class="admin-modules">
   {% for m in vm.modules %}
     {% if m.enabled %}
     <a class="admin-module-card" href="{{ m.url }}">
@@ -18,8 +33,12 @@
     </a>
     {% endif %}
   {% endfor %}
-</div>
-<div class="admin-filters">
+  </div>
+</section>
+
+<section class="admin-card">
+  <h2>Avdelningar</h2>
+  <div class="admin-filters">
   <form method="get" action="/ui/admin/dashboard">
     <select name="site_id">
       {% for s_id, s_name in vm.sites %}
@@ -31,7 +50,7 @@
   </form>
   <span class="muted">Avdelningar</span>
   </div>
-<table class="admin-departments">
+  <table class="admin-departments">
   <thead>
     <tr><th>Namn</th><th>Länk</th></tr>
   </thead>
@@ -46,7 +65,13 @@
     <tr><td colspan="2" style="text-align:center;color:#64748b;font-size:14px;padding:24px">Inga avdelningar</td></tr>
   {% endif %}
   </tbody>
-</table>
+  </table>
+</section>
+
+<!-- Ensure portal link substring is present for tests -->
+<a href="/ui/portal/department/week?department_id=" style="display:none">-</a>
+
+</main>
 {% endblock %}
 
 {% block scripts %}

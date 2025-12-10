@@ -2452,12 +2452,32 @@ def admin_dashboard():
     finally:
         db.close()
     
+    # Provide departments for dashboard quick-links
+    departments = []
+    db = get_session()
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT d.id, d.name
+                FROM departments d
+                ORDER BY d.name
+                """
+            )
+        ).fetchall()
+        for r in rows:
+            departments.append({"id": r[0], "name": r[1]})
+    finally:
+        db.close()
+
     vm = {
         "tenant_name": tenant_name,
         "site_name": site_name,
         "current_year": current_year,
         "current_week": current_week,
         "user_role": role,
+        "departments": departments,
+        "department_count": len(departments),
     }
     
     return render_template("ui/unified_admin_dashboard.html", vm=vm)

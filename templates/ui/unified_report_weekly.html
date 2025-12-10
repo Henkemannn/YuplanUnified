@@ -4,8 +4,9 @@
 
 {# Unified UI CSS/JS inherited from base template #}
 
-{% block content %}
-<div class="admin-header">
+{% block admin_main %}
+<section class="ua-section">
+<div class="ua-card admin-header">
     <div class="header-flex">
         <div>
             <h1>Veckorapport – Registrering</h1>
@@ -41,7 +42,7 @@
 </div>
 
 <!-- Week Navigation -->
-<div class="card">
+<div class="ua-card card">
     <div class="card-body">
         <div class="week-navigation">
             <a href="{{ url_for('ui.reports_weekly', year=vm.prev_year, week=vm.prev_week) }}" class="yp-button yp-button-secondary">
@@ -64,7 +65,7 @@
     <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-primary">➕ Skapa avdelningar</a>
 </div>
 {% else %}
-<div class="card">
+<div class="ua-card card">
     <div class="card-header">
         <h2>Registreringsöversikt per avdelning</h2>
         <p class="help-text">Visar antal registrerade måltider i förhållande till planerade måltider för veckan.</p>
@@ -105,7 +106,7 @@
 </div>
 
 <!-- Legend -->
-<div class="legend-box">
+<div class="ua-card legend-box">
     <h3>Förklaring</h3>
     <div class="legend-items">
         <div class="legend-item">
@@ -272,4 +273,5 @@
     }
 }
 </style>
+</section>
 {% endblock %}

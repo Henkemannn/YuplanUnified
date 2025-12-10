@@ -2,8 +2,9 @@
 
 {% block title %}Redigera Vecka {{ vm.week }}/{{ vm.year }} - Menyplanering{% endblock %}
 
-{% block content %}
-<div class="admin-header">
+{% block admin_main %}
+<section class="ua-section">
+<div class="ua-card admin-header">
     <div class="header-flex">
         <div>
             <h1>Redigera Menyschema – Vecka {{ vm.week }}, {{ vm.year }}</h1>
@@ -26,7 +27,7 @@
 <form method="POST" action="{{ url_for('ui.admin_menu_planning_save', year=vm.year, week=vm.week) }}" class="edit-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
     
-    <div class="card">
+    <div class="ua-card card">
         <div class="card-header">
             <h2>Alt 2-inställningar</h2>
             <p class="help-text">Markera de dagar där varje avdelning ska använda alternativ 2. Dagar utan markering använder alternativ 1 (standard).</p>
@@ -88,7 +89,7 @@
     </div>
 </form>
 
-<div class="instructions-box">
+<div class="ua-card instructions-box">
     <h3>Tips</h3>
     <ul>
         <li>Markera kryssrutor för dagar där avdelningen ska använda <strong>alternativ 2</strong>.</li>
@@ -275,4 +276,5 @@
     }
 }
 </style>
+</section>
 {% endblock %}
