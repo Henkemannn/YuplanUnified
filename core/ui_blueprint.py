@@ -2076,6 +2076,77 @@ def reports_weekly():
         db2.close()
     return render_template("ui/unified_report_weekly.html", vm=vm)
 
+# ----------------------------------------------------------------------------
+# Admin – Weekly Diets Report (Module 3 MVP)
+# ----------------------------------------------------------------------------
+@ui_bp.get("/ui/admin/report/week")
+@require_roles(*ADMIN_ROLES)
+def admin_report_week():
+    from datetime import date as _d
+    # Params
+    today = _d.today()
+    iso = today.isocalendar()
+    year = int(request.args.get("year", iso[0]))
+    week = int(request.args.get("week", iso[1]))
+    department_id = (request.args.get("department_id") or "ALL").strip()
+    view_mode = (request.args.get("view") or "week").strip().lower()
+
+    tenant_id = getattr(g, "tenant_id", None) or session.get("tenant_id") or 1
+    site_id = getattr(g, "site_id", None) or session.get("site_id")
+
+    db = get_session()
+    try:
+        deps_rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+        all_deps = [{"id": str(r[0]), "name": str(r[1] or "")} for r in deps_rows]
+    finally:
+        db.close()
+    target_deps = all_deps if (not department_id or department_id == "ALL") else [d for d in all_deps if d["id"] == department_id]
+
+    svc = WeekviewService()
+
+    def _count_specials(day: dict, meal_key: str) -> int:
+        diets = day.get("diets", {}).get(meal_key, []) or []
+        total = 0
+        for it in diets:
+            if not bool(it.get("marked")):
+                continue
+            name = str(it.get("diet_name", "")).lower()
+            dtid = str(it.get("diet_type_id", "")).lower()
+            if name in ("normal", "normalkost") or dtid in ("normal", "normalkost"):
+                continue
+            cnt = int(it.get("resident_count", 0) or 0)
+            total += cnt
+        return total
+
+    vm_deps = []
+    for dep in target_deps:
+        dep_id = dep["id"]
+        payload, _etag = svc.fetch_weekview(tenant_id, year, week, dep_id)
+        summaries = payload.get("department_summaries") or []
+        days = []
+        if summaries:
+            summ = next((s for s in summaries if str(s.get("department_id")) == dep_id), summaries[0])
+            days = summ.get("days") or []
+        rows = []
+        for day in days:
+            dow = int(day.get("day_of_week") or 0)
+            wl = str(day.get("weekday_name") or "")
+            rl = int(day.get("residents", {}).get("lunch", 0) or 0)
+            rd = int(day.get("residents", {}).get("dinner", 0) or 0)
+            spl = _count_specials(day, "lunch")
+            spd = _count_specials(day, "dinner")
+            nol = max(0, rl - spl)
+            nod = max(0, rd - spd)
+            rows.append({"weekday_index": dow, "weekday_label": wl, "residents_lunch": rl, "residents_dinner": rd, "special_lunch": spl, "normal_lunch": nol, "special_dinner": spd, "normal_dinner": nod})
+        sl = sum(r["special_lunch"] for r in rows)
+        nl = sum(r["normal_lunch"] for r in rows)
+        sd = sum(r["special_dinner"] for r in rows)
+        nd = sum(r["normal_dinner"] for r in rows)
+        vm_deps.append({"id": dep_id, "name": dep["name"], "rows": rows, "week_summary": {"special_lunch_total": sl, "normal_lunch_total": nl, "special_dinner_total": sd, "normal_dinner_total": nd}})
+
+    vm = {"selected_year": year, "selected_week": week, "selected_department_id": department_id or "ALL", "view_mode": ("day" if view_mode.startswith("day") else "week"), "departments": vm_deps, "departments_options": [{"id":"ALL","name":"Alla avdelningar"}] + all_deps}
+    return render_template("ui/unified_report_weekly.html", vm=vm)
+
 
 @ui_bp.get("/ui/reports/weekly.csv")
 @require_roles(*ADMIN_ROLES)

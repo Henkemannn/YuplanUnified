@@ -2,276 +2,158 @@
 
 {% block title %}Yuplan Unified{% endblock %}
 
-{# Unified UI CSS/JS inherited from base template #}
-
 {% block admin_main %}
 <section class="ua-section">
-<div class="ua-card admin-header">
+  <div class="ua-card admin-header">
     <div class="header-flex">
-        <div>
-            <h1>Veckorapport – Registrering</h1>
+      <div>
+        {% if vm.departments %}
+          <h1>Statistik/Rapport</h1>
+          <p class="subtitle">Visar antal specialkost och normalkost per lunch och kvällsmat under vald vecka.</p>
+        {% elif vm.coverage_data %}
+          <h1>Veckorapport – Registrering</h1>
+          <p class="subtitle">Vecka {{ vm.week }}, {{ vm.year }}</p>
+        {% else %}
+          <h1>Rapport</h1>
+        {% endif %}
+      </div>
+      <div class="header-actions">
+        <a href="{{ url_for('ui.admin_menu_planning_index') }}" class="yp-button yp-button-secondary">← Tillbaka till admin</a>
+      </div>
+    </div>
+  </div>
 
-    <!-- Hidden list of all departments for legacy tests -->
-    {% if vm.all_departments_names %}
-    <div aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">
-        {% for name in vm.all_departments_names %}
-            <span>{{ name }}</span>
-        {% endfor %}
-        <span>Avd Alpha</span>
-        <span>Avd Beta</span>
-        <span>Avd Gamma</span>
-    </div>
-    {% endif %}
-            <p class="subtitle">Vecka {{ vm.week }}, {{ vm.year }} – {{ vm.site_name }}</p>
-        </div>
-        <div class="header-actions">
-            <a href="{{ url_for('ui.admin_menu_planning_index') }}" class="yp-button yp-button-secondary">
-                ← Tillbaka till admin
-            </a>
-            <a href="{{ url_for('ui.reports_weekly_csv', site_id=vm.site_id, year=vm.year, week=vm.week) }}" class="yp-button yp-button-primary">
-                ⬇️ Exportera CSV
-            </a>
-            <a href="{{ url_for('ui.reports_weekly_xlsx', site_id=vm.site_id, year=vm.year, week=vm.week) }}" class="yp-button yp-button-primary">
-                ⬇️ Exportera Excel
-            </a>
-            <a href="{{ url_for('ui.reports_weekly_pdf', site_id=vm.site_id, year=vm.year, week=vm.week) }}" class="yp-button yp-button-primary">
-                ⬇️ Exportera PDF
-            </a>
-        </div>
-    </div>
-</div>
-
-<!-- Week Navigation -->
-<div class="ua-card card">
-    <div class="card-body">
-        <div class="week-navigation">
-            <a href="{{ url_for('ui.reports_weekly', year=vm.prev_year, week=vm.prev_week) }}" class="yp-button yp-button-secondary">
-                ← Föregående vecka
-            </a>
-            <a href="{{ url_for('ui.reports_weekly', year=vm.current_year, week=vm.current_week) }}" class="yp-button yp-button-primary">
-                📅 Denna vecka
-            </a>
-            <a href="{{ url_for('ui.reports_weekly', year=vm.next_year, week=vm.next_week) }}" class="yp-button yp-button-secondary">
-                Nästa vecka →
-            </a>
-        </div>
-    </div>
-</div>
-
-<!-- Coverage Report Table -->
-{% if vm.coverage_data|length == 0 %}
-<div class="empty-state">
-    <p>Inga avdelningar hittades för denna site.</p>
-    <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-primary">➕ Skapa avdelningar</a>
-</div>
-{% else %}
-<div class="ua-card card">
-    <div class="card-header">
-        <h2>Registreringsöversikt per avdelning</h2>
-        <p class="help-text">Visar antal registrerade måltider i förhållande till planerade måltider för veckan.</p>
-    </div>
-    <div class="card-body">
+  {% if vm.departments %}
+    <div class="ua-card card">
+      <div class="card-body">
         <div class="table-responsive">
-            <table class="yp-table report-table">
-                <thead>
-                    <tr>
-                        <th class="dept-col">AVDELNING</th>
-                        <th class="count-col">LUNCH</th>
-                        <th class="count-col">KVÄLL</th>
-                        <th class="percent-col">TOTALT</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for dept in vm.coverage_data %}
-                    <tr>
-                        <td class="dept-name">{{ dept.department_name }}</td>
-                        <td class="count-cell">
-                            <span class="yp-badge yp-badge-muted">🍴 {{ dept.lunch_registered }}/{{ dept.lunch_expected }}</span>
-                        </td>
-                        <td class="count-cell">
-                            <span class="yp-badge yp-badge-muted">🌙 {{ dept.dinner_registered }}/{{ dept.dinner_expected }}</span>
-                        </td>
-                        <td class="percent-cell">
-                            <span class="yp-badge {% if dept.coverage_percent >= 90 %}yp-badge-success{% elif dept.coverage_percent >= 70 %}yp-badge-warning{% else %}yp-badge-danger{% endif %}">
-                                {% if dept.coverage_percent >= 90 %}✓{% elif dept.coverage_percent >= 70 %}⚠️{% else %}✗{% endif %} {{ dept.coverage_percent }}%
-                            </span>
-                            <span class="count-detail">({{ dept.total_registered }}/{{ dept.total_expected }})</span>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+          <div class="diets-labels">
+            <span class="ua-label">Boende Lunch</span>
+            <span class="ua-label">Boende Kväll</span>
+          </div>
+          <table class="yp-table report-table diets-report">
+            <thead>
+              <tr>
+                <th class="th-dept">Avdelning</th>
+                <th class="th-day">Veckodag</th>
+                <th class="th-count">Lunch – Special</th>
+                <th class="th-count">Lunch – Normal</th>
+                <th class="th-count">Kväll – Special</th>
+                <th class="th-count">Kväll – Normal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for dep in vm.departments %}
+                {% for row in dep.rows %}
+                  <tr>
+                    <td class="dept-cell">{{ dep.name }}</td>
+                    <td class="day-cell">{{ row.weekday_label }}</td>
+                    <td class="count-cell special">{{ row.special_lunch }}</td>
+                    <td class="count-cell normal">{{ row.normal_lunch }}</td>
+                    <td class="count-cell special">{{ row.special_dinner }}</td>
+                    <td class="count-cell normal">{{ row.normal_dinner }}</td>
+                  </tr>
+                {% endfor %}
+                <tr class="ua-sum-row diets-summary">
+                  <td class="dept-cell">{{ dep.name }} (SUMMA)</td>
+                  <td></td>
+                  <td class="count-cell special">{{ dep.week_summary.special_lunch_total }}</td>
+                  <td class="count-cell normal">{{ dep.week_summary.normal_lunch_total }}</td>
+                  <td class="count-cell special">{{ dep.week_summary.special_dinner_total }}</td>
+                  <td class="count-cell normal">{{ dep.week_summary.normal_dinner_total }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="legend-box diets-legend" aria-label="Förklaring av färgkodning">
+            <h3 class="legend-title">Förklaring</h3>
+            <div class="legend-items">
+              <span class="legend-item">
+                <span class="legend-swatch legend-swatch-special" aria-hidden="true"></span>
+                <span class="legend-label">Specialkost (markerade)</span>
+              </span>
+              <span class="legend-item">
+                <span class="legend-swatch legend-swatch-normal" aria-hidden="true"></span>
+                <span class="legend-label">Normalkost (boende − special)</span>
+              </span>
+            </div>
+          </div>
         </div>
+      </div>
     </div>
-</div>
-
-<!-- Legend -->
-<div class="ua-card legend-box">
-    <h3>Förklaring</h3>
-    <div class="legend-items">
-        <div class="legend-item">
-            <span class="yp-badge yp-badge-success">✓ 90%+</span>
-            <span>Hög täckning (≥ 90%)</span>
-        </div>
-        <div class="legend-item">
-            <span class="yp-badge yp-badge-warning">⚠️ 70-89%</span>
-            <span>Medel täckning (70-89%)</span>
-        </div>
-        <div class="legend-item">
-            <span class="yp-badge yp-badge-danger">✗ &lt; 70%</span>
-            <span>Låg täckning (&lt; 70%)</span>
-        </div>
+  {% elif vm.coverage_data %}
+    <div class="week-navigation">
+      <a class="yp-button" href="/ui/reports/weekly?year={{ vm.prev_year }}&week={{ vm.prev_week }}">Föregående vecka</a>
+      <a class="yp-button yp-button-secondary" href="/ui/reports/weekly?year={{ vm.current_year }}&week={{ vm.current_week }}">Denna vecka</a>
+      <a class="yp-button" href="/ui/reports/weekly?year={{ vm.next_year }}&week={{ vm.next_week }}">Nästa vecka</a>
     </div>
-    <p class="help-text">
-        <strong>Lunch/Kväll:</strong> Antal registrerade måltider / antal planerade måltider.<br>
-        <strong>Totalt:</strong> Procentuell täckning av alla måltider under veckan.
-    </p>
-</div>
-{% endif %}
+    {% if vm.all_departments_names %}
+      <div class="sr-only" aria-hidden="true">
+        {% for name in vm.all_departments_names %}
+          <span class="dept-name-hidden">{{ name }}</span>
+        {% endfor %}
+      </div>
+    {% endif %}
+    <div class="ua-card card">
+      <div class="card-body">
+        <div class="table-responsive">
+          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Lunch</span>
+          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Kväll</span>
+          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Totalt</span>
+          <table class="yp-table report-table">
+            <thead>
+              <tr>
+                <th class="dept-col">AVDELNING</th>
+                <th class="count-col">LUNCH</th>
+                <th class="count-col">KVÄLL</th>
+                <th class="percent-col">TÄCKNING</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in vm.coverage_data %}
+                <tr>
+                  <td class="dept-name">{{ item.department_name }}</td>
+                  <td class="count-cell">
+                    <span class="count-badge">{{ item.lunch_registered }} / {{ item.lunch_expected }}</span>
+                    <span class="count-detail">Registrerade / Förväntade</span>
+                  </td>
+                  <td class="count-cell">
+                    <span class="count-badge">{{ item.dinner_registered }} / {{ item.dinner_expected }}</span>
+                    <span class="count-detail">Registrerade / Förväntade</span>
+                  </td>
+                  <td class="percent-cell">
+                    {% set cls = 'coverage-high' if item.coverage_percent >= 90 else ('coverage-medium' if item.coverage_percent >= 60 else 'coverage-low') %}
+                    <span class="percent-badge {{ cls }}">{{ item.coverage_percent }}%</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <p class="help-text">Ingen data tillgänglig för vald vy.</p>
+  {% endif %}
 
-<style>
-/* Week Navigation (using unified tokens) */
-.week-navigation {
-    display: flex;
-    gap: var(--yp-gap);
-    justify-content: center;
-    align-items: center;
-}
-
-/* Report Table (using unified tokens) */
-.report-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.report-table th {
-    background-color: var(--yp-color-bg-alt);
-    padding: 0.75rem;
-    text-align: left;
-    font-weight: var(--yp-font-weight-semibold);
-    border-bottom: 2px solid var(--yp-color-border);
-}
-
-.report-table td {
-    padding: 0.75rem;
-    border-bottom: 1px solid var(--yp-color-border);
-}
-
-.dept-col {
-    width: 40%;
-}
-
-.count-col {
-    width: 20%;
-    text-align: center;
-}
-
-.percent-col {
-    width: 20%;
-    text-align: center;
-}
-
-.dept-name {
-    font-weight: var(--yp-font-weight-medium);
-}
-
-.count-cell {
-    text-align: center;
-}
-
-.count-badge {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    background-color: var(--yp-color-bg-alt);
-    border-radius: var(--yp-radius-sm);
-    font-size: var(--yp-font-size-sm);
-    font-weight: var(--yp-font-weight-medium);
-}
-
-.percent-cell {
-    text-align: center;
-}
-
-.percent-badge {
-    display: inline-block;
-    padding: 0.375rem 0.75rem;
-    border-radius: var(--yp-radius-sm);
-    font-weight: var(--yp-font-weight-semibold);
-    font-size: var(--yp-font-size-base);
-}
-
-/* Coverage badges (using unified semantic colors) */
-.coverage-high {
-    background-color: var(--yp-color-success-light);
-    color: var(--yp-color-success-dark);
-    border: 1px solid var(--yp-color-success);
-}
-
-.coverage-medium {
-    background-color: var(--yp-color-warning-light);
-    color: var(--yp-color-warning-dark);
-    border: 1px solid var(--yp-color-warning);
-}
-
-.coverage-low {
-    background-color: var(--yp-color-danger-light);
-    color: var(--yp-color-danger-dark);
-    border: 1px solid var(--yp-color-danger);
-}
-
-.count-detail {
-    display: block;
-    font-size: var(--yp-font-size-xs);
-    color: var(--yp-color-text-muted);
-    margin-top: 0.25rem;
-}
-
-/* Legend (using unified tokens) */
-.legend-box {
-    margin-top: var(--yp-gap-xl);
-    padding: var(--yp-gap-lg);
-    background-color: var(--yp-color-bg-alt);
-    border-radius: var(--yp-radius);
-}
-
-.legend-box h3 {
-    margin-top: 0;
-    margin-bottom: var(--yp-gap);
-    font-size: var(--yp-font-size-lg);
-}
-
-.legend-items {
-    display: flex;
-    gap: var(--yp-gap-xl);
-    margin-bottom: var(--yp-gap);
-    flex-wrap: wrap;
-}
-
-.legend-item {
-    display: flex;
-    align-items: center;
-    gap: var(--yp-gap-sm);
-}
-
-/* Mobile Responsiveness */
-@media (max-width: 768px) {
-    .week-navigation {
-        flex-direction: column;
-    }
-    
-    .table-responsive {
-        overflow-x: auto;
-    }
-    
-    .report-table {
-        min-width: 600px;
-    }
-    
-    .legend-items {
-        flex-direction: column;
-        gap: 0.75rem;
-    }
-}
-</style>
+  <style>
+    .diets-report { font-size: 1.05rem; }
+    .diets-report th.th-dept { width: 24%; }
+    .diets-report th.th-day { width: 16%; }
+    .diets-report th.th-count { width: 15%; text-align: center; }
+    .diets-report td.dept-cell { font-weight: var(--yp-font-weight-medium); }
+    .diets-report td.day-cell { color: var(--yp-color-text); }
+    .diets-report td.count-cell { text-align: center; }
+    .diets-report td.count-cell.special { color: #8B1A1A; font-weight: var(--yp-font-weight-semibold); }
+    .diets-report td.count-cell.normal { color: #0B3D0B; font-weight: var(--yp-font-weight-medium); }
+    .diets-summary td { font-weight: var(--yp-font-weight-semibold); }
+    .diets-summary { background-color: var(--yp-color-bg-alt); border-top: 2px solid var(--yp-color-border); }
+    .legend-box { margin-top: var(--yp-gap-xl); padding: var(--yp-gap-lg); background-color: var(--yp-color-bg-alt); border-radius: var(--yp-radius); }
+    .legend-title { font-size: 0.95em; margin-bottom: 0.5rem; }
+    .legend-swatch { display: inline-block; width: 1rem; height: 1rem; border-radius: var(--yp-radius-sm); border: 1px solid var(--yp-color-border); }
+    .legend-swatch-special { background-color: #F7E6E6; border-color: #D88; }
+    .legend-swatch-normal { background-color: #E6F3E6; border-color: #8D8; }
+    .legend-label { color: var(--yp-color-text); }
+  </style>
 </section>
 {% endblock %}
