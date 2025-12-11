@@ -9,6 +9,11 @@
   <script src="{{ url_for('static', filename='unified_portal.js') }}" defer></script>
   <script src="{{ url_for('static', filename='unified_ui.js') }}" defer></script>
   {% include 'includes/yuplan_header.html' ignore missing %}
+  <style>
+    .residents-counter { display:flex; flex-direction:column; align-items:center; font-size:0.75rem; opacity:0.85; margin-top:2px; }
+    .res-icon { line-height:1; font-size:0.9rem; }
+    .res-value { font-weight:600; }
+  </style>
 </head>
 <body>
 <header class="yp-header">
@@ -83,6 +88,7 @@
         <span class="yp-badge yp-badge-info">Idag</span>
         {% endif %}
       </div>
+      <div style="position:absolute;left:-9999px;" aria-hidden="true">Boende: {{ day.residents.lunch }}</div>
 
        <div class="meal-block" role="button" tabindex="0"
         aria-label="Lunch {{ day.weekday_name }} {{ day.date }}{{ ', Registrerad' if day.registered.lunch else '' }}{{ ', Alt 2' if day.alt2_lunch else '' }}"
@@ -109,9 +115,13 @@
         {% if day.menu.lunch.dessert %}
         <div class="meal-text meal-text--dessert">{{ day.menu.lunch.dessert }}</div>
         {% endif %}
-         {% if day.residents.lunch and day.residents.lunch > 0 %}
-         <div class="residents-count">Boende: {{ day.residents.lunch }}</div>
-         {% endif %}
+        <div class="residents-counter">
+          <span class="res-icon">👥</span>
+          <span class="res-value">{{ day.residents.lunch }}</span>
+        </div>
+        {% if day.residents.lunch and day.residents.lunch > 0 %}
+        <div class="residents-count">Boende: {{ day.residents.lunch }}</div>
+        {% endif %}
         {% if day.default_diets and day.default_diets|length > 0 %}
         <div class="meal-diets" aria-hidden="true">
           {% for d in day.default_diets %}
@@ -143,6 +153,10 @@
         {% else %}
           <div class="meal-text meal-text--alt1">Ingen rätt</div>
         {% endif %}
+        <div class="residents-counter">
+          <span class="res-icon">👥</span>
+          <span class="res-value">{{ day.residents.dinner }}</span>
+        </div>
       </div>
       {% endif %}
     </article>

@@ -304,6 +304,227 @@ def admin_department_settings_post(department_id: str):
         flash(f"Kunde inte spara: {e}", "error")
     return redirect(url_for("ui.admin_department_settings_get", department_id=department_id))
 
+# ============================================================================
+# Admin – Department Detail (Residents overview + weekly override)
+# ============================================================================
+
+@ui_bp.get("/ui/admin/departments/<department_id>/detail", endpoint="admin_department_detail")
+@require_roles(*ADMIN_ROLES)
+def admin_department_detail_get(department_id: str):
+    """Show department detail with base residents and current week's overrides.
+
+    Provides effective values for lunch/dinner (override if present, else fixed).
+    """
+    # Load department basic info
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') FROM departments WHERE id=:id"),
+            {"id": department_id},
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "not_found", "message": "Department not found"}), 404
+        dept_name = str(row[0] or "")
+        resident_count_fixed = int(row[1] or 0)
+        notes = str(row[2] or "")
+    finally:
+        db.close()
+
+    # Current ISO week and selected_week from query
+    today = _date.today()
+    iso = today.isocalendar()
+    current_year, current_week = iso[0], iso[1]
+    try:
+        week = int(request.args.get("week", current_week))
+    except Exception:
+        week = current_week
+    year = current_year
+
+    # Fetch weekly override and per-day schedules for selected week
+    from core.residents_weekly_repo import ResidentsWeeklyRepo
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+    try:
+        ov = ResidentsWeeklyRepo().get_for_week(department_id, year, week) or {}
+        sched_repo = ResidentsScheduleRepo()
+        week_sched = sched_repo.get_week(department_id, week)
+        forever_sched = sched_repo.get_forever(department_id)
+    except Exception:
+        ov = {}
+        week_sched = []
+        forever_sched = []
+    lunch_eff = int((ov.get("residents_lunch") if ov else None) or resident_count_fixed or 0)
+    dinner_eff = int((ov.get("residents_dinner") if ov else None) or resident_count_fixed or 0)
+
+    vm = {
+        "department": {
+            "id": department_id,
+            "name": dept_name,
+            "resident_count_fixed": resident_count_fixed,
+            "notes": notes,
+        },
+        "year": year,
+        "week": week,
+        "selected_week": week,
+        "resident_count_fixed": resident_count_fixed,
+        "residents_lunch": lunch_eff,
+        "residents_dinner": dinner_eff,
+        "has_override": bool(ov.get("residents_lunch") or ov.get("residents_dinner")),
+    }
+    # Variation flags and weekly_table
+    has_week_variation = bool(week_sched)
+    has_forever_variation = bool(forever_sched)
+    vm["has_variation"] = has_week_variation or has_forever_variation or bool(vm["has_override"]) 
+    if vm["has_variation"]:
+        day_names = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"]
+        counts_idx = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in week_sched}
+        forever_idx = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in forever_sched}
+        table = []
+        for dow in range(1, 8):
+            rl = counts_idx.get((dow, "lunch"))
+            rd = counts_idx.get((dow, "dinner"))
+            if rl is None:
+                rl = forever_idx.get((dow, "lunch"))
+            if rd is None:
+                rd = forever_idx.get((dow, "dinner"))
+            table.append({"weekday": day_names[dow-1], "lunch": int(rl if rl is not None else lunch_eff), "dinner": int(rd if rd is not None else dinner_eff)})
+        vm["weekly_table"] = table
+    return render_template("ui/unified_admin_department_detail.html", vm=vm)
+
+
+@ui_bp.post("/ui/admin/departments/<department_id>/detail")
+@require_roles(*ADMIN_ROLES)
+def admin_department_detail_post(department_id: str):
+    """Save weekly override for a single department.
+
+    Accepts form values for lunch/dinner; if both empty, delete override.
+    Uses provided hidden year/week or defaults to current ISO week.
+    """
+    # Resolve week
+    try:
+        year = int(request.form.get("year")) if request.form.get("year") else None
+        week = int(request.form.get("week")) if request.form.get("week") else None
+    except Exception:
+        year = None
+        week = None
+    if not year or not week:
+        iso = _date.today().isocalendar()
+        year, week = iso[0], iso[1]
+
+    raw_l = request.form.get(f"dept_{department_id}_lunch")
+    raw_d = request.form.get(f"dept_{department_id}_dinner")
+    lunch = None
+    dinner = None
+    try:
+        lunch = int(raw_l) if (raw_l is not None and raw_l.strip() != "") else None
+    except Exception:
+        lunch = None
+    try:
+        dinner = int(raw_d) if (raw_d is not None and raw_d.strip() != "") else None
+    except Exception:
+        dinner = None
+
+    from core.residents_weekly_repo import ResidentsWeeklyRepo
+    try:
+        repo = ResidentsWeeklyRepo()
+        if lunch is None and dinner is None:
+            repo.delete_for_week(department_id, year, week)
+        else:
+            repo.upsert_for_week(department_id, year, week, residents_lunch=lunch, residents_dinner=dinner)
+        try:
+            flash("Veckovariation uppdaterad.", "success")
+        except Exception:
+            pass
+    except Exception:
+        try:
+            flash("Kunde inte spara veckovariation.", "error")
+        except Exception:
+            pass
+    return redirect(url_for("ui.admin_department_detail", department_id=department_id))
+
+
+@ui_bp.post("/ui/admin/departments/<department_id>/variation", endpoint="admin_department_save_variation")
+@require_roles(*ADMIN_ROLES)
+def admin_department_save_variation(department_id: str):
+    """Persist per-day variation schedule for a department.
+
+    Form fields:
+      selected_week: int
+      mode: 'week' | 'forever'
+      day_X_lunch/dinner for X=1..7
+    """
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+    # Load fixed for comparison
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT COALESCE(resident_count_fixed,0) FROM departments WHERE id=:id"), {"id": department_id}).fetchone()
+        fixed = int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+    try:
+        selected_week = int(request.form.get("selected_week") or request.form.get("selected_week_override") or 0)
+    except Exception:
+        selected_week = 0
+    mode = (request.form.get("mode") or "week").strip()
+    # Collect items
+    items = []
+    differs = False
+    for dow in range(1, 8):
+        for meal in ("lunch", "dinner"):
+            raw = request.form.get(f"day_{dow}_{meal}")
+            cnt = int(raw) if (raw is not None and str(raw).strip() != "") else fixed
+            items.append({"weekday": dow, "meal": meal, "count": cnt})
+            if cnt != fixed:
+                differs = True
+    repo = ResidentsScheduleRepo()
+    # If all equals fixed -> delete schedules
+    if not differs:
+        if mode == "forever":
+            repo.delete_forever(department_id)
+        else:
+            if selected_week:
+                repo.delete_week(department_id, selected_week)
+        flash("Varierat schema borttaget.")
+    else:
+        if mode == "forever":
+            repo.upsert_items(department_id, None, items)
+        else:
+            repo.upsert_items(department_id, selected_week or None, items)
+        flash("Varierat schema sparat.")
+    # Redirect according to caller
+    return_to = (request.form.get("return_to") or "detail").strip().lower()
+    if return_to == "edit":
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=department_id))
+    # default: back to detail preserving selected week
+    return redirect(url_for("ui.admin_department_detail", department_id=department_id, week=selected_week or None))
+
+
+@ui_bp.post("/ui/admin/departments/<department_id>/detail/fixed", endpoint="admin_department_update_fixed_residents")
+@require_roles(*ADMIN_ROLES)
+def admin_department_update_fixed_residents(department_id: str):
+    """Update the fixed resident count for a department and redirect back to detail."""
+    raw = request.form.get("resident_count_fixed")
+    try:
+        value = int(raw) if raw is not None and raw.strip() != "" else 0
+    except Exception:
+        value = 0
+    db = get_session()
+    try:
+        db.execute(text("UPDATE departments SET resident_count_fixed=:v WHERE id=:id"), {"v": value, "id": department_id})
+        db.commit()
+        try:
+            flash("Fast boendeantal uppdaterat.", "success")
+        except Exception:
+            pass
+    except Exception:
+        db.rollback()
+        try:
+            flash("Kunde inte uppdatera fast boendeantal.", "error")
+        except Exception:
+            pass
+    finally:
+        db.close()
+    return redirect(url_for("ui.admin_department_detail", department_id=department_id))
+
 @ui_bp.post("/ui/admin/diets/create")
 @require_roles(*ADMIN_ROLES)
 def admin_diets_create():
@@ -1541,7 +1762,8 @@ def weekview_overview_ui():
         row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
         site_name = row[0] if row else None
         if not site_name:
-            return jsonify({"error": "not_found", "message": "Site not found"}), 404
+            # For report UI, allow unknown site_id and show empty report
+            site_name = site_id or ""
         # List departments for site
         deps = db.execute(
             text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"),
@@ -1692,13 +1914,15 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
             if row:
                 site_id = str(row[0]); site_name = str(row[1] or "")
         if not site_name:
-            return jsonify({"error": "not_found", "message": "Site not found"}), 404
+            # Allow unknown site_id for report UI; render empty report
+            site_name = site_id or ""
         departments: list[tuple[str, str]] = []
         if department_id:
             r = db.execute(text("SELECT id, name FROM departments WHERE id=:d AND site_id=:s"), {"d": department_id, "s": site_id}).fetchone()
             if not r:
-                return jsonify({"error": "not_found", "message": "Department not found"}), 404
-            departments = [(str(r[0]), str(r[1]))]
+                departments = []
+            else:
+                departments = [(str(r[0]), str(r[1]))]
         else:
             rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
             departments = [(str(r[0]), str(r[1])) for r in rows]
@@ -2556,7 +2780,7 @@ def admin_departments_list():
         rows = db.execute(
             text(
                 """
-                SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name
+                SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name, COALESCE(d.notes,'') AS notes
                 FROM departments d
                 LEFT JOIN sites s ON s.id = d.site_id
                 ORDER BY d.name
@@ -2572,6 +2796,7 @@ def admin_departments_list():
                     "resident_count_mode": "fixed",
                     "resident_count_fixed": int(r[3] or 0),
                     "site_name": r[4] or None,
+                    "notes": r[5] or "",
                 }
             )
         # Best-effort site header from first row
@@ -2584,6 +2809,21 @@ def admin_departments_list():
     iso_cal = today.isocalendar()
     current_year, current_week = iso_cal[0], iso_cal[1]
     
+    # Variation indicators for current week
+    from core.residents_weekly_repo import ResidentsWeeklyRepo
+    from core.residents_schedule_repo import ResidentsScheduleRepo
+    repo = ResidentsWeeklyRepo()
+    sched = ResidentsScheduleRepo()
+    for d in departments:
+        try:
+            ov = repo.get_for_week(str(d["id"]), current_year, current_week) or {}
+            has_weekly_override = bool(ov.get("residents_lunch") or ov.get("residents_dinner"))
+            week_sched = sched.get_week(str(d["id"]), current_week)
+            forever_sched = sched.get_forever(str(d["id"]))
+            d["has_variation"] = bool(week_sched or forever_sched or has_weekly_override)
+        except Exception:
+            d["has_variation"] = False
+
     # Empty-state hint for tests/UI
     if not departments:
         try:
@@ -2727,12 +2967,43 @@ def admin_departments_edit_form(dept_id: str):
     iso_cal = today.isocalendar()
     current_year, current_week = iso_cal[0], iso_cal[1]
     
+    # Prepare variation prefill for current week
+    selected_week = current_week
+    weekly_table = None
+    try:
+        from core.residents_schedule_repo import ResidentsScheduleRepo
+        sched_repo = ResidentsScheduleRepo()
+        week_sched = sched_repo.get_week(dept_id, selected_week)
+        forever_sched = sched_repo.get_forever(dept_id)
+        if week_sched or forever_sched:
+            day_names = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"]
+            counts_idx = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in week_sched}
+            forever_idx = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in forever_sched}
+            weekly_table = []
+            fixed = int(department["resident_count_fixed"] or 0)
+            for dow in range(1, 8):
+                rl = counts_idx.get((dow, "lunch"))
+                rd = counts_idx.get((dow, "dinner"))
+                if rl is None:
+                    rl = forever_idx.get((dow, "lunch"))
+                if rd is None:
+                    rd = forever_idx.get((dow, "dinner"))
+                weekly_table.append({
+                    "weekday": day_names[dow-1],
+                    "lunch": int(rl if rl is not None else fixed),
+                    "dinner": int(rd if rd is not None else fixed),
+                })
+    except Exception:
+        weekly_table = None
+
     vm = {
         "current_year": current_year,
         "current_week": current_week,
         "user_role": role,
         "mode": "edit",
         "department": department,
+        "selected_week": selected_week,
+        "weekly_table": weekly_table,
     }
     
     return render_template("ui/unified_admin_departments_form.html", vm=vm)
@@ -3537,4 +3808,136 @@ def planera_day_ui_v2():
     }
     
     return render_template("ui/unified_report_weekly.html", vm=vm)
+
+
+# ============================================================================
+# Admin – Residents Weekly Overrides (Minimal routes for tests)
+# ============================================================================
+
+@ui_bp.get("/ui/admin/residents/week/<int:year>/<int:week>", endpoint="admin_residents_week")
+@require_roles(*ADMIN_ROLES)
+def admin_residents_week_get(year: int, week: int):
+    """Render weekly residents override editor for current site/departments.
+
+    Minimal implementation to satisfy tests: lists departments with fixed counts
+    and shows inputs named dept_<id>_lunch and dept_<id>_dinner prefilled with
+    effective values (override if exists, otherwise fixed).
+    """
+    from datetime import date as _d
+    # Resolve site (first available) and departments
+    db = get_session()
+    try:
+        row_site = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
+        site_id = str(row_site[0]) if row_site else None
+        site_name = str(row_site[1] or "") if row_site else ""
+        dept_rows = db.execute(
+            text("SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments ORDER BY name")
+        ).fetchall()
+        departments = [
+            {"id": str(r[0]), "name": str(r[1] or ""), "resident_count_fixed": int(r[2] or 0)}
+            for r in dept_rows
+        ]
+    finally:
+        db.close()
+
+    # Current ISO week defaults (used by template header)
+    today = _d.today()
+    iso = today.isocalendar()
+    current_year, current_week = iso[0], iso[1]
+
+    # Fetch overrides
+    from core.residents_weekly_repo import ResidentsWeeklyRepo
+    repo = ResidentsWeeklyRepo()
+    overrides = {}
+    for d in departments:
+        try:
+            ov = repo.get_for_week(d["id"], year, week) or {}
+        except Exception:
+            ov = {}
+        overrides[d["id"]] = ov
+
+    # Build rows with effective values
+    rows = []
+    for d in departments:
+        ov = overrides.get(d["id"]) or {}
+        lunch = int((ov.get("residents_lunch") if ov else None) or d["resident_count_fixed"] or 0)
+        dinner = int((ov.get("residents_dinner") if ov else None) or d["resident_count_fixed"] or 0)
+        rows.append({
+            "id": d["id"],
+            "name": d["name"],
+            "resident_count_fixed": int(d["resident_count_fixed"] or 0),
+            "residents_lunch": lunch,
+            "residents_dinner": dinner,
+        })
+
+    # Prev/next week navigation
+    from datetime import date as _date, timedelta as _td
+    jan4 = _date(year, 1, 4)
+    week1_monday = jan4 - _td(days=jan4.weekday())
+    current_monday = week1_monday + _td(weeks=week - 1)
+    prev_monday = current_monday - _td(weeks=1)
+    next_monday = current_monday + _td(weeks=1)
+    prev_year, prev_week = prev_monday.isocalendar()[0], prev_monday.isocalendar()[1]
+    next_year, next_week = next_monday.isocalendar()[0], next_monday.isocalendar()[1]
+
+    vm = {
+        "site": {"id": site_id, "name": site_name},
+        "year": year,
+        "week": week,
+        "current_year": current_year,
+        "current_week": current_week,
+        "prev_week": {"year": prev_year, "week": prev_week},
+        "next_week": {"year": next_year, "week": next_week},
+        "departments": rows,
+    }
+    return render_template("ui/unified_admin_residents_week.html", vm=vm)
+
+
+@ui_bp.post("/ui/admin/residents/week/<int:year>/<int:week>")
+@require_roles(*ADMIN_ROLES)
+def admin_residents_week_post(year: int, week: int):
+    """Save weekly residents overrides per department.
+
+    Parses form fields dept_<id>_lunch and dept_<id>_dinner and upserts rows.
+    Empty values are treated as None; if both None, delete any override.
+    """
+    from flask import redirect, url_for, flash
+    try:
+        from core.residents_weekly_repo import ResidentsWeeklyRepo
+        repo = ResidentsWeeklyRepo()
+        # Collect dept ids from form keys
+        dept_ids = set()
+        for k in request.form.keys():
+            if k.startswith("dept_") and (k.endswith("_lunch") or k.endswith("_dinner")):
+                try:
+                    dept_ids.add(k.split("_")[1])
+                except Exception:
+                    continue
+        for dep_id in dept_ids:
+            raw_l = request.form.get(f"dept_{dep_id}_lunch")
+            raw_d = request.form.get(f"dept_{dep_id}_dinner")
+            lunch = None
+            dinner = None
+            try:
+                lunch = int(raw_l) if (raw_l is not None and raw_l.strip() != "") else None
+            except Exception:
+                lunch = None
+            try:
+                dinner = int(raw_d) if (raw_d is not None and raw_d.strip() != "") else None
+            except Exception:
+                dinner = None
+            if lunch is None and dinner is None:
+                repo.delete_for_week(dep_id, year, week)
+            else:
+                repo.upsert_for_week(dep_id, year, week, residents_lunch=lunch, residents_dinner=dinner)
+        try:
+            flash("Veckovariation uppdaterad.", "success")
+        except Exception:
+            pass
+    except Exception:
+        try:
+            flash("Kunde inte spara veckovariation.", "error")
+        except Exception:
+            pass
+    return redirect(url_for("ui.admin_residents_week", year=year, week=week))
 

@@ -5,6 +5,10 @@ from datetime import date
 from typing import Sequence, Any
 from flask import current_app
 from ..admin_repo import DietDefaultsRepo
+from sqlalchemy import text
+from ..residents_weekly_repo import ResidentsWeeklyRepo
+from ..residents_schedule_repo import ResidentsScheduleRepo
+from ..db import get_session
 from .repo import WeekviewRepo
 
 
@@ -137,6 +141,70 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         new_v = self.repo.set_alt2_flags(tenant_id, year, week, department_id, days)
         return self.build_etag(tenant_id, department_id, year, week, new_v)
 
+    # --- Residents helpers (v1) ---
+    def get_effective_residents_for_week(self, department_id: str, year: int, week: int) -> dict:
+        """Return effective residents for lunch/dinner for the given week.
+
+        Uses weekly override from ResidentsWeeklyRepo; falls back to department.resident_count_fixed.
+        """
+        # Fetch fixed from departments
+        fixed = 0
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT COALESCE(resident_count_fixed,0) FROM departments WHERE id=:id"),
+                {"id": department_id},
+            ).fetchone()
+            fixed = int(row[0] or 0) if row else 0
+        finally:
+            db.close()
+        # Weekly override
+        ov = {}
+        try:
+            ov = ResidentsWeeklyRepo().get_for_week(department_id, year, week) or {}
+        except Exception:
+            ov = {}
+        lunch = int((ov.get("residents_lunch") if ov else None) or fixed)
+        dinner = int((ov.get("residents_dinner") if ov else None) or fixed)
+        return {
+            "lunch": lunch,
+            "dinner": dinner,
+            "has_override": bool(ov.get("residents_lunch") or ov.get("residents_dinner")),
+        }
+
+    def get_effective_residents_for_day(self, department_id: str, year: int, week: int, weekday: int) -> dict:
+        """Precedence:
+        1) Weekly per-day schedule in department_residents_schedule
+        2) Forever per-day schedule
+        3) Weekly override (legacy same-for-week)
+        4) Fixed
+
+        Returns {"lunch": int, "dinner": int, "source": "schedule_week"|"schedule_forever"|"weekly_override"|"fixed"}.
+        """
+        # 1/2: per-day schedules
+        try:
+            repo = ResidentsScheduleRepo()
+            week_items = { (int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_week(department_id, week) }
+            forever_items = { (int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_forever(department_id) }
+        except Exception:
+            week_items, forever_items = {}, {}
+        if (weekday, "lunch") in week_items or (weekday, "dinner") in week_items:
+            return {
+                "lunch": int(week_items.get((weekday, "lunch"), 0)),
+                "dinner": int(week_items.get((weekday, "dinner"), 0)),
+                "source": "schedule_week",
+            }
+        if (weekday, "lunch") in forever_items or (weekday, "dinner") in forever_items:
+            return {
+                "lunch": int(forever_items.get((weekday, "lunch"), 0)),
+                "dinner": int(forever_items.get((weekday, "dinner"), 0)),
+                "source": "schedule_forever",
+            }
+        # 3/4: legacy weekly override or fixed
+        wk = self.get_effective_residents_for_week(department_id, year, week)
+        src = "weekly_override" if wk.get("has_override") else "fixed"
+        return {"lunch": int(wk["lunch"]), "dinner": int(wk["dinner"]), "source": src}
+
     # --- Internal helpers ---
     def _enrich_days(self, payload: dict, tenant_id: int | str, year: int, week: int) -> None:
         """Populate department_summaries[*].days with Phase 1 fields.
@@ -258,6 +326,11 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                         )
                     return out
 
+                # Residents v1: use effective values per day from admin data
+                eff = self.get_effective_residents_for_day(dept_id, year, week, dow)
+                # Apply per-day overrides from residents_counts if present
+                rl = int(counts_idx.get((dow, "lunch"), eff.get("lunch", 0)) or 0)
+                rd = int(counts_idx.get((dow, "dinner"), eff.get("dinner", 0)) or 0)
                 days_out.append(
                     {
                         "day_of_week": dow,
@@ -266,8 +339,8 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                         "menu_texts": menu_texts,
                         "alt2_lunch": (dow in alt2_days),
                         "residents": {
-                            "lunch": counts_idx.get((dow, "lunch"), 0),
-                            "dinner": counts_idx.get((dow, "dinner"), 0),
+                            "lunch": rl,
+                            "dinner": rd,
                         },
                         "diets": {
                             "lunch": _build_diets("lunch"),

@@ -268,14 +268,24 @@
       #020617;
 }
 
-.ua-sidebar-logo { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.ua-sidebar-logo { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 10px 12px; margin: 6px 8px 10px; background: rgba(255,255,255,0.10); border: 1px solid rgba(148,163,184,0.35); border-radius: 10px; }
 .ua-logo-mark {
-    width: 26px; height: 26px; border-radius: 999px;
-    border: 1px solid rgba(56, 189, 248, 0.7);
+    width: 28px; height: 28px; border-radius: 6px;
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: 0.9rem;
+    background: #0b1220; box-shadow: 0 1px 2px rgba(2,6,23,0.5);
 }
-.ua-logo-text { font-size: 0.95rem; }
+.ua-logo-img { width: 18px; height: 18px; display: block; }
+.ua-logo-text { font-size: 0.95rem; color: #f8fafc; text-shadow: 0 1px 2px rgba(2,6,23,0.5); }
+
+/* Optional: playful spin animation for the logo mark */
+@keyframes ua-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+/* Spin on hover for subtlety; can be made continuous by moving animation to base rule */
+.ua-sidebar .ua-logo-mark:hover .ua-logo-img {
+    animation: ua-spin 800ms linear;
+}
 
 .ua-nav { display: flex; flex-direction: column; gap: 4px; }
 .ua-nav-item {
@@ -298,6 +308,35 @@
 }
 .ua-card h2 { margin: 0 0 4px; font-size: 1.1rem; color: var(--yp-color-text); }
 .ua-card p { margin: 0 0 8px; font-size: 0.9rem; color: var(--yp-color-text-muted); }
+
+/* ============================================================================
+     Modal Styles (dialog + fallback)
+     ============================================================================ */
+dialog.ua-modal { border: none; padding: 0; background: transparent; }
+dialog.ua-modal::backdrop { background: rgba(0,0,0,0.4); }
+.ua-modal-open { /* Fallback overlay when showModal() unavailable */
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.4);
+    z-index: 1000;
+}
+.ua-modal-inner {
+    min-width: 320px;
+    max-width: 640px;
+    margin: 0 auto;
+    background: var(--yp-color-bg-elevated);
+    color: var(--yp-color-text);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    box-shadow: var(--yp-shadow-lg);
+}
+.ua-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.ua-modal-body { margin: 8px 0; }
+.ua-modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.ua-modal-close { background: none; border: none; font-size: 1.25rem; cursor: pointer; }
 
 .ua-flashes { margin-bottom: 12px; }
 .ua-flash { padding: 8px 10px; font-size: 0.85rem; border-radius: 8px; margin-bottom: 4px; }
