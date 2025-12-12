@@ -2,31 +2,79 @@
 {% block title %}Specialkost – {{ vm.site.name }}{% endblock %}
 {% block content %}
 <main class="admin-section">
-  <h1>Specialkost – {{ vm.site.name }}</h1>
-  <p class="admin-intro">Hantera specialkosttyper för enheten. Ändra inte backendfält eller texter.</p>
+  <h1>Specialkoster – {{ vm.site.name }}</h1>
+  <p class="admin-intro">Hantera kosttyper och standardantal per avdelning. Rapportlogik påverkas inte.</p>
+
+  <!-- Section A: Diet Types -->
   <section class="admin-card">
     <h2>Specialkosttyper</h2>
     <table>
       <thead>
-        <tr><th>Namn</th></tr>
+        <tr><th>Namn</th><th style="width:1%"></th></tr>
       </thead>
       <tbody>
         {% for d in vm.diets %}
-        <tr><td>{{ d.name }}</td></tr>
+        <tr>
+          <td>{{ d.name }}</td>
+          <td>
+            <form method="post" action="{{ url_for('ui.admin_diets_delete', site_id=vm.site.id) }}" onsubmit="return confirm('Ta bort kosttypen?');">
+              <input type="hidden" name="diet_type_id" value="{{ d.id }}">
+              <button class="btn btn-danger" type="submit">Ta bort</button>
+            </form>
+          </td>
+        </tr>
         {% endfor %}
         {% if not vm.diets %}
-        <tr><td class="muted">Inga specialkosttyper upplagda ännu.</td></tr>
+        <tr><td colspan="2" class="muted">Inga specialkosttyper upplagda ännu.</td></tr>
         {% endif %}
       </tbody>
     </table>
-    <h3>Skapa ny specialkosttyp</h3>
+    <h3>Lägg till specialkosttyp</h3>
     <form method="post" action="{{ url_for('ui.admin_diets_create', site_id=vm.site.id) }}">
       <div class="admin-form-row">
         <label for="diet_name">Namn</label>
         <input id="diet_name" type="text" name="name" required>
       </div>
-      <button class="btn" type="submit">Skapa</button>
+      <button class="btn" type="submit">Lägg till</button>
     </form>
+  </section>
+
+  <!-- Section B: Defaults per Department -->
+  <section class="admin-card">
+    <h2>Default per avdelning</h2>
+    {% if not vm.departments %}
+    <p class="muted">Inga avdelningar hittades för denna arbetsplats.</p>
+    {% endif %}
+    {% for dep in vm.departments %}
+    <div class="dept-card">
+      <h3>{{ dep.name }}</h3>
+      <table>
+        <thead>
+          <tr><th>Diettyp</th><th>Antal (default)</th><th style="width:1%"></th></tr>
+        </thead>
+        <tbody>
+          {% for d in vm.diets %}
+          {% set current = (vm.defaults_by_dept.get(dep.id) or {}).get(d.id|string) or (vm.defaults_by_dept.get(dep.id) or {}).get(d.id) or 0 %}
+          <tr>
+            <td>{{ d.name }}</td>
+            <td>
+              <form class="inline" method="post" action="{{ url_for('ui.admin_diets_defaults_save') }}">
+                <input type="hidden" name="department_id" value="{{ dep.id }}">
+                <input type="hidden" name="diet_type_id" value="{{ d.id }}">
+                <input type="number" name="default_count" min="0" value="{{ current }}" style="width:6em">
+                <button class="btn" type="submit">Spara</button>
+              </form>
+            </td>
+            <td></td>
+          </tr>
+          {% endfor %}
+          {% if not vm.diets %}
+          <tr><td colspan="3" class="muted">Lägg först till specialkosttyper.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
   </section>
 </main>
 {% endblock %}

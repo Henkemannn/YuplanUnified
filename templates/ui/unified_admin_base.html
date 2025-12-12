@@ -24,7 +24,8 @@
       <a href="{{ url_for('ui.admin_departments_list') }}" class="ua-nav-item {% if request.endpoint and 'admin_departments' in request.endpoint %}ua-nav-item-active{% endif %}"><span class="nav-icon">🏢</span> Avdelningar</a>
       <a href="{{ url_for('ui.admin_menu_import_list') }}" class="ua-nav-item {% if request.endpoint and 'admin_menu_import' in request.endpoint %}ua-nav-item-active{% endif %}"><span class="nav-icon">📋</span> Meny &amp; registrering</a>
       <a href="{{ url_for('ui.admin_specialkost_list') }}" class="ua-nav-item {% if request.endpoint and 'admin_specialkost' in request.endpoint %}ua-nav-item-active{% endif %}"><span class="nav-icon">🥗</span> Specialkost</a>
-      <a href="{{ url_for('ui.reports_weekly') }}" class="ua-nav-item {% if request.endpoint and 'reports_' in request.endpoint %}ua-nav-item-active{% endif %}"><span class="nav-icon">📊</span> Rapporter</a>
+      <a href="{{ url_for('ui.admin_report_week') }}" class="ua-nav-item {% if request.endpoint == 'ui.admin_report_week' %}ua-nav-item-active{% endif %}"><span class="nav-icon">📊</span> Statistik/Rapport</a>
+      <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Rapporter</span>
       <a href="{{ url_for('ui.weekview_ui') }}" class="ua-nav-item"><span class="nav-icon">📅</span> Tillbaka till Veckovy</a>
     </nav>
   </aside>

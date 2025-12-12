@@ -253,11 +253,28 @@ def admin_diets_page():
             site_name = str(r[1] or "") if r else ""
         # Diet types via repo (tenant-scoped; site scoping to be added in future phases)
         from core.admin_repo import DietTypesRepo
-
         diets = DietTypesRepo().list_all(tenant_id=1)
+        # Departments for site (to manage defaults)
+        from core.admin_repo import DepartmentsRepo, DietDefaultsRepo
+        departments = []
+        defaults_by_dept: dict[str, dict] = {}
+        if site_id:
+            departments = DepartmentsRepo().list_for_site(site_id)
+            # Prefetch defaults for each department
+            drepo = DietDefaultsRepo()
+            for d in departments:
+                dep_id = d.get("id")
+                defaults = drepo.list_for_department(dep_id)
+                # Map diet_type_id -> default_count
+                defaults_by_dept[dep_id] = {row["diet_type_id"]: int(row["default_count"]) for row in (defaults or [])}
     finally:
         db.close()
-    vm = {"site": {"id": site_id, "name": site_name}, "diets": diets}
+    vm = {
+        "site": {"id": site_id, "name": site_name},
+        "diets": diets,
+        "departments": departments,
+        "defaults_by_dept": defaults_by_dept,
+    }
     return render_template("admin_diets.html", vm=vm)
 
 # ============================================================================
@@ -540,6 +557,54 @@ def admin_diets_create():
     flash("Specialkosttyp skapad.", "success")
     return redirect(url_for("ui.admin_diets_page", site_id=site_id))
 
+@ui_bp.post("/ui/admin/diets/types/delete")
+@require_roles(*ADMIN_ROLES)
+def admin_diets_delete():
+    from flask import redirect, url_for, flash
+    site_id = (request.args.get("site_id") or "").strip()
+    try:
+        diet_type_id = int(request.form.get("diet_type_id") or "0")
+    except Exception:
+        diet_type_id = 0
+    if diet_type_id <= 0:
+        flash("Ogiltigt id.", "error")
+        return redirect(url_for("ui.admin_diets_page", site_id=site_id))
+    try:
+        from core.admin_repo import DietTypesRepo
+        DietTypesRepo().delete(diet_type_id)
+        flash("Borttagen.", "success")
+    except Exception as e:
+        flash(f"Kunde inte ta bort: {e}", "error")
+    return redirect(url_for("ui.admin_diets_page", site_id=site_id))
+
+@ui_bp.post("/ui/admin/diets/defaults/save")
+@require_roles(*ADMIN_ROLES)
+def admin_diets_defaults_save():
+    from flask import redirect, url_for, flash
+    department_id = (request.form.get("department_id") or "").strip()
+    try:
+        diet_type_id = str(request.form.get("diet_type_id") or "").strip()
+        count = int((request.form.get("default_count") or "0").strip() or 0)
+    except Exception:
+        flash("Ogiltiga värden.", "error")
+        return redirect(url_for("ui.admin_diets_page"))
+    if not department_id or not diet_type_id:
+        flash("Saknar avdelning eller kosttyp.", "error")
+        return redirect(url_for("ui.admin_diets_page"))
+    # Upsert one default entry. If count=0 we store zero (no delete helper in repo).
+    from core.admin_repo import DepartmentsRepo
+    try:
+        ver = DepartmentsRepo().get_version(department_id) or 0
+        DepartmentsRepo().upsert_department_diet_defaults(
+            department_id,
+            ver,
+            [{"diet_type_id": diet_type_id, "default_count": int(count)}],
+        )
+        flash("Sparat.", "success")
+    except Exception as e:
+        flash(f"Kunde inte spara: {e}", "error")
+    return redirect(url_for("ui.admin_diets_page"))
+
 @ui_bp.post("/ui/admin/system/diet/create")
 @require_roles("superuser")
 def admin_system_diet_create():
@@ -734,6 +799,15 @@ def weekview_ui():
     # Index by (date, meal_type) for quick lookup
     reg_map = {(r["date"], r["meal_type"]): r["registered"] for r in registrations}
 
+    # Map diet type id -> human name for display
+    diet_name_map: dict[str, str] = {}
+    try:
+        from core.admin_repo import DietTypesRepo
+        _types = DietTypesRepo().list_all(tenant_id=1)
+        diet_name_map = {str(t["id"]): str(t["name"]) for t in _types}
+    except Exception:
+        diet_name_map = {}
+
     # Build DayVM list (Phase 2 - with registration data, Phase 4 - with summaries)
     day_vms = []
     has_dinner = False
@@ -747,6 +821,7 @@ def weekview_ui():
         lunch = mt.get("lunch", {}) if isinstance(mt, dict) else {}
         dinner = mt.get("dinner", {}) if isinstance(mt, dict) else {}
         date_str = d.get("date")
+        day_index = int(d.get("day_of_week") or 0)
         
         # Get residents counts
         residents_lunch = (d.get("residents", {}) or {}).get("lunch", 0)
@@ -777,20 +852,30 @@ def weekview_ui():
         # Build diets list for lunch from enriched payload (Phase 2b)
         diets_obj = d.get("diets", {}) or {}
         lunch_diets = []
+        dinner_diets = []
         try:
             for it in diets_obj.get("lunch") or []:
-                lunch_diets.append(
-                    {
-                        "diet_type_id": str(it.get("diet_type_id")),
-                        "diet_name": str(it.get("diet_name")),
-                        "resident_count": int(it.get("resident_count") or 0),
-                        "marked": bool(it.get("marked")),
-                    }
-                )
+                _id = str(it.get("diet_type_id"))
+                lunch_diets.append({
+                    "diet_type_id": _id,
+                    "diet_name": diet_name_map.get(_id, str(it.get("diet_name"))),
+                    "resident_count": int(it.get("resident_count") or 0),
+                    "marked": bool(it.get("marked")),
+                })
+            for it in diets_obj.get("dinner") or []:
+                _id = str(it.get("diet_type_id"))
+                dinner_diets.append({
+                    "diet_type_id": _id,
+                    "diet_name": diet_name_map.get(_id, str(it.get("diet_name"))),
+                    "resident_count": int(it.get("resident_count") or 0),
+                    "marked": bool(it.get("marked")),
+                })
         except Exception:
             lunch_diets = []
+            dinner_diets = []
 
         day_vm = {
+            "day_of_week": day_index,
             "date": date_str,
             "weekday_name": d.get("weekday_name"),
             "lunch_alt1": lunch.get("alt1"),
@@ -802,6 +887,7 @@ def weekview_ui():
             "residents_lunch": residents_lunch,
             "residents_dinner": residents_dinner,
             "lunch_diets": lunch_diets,
+            "dinner_diets": dinner_diets,
             # Phase 2: Add registration state
             "lunch_registered": lunch_registered,
             "dinner_registered": dinner_registered,
@@ -848,6 +934,104 @@ def weekview_ui():
 # ============================================================================
 # Department Portal (Phase 1) - Read-only week view for a single department
 # ============================================================================
+
+@ui_bp.post("/ui/weekview/residents/save", endpoint="weekview_save_residents")
+@require_roles(*SAFE_UI_ROLES)
+def weekview_save_residents():
+    """Save residents counts (lunch/dinner) for the selected week.
+
+    v1 behavior: apply the provided lunch/dinner counts to all 7 days of the week
+    for the chosen department, using WeekviewRepo.set_residents_counts.
+    """
+    try:
+        site_id = (request.form.get("site_id") or "").strip()
+        department_id = (request.form.get("department_id") or "").strip()
+        year = int(request.form.get("year") or "0")
+        week = int(request.form.get("week") or "0")
+        rl = int((request.form.get("residents_lunch") or "0").strip() or 0)
+        rd = int((request.form.get("residents_dinner") or "0").strip() or 0)
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Invalid form fields"}), 400
+    if year < 2000 or year > 2100 or week < 1 or week > 53 or not department_id:
+        return jsonify({"error": "bad_request", "message": "Invalid params"}), 400
+    tid = session.get("tenant_id")
+    if not tid:
+        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+    # Build items for all days 1..7
+    items = []
+    for dow in range(1, 8):
+        items.append({"day_of_week": dow, "meal": "lunch", "count": rl})
+        items.append({"day_of_week": dow, "meal": "dinner", "count": rd})
+    from .weekview.repo import WeekviewRepo
+    repo = WeekviewRepo()
+    try:
+        repo.set_residents_counts(tid, year, week, department_id, items)
+    except Exception as e:
+        return jsonify({"error": "server_error", "message": str(e)}), 500
+    # Redirect back to weekview
+    from flask import redirect, url_for
+    return redirect(url_for("ui.weekview_ui", site_id=site_id, department_id=department_id, year=year, week=week))
+
+@ui_bp.post("/ui/weekview/diets/save", endpoint="weekview_save_diets")
+@require_roles(*SAFE_UI_ROLES)
+def weekview_save_diets():
+    """Save per-day/meal diet marks for the selected department/week.
+
+    Accepts multiple checkbox values named "mark" where each value is "<dow>|<meal>|<diet_type_id>".
+    Writes using WeekviewRepo.apply_operations without ETag (UI form submit), then redirects back.
+    """
+    from flask import redirect, url_for
+    try:
+        site_id = (request.form.get("site_id") or "").strip()
+        department_id = (request.form.get("department_id") or "").strip()
+        year = int(request.form.get("year") or "0")
+        week = int(request.form.get("week") or "0")
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Invalid fields"}), 400
+    if not department_id or year < 2000 or week < 1 or week > 53:
+        return jsonify({"error": "bad_request", "message": "Invalid params"}), 400
+    tid = session.get("tenant_id")
+    if not tid:
+        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+    # Parse selected marks
+    selected = set()
+    for v in request.form.getlist("mark"):
+        try:
+            parts = str(v).split("|")
+            dow = int(parts[0])
+            meal = str(parts[1])
+            diet = str(parts[2])
+            if meal in ("lunch", "dinner") and 1 <= dow <= 7 and diet:
+                selected.add((dow, meal, diet))
+        except Exception:
+            continue
+    # Load current marks to compute delta ops
+    from .weekview.repo import WeekviewRepo
+    repo = WeekviewRepo()
+    payload = repo.get_weekview(tid, year, week, department_id)
+    current_marked = set()
+    try:
+        summaries = payload.get("department_summaries") or []
+        marks = summaries[0].get("marks") if summaries else []
+        for m in marks or []:
+            if bool(m.get("marked")):
+                current_marked.add((int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type"))))
+    except Exception:
+        current_marked = set()
+    ops = []
+    universe = current_marked | selected
+    for key in sorted(universe):
+        should_mark = key in selected
+        is_marked = key in current_marked
+        if should_mark != is_marked:
+            dow, meal, diet = key
+            ops.append({"day_of_week": int(dow), "meal": str(meal), "diet_type": str(diet), "marked": bool(should_mark)})
+    if ops:
+        try:
+            repo.apply_operations(tid, year, week, department_id, ops)
+        except Exception as e:
+            return jsonify({"error": "server_error", "message": str(e)}), 500
+    return redirect(url_for("ui.weekview_ui", site_id=site_id, department_id=department_id, year=year, week=week))
 
 @ui_bp.get("/ui/portal/week")
 @require_roles(*SAFE_UI_ROLES)
