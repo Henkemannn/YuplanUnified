@@ -18,11 +18,13 @@
           <td>{{ d.name }}</td>
           <td>
             <form method="post" action="{{ url_for('ui.admin_diets_delete', site_id=vm.site.id) }}" onsubmit="return confirm('Ta bort kosttypen?');">
+              {{ csrf_token_input()|safe }}
               <input type="hidden" name="diet_type_id" value="{{ d.id }}">
               <button class="btn btn-danger" type="submit">Ta bort</button>
             </form>
           </td>
         </tr>
+        
         {% endfor %}
         {% if not vm.diets %}
         <tr><td colspan="2" class="muted">Inga specialkosttyper upplagda ännu.</td></tr>
@@ -35,6 +37,7 @@
         <label for="diet_name">Namn</label>
         <input id="diet_name" type="text" name="name" required>
       </div>
+      {{ csrf_token_input()|safe }}
       <button class="btn" type="submit">Lägg till</button>
     </form>
   </section>
@@ -59,6 +62,7 @@
             <td>{{ d.name }}</td>
             <td>
               <form class="inline" method="post" action="{{ url_for('ui.admin_diets_defaults_save') }}">
+                {{ csrf_token_input()|safe }}
                 <input type="hidden" name="department_id" value="{{ dep.id }}">
                 <input type="hidden" name="diet_type_id" value="{{ d.id }}">
                 <input type="number" name="default_count" min="0" value="{{ current }}" style="width:6em">

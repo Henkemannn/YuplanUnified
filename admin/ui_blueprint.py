@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, request, current_app, redirect, ur
 from core.app_authz import require_roles
 from core.db import get_session
 from core.admin_repo import DepartmentsRepo, SitesRepo, DietTypesRepo
+from core.admin_repo import DietDefaultsRepo
 from core.menu_service import MenuServiceDB
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
@@ -286,9 +287,23 @@ def admin_department_edit(department_id: str) -> str:  # type: ignore[override]
             return redirect(url_for("admin_ui.admin_departments_list"))
         
         try:
-            depts_repo.update_department(
+            # Gather specialkost defaults from form first
+            items: list[dict[str, int]] = []
+            for key, val in request.form.items():
+                if key.startswith("diet_default_"):
+                    dtid = key.replace("diet_default_", "")
+                    try:
+                        cnt = int(val)
+                    except ValueError:
+                        cnt = 0
+                    items.append({"diet_type_id": int(dtid), "default_count": cnt})
+            # Apply defaults first to avoid version conflicts, then update department fields
+            new_version_for_update = current_version
+            if items:
+                new_version_for_update = depts_repo.upsert_department_diet_defaults(department_id, current_version, items)
+            new_version = depts_repo.update_department(
                 department_id,
-                current_version,
+                new_version_for_update,
                 name=new_name,
                 resident_count_fixed=count_int,
                 notes=new_notes,
@@ -303,7 +318,7 @@ def admin_department_edit(department_id: str) -> str:  # type: ignore[override]
     db = get_session()
     try:
         row = db.execute(
-            text("SELECT id, site_id, name, resident_count_fixed, notes FROM departments WHERE id=:id"),
+            text("SELECT id, site_id, name, resident_count_fixed, notes, version FROM departments WHERE id=:id"),
             {"id": department_id},
         ).fetchone()
     finally:
@@ -319,9 +334,15 @@ def admin_department_edit(department_id: str) -> str:  # type: ignore[override]
         "name": str(row[2]) if row[2] else "",
         "resident_count_fixed": int(row[3] or 0),
         "notes": str(row[4]) if row[4] else "",
+        "version": int(row[5] or 0),
     }
-    
-    vm = {"department": dept}
+    # Load diet types and defaults
+    diets_repo = DietTypesRepo()
+    defaults_repo = DietDefaultsRepo()
+    diets = diets_repo.list_all(tenant_id=1)
+    defaults_items = defaults_repo.list_for_department(department_id) or []
+    defaults_by_id: dict[str, int] = {str(it["diet_type_id"]): int(it.get("default_count", 0)) for it in defaults_items}
+    vm = {"department": dept, "diet_types": diets, "diet_defaults": defaults_by_id}
     return render_template("admin_department_edit.html", vm=vm)
 
 
@@ -330,7 +351,14 @@ def admin_department_edit(department_id: str) -> str:  # type: ignore[override]
 def admin_specialkost_list() -> str:  # type: ignore[override]
     """List all dietary types (specialkost)."""
     repo = DietTypesRepo()
-    diet_types = repo.list_all(tenant_id=1)
+    # Resolve tenant from request context (falls back to 1)
+    from flask import g as _g
+    tid = 1
+    try:
+        tid = int(getattr(_g, "tenant_id", 1) or 1)
+    except Exception:
+        tid = 1
+    diet_types = repo.list_all(tenant_id=tid)
     vm = {"diet_types": diet_types}
     return render_template("admin_specialkost.html", vm=vm)
 
@@ -342,22 +370,25 @@ def admin_specialkost_new() -> str:  # type: ignore[override]
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()
         default_select = request.form.get("default_select") == "on"
-        
         if not name:
             flash("Namn måste anges.", "danger")
             return render_template("admin_specialkost_new.html", vm={})
-        
         repo = DietTypesRepo()
+        # Resolve tenant id
+        from flask import g as _g
+        tid = 1
         try:
-            repo.create(tenant_id=1, name=name, default_select=default_select)
+            tid = int(getattr(_g, "tenant_id", 1) or 1)
+        except Exception:
+            tid = 1
+        try:
+            repo.create(tenant_id=tid, name=name, default_select=default_select)
             flash(f"Kosttyp '{name}' skapad.", "success")
         except Exception as e:
             flash(f"Fel vid skapande: {e}", "danger")
-        
+            return render_template("admin_specialkost_new.html", vm={})
         return redirect(url_for("admin_ui.admin_specialkost_list"))
-    
-    vm = {}
-    return render_template("admin_specialkost_new.html", vm=vm)
+    return render_template("admin_specialkost_new.html", vm={})
 
 
 @admin_ui_bp.route("/ui/admin/specialkost/<int:kosttyp_id>/edit", methods=["GET", "POST"])
@@ -406,6 +437,11 @@ def admin_specialkost_delete(kosttyp_id: int) -> str:  # type: ignore[override]
         flash(f"Fel vid borttagning: {e}", "danger")
     
     return redirect(url_for("admin_ui.admin_specialkost_list"))
+@admin_ui_bp.get("/ui/admin/diets")
+@require_roles("admin", "superuser")
+def admin_diets_redirect() -> str:  # type: ignore[override]
+    """Redirect old diets path to canonical specialkost page to avoid confusion."""
+    return redirect(url_for("admin_ui.admin_specialkost_list"), code=302)
 
 
 # ========================================

@@ -38,6 +38,7 @@
           <td>
             <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}">Redigera</a>
             <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" style="display:inline">
+              {{ csrf_token_input()|safe }}
               <button type="submit" class="yp-button yp-button-danger">Ta bort</button>
             </form>
           </td>

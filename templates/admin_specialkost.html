@@ -51,6 +51,7 @@
         <td>
           <a href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" class="admin-link-btn">Redigera</a>
           <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" style="display:inline;" onsubmit="return confirm('Är du säker på att du vill ta bort denna kosttyp?');">
+            {{ csrf_token_input()|safe }}
             <button type="submit" class="admin-link-btn admin-btn-danger">Ta bort</button>
           </form>
         </td>

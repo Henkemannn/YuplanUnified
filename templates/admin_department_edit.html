@@ -21,6 +21,7 @@
   {% endwith %}
 
   <form method="POST" class="admin-form">
+    {{ csrf_token_input()|safe }}
     <div class="admin-form-group">
       <label for="name">Avdelningsnamn</label>
       <input type="text" id="name" name="name" value="{{ vm.department.name }}" required>
@@ -41,5 +42,25 @@
       <a href="{{ url_for('admin_ui.admin_departments_list') }}" class="admin-btn-secondary">Avbryt</a>
     </div>
   </form>
+
+  <section class="admin-card" style="margin-top:2rem">
+    <h2>Specialkost (antal på avdelningen)</h2>
+    <p class="muted">Anger hur många på avdelningen som har specialkosten.</p>
+    <form method="POST" class="admin-form">
+      {{ csrf_token_input()|safe }}
+      <div class="admin-grid">
+        {% for d in vm.diet_types %}
+        {% set current = (vm.diet_defaults.get(d.id|string) or vm.diet_defaults.get(d.id) or 0) %}
+        <div class="admin-form-row">
+          <label for="diet_default_{{ d.id }}">{{ d.name }}</label>
+          <input id="diet_default_{{ d.id }}" type="number" min="0" name="diet_default_{{ d.id }}" value="{{ current }}" style="width:6em">
+        </div>
+        {% endfor %}
+      </div>
+      <div class="admin-form-actions">
+        <button type="submit" class="admin-btn-primary">Spara specialkost</button>
+      </div>
+    </form>
+  </section>
 </div>
 {% endblock %}

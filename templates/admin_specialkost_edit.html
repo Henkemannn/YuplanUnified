@@ -26,6 +26,7 @@
   <section class="ua-section">
     <div class="ua-card">
       <form method="POST" class="admin-form">
+        {{ csrf_token_input()|safe }}
       <div class="admin-form-row">
         <label for="name">Kosttypsnamn</label>
         <input type="text" id="name" name="name" value="{{ vm.diet_type.name }}" required>
