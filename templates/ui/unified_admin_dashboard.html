@@ -1,6 +1,7 @@
 {% extends "ui/unified_admin_base.html" %}
 
-{% block admin_title %}Adminpanel{% endblock %}
+{% block admin_title %}{{ vm.tenant_name or tenant_name or 'Adminpanel' }}{% endblock %}
+{% block admin_subtitle %}{{ vm.site_name or current_site_name or 'Hantera din Yuplan-miljö för denna kund.' }}{% endblock %}
 
 {% block admin_main %}
   <!-- Legacy test hooks: ensure expected substrings exist without visual impact -->

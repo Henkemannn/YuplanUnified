@@ -1,6 +1,14 @@
 {% extends "_base.html" %}
 
-{% block title %}{% if vm.site_name %}{{ vm.site_name }} Admin - Yuplan Unified{% else %}Admin - Yuplan Unified{% endif %}{% endblock %}
+{% block title %}
+  {% if vm.tenant_name or tenant_name %}
+    Kundadmin – {{ vm.tenant_name or tenant_name }}{% if vm.site_name or current_site_name %} — {{ vm.site_name or current_site_name }}{% endif %}
+  {% elif vm.site_name or current_site_name %}
+    Kundadmin – {{ vm.site_name or current_site_name }}
+  {% else %}
+    Kundadmin – Yuplan Unified
+  {% endif %}
+{% endblock %}
 
 {% block head %}
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-proposal.svg') }}">
@@ -33,8 +41,20 @@
   <div class="ua-shell">
     <header class="ua-topbar content-header">
       <div class="ua-topbar-main">
-        <h1 class="ua-topbar-title">{% block admin_title %}Adminpanel{% endblock %}</h1>
-        <p class="ua-topbar-subtitle">{% block admin_subtitle %}Hantera din Yuplan-miljö för denna kund.{% endblock %}</p>
+        <h1 class="ua-topbar-title">
+          {% block admin_title %}
+            {{ vm.tenant_name or tenant_name or 'Adminpanel' }}
+          {% endblock %}
+        </h1>
+        <p class="ua-topbar-subtitle">
+          {% block admin_subtitle %}
+            {% if vm.site_name or current_site_name %}
+              {{ vm.site_name or current_site_name }}
+            {% else %}
+              Hantera din Yuplan-miljö för denna kund.
+            {% endif %}
+          {% endblock %}
+        </p>
       </div>
     </header>
 

@@ -41,7 +41,7 @@
     <section class="sa-grid">
       <article class="sa-card sa-card-wide">
         <h2>Aktiva kunder</h2>
-        <p class="sa-card-sub">Filtrerad lista (testkunder döljs automatiskt).</p>
+        <p class="sa-card-sub">Lista över tenants (kunder). Hantera sites per kund via "Visa sites".</p>
 
         {% if vm.customers %}
         <div class="sa-table-wrap">
@@ -49,7 +49,7 @@
             <thead>
               <tr>
                 <th>Kund</th>
-                <th>Site</th>
+                <th>Antal sites</th>
                 <th>Typ</th>
                 <th>Status</th>
                 <th>Åtgärder</th>
@@ -59,11 +59,11 @@
               {% for c in vm.customers %}
               <tr>
                 <td>{{ c.tenant_name or '-' }}</td>
-                <td>{{ c.site_name }}</td>
+                <td>{{ c.site_count or 0 }}</td>
                 <td>{{ c.customer_type or 'Okänd' }}</td>
                 <td>{{ c.status or 'Aktiv' }}</td>
                 <td>
-                  <a class="sa-btn sa-btn-secondary sa-btn-small" href="{{ url_for('ui.admin_dashboard') }}">Öppna admin</a>
+                  <a class="sa-btn sa-btn-small" href="{{ url_for('admin_ui.systemadmin_customer_sites', tenant_id=c.tenant_id) }}" target="_blank">Visa sites</a>
                 </td>
               </tr>
               {% endfor %}

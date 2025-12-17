@@ -101,6 +101,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         for k, v in config_override.items():  # also allow direct Flask config keys
             if k.isupper():
                 app.config[k] = v
+    # Resolve stable absolute dev DB path when DATABASE_URL not provided
+    try:
+        if not os.getenv("DATABASE_URL"):
+            # Default from Config is sqlite:///dev.db; replace with absolute instance path
+            if str(cfg.database_url).startswith("sqlite:///"):
+                os.makedirs(app.instance_path, exist_ok=True)
+                abs_db = os.path.join(app.instance_path, "dev.db")
+                cfg.database_url = f"sqlite:///{abs_db}"
+    except Exception:
+        pass
     app.config.update(cfg.to_flask_dict())
     # Development convenience: map DEV_DEPARTMENT_ID env into app.config for portal fallback.
     dev_dept = os.getenv("DEV_DEPARTMENT_ID")
@@ -110,6 +120,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- DB setup ---
     init_engine(cfg.database_url)
+    try:
+        # Always emit a single startup line with DB location
+        db_url = str(cfg.database_url)
+        sqlite_file = None
+        if db_url.startswith("sqlite:///"):
+            sqlite_file = os.path.abspath(db_url.replace("sqlite:///", "", 1))
+        line = f"DB_URL={db_url}" + (f" ; SQLITE_FILE={sqlite_file}" if sqlite_file else "")
+        print(line)
+    except Exception:
+        pass
 
     # Inject department id into session for local dev (no auth layer) so portal works without 403.
     @app.before_request  # type: ignore[misc]
@@ -332,27 +352,51 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 return ""
             return f'<input type="hidden" name="csrf_token" value="{tok}">'  # nosec B704
 
-        # Lookup current site name by tenant_id (if available)
+        # Lookup current tenant and site for UI chrome
         current_site_name = None
+        tenant_name = None
         try:
             tid_val = getattr(g, "tenant_id", None)
             if tid_val:
                 from sqlalchemy import text as _sa_text  # local import
                 db = get_session()
                 try:
-                    row = db.execute(
-                        _sa_text("SELECT name FROM sites WHERE tenant_id=:tid LIMIT 1"),
-                        {"tid": int(tid_val)},
-                    ).fetchone()
-                    if row and row[0]:
-                        current_site_name = str(row[0])
+                    # Prefer explicit site_id from session if present
+                    from flask import session as _sess
+                    sid = _sess.get("site_id")
+                    if sid:
+                        row_s = db.execute(
+                            _sa_text("SELECT name FROM sites WHERE id=:sid LIMIT 1"),
+                            {"sid": str(sid)},
+                        ).fetchone()
+                        if row_s and row_s[0]:
+                            current_site_name = str(row_s[0])
+                    if not current_site_name:
+                        row = db.execute(
+                            _sa_text("SELECT name FROM sites WHERE tenant_id=:tid ORDER BY name LIMIT 1"),
+                            {"tid": int(tid_val)},
+                        ).fetchone()
+                        if row and row[0]:
+                            current_site_name = str(row[0])
+                    # Also try to resolve tenant name from tenants table
+                    try:
+                        row_t = db.execute(
+                            _sa_text("SELECT name FROM tenants WHERE id=:tid LIMIT 1"),
+                            {"tid": int(tid_val)},
+                        ).fetchone()
+                        if row_t and row_t[0]:
+                            tenant_name = str(row_t[0])
+                    except Exception:
+                        tenant_name = None
                 finally:
                     db.close()
         except Exception:
             current_site_name = None
+            tenant_name = None
 
         return {
             "tenant_id": getattr(g, "tenant_id", None),
+            "tenant_name": tenant_name,
             "feature_enabled": feature_enabled,
             "csrf_token": csrf_token(),
             "csrf_token_input": csrf_token_input,
@@ -553,8 +597,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     try:
         from admin.ui_blueprint import admin_ui_bp
         app.register_blueprint(admin_ui_bp)
+        app.logger.info("Registered admin_ui blueprint")
     except Exception:
-        pass
+        app.logger.warning("Failed to register admin_ui blueprint", exc_info=True)
     app.register_blueprint(weekview_api_bp)
     app.register_blueprint(planera_api_bp)
     app.register_blueprint(report_api_bp)

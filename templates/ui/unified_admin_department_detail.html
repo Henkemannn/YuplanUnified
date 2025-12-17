@@ -130,8 +130,24 @@
 <section class="ua-section">
   <div class="ua-card">
     <h2>Specialkost</h2>
-    <p class="ua-muted">Koppling till specialkosttyper visas / redigeras här senare.</p>
-    <a href="{{ url_for('ui.admin_specialkost_list') }}">Gå till specialkost</a>
+    {% if vm.diet_types and vm.diet_types|length > 0 %}
+      <table class="ua-table">
+        <tr><th>Typ</th><th>Standardantal</th></tr>
+        {% for t in vm.diet_types %}
+          {% set cnt = vm.diet_defaults.get(t.id, 0) %}
+          <tr>
+            <td>{{ t.name }}</td>
+            <td>{{ cnt }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    {% else %}
+      <p class="ua-muted">Inga specialkosttyper definierade.</p>
+    {% endif %}
+    <div style="margin-top:8px; display:flex; gap:8px;">
+      <a class="ua-button ua-button-secondary" href="{{ url_for('ui.admin_departments_edit_form', dept_id=vm.department.id) }}">Redigera specialkost</a>
+      <a class="ua-button ua-button-ghost" href="{{ url_for('ui.admin_specialkost_list') }}">Hantera specialkosttyper</a>
+    </div>
   </div>
 </section>
 

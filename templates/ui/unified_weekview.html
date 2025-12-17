@@ -108,7 +108,7 @@
                   <span>LUNCH</span>
                 </div>
                 <a
-            <p class="subtitle">Vecka {{ vm.week }}, År {{ vm.year }} – {{ vm.site_name }}</p>
+                  class="meal-action-link"
                   href="/ui/register/meal?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&date={{ day.date }}&meal=lunch"
                   title="Öppna registreringsvy (lunch)"
                 >Registrera</a>
@@ -116,122 +116,6 @@
                 <!-- Premium Registration Badge -->
                 {% if day.lunch_registered %}
                   <span class="yp-badge yp-badge-success registration-badge">✓ Registrerad</span>
-      <!-- Step 1: Week selector (GET) -->
-      <div class="ua-card card" aria-label="Välj vecka">
-        <div class="card-body">
-          <form class="yp-form" method="get" action="{{ url_for('ui.weekview_ui') }}">
-            <input type="hidden" name="site_id" value="{{ vm.site_id }}" />
-            <input type="hidden" name="department_id" value="{{ vm.department_id }}" />
-            <div class="form-row">
-              <label for="year">År</label>
-              <input id="year" name="year" type="number" value="{{ vm.year }}" min="2000" max="2100" />
-              <label for="week">Vecka</label>
-              <input id="week" name="week" type="number" value="{{ vm.week }}" min="1" max="53" />
-            </div>
-            <div class="form-actions">
-              {% set prev_week = (vm.week - 1) if vm.week > 1 else 53 %}
-              {% set prev_year = (vm.year - 1) if vm.week == 1 else vm.year %}
-              {% set next_week = (vm.week + 1) if vm.week < 53 else 1 %}
-              {% set next_year = (vm.year + 1) if vm.week == 53 else vm.year %}
-              <button class="yp-button" type="submit">Visa</button>
-              <a class="yp-button" href="{{ url_for('ui.weekview_ui') }}?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&year={{ prev_year }}&week={{ prev_week }}">Föregående</a>
-              <a class="yp-button yp-button-secondary" href="{{ url_for('ui.weekview_ui') }}?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&year={{ vm.current_year }}&week={{ vm.current_week }}">Denna</a>
-              <a class="yp-button" href="{{ url_for('ui.weekview_ui') }}?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&year={{ next_year }}&week={{ next_week }}">Nästa</a>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      <!-- Step 2: Department block (single department v1) -->
-      <div class="ua-card card" aria-label="Avdelningsöversikt">
-        <div class="card-body">
-          <h2 class="dept-title">{{ vm.department_name }}</h2>
-          <!-- Step 3: Residents inputs + save -->
-          <form class="yp-form" method="post" action="{{ url_for('ui.weekview_save_residents') }}">
-            <input type="hidden" name="site_id" value="{{ vm.site_id }}" />
-            <input type="hidden" name="department_id" value="{{ vm.department_id }}" />
-            <input type="hidden" name="year" value="{{ vm.year }}" />
-            <input type="hidden" name="week" value="{{ vm.week }}" />
-            <div class="form-row">
-              <label for="residents_lunch">Boende Lunch</label>
-              <input id="residents_lunch" name="residents_lunch" type="number" min="0" value="{{ (vm.days[0].residents_lunch if vm.days and vm.days|length>0 else 0) }}" />
-              <label for="residents_dinner">Boende Kväll</label>
-              <input id="residents_dinner" name="residents_dinner" type="number" min="0" value="{{ (vm.days[0].residents_dinner if vm.days and vm.days|length>0 else 0) }}" />
-              <button class="yp-button" type="submit">Spara boendeantal</button>
-            </div>
-          </form>
-          <table class="yp-table weekview-table">
-            <thead>
-              <tr>
-                <th>Dag</th>
-                <th>Lunch</th>
-                <th>Kväll</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for d in vm.days %}
-                <tr>
-                  <td>{{ d.weekday_name }}</td>
-                  <td>
-                    {% set rl = d.residents_lunch %}
-                    <span class="cell-residents" aria-label="Boende lunch">{{ rl }}</span>
-                  </td>
-                  <td>
-                    {% set rd = d.residents_dinner %}
-                    <span class="cell-residents" aria-label="Boende kväll">{{ rd }}</span>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          
-          <!-- Step 4b: Specialkost markeringar -->
-          <form class="yp-form" method="post" action="{{ url_for('ui.weekview_save_diets') }}">
-            <input type="hidden" name="site_id" value="{{ vm.site_id }}" />
-            <input type="hidden" name="department_id" value="{{ vm.department_id }}" />
-            <input type="hidden" name="year" value="{{ vm.year }}" />
-            <input type="hidden" name="week" value="{{ vm.week }}" />
-            <table class="yp-table weekview-table">
-              <thead>
-                <tr>
-                  <th>Dag</th>
-                  <th>Lunch – Specialkoster</th>
-                  <th>Kväll – Specialkoster</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for d in vm.days %}
-                <tr>
-                  <td>{{ d.weekday_name }}</td>
-                  <td>
-                    {% for it in d.lunch_diets %}
-                      <label class="checkbox-label" style="display:inline-block;margin-right:0.75rem;">
-                        <input type="checkbox" name="mark" value="{{ d.day_of_week }}|lunch|{{ it.diet_type_id }}" {% if it.marked %}checked{% endif %}>
-                        {{ it.diet_name }} ({{ it.resident_count }})
-                      </label>
-                    {% endfor %}
-                    {% if not d.lunch_diets %}<span class="muted">–</span>{% endif %}
-                  </td>
-                  <td>
-                    {% for it in d.dinner_diets %}
-                      <label class="checkbox-label" style="display:inline-block;margin-right:0.75rem;">
-                        <input type="checkbox" name="mark" value="{{ d.day_of_week }}|dinner|{{ it.diet_type_id }}" {% if it.marked %}checked{% endif %}>
-                        {{ it.diet_name }} ({{ it.resident_count }})
-                      </label>
-                    {% endfor %}
-                    {% if not d.dinner_diets %}<span class="muted">–</span>{% endif %}
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-            <div class="form-actions">
-              <button class="yp-button" type="submit">Spara specialkoster</button>
-            </div>
-          </form>
-        </div>
-      </div>
-
                 {% else %}
                   <span class="yp-badge yp-badge-muted registration-badge">Ej gjord</span>
                 {% endif %}
@@ -262,8 +146,6 @@
                 <div class="residents-count">
                   Boende: {{ day.residents_lunch }}
                 </div>
-            .weekview-table th, .weekview-table td { text-align: left; }
-            .dept-title { margin-bottom: var(--yp-gap-md); }
               {% endif %}
 
               {% if day.lunch_diets and day.lunch_diets|length > 0 %}

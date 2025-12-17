@@ -39,7 +39,7 @@
 <section class="admin-card">
   <h2>Avdelningar</h2>
   <div class="admin-filters">
-  <form method="get" action="/ui/admin/dashboard">
+  <form method="get" action="/ui/admin">
     <select name="site_id">
       {% for s_id, s_name in vm.sites %}
         <option value="{{ s_id }}" {% if vm.selected_site_id == s_id %}selected{% endif %}>{{ s_name }}</option>

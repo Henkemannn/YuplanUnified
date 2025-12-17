@@ -64,7 +64,7 @@ def ui_login():  # Simple HTML login that sets session directly
             if user.role == "superuser":
                 target = "/ui/systemadmin/dashboard"
             elif user.role == "admin":
-                target = "/ui/admin/dashboard"
+                target = "/ui/admin"
             else:
                 # Fall back to existing start views
                 target = "/ui/weekview"

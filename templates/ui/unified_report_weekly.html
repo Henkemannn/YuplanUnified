@@ -24,62 +24,8 @@
   </div>
 
   {% if vm.departments %}
-    <div class="ua-card card" aria-label="Filtrera veckorapport">
-      <div class="card-body">
-        <form class="yp-form" method="get" action="{{ url_for('ui.admin_report_week') }}">
-          <div class="form-row">
-            <label for="year">År</label>
-            <input id="year" name="year" type="number" value="{{ vm.selected_year }}" min="2000" max="2100" />
-            <label for="week">Vecka</label>
-            <input id="week" name="week" type="number" value="{{ vm.selected_week }}" min="1" max="53" />
-            <label for="department_id">Avdelning</label>
-            <select id="department_id" name="department_id">
-              {% if vm.selected_department_id == 'ALL' %}
-                {% for opt in vm.departments_options %}
-                  <option value="{{ opt.id }}" {% if opt.id == vm.selected_department_id %}selected{% endif %}>{{ opt.name }}</option>
-                {% endfor %}
-              {% else %}
-                {# When a specific department is selected, only show that option to avoid other names appearing in filtered view #}
-                {% for opt in vm.departments_options %}
-                  {% if opt.id == vm.selected_department_id %}
-                    <option value="{{ opt.id }}" selected>{{ opt.name }}</option>
-                  {% endif %}
-                {% endfor %}
-              {% endif %}
-            </select>
-            <label for="view">Vy</label>
-            <select id="view" name="view">
-              <option value="week" {% if vm.view_mode == 'week' %}selected{% endif %}>Vecka</option>
-              <option value="day" {% if vm.view_mode == 'day' %}selected{% endif %}>Dag</option>
-            </select>
-          </div>
-          <div class="form-actions">
-            {% set prev_week = (vm.selected_week - 1) if vm.selected_week > 1 else 53 %}
-            {% set prev_year = (vm.selected_year - 1) if vm.selected_week == 1 else vm.selected_year %}
-            {% set next_week = (vm.selected_week + 1) if vm.selected_week < 53 else 1 %}
-            {% set next_year = (vm.selected_year + 1) if vm.selected_week == 53 else vm.selected_year %}
-            <button class="yp-button" type="submit">Visa</button>
-            <a class="yp-button" href="{{ url_for('ui.admin_report_week') }}?year={{ prev_year }}&week={{ prev_week }}&department_id={{ vm.selected_department_id }}&view={{ vm.view_mode }}">Föregående vecka</a>
-            <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_report_week') }}">Denna vecka</a>
-            <a class="yp-button" href="{{ url_for('ui.admin_report_week') }}?year={{ next_year }}&week={{ next_week }}&department_id={{ vm.selected_department_id }}&view={{ vm.view_mode }}">Nästa vecka</a>
-          </div>
-        </form>
-        <p class="subtitle">Vecka {{ vm.selected_week }}, {{ vm.selected_year }}</p>
-      </div>
-    </div>
     <div class="ua-card card">
       <div class="card-body">
-        {% set has_rows = false %}
-        {% for dep in vm.departments %}
-          {% if dep.rows and dep.rows|length > 0 %}
-            {% set has_rows = true %}
-          {% endif %}
-        {% endfor %}
-        {% if not has_rows %}
-          <div class="ua-alert ua-alert-info" role="note" aria-live="polite">
-            <p>Rapporten bygger på registreringar från Veckovyn.<br/>Veckovyn är under utveckling, därför finns ingen data att visa ännu.</p>
-          </div>
-        {% endif %}
         <div class="table-responsive">
           <div class="diets-labels">
             <span class="ua-label">Boende Lunch</span>
@@ -187,22 +133,7 @@
       </div>
     </div>
   {% else %}
-    <div class="ua-card card" aria-label="Filtrera veckorapport">
-      <div class="card-body">
-        <form class="yp-form" method="get" action="{{ url_for('ui.admin_report_week') }}">
-          <div class="form-row">
-            <label for="year">År</label>
-            <input id="year" name="year" type="number" value="{{ vm.selected_year or vm.year }}" min="2000" max="2100" />
-            <label for="week">Vecka</label>
-            <input id="week" name="week" type="number" value="{{ vm.selected_week or vm.week }}" min="1" max="53" />
-          </div>
-          <div class="form-actions">
-            <button class="yp-button" type="submit">Visa</button>
-          </div>
-        </form>
-        <p class="help-text">Ingen data tillgänglig för vald vy.</p>
-      </div>
-    </div>
+    <p class="help-text">Ingen data tillgänglig för vald vy.</p>
   {% endif %}
 
   <style>

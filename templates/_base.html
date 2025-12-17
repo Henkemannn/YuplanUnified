@@ -41,11 +41,11 @@
   <span class="staging-note">Ej produktion</span>
   </div>
 {% endif %}
-{% if g.get('impersonating') %}
+{% if g.impersonating %}
 <div class="impersonation-banner">
-  <strong>Du är inloggad som admin för {{ current_site_name or ('tenant ' ~ tenant_id) }} (impersonering).</strong>
-  <span style="margin-left:8px">Återstående {{ g.get('impersonation_remaining', '?') }}s</span>
-  {% if g.get('impersonation_reason') %}<span style="margin-left:8px">Orsak: {{ g.get('impersonation_reason') }}</span>{% endif %}
+  <strong>Du är inloggad som admin för kund: {{ tenant_name or tenant_id }}{% if current_site_name %} — plats: {{ current_site_name }}{% endif %} (impersonering).</strong>
+  <span style="margin-left:8px">Återstående {{ g.impersonation_remaining if g.impersonation_remaining is not none else '?' }}s</span>
+  {% if g.impersonation_reason %}<span style="margin-left:8px">Orsak: {{ g.impersonation_reason }}</span>{% endif %}
   <form id="imp-stop" method="post" action="/superuser/impersonate/stop" class="inline-form">
     {% if g.features.get('strict_csrf') %}{{ csrf_token_input()|safe }}{% endif %}
     <button class="impersonation-stop-btn">Stoppa impersonering</button>
@@ -59,7 +59,7 @@
     <nav>
       <strong>Yuplan</strong>
       · <a href="{{ url_for('ui.weekview_ui') }}" class="{% if request.endpoint=='ui.weekview_ui' %}active{% endif %}">Översikt</a>
-      {% if current_user %}<span class="pill">Tenant {{ tenant_id }}</span>{% endif %}
+      {% if tenant_id %}<span class="pill">{{ tenant_name or ('Tenant ' ~ tenant_id) }}{% if current_site_name %} — {{ current_site_name }}{% endif %}</span>{% endif %}
       <span style="float:right">
         {% if current_user and current_user.role in ('admin','superuser') %}
           <a class="btn" href="{{ url_for('export_api.export_notes') }}">Exportera Notes</a>

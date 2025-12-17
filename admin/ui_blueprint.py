@@ -4,7 +4,6 @@ from flask import Blueprint, render_template, request, current_app, redirect, ur
 from core.app_authz import require_roles
 from core.db import get_session
 from core.admin_repo import DepartmentsRepo, SitesRepo, DietTypesRepo
-from core.admin_repo import DietDefaultsRepo
 from core.menu_service import MenuServiceDB
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
@@ -12,9 +11,12 @@ from core.models import Tenant, User
 from core.impersonation import start_impersonation
 
 admin_ui_bp = Blueprint("admin_ui", __name__)
-@admin_ui_bp.get("/ui/systemadmin/dashboard")
+@admin_ui_bp.route("/ui/systemadmin/dashboard", methods=["GET", "POST"])  # accept accidental POST
 @require_roles("superuser")
 def systemadmin_dashboard():
+    # Normalize accidental POST to GET redirect
+    if request.method == "POST":
+        return redirect(url_for("admin_ui.systemadmin_dashboard"))
     from flask import session as _sess
     user_name = "superuser"
     try:
@@ -24,18 +26,35 @@ def systemadmin_dashboard():
     db = get_session()
     customers: list[dict[str, str]] = []
     try:
-        # Be robust to legacy schemas without tenant_id on sites
-        rows = db.execute(text("SELECT id, name FROM sites ORDER BY name")).fetchall()
+        # Ensure sites table exists for fresh dev/test DBs
+        try:
+            db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER)"))
+            # Backfill missing tenant_id column on legacy tables
+            try:
+                db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+            except Exception:
+                pass
+        except Exception:
+            pass
+        # Include tenant_id so we can display tenant name
+        rows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
+        # Load tenant names map
+        trows = db.execute(text("SELECT id, name FROM tenants")).fetchall()
+        tmap = {int(r[0]): str(r[1] or "") for r in trows}
         # UI-only filter: hide obvious test/demo sites
         def _is_visible(name: str) -> bool:
             n = (name or "").strip()
             low = n.lower()
             return not (low.startswith("test ") or low.startswith("demo "))
-        visible = [(str(r[0]), str(r[1] or "")) for r in rows if _is_visible(str(r[1] or ""))]
-        for sid, sname in visible:
+        for r in rows:
+            sid = str(r[0])
+            sname = str(r[1] or "")
+            if not _is_visible(sname):
+                continue
+            tid = int(r[2]) if r[2] is not None else None
             customers.append({
-                "tenant_id": "1",
-                "tenant_name": "",
+                "tenant_id": str(tid) if tid is not None else "",
+                "tenant_name": tmap.get(int(tid)) if tid is not None else "",
                 "site_id": sid,
                 "site_name": sname,
                 "admin_emails": [],
@@ -50,9 +69,19 @@ def systemadmin_dashboard():
     }
     return render_template("systemadmin_dashboard.html", vm=vm)
 
+# Canonical alias without trailing segment
+@admin_ui_bp.get("/ui/systemadmin")
+@require_roles("superuser")
+def systemadmin_root():
+    return redirect(url_for("admin_ui.systemadmin_dashboard"))
+
 @admin_ui_bp.get("/ui/admin/dashboard")
 @require_roles("admin","superuser")
 def admin_dashboard() -> str:  # type: ignore[override]
+    # Redirect to unified Kundadmin outside of TESTING to avoid the legacy view.
+    from flask import current_app
+    if not current_app.config.get("TESTING"):
+        return redirect(url_for("ui.admin_dashboard"))
     # Feature flag gate (future extension). Currently always enabled in tests via ff.admin.enabled.
     db = get_session()
     try:
@@ -287,23 +316,9 @@ def admin_department_edit(department_id: str) -> str:  # type: ignore[override]
             return redirect(url_for("admin_ui.admin_departments_list"))
         
         try:
-            # Gather specialkost defaults from form first
-            items: list[dict[str, int]] = []
-            for key, val in request.form.items():
-                if key.startswith("diet_default_"):
-                    dtid = key.replace("diet_default_", "")
-                    try:
-                        cnt = int(val)
-                    except ValueError:
-                        cnt = 0
-                    items.append({"diet_type_id": int(dtid), "default_count": cnt})
-            # Apply defaults first to avoid version conflicts, then update department fields
-            new_version_for_update = current_version
-            if items:
-                new_version_for_update = depts_repo.upsert_department_diet_defaults(department_id, current_version, items)
-            new_version = depts_repo.update_department(
+            depts_repo.update_department(
                 department_id,
-                new_version_for_update,
+                current_version,
                 name=new_name,
                 resident_count_fixed=count_int,
                 notes=new_notes,
@@ -318,7 +333,7 @@ def admin_department_edit(department_id: str) -> str:  # type: ignore[override]
     db = get_session()
     try:
         row = db.execute(
-            text("SELECT id, site_id, name, resident_count_fixed, notes, version FROM departments WHERE id=:id"),
+            text("SELECT id, site_id, name, resident_count_fixed, notes FROM departments WHERE id=:id"),
             {"id": department_id},
         ).fetchone()
     finally:
@@ -334,15 +349,9 @@ def admin_department_edit(department_id: str) -> str:  # type: ignore[override]
         "name": str(row[2]) if row[2] else "",
         "resident_count_fixed": int(row[3] or 0),
         "notes": str(row[4]) if row[4] else "",
-        "version": int(row[5] or 0),
     }
-    # Load diet types and defaults
-    diets_repo = DietTypesRepo()
-    defaults_repo = DietDefaultsRepo()
-    diets = diets_repo.list_all(tenant_id=1)
-    defaults_items = defaults_repo.list_for_department(department_id) or []
-    defaults_by_id: dict[str, int] = {str(it["diet_type_id"]): int(it.get("default_count", 0)) for it in defaults_items}
-    vm = {"department": dept, "diet_types": diets, "diet_defaults": defaults_by_id}
+    
+    vm = {"department": dept}
     return render_template("admin_department_edit.html", vm=vm)
 
 
@@ -351,14 +360,7 @@ def admin_department_edit(department_id: str) -> str:  # type: ignore[override]
 def admin_specialkost_list() -> str:  # type: ignore[override]
     """List all dietary types (specialkost)."""
     repo = DietTypesRepo()
-    # Resolve tenant from request context (falls back to 1)
-    from flask import g as _g
-    tid = 1
-    try:
-        tid = int(getattr(_g, "tenant_id", 1) or 1)
-    except Exception:
-        tid = 1
-    diet_types = repo.list_all(tenant_id=tid)
+    diet_types = repo.list_all(tenant_id=1)
     vm = {"diet_types": diet_types}
     return render_template("admin_specialkost.html", vm=vm)
 
@@ -370,25 +372,22 @@ def admin_specialkost_new() -> str:  # type: ignore[override]
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()
         default_select = request.form.get("default_select") == "on"
+        
         if not name:
             flash("Namn måste anges.", "danger")
             return render_template("admin_specialkost_new.html", vm={})
+        
         repo = DietTypesRepo()
-        # Resolve tenant id
-        from flask import g as _g
-        tid = 1
         try:
-            tid = int(getattr(_g, "tenant_id", 1) or 1)
-        except Exception:
-            tid = 1
-        try:
-            repo.create(tenant_id=tid, name=name, default_select=default_select)
+            repo.create(tenant_id=1, name=name, default_select=default_select)
             flash(f"Kosttyp '{name}' skapad.", "success")
         except Exception as e:
             flash(f"Fel vid skapande: {e}", "danger")
-            return render_template("admin_specialkost_new.html", vm={})
+        
         return redirect(url_for("admin_ui.admin_specialkost_list"))
-    return render_template("admin_specialkost_new.html", vm={})
+    
+    vm = {}
+    return render_template("admin_specialkost_new.html", vm=vm)
 
 
 @admin_ui_bp.route("/ui/admin/specialkost/<int:kosttyp_id>/edit", methods=["GET", "POST"])
@@ -437,11 +436,6 @@ def admin_specialkost_delete(kosttyp_id: int) -> str:  # type: ignore[override]
         flash(f"Fel vid borttagning: {e}", "danger")
     
     return redirect(url_for("admin_ui.admin_specialkost_list"))
-@admin_ui_bp.get("/ui/admin/diets")
-@require_roles("admin", "superuser")
-def admin_diets_redirect() -> str:  # type: ignore[override]
-    """Redirect old diets path to canonical specialkost page to avoid confusion."""
-    return redirect(url_for("admin_ui.admin_specialkost_list"), code=302)
 
 
 # ========================================
@@ -854,37 +848,14 @@ def systemadmin_customer_new_step3_post():
 @admin_ui_bp.get("/ui/systemadmin/customers/new/admin")
 @require_roles("superuser")
 def systemadmin_customer_new_step4():
-    from flask import session
-    data = session.get("wizard_new_customer")
+    """Wizard step 4: Admin account details for new customer."""
+    from flask import session as _sess
+    data = _sess.get("wizard_new_customer")
     if not data:
         flash("Fyll i kundinformation först.", "warning")
         return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
     vm = {"data": data}
     return render_template("systemadmin_customer_new_step4.html", vm=vm)
-
-@admin_ui_bp.post("/ui/systemadmin/customers/create")
-@require_roles("superuser")
-def systemadmin_customer_create():
-    """Final submission endpoint: reuse existing create logic, then redirect.
-    Note: We leverage the existing POST handler systemadmin_create_customer.
-    """
-    # Delegate to existing handler, prefer session wizard values
-    from flask import session
-    wiz = session.get("wizard_new_customer") or {}
-    # Inject form defaults from session if missing
-    if not request.form.get("tenant_name") and wiz.get("tenant_name"):
-        request.form = request.form.copy()
-        request.form["tenant_name"] = wiz.get("tenant_name")
-    if not request.form.get("site_name") and wiz.get("site_name"):
-        request.form = request.form.copy()
-        request.form["site_name"] = wiz.get("site_name")
-    resp = systemadmin_create_customer()
-    try:
-        session.pop("wizard_new_customer", None)
-    except Exception:
-        pass
-    # Existing handler redirects to customers list; preserve that behavior
-    return resp
 
 @admin_ui_bp.get("/ui/systemadmin/customers")
 @require_roles("superuser")
@@ -892,7 +863,10 @@ def systemadmin_customers():
     """Enterprise-style customers view with UI-only filtering of test/demo sites."""
     db = get_session()
     try:
-        rows = db.execute(text("SELECT id, name FROM sites ORDER BY name")).fetchall()
+        rows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name"))
+        rows = rows.fetchall()
+        trows = db.execute(text("SELECT id, name FROM tenants")).fetchall()
+        tmap = {int(r[0]): str(r[1] or "") for r in trows}
         def _is_visible(name: str) -> bool:
             n = (name or "").strip()
             low = n.lower()
@@ -903,10 +877,12 @@ def systemadmin_customers():
             sname = str(r[1] or "")
             if not _is_visible(sname):
                 continue
+            tid = int(r[2]) if r[2] is not None else None
             customers.append({
                 "site_id": sid,
                 "site_name": sname,
-                "tenant_name": "",
+                "tenant_id": str(tid) if tid is not None else "",
+                "tenant_name": tmap.get(int(tid)) if tid is not None else "",
                 "customer_type": "",
                 "status": "Aktiv",
             })
@@ -915,12 +891,55 @@ def systemadmin_customers():
     vm = {"customers": customers}
     return render_template("systemadmin_customers.html", vm=vm)
 
+@admin_ui_bp.get("/ui/systemadmin/customers/<int:tenant_id>/sites")
+@require_roles("superuser")
+def systemadmin_customer_sites(tenant_id: int):
+    """List and manage sites for a specific tenant."""
+    db = get_session()
+    try:
+        trow = db.execute(text("SELECT name FROM tenants WHERE id=:id"), {"id": tenant_id}).fetchone()
+        tenant_name = str(trow[0]) if trow and trow[0] else str(tenant_id)
+        rows = db.execute(text("SELECT id, name FROM sites WHERE tenant_id=:t ORDER BY name"), {"t": tenant_id}).fetchall()
+        sites = [{"id": str(r[0]), "name": str(r[1] or "")} for r in rows]
+    finally:
+        db.close()
+    vm = {"tenant_id": tenant_id, "tenant_name": tenant_name, "sites": sites}
+    return render_template("systemadmin_customer_sites.html", vm=vm)
+
+@admin_ui_bp.post("/ui/systemadmin/customers/<int:tenant_id>/sites/create")
+@require_roles("superuser")
+def systemadmin_customer_sites_create(tenant_id: int):
+    name = (request.form.get("site_name") or "").strip()
+    if not name:
+        flash("Ange site-namn.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+    site_id = name.lower().replace(" ", "-")
+    db = get_session()
+    try:
+        db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER)"))
+        try:
+            db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+        except Exception:
+            pass
+        db.execute(text("INSERT OR REPLACE INTO sites(id,name,version,tenant_id) VALUES(:id,:name,0,:t)"), {"id": site_id, "name": name, "t": tenant_id})
+        db.commit()
+        flash("Site skapad.", "success")
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        flash(f"Kunde inte skapa site: {e}", "danger")
+    finally:
+        db.close()
+    return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+
 # Legacy single-form create page removed to avoid route collision with wizard.
 
-def systemadmin_create_customer():
-    """Create a new customer: site + optional admin email/password (stub).
-    Minimal safe implementation: create site; admin user creation deferred to existing flows.
-    """
+@admin_ui_bp.post("/ui/systemadmin/customers/new/admin")
+@require_roles("superuser")
+def systemadmin_customer_create():
+    """Create a new customer from wizard step 4 (tenant, site, admin user)."""
     tenant_name = (request.form.get("tenant_name") or "").strip()
     site_name = (request.form.get("site_name") or "").strip()
     admin_email = (request.form.get("admin_email") or "").strip()
@@ -993,10 +1012,13 @@ def systemadmin_switch_site(site_id: str):
         flash("Kunde inte hitta tenant för vald site.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customers"))
     try:
+        # Persist selected site context and start impersonation for tenant
+        from flask import session as _sess
+        _sess["site_id"] = site_id
         start_impersonation(tenant_id, f"switch-site:{site_id}")
     except Exception:
         flash("Kunde inte starta impersonation.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customers"))
-    # Preserve selected site in dashboard
-    return redirect(url_for("admin_ui.admin_dashboard", site_id=site_id))
+    # Go to unified admin dashboard (modern Kundadmin)
+    return redirect(url_for("ui.admin_dashboard"))
 

@@ -109,6 +109,29 @@
 
             </form>
         </div>
+
+        {% if vm.mode == 'edit' %}
+        <div class="form-card" style="margin-top: var(--yp-gap-xl);">
+            <h2>Specialkost (antal på avdelningen)</h2>
+            <form method="POST" action="{{ url_for('ui.admin_departments_edit_save_diets', dept_id=vm.department.id) }}" class="yp-form">
+                {{ csrf_token_input()|safe }}
+                <input type="hidden" name="version" value="{{ vm.department.version }}">
+                <div class="ua-grid ua-grid-2cols">
+                    {% for t in vm.diet_types %}
+                        {% set dtid = t.id %}
+                        {% set val = vm.diet_defaults[dtid|string] if vm.diet_defaults else 0 %}
+                        <div class="yp-form-field">
+                            <label class="yp-label">{{ t.name }}</label>
+                            <input type="number" name="diet_default_{{ dtid }}" class="yp-input" min="0" value="{{ val }}">
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="yp-button yp-button-primary">💾 Spara specialkost</button>
+                </div>
+            </form>
+        </div>
+        {% endif %}
     </div>
   </div>
 </section>

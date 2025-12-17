@@ -18,7 +18,6 @@
 {% endwith %}
 
 <form method="POST" class="yp-form" style="max-width:520px">
-  {{ csrf_token_input()|safe }}
   <div class="yp-form-field">
     <label for="name" class="yp-label">Kosttypsnamn</label>
     <input id="name" name="name" class="yp-input" value="{{ vm.diet_type.name }}" required>

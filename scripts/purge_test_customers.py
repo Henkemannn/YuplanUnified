@@ -12,6 +12,7 @@ By default, tenants and users stay intact; use --include-users to remove all non
 
 import sys
 import os
+sys.path.append(os.getcwd())
 from typing import Sequence
 from sqlalchemy import text
 

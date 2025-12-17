@@ -114,6 +114,12 @@ def apply_impersonation() -> None:
     g.impersonation_reason = st.reason
     # Override tenant context
     g.tenant_id = st.tenant_id
+    # Ensure session also carries tenant context for code reading from session
+    try:
+        session[SESSION_KEY] = session.get(SESSION_KEY)  # preserve existing state
+        session["tenant_id"] = st.tenant_id
+    except Exception:
+        pass
     # Promote role logically to admin for the duration of request if not present
     roles = session.get("roles") or []
     if "admin" not in roles:

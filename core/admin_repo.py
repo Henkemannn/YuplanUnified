@@ -86,6 +86,51 @@ class SitesRepo:
         finally:
             db.close()
 
+    def list_sites_for_tenant(self, tenant_id: int | str) -> list[dict]:
+        """List sites for a given tenant when schema supports it.
+
+        If the sites table lacks a tenant_id column (sqlite dev fallback), returns an empty list
+        to avoid leaking cross-tenant data. Superuser flows should call list_sites().
+        """
+        db = get_session()
+        try:
+            # Ensure table exists on sqlite
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS sites (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            notes TEXT NULL,
+                            updated_at TEXT
+                        )
+                        """
+                    )
+                )
+            # Detect presence of tenant_id column
+            has_col = False
+            try:
+                cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
+                has_col = any(str(c[1]) == "tenant_id" for c in cols)
+            except Exception:
+                # Postgres path
+                try:
+                    chk = db.execute(text("SELECT 1 FROM information_schema.columns WHERE table_name='sites' AND column_name='tenant_id'"))
+                    has_col = chk.fetchone() is not None
+                except Exception:
+                    has_col = False
+            if not has_col:
+                return []
+            rows = db.execute(
+                text("SELECT id, name, COALESCE(version,0) FROM sites WHERE tenant_id=:t ORDER BY name"),
+                {"t": int(tenant_id) if str(tenant_id).isdigit() else tenant_id},
+            ).fetchall()
+            return [{"id": r[0], "name": r[1], "version": int(r[2] or 0)} for r in rows]
+        finally:
+            db.close()
+
 
 class DepartmentsRepo:
     def create_department(

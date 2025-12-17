@@ -56,6 +56,33 @@ def api_weekview_specialdiets_mark():
     except Exception:
         # Return 412 Precondition Failed on ETag mismatch semantics
         return jsonify({"type": "about:blank", "title": "etag_mismatch"}), 412
+
+@ui_bp.get("/api/weekview/etag")
+@require_roles("superuser", "admin", "cook", "unit_portal")
+def api_weekview_get_etag():
+    """Return current ETag for a department/week to support UI retry after 412.
+
+    Query params: department_id, year, week
+    """
+    try:
+        department_id = str((request.args.get("department_id") or "").strip())
+        year = int(request.args.get("year"))
+        week = int(request.args.get("week"))
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Invalid params"}), 400
+    tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
+    if not tid:
+        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+    from .weekview.repo import WeekviewRepo
+    from .weekview.service import WeekviewService as _WVS
+    repo = WeekviewRepo()
+    svc = _WVS(repo)
+    try:
+        version = repo.get_version(tid, year, week, department_id)
+        etag = svc.build_etag(tid, department_id, year, week, version)
+        return jsonify({"etag": etag})
+    except Exception:
+        return jsonify({"error": "server_error"}), 500
 @ui_bp.route("/ui/cook/week-overview/<int:year>/<int:week>", methods=["GET"])
 @require_roles("cook")
 def cook_week_overview_unified(year: int, week: int):
@@ -242,7 +269,20 @@ def admin_diets_page():
     db = get_session()
     try:
         if not site_id:
-            row_site = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
+            # Prefer tenant-scoped site when schema supports tenant_id
+            tid = session.get("tenant_id")
+            row_site = None
+            try:
+                cols = {r[1] for r in db.execute(text("PRAGMA table_info('sites')")).fetchall()}
+                if "tenant_id" in cols and tid is not None:
+                    row_site = db.execute(
+                        text("SELECT id, name FROM sites WHERE tenant_id=:t ORDER BY name LIMIT 1"),
+                        {"t": tid},
+                    ).fetchone()
+            except Exception:
+                pass
+            if not row_site:
+                row_site = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
             if row_site:
                 site_id = str(row_site[0])
                 site_name = str(row_site[1] or "")
@@ -253,28 +293,11 @@ def admin_diets_page():
             site_name = str(r[1] or "") if r else ""
         # Diet types via repo (tenant-scoped; site scoping to be added in future phases)
         from core.admin_repo import DietTypesRepo
-        diets = DietTypesRepo().list_all(tenant_id=1)
-        # Departments for site (to manage defaults)
-        from core.admin_repo import DepartmentsRepo, DietDefaultsRepo
-        departments = []
-        defaults_by_dept: dict[str, dict] = {}
-        if site_id:
-            departments = DepartmentsRepo().list_for_site(site_id)
-            # Prefetch defaults for each department
-            drepo = DietDefaultsRepo()
-            for d in departments:
-                dep_id = d.get("id")
-                defaults = drepo.list_for_department(dep_id)
-                # Map diet_type_id -> default_count
-                defaults_by_dept[dep_id] = {row["diet_type_id"]: int(row["default_count"]) for row in (defaults or [])}
+        tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
+        diets = DietTypesRepo().list_all(tenant_id=tid) if tid is not None else []
     finally:
         db.close()
-    vm = {
-        "site": {"id": site_id, "name": site_name},
-        "diets": diets,
-        "departments": departments,
-        "defaults_by_dept": defaults_by_dept,
-    }
+    vm = {"site": {"id": site_id, "name": site_name}, "diets": diets}
     return render_template("admin_diets.html", vm=vm)
 
 # ============================================================================
@@ -405,6 +428,18 @@ def admin_department_detail_get(department_id: str):
                 rd = forever_idx.get((dow, "dinner"))
             table.append({"weekday": day_names[dow-1], "lunch": int(rl if rl is not None else lunch_eff), "dinner": int(rd if rd is not None else dinner_eff)})
         vm["weekly_table"] = table
+    # Load diet types and existing defaults for this department (for detail view)
+    try:
+        from core.admin_repo import DietTypesRepo, DietDefaultsRepo
+        tid_for_diet = getattr(g, "tenant_id", None) or session.get("tenant_id")
+        types = DietTypesRepo().list_all(tenant_id=tid_for_diet) if tid_for_diet is not None else []
+        defaults = DietDefaultsRepo().list_for_department(department_id)
+        vm["diet_types"] = types
+        # Use integer keys to simplify template lookup with t.id
+        vm["diet_defaults"] = {int(it["diet_type_id"]): int(it.get("default_count", 0) or 0) for it in defaults}
+    except Exception:
+        vm["diet_types"] = []
+        vm["diet_defaults"] = {}
     return render_template("ui/unified_admin_department_detail.html", vm=vm)
 
 
@@ -552,58 +587,13 @@ def admin_diets_create():
         flash("Namn måste anges.", "error")
         return redirect(url_for("ui.admin_diets_page", site_id=site_id))
     from core.admin_repo import DietTypesRepo
-
-    DietTypesRepo().create(tenant_id=1, name=name, default_select=False)
+    tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
+    if tid is None:
+        flash("Ingen kundkontext (tenant) hittades.", "error")
+        return redirect(url_for("ui.admin_diets_page", site_id=site_id))
+    DietTypesRepo().create(tenant_id=int(tid) if str(tid).isdigit() else tid, name=name, default_select=False)
     flash("Specialkosttyp skapad.", "success")
     return redirect(url_for("ui.admin_diets_page", site_id=site_id))
-
-@ui_bp.post("/ui/admin/diets/types/delete")
-@require_roles(*ADMIN_ROLES)
-def admin_diets_delete():
-    from flask import redirect, url_for, flash
-    site_id = (request.args.get("site_id") or "").strip()
-    try:
-        diet_type_id = int(request.form.get("diet_type_id") or "0")
-    except Exception:
-        diet_type_id = 0
-    if diet_type_id <= 0:
-        flash("Ogiltigt id.", "error")
-        return redirect(url_for("ui.admin_diets_page", site_id=site_id))
-    try:
-        from core.admin_repo import DietTypesRepo
-        DietTypesRepo().delete(diet_type_id)
-        flash("Borttagen.", "success")
-    except Exception as e:
-        flash(f"Kunde inte ta bort: {e}", "error")
-    return redirect(url_for("ui.admin_diets_page", site_id=site_id))
-
-@ui_bp.post("/ui/admin/diets/defaults/save")
-@require_roles(*ADMIN_ROLES)
-def admin_diets_defaults_save():
-    from flask import redirect, url_for, flash
-    department_id = (request.form.get("department_id") or "").strip()
-    try:
-        diet_type_id = str(request.form.get("diet_type_id") or "").strip()
-        count = int((request.form.get("default_count") or "0").strip() or 0)
-    except Exception:
-        flash("Ogiltiga värden.", "error")
-        return redirect(url_for("ui.admin_diets_page"))
-    if not department_id or not diet_type_id:
-        flash("Saknar avdelning eller kosttyp.", "error")
-        return redirect(url_for("ui.admin_diets_page"))
-    # Upsert one default entry. If count=0 we store zero (no delete helper in repo).
-    from core.admin_repo import DepartmentsRepo
-    try:
-        ver = DepartmentsRepo().get_version(department_id) or 0
-        DepartmentsRepo().upsert_department_diet_defaults(
-            department_id,
-            ver,
-            [{"diet_type_id": diet_type_id, "default_count": int(count)}],
-        )
-        flash("Sparat.", "success")
-    except Exception as e:
-        flash(f"Kunde inte spara: {e}", "error")
-    return redirect(url_for("ui.admin_diets_page"))
 
 @ui_bp.post("/ui/admin/system/diet/create")
 @require_roles("superuser")
@@ -615,8 +605,10 @@ def admin_system_diet_create():
         return redirect(url_for("ui.admin_system_page"))
     try:
         from core.admin_repo import DietTypesRepo
-
-        DietTypesRepo().create(tenant_id=1, name=name, default_select=False)
+        tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
+        if tid is None:
+            raise ValueError("missing_tenant_context")
+        DietTypesRepo().create(tenant_id=int(tid) if str(tid).isdigit() else tid, name=name, default_select=False)
     except Exception:
         flash("Kunde inte skapa specialkosttyp.", "error")
         return redirect(url_for("ui.admin_system_page"))
@@ -753,6 +745,11 @@ def weekview_ui():
         if site_id:
             row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
             site_name = row[0] if row else None
+            # When a site is explicitly chosen, persist to session
+            try:
+                session["site_id"] = site_id
+            except Exception:
+                pass
         if department_id:
             row = db.execute(
                 text("SELECT name FROM departments WHERE id = :id"), {"id": department_id}
@@ -764,6 +761,93 @@ def weekview_ui():
             dep_name = "Avdelning"
     finally:
         db.close()
+
+    # If department_id is empty: show all departments for the site (Yuplan 3.5-style)
+    if not (department_id and department_id.strip()):
+        # Resolve site_id: prefer query; else first available
+        if not site_id:
+            db2 = get_session()
+            try:
+                # Prefer tenant-scoped first site when schema supports it
+                tid = session.get("tenant_id")
+                rows = []
+                try:
+                    cols = {r[1] for r in db2.execute(text("PRAGMA table_info('sites')")).fetchall()}
+                    if "tenant_id" in cols and tid is not None:
+                        rows = db2.execute(
+                            text("SELECT id, name FROM sites WHERE tenant_id=:t ORDER BY name LIMIT 1"),
+                            {"t": tid},
+                        ).fetchall()
+                except Exception:
+                    rows = []
+                if not rows:
+                    rows = db2.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchall()
+                if rows:
+                    site_id = str(rows[0][0])
+                    site_name = str(rows[0][1])
+                    session["site_id"] = site_id
+            finally:
+                db2.close()
+        # Fetch sites for selector (tenant-scoped minimal)
+        from .admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
+        try:
+            tid = session.get("tenant_id")
+            role = session.get("role")
+            if role == "superuser":
+                all_sites = SitesRepo().list_sites()
+            else:
+                # Non-superusers: restrict to current tenant when possible
+                all_sites = SitesRepo().list_sites_for_tenant(tid) if tid is not None else []
+        except Exception:
+            all_sites = []
+        # Fetch departments for site
+        deps = []
+        try:
+            dept_rows = DepartmentsRepo().list_for_site(site_id) if site_id else []
+        except Exception:
+            dept_rows = []
+        tid = session.get("tenant_id")
+        if not tid:
+            return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+        svc = WeekviewService()
+        # Diet type names map for display
+        try:
+            types = DietTypesRepo().list_all(tenant_id=tid)
+            diet_name_map = {int(t["id"]): str(t["name"]) for t in types}
+        except Exception:
+            diet_name_map = {}
+        for d in dept_rows:
+            dep_id = str(d.get("id"))
+            dep_name_row = str(d.get("name") or "")
+            payload, etag = svc.fetch_weekview(tid, year, week, dep_id)
+            summaries = payload.get("department_summaries") or []
+            days = (summaries[0].get("days") if summaries else []) or []
+            deps.append({
+                "id": dep_id,
+                "name": dep_name_row,
+                "etag": etag,
+                "days": days,
+            })
+        vm_all = {
+            "site_id": site_id,
+            "site_name": site_name,
+            "year": year,
+            "week": week,
+            "current_year": current_year,
+            "current_week": current_week,
+            "departments": deps,
+            "diet_name_map": diet_name_map,
+            "sites": all_sites,
+            "active_site": site_id,
+        }
+        try:
+            from flask import current_app
+            current_app.logger.info("weekview template=weekview_all.html deps=%s", len(deps))
+            print(f"WEEKVIEW_RENDER: template=weekview_all.html deps={len(deps)}")
+        except Exception:
+            pass
+        meal_labels = get_meal_labels_for_site(site_id)
+        return render_template("ui/weekview_all.html", vm=vm_all, meal_labels=meal_labels)
 
     # Fetch enriched weekview payload via service (no extra SQL here)
     tid = session.get("tenant_id")
@@ -799,15 +883,6 @@ def weekview_ui():
     # Index by (date, meal_type) for quick lookup
     reg_map = {(r["date"], r["meal_type"]): r["registered"] for r in registrations}
 
-    # Map diet type id -> human name for display
-    diet_name_map: dict[str, str] = {}
-    try:
-        from core.admin_repo import DietTypesRepo
-        _types = DietTypesRepo().list_all(tenant_id=1)
-        diet_name_map = {str(t["id"]): str(t["name"]) for t in _types}
-    except Exception:
-        diet_name_map = {}
-
     # Build DayVM list (Phase 2 - with registration data, Phase 4 - with summaries)
     day_vms = []
     has_dinner = False
@@ -821,7 +896,6 @@ def weekview_ui():
         lunch = mt.get("lunch", {}) if isinstance(mt, dict) else {}
         dinner = mt.get("dinner", {}) if isinstance(mt, dict) else {}
         date_str = d.get("date")
-        day_index = int(d.get("day_of_week") or 0)
         
         # Get residents counts
         residents_lunch = (d.get("residents", {}) or {}).get("lunch", 0)
@@ -852,30 +926,20 @@ def weekview_ui():
         # Build diets list for lunch from enriched payload (Phase 2b)
         diets_obj = d.get("diets", {}) or {}
         lunch_diets = []
-        dinner_diets = []
         try:
             for it in diets_obj.get("lunch") or []:
-                _id = str(it.get("diet_type_id"))
-                lunch_diets.append({
-                    "diet_type_id": _id,
-                    "diet_name": diet_name_map.get(_id, str(it.get("diet_name"))),
-                    "resident_count": int(it.get("resident_count") or 0),
-                    "marked": bool(it.get("marked")),
-                })
-            for it in diets_obj.get("dinner") or []:
-                _id = str(it.get("diet_type_id"))
-                dinner_diets.append({
-                    "diet_type_id": _id,
-                    "diet_name": diet_name_map.get(_id, str(it.get("diet_name"))),
-                    "resident_count": int(it.get("resident_count") or 0),
-                    "marked": bool(it.get("marked")),
-                })
+                lunch_diets.append(
+                    {
+                        "diet_type_id": str(it.get("diet_type_id")),
+                        "diet_name": str(it.get("diet_name")),
+                        "resident_count": int(it.get("resident_count") or 0),
+                        "marked": bool(it.get("marked")),
+                    }
+                )
         except Exception:
             lunch_diets = []
-            dinner_diets = []
 
         day_vm = {
-            "day_of_week": day_index,
             "date": date_str,
             "weekday_name": d.get("weekday_name"),
             "lunch_alt1": lunch.get("alt1"),
@@ -887,7 +951,6 @@ def weekview_ui():
             "residents_lunch": residents_lunch,
             "residents_dinner": residents_dinner,
             "lunch_diets": lunch_diets,
-            "dinner_diets": dinner_diets,
             # Phase 2: Add registration state
             "lunch_registered": lunch_registered,
             "dinner_registered": dinner_registered,
@@ -934,104 +997,6 @@ def weekview_ui():
 # ============================================================================
 # Department Portal (Phase 1) - Read-only week view for a single department
 # ============================================================================
-
-@ui_bp.post("/ui/weekview/residents/save", endpoint="weekview_save_residents")
-@require_roles(*SAFE_UI_ROLES)
-def weekview_save_residents():
-    """Save residents counts (lunch/dinner) for the selected week.
-
-    v1 behavior: apply the provided lunch/dinner counts to all 7 days of the week
-    for the chosen department, using WeekviewRepo.set_residents_counts.
-    """
-    try:
-        site_id = (request.form.get("site_id") or "").strip()
-        department_id = (request.form.get("department_id") or "").strip()
-        year = int(request.form.get("year") or "0")
-        week = int(request.form.get("week") or "0")
-        rl = int((request.form.get("residents_lunch") or "0").strip() or 0)
-        rd = int((request.form.get("residents_dinner") or "0").strip() or 0)
-    except Exception:
-        return jsonify({"error": "bad_request", "message": "Invalid form fields"}), 400
-    if year < 2000 or year > 2100 or week < 1 or week > 53 or not department_id:
-        return jsonify({"error": "bad_request", "message": "Invalid params"}), 400
-    tid = session.get("tenant_id")
-    if not tid:
-        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    # Build items for all days 1..7
-    items = []
-    for dow in range(1, 8):
-        items.append({"day_of_week": dow, "meal": "lunch", "count": rl})
-        items.append({"day_of_week": dow, "meal": "dinner", "count": rd})
-    from .weekview.repo import WeekviewRepo
-    repo = WeekviewRepo()
-    try:
-        repo.set_residents_counts(tid, year, week, department_id, items)
-    except Exception as e:
-        return jsonify({"error": "server_error", "message": str(e)}), 500
-    # Redirect back to weekview
-    from flask import redirect, url_for
-    return redirect(url_for("ui.weekview_ui", site_id=site_id, department_id=department_id, year=year, week=week))
-
-@ui_bp.post("/ui/weekview/diets/save", endpoint="weekview_save_diets")
-@require_roles(*SAFE_UI_ROLES)
-def weekview_save_diets():
-    """Save per-day/meal diet marks for the selected department/week.
-
-    Accepts multiple checkbox values named "mark" where each value is "<dow>|<meal>|<diet_type_id>".
-    Writes using WeekviewRepo.apply_operations without ETag (UI form submit), then redirects back.
-    """
-    from flask import redirect, url_for
-    try:
-        site_id = (request.form.get("site_id") or "").strip()
-        department_id = (request.form.get("department_id") or "").strip()
-        year = int(request.form.get("year") or "0")
-        week = int(request.form.get("week") or "0")
-    except Exception:
-        return jsonify({"error": "bad_request", "message": "Invalid fields"}), 400
-    if not department_id or year < 2000 or week < 1 or week > 53:
-        return jsonify({"error": "bad_request", "message": "Invalid params"}), 400
-    tid = session.get("tenant_id")
-    if not tid:
-        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    # Parse selected marks
-    selected = set()
-    for v in request.form.getlist("mark"):
-        try:
-            parts = str(v).split("|")
-            dow = int(parts[0])
-            meal = str(parts[1])
-            diet = str(parts[2])
-            if meal in ("lunch", "dinner") and 1 <= dow <= 7 and diet:
-                selected.add((dow, meal, diet))
-        except Exception:
-            continue
-    # Load current marks to compute delta ops
-    from .weekview.repo import WeekviewRepo
-    repo = WeekviewRepo()
-    payload = repo.get_weekview(tid, year, week, department_id)
-    current_marked = set()
-    try:
-        summaries = payload.get("department_summaries") or []
-        marks = summaries[0].get("marks") if summaries else []
-        for m in marks or []:
-            if bool(m.get("marked")):
-                current_marked.add((int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type"))))
-    except Exception:
-        current_marked = set()
-    ops = []
-    universe = current_marked | selected
-    for key in sorted(universe):
-        should_mark = key in selected
-        is_marked = key in current_marked
-        if should_mark != is_marked:
-            dow, meal, diet = key
-            ops.append({"day_of_week": int(dow), "meal": str(meal), "diet_type": str(diet), "marked": bool(should_mark)})
-    if ops:
-        try:
-            repo.apply_operations(tid, year, week, department_id, ops)
-        except Exception as e:
-            return jsonify({"error": "server_error", "message": str(e)}), 500
-    return redirect(url_for("ui.weekview_ui", site_id=site_id, department_id=department_id, year=year, week=week))
 
 @ui_bp.get("/ui/portal/week")
 @require_roles(*SAFE_UI_ROLES)
@@ -2909,15 +2874,15 @@ def admin_dashboard():
     Unified Admin Panel - Modern dashboard replacing legacy Kommun admin.
     Phase 1: Navigation shell and quick links.
     """
-    tid = session.get("tenant_id")
+    tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
     user_id = session.get("user_id")
     role = session.get("role")
     
     # Get tenant/site info
     db = get_session()
     try:
-        # Get tenant name (generic context; no per-user site binding at this phase)
-        tenant_name = "Admin Panel"
+        # Resolve tenant and selected site from session/DB
+        tenant_name = None
         site_name = None
 
         # Do not assume a site_id field exists on User; keep dashboard generic
@@ -2927,7 +2892,27 @@ def admin_dashboard():
         today = _date.today()
         iso_cal = today.isocalendar()
         current_year, current_week = iso_cal[0], iso_cal[1]
-
+        # Look up tenant name
+        try:
+            if tid is not None:
+                row_t = db.execute(text("SELECT name FROM tenants WHERE id=:id"), {"id": int(tid)}).fetchone()
+                if row_t and row_t[0]:
+                    tenant_name = str(row_t[0])
+        except Exception:
+            tenant_name = None
+        # Look up site by explicit session site_id, fallback to first for tenant
+        try:
+            sid = session.get("site_id")
+            if sid:
+                row_s = db.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": str(sid)}).fetchone()
+                if row_s and row_s[0]:
+                    site_name = str(row_s[0])
+            if site_name is None and tid is not None:
+                row_s2 = db.execute(text("SELECT name FROM sites WHERE tenant_id=:t ORDER BY name LIMIT 1"), {"t": int(tid)}).fetchone()
+                if row_s2 and row_s2[0]:
+                    site_name = str(row_s2[0])
+        except Exception:
+            site_name = None
     finally:
         db.close()
     
@@ -3259,7 +3244,19 @@ def admin_departments_edit_form(dept_id: str):
         "department": department,
         "selected_week": selected_week,
         "weekly_table": weekly_table,
+        "diet_types": [],
+        "diet_defaults": {},
     }
+    # Load diet types and existing defaults for this department
+    try:
+        from core.admin_repo import DietTypesRepo, DietDefaultsRepo
+        types = DietTypesRepo().list_all(tenant_id=1)
+        defaults = DietDefaultsRepo().list_for_department(dept_id)
+        vm["diet_types"] = types
+        vm["diet_defaults"] = {str(it["diet_type_id"]): int(it.get("default_count", 0) or 0) for it in defaults}
+    except Exception:
+        vm["diet_types"] = []
+        vm["diet_defaults"] = {}
     
     return render_template("ui/unified_admin_departments_form.html", vm=vm)
 
@@ -3271,7 +3268,7 @@ def admin_departments_update(dept_id: str):
     Update a department.
     """
     from flask import flash, redirect, url_for
-    from core.admin_repo import DepartmentsRepo
+    from core.admin_repo import DepartmentsRepo, DietTypesRepo
     from core.etag import ConcurrencyError
     
     # Verify department exists
@@ -3326,6 +3323,32 @@ def admin_departments_update(dept_id: str):
             resident_count_fixed=resident_count_int,
             notes=notes,
         )
+        # Persist specialkost defaults from form
+        items: list[dict] = []
+        try:
+            types = DietTypesRepo().list_all(tenant_id=1)
+            for t in types:
+                dtid = str(t.get("id"))
+                key = f"diet_default_{dtid}"
+                raw = request.form.get(key)
+                if raw is None:
+                    continue
+                try:
+                    cnt = int(str(raw).strip() or "0")
+                except Exception:
+                    cnt = 0
+                items.append({"diet_type_id": dtid, "default_count": cnt})
+        except Exception:
+            items = []
+        if items:
+            try:
+                repo.upsert_department_diet_defaults(
+                    dept_id=dept_id,
+                    expected_version=expected_version if expected_version is not None else 0,
+                    items=items,
+                )
+            except Exception:
+                pass
         # copy keyword contains 'uppdaterad' for assertions
         flash(f"Avdelning '{name}' uppdaterad.", "success")
     except ConcurrencyError:
@@ -3336,6 +3359,56 @@ def admin_departments_update(dept_id: str):
         return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
     
     return redirect(url_for("ui.admin_departments_list"))
+
+
+@ui_bp.post("/ui/admin/departments/<dept_id>/edit/diets")
+@require_roles(*ADMIN_ROLES)
+def admin_departments_edit_save_diets(dept_id: str):
+    """Persist Specialkost defaults from the edit page without touching department core fields."""
+    from flask import flash, redirect, url_for
+    from core.admin_repo import DepartmentsRepo, DietTypesRepo
+    # Version handling
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT version FROM departments WHERE id = :id"), {"id": dept_id}).fetchone()
+        current_version = int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+    version_str = (request.form.get("version") or str(current_version)).strip()
+    try:
+        expected_version = int(version_str)
+    except Exception:
+        expected_version = current_version
+    # Parse inputs
+    items: list[dict] = []
+    try:
+        types = DietTypesRepo().list_all(tenant_id=1)
+        for t in types:
+            dtid = str(t.get("id"))
+            key = f"diet_default_{dtid}"
+            raw = request.form.get(key)
+            if raw is None:
+                continue
+            try:
+                cnt = int(str(raw).strip() or "0")
+            except Exception:
+                cnt = 0
+            items.append({"diet_type_id": dtid, "default_count": cnt})
+    except Exception:
+        items = []
+    # Persist with fallback once on version mismatch
+    repo = DepartmentsRepo()
+    try:
+        repo.upsert_department_diet_defaults(dept_id=dept_id, expected_version=expected_version, items=items)
+        flash("Specialkost sparad.", "success")
+    except Exception:
+        # Retry with current version
+        try:
+            repo.upsert_department_diet_defaults(dept_id=dept_id, expected_version=current_version, items=items)
+            flash("Specialkost sparad.", "success")
+        except Exception as e:
+            flash(f"Kunde inte spara specialkost: {str(e)}", "error")
+    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
 
 @ui_bp.post("/ui/admin/departments/<dept_id>/delete")
