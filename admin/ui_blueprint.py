@@ -916,27 +916,38 @@ def systemadmin_customers():
                 has_tenant_col = False
 
         if has_tenant_col:
-            rows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
+            srows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
         else:
-            rows = db.execute(text("SELECT id, name, NULL as tenant_id FROM sites ORDER BY name")).fetchall()
-        trows = db.execute(text("SELECT id, name FROM tenants")).fetchall()
+            srows = db.execute(text("SELECT id, name, NULL as tenant_id FROM sites ORDER BY name")).fetchall()
+        trows = db.execute(text("SELECT id, name FROM tenants ORDER BY name")).fetchall()
         tmap = {int(r[0]): str(r[1] or "") for r in trows}
-        def _is_visible(name: str) -> bool:
-            n = (name or "").strip()
-            low = n.lower()
+
+        # Helper: UI-only filter of obvious test/demo sites
+        def _site_visible(name: str) -> bool:
+            n = (name or "").strip(); low = n.lower()
             return not (low.startswith("test ") or low.startswith("demo "))
-        customers = []
-        for r in rows:
-            sid = str(r[0])
+
+        # Aggregate site counts per tenant
+        site_count: dict[int, int] = {}
+        for r in srows:
             sname = str(r[1] or "")
-            if not _is_visible(sname):
+            if not _site_visible(sname):
                 continue
-            tid = int(r[2]) if r[2] is not None else None
+            tid_val = r[2]
+            if tid_val is None:
+                continue  # cannot attribute site to any tenant
+            tid_int = int(tid_val)
+            site_count[tid_int] = site_count.get(tid_int, 0) + 1
+
+        # Build customers view as tenants with site_count
+        customers = []
+        for t in trows:
+            tid = int(t[0])
+            tname = tmap.get(tid, str(tid))
             customers.append({
-                "site_id": sid,
-                "site_name": sname,
-                "tenant_id": str(tid) if tid is not None else "",
-                "tenant_name": tmap.get(int(tid)) if tid is not None else "",
+                "tenant_id": tid,
+                "tenant_name": tname,
+                "site_count": site_count.get(tid, 0),
                 "customer_type": "",
                 "status": "Aktiv",
             })
