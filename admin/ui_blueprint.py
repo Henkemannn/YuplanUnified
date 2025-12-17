@@ -890,8 +890,35 @@ def systemadmin_customers():
     """Enterprise-style customers view with UI-only filtering of test/demo sites."""
     db = get_session()
     try:
-        rows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name"))
-        rows = rows.fetchall()
+        # Ensure sites table exists and detect optional tenant_id column
+        has_tenant_col = False
+        try:
+            db.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS sites (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        version INTEGER NOT NULL DEFAULT 0,
+                        notes TEXT NULL,
+                        updated_at TEXT
+                    )
+                    """
+                )
+            )
+            cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
+            has_tenant_col = any(str(c[1]) == "tenant_id" for c in cols)
+        except Exception:
+            try:
+                chk = db.execute(text("SELECT 1 FROM information_schema.columns WHERE table_name='sites' AND column_name='tenant_id'"))
+                has_tenant_col = chk.fetchone() is not None
+            except Exception:
+                has_tenant_col = False
+
+        if has_tenant_col:
+            rows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
+        else:
+            rows = db.execute(text("SELECT id, name, NULL as tenant_id FROM sites ORDER BY name")).fetchall()
         trows = db.execute(text("SELECT id, name FROM tenants")).fetchall()
         tmap = {int(r[0]): str(r[1] or "") for r in trows}
         def _is_visible(name: str) -> bool:
