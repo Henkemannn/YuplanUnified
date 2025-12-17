@@ -26,18 +26,38 @@ def systemadmin_dashboard():
     db = get_session()
     customers: list[dict[str, str]] = []
     try:
-        # Ensure sites table exists for fresh dev/test DBs
+        # Ensure sites table exists in sqlite and detect optional tenant_id column
+        has_tenant_col = False
         try:
-            db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER)"))
-            # Backfill missing tenant_id column on legacy tables
-            try:
-                db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
-            except Exception:
-                pass
+            # Create minimal table if missing (sqlite dev convenience)
+            db.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS sites (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        version INTEGER NOT NULL DEFAULT 0,
+                        notes TEXT NULL,
+                        updated_at TEXT
+                    )
+                    """
+                )
+            )
+            cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
+            has_tenant_col = any(str(c[1]) == "tenant_id" for c in cols)
         except Exception:
-            pass
-        # Include tenant_id so we can display tenant name
-        rows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
+            # Best-effort Postgres path: check information_schema
+            try:
+                chk = db.execute(text("SELECT 1 FROM information_schema.columns WHERE table_name='sites' AND column_name='tenant_id'"))
+                has_tenant_col = chk.fetchone() is not None
+            except Exception:
+                has_tenant_col = False
+
+        # Build query depending on schema
+        if has_tenant_col:
+            rows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
+        else:
+            rows = db.execute(text("SELECT id, name, NULL as tenant_id FROM sites ORDER BY name")).fetchall()
         # Load tenant names map
         trows = db.execute(text("SELECT id, name FROM tenants")).fetchall()
         tmap = {int(r[0]): str(r[1] or "") for r in trows}
@@ -135,25 +155,32 @@ def admin_dashboard() -> str:  # type: ignore[override]
 @admin_ui_bp.get("/ui/admin/departments")
 @require_roles("admin", "superuser")
 def admin_departments_list() -> str:  # type: ignore[override]
-    """List all departments across all sites with site names."""
+    """List departments scoped to the active site only."""
+    from core.context import get_active_context
+    ctx = get_active_context()
+    active_site = ctx.get("site_id")
+    if not active_site:
+        from flask import redirect, url_for
+        return redirect(url_for("ui.select_site", next=url_for("admin_ui.admin_departments_list")))
+
     sites_repo = SitesRepo()
     depts_repo = DepartmentsRepo()
-    sites_data = sites_repo.list_sites()
-    sites_map = {s["id"]: s["name"] for s in sites_data}
-    
-    # Gather all departments across all sites
+    # Map for display
+    site_row = next((s for s in sites_repo.list_sites() if s.get("id") == active_site), None)
+    sites_map = {active_site: (site_row or {}).get("name", "")}
+
+    # Gather only departments for active site
     all_departments = []
-    for site in sites_data:
-        depts = depts_repo.list_for_site(site["id"])
-        for d in depts:
-            all_departments.append({
-                "id": d["id"],
-                "name": d["name"],
-                "site_id": d["site_id"],
-                "site_name": sites_map.get(d["site_id"], ""),
-                "resident_count_fixed": d.get("resident_count_fixed", 0),
-                "notes": "",  # TODO: fetch notes from department_notes table if needed
-            })
+    depts = depts_repo.list_for_site(active_site)
+    for d in depts:
+        all_departments.append({
+            "id": d["id"],
+            "name": d["name"],
+            "site_id": d["site_id"],
+            "site_name": sites_map.get(d["site_id"], ""),
+            "resident_count_fixed": d.get("resident_count_fixed", 0),
+            "notes": "",
+        })
     
     # Determine current ISO year/week
     import datetime as _dt
