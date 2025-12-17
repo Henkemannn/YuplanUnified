@@ -101,6 +101,38 @@ SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 ADMIN_ROLES = ("admin", "superuser")
 COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 
+# --- Site selector ---
+@ui_bp.get("/ui/select-site")
+@require_roles(*SAFE_UI_ROLES)
+def select_site():
+    """Simple site selection page: choose active site for current tenant."""
+    next_url = (request.args.get("next") or "/").strip()
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    tid = ctx.get("tenant_id")
+    from core.admin_repo import SitesRepo
+    sites = []
+    try:
+        repo = SitesRepo()
+        sites = repo.list_sites_for_tenant(tid) if tid is not None else []
+    except Exception:
+        sites = []
+    return render_template("ui/select_site.html", vm={"sites": sites, "next": next_url})
+
+@ui_bp.post("/ui/select-site")
+@require_roles(*SAFE_UI_ROLES)
+def select_site_post():
+    site_id = (request.form.get("site_id") or "").strip()
+    next_url = (request.form.get("next") or "/").strip()
+    if not site_id:
+        flash("Välj en site.", "warning")
+        return redirect(url_for("ui.select_site", next=next_url))
+    try:
+        session["site_id"] = site_id
+    except Exception:
+        pass
+    return redirect(next_url or "/")
+
 # ----------------------------------------------------------------------------
 # Landing: default dashboard selection + public root page
 # ----------------------------------------------------------------------------
@@ -764,30 +796,15 @@ def weekview_ui():
 
     # If department_id is empty: show all departments for the site (Yuplan 3.5-style)
     if not (department_id and department_id.strip()):
-        # Resolve site_id: prefer query; else first available
+        # Resolve site_id strictly from active context; if missing → redirect to selector
         if not site_id:
-            db2 = get_session()
-            try:
-                # Prefer tenant-scoped first site when schema supports it
-                tid = session.get("tenant_id")
-                rows = []
-                try:
-                    cols = {r[1] for r in db2.execute(text("PRAGMA table_info('sites')")).fetchall()}
-                    if "tenant_id" in cols and tid is not None:
-                        rows = db2.execute(
-                            text("SELECT id, name FROM sites WHERE tenant_id=:t ORDER BY name LIMIT 1"),
-                            {"t": tid},
-                        ).fetchall()
-                except Exception:
-                    rows = []
-                if not rows:
-                    rows = db2.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchall()
-                if rows:
-                    site_id = str(rows[0][0])
-                    site_name = str(rows[0][1])
-                    session["site_id"] = site_id
-            finally:
-                db2.close()
+            from .context import get_active_context as _get_ctx
+            ctx = _get_ctx()
+            site_id = ctx.get("site_id") or ""
+            if not site_id:
+                from flask import redirect, url_for
+                target = url_for('ui.weekview_ui', site_id='', department_id='', year=year, week=week)
+                return redirect(url_for('ui.select_site', next=target))
         # Fetch sites for selector (tenant-scoped minimal)
         from .admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
         try:
@@ -800,7 +817,7 @@ def weekview_ui():
                 all_sites = SitesRepo().list_sites_for_tenant(tid) if tid is not None else []
         except Exception:
             all_sites = []
-        # Fetch departments for site
+        # Fetch departments for active site
         deps = []
         try:
             dept_rows = DepartmentsRepo().list_for_site(site_id) if site_id else []
