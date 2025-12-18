@@ -23,6 +23,9 @@ def _seed_basic():
 
 def test_get_department_detail_page(app_session: Flask, client_admin: FlaskClient) -> None:
     site = _seed_basic()
+    # Activate this site for the session
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
     dept, _ = DepartmentsRepo().create_department(
         site_id=site["id"], name="Avd Alfa", resident_count_mode="fixed", resident_count_fixed=10
     )
@@ -48,6 +51,8 @@ def test_get_department_detail_page(app_session: Flask, client_admin: FlaskClien
 
 def test_post_updates_fixed_resident_count(app_session: Flask, client_admin: FlaskClient) -> None:
     site = _seed_basic()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
     dept, _ = DepartmentsRepo().create_department(
         site_id=site["id"], name="Avd Fix", resident_count_mode="fixed", resident_count_fixed=8
     )
@@ -69,6 +74,8 @@ def test_post_updates_fixed_resident_count(app_session: Flask, client_admin: Fla
 
 def test_post_creates_weekly_override_and_reflects(app_session: Flask, client_admin: FlaskClient) -> None:
     site = _seed_basic()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
     dept, _ = DepartmentsRepo().create_department(
         site_id=site["id"], name="Avd Weekly", resident_count_mode="fixed", resident_count_fixed=10
     )
@@ -92,6 +99,8 @@ def test_post_creates_weekly_override_and_reflects(app_session: Flask, client_ad
 
 def test_post_clears_weekly_override(app_session: Flask, client_admin: FlaskClient) -> None:
     site = _seed_basic()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
     dept, _ = DepartmentsRepo().create_department(
         site_id=site["id"], name="Avd Reset", resident_count_mode="fixed", resident_count_fixed=10
     )
@@ -118,6 +127,8 @@ def test_post_clears_weekly_override(app_session: Flask, client_admin: FlaskClie
 
 def test_departments_list_shows_link_and_varierat_badge(app_session: Flask, client_admin: FlaskClient) -> None:
     site = _seed_basic()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
     # Create a department with notes
     dept, _ = DepartmentsRepo().create_department(
         site_id=site["id"], name="Avd Beta", resident_count_mode="fixed", resident_count_fixed=11

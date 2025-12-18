@@ -9,6 +9,8 @@ def _headers(role="admin", tid="1"):
 def test_get_admin_residents_week(client_admin):
     # Ensure at least one site and department exist
     site, _ = SitesRepo().create_site("Test Site")
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
     DepartmentsRepo().create_department(site_id=site["id"], name="Avd A", resident_count_mode="fixed", resident_count_fixed=10)
     # Use current ISO week
     iso = date.today().isocalendar()
@@ -24,6 +26,8 @@ def test_get_admin_residents_week(client_admin):
 
 def test_post_saves_override_then_reflects(client_admin):
     site, _ = SitesRepo().create_site("Test Site")
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
     dept, _ = DepartmentsRepo().create_department(site_id=site["id"], name="Avd B", resident_count_mode="fixed", resident_count_fixed=9)
     iso = date.today().isocalendar()
     year, week = iso[0], iso[1]
@@ -52,6 +56,8 @@ def test_post_saves_override_then_reflects(client_admin):
 
 def test_fallback_uses_fixed_when_no_override(client_admin):
     site, _ = SitesRepo().create_site("Test Site")
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
     DepartmentsRepo().create_department(site_id=site["id"], name="Avd C", resident_count_mode="fixed", resident_count_fixed=8)
     iso = date.today().isocalendar()
     year, week = iso[0], iso[1]

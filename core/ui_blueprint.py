@@ -777,11 +777,6 @@ def weekview_ui():
         if site_id:
             row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
             site_name = row[0] if row else None
-            # When a site is explicitly chosen, persist to session
-            try:
-                session["site_id"] = site_id
-            except Exception:
-                pass
         if department_id:
             row = db.execute(
                 text("SELECT name FROM departments WHERE id = :id"), {"id": department_id}
@@ -2151,6 +2146,16 @@ def reports_weekly():
     from datetime import date, timedelta
     from core.report_service import ReportService
     site_id = (request.args.get("site_id") or "").strip()
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    if not site_id:
+        # Prefer active context site id; if missing, redirect to selector (strict scoping)
+        site_id = ctx.get("site_id") or ""
+        if not site_id:
+            try:
+                return redirect(url_for("ui.select_site", next=request.url))
+            except Exception:
+                return jsonify({"error": "bad_request", "message": "Ingen site vald"}), 400
     try:
         year = int(request.args.get("year", ""))
         week = int(request.args.get("week", ""))
@@ -2162,42 +2167,10 @@ def reports_weekly():
     # Resolve site name
     db = get_session()
     try:
-        if not site_id:
-            # Prefer a site that has departments but no menus for the requested week
-            jan4 = date(year, 1, 4)
-            week1_monday = jan4 - timedelta(days=jan4.weekday())
-            start_date = (week1_monday + timedelta(weeks=week - 1)).isoformat()
-            end_date = (week1_monday + timedelta(weeks=week - 1, days=6)).isoformat()
-            sql_no_menus = text(
-                """
-                SELECT s.id, s.name
-                FROM sites s
-                WHERE EXISTS (SELECT 1 FROM departments d WHERE d.site_id = s.id)
-                  AND NOT EXISTS (
-                    SELECT 1 FROM weekview_items w
-                    JOIN departments d2 ON d2.id = w.department_id
-                    WHERE d2.site_id = s.id
-                      AND w.local_date >= :start_date AND w.local_date <= :end_date
-                  )
-                ORDER BY s.name
-                LIMIT 1
-                """
-            )
-            row_any = db.execute(sql_no_menus, {"start_date": start_date, "end_date": end_date}).fetchone()
-            if row_any:
-                site_id = row_any[0]
-                site_name = row_any[1]
-            else:
-                # Fallback to any site if none have departments
-                row_fallback = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
-                if row_fallback:
-                    site_id = row_fallback[0]
-                    site_name = row_fallback[1]
-                else:
-                    site_name = ""
-        else:
-            row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
-            site_name = row[0] if row else (site_id or "")
+        row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
+        site_name = row[0] if row else None
+        if not site_name:
+            return jsonify({"error": "not_found", "message": "Site not found"}), 404
     finally:
         db.close()
     tid = session.get("tenant_id") or 1
@@ -2236,7 +2209,7 @@ def reports_weekly():
     # Include all department names (for legacy string checks in tests)
     db2 = get_session()
     try:
-        all_dept_rows = db2.execute(text("SELECT name FROM departments ORDER BY name")).fetchall()
+        all_dept_rows = db2.execute(text("SELECT name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
         vm["all_departments_names"] = [str(r[0]) for r in all_dept_rows]
     finally:
         db2.close()
@@ -2895,14 +2868,15 @@ def admin_dashboard():
     user_id = session.get("user_id")
     role = session.get("role")
     
-    # Get tenant/site info
+    # Get tenant/site info strictly from active context
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
     db = get_session()
     try:
-        # Resolve tenant and selected site from session/DB
         tenant_name = None
         site_name = None
 
-        # Do not assume a site_id field exists on User; keep dashboard generic
         _ = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first()
 
         # Get current week for quick reference
@@ -2917,17 +2891,12 @@ def admin_dashboard():
                     tenant_name = str(row_t[0])
         except Exception:
             tenant_name = None
-        # Look up site by explicit session site_id, fallback to first for tenant
+        # Look up site name strictly from active site id; no fallback
         try:
-            sid = session.get("site_id")
-            if sid:
-                row_s = db.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": str(sid)}).fetchone()
+            if active_site_id:
+                row_s = db.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": str(active_site_id)}).fetchone()
                 if row_s and row_s[0]:
                     site_name = str(row_s[0])
-            if site_name is None and tid is not None:
-                row_s2 = db.execute(text("SELECT name FROM sites WHERE tenant_id=:t ORDER BY name LIMIT 1"), {"t": int(tid)}).fetchone()
-                if row_s2 and row_s2[0]:
-                    site_name = str(row_s2[0])
         except Exception:
             site_name = None
     finally:
@@ -2937,15 +2906,21 @@ def admin_dashboard():
     departments = []
     db = get_session()
     try:
-        rows = db.execute(
-            text(
-                """
-                SELECT d.id, d.name
-                FROM departments d
-                ORDER BY d.name
-                """
-            )
-        ).fetchall()
+        rows = []
+        from .context import get_active_context as _get_ctx
+        ctx2 = _get_ctx()
+        active_site_id2 = ctx2.get("site_id")
+        if active_site_id2:
+            try:
+                rows = db.execute(
+                    text(
+                        "SELECT d.id, d.name FROM departments d WHERE d.site_id = :sid ORDER BY d.name"
+                    ),
+                    {"sid": active_site_id2},
+                ).fetchall()
+            except Exception:
+                # Missing table: return empty quick-links
+                rows = []
         for r in rows:
             departments.append({"id": r[0], "name": r[1]})
     finally:
@@ -3029,21 +3004,34 @@ def admin_departments_list():
     Admin/superuser only.
     """
     role = session.get("role")
-    
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+
+    # Require active site; redirect to selector when missing
+    if not active_site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_list")))
+
     db = get_session()
     try:
-        # Join sites to include site name and resident count where available
+        # Join sites to include site name and resident count where available; strictly scoped to active site
         departments = []
-        rows = db.execute(
-            text(
-                """
-                SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name, COALESCE(d.notes,'') AS notes
-                FROM departments d
-                LEFT JOIN sites s ON s.id = d.site_id
-                ORDER BY d.name
-                """
-            )
-        ).fetchall()
+        rows = []
+        try:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name, COALESCE(d.notes,'') AS notes
+                    FROM departments d
+                    LEFT JOIN sites s ON s.id = d.site_id
+                    WHERE d.site_id = :sid
+                    ORDER BY d.name
+                    """
+                ),
+                {"sid": active_site_id},
+            ).fetchall()
+        except Exception:
+            rows = []
         for r in rows:
             departments.append(
                 {
@@ -3056,8 +3044,12 @@ def admin_departments_list():
                     "notes": r[5] or "",
                 }
             )
-        # Best-effort site header from first row
-        site_name = rows[0][4] if rows else None
+        # Site header: strictly resolve from active site
+        try:
+            row_site = db.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": active_site_id}).fetchone()
+            site_name = row_site[0] if row_site else None
+        except Exception:
+            site_name = None
     finally:
         db.close()
     
@@ -3105,7 +3097,9 @@ def admin_departments_new_form():
     """
     Show form for creating a new department.
     """
-    tid = session.get("tenant_id")
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    tid = ctx.get("tenant_id")
     role = session.get("role")
     
     # Get current week for header
@@ -3133,19 +3127,13 @@ def admin_departments_create():
     from flask import flash, redirect, url_for
     from core.admin_repo import DepartmentsRepo
     
-    # Get first available site (for simplicity in Phase 2)
-    db = get_session()
-    try:
-        site_row = db.execute(
-            text("SELECT id FROM sites LIMIT 1")
-        ).fetchone()
-        site_id = site_row[0] if site_row else None
-    finally:
-        db.close()
-    
+    # Resolve active site strictly from context; no guessing
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = ctx.get("site_id")
     if not site_id:
-        flash("Ingen site hittades.", "error")
-        return redirect(url_for("ui.admin_departments_list"))
+        flash("Ingen site vald. Välj site först.", "error")
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_new_form")))
     
     # Get form data
     name = request.form.get("name", "").strip()
@@ -3188,23 +3176,29 @@ def admin_departments_edit_form(dept_id: str):
     Show form for editing a department.
     """
     role = session.get("role")
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
     
+    # Require active site; redirect to selector when missing
+    if not active_site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_edit_form", dept_id=dept_id)))
     db = get_session()
     try:
-        # Get department (include notes if present)
+        # Get department strictly within active site (include notes)
         dept_row = db.execute(
             text(
                 "SELECT d.id, d.site_id, d.name, d.resident_count_mode, d.resident_count_fixed, d.notes, d.version "
                 "FROM departments d "
-                "WHERE d.id = :id"
+                "WHERE d.id = :id AND d.site_id = :sid"
             ),
-            {"id": dept_id},
+            {"id": dept_id, "sid": active_site_id},
         ).fetchone()
 
         if not dept_row:
             from flask import flash, redirect, url_for
 
-            flash("Avdelning hittades inte.", "error")
+            flash("Avdelning hittades inte för vald site.", "error")
             return redirect(url_for("ui.admin_departments_list"))
 
         department = {
@@ -3267,7 +3261,10 @@ def admin_departments_edit_form(dept_id: str):
     # Load diet types and existing defaults for this department
     try:
         from core.admin_repo import DietTypesRepo, DietDefaultsRepo
-        types = DietTypesRepo().list_all(tenant_id=1)
+        from .context import get_active_context as _get_ctx
+        _ctx3 = _get_ctx()
+        _tid3 = _ctx3.get("tenant_id") or 1
+        types = DietTypesRepo().list_all(tenant_id=_tid3)
         defaults = DietDefaultsRepo().list_for_department(dept_id)
         vm["diet_types"] = types
         vm["diet_defaults"] = {str(it["diet_type_id"]): int(it.get("default_count", 0) or 0) for it in defaults}
@@ -3289,17 +3286,21 @@ def admin_departments_update(dept_id: str):
     from core.etag import ConcurrencyError
     
     # Verify department exists
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    # Require active site; redirect to selector when missing
+    if not active_site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_edit_form", dept_id=dept_id)))
     db = get_session()
     try:
         dept_row = db.execute(
-            text("SELECT version FROM departments WHERE id = :id"),
-            {"id": dept_id}
+            text("SELECT version FROM departments WHERE id = :id AND site_id = :sid"),
+            {"id": dept_id, "sid": active_site_id}
         ).fetchone()
-        
         if not dept_row:
-            flash("Avdelning hittades inte.", "error")
+            flash("Avdelning hittades inte för vald site.", "error")
             return redirect(url_for("ui.admin_departments_list"))
-        
         current_version = int(dept_row[0] or 0)
     finally:
         db.close()
@@ -3437,27 +3438,30 @@ def admin_departments_delete(dept_id: str):
     from flask import flash, redirect, url_for
     
     # Get department and delete it
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
     db = get_session()
     try:
-        # Get department name
+        # Get department name strictly within active site
         dept_row = db.execute(
             text(
                 "SELECT d.name FROM departments d "
-                "WHERE d.id = :id"
+                "WHERE d.id = :id AND d.site_id = :sid"
             ),
-            {"id": dept_id}
+            {"id": dept_id, "sid": active_site_id}
         ).fetchone()
         
         if not dept_row:
-            flash("Avdelning hittades inte.", "error")
+            flash("Avdelning hittades inte för vald site.", "error")
             return redirect(url_for("ui.admin_departments_list"))
         
         dept_name = dept_row[0]
         
-        # Delete department
+        # Delete department within site scope
         db.execute(
-            text("DELETE FROM departments WHERE id = :id"),
-            {"id": dept_id}
+            text("DELETE FROM departments WHERE id = :id AND site_id = :sid"),
+            {"id": dept_id, "sid": active_site_id}
         )
         db.commit()
         
@@ -3844,12 +3848,18 @@ def admin_menu_planning_view(year: int, week: int):
     
     role = session.get("role")
     tid = session.get("tenant_id")
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
     
-    # Get all departments (across all sites)
+    # Require active site and fetch departments scoped to it
+    if not active_site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_menu_planning_view", year=year, week=week)))
     db = get_session()
     try:
         dept_rows = db.execute(
-            text("SELECT id, name FROM departments ORDER BY name")
+            text("SELECT id, name FROM departments WHERE site_id=:sid ORDER BY name"),
+            {"sid": active_site_id},
         ).fetchall()
         departments = [{"id": str(r[0]), "name": str(r[1])} for r in dept_rows]
     finally:
@@ -3921,12 +3931,18 @@ def admin_menu_planning_edit(year: int, week: int):
     
     role = session.get("role")
     tid = session.get("tenant_id")
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
     
-    # Get all departments (across all sites)
+    # Require active site and fetch departments scoped to it
+    if not active_site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_menu_planning_edit", year=year, week=week)))
     db = get_session()
     try:
         dept_rows = db.execute(
-            text("SELECT id, name FROM departments ORDER BY name")
+            text("SELECT id, name FROM departments WHERE site_id=:sid ORDER BY name"),
+            {"sid": active_site_id},
         ).fetchall()
         departments = [{"id": str(r[0]), "name": str(r[1])} for r in dept_rows]
     finally:
@@ -4169,14 +4185,20 @@ def admin_residents_week_get(year: int, week: int):
     effective values (override if exists, otherwise fixed).
     """
     from datetime import date as _d
-    # Resolve site (first available) and departments
+    # Resolve active site and departments scoped to it
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_residents_week", year=year, week=week)))
     db = get_session()
     try:
-        row_site = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
+        row_site = db.execute(text("SELECT id, name FROM sites WHERE id=:id"), {"id": active_site_id}).fetchone()
         site_id = str(row_site[0]) if row_site else None
         site_name = str(row_site[1] or "") if row_site else ""
         dept_rows = db.execute(
-            text("SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments ORDER BY name")
+            text("SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments WHERE site_id=:sid ORDER BY name"),
+            {"sid": active_site_id},
         ).fetchall()
         departments = [
             {"id": str(r[0]), "name": str(r[1] or ""), "resident_count_fixed": int(r[2] or 0)}
@@ -4248,6 +4270,11 @@ def admin_residents_week_post(year: int, week: int):
     """
     from flask import redirect, url_for, flash
     try:
+        # Require active site context
+        from .context import get_active_context as _get_ctx
+        _ctx = _get_ctx()
+        if not _ctx.get("site_id"):
+            return redirect(url_for("ui.select_site", next=url_for("ui.admin_residents_week", year=year, week=week)))
         from core.residents_weekly_repo import ResidentsWeeklyRepo
         repo = ResidentsWeeklyRepo()
         # Collect dept ids from form keys

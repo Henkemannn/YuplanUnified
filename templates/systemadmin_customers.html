@@ -60,7 +60,7 @@
               <tr>
                 <td>{{ c.tenant_name or '-' }}</td>
                 <td>{{ c.site_count or 0 }}</td>
-                <td>{{ c.customer_type or 'Okänd' }}</td>
+                <td>{{ c.customer_type or '-' }}</td>
                 <td>{{ c.status or 'Aktiv' }}</td>
                 <td>
                   <a class="sa-btn sa-btn-small" href="{{ url_for('admin_ui.systemadmin_customer_sites', tenant_id=c.tenant_id) }}" target="_blank">Visa sites</a>

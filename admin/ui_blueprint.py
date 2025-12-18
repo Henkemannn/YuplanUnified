@@ -26,23 +26,24 @@ def systemadmin_dashboard():
     db = get_session()
     customers: list[dict[str, str]] = []
     try:
-        # Ensure sites table exists in sqlite and detect optional tenant_id column
+        # Detect optional tenant_id column without doing schema DDL in request
         has_tenant_col = False
         try:
-            # Create minimal table if missing (sqlite dev convenience)
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS sites (
-                        id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        version INTEGER NOT NULL DEFAULT 0,
-                        notes TEXT NULL,
-                        updated_at TEXT
+            # Dev convenience: allow creating minimal table only under flag
+            if os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS sites (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            notes TEXT NULL,
+                            updated_at TEXT
+                        )
+                        """
                     )
-                    """
                 )
-            )
             cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
             has_tenant_col = any(str(c[1]) == "tenant_id" for c in cols)
         except Exception:
@@ -53,11 +54,14 @@ def systemadmin_dashboard():
             except Exception:
                 has_tenant_col = False
 
-        # Build query depending on schema
-        if has_tenant_col:
-            rows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
-        else:
-            rows = db.execute(text("SELECT id, name, NULL as tenant_id FROM sites ORDER BY name")).fetchall()
+        # Build query depending on schema; tolerate missing table
+        try:
+            if has_tenant_col:
+                rows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
+            else:
+                rows = db.execute(text("SELECT id, name, NULL as tenant_id FROM sites ORDER BY name")).fetchall()
+        except Exception:
+            rows = []
         # Load tenant names map
         trows = db.execute(text("SELECT id, name FROM tenants")).fetchall()
         tmap = {int(r[0]): str(r[1] or "") for r in trows}
@@ -66,15 +70,19 @@ def systemadmin_dashboard():
             n = (name or "").strip()
             low = n.lower()
             return not (low.startswith("test ") or low.startswith("demo "))
+        valid_tenant_ids = set(tmap.keys())
         for r in rows:
             sid = str(r[0])
             sname = str(r[1] or "")
             if not _is_visible(sname):
                 continue
             tid = int(r[2]) if r[2] is not None else None
+            # Hide orphan sites (no tenant or tenant deleted) to match customers view
+            if tid is None or tid not in valid_tenant_ids:
+                continue
             customers.append({
-                "tenant_id": str(tid) if tid is not None else "",
-                "tenant_name": tmap.get(int(tid)) if tid is not None else "",
+                "tenant_id": str(tid),
+                "tenant_name": tmap.get(int(tid), ""),
                 "site_id": sid,
                 "site_name": sname,
                 "admin_emails": [],
@@ -786,7 +794,8 @@ def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: igno
 
 __all__ = ["admin_ui_bp"]
 from core.app_authz import require_roles
-from flask import session
+from flask import session, current_app
+import os
 @admin_ui_bp.get("/ui/systemadmin/customers/new")
 @require_roles("superuser")
 def systemadmin_customer_new_step1():
@@ -800,15 +809,13 @@ def systemadmin_customer_new_step1():
 def systemadmin_customer_new_step1_post():
     from flask import session
     tenant_name = (request.form.get("tenant_name") or "").strip()
-    site_name = (request.form.get("site_name") or "").strip()
     customer_type = (request.form.get("customer_type") or "").strip()
-    if not tenant_name or not site_name or not customer_type:
-        flash("Fyll i kundnamn, site och kundtyp.", "danger")
+    if not tenant_name or not customer_type:
+        flash("Fyll i kundnamn och kundtyp.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
     data = session.get("wizard_new_customer", {})
     data.update({
         "tenant_name": tenant_name,
-        "site_name": site_name,
         "customer_type": customer_type,
         "contact_name": (request.form.get("contact_name") or "").strip(),
         "contact_email": (request.form.get("contact_email") or "").strip(),
@@ -841,35 +848,23 @@ def systemadmin_customer_new_step2_post():
         "internal_notes": (request.form.get("internal_notes") or "").strip(),
     })
     session["wizard_new_customer"] = data
-    return redirect(url_for("admin_ui.systemadmin_customer_new_step3"))
+    # Skip module selection at tenant level; proceed to confirmation
+    return redirect(url_for("admin_ui.systemadmin_customer_new_step4"))
 
 @admin_ui_bp.get("/ui/systemadmin/customers/new/modules")
 @require_roles("superuser")
 def systemadmin_customer_new_step3():
     from flask import session
-    data = session.get("wizard_new_customer")
-    if not data:
+    # Module selection moved to site level; redirect to step 4
+    if not session.get("wizard_new_customer"):
         flash("Fyll i kundinformation först.", "warning")
         return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
-    vm = {"data": data}
-    return render_template("systemadmin_customer_new_step3.html", vm=vm)
+    return redirect(url_for("admin_ui.systemadmin_customer_new_step4"))
 
 @admin_ui_bp.post("/ui/systemadmin/customers/new/modules")
 @require_roles("superuser")
 def systemadmin_customer_new_step3_post():
-    from flask import session
-    selected_modules = []
-    names = [
-        "weekview","planera","portal","report","menu_import","specialkost",
-        "recipes","prep","freeze","husk_bestill","integrations",
-    ]
-    for n in names:
-        field = f"modules_{n}"
-        if request.form.get(field):
-            selected_modules.append(n)
-    data = session.get("wizard_new_customer", {})
-    data["modules"] = selected_modules
-    session["wizard_new_customer"] = data
+    # No-op; modules handled per site
     return redirect(url_for("admin_ui.systemadmin_customer_new_step4"))
 
 @admin_ui_bp.get("/ui/systemadmin/customers/new/admin")
@@ -890,49 +885,41 @@ def systemadmin_customers():
     """Enterprise-style customers view with UI-only filtering of test/demo sites."""
     db = get_session()
     try:
-        # Ensure sites table exists and detect optional tenant_id column
+        # Detect optional tenant_id column without doing schema DDL in request
         has_tenant_col = False
         try:
-            db.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS sites (
-                        id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        version INTEGER NOT NULL DEFAULT 0,
-                        notes TEXT NULL,
-                        updated_at TEXT
-                    )
-                    """
-                )
-            )
             cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
             has_tenant_col = any(str(c[1]) == "tenant_id" for c in cols)
         except Exception:
-            try:
-                chk = db.execute(text("SELECT 1 FROM information_schema.columns WHERE table_name='sites' AND column_name='tenant_id'"))
-                has_tenant_col = chk.fetchone() is not None
-            except Exception:
-                has_tenant_col = False
+            # Non-SQLite or table missing: we'll try selects with fallback below
+            has_tenant_col = False
 
-        if has_tenant_col:
-            srows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
-        else:
-            srows = db.execute(text("SELECT id, name, NULL as tenant_id FROM sites ORDER BY name")).fetchall()
+        try:
+            if has_tenant_col:
+                srows = db.execute(text("SELECT id, name, tenant_id FROM sites ORDER BY name")).fetchall()
+            else:
+                srows = db.execute(text("SELECT id, name, NULL as tenant_id FROM sites ORDER BY name")).fetchall()
+        except Exception:
+            # Table may not exist; treat as no sites
+            srows = []
         trows = db.execute(text("SELECT id, name FROM tenants ORDER BY name")).fetchall()
         tmap = {int(r[0]): str(r[1] or "") for r in trows}
-
-        # Helper: UI-only filter of obvious test/demo sites
-        def _site_visible(name: str) -> bool:
-            n = (name or "").strip(); low = n.lower()
-            return not (low.startswith("test ") or low.startswith("demo "))
+        # Load customer type (canonical kind) from tenant_metadata
+        tm_rows = []
+        try:
+            tm_rows = db.execute(text("SELECT tenant_id, kind FROM tenant_metadata")).fetchall()
+        except Exception:
+            tm_rows = []
+        tm_map: dict[int, str] = {}
+        for r in tm_rows:
+            try:
+                tm_map[int(r[0])] = (str(r[1]) if r[1] is not None else "")
+            except Exception:
+                continue
 
         # Aggregate site counts per tenant
         site_count: dict[int, int] = {}
         for r in srows:
-            sname = str(r[1] or "")
-            if not _site_visible(sname):
-                continue
             tid_val = r[2]
             if tid_val is None:
                 continue  # cannot attribute site to any tenant
@@ -940,6 +927,19 @@ def systemadmin_customers():
             site_count[tid_int] = site_count.get(tid_int, 0) + 1
 
         # Build customers view as tenants with site_count
+        def _label_for_kind(kind: str | None) -> str:
+            if not kind:
+                return "Standard"
+            labels = {
+                "municipality": "Kommun",
+                "offshore": "Offshore",
+                "hotel": "Hotell / Storkök",
+                "care": "Vård & omsorg",
+                "school": "Skola",
+                "other": "Annat",
+            }
+            k = (kind or "").strip().lower()
+            return labels.get(k) or f"Okänd ({kind})"
         customers = []
         for t in trows:
             tid = int(t[0])
@@ -948,9 +948,14 @@ def systemadmin_customers():
                 "tenant_id": tid,
                 "tenant_name": tname,
                 "site_count": site_count.get(tid, 0),
-                "customer_type": "",
+                "customer_type": _label_for_kind(tm_map.get(tid)),
                 "status": "Aktiv",
             })
+        # Debug log after read
+        try:
+            current_app.logger.info("Customers: %d tenants. Sample tenant_metadata: %s", len(customers), list(tm_map.items())[:5])
+        except Exception:
+            pass
     finally:
         db.close()
     vm = {"customers": customers}
@@ -964,7 +969,10 @@ def systemadmin_customer_sites(tenant_id: int):
     try:
         trow = db.execute(text("SELECT name FROM tenants WHERE id=:id"), {"id": tenant_id}).fetchone()
         tenant_name = str(trow[0]) if trow and trow[0] else str(tenant_id)
-        rows = db.execute(text("SELECT id, name FROM sites WHERE tenant_id=:t ORDER BY name"), {"t": tenant_id}).fetchall()
+        try:
+            rows = db.execute(text("SELECT id, name FROM sites WHERE tenant_id=:t ORDER BY name"), {"t": tenant_id}).fetchall()
+        except Exception:
+            rows = []
         sites = [{"id": str(r[0]), "name": str(r[1] or "")} for r in rows]
     finally:
         db.close()
@@ -975,20 +983,64 @@ def systemadmin_customer_sites(tenant_id: int):
 @require_roles("superuser")
 def systemadmin_customer_sites_create(tenant_id: int):
     name = (request.form.get("site_name") or "").strip()
+    admin_email = (request.form.get("admin_email") or "").strip().lower()
+    admin_password = (request.form.get("admin_password") or "").strip()
     if not name:
         flash("Ange site-namn.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+    if not admin_email or not admin_password:
+        flash("Ange admin e-post och lösenord.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
     site_id = name.lower().replace(" ", "-")
     db = get_session()
     try:
-        db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER)"))
+        # Dev-only schema helpers
+        if os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"):
+            try:
+                db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER)"))
+            except Exception:
+                pass
+            try:
+                db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+            except Exception:
+                pass
+        # Ensure site_feature_flags exists before insert (safe no-op if present)
         try:
-            db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+            db.execute(text("CREATE TABLE IF NOT EXISTS site_feature_flags(site_id TEXT, name TEXT, enabled INTEGER, PRIMARY KEY(site_id, name))"))
         except Exception:
             pass
         db.execute(text("INSERT OR REPLACE INTO sites(id,name,version,tenant_id) VALUES(:id,:name,0,:t)"), {"id": site_id, "name": name, "t": tenant_id})
+        # Persist selected site modules as feature flags
+        module_names = [
+            "weekview","planera","portal","report","menu_import","specialkost",
+            "recipes","prep","freeze","husk_bestill","integrations",
+        ]
+        for m in module_names:
+            field = f"sf_{m}"
+            if request.form.get(field):
+                db.execute(
+                    text("INSERT OR REPLACE INTO site_feature_flags(site_id, name, enabled) VALUES(:sid, :name, 1)"),
+                    {"sid": site_id, "name": m},
+                )
+        # Create site-admin user for the tenant
+        pw_hash = generate_password_hash(admin_password)
+        user = User(
+            tenant_id=tenant_id,
+            email=admin_email,
+            password_hash=pw_hash,
+            role="admin",
+            unit_id=None,
+        )
+        db.add(user)
         db.commit()
-        flash("Site skapad.", "success")
+        try:
+            open_admin_url = url_for("admin_ui.systemadmin_switch_site", site_id=site_id)
+        except Exception:
+            open_admin_url = f"/ui/systemadmin/switch-site/{site_id}"
+        flash(
+            f"Site ‘{name}’ skapad. <a class=\"sa-btn sa-btn-primary sa-btn-small\" href=\"{open_admin_url}\">Öppna admin</a>",
+            "success",
+        )
     except Exception as e:
         try:
             db.rollback()
@@ -1004,51 +1056,76 @@ def systemadmin_customer_sites_create(tenant_id: int):
 @admin_ui_bp.post("/ui/systemadmin/customers/new/admin")
 @require_roles("superuser")
 def systemadmin_customer_create():
-    """Create a new customer from wizard step 4 (tenant, site, admin user)."""
-    tenant_name = (request.form.get("tenant_name") or "").strip()
-    site_name = (request.form.get("site_name") or "").strip()
-    admin_email = (request.form.get("admin_email") or "").strip()
-    admin_password = (request.form.get("admin_password") or "").strip()
+    """Create a new customer from wizard: create tenant only, then redirect to Sites."""
+    # Use wizard session data; do not require site or admin here
+    from flask import session as _sess
+    data = _sess.get("wizard_new_customer", {})
+    tenant_name = (data.get("tenant_name") or "").strip()
+    raw_type = (data.get("customer_type") or "").strip()
 
-    if not tenant_name or not site_name or not admin_email or not admin_password:
-        flash("Alla fält måste fyllas i.", "danger")
-        return redirect(url_for("admin_ui.systemadmin_customers"))
+    if not tenant_name:
+        flash("Kundnamn saknas.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
 
-    # Create tenant, admin user, and site record
-    site_id = site_name.lower().replace(" ", "-")
     db = get_session()
     try:
-        # Create tenant
         tenant = Tenant(name=tenant_name)
         db.add(tenant)
         db.flush()
-
-        # Create admin user for tenant
-        pw_hash = generate_password_hash(admin_password)
-        user = User(
-            tenant_id=tenant.id,
-            email=admin_email.lower(),
-            password_hash=pw_hash,
-            role="admin",
-            unit_id=None,
-        )
-        db.add(user)
-
-        # Ensure sites table exists and has tenant_id
-        db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER)"))
-        # Try to add tenant_id column if table existed without it
+        # Normalize and persist customer type to tenant_metadata.kind
+        def _canonicalize_customer_type(s: str) -> str | None:
+            if not s:
+                return None
+            low = s.strip().lower()
+            mapping = {
+                "kommun": "municipality",
+                "municipality": "municipality",
+                "offshore": "offshore",
+                "hotell / storkök": "hotel",
+                "hotell": "hotel",
+                "storkök": "hotel",
+                "storkok": "hotel",
+                "skola": "school",
+                "school": "school",
+                "vård & omsorg": "care",
+                "vard & omsorg": "care",
+                "care": "care",
+                "annat": "other",
+                "other": "other",
+            }
+            return mapping.get(low) or low
+        canon = _canonicalize_customer_type(raw_type)
         try:
-            db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+            current_app.logger.info("Create tenant '%s' customer_type raw='%s' canonical='%s'", tenant_name, raw_type, canon)
         except Exception:
             pass
-
-        # Insert site row
-        db.execute(
-            text("INSERT OR REPLACE INTO sites(id,name,version,tenant_id) VALUES(:id,:name,0,:tenant_id)"),
-            {"id": site_id, "name": site_name, "tenant_id": tenant.id},
-        )
+        try:
+            from core.tenant_metadata_service import TenantMetadataService
+            TenantMetadataService().upsert(tenant.id, kind=canon, description=None)
+        except Exception as e:
+            try:
+                current_app.logger.warning("Tenant metadata upsert failed for tenant_id=%s: %s", tenant.id, e)
+            except Exception:
+                pass
+        # Debug: quick SQLite tenants.customer_type check
+        try:
+            cols = db.execute(text("PRAGMA table_info('tenants')")).fetchall()
+            has_ct = any(str(c[1]) == "customer_type" for c in cols)
+            if has_ct:
+                rows = db.execute(text("SELECT id, name, customer_type FROM tenants ORDER BY id DESC LIMIT 5")).fetchall()
+                current_app.logger.info("SQLite tenants.customer_type present; sample=%s", rows)
+            else:
+                current_app.logger.info("SQLite: tenants.customer_type not present")
+        except Exception:
+            pass
         db.commit()
-        flash("Kund skapad.", "success")
+        # Clear wizard state
+        try:
+            _sess.pop("wizard_new_customer", None)
+        except Exception:
+            pass
+        flash("Kund skapad. Lägg till första site.", "success")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant.id))
     except Exception as e:
         try:
             db.rollback()
@@ -1057,7 +1134,6 @@ def systemadmin_customer_create():
         flash(f"Fel vid skapande: {e}", "danger")
     finally:
         db.close()
-
     return redirect(url_for("admin_ui.systemadmin_customers"))
 
 

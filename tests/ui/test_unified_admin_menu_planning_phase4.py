@@ -54,6 +54,9 @@ def seed_departments(client_admin):
                 ('{dept3_id}', '{site_id}', 'Avd Gamma', 'fixed', 20, 0)
         """))
         sess.commit()
+    # Activate created site for session
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     yield {"dept1": dept1_id, "dept2": dept2_id, "dept3": dept3_id}
 
 

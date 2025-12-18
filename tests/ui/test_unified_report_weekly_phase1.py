@@ -64,6 +64,9 @@ def seed_site_and_departments(client_admin):
         """))
         sess.commit()
     
+    # Activate this site for the session to satisfy strict scoping
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     yield {"site_id": site_id, "dept1": dept1_id, "dept2": dept2_id}
 
 

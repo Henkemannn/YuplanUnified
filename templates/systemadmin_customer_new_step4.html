@@ -22,8 +22,8 @@
   <section class="sa-main">
     <header class="sa-header">
       <div>
-        <h1>Steg 4 · Adminkonto</h1>
-        <p class="sa-subtitle">Skapa administratör för kunden.</p>
+        <h1>Steg 4 · Bekräfta</h1>
+        <p class="sa-subtitle">Skapa kund (utan site). Lägg till site efteråt.</p>
       </div>
     </header>
 
@@ -31,33 +31,12 @@
       <article class="sa-card sa-card-wide">
         <div class="sa-summary">
           {% set d = vm.data or {} %}
-          <p><strong>Kund:</strong> {{ d.tenant_name or '-' }} · <strong>Site:</strong> {{ d.site_name or '-' }}</p>
+          <p><strong>Kund:</strong> {{ d.tenant_name or '-' }}</p>
           <p><strong>Typ:</strong> {{ d.customer_type or '-' }}</p>
           <p><strong>Fakturamodell:</strong> {{ d.billing_model or '-' }}</p>
-          {% if d.modules %}
-          <p><strong>Moduler:</strong>
-            {% for m in d.modules %}<span class="sa-pill sa-pill-on" style="margin-right:6px">{{ m }}</span>{% endfor %}
-          </p>
-          {% endif %}
         </div>
         <form method="post" action="{{ url_for('admin_ui.systemadmin_customer_create') }}" class="sa-form">
           {{ csrf_token_input()|safe }}
-          <div class="admin-form-row">
-            <label for="tenant_name">Kundnamn</label>
-            <input type="text" id="tenant_name" name="tenant_name" value="{{ vm.data.tenant_name or '' }}" required>
-          </div>
-          <div class="admin-form-row">
-            <label for="site_name">Site / enhet</label>
-            <input type="text" id="site_name" name="site_name" value="{{ vm.data.site_name or '' }}" required>
-          </div>
-          <div class="admin-form-row">
-            <label for="admin_email">Admin e-post</label>
-            <input type="email" id="admin_email" name="admin_email" required>
-          </div>
-          <div class="admin-form-row">
-            <label for="admin_password">Admin lösenord</label>
-            <input type="password" id="admin_password" name="admin_password" required>
-          </div>
           <button type="submit" class="sa-btn sa-btn-primary">Skapa kund</button>
           <a class="sa-btn sa-btn-secondary" href="{{ url_for('admin_ui.systemadmin_customers') }}">Avbryt</a>
         </form>

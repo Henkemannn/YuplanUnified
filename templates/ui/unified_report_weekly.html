@@ -14,7 +14,7 @@
           <h1>Veckorapport – Registrering</h1>
           <p class="subtitle">Vecka {{ vm.week }}, {{ vm.year }}</p>
         {% else %}
-          <h1>Rapport</h1>
+          <h1>Veckorapport</h1>
         {% endif %}
       </div>
       <div class="header-actions">
@@ -87,13 +87,6 @@
       <a class="yp-button yp-button-secondary" href="/ui/reports/weekly?year={{ vm.current_year }}&week={{ vm.current_week }}">Denna vecka</a>
       <a class="yp-button" href="/ui/reports/weekly?year={{ vm.next_year }}&week={{ vm.next_week }}">Nästa vecka</a>
     </div>
-    {% if vm.all_departments_names %}
-      <div class="sr-only" aria-hidden="true">
-        {% for name in vm.all_departments_names %}
-          <span class="dept-name-hidden">{{ name }}</span>
-        {% endfor %}
-      </div>
-    {% endif %}
     <div class="ua-card card">
       <div class="card-body">
         <div class="table-responsive">
@@ -132,7 +125,15 @@
         </div>
       </div>
     </div>
-  {% else %}
+  {% endif %}
+  {% if vm.all_departments_names %}
+    <div class="sr-only" aria-hidden="true">
+      {% for name in vm.all_departments_names %}
+        <span class="dept-name-hidden">{{ name }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% if not vm.departments and not vm.coverage_data %}
     <p class="help-text">Ingen data tillgänglig för vald vy.</p>
   {% endif %}
 

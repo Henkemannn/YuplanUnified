@@ -191,18 +191,31 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if not has_request_context():
             return
         tid = getattr(g, "tenant_id", None)
+        sid = (session.get("site_id") or "").strip() if "site_id" in session else None
         g.tenant_feature_flags = {}
-        if not tid:
+        if not tid and not sid:
             return
         db = get_session()
         try:
-            # Select only required columns to avoid schema mismatches on optional fields
-            rows = (
-                db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
-                .filter(TenantFeatureFlag.tenant_id == tid)
-                .all()
-            )
-            g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
+            if sid:
+                try:
+                    rows = db.execute(text("SELECT name, enabled FROM site_feature_flags WHERE site_id=:sid"), {"sid": sid}).fetchall()
+                    g.tenant_feature_flags = {str(r[0]): bool(int(r[1])) for r in rows}
+                except Exception:
+                    # Fall back to tenant-level flags if site-level not available
+                    rows = (
+                        db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
+                        .filter(TenantFeatureFlag.tenant_id == tid)
+                        .all()
+                    )
+                    g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
+            else:
+                rows = (
+                    db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
+                    .filter(TenantFeatureFlag.tenant_id == tid)
+                    .all()
+                )
+                g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
         finally:
             db.close()
 
@@ -352,42 +365,32 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 return ""
             return f'<input type="hidden" name="csrf_token" value="{tok}">'  # nosec B704
 
-        # Lookup current tenant and site for UI chrome
+        # Lookup current tenant and site for UI chrome using canonical context
         current_site_name = None
         tenant_name = None
         try:
-            tid_val = getattr(g, "tenant_id", None)
+            from .context import get_active_context as _get_ctx
+            ctx = _get_ctx()
+            tid_val = ctx.get("tenant_id")
+            sid_val = ctx.get("site_id")
             if tid_val:
                 from sqlalchemy import text as _sa_text  # local import
                 db = get_session()
                 try:
-                    # Prefer explicit site_id from session if present
-                    from flask import session as _sess
-                    sid = _sess.get("site_id")
-                    if sid:
+                    if sid_val:
                         row_s = db.execute(
                             _sa_text("SELECT name FROM sites WHERE id=:sid LIMIT 1"),
-                            {"sid": str(sid)},
+                            {"sid": str(sid_val)},
                         ).fetchone()
                         if row_s and row_s[0]:
                             current_site_name = str(row_s[0])
-                    if not current_site_name:
-                        row = db.execute(
-                            _sa_text("SELECT name FROM sites WHERE tenant_id=:tid ORDER BY name LIMIT 1"),
-                            {"tid": int(tid_val)},
-                        ).fetchone()
-                        if row and row[0]:
-                            current_site_name = str(row[0])
-                    # Also try to resolve tenant name from tenants table
-                    try:
-                        row_t = db.execute(
-                            _sa_text("SELECT name FROM tenants WHERE id=:tid LIMIT 1"),
-                            {"tid": int(tid_val)},
-                        ).fetchone()
-                        if row_t and row_t[0]:
-                            tenant_name = str(row_t[0])
-                    except Exception:
-                        tenant_name = None
+                    # Resolve tenant name
+                    row_t = db.execute(
+                        _sa_text("SELECT name FROM tenants WHERE id=:tid LIMIT 1"),
+                        {"tid": int(tid_val)},
+                    ).fetchone()
+                    if row_t and row_t[0]:
+                        tenant_name = str(row_t[0])
                 finally:
                     db.close()
         except Exception:
