@@ -2753,23 +2753,38 @@ def cook_dashboard():
                    "juli", "augusti", "september", "oktober", "november", "december"]
     today_formatted = f"{today_name} {today.day} {month_names[today.month - 1]}"
     
+    # Require active site context; redirect to site selector if missing
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        from flask import redirect, url_for
+        return redirect(url_for("ui.select_site", next="/ui/cook"))
+
     db = get_session()
     try:
         # Get user info (note: site_id doesn't exist in User model, using tenant instead)
         user = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first() if user_id and tid else None
-        
-        # For now, use tenant as "site" since site model doesn't exist yet
-        site_id = None  # Will be user.unit_id when we have proper site association
-        site_name = "Test Site"  # Placeholder
-        
-        # Get all departments (departments table has site_id, not tenant_id)
-        # For now, fetch all departments without filtering
+
+        # Use active site strictly
+        site_id = active_site_id
+        try:
+            row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+            site_name = row_s[0] if row_s else "Site"
+        except Exception:
+            site_name = "Site"
+
+        # Fetch departments strictly for active site
         departments = []
-        dept_rows = db.execute(
-            text("SELECT id, name FROM departments ORDER BY name LIMIT 20")
-        ).fetchall()
+        try:
+            dept_rows = db.execute(
+                text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name LIMIT 20"),
+                {"s": site_id},
+            ).fetchall()
+        except Exception:
+            dept_rows = []
         departments = [{"id": str(r[0]), "name": r[1], "resident_count": 0} for r in dept_rows]
-        
+
     finally:
         db.close()
     
