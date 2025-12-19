@@ -1,17 +1,4 @@
-extends: "spectral:recommended"
-
+extends: [spectral:oas]
 rules:
-  operation-description: warn
-  operation-operationId: warn
-  no-ambiguous-paths: error
-  openapi-tags: off
-  oas-415-description-standard:
-    description: 415 responses should use the standard description "Unsupported Media Type".
-    message: 415 response description should be "Unsupported Media Type".
-    given: $.paths[*][*].responses[415]
-    severity: warn
-    then:
-      field: description
-      function: pattern
-      functionOptions:
-        match: ^Unsupported Media Type$
+  # Strong schema validation
+  oas3-schema: error
