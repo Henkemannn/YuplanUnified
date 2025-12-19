@@ -110,11 +110,17 @@ def select_site():
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
     tid = ctx.get("tenant_id")
+    # Require tenant context to show site selector; otherwise redirect
+    if tid is None:
+        role = (session.get("role") or "").strip().lower()
+        if role == "superuser":
+            return redirect(url_for("ui.admin_system_page"))
+        return redirect(url_for("home.ui_login", next=next_url))
     from core.admin_repo import SitesRepo
     sites = []
     try:
         repo = SitesRepo()
-        sites = repo.list_sites_for_tenant(tid) if tid is not None else []
+        sites = repo.list_sites_for_tenant(tid)
     except Exception:
         sites = []
     return render_template("ui/select_site.html", vm={"sites": sites, "next": next_url})
@@ -296,37 +302,22 @@ def admin_system_department_create():
 @ui_bp.get("/ui/admin/diets")
 @require_roles(*ADMIN_ROLES)
 def admin_diets_page():
-    # Resolve current site (simple: first site or site_id query)
+    # Resolve active site strictly; require selection if missing
     site_id = (request.args.get("site_id") or "").strip()
     db = get_session()
     try:
         if not site_id:
-            # Prefer tenant-scoped site when schema supports tenant_id
-            tid = session.get("tenant_id")
-            row_site = None
-            try:
-                cols = {r[1] for r in db.execute(text("PRAGMA table_info('sites')")).fetchall()}
-                if "tenant_id" in cols and tid is not None:
-                    row_site = db.execute(
-                        text("SELECT id, name FROM sites WHERE tenant_id=:t ORDER BY name LIMIT 1"),
-                        {"t": tid},
-                    ).fetchone()
-            except Exception:
-                pass
-            if not row_site:
-                row_site = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
-            if row_site:
-                site_id = str(row_site[0])
-                site_name = str(row_site[1] or "")
-            else:
-                site_name = ""
-        else:
-            r = db.execute(text("SELECT id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-            site_name = str(r[1] or "") if r else ""
-        # Diet types via repo (tenant-scoped; site scoping to be added in future phases)
+            # Try active context
+            from .context import get_active_context as _get_ctx
+            ctx = _get_ctx()
+            site_id = ctx.get("site_id") or ""
+            if not site_id:
+                return redirect(url_for("ui.select_site", next=request.url))
+        r = db.execute(text("SELECT id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = str(r[1] or "") if r else ""
+        # Diet types via repo (site-scoped)
         from core.admin_repo import DietTypesRepo
-        tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
-        diets = DietTypesRepo().list_all(tenant_id=tid) if tid is not None else []
+        diets = DietTypesRepo().list_all(site_id=site_id) if site_id else []
     finally:
         db.close()
     vm = {"site": {"id": site_id, "name": site_name}, "diets": diets}
@@ -345,6 +336,18 @@ def admin_department_settings_get(department_id: str):
         vm = svc.get_department_settings(department_id)
     except ValueError:
         return jsonify({"error": "not_found", "message": "Department not found"}), 404
+    # Ensure diet types are site-scoped in the VM for the edit form
+    try:
+        from core.admin_repo import DietTypesRepo
+        db = get_session()
+        try:
+            row = db.execute(text("SELECT site_id FROM departments WHERE id=:id"), {"id": department_id}).fetchone()
+            dep_site_id = str(row[0]) if row and row[0] is not None else None
+        finally:
+            db.close()
+        vm["diet_types"] = DietTypesRepo().list_all(site_id=dep_site_id) if dep_site_id else DietTypesRepo().list_all(site_id="")
+    except Exception:
+        pass
     return render_template("ui/admin_department_settings.html", vm=vm)
 
 
@@ -391,7 +394,7 @@ def admin_department_detail_get(department_id: str):
     db = get_session()
     try:
         row = db.execute(
-            text("SELECT name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') FROM departments WHERE id=:id"),
+            text("SELECT name, COALESCE(resident_count_fixed,0), COALESCE(notes,''), site_id FROM departments WHERE id=:id"),
             {"id": department_id},
         ).fetchone()
         if not row:
@@ -399,6 +402,7 @@ def admin_department_detail_get(department_id: str):
         dept_name = str(row[0] or "")
         resident_count_fixed = int(row[1] or 0)
         notes = str(row[2] or "")
+        dept_site_id = str(row[3]) if row[3] is not None else None
     finally:
         db.close()
 
@@ -463,8 +467,8 @@ def admin_department_detail_get(department_id: str):
     # Load diet types and existing defaults for this department (for detail view)
     try:
         from core.admin_repo import DietTypesRepo, DietDefaultsRepo
-        tid_for_diet = getattr(g, "tenant_id", None) or session.get("tenant_id")
-        types = DietTypesRepo().list_all(tenant_id=tid_for_diet) if tid_for_diet is not None else []
+        # Diet types are site-scoped
+        types = DietTypesRepo().list_all(site_id=dept_site_id) if dept_site_id else []
         defaults = DietDefaultsRepo().list_for_department(department_id)
         vm["diet_types"] = types
         # Use integer keys to simplify template lookup with t.id
@@ -619,11 +623,15 @@ def admin_diets_create():
         flash("Namn måste anges.", "error")
         return redirect(url_for("ui.admin_diets_page", site_id=site_id))
     from core.admin_repo import DietTypesRepo
-    tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
-    if tid is None:
-        flash("Ingen kundkontext (tenant) hittades.", "error")
-        return redirect(url_for("ui.admin_diets_page", site_id=site_id))
-    DietTypesRepo().create(tenant_id=int(tid) if str(tid).isdigit() else tid, name=name, default_select=False)
+    if not site_id:
+        # Derive from active context if not explicitly provided
+        from .context import get_active_context as _get_ctx
+        ctx = _get_ctx()
+        site_id = ctx.get("site_id") or ""
+        if not site_id:
+            flash("Ingen arbetsplats vald.", "error")
+            return redirect(url_for("ui.select_site", next=url_for("ui.admin_diets_page")))
+    DietTypesRepo().create(site_id=site_id, name=name, default_select=False)
     flash("Specialkosttyp skapad.", "success")
     return redirect(url_for("ui.admin_diets_page", site_id=site_id))
 
@@ -632,15 +640,23 @@ def admin_diets_create():
 def admin_system_diet_create():
     from flask import redirect, url_for, flash
     name = (request.form.get("name") or "").strip()
+    site_id = (request.args.get("site_id") or "").strip()
     if not name:
         flash("Namn måste anges.", "error")
         return redirect(url_for("ui.admin_system_page"))
     try:
         from core.admin_repo import DietTypesRepo
-        tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
-        if tid is None:
-            raise ValueError("missing_tenant_context")
-        DietTypesRepo().create(tenant_id=int(tid) if str(tid).isdigit() else tid, name=name, default_select=False)
+        if not site_id:
+            # Fallback to first site on system page when not provided
+            db = get_session()
+            try:
+                row_site = db.execute(text("SELECT id FROM sites ORDER BY name LIMIT 1")).fetchone()
+                site_id = str(row_site[0]) if row_site else ""
+            finally:
+                db.close()
+        if not site_id:
+            raise ValueError("missing_site_context")
+        DietTypesRepo().create(site_id=site_id, name=name, default_select=False)
     except Exception:
         flash("Kunde inte skapa specialkosttyp.", "error")
         return redirect(url_for("ui.admin_system_page"))
@@ -818,13 +834,13 @@ def weekview_ui():
             dept_rows = DepartmentsRepo().list_for_site(site_id) if site_id else []
         except Exception:
             dept_rows = []
-        tid = session.get("tenant_id")
-        if not tid:
-            return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+        # tenant_id not needed here for diet types; ensure site_id exists
+        if not site_id:
+            return jsonify({"error": "bad_request", "message": "Missing site"}), 400
         svc = WeekviewService()
         # Diet type names map for display
         try:
-            types = DietTypesRepo().list_all(tenant_id=tid)
+            types = DietTypesRepo().list_all(site_id=site_id)
             diet_name_map = {int(t["id"]): str(t["name"]) for t in types}
         except Exception:
             diet_name_map = {}
@@ -1624,8 +1640,13 @@ def admin_specialkost_list():
     from core.admin_repo import DietTypesRepo
     role = session.get("role")
     repo = DietTypesRepo()
-    items = repo.list_all(tenant_id=1)
-    vm = {"diet_types": items, "user_role": role}
+    # Resolve active site; if missing, fall back to first site for convenience in tests
+    site_id = (session.get("site_id") or (request.args.get("site_id") or "").strip())
+    if not site_id:
+        # Strict site isolation: require site selection
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_list")))
+    items = repo.list_all(site_id=site_id)
+    vm = {"diet_types": items, "user_role": role, "site_id": site_id}
     return render_template("ui/unified_admin_specialkost_list.html", vm=vm)
 
 
@@ -1646,7 +1667,11 @@ def admin_specialkost_create():
     if not name:
         flash("Namn måste anges.", "error")
         return redirect(url_for("ui.admin_specialkost_new_form"))
-    DietTypesRepo().create(tenant_id=1, name=name, default_select=default_select)
+    # Determine site (strict)
+    site_id = (session.get("site_id") or (request.args.get("site_id") or "").strip())
+    if not site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_new_form")))
+    DietTypesRepo().create(site_id=site_id, name=name, default_select=default_select)
     flash("Kosttyp skapad.", "success")
     return redirect(url_for("ui.admin_specialkost_list"))
 
@@ -1660,6 +1685,13 @@ def admin_specialkost_edit_form(kosttyp_id: int):
     if not item:
         flash("Kosttyp hittades inte.", "error")
         return redirect(url_for("ui.admin_specialkost_list"))
+    # Strict site isolation: only allow editing items for active site
+    active_site_id = session.get("site_id") or (request.args.get("site_id") or "").strip()
+    if not active_site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_edit_form", kosttyp_id=kosttyp_id)))
+    if str(item.get("site_id") or "") != str(active_site_id):
+        from flask import abort
+        abort(404)
     return render_template("ui/unified_admin_specialkost_edit.html", vm={"diet_type": item, "user_role": role})
 
 
@@ -1670,6 +1702,14 @@ def admin_specialkost_update(kosttyp_id: int):
     from core.admin_repo import DietTypesRepo
     name = (request.form.get("name") or "").strip()
     default_select = bool(request.form.get("default_select"))
+    # Verify site match
+    active_site_id = session.get("site_id") or (request.args.get("site_id") or "").strip()
+    if not active_site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_edit_form", kosttyp_id=kosttyp_id)))
+    item = DietTypesRepo().get_by_id(kosttyp_id)
+    if not item or str(item.get("site_id") or "") != str(active_site_id):
+        from flask import abort
+        abort(404)
     DietTypesRepo().update(kosttyp_id, name=name, default_select=default_select)
     flash("Kosttyp uppdaterad.", "success")
     return redirect(url_for("ui.admin_specialkost_list"))
@@ -2222,6 +2262,7 @@ def reports_weekly():
 @require_roles(*ADMIN_ROLES)
 def admin_report_week():
     from datetime import date as _d
+    from datetime import timedelta as _td
     # Params
     today = _d.today()
     iso = today.isocalendar()
@@ -2232,6 +2273,14 @@ def admin_report_week():
 
     tenant_id = getattr(g, "tenant_id", None) or session.get("tenant_id") or 1
     site_id = getattr(g, "site_id", None) or session.get("site_id")
+
+    # Enforce site context strictly: redirect to select-site when missing
+    if not site_id:
+        try:
+            nxt = url_for("ui.admin_report_week", year=year, week=week, department_id=department_id, view=view_mode)
+        except Exception:
+            nxt = f"/ui/admin/report/week?year={year}&week={week}&department_id={department_id}&view={view_mode}"
+        return redirect(url_for("ui.select_site", next=nxt))
 
     db = get_session()
     try:
@@ -2283,7 +2332,30 @@ def admin_report_week():
         nd = sum(r["normal_dinner"] for r in rows)
         vm_deps.append({"id": dep_id, "name": dep["name"], "rows": rows, "week_summary": {"special_lunch_total": sl, "normal_lunch_total": nl, "special_dinner_total": sd, "normal_dinner_total": nd}})
 
-    vm = {"selected_year": year, "selected_week": week, "selected_department_id": department_id or "ALL", "view_mode": ("day" if view_mode.startswith("day") else "week"), "departments": vm_deps, "departments_options": [{"id":"ALL","name":"Alla avdelningar"}] + all_deps}
+    # Compute navigation weeks similar to coverage view
+    jan4 = _d(year, 1, 4)
+    week1_monday = jan4 - _td(days=jan4.weekday())
+    current_monday = week1_monday + _td(weeks=week - 1)
+    prev_monday = current_monday - _td(weeks=1)
+    next_monday = current_monday + _td(weeks=1)
+    prev_year, prev_week = prev_monday.isocalendar()[0], prev_monday.isocalendar()[1]
+    next_year, next_week = next_monday.isocalendar()[0], next_monday.isocalendar()[1]
+    today_iso = _d.today().isocalendar()
+    current_year, current_week = today_iso[0], today_iso[1]
+    vm = {
+        "selected_year": year,
+        "selected_week": week,
+        "selected_department_id": department_id or "ALL",
+        "view_mode": ("day" if view_mode.startswith("day") else "week"),
+        "departments": vm_deps,
+        "departments_options": [{"id":"ALL","name":"Alla avdelningar"}] + all_deps,
+        "prev_year": prev_year,
+        "prev_week": prev_week,
+        "next_year": next_year,
+        "next_week": next_week,
+        "current_year": current_year,
+        "current_week": current_week,
+    }
     return render_template("ui/unified_report_weekly.html", vm=vm)
 
 
@@ -3276,10 +3348,8 @@ def admin_departments_edit_form(dept_id: str):
     # Load diet types and existing defaults for this department
     try:
         from core.admin_repo import DietTypesRepo, DietDefaultsRepo
-        from .context import get_active_context as _get_ctx
-        _ctx3 = _get_ctx()
-        _tid3 = _ctx3.get("tenant_id") or 1
-        types = DietTypesRepo().list_all(tenant_id=_tid3)
+        # Diet types are site-scoped; include legacy NULL-site rows via repo
+        types = DietTypesRepo().list_all(site_id=active_site_id)
         defaults = DietDefaultsRepo().list_for_department(dept_id)
         vm["diet_types"] = types
         vm["diet_defaults"] = {str(it["diet_type_id"]): int(it.get("default_count", 0) or 0) for it in defaults}
@@ -3359,7 +3429,7 @@ def admin_departments_update(dept_id: str):
         # Persist specialkost defaults from form
         items: list[dict] = []
         try:
-            types = DietTypesRepo().list_all(tenant_id=1)
+            types = DietTypesRepo().list_all(site_id=active_site_id)
             for t in types:
                 dtid = str(t.get("id"))
                 key = f"diet_default_{dtid}"
@@ -3415,7 +3485,10 @@ def admin_departments_edit_save_diets(dept_id: str):
     # Parse inputs
     items: list[dict] = []
     try:
-        types = DietTypesRepo().list_all(tenant_id=1)
+        from .context import get_active_context as _get_ctx
+        _ctx_local = _get_ctx()
+        active_site_id_local = _ctx_local.get("site_id")
+        types = DietTypesRepo().list_all(site_id=active_site_id_local)
         for t in types:
             dtid = str(t.get("id"))
             key = f"diet_default_{dtid}"
@@ -4184,6 +4257,58 @@ def planera_day_ui_v2():
     }
     
     return render_template("ui/unified_report_weekly.html", vm=vm)
+
+# ----------------------------------------------------------------------------
+# Systemadmin – Switch Active Site and enter Admin
+# ----------------------------------------------------------------------------
+@ui_bp.get("/ui/systemadmin/switch-site/<site_id>")
+@require_roles("superuser", "admin")
+def systemadmin_switch_site(site_id: str):
+    """Switch active site context and redirect into Admin dashboard.
+
+    Preserves authenticated user and role while clearing other session keys.
+    """
+    try:
+        uid = session.get("user_id")
+        role = session.get("role")
+        tid = session.get("tenant_id")
+    except Exception:
+        uid = None
+        role = None
+        tid = None
+    try:
+        # Try to resolve tenant_id from site when available
+        resolved_tid = None
+        db = get_session()
+        try:
+            # Detect tenant_id column
+            cols = {r[1] for r in db.execute(text("PRAGMA table_info('sites')")).fetchall()}
+            if "tenant_id" in cols:
+                row = db.execute(text("SELECT tenant_id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+                if row and row[0] is not None:
+                    resolved_tid = int(row[0]) if str(row[0]).isdigit() else row[0]
+        except Exception:
+            pass
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+        session.clear()
+        if uid is not None:
+            session["user_id"] = uid
+        if role is not None:
+            session["role"] = role
+        # Prefer tenant resolved from site; else keep previous
+        if resolved_tid is not None:
+            session["tenant_id"] = resolved_tid
+        elif tid is not None:
+            session["tenant_id"] = tid
+        session["site_id"] = str(site_id).strip()
+    except Exception:
+        # Fallback: do not crash on session issues
+        pass
+    return redirect(url_for("ui.admin_dashboard"))
 
 
 # ============================================================================

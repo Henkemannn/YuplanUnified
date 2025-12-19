@@ -26,6 +26,40 @@
   {% if vm.departments %}
     <div class="ua-card card">
       <div class="card-body">
+        <form method="GET" action="/ui/admin/report/week" class="filter-bar" aria-label="Välj vecka och avdelning">
+          <div class="filter-grid">
+            <div class="filter-item">
+              <label for="year-input">År</label>
+              <input id="year-input" name="year" type="number" min="2000" max="2100" value="{{ vm.selected_year }}" />
+            </div>
+            <div class="filter-item">
+              <label for="week-input">Vecka</label>
+              <input id="week-input" name="week" type="number" min="1" max="53" value="{{ vm.selected_week }}" />
+            </div>
+            <div class="filter-item">
+              <label for="department-select">Avdelning</label>
+              <select id="department-select" name="department_id">
+                {% if vm.selected_department_id == 'ALL' %}
+                  {% for opt in vm.departments_options %}
+                    <option value="{{ opt.id }}" {% if vm.selected_department_id == opt.id %}selected{% endif %}>{{ opt.name }}</option>
+                  {% endfor %}
+                {% else %}
+                  {% for opt in vm.departments_options %}
+                    {% if opt.id == vm.selected_department_id %}
+                      <option value="{{ opt.id }}" selected>{{ opt.name }}</option>
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+              </select>
+            </div>
+            <div class="filter-actions">
+              <button class="yp-button" type="submit">Visa</button>
+              <a class="yp-button yp-button-secondary" href="/ui/admin/report/week?year={{ vm.current_year }}&week={{ vm.current_week }}&department_id={{ vm.selected_department_id }}">Denna vecka</a>
+              <a class="yp-button" href="/ui/admin/report/week?year={{ vm.prev_year }}&week={{ vm.prev_week }}&department_id={{ vm.selected_department_id }}">Föregående vecka</a>
+              <a class="yp-button" href="/ui/admin/report/week?year={{ vm.next_year }}&week={{ vm.next_week }}&department_id={{ vm.selected_department_id }}">Nästa vecka</a>
+            </div>
+          </div>
+        </form>
         <div class="table-responsive">
           <div class="diets-labels">
             <span class="ua-label">Boende Lunch</span>
@@ -126,18 +160,16 @@
       </div>
     </div>
   {% endif %}
-  {% if vm.all_departments_names %}
-    <div class="sr-only" aria-hidden="true">
-      {% for name in vm.all_departments_names %}
-        <span class="dept-name-hidden">{{ name }}</span>
-      {% endfor %}
-    </div>
-  {% endif %}
+  
   {% if not vm.departments and not vm.coverage_data %}
     <p class="help-text">Ingen data tillgänglig för vald vy.</p>
   {% endif %}
 
   <style>
+    .filter-bar { margin-bottom: var(--yp-gap-lg); }
+    .filter-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--yp-gap-md); align-items: end; }
+    .filter-item label { display: block; font-size: 0.9em; color: var(--yp-color-text-muted); margin-bottom: 0.25rem; }
+    .filter-actions { display: flex; gap: var(--yp-gap-sm); justify-content: flex-end; align-items: center; }
     .diets-report { font-size: 1.05rem; }
     .diets-report th.th-dept { width: 24%; }
     .diets-report th.th-day { width: 16%; }

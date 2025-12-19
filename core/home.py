@@ -46,6 +46,11 @@ def ui_login():  # Simple HTML login that sets session directly
             if not user or not check_password_hash(user.password_hash, password):
                 return render_template("login.html", vm={"error": "Ogiltiga uppgifter"})
             # Set session
+            try:
+                # Stabilize by clearing prior keys first
+                session.clear()
+            except Exception:
+                pass
             session["user_id"] = user.id
             session["role"] = user.role
             session["tenant_id"] = user.tenant_id
@@ -54,6 +59,20 @@ def ui_login():  # Simple HTML login that sets session directly
                 session["user_email"] = user.email
                 if getattr(user, "full_name", None):
                     session["full_name"] = user.full_name
+            except Exception:
+                pass
+            # Auto-select site for single-site admins to avoid selector
+            try:
+                if user.role == "admin":
+                    from .admin_repo import SitesRepo as _SitesRepo
+                    repo = _SitesRepo()
+                    # Prefer tenant-scoped listing when available
+                    sites = repo.list_sites_for_tenant(user.tenant_id) or []
+                    if not sites:
+                        # Fallback to global listing in sqlite/dev environments
+                        sites = repo.list_sites() or []
+                    if len(sites) == 1:
+                        session["site_id"] = str(sites[0]["id"])  # single-site shortcut
             except Exception:
                 pass
             # Ensure CSRF cookie

@@ -418,6 +418,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     @app.before_request
     def _before_req() -> Response | None:
+        # Sync request context from session for consistent access
+        try:
+            g.tenant_id = session.get("tenant_id")
+            g.site_id = session.get("site_id")
+            g.user_id = session.get("user_id")
+        except Exception:
+            pass
         if app.config.get("TESTING"):
             from flask import session
 
@@ -517,8 +524,14 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 log.info(
                     {
                         "request_id": rid,
+                        # Context and session diagnostics
                         "tenant_id": getattr(g, "tenant_id", None),
+                        "tenant_id_g": getattr(g, "tenant_id", None),
+                        "tenant_id_session": session.get("tenant_id"),
+                        "site_id_g": getattr(g, "site_id", None),
+                        "site_id_session": session.get("site_id"),
                         "user_id": session.get("user_id"),
+                        "user_id_g": getattr(g, "user_id", None),
                         "method": request.method,
                         "path": request.path,
                         "status": resp.status_code,

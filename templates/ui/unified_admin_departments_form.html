@@ -116,6 +116,7 @@
             <form method="POST" action="{{ url_for('ui.admin_departments_edit_save_diets', dept_id=vm.department.id) }}" class="yp-form">
                 {{ csrf_token_input()|safe }}
                 <input type="hidden" name="version" value="{{ vm.department.version }}">
+                {% if vm.diet_types and vm.diet_types|length > 0 %}
                 <div class="ua-grid ua-grid-2cols">
                     {% for t in vm.diet_types %}
                         {% set dtid = t.id %}
@@ -126,6 +127,9 @@
                         </div>
                     {% endfor %}
                 </div>
+                {% else %}
+                <p class="ua-muted">Inga specialkosttyper finns på denna site – skapa under <a href="{{ url_for('ui.admin_specialkost_list') }}">Specialkost</a>.</p>
+                {% endif %}
                 <div class="form-actions">
                     <button type="submit" class="yp-button yp-button-primary">💾 Spara specialkost</button>
                 </div>

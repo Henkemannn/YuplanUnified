@@ -26,14 +26,13 @@ def _seed_diet_types(db):
     db.execute(text("""
         CREATE TABLE IF NOT EXISTS dietary_types (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tenant_id INTEGER NOT NULL,
+            site_id TEXT NULL,
             name TEXT NOT NULL,
             default_select INTEGER NOT NULL DEFAULT 0
         );
     """))
-    db.execute(text("INSERT INTO dietary_types(tenant_id,name,default_select) VALUES(1,'Normalkost',0)"))
-    db.execute(text("INSERT INTO dietary_types(tenant_id,name,default_select) VALUES(1,'Gluten',0)"))
-    db.execute(text("INSERT INTO dietary_types(tenant_id,name,default_select) VALUES(1,'Laktos',0)"))
+    # Ensure site_id column exists for strict isolation
+    # (No-op: table definition above includes site_id)
 
 
 def _seed_diet_defaults(db):

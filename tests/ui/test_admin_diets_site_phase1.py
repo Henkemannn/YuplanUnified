@@ -13,11 +13,11 @@ def _seed_site_and_diets(db):
 
     repo = DietTypesRepo()
     try:
-        repo.create(tenant_id=1, name="Gluten", default_select=False)
+        repo.create(site_id='s1', name="Gluten", default_select=False)
     except Exception:
         pass
     try:
-        repo.create(tenant_id=1, name="Laktos", default_select=False)
+        repo.create(site_id='s1', name="Laktos", default_select=False)
     except Exception:
         pass
     db.commit()
@@ -32,6 +32,11 @@ def test_access_and_listing_diets():
         finally:
             db.close()
     client: FlaskClient = app.test_client()
+    with client.session_transaction() as s:
+        s["site_id"] = "s1"
+        s["role"] = "admin"
+        s["tenant_id"] = 1
+        s["user_id"] = "tester"
     # Admin can access diets page
     r = client.get("/ui/admin/diets?site_id=s1", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
     assert r.status_code == 200
@@ -53,6 +58,11 @@ def test_create_diet_type():
         finally:
             db.close()
     client = app.test_client()
+    with client.session_transaction() as s:
+        s["site_id"] = "s1"
+        s["role"] = "admin"
+        s["tenant_id"] = 1
+        s["user_id"] = "tester"
     r = client.post(
         "/ui/admin/diets/create?site_id=s1",
         data={"name": "Nötfri"},
