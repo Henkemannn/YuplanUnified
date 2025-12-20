@@ -317,8 +317,8 @@ jobs:
                 '{
                   schemaVersion: 1,
                   label: "api",
-                  message: ( $s == "ok" and $ad > 0 ) ? "changed" : ( $s == "ok" ? "stable" : "breaking" ),
-                  color:    ( $s == "ok" and $ad > 0 ) ? "yellow"  : ( $s == "ok" ? "success" : "red" ),
+                  message: ( if $s == "ok" and $ad > 0 then "changed" elif $s == "ok" then "stable" else "breaking" end ),
+                  color:    ( if $s == "ok" and $ad > 0 then "yellow"  elif $s == "ok" then "success" else "red" end ),
                   namedLogo: "openapi",
                   cacheSeconds: 300,
                   meta: { status: $s, breaking: $br, additions: $ad }
