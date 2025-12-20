@@ -1,8 +1,8 @@
 extends: "spectral:oas"
 
 rules:
-  oas-operation-description: warn
-  oas-operation-operationId: warn
+  operation-description: warn
+  operation-operationId: warn
   oas-no-ambiguous-paths: off
   oas-tags: off
   oas-415-description-standard:
