@@ -40,12 +40,12 @@ jobs:
           pip freeze
       - name: Run migrations (PG)
         env:
-          DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/yuplan
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/yuplan
         run: |
           alembic upgrade head || true
       - name: pytest (Postgres)
         env:
-          DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/yuplan
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/yuplan
           PYTHONWARNINGS: default
         run: pytest -q
       - name: pytest (SQLite)
