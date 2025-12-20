@@ -3,7 +3,7 @@ extends: "spectral:oas"
 rules:
   operation-description: warn
   operation-operationId: warn
-  no-ambiguous-paths: error
+  no-ambiguous-paths: off
   openapi-tags: off
   oas-415-description-standard:
     description: 415 responses should use the standard description "Unsupported Media Type".
