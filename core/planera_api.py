@@ -90,7 +90,7 @@ def _validate_site_and_department(site_id: str, department_id: str | None) -> tu
 def _meal_labels(site_id: str) -> dict[str, str]:
     # Reuse existing helper if available; fallback defaults.
     try:
-        from .ui_blueprint import get_meal_labels_for_site  # type: ignore
+        from .ui_blueprint import get_meal_labels_for_site
         return get_meal_labels_for_site(site_id)
     except Exception:
         return {"lunch": "Lunch", "dinner": "Kvällsmat"}

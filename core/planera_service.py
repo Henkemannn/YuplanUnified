@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date as _date
-from typing import Any, Iterable, List, Dict, Tuple
+from typing import Any, Iterable, List, Dict, Tuple, cast
 
 from .weekview.service import WeekviewService
 
@@ -157,10 +157,15 @@ class PlaneraService:
                     if cnt > 0
                 ]
                 try:
-                    specials_arr.sort(key=lambda x: (-int(x.get("count", 0) or 0), str(x.get("diet_name") or "")))
+                    specials_arr.sort(
+                        key=lambda x: (
+                            -int(cast(int, x.get("count", 0) or 0)),
+                            str(x.get("diet_name") or ""),
+                        )
+                    )
                 except Exception:
                     pass
-                total_special = sum(int(x.get("count") or 0) for x in specials_arr)
+                total_special = sum(int(cast(int, x.get("count", 0) or 0)) for x in specials_arr)
                 normal = residents_total - total_special
                 if normal < 0:
                     normal = 0
@@ -168,7 +173,7 @@ class PlaneraService:
                 alt_choice = None
                 try:
                     if meal == "lunch":
-                        alt_choice = "Alt2" if bool(day.get("alt2_lunch")) else ("Alt1" if alt1_text else None)
+                        alt_choice = "Alt2" if (day is not None and bool(day.get("alt2_lunch"))) else ("Alt1" if alt1_text else None)
                     else:
                         # If dinner alt2 text exists, prefer Alt2; otherwise Alt1 when present
                         alt_choice = "Alt2" if alt2_text else ("Alt1" if alt1_text else None)
@@ -195,10 +200,15 @@ class PlaneraService:
                 if cnt > 0
             ]
             try:
-                specials_arr.sort(key=lambda x: (-int(x.get("count", 0) or 0), str(x.get("diet_name") or "")))
+                specials_arr.sort(
+                    key=lambda x: (
+                        -int(cast(int, x.get("count", 0) or 0)),
+                        str(x.get("diet_name") or ""),
+                    )
+                )
             except Exception:
                 pass
-            total_special = sum(int(x.get("count") or 0) for x in specials_arr)
+            total_special = sum(int(cast(int, x.get("count", 0) or 0)) for x in specials_arr)
             normal = total_residents[meal] - total_special
             if normal < 0:
                 normal = 0
@@ -269,10 +279,15 @@ class PlaneraService:
                     if cnt > 0
                 ]
                 try:
-                    specials_arr.sort(key=lambda x: (-int(x.get("count", 0) or 0), str(x.get("diet_name") or "")))
+                    specials_arr.sort(
+                        key=lambda x: (
+                            -int(cast(int, x.get("count", 0) or 0)),
+                            str(x.get("diet_name") or ""),
+                        )
+                    )
                 except Exception:
                     pass
-                total_special = sum(int(x.get("count") or 0) for x in specials_arr)
+                total_special = sum(int(cast(int, x.get("count", 0) or 0)) for x in specials_arr)
                 normal = day_residents[meal] - total_special
                 if normal < 0:
                     normal = 0
@@ -300,10 +315,15 @@ class PlaneraService:
                 if cnt > 0
             ]
             try:
-                specials_arr.sort(key=lambda x: (-int(x.get("count", 0) or 0), str(x.get("diet_name") or "")))
+                specials_arr.sort(
+                    key=lambda x: (
+                        -int(cast(int, x.get("count", 0) or 0)),
+                        str(x.get("diet_name") or ""),
+                    )
+                )
             except Exception:
                 pass
-            total_special = sum(int(x.get("count") or 0) for x in specials_arr)
+            total_special = sum(int(cast(int, x.get("count", 0) or 0)) for x in specials_arr)
             normal = weekly_residents[meal] - total_special
             if normal < 0:
                 normal = 0

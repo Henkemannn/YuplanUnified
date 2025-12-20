@@ -42,13 +42,12 @@ class MealRegistrationRepo:
             dates = [target_monday + timedelta(days=i) for i in range(7)]
             date_strs = [d.isoformat() for d in dates]
             
-            placeholders = ",".join([":d" + str(i) for i in range(7)])
-            params = {f"d{i}": date_strs[i] for i in range(7)}
-            params.update({
-                "tenant_id": int(tenant_id),
-                "site_id": site_id,
-                "department_id": department_id,
-            })
+            placeholders = ",".join(":d" + str(i) for i in range(7))
+            # Mixed-type params: ensure a wide mapping type to satisfy mypy
+            params: dict[str, object] = {f"d{i}": date_strs[i] for i in range(7)}
+            params["tenant_id"] = int(tenant_id)
+            params["site_id"] = site_id
+            params["department_id"] = department_id
             
             rows = db.execute(
                 text(f"""

@@ -125,7 +125,7 @@ class AdminUserRepo:
         try:
             # Build dynamic update
             updates = []
-            params = {"uid": user_id}
+            params: dict[str, object] = {"uid": user_id}
             
             if email is not None:
                 updates.append("email = :email")
