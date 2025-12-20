@@ -1,4 +1,4 @@
-extends: "spectral:recommended"
+extends: "spectral:oas"
 
 rules:
   operation-description: warn
