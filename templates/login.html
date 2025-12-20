@@ -14,7 +14,7 @@
     {% if vm.error or error_message %}
       <p class="login-error">{{ vm.error or error_message }}</p>
     {% endif %}
-    <form method="post" action="{{ url_for('home.ui_login') }}" class="login-form">
+    <form method="post" action="{{ url_for('auth.login') }}" class="login-form">
       {{ csrf_token_input()|safe }}
       <div class="login-form-row">
         <label for="email">E-post</label>

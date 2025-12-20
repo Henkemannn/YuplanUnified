@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g, current_app
+import os
 from sqlalchemy import text
 
 from .auth import require_roles
@@ -13,6 +14,18 @@ from datetime import timedelta
 import uuid
 
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
+
+# Polished Login UI: redirect to real auth login, preserve next
+@ui_bp.get("/ui/login")
+def ui_login():
+    nxt = request.args.get("next")
+    from flask import url_for
+    target = url_for("auth.login_get")
+    if nxt:
+        # Preserve next param when redirecting
+        from urllib.parse import urlencode
+        target = f"{target}?{urlencode({'next': nxt})}"
+    return redirect(target)
 # Weekview special diets mark toggle API (ETag-safe), aligned with report marks
 @ui_bp.route("/api/weekview/specialdiets/mark", methods=["POST"])
 @require_roles("cook", "admin", "superuser")
@@ -398,6 +411,11 @@ def test_login():
     Development-only test login page.
     Allows choosing a role and destination without real authentication.
     """
+    env = (os.environ.get("APP_ENV") or "").lower()
+    dev_helpers = os.environ.get("YUPLAN_DEV_HELPERS")
+    # Allow in test mode; gate in non-dev without helpers
+    if not current_app.config.get("TESTING") and env != "dev" and dev_helpers != "1":
+        return jsonify({"error": "not_found", "message": "Resource not available"}), 404
     if request.method == "GET":
         return render_template("test_login.html")
     
