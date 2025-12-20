@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-<<<<<<< Updated upstream
 from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g, current_app
-=======
-from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g, current_app
->>>>>>> Stashed changes
 from sqlalchemy import text
 
 from .auth import require_roles
@@ -15,7 +11,6 @@ from .meal_registration_repo import MealRegistrationRepo
 from datetime import date as _date
 from datetime import timedelta
 import uuid
-from .context import get_active_context
 
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
 # Weekview special diets mark toggle API (ETag-safe), aligned with report marks
@@ -51,8 +46,7 @@ def api_weekview_specialdiets_mark():
         "marked": desired_state,
     }
     # Deterministic site-scope validation using active context and current request DB session
-    ctx = get_active_context()
-    active_site_id = ctx.get("site_id")
+    active_site_id = getattr(g, "site_id", None) or session.get("site_id")
     if not active_site_id:
         return jsonify({"type": "about:blank", "title": "missing_site"}), 400
     db = get_new_session()
@@ -206,6 +200,16 @@ def admin_system_page():
         db.close()
     vm = {"sites": sites, "departments": departments, "selected_site_id": site_id_q}
     return render_template("admin_system.html", vm=vm)
+
+@ui_bp.get("/ui/systemadmin/switch-site/<site_id>")
+@require_roles("superuser")
+def systemadmin_switch_site(site_id: str):
+    # Set active site context and jump into Admin dashboard
+    try:
+        session["site_id"] = site_id
+    except Exception:
+        pass
+    return redirect(url_for("ui.admin_dashboard"))
 
 @ui_bp.post("/ui/admin/system/site/create")
 @require_roles("superuser")
@@ -405,6 +409,7 @@ def test_login():
 
 def get_meal_labels_for_site(site_id: str | None) -> dict[str, str]:
     # Phase 1.1 default mapping (Kommun-style). TODO Phase 2: vary by site/offshore kind.
+    # Report/overview tests expect dinner label "Kvällsmat"
     return {"lunch": "Lunch", "dinner": "Kvällsmat"}
 
 
@@ -460,6 +465,7 @@ def weekview_ui():
     # Validate query params - default to current week if not provided
     site_id = (request.args.get("site_id") or "").strip()
     department_id = (request.args.get("department_id") or "").strip()
+    department_id = department_id if department_id else None
     
     # Get current ISO week as default
     today = _date.today()
@@ -484,6 +490,11 @@ def weekview_ui():
     if week < 1 or week > 53:
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
 
+    # If no specific department requested, render the site overview directly
+    if not department_id:
+        # Delegate to overview UI to satisfy tests expecting department headers when department_id is empty
+        return weekview_overview_ui()
+
     # Resolve names (sites/departments)
     db = get_session()
     try:
@@ -492,12 +503,13 @@ def weekview_ui():
         if site_id:
             row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
             site_name = row[0] if row else None
-        if department_id:
-            row = db.execute(
-                text("SELECT name FROM departments WHERE id = :id"), {"id": department_id}
-            ).fetchone()
-            dep_name = row[0] if row else None
-        if not site_name or not dep_name:
+        row = db.execute(
+            text("SELECT name FROM departments WHERE id = :id"), {"id": department_id}
+        ).fetchone()
+        dep_name = row[0] if row else None
+        if not dep_name:
+            return jsonify({"error": "not_found", "message": "Site or department not found"}), 404
+        if not site_name:
             return jsonify({"error": "not_found", "message": "Site or department not found"}), 404
     finally:
         db.close()
@@ -1836,11 +1848,6 @@ def reports_weekly_csv():
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = f"attachment; filename=veckorapport_v{week}_{year}.csv"
     return resp
-<<<<<<< Updated upstream
-
-
-=======
->>>>>>> Stashed changes
 @ui_bp.get("/ui/reports/weekly.xlsx")
 @require_roles(*ADMIN_ROLES)
 def reports_weekly_xlsx():
