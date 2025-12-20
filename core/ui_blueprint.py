@@ -16,9 +16,9 @@ import uuid
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
 
 # Polished Login UI: redirect to real auth login, preserve next
-@ui_bp.get("/ui/login")
+@ui_bp.route("/ui/login", methods=["GET", "POST"])
 def ui_login():
-    nxt = request.args.get("next")
+    nxt = request.args.get("next") or request.form.get("next")
     from flask import url_for
     target = url_for("auth.login_get")
     if nxt:
