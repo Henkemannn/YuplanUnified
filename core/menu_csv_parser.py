@@ -80,10 +80,10 @@ def parse_menu_csv(file_stream: IO[bytes]) -> list[MenuCSVRow]:
                 try:
                     year = int(year_str)
                     week = int(week_str)
-                except ValueError:
+                except ValueError as e:
                     raise MenuCSVParseError(
                         f"Rad {idx}: Year och Week måste vara heltal (year={year_str}, week={week_str})"
-                    )
+                    ) from e
                 
                 # Validate week range
                 if not (1 <= week <= 53):
@@ -101,7 +101,7 @@ def parse_menu_csv(file_stream: IO[bytes]) -> list[MenuCSVRow]:
             except MenuCSVParseError:
                 raise
             except Exception as e:
-                raise MenuCSVParseError(f"Rad {idx}: Kunde inte parsa ({e})")
+                raise MenuCSVParseError(f"Rad {idx}: Kunde inte parsa ({e})") from e
         
         if not rows:
             raise MenuCSVParseError("CSV-filen är tom eller innehåller ingen giltig data")
@@ -109,9 +109,9 @@ def parse_menu_csv(file_stream: IO[bytes]) -> list[MenuCSVRow]:
         return rows
         
     except csv.Error as e:
-        raise MenuCSVParseError(f"Ogiltigt CSV-format: {e}")
-    except UnicodeDecodeError:
-        raise MenuCSVParseError("Filkodning stöds inte. Använd UTF-8.")
+        raise MenuCSVParseError(f"Ogiltigt CSV-format: {e}") from e
+    except UnicodeDecodeError as e:
+        raise MenuCSVParseError("Filkodning stöds inte. Använd UTF-8.") from e
 
 
 def csv_rows_to_import_result(rows: list[MenuCSVRow]):

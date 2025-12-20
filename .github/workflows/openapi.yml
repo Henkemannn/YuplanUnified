@@ -291,7 +291,7 @@ jobs:
             /tmp/openapi-diff.json
 
       - name: Lint OpenAPI (Spectral)
-        run: spectral lint openapi.json
+        run: spectral lint -r .spectral.yaml openapi.json
       - name: "Smoke: POST /import/menu (JSON)"
         continue-on-error: true
         run: |

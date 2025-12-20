@@ -352,7 +352,7 @@ vm = {
 
 ## Future Enhancements
 
-### Potential Additions:
+### Potential Additions
 1. **Percentage Display:** Show "15% registrerade" alongside counts
 2. **Color Coding:** Red/yellow/green indicators based on registration rate
 3. **Week-over-Week Comparison:** Show trend arrows (↑ ↓) vs. previous week
@@ -360,7 +360,7 @@ vm = {
 5. **Historical Charts:** Line graph of registration rates over time
 6. **Department Comparison:** Side-by-side summary for multiple departments
 
-### Reporting Module Integration:
+### Reporting Module Integration
 Phase 4 lays the groundwork for a future Reporting Module:
 - Summary calculation logic can be reused
 - Same data model (registrations + residents)

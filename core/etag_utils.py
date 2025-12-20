@@ -82,8 +82,8 @@ def validate_etag(
     current_timestamp = int(current_updated_at.timestamp() * 1000)
     if etag_timestamp != current_timestamp:
         return False, (
-            f"Menu has been modified by another user. "
-            f"Please reload and try again."
+            "Menu has been modified by another user. "
+            "Please reload and try again."
         )
     
     return True, None

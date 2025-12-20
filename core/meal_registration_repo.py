@@ -11,8 +11,7 @@ Schema:
 """
 from __future__ import annotations
 
-from datetime import date as _date, datetime
-from typing import Sequence
+from datetime import datetime
 
 from sqlalchemy import text
 

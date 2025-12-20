@@ -235,7 +235,7 @@ All spacing and colors use `--wv-*` prefix for easy theming:
 
 ## Next Steps / Future Enhancements
 
-### To Enable True Inline Toggle (Optional):
+### To Enable True Inline Toggle (Optional)
 Currently, clicking a meal cell opens the modal (Phase 2 behavior). To enable single-tap registration:
 
 1. **Add hidden form to each meal section:**
@@ -263,7 +263,7 @@ The `setupInlineToggles()` function in `unified_weekview.js` already has logic t
 
 No JS changes needed, just add the forms!
 
-### Other Potential Enhancements:
+### Other Potential Enhancements
 - **Tooltips:** Add tooltip markup for registration status on hover
 - **Animations:** Smooth transitions when registration state changes
 - **Loading States:** Show spinner during form submission

@@ -88,7 +88,7 @@ GET /portal/department/week?year=YYYY&week=WW
 - Alt2 flagga separeras (driftstatus) och påverkar inte direkt om Alt2 kan väljas (regler kan införas senare).
 
 ## Mutation Schema (För senare fas)
-### Endpoint (föreslagen):
+### Endpoint (föreslagen)
 POST /portal/department/menu-choice/change
 
 ### Body
