@@ -11,7 +11,8 @@ from .http_errors import bad_request, not_found
 from .db import get_session
 
 bp = Blueprint("planera_api", __name__, url_prefix="/api")
-_service: "PlaneraService | None" = None
+from typing import Any as _Any
+_service: _Any | None = None
 
 
 def _feature_enabled(name: str) -> bool:
@@ -41,7 +42,8 @@ def _tenant_id() -> Any:
 
 
 def _build_etag(kind: str, payload: dict) -> str:
-    import json, hashlib
+    import json
+    import hashlib
     try:
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     except Exception:
@@ -250,7 +252,8 @@ def get_planera_week_csv():  # CSV export for week aggregation
         resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
         return resp
     # Build CSV rows
-    import csv, io
+    import csv
+    import io
     output = io.StringIO()
     w = csv.writer(output)
     w.writerow(["date", "weekday", "meal", "department", "residents_total", "normal", "special_diets"])
@@ -258,9 +261,7 @@ def get_planera_week_csv():  # CSV export for week aggregation
     # However agg["days"] already aggregates across all departments. For CSV we output aggregated totals per day+meal per department separately.
     # Simplification: output aggregated site totals only (department column = "__total__") plus per-day site totals.
     # Future enhancement: expand per department rows.
-    weekday_map = {d["day_of_week"]: d["weekday_name"] for d in agg["days"]}
     for d in agg["days"]:
-        dow = d.get("day_of_week")
         date_str = d.get("date")
         weekday_name = d.get("weekday_name")
         for meal_key in ("lunch", "dinner"):

@@ -4,10 +4,9 @@ from typing import Any
 from datetime import date as _date
 
 from .db import get_session
-from .ui_blueprint import get_meal_labels_for_site, _feature_enabled  # reuse labels
+from .ui_blueprint import get_meal_labels_for_site  # reuse labels
 from .admin_repo import DietDefaultsRepo
 from .weekview.repo import WeekviewRepo
-from .weekview.service import WeekviewService
 
 
 class RegistrationService:

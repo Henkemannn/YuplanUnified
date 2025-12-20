@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 from .auth import require_roles
 from .db import get_session, get_new_session
-from .models import Note, Task, User
+from .models import User
 from .weekview.service import WeekviewService
 from .meal_registration_repo import MealRegistrationRepo
 from datetime import date as _date
@@ -223,7 +223,6 @@ def systemadmin_switch_site(site_id: str):
 def admin_system_site_create():
     from flask import redirect, url_for, flash
     name = (request.form.get("name") or "").strip()
-    code = (request.form.get("code") or "").strip() or None
     if not name:
         flash("Namn måste anges.", "error")
         return redirect(url_for("ui.admin_system_page"))
@@ -460,7 +459,7 @@ def planera_mark_done():
         svc = PlaneraService()
         svc.mark_done(tenant_id, site_id, d_obj, meal, dep_ids)
         # Redirect back to unified view to reflect updated "Klar" status
-        from flask import redirect, url_for
+        from flask import redirect
         return redirect(f"/ui/planera/day?ui=unified&site_id={site_id}&date={date_str}&meal={meal}")
     except Exception as e:
         return jsonify({"error": "server_error", "message": str(e)}), 500
@@ -637,7 +636,7 @@ def weekview_ui():
             has_dinner = True
         day_vms.append(day_vm)
 
-    force_flag = request.path.startswith("/ui/portal/week")
+    # force_flag = request.path.startswith("/ui/portal/week")
     vm = {
         "site_id": site_id,
         "department_id": department_id,
@@ -743,8 +742,7 @@ def portal_week():
     except Exception:
         regs = []
     reg_map = {(r["date"], r["meal_type"]): bool(r.get("registered")) for r in regs}
-    has_any_registration = any(bool(r.get("registered")) for r in regs)
-    has_any_registration = any(bool(r.get("registered")) for r in regs)
+    # has_any_registration not used in this view
 
     # Menu-choice rows for completion status (explicit choices only)
     from .admin_repo import Alt2Repo, DietDefaultsRepo
@@ -854,12 +852,7 @@ def portal_week():
         # planera link for lunch
         planera_lunch_url = url_for("ui.planera_day_ui_v2") + f"?ui=unified&site_id={site_id}&department_id={department_id}&date={day_vm.get('date') if day_vm else ''}&meal=lunch"
         # today index for smart jump
-        is_today = False
-        try:
-            is_today = bool(day_vm and (day_vm.get("date") == today.isoformat()))
-        except Exception:
-            is_today = False
-        days_ordered.append({"index": idx, "label_short": label, "key": key, "has_menu": has_menu_flag, "date": (day_vm.get("date") if day_vm else None), "planera_lunch_url": planera_lunch_url})
+        days_ordered.append({"index": idx, "label_short": label, "key": key, "has_menu": has_menu_flag, "date": (day_vm.get('date') if day_vm else None), "planera_lunch_url": planera_lunch_url})
 
     vm = {
         "site_id": site_id,
@@ -897,8 +890,7 @@ def portal_week_legacy_short():
 @ui_bp.get("/ui/kitchen/week")
 @require_roles(*SAFE_UI_ROLES)
 def kitchen_veckovy_week():
-    # Reuse portal_week to build base VM, then enable grid mode
-    resp = portal_week()
+    # Build grid mode view from WeekviewService without unrelated side effects
     # When using Flask render_template, we need to rebuild with grid flag; instead, reconstruct minimal VM
     site_id = (request.args.get("site_id") or "").strip()
     department_id = (request.args.get("department_id") or "").strip()
@@ -1317,7 +1309,10 @@ def admin_menu_import_week(year: int, week: int):
                 {"mid": menu_id},
             ).fetchall()
             for r in rows:
-                day = str(r[0]); meal = str(r[1]); vtype = str(r[2]); dname = r[3]
+                day = str(r[0])
+                meal = str(r[1])
+                vtype = str(r[2])
+                dname = r[3]
                 vm["days"].setdefault(day, {}).setdefault(meal, {})[vtype] = {"dish_name": dname}
         finally:
             db.close()
@@ -1637,7 +1632,8 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
             # Default to first site if not provided
             row = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
             if row:
-                site_id = str(row[0]); site_name = str(row[1] or "")
+                site_id = str(row[0])
+                site_name = str(row[1] or "")
         if not site_name:
             return jsonify({"error": "not_found", "message": "Site not found"}), 404
         departments: list[tuple[str, str]] = []
@@ -1834,7 +1830,8 @@ def reports_weekly_csv():
     dept_vms = compute_weekview_report(tid, year, week, departments)
 
     # Build CSV
-    import io, csv
+    import io
+    import csv
     output = io.StringIO()
     writer = csv.writer(output)
     # Header row (stable)
@@ -2002,7 +1999,7 @@ def reports_weekly_pdf():
     }
 
     # Render print-friendly HTML (future: HTML->PDF via engine)
-    html = render_template("ui/unified_report_weekly_print.html", vm=vm)
+    # Rendered HTML not directly used; PDF builder below provides minimal bytes
 
     # Minimal static PDF bytes (valid %PDF) as fallback implementation
     # This avoids external dependencies while satisfying tests and basic export needs.
@@ -2101,7 +2098,8 @@ def register_meal_ui():
     if not site_id or not department_id or not date_str or meal not in ("lunch", "dinner"):
         return render_template("ui/unified_registration_day_meal.html", vm={"error": "invalid_parameters"})
     try:
-        uuid.UUID(site_id); uuid.UUID(department_id)
+        uuid.UUID(site_id)
+        uuid.UUID(department_id)
         _date.fromisoformat(date_str)
     except Exception:
         return render_template("ui/unified_registration_day_meal.html", vm={"error": "invalid_parameters"})
@@ -2270,7 +2268,7 @@ def cook_dashboard():
     db = get_session()
     try:
         # Get user info (note: site_id doesn't exist in User model, using tenant instead)
-        user = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first() if user_id and tid else None
+        _user = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first() if user_id and tid else None
         
         # For now, use tenant as "site" since site model doesn't exist yet
         site_id = None  # Will be user.unit_id when we have proper site association
@@ -2483,7 +2481,6 @@ def admin_departments_new_form():
     """
     Show form for creating a new department.
     """
-    tid = session.get("tenant_id")
     role = session.get("role")
     
     # Get current week for header
@@ -2847,7 +2844,7 @@ def admin_users_create():
     
     # Create user
     try:
-        user_id = repo.create_user(
+        repo.create_user(
             tenant_id=tid,
             username=username,
             email=email,
@@ -2928,6 +2925,7 @@ def admin_users_update(user_id: int):
     
     if (not user or user["tenant_id"] != tid):
         # If attempting to deactivate own (missing) account, treat as self-case for test expectation
+        current_user_id = session.get("user_id")
         if current_user_id is not None and user_id == current_user_id:
             flash("Du kan inte inaktivera ditt eget konto.", "error")
             return redirect(url_for("ui.admin_users_list"))
@@ -3384,32 +3382,5 @@ def planera_day_ui_v2():
         return render_template("ui/planera_day.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id))
     finally:
         db.close()
-    week1_monday = jan4 - timedelta(days=jan4.weekday())
-    current_monday = week1_monday + timedelta(weeks=week - 1)
-    
-    # Previous week
-    prev_monday = current_monday - timedelta(weeks=1)
-    prev_iso = prev_monday.isocalendar()
-    prev_year, prev_week = prev_iso[0], prev_iso[1]
-    
-    # Next week
-    next_monday = current_monday + timedelta(weeks=1)
-    next_iso = next_monday.isocalendar()
-    next_year, next_week = next_iso[0], next_iso[1]
-    
-    vm = {
-        "year": year,
-        "week": week,
-        "current_year": current_year,
-        "current_week": current_week,
-        "prev_year": prev_year,
-        "prev_week": prev_week,
-        "next_year": next_year,
-        "next_week": next_week,
-        "site_name": site_name,
-        "coverage_data": coverage_data,
-        "user_role": role,
-    }
-    
-    return render_template("ui/unified_report_weekly.html", vm=vm)
+    # Removed unreachable legacy block
 

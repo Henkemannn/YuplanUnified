@@ -37,7 +37,8 @@ class PlaneraService:
         departments: List[Tuple[str, str]] = []
         seen: set[str] = set()
         for r in dep_rows:
-            rid = str(r[0]); rn = str(r[1])
+            rid = str(r[0])
+            rn = str(r[1])
             if rid in seen:
                 continue
             seen.add(rid)

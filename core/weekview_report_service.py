@@ -40,7 +40,6 @@ def compute_weekview_report(
         # Accumulators
         residents_total = {"lunch": 0, "dinner": 0}
         debiterbar_total = {"lunch": 0, "dinner": 0}
-        diet_names: Dict[str, str] = {}
         day_rows: List[Dict[str, Any]] = []
         for d in days:
             res = (d.get("residents") or {})

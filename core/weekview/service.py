@@ -208,26 +208,30 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                 dkey = day_keys[dow - 1]
                 # menu_texts lookup
                 menu_for_day = menu_days.get(dkey, {}) if isinstance(menu_days, dict) else {}
-                def _dish_name(meal: str, variant: str) -> str | None:
-                    try:
-                        v = menu_for_day.get(meal, {}).get(variant)
-                        if v is None:
-                            return None
-                        return v.get("dish_name")
-                    except Exception:
-                        return None
 
                 menu_texts = {}
                 # lunch always relevant in Phase 1
                 lunch_obj: dict[str, Any] = {}
-                a1 = _dish_name("lunch", "alt1")
-                a2 = _dish_name("lunch", "alt2")
+                try:
+                    v = (menu_for_day.get("lunch", {}) or {}).get("alt1")
+                    a1 = v.get("dish_name") if v else None
+                except Exception:
+                    a1 = None
+                try:
+                    v = (menu_for_day.get("lunch", {}) or {}).get("alt2")
+                    a2 = v.get("dish_name") if v else None
+                except Exception:
+                    a2 = None
                 if a1 is not None:
                     lunch_obj["alt1"] = a1
                 if a2 is not None:
                     lunch_obj["alt2"] = a2
                 # Optional dessert if modeled
-                dessert = _dish_name("lunch", "dessert")
+                try:
+                    v = (menu_for_day.get("lunch", {}) or {}).get("dessert")
+                    dessert = v.get("dish_name") if v else None
+                except Exception:
+                    dessert = None
                 if dessert is not None:
                     lunch_obj["dessert"] = dessert
                 if lunch_obj:
@@ -235,8 +239,16 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
 
                 # dinner (kväll) optional in Phase 1
                 dinner_obj: dict[str, Any] = {}
-                d1 = _dish_name("dinner", "alt1")
-                d2 = _dish_name("dinner", "alt2")
+                try:
+                    v = (menu_for_day.get("dinner", {}) or {}).get("alt1")
+                    d1 = v.get("dish_name") if v else None
+                except Exception:
+                    d1 = None
+                try:
+                    v = (menu_for_day.get("dinner", {}) or {}).get("alt2")
+                    d2 = v.get("dish_name") if v else None
+                except Exception:
+                    d2 = None
                 if d1 is not None:
                     dinner_obj["alt1"] = d1
                 if d2 is not None:
@@ -245,18 +257,26 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                     menu_texts["dinner"] = dinner_obj
 
                 # Build diets list per meal using department defaults and marks
-                def _build_diets(meal_name: str) -> list[dict[str, Any]]:
-                    out: list[dict[str, Any]] = []
-                    for dt_id, default_cnt in sorted(diet_defaults.items()):
-                        out.append(
-                            {
-                                "diet_type_id": dt_id,
-                                "diet_name": dt_id,  # TODO: map id->human name via diet types registry
-                                "resident_count": int(default_cnt),
-                                "marked": (dow, meal_name, dt_id) in marked_idx,
-                            }
-                        )
-                    return out
+                diets_lunch: list[dict[str, Any]] = []
+                for dt_id, default_cnt in sorted(diet_defaults.items()):
+                    diets_lunch.append(
+                        {
+                            "diet_type_id": dt_id,
+                            "diet_name": dt_id,  # TODO: map id->human name via diet types registry
+                            "resident_count": int(default_cnt),
+                            "marked": (dow, "lunch", dt_id) in marked_idx,
+                        }
+                    )
+                diets_dinner: list[dict[str, Any]] = []
+                for dt_id, default_cnt in sorted(diet_defaults.items()):
+                    diets_dinner.append(
+                        {
+                            "diet_type_id": dt_id,
+                            "diet_name": dt_id,
+                            "resident_count": int(default_cnt),
+                            "marked": (dow, "dinner", dt_id) in marked_idx,
+                        }
+                    )
 
                 days_out.append(
                     {
@@ -270,8 +290,8 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                             "dinner": counts_idx.get((dow, "dinner"), 0),
                         },
                         "diets": {
-                            "lunch": _build_diets("lunch"),
-                            "dinner": _build_diets("dinner"),
+                            "lunch": diets_lunch,
+                            "dinner": diets_dinner,
                         },
                     }
                 )
