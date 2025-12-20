@@ -24,7 +24,9 @@ def api_weekview_specialdiets_mark():
         department_id = str(data["department_id"])  # keep as string ID
         diet_type_id = str(data["diet_type_id"])  # diet type key
         meal = str(data["meal"]).lower()  # expect "Lunch"/"Kväll" → lower to "lunch"/"dinner"
+        # Accept either Swedish weekday abbr or explicit day_of_week index
         weekday_abbr = str(data.get("weekday_abbr") or data.get("weekday") or "")
+        day_of_week_raw = data.get("day_of_week")
         desired_state = bool(data.get("marked") if "marked" in data else data.get("desired_state"))
     except Exception:
         return jsonify({"type": "about:blank", "title": "invalid_payload"}), 400
@@ -32,7 +34,12 @@ def api_weekview_specialdiets_mark():
     # Map Swedish abbr to ISO weekday index
     WEEKDAY_ABBR_TO_INDEX = {"Mån": 1, "Tis": 2, "Ons": 3, "Tors": 4, "Fre": 5, "Lör": 6, "Sön": 7}
     try:
-        day_idx = WEEKDAY_ABBR_TO_INDEX[weekday_abbr or "Mån"]
+        if day_of_week_raw is not None:
+            day_idx = int(day_of_week_raw)
+            if day_idx < 1 or day_idx > 7:
+                raise ValueError("bad_dow")
+        else:
+            day_idx = WEEKDAY_ABBR_TO_INDEX[weekday_abbr or "Mån"]
     except Exception:
         return jsonify({"type": "about:blank", "title": "invalid_weekday"}), 400
 
@@ -606,6 +613,7 @@ def weekview_ui():
 
         day_vm = {
             "date": date_str,
+            "day_of_week": d.get("day_of_week"),
             "weekday_name": d.get("weekday_name"),
             "lunch_alt1": lunch.get("alt1"),
             "lunch_alt2": lunch.get("alt2"),

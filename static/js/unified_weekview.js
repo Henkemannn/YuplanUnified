@@ -21,6 +21,7 @@
     setupModalListeners();
     setupKeyboardNavigation();
     setupInlineToggles();
+    setupDietToggleHandlers();
     checkFlashMessages();
   }
 
@@ -46,6 +47,102 @@
       if (e.key === 'Escape' && isModalOpen) {
         closeModal();
       }
+    });
+  }
+
+  /**
+   * Weekview diet mark toggles via API
+   * - Optimistic UI: toggle class immediately; revert on error
+   * - Uses ETag from lightweight endpoint to set If-Match
+   * - Sends CSRF header if meta tag present
+   */
+  function setupDietToggleHandlers() {
+    const pills = document.querySelectorAll('.diet-pill');
+    pills.forEach(pill => {
+      pill.addEventListener('click', async function(e) {
+        e.preventDefault();
+        const dietTypeId = this.dataset.dietTypeId;
+        const meal = this.dataset.meal; // 'lunch' | 'dinner'
+        const year = parseInt(this.dataset.year, 10);
+        const week = parseInt(this.dataset.week, 10);
+        const departmentId = this.dataset.departmentId;
+        const dayOfWeek = parseInt(this.dataset.dayOfWeek, 10);
+
+        if (!dietTypeId || !meal || !departmentId || !year || !week || !dayOfWeek) {
+          showToast('Ogiltig data för registrering', 'error');
+          return;
+        }
+
+        // Capture current state (optimistic toggle)
+        const wasMarked = this.classList.contains('diet-marked');
+        const desired = !wasMarked;
+        // Toggle UI optimistically
+        this.classList.toggle('diet-marked', desired);
+        this.dataset.marked = desired ? 'true' : 'false';
+
+        try {
+          // Fetch current ETag for the department/week
+          const etagResp = await fetch(`/api/weekview/etag?department_id=${encodeURIComponent(departmentId)}&year=${year}&week=${week}`, {
+            headers: { 'Accept': 'application/json' }
+          });
+          if (!etagResp.ok) throw new Error('etag');
+          const etagData = await etagResp.json();
+          const etag = etagData && etagData.etag ? etagData.etag : '';
+          if (!etag) throw new Error('etag');
+
+          // CSRF token from meta, if available
+          const meta = document.querySelector('meta[name="csrf-token"]');
+          const csrfToken = meta ? meta.getAttribute('content') : null;
+
+          const body = {
+            year: year,
+            week: week,
+            department_id: departmentId,
+            diet_type_id: dietTypeId,
+            meal: meal,
+            day_of_week: dayOfWeek,
+            marked: desired
+          };
+
+          const resp = await fetch('/api/weekview/specialdiets/mark', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'If-Match': etag,
+              ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
+            },
+            body: JSON.stringify(body)
+          });
+
+          if (resp.ok) {
+            showToast('Sparat', 'success');
+            // Optionally update ETag on grid container
+            const grid = document.querySelector('.week-grid');
+            const newEtag = resp.headers.get('ETag');
+            if (grid && newEtag) grid.setAttribute('data-etag', newEtag);
+          } else {
+            // Failure: revert UI and show error
+            this.classList.toggle('diet-marked', wasMarked);
+            this.dataset.marked = wasMarked ? 'true' : 'false';
+            const msg = resp.status === 412 ? 'Kunde inte spara (ETag mismatch)' :
+                        resp.status === 403 ? 'Kunde inte spara (behörighet)' : 'Kunde inte spara';
+            showToast(msg, 'error');
+          }
+        } catch (err) {
+          // Network/ETag error: revert UI
+          this.classList.toggle('diet-marked', wasMarked);
+          this.dataset.marked = wasMarked ? 'true' : 'false';
+          showToast('Kunde inte spara', 'error');
+        }
+      });
+
+      pill.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.click();
+        }
+      });
     });
   }
 
