@@ -196,6 +196,7 @@ jobs:
           } > /tmp/openapi-comment.md
 
       - name: Post/Update PR comment (OpenAPI diff)
+        continue-on-error: true
         if: ${{ github.event_name == 'pull_request' && steps.decide.outputs.needed == 'true' }}
         uses: actions/github-script@v7
         with:
@@ -203,7 +204,6 @@ jobs:
               const fs = require('fs');
               const marker = '<!-- openapi-diff-comment -->';
               const body = fs.readFileSync('/tmp/openapi-comment.md', 'utf8');
-              const {context, github, core} = require('@actions/github');
               const {owner, repo} = context.repo;
               const issue_number = context.issue.number;
               const {data: comments} = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });

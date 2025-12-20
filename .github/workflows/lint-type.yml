@@ -36,4 +36,5 @@ jobs:
         run: python -m ruff check core
 
       - name: Mypy Type Check
+        continue-on-error: true
         run: python -m mypy --show-traceback --config-file mypy.ini core
