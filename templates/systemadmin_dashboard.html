@@ -1,0 +1,127 @@
+{% extends "_base.html" %}
+{% set hide_global_nav = True %}
+{% block title %}SystemAdmin Dashboard{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+{% endblock %}
+{% block content %}
+<main class="sa-root sa-theme-light">
+  <aside class="sa-sidebar">
+    <div>
+      <div class="sa-sidebar-logo">
+        <img src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="28" height="28">
+      </div>
+      <nav class="sa-nav">
+        <a class="sa-nav-item sa-nav-item-active" href="#">Översikt</a>
+        <a class="sa-nav-item" href="#">Kunder</a>
+        <a class="sa-nav-item" href="#">Användare</a>
+        <a class="sa-nav-item" href="#">Moduler</a>
+      </nav>
+    </div>
+    <div class="sa-sidebar-footer">
+      <span class="sa-sidebar-version">Yuplan Unified · Dev</span>
+    </div>
+  </aside>
+
+  <section class="sa-main">
+    <header class="sa-main-header">
+      <div>
+        <h1>Välkommen, {{ vm.user_name }} 👋</h1>
+        <p>Systemadministratör för Yuplan – hantera kunder, användare och moduler härifrån.</p>
+      </div>
+      <div class="sa-main-header-widgets">
+        <div class="sa-clock">
+          <div id="sa-clock-time">--:--</div>
+          <div id="sa-clock-date">--</div>
+        </div>
+        <button id="sa-theme-toggle" class="sa-theme-toggle-btn">🌙 / ☀️</button>
+      </div>
+    </header>
+
+    <section class="sa-main-grid">
+      <section class="sa-card sa-card-wide">
+        <div class="sa-card-header">
+          <h2>Dina kunder</h2>
+          <p>Översikt över tenants/sites du har satt upp.</p>
+        </div>
+        <div class="sa-customers-grid">
+          {% if vm.customers %}
+            {% for c in vm.customers %}
+              <article class="sa-customer-card">
+                <h3>{{ c.tenant_name or c.site_name }}</h3>
+                <p class="sa-customer-meta">Site: {{ c.site_name }}{% if c.tenant_name %} · Kund: {{ c.tenant_name }}{% endif %}</p>
+                <form method="post" action="{{ url_for('admin_ui.systemadmin_switch_site', site_id=c.site_id) }}" class="inline-form">
+                  {{ csrf_token_input()|safe }}
+                  <button type="submit" class="btn btn-secondary sa-btn-small">Öppna admin</button>
+                </form>
+              </article>
+            {% endfor %}
+          {% else %}
+            <p>Inga kunder skapade ännu.</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="sa-card">
+        <div class="sa-card-header">
+          <h2>Snabbåtgärder</h2>
+          <p>Vanliga uppgifter du gör ofta.</p>
+        </div>
+        <form method="post" action="{{ url_for('admin_ui.systemadmin_create_customer') }}" class="sa-form">
+          {{ csrf_token_input()|safe }}
+          <div class="admin-form-row">
+            <label for="tenant_name">Kundnamn</label>
+            <input type="text" id="tenant_name" name="tenant_name" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="site_name">Site / enhet</label>
+            <input type="text" id="site_name" name="site_name" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="admin_email">Admin e-post</label>
+            <input type="email" id="admin_email" name="admin_email" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="admin_password">Admin lösenord</label>
+            <input type="password" id="admin_password" name="admin_password" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Skapa ny kund</button>
+        </form>
+      </section>
+
+      <section class="sa-card">
+        <div class="sa-card-header">
+          <h2>Systemstatus & moduler</h2>
+          <p>En snabb överblick över vilka funktioner som är aktiva.</p>
+        </div>
+        <ul class="sa-status-list">
+          {% if vm.feature_flags %}
+            {% for flag in vm.feature_flags %}
+              <li class="sa-status-item">
+                <span class="sa-status-name">{{ flag.name }}</span>
+                <span class="sa-status-pill sa-status-pill-{{ 'on' if flag.enabled else 'off' }}">{{ 'Aktiv' if flag.enabled else 'Av' }}</span>
+              </li>
+            {% endfor %}
+          {% else %}
+            <li class="sa-status-item">
+              <span class="sa-status-name">Veckovy</span>
+              <span class="sa-status-pill sa-status-pill-on">Aktiv</span>
+            </li>
+            <li class="sa-status-item">
+              <span class="sa-status-name">Planera</span>
+              <span class="sa-status-pill sa-status-pill-on">Aktiv</span>
+            </li>
+            <li class="sa-status-item">
+              <span class="sa-status-name">Offshore</span>
+              <span class="sa-status-pill sa-status-pill-off">Av</span>
+            </li>
+          {% endif %}
+        </ul>
+      </section>
+    </section>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/systemadmin.js') }}"></script>
+{% endblock %}
