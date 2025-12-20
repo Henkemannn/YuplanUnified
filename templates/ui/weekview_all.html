@@ -1,0 +1,241 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block admin_title %}Veckovy – vecka {{ vm.week }}, {{ vm.year }}{% endblock %}
+{% block admin_subtitle %}Alla avdelningar ({{ vm.site_name }}){% endblock %}
+
+{% block admin_main %}
+
+<style>
+  /* iPad-first: larger, comfortable targets */
+  .weekview-all { font-size: 18px; line-height: 1.55; }
+  .weekview-all .ua-card { padding: 16px 16px; }
+  .weekview-all h2 { margin: 0 0 6px 0; font-size: 20px; }
+  .meta-row { color: #666; font-size: 14px; margin-bottom: 8px; }
+  table.weekview { width: 100%; border-collapse: separate; border-spacing: 0; }
+  table.weekview th, table.weekview td { text-align:center; padding: 8px 6px; }
+  table.weekview thead th { position: sticky; top: 0; z-index: 5; background: #fff; box-shadow: 0 1px 0 rgba(0,0,0,0.06); }
+  table.weekview thead tr:nth-child(2) th { top: 32px; z-index: 6; }
+  table.weekview th + th, table.weekview td + td { border-left: 1px solid rgba(0,0,0,0.08); }
+  table.weekview tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+  table.weekview tbody tr.boende-row { background: rgba(33,150,243,0.06); font-weight: 600; }
+  td.kvall { background: rgba(0,0,0,0.03); }
+  td.diet-cell { cursor: pointer; user-select: none; }
+  td.diet-cell.marked { outline: 2px solid #2e7d32; background: rgba(46,125,50,0.08); }
+  .legend { font-size: 13px; color: #555; display: flex; gap: 16px; align-items:center; margin: 8px 0 0 0; }
+  .legend .pill { display:inline-block; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.06); }
+  .legend .pill.kvall { background: rgba(0,0,0,0.08); }
+  .legend .pill.marked { outline: 2px solid #2e7d32; background: rgba(46,125,50,0.12); }
+  /* Optional sticky dep header within card */
+  .dep-header { position: sticky; top: 0; background: #fff; z-index: 7; padding-bottom: 4px; }
+  /* Snackbar */
+  .snackbar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #323232; color: #fff; padding: 10px 14px; border-radius: 6px; opacity: 0; pointer-events:none; transition: opacity 150ms ease-in-out; font-size: 14px; }
+  .snackbar.show { opacity: 1; }
+  .snackbar.error { background: #c62828; }
+</style>
+
+<div class="ua-muted" style="margin:4px 0; font-size:12px;">DEBUG: departments={{ vm.departments|length if vm.departments is defined else 'UNDEF' }}</div>
+
+<section class="ua-section weekview-all">
+  <div class="ua-card">
+    <div style="display:flex;align-items:center;gap:8px;">
+      {% set prev_w = vm.week-1 if vm.week>1 else 1 %}
+      {% set next_w = vm.week+1 if vm.week<52 else 52 %}
+      <a class="yp-button" href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, year=vm.year, week=prev_w) }}" aria-label="Föregående vecka">◀︎</a>
+      <span>Vecka {{ vm.week }} – {{ vm.year }}</span>
+      <a class="yp-button" href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, year=vm.year, week=next_w) }}" aria-label="Nästa vecka">▶︎</a>
+    </div>
+    {% if vm.sites %}
+      <div class="meta-row" style="margin-top:6px;">
+        <strong>Aktiv site:</strong> {{ vm.site_name }}
+        {% set base_q = {'year': vm.week, 'week': vm.week} %}
+        <span style="margin-left:12px; color:#777;">Byt site:</span>
+        {% for s in vm.sites %}
+          {% if s.id != vm.active_site %}
+            <a class="ua-link" href="{{ url_for('ui.weekview_ui', site_id=s.id, department_id='', year=vm.year, week=vm.week) }}" style="margin-left:8px;">{{ s.name }}</a>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+    <div class="legend">
+      <span class="pill">Boende = antal boende/måltid</span>
+      <span class="pill marked">Markerad = specialkost behövde anpassas</span>
+      <span class="pill kvall">Kväll markeras med svag ton</span>
+    </div>
+  </div>
+</section>
+
+{% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
+
+{% for dep in vm.departments %}
+<section class="ua-section weekview-all" data-department-id="{{ dep.id }}" data-etag="{{ dep.etag }}">
+  <div class="ua-card">
+    <div class="dep-header">
+      <h2>{{ dep.name }}</h2>
+      <div class="meta-row">Vecka {{ vm.week }}, {{ vm.year }}</div>
+    </div>
+    <table class="ua-table weekview">
+      <thead>
+        <tr>
+          <th></th>
+          {% for dn in day_names %}
+            <th colspan="2">{{ dn }}</th>
+          {% endfor %}
+        </tr>
+        <tr>
+          <th></th>
+          {% for dn in day_names %}
+            <th>Lunch</th>
+            <th>Kväll</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="boende-row">
+          <td><strong>Boende</strong></td>
+          {% for d in dep.days %}
+            <td>{{ (d.residents or {}).lunch or 0 }}</td>
+            <td class="kvall">{{ (d.residents or {}).dinner or 0 }}</td>
+          {% endfor %}
+        </tr>
+        {% set diet_ids = [] %}
+        {% if dep.days and dep.days|length > 0 %}
+          {% for it in (dep.days[0].diets.lunch if dep.days[0].diets and dep.days[0].diets.lunch else []) %}
+            {% if it.resident_count > 0 %}
+              {% set _ = diet_ids.append(it.diet_type_id) %}
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+        {% for dtid in diet_ids %}
+          <tr>
+            <td>{{ vm.diet_name_map.get(dtid|int, dtid) }}</td>
+            {% for i in range(0, dep.days|length) %}
+              {% set day = dep.days[i] %}
+              {% set lunch_cell = (day.diets.lunch | selectattr('diet_type_id','equalto', dtid) | list | first) %}
+              {% set dinner_cell = (day.diets.dinner | selectattr('diet_type_id','equalto', dtid) | list | first) %}
+              <td class="diet-cell {% if lunch_cell and lunch_cell.marked %}marked{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Lunch" data-diet-id="{{ dtid }}">
+                {{ lunch_cell.resident_count if lunch_cell else 0 }}
+              </td>
+              <td class="diet-cell kvall {% if dinner_cell and dinner_cell.marked %}marked{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Kväll" data-diet-id="{{ dtid }}">
+                {{ dinner_cell.resident_count if dinner_cell else 0 }}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="ua-muted">Klicka i rutan för att markera/avmarkera specialkost.</p>
+  </div>
+</section>
+{% endfor %}
+
+<script>
+(function(){
+  var snack;
+  function ensureSnack(){
+    if(!snack){
+      snack = document.createElement('div');
+      snack.className = 'snackbar';
+      snack.setAttribute('aria-live','polite');
+      document.body.appendChild(snack);
+    }
+  }
+  function showToast(msg, isError){
+    ensureSnack();
+    snack.textContent = msg;
+    snack.classList.toggle('error', !!isError);
+    snack.classList.add('show');
+    setTimeout(function(){ snack.classList.remove('show'); }, 1000);
+  }
+  function closestDep(el){
+    while(el && el.tagName){
+      if(el.matches('section[data-department-id]')) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+  function fetchEtag(deptId, year, week){
+    var url = '{{ url_for('ui.api_weekview_get_etag') }}' + '?department_id=' + encodeURIComponent(deptId) + '&year=' + encodeURIComponent(year) + '&week=' + encodeURIComponent(week);
+    return fetch(url, { headers: { 'Accept': 'application/json' } }).then(function(r){ return r.json(); }).then(function(j){ return j && j.etag; });
+  }
+  function toggleCell(cell){
+    var dep = closestDep(cell);
+    if(!dep) return;
+    var deptId = dep.getAttribute('data-department-id');
+    var etag = dep.getAttribute('data-etag') || '';
+    var meal = cell.getAttribute('data-meal');
+    var weekday = cell.getAttribute('data-weekday');
+    var dietId = cell.getAttribute('data-diet-id');
+    var marked = !cell.classList.contains('marked');
+    var payload = {
+      year: {{ vm.year }},
+      week: {{ vm.week }},
+      department_id: deptId,
+      meal: meal,
+      weekday_abbr: weekday,
+      diet_type_id: dietId,
+      marked: marked
+    };
+    // Optimistic UI
+    if(marked){ cell.classList.add('marked'); } else { cell.classList.remove('marked'); }
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+    fetch('{{ url_for('ui.api_weekview_specialdiets_mark') }}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'If-Match': etag,
+        'X-CSRF-Token': csrfToken
+      },
+      body: JSON.stringify(payload)
+    }).then(function(res){
+      if(res.status === 200){
+        var newEtag = res.headers.get('ETag');
+        if(newEtag){ dep.setAttribute('data-etag', newEtag); }
+        showToast('Sparat');
+      } else if(res.status === 412){
+        // Retry flow: fetch latest ETag then try once more
+        fetchEtag(deptId, {{ vm.year }}, {{ vm.week }}).then(function(newTag){
+          if(!newTag){ throw new Error('no-etag'); }
+          dep.setAttribute('data-etag', newTag);
+          return fetch('{{ url_for('ui.api_weekview_specialdiets_mark') }}', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'If-Match': newTag,
+              'X-CSRF-Token': csrfToken
+            },
+            body: JSON.stringify(payload)
+          });
+        }).then(function(r2){
+          if(r2 && r2.status === 200){
+            var nt = r2.headers.get('ETag');
+            if(nt){ dep.setAttribute('data-etag', nt); }
+            showToast('Sparat');
+          } else {
+            // Revert optimistic UI on failure
+            if(marked){ cell.classList.remove('marked'); } else { cell.classList.add('marked'); }
+            showToast('Kunde inte spara – uppdatera sidan', true);
+          }
+        }).catch(function(){
+          if(marked){ cell.classList.remove('marked'); } else { cell.classList.add('marked'); }
+          showToast('Kunde inte spara – uppdatera sidan', true);
+        });
+      } else {
+        // Unknown failure: revert optimistic state
+        if(marked){ cell.classList.remove('marked'); } else { cell.classList.add('marked'); }
+        showToast('Kunde inte spara', true);
+      }
+    }).catch(function(){ /* ignore */ });
+  }
+  document.addEventListener('click', function(ev){
+    var el = ev.target;
+    if(el && el.classList && el.classList.contains('diet-cell')){
+      toggleCell(el);
+    }
+  });
+})();
+</script>
+
+<div class="snackbar" role="status" aria-live="polite" aria-atomic="true">Sparat</div>
+
+{% endblock %}

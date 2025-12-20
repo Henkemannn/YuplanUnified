@@ -1,18 +1,153 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash
+<<<<<<< Updated upstream
+from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g, current_app
+=======
+from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g, current_app
+>>>>>>> Stashed changes
 from sqlalchemy import text
 
 from .auth import require_roles
-from .db import get_session
+from .db import get_session, get_new_session
 from .models import Note, Task, User
 from .weekview.service import WeekviewService
 from .meal_registration_repo import MealRegistrationRepo
 from datetime import date as _date
 from datetime import timedelta
 import uuid
+from .context import get_active_context
 
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
+# Weekview special diets mark toggle API (ETag-safe), aligned with report marks
+@ui_bp.route("/api/weekview/specialdiets/mark", methods=["POST"])
+@require_roles("cook", "admin", "superuser")
+def api_weekview_specialdiets_mark():
+    data = request.get_json(force=True) or {}
+    try:
+        year = int(data["year"])  # yyyy
+        week = int(data["week"])  # ww
+        department_id = str(data["department_id"])  # keep as string ID
+        diet_type_id = str(data["diet_type_id"])  # diet type key
+        meal = str(data["meal"]).lower()  # expect "Lunch"/"Kväll" → lower to "lunch"/"dinner"
+        weekday_abbr = str(data.get("weekday_abbr") or data.get("weekday") or "")
+        desired_state = bool(data.get("marked") if "marked" in data else data.get("desired_state"))
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "invalid_payload"}), 400
+
+    # Map Swedish abbr to ISO weekday index
+    WEEKDAY_ABBR_TO_INDEX = {"Mån": 1, "Tis": 2, "Ons": 3, "Tors": 4, "Fre": 5, "Lör": 6, "Sön": 7}
+    try:
+        day_idx = WEEKDAY_ABBR_TO_INDEX[weekday_abbr or "Mån"]
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "invalid_weekday"}), 400
+
+    meal_key = "lunch" if meal.lower().startswith("lunch") else ("dinner" if meal.lower().startswith("kv") or meal.lower().startswith("dinner") else meal)
+
+    # Build operations for WeekviewService.toggle_marks
+    op = {
+        "day_of_week": day_idx,
+        "meal": meal_key,
+        "diet_type": diet_type_id,
+        "marked": desired_state,
+    }
+    # Deterministic site-scope validation using active context and current request DB session
+    ctx = get_active_context()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        return jsonify({"type": "about:blank", "title": "missing_site"}), 400
+    db = get_new_session()
+    try:
+        row = db.execute(text("SELECT site_id FROM departments WHERE id=:id"), {"id": department_id}).fetchone()
+        # Test-only diagnostics: verify DB URL and department visibility
+        if current_app.config.get("TESTING"):
+            try:
+                db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI")
+                dblist = db.execute(text("PRAGMA database_list")).fetchall()
+                dep_cnt = db.execute(text("SELECT COUNT(1) FROM departments")).fetchone()
+                dep1_cnt = db.execute(text("SELECT COUNT(1) FROM departments WHERE id='d1'")).fetchone()
+                dep2_cnt = db.execute(text("SELECT COUNT(1) FROM departments WHERE id='d2'")).fetchone()
+                print({
+                    "weekview_mark_db_diag": True,
+                    "db_url": db_url,
+                    "db_list": [(str(r[1]), str(r[2])) for r in dblist],
+                    "departments_total": int(dep_cnt[0]) if dep_cnt else None,
+                    "departments_d1": int(dep1_cnt[0]) if dep1_cnt else None,
+                    "departments_d2": int(dep2_cnt[0]) if dep2_cnt else None,
+                })
+            except Exception as _e:
+                print({"weekview_mark_db_diag_error": str(_e)})
+        if not row:
+            return jsonify({"type": "about:blank", "title": "not_found"}), 404
+        dep_site_id = str(row[0]) if row[0] is not None else None
+        if dep_site_id is None:
+            return jsonify({"type": "about:blank", "title": "not_found"}), 404
+        if str(active_site_id) != dep_site_id:
+            return jsonify({"type": "about:blank", "title": "forbidden_site"}), 403
+        # Optional: validate diet type site-scope when available
+        try:
+            cols_diet = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+            if "site_id" in cols_diet:
+                drow = db.execute(text("SELECT site_id FROM dietary_types WHERE id=:id"), {"id": diet_type_id}).fetchone()
+                if drow and drow[0] is not None and str(drow[0]) != str(active_site_id):
+                    return jsonify({"type": "about:blank", "title": "forbidden_site"}), 403
+        except Exception:
+            pass
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+    svc = WeekviewService()
+    if_match = request.headers.get("If-Match") or ""
+    try:
+        new_etag = svc.toggle_marks(g.tenant_id or 0, year, week, department_id, if_match, [op])
+        resp = jsonify({"status": "ok", "marked": bool(desired_state)})
+        resp.headers["ETag"] = new_etag
+        return resp, 200
+    except Exception:
+        # Return 412 Precondition Failed on ETag mismatch semantics
+        return jsonify({"type": "about:blank", "title": "etag_mismatch"}), 412
+
+@ui_bp.get("/api/weekview/etag")
+@require_roles("superuser", "admin", "cook", "unit_portal")
+def api_weekview_get_etag():
+    """Return current ETag for a department/week to support UI retry after 412.
+
+    Query params: department_id, year, week
+    """
+    try:
+        department_id = str((request.args.get("department_id") or "").strip())
+        year = int(request.args.get("year"))
+        week = int(request.args.get("week"))
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Invalid params"}), 400
+    tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
+    if not tid:
+        return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
+    from .weekview.repo import WeekviewRepo
+    from .weekview.service import WeekviewService as _WVS
+    repo = WeekviewRepo()
+    svc = _WVS(repo)
+    try:
+        version = repo.get_version(tid, year, week, department_id)
+        etag = svc.build_etag(tid, department_id, year, week, version)
+        return jsonify({"etag": etag})
+    except Exception:
+        return jsonify({"error": "server_error"}), 500
+@ui_bp.route("/ui/cook/week-overview/<int:year>/<int:week>", methods=["GET"])
+@require_roles("cook")
+def cook_week_overview_unified(year: int, week: int):
+    from .cook_week_overview_service import build_cook_week_overview_context
+    tenant_id = getattr(g, "tenant_id", None)
+    site_id = getattr(g, "site_id", None)
+    context = build_cook_week_overview_context(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        year=year,
+        week=week,
+    )
+    return render_template("unified_cook_week_overview.html", **context)
 
 SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 ADMIN_ROLES = ("admin", "superuser")
@@ -23,25 +158,53 @@ ADMIN_ROLES = ("admin", "superuser")
 @ui_bp.get("/ui/admin/system")
 @require_roles("superuser")
 def admin_system_page():
-    site_id = (request.args.get("site_id") or "").strip()
+    # Systemadmin should primarily show site metadata and entry to Admin.
+    # When a specific site_id is requested, list its departments with a Settings link.
+    site_id_q = (request.args.get("site_id") or "").strip()
     db = get_session()
     try:
-        sites_rows = db.execute(text("SELECT id, name FROM sites ORDER BY name")).fetchall()
-        sites = [{"id": str(r[0]), "name": str(r[1] or "")} for r in sites_rows]
-        selected_site = None
+        rows = db.execute(text("SELECT id, name FROM sites ORDER BY name")).fetchall()
+        sites = []
+        # Detect optional tables/columns to compute read-only aggregates safely
+        try:
+            cols_dep = {r[1] for r in db.execute(text("PRAGMA table_info('departments')")).fetchall()}
+        except Exception:
+            cols_dep = set()
+        try:
+            cols_diet = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+        except Exception:
+            cols_diet = set()
+        for r in rows:
+            sid = str(r[0])
+            name = str(r[1] or "")
+            dep_count = 0
+            diet_count = 0
+            try:
+                if cols_dep:
+                    dep_count = int(db.execute(text("SELECT COUNT(1) FROM departments WHERE site_id=:s"), {"s": sid}).fetchone()[0])
+            except Exception:
+                dep_count = 0
+            try:
+                if cols_diet:
+                    # Site-scoped count; if site_id missing in schema, treat as 0 to preserve isolation
+                    if "site_id" in cols_diet:
+                        diet_count = int(db.execute(text("SELECT COUNT(1) FROM dietary_types WHERE site_id=:s"), {"s": sid}).fetchone()[0])
+                    else:
+                        diet_count = 0
+            except Exception:
+                diet_count = 0
+            sites.append({"id": sid, "name": name, "dep_count": dep_count, "diet_count": diet_count})
+        # Optional: departments for selected site
         departments = []
-        if not site_id and sites:
-            site_id = sites[0]["id"]
-        if site_id:
-            row = db.execute(text("SELECT id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-            if row:
-                selected_site = {"id": str(row[0]), "name": str(row[1] or "")}
-                deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+        if site_id_q:
+            try:
+                deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id_q}).fetchall()
                 departments = [{"id": str(d[0]), "name": str(d[1] or "")} for d in deps]
+            except Exception:
+                departments = []
     finally:
         db.close()
-    # Systemadmin VM only: sites + departments (no diet types here)
-    vm = {"sites": sites, "selected_site": selected_site, "departments": departments}
+    vm = {"sites": sites, "departments": departments, "selected_site_id": site_id_q}
     return render_template("admin_system.html", vm=vm)
 
 @ui_bp.post("/ui/admin/system/site/create")
@@ -1673,12 +1836,15 @@ def reports_weekly_csv():
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = f"attachment; filename=veckorapport_v{week}_{year}.csv"
     return resp
+<<<<<<< Updated upstream
 
 
+=======
+>>>>>>> Stashed changes
 @ui_bp.get("/ui/reports/weekly.xlsx")
 @require_roles(*ADMIN_ROLES)
 def reports_weekly_xlsx():
-    # Excel export for weekly report using same coverage data
+    """XLSX export for weekly report mirroring CSV logic."""
     site_id = (request.args.get("site_id") or "").strip()
     try:
         year = int(request.args.get("year", ""))
@@ -1690,7 +1856,7 @@ def reports_weekly_xlsx():
     if week < 1 or week > 53:
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
 
-    # Resolve site and departments (mirror HTML report)
+    # Resolve site and departments (same logic as HTML report)
     db = get_session()
     try:
         row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
@@ -1708,12 +1874,12 @@ def reports_weekly_xlsx():
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
     dept_vms = compute_weekview_report(tid, year, week, departments)
 
-    # Build XLSX workbook in memory
-    from io import BytesIO
+    # Build XLSX via openpyxl
     try:
         from openpyxl import Workbook
+        from io import BytesIO
     except Exception:
-        return jsonify({"error": "unsupported", "message": "Excel export not available"}), 415
+        return jsonify({"error": "server_error", "message": "XLSX not available"}), 500
     wb = Workbook()
     ws = wb.active
     ws.title = "Veckorapport"
@@ -1738,6 +1904,21 @@ def reports_weekly_xlsx():
     resp.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     resp.headers["Content-Disposition"] = f"attachment; filename=veckorapport_v{week}_{year}.xlsx"
     return resp
+# Cook Dashboard (Phase 5) – Unified cook view
+@ui_bp.get("/ui/cook/dashboard")
+@require_roles("cook", "admin", "superuser")
+def cook_dashboard_ui():
+    from .cook_dashboard_service import CookDashboardService
+    tenant_id = int(session.get("tenant_id") or 1)
+    site_id = (request.args.get("site_id") or "").strip()
+    date_str = (request.args.get("date") or "").strip()
+    try:
+        today = _date.fromisoformat(date_str) if date_str else _date.today()
+    except Exception:
+        today = _date.today()
+    svc = CookDashboardService()
+    vm = svc.get_view(tenant_id=tenant_id, site_id=site_id or None, today=today)
+    return render_template("ui/unified_cook_dashboard_phase5.html", vm=vm)
 
 
 @ui_bp.get("/ui/reports/weekly.pdf")

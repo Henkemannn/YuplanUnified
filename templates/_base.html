@@ -52,19 +52,23 @@
 </head>
 <body>
 <nav class="main-nav">
-  <a href="{{ url_for('ui.weekview_ui') }}">Veckovy</a>
-  <a href="{{ url_for('ui.portal_week') }}" class="{% if request.path.startswith('/portal/week') %}active{% endif %}">Avdelningsportal</a>
-  <a href="{{ url_for('ui.planera_day_ui_v2') }}">Planera</a>
-  <a href="{{ url_for('ui.weekview_report_ui') }}">Rapport</a>
-  <a href="{{ url_for('ui.admin_dashboard') }}">Admin</a>
-  {% if has_role('superuser') %}
-    <a href="{{ url_for('ui.admin_system_page') }}" class="{% if request.endpoint=='ui.admin_system_page' %}active{% endif %}">Systemadministration</a>
-  {% endif %}
-  {% if has_role('admin','superuser') %}
-    <a href="{{ url_for('ui.admin_diets_page') }}" class="{% if request.endpoint=='ui.admin_diets_page' %}active{% endif %}">Specialkost</a>
-  {% endif %}
-  {% if has_role('superuser') %}
-    <a href="{{ url_for('ui.admin_system_page') }}" class="{% if request.endpoint=='ui.admin_system_page' or request.path.startswith('/ui/admin/system') %}active{% endif %}">Systemadministration</a>
+  {% set is_systemadmin_ctx = (request.endpoint=='ui.admin_system_page' or request.path.startswith('/ui/admin/system')) %}
+  {% if is_systemadmin_ctx and has_role('superuser') %}
+    {# Systemadmin context: show only systemadmin navigation #}
+    <a href="{{ url_for('ui.admin_system_page') }}" class="active">Systemadministration</a>
+    {# Optional: add Kunder/Logga ut links if available in routes #}
+  {% else %}
+    <a href="{{ url_for('ui.weekview_ui') }}">Veckovy</a>
+    <a href="{{ url_for('ui.portal_week') }}" class="{% if request.path.startswith('/portal/week') %}active{% endif %}">Avdelningsportal</a>
+    <a href="{{ url_for('ui.planera_day_ui_v2') }}">Planera</a>
+    <a href="{{ url_for('ui.weekview_report_ui') }}">Rapport</a>
+    <a href="{{ url_for('ui.admin_dashboard') }}">Admin</a>
+    {% if has_role('admin','superuser') %}
+      <a href="{{ url_for('ui.admin_diets_page') }}" class="{% if request.endpoint=='ui.admin_diets_page' %}active{% endif %}">Specialkost</a>
+    {% endif %}
+    {% if has_role('superuser') %}
+      <a href="{{ url_for('ui.admin_system_page') }}" class="{% if request.endpoint=='ui.admin_system_page' or request.path.startswith('/ui/admin/system') %}active{% endif %}">Systemadministration</a>
+    {% endif %}
   {% endif %}
 </nav>
 {% if staging_demo %}
