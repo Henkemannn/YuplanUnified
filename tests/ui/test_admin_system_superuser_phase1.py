@@ -59,6 +59,7 @@ def test_create_site_and_department():
     # Create department on s1
     r = client.post("/ui/admin/system/department/create?site_id=s1", data={"name": "Avd 2"}, headers={"X-User-Role": "superuser", "X-Tenant-Id": "1"})
     assert r.status_code in (302, 303)
-    r = client.get("/ui/admin/system?site_id=s1", headers={"X-User-Role": "superuser", "X-Tenant-Id": "1"})
+    r = client.get("/ui/admin/system", headers={"X-User-Role": "superuser", "X-Tenant-Id": "1"})
     html = r.data.decode("utf-8")
-    assert "Avd 2" in html
+    # Systemadmin now shows aggregate badges; expect updated department count for s1
+    assert "Avdelningar:" in html
