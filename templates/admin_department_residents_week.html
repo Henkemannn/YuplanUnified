@@ -1,0 +1,41 @@
+{% extends "_base.html" %}
+{% block title %}Boendeantal – {{ vm.department_name }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+{% block content %}
+<main class="admin-section">
+  <h1>Boendeantal – {{ vm.department_name }} – vecka {{ vm.week }}</h1>
+  <section class="admin-card">
+    <form method="post">
+      {{ csrf_token_input()|safe }}
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Dag</th>
+            <th>Lunch</th>
+            <th>Kväll</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for day in vm.days %}
+          <tr>
+            <td>{{ day.label }}</td>
+            <td>
+              <input type="number" name="{{ day.key }}_Lunch" value="{{ day.lunch }}" min="0" step="1" style="width:80px">
+            </td>
+            <td>
+              <input type="number" name="{{ day.key }}_Dinner" value="{{ day.dinner }}" min="0" step="1" style="width:80px">
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div style="margin-top:12px">
+        <button type="submit" class="btn btn-primary">Spara</button>
+        <a href="{{ url_for('admin_ui.admin_departments_list') }}" class="btn btn-secondary" style="margin-left:8px">Till avdelningar</a>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}

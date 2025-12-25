@@ -26,9 +26,17 @@
     <span class="breadcrumb-current">Veckor</span>
   </nav>
 
-  <section class="portal-summary">
-    <h1>Veckor för {{ vm.department_name }}</h1>
-    <p>{{ vm.site_name }}</p>
+  <section class="portal-department-info">
+    <h1 class="portal-department-title">{{ vm.department_name }}</h1>
+    <p class="portal-department-meta">Boende: {{ vm.residents_count or "okänt" }}</p>
+
+    {% if vm.info_text %}
+      <p class="portal-department-note">{{ vm.info_text }}</p>
+    {% endif %}
+
+    <p class="portal-department-help">
+      Om något inte stämmer – kontakta köket eller admin.
+    </p>
   </section>
 
   <div class="weeks-legend" aria-hidden="true">
@@ -38,27 +46,27 @@
   </div>
 
   <section class="weeks-grid" aria-label="Veckor">
-    {% for item in vm["items"] %}
+    {% for item in vm.items %}
     <a href="{{ item.url }}"
-       class="week-card week-card--{{ item.status }}{% if item.is_current %} week-card--current{% endif %}"
+       class="week-card week-card--{{ 'done' if item.is_completed else ('needs' if item.needs_choices else ('no-menu' if not item.has_menu else 'in-progress')) }}{% if item.is_current %} week-card--current{% endif %}"
        data-year="{{ item.year }}" data-week="{{ item.week }}"
        aria-label="Öppna vecka {{ item.week }} ({{ item.start_date.strftime('%d/%m') }} – {{ item.end_date.strftime('%d/%m') }})">
       <div class="week-card__header">
-        <div class="week-card__title">{{ item.label }}</div>
-        <div class="week-card__dates">{{ item.start_date.strftime('%d/%m') }} – {{ item.end_date.strftime('%d/%m') }}</div>
+        <div class="week-card__title">Vecka {{ item.week }}</div>
+        <div class="week-card__dates">{{ item.start_date.strftime('%Y-%m-%d') }} – {{ item.end_date.strftime('%Y-%m-%d') }}</div>
       </div>
-      {% if item.is_current %}
-      <div class="week-card__current" aria-hidden="true">Denna vecka</div>
-      {% endif %}
-      <div class="week-card__status">
-        {% if item.status == 'done' %}
+      {% if item.has_menu %}
+        {% if item.is_completed %}
           <span class="status-pill status-pill--done">Klar</span>
-        {% elif item.status == 'in_progress' %}
-          <span class="status-pill status-pill--in-progress">Ej klar</span>
+          <p class="status-text">Valen för denna vecka är gjorda.</p>
         {% else %}
-          <span class="status-pill status-pill--not-started">{% if item.is_future %}Kommer{% else %}Ej påbörjad{% endif %}</span>
+          <span class="status-pill status-pill--needs">Behöver val</span>
+          <p class="status-text">Det saknas val vissa dagar.</p>
         {% endif %}
-      </div>
+      {% else %}
+        <span class="status-pill status-pill--no-menu">Ingen meny</span>
+        <p class="status-text">Köket har inte lagt in meny än.</p>
+      {% endif %}
     </a>
     {% endfor %}
   </section>

@@ -42,6 +42,9 @@ def test_departments_list_happy_path_admin(client_admin):
         finally:
             db.close()
     
+    # Activate this site in session
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     resp = client_admin.get("/ui/admin/departments", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
@@ -268,6 +271,9 @@ def test_departments_edit_form_happy_path(client_admin):
         finally:
             db.close()
     
+    # Activate this site in session
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     resp = client_admin.get(f"/ui/admin/departments/{dept_id}/edit", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
@@ -304,6 +310,8 @@ def test_departments_edit_form_permissions_admin_allowed(client_admin):
         finally:
             db.close()
     
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     resp = client_admin.get(f"/ui/admin/departments/{dept_id}/edit", headers=_h("admin"))
     
     assert resp.status_code == 200
@@ -345,6 +353,8 @@ def test_departments_update_happy_path(client_admin):
             db.close()
     
     # Update department
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     resp = client_admin.post(
         f"/ui/admin/departments/{dept_id}/edit",
         headers=_h("admin"),
@@ -395,6 +405,8 @@ def test_departments_delete_happy_path(client_admin):
             db.close()
     
     # Delete department
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     resp = client_admin.post(
         f"/ui/admin/departments/{dept_id}/delete",
         headers=_h("admin"),

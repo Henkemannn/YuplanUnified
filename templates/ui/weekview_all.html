@@ -177,14 +177,11 @@
     };
     // Optimistic UI
     if(marked){ cell.classList.add('marked'); } else { cell.classList.remove('marked'); }
-    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
     fetch('{{ url_for('ui.api_weekview_specialdiets_mark') }}', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'If-Match': etag,
-        'X-CSRF-Token': csrfToken
+        'If-Match': etag
       },
       body: JSON.stringify(payload)
     }).then(function(res){
@@ -201,8 +198,7 @@
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'If-Match': newTag,
-              'X-CSRF-Token': csrfToken
+              'If-Match': newTag
             },
             body: JSON.stringify(payload)
           });

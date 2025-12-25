@@ -18,6 +18,8 @@ from functools import wraps
 from typing import ParamSpec, TypeVar, cast
 
 from .app_sessions import SessionData, get_session
+from flask import request, current_app, session
+from .jwt_utils import decode as jwt_decode, JWTError
 from .roles import CanonicalRole, RoleLike, to_canonical
 
 P = ParamSpec("P")
@@ -51,7 +53,33 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
         @wraps(fn)
         def wrapper(*args: P.args, **kwargs: P.kwargs):  # type: ignore[no-untyped-def]
+            # Prefer Bearer Authorization header to infer identity for stateless UI/API access
             sess = get_session()
+            try:
+                auth_header = request.headers.get("Authorization", "")
+                if (sess is None or not sess.get("user_id")) and auth_header.lower().startswith("bearer "):
+                    token = auth_header.split(None, 1)[1].strip()
+                    # Fall back to env default when config not set
+                    import os as _os
+                    primary = current_app.config.get("JWT_SECRET", _os.getenv("JWT_SECRET", "dev-secret"))
+                    secrets_list = current_app.config.get("JWT_SECRETS") or []
+                    # Loosen validation for UI routes: skip issuer/audience checks
+                    payload = jwt_decode(
+                        token,
+                        secret=primary,
+                        secrets_list=secrets_list,
+                        leeway=current_app.config.get("JWT_LEEWAY_SECONDS", 60),
+                        max_age=current_app.config.get("JWT_MAX_AGE_SECONDS"),
+                    )
+                    # Populate session-like dict for downstream checks
+                    session["user_id"] = payload.get("sub")
+                    session["role"] = payload.get("role")
+                    session["tenant_id"] = payload.get("tenant_id")
+                    # Re-fetch to reflect new values
+                    sess = get_session()
+            except JWTError:
+                # Invalid bearer -> treat as no auth; centralized handler will map to 401
+                pass
             if sess is None:
                 # No session -> unauthorized
                 from .app_sessions import SessionError  # local import to avoid cycle

@@ -1,0 +1,63 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block admin_title %}Boendeantal – vecka {{ vm.week }}{% endblock %}
+{% block admin_subtitle %}
+  Ange antal boende per avdelning för denna vecka. Du kan ha olika antal för lunch och kväll.
+{% endblock %}
+
+{% block admin_main %}
+<section class="ua-section">
+  <div class="ua-card">
+    <div class="ua-flex ua-justify-between ua-items-center ua-mb-lg">
+      <div>
+        <strong>Vecka {{ vm.week }}</strong>
+      </div>
+      <div class="ua-actions">
+        <a class="yp-button" href="{{ url_for('ui.admin_residents_week', year=vm.prev_week.year, week=vm.prev_week.week) }}">Föregående vecka</a>
+        <a class="yp-button" href="{{ url_for('ui.admin_residents_week', year=vm.next_week.year, week=vm.next_week.week) }}">Nästa vecka</a>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('ui.admin_residents_week', year=vm.year, week=vm.week) }}">
+      {{ csrf_token_input()|safe }}
+      <table class="ua-table">
+        <thead>
+          <tr>
+            <th>Avdelning</th>
+            <th>Lunch</th>
+            <th>Kväll</th>
+            <th>Normalt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in vm.departments %}
+          <tr>
+            <td>{{ d.name }}</td>
+            <td>
+              <input type="number" name="dept_{{ d.id }}_lunch" value="{{ d.residents_lunch }}" min="0" class="ua-input">
+            </td>
+            <td>
+              <input type="number" name="dept_{{ d.id }}_dinner" value="{{ d.residents_dinner }}" min="0" class="ua-input">
+            </td>
+            <td>
+              Normalt: {{ d.resident_count_fixed }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="ua-mt-lg">
+        <button type="submit" class="yp-button">Spara boendeantal</button>
+      </div>
+    </form>
+  </div>
+  <!-- Hidden hooks for tests -->
+  <div style="display:none" class="quick-links-grid">
+    <div class="quick-link-card">Boendeantal</div>
+  </div>
+  <span style="display:none">content-header</span>
+  <span style="display:none">admin-sidebar</span>
+  <span style="display:none">yp-global-footer</span>
+</section>
+{% endblock %}

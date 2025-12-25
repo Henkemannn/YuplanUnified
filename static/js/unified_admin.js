@@ -23,6 +23,7 @@
         setupButtonRipple();
         setupSmoothTableHover();
         setupSmoothScroll();
+        setupModalHandlers();
         
         // Check mobile on load
         if (window.innerWidth <= 768) {
@@ -63,6 +64,56 @@
         });
     }
     
+    // ========================================================================
+    // Modal Handlers (data-modal-target / data-modal-close)
+    // ========================================================================
+    function setupModalHandlers() {
+        // Open handler
+        document.addEventListener('click', function (event) {
+            const trigger = event.target.closest('[data-modal-target]');
+            if (!trigger) return;
+
+            const selector = trigger.getAttribute('data-modal-target');
+            if (!selector) return;
+
+            const dialog = document.querySelector(selector);
+            if (!dialog) return;
+
+            try {
+                if (typeof dialog.showModal === 'function') {
+                    dialog.showModal();
+                    dialog.classList.add('ua-modal-open');
+                } else {
+                    dialog.setAttribute('open', 'open');
+                    dialog.classList.add('ua-modal-open');
+                }
+            } catch (e) {
+                dialog.setAttribute('open', 'open');
+                dialog.classList.add('ua-modal-open');
+            }
+        });
+
+        // Close handler
+        document.addEventListener('click', function (event) {
+            const closeBtn = event.target.closest('[data-modal-close]');
+            if (!closeBtn) return;
+
+            const dialog = closeBtn.closest('dialog.ua-modal');
+            if (!dialog) return;
+
+            try {
+                if (typeof dialog.close === 'function') {
+                    dialog.close();
+                } else {
+                    dialog.removeAttribute('open');
+                }
+            } catch (e) {
+                dialog.removeAttribute('open');
+            }
+            dialog.classList.remove('ua-modal-open');
+        });
+    }
+
     function toggleSidebar() {
         if (sidebarOpen) {
             closeSidebar();

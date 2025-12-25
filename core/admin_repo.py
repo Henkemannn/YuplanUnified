@@ -86,6 +86,51 @@ class SitesRepo:
         finally:
             db.close()
 
+    def list_sites_for_tenant(self, tenant_id: int | str) -> list[dict]:
+        """List sites for a given tenant when schema supports it.
+
+        If the sites table lacks a tenant_id column (sqlite dev fallback), returns an empty list
+        to avoid leaking cross-tenant data. Superuser flows should call list_sites().
+        """
+        db = get_session()
+        try:
+            # Ensure table exists on sqlite
+            if _is_sqlite(db):
+                db.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS sites (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            version INTEGER NOT NULL DEFAULT 0,
+                            notes TEXT NULL,
+                            updated_at TEXT
+                        )
+                        """
+                    )
+                )
+            # Detect presence of tenant_id column
+            has_col = False
+            try:
+                cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
+                has_col = any(str(c[1]) == "tenant_id" for c in cols)
+            except Exception:
+                # Postgres path
+                try:
+                    chk = db.execute(text("SELECT 1 FROM information_schema.columns WHERE table_name='sites' AND column_name='tenant_id'"))
+                    has_col = chk.fetchone() is not None
+                except Exception:
+                    has_col = False
+            if not has_col:
+                return []
+            rows = db.execute(
+                text("SELECT id, name, COALESCE(version,0) FROM sites WHERE tenant_id=:t ORDER BY name"),
+                {"t": int(tenant_id) if str(tenant_id).isdigit() else tenant_id},
+            ).fetchall()
+            return [{"id": r[0], "name": r[1], "version": int(r[2] or 0)} for r in rows]
+        finally:
+            db.close()
+
 
 class DepartmentsRepo:
     def create_department(
@@ -421,29 +466,59 @@ class DietDefaultsRepo:
 
 
 class DietTypesRepo:
-    """Repository for managing dietary types (specialkost)."""
+    """Repository for managing dietary types (specialkost), now scoped per site."""
 
-    def list_all(self, tenant_id: int = 1) -> list[dict]:
-        """List all dietary types for a tenant."""
+    def _ensure_table(self, db) -> None:
+        if _is_sqlite(db):
+            db.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS dietary_types (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        -- tenant_id kept for backward-compat in some environments
+                        tenant_id INTEGER NULL,
+                        site_id TEXT NULL,
+                        name TEXT NOT NULL,
+                        default_select INTEGER NOT NULL DEFAULT 0
+                    )
+                    """
+                )
+            )
+            # Add missing site_id column for older dev DBs; keep it NULL-able to avoid breaking existing rows
+            try:
+                cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+                if "site_id" not in cols:
+                    db.execute(text("ALTER TABLE dietary_types ADD COLUMN site_id TEXT"))
+            except Exception:
+                pass
+            # Helpful index for lookups
+            try:
+                db.execute(text("CREATE INDEX IF NOT EXISTS idx_dietary_types_site_name ON dietary_types(site_id, name)"))
+            except Exception:
+                pass
+
+    def list_all(self, site_id: str) -> list[dict]:
+        """List all dietary types for a given site."""
         db = get_session()
         try:
-            if _is_sqlite(db):
-                db.execute(
-                    text(
-                        """
-                        CREATE TABLE IF NOT EXISTS dietary_types (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            tenant_id INTEGER NOT NULL,
-                            name TEXT NOT NULL,
-                            default_select INTEGER NOT NULL DEFAULT 0
-                        )
-                        """
-                    )
-                )
-            rows = db.execute(
-                text("SELECT id, name, default_select FROM dietary_types WHERE tenant_id=:t ORDER BY name"),
-                {"t": tenant_id},
-            ).fetchall()
+            self._ensure_table(db)
+            # If site_id column exists, filter by it; else return empty list to encourage DB reset
+            try:
+                cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+                if "site_id" not in cols:
+                    # Schema missing site_id: return empty to force isolation (devs should reset DB)
+                    rows = []
+                else:
+                    if not site_id:
+                        # Strict isolation: require site_id; routes should redirect to select-site
+                        rows = []
+                    else:
+                        rows = db.execute(
+                            text("SELECT id, name, default_select FROM dietary_types WHERE site_id=:s ORDER BY name"),
+                            {"s": site_id},
+                        ).fetchall()
+            except Exception:
+                rows = []
             return [
                 {"id": int(r[0]), "name": str(r[1]), "default_select": bool(r[2])}
                 for r in rows
@@ -455,53 +530,90 @@ class DietTypesRepo:
         """Get a single dietary type by ID."""
         db = get_session()
         try:
+            self._ensure_table(db)
             row = db.execute(
-                text("SELECT id, tenant_id, name, default_select FROM dietary_types WHERE id=:id"),
+                text("SELECT id, site_id, name, default_select FROM dietary_types WHERE id=:id"),
                 {"id": diet_type_id},
             ).fetchone()
             if not row:
                 return None
             return {
                 "id": int(row[0]),
-                "tenant_id": int(row[1]),
+                "site_id": (str(row[1]) if row[1] is not None else None),
                 "name": str(row[2]),
                 "default_select": bool(row[3]),
             }
         finally:
             db.close()
 
-    def create(self, tenant_id: int, name: str, default_select: bool = False) -> int:
-        """Create a new dietary type, return ID."""
+    def create(self, *args, **kwargs) -> int:
+        """Create a new dietary type. Accepts both legacy and site-scoped signatures.
+
+        Supported usages:
+        - create(name="Glutenfri", default_select=False, site_id="s1")
+        - create(site_id="s1", name="Glutenfri", default_select=False)
+        - create(tenant_id=1, name="Glutenfri", default_select=False)  # legacy
+        """
+        # Normalize arguments
+        site_id = kwargs.get("site_id")
+        tenant_id = kwargs.get("tenant_id")
+        name = kwargs.get("name")
+        default_select = bool(kwargs.get("default_select", False))
+        # Allow positional pattern (site_id, name, default_select)
+        if not name and len(args) >= 2 and isinstance(args[1], str):
+            # Either (site_id, name, default_select) or (name, default_select)
+            if len(args) >= 3 and isinstance(args[2], (bool, int)):
+                # Assume (site_id, name, default_select)
+                site_id = args[0]
+                name = args[1]
+                default_select = bool(args[2])
+            else:
+                # (name, default_select)
+                name = args[0]
+                default_select = bool(args[1]) if len(args) >= 2 else False
+        elif not name and len(args) >= 1 and isinstance(args[0], str):
+            name = args[0]
+            default_select = bool(args[1]) if len(args) >= 2 else default_select
+        if not name:
+            raise ValueError("name is required")
         db = get_session()
         try:
+            self._ensure_table(db)
             if _is_sqlite(db):
-                db.execute(
-                    text(
-                        """
-                        CREATE TABLE IF NOT EXISTS dietary_types (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            tenant_id INTEGER NOT NULL,
-                            name TEXT NOT NULL,
-                            default_select INTEGER NOT NULL DEFAULT 0
+                cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+                if "tenant_id" in cols:
+                    # If legacy NOT NULL constraint exists, provide a default value (1)
+                    notnull_map = {str(r[1]): int(r[3] or 0) for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+                    needs_tenant = bool(notnull_map.get("tenant_id", 0))
+                    if needs_tenant:
+                        tval = int(tenant_id) if tenant_id is not None else 1
+                        db.execute(
+                            text("INSERT INTO dietary_types(tenant_id, site_id, name, default_select) VALUES(:t, :s, :n, :d)"),
+                            {"t": tval, "s": site_id, "n": name, "d": 1 if default_select else 0},
                         )
-                        """
+                    else:
+                        db.execute(
+                            text("INSERT INTO dietary_types(site_id, name, default_select) VALUES(:s, :n, :d)"),
+                            {"s": site_id, "n": name, "d": 1 if default_select else 0},
+                        )
+                else:
+                    db.execute(
+                        text("INSERT INTO dietary_types(site_id, name, default_select) VALUES(:s, :n, :d)"),
+                        {"s": site_id, "n": name, "d": 1 if default_select else 0},
                     )
-                )
-                db.execute(
-                    text(
-                        "INSERT INTO dietary_types(tenant_id, name, default_select) VALUES(:t, :n, :d)"
-                    ),
-                    {"t": tenant_id, "n": name, "d": 1 if default_select else 0},
-                )
                 row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
                 new_id = int(row[0]) if row else 0
             else:
-                res = db.execute(
-                    text(
-                        "INSERT INTO dietary_types(tenant_id, name, default_select) VALUES(:t, :n, :d) RETURNING id"
-                    ),
-                    {"t": tenant_id, "n": name, "d": default_select},
-                )
+                if tenant_id is not None:
+                    res = db.execute(
+                        text("INSERT INTO dietary_types(tenant_id, site_id, name, default_select) VALUES(:t, :s, :n, :d) RETURNING id"),
+                        {"t": int(tenant_id), "s": site_id, "n": name, "d": default_select},
+                    )
+                else:
+                    res = db.execute(
+                        text("INSERT INTO dietary_types(site_id, name, default_select) VALUES(:s, :n, :d) RETURNING id"),
+                        {"s": site_id, "n": name, "d": default_select},
+                    )
                 row = res.fetchone()
                 new_id = int(row[0]) if row else 0
             db.commit()

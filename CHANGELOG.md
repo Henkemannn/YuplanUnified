@@ -85,6 +85,14 @@
 
 
 ### Added
+- **Optimistic Concurrency Control**: ETag/If-Match support for `/admin/users`, `/admin/roles`, and `/admin/feature-flags` endpoints
+  - DELETE operations require `If-Match` header (strict) - returns 400 if missing, 412 if mismatch
+  - PATCH/PUT operations allow operation without `If-Match` (lenient) - returns 412 if provided but mismatched
+  - ETag response headers included in successful PATCH/PUT responses
+  - Typed RFC7807 ProblemDetails responses for 412 Precondition Failed and 400 Bad Request
+  - New `core.concurrency` module with strict mypy typing
+  - Documentation in `docs/optimistic-concurrency.md`
+  - Comprehensive test coverage in `tests/admin/test_admin_etag_concurrency.py`
 - Strict Pocket 5: Tasks API & service under `--strict`.
 - Unified error envelope repo-brett: `{ "ok": false, "error", "message?" }`.
 - Tasks: `PATCH /tasks/{id}` (behåller `PUT` tills vidare).

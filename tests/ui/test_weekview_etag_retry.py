@@ -32,11 +32,6 @@ def test_etag_stale_then_retry_with_fresh_etag():
     client: FlaskClient = app.test_client()
     site, dep, dt_id = seed_basic()
 
-    # Ensure active site context for strict validation
-    with client.session_transaction() as s:
-        s["site_id"] = site["id"]
-        s["tenant_id"] = 1
-
     iso = _date.today().isocalendar()
     year, week = iso[0], iso[1]
 

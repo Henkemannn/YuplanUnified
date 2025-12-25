@@ -54,11 +54,6 @@ def test_toggle_flow_marks_persist_and_report_shows_special():
     client: FlaskClient = app.test_client()
     site, depA, depB, dt_id = setup_data()
 
-    # Ensure active site context for strict validation
-    with client.session_transaction() as s:
-        s["site_id"] = site["id"]
-        s["tenant_id"] = 1
-
     iso = _date.today().isocalendar()
     year, week = iso[0], iso[1]
 

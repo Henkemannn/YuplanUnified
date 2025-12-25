@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Avdelningsvy – Dagval</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_portal.css') }}">
+</head>
+<body>
+<main class="portal-day">
+  {% with messages = get_flashed_messages(with_categories=True) %}
+    {% if messages %}
+      <div class="flash-container">
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+  <section class="portal-week-header">
+    <h1>Vecka {{ vm.week }} – {{ vm.department_name }}</h1>
+    <p>{{ vm.day_name }} ({{ vm.date }})</p>
+  </section>
+
+  <section class="portal-day-content">
+    <h2>Dagens meny</h2>
+    <div class="portal-week-meals">
+      <div class="portal-week-meal">
+        <strong>Lunch</strong>
+        <div>Alt 1: {{ vm.lunch_alt1 or "Ingen rätt" }}</div>
+        <div>Alt 2: {{ vm.lunch_alt2 or "Ingen rätt" }}</div>
+      </div>
+      <div class="portal-week-meal">
+        <strong>Middag</strong>
+        <div>{{ vm.dinner or "Ingen rätt" }}</div>
+      </div>
+    </div>
+    <form method="post" class="portal-day-form">
+      {% if csrf_token %}{{ csrf_token() }}{% endif %}
+      <fieldset>
+        <legend>Val för lunch</legend>
+        <label>
+          <input type="radio" name="selected_alt" value="1" {% if not vm.alt2_selected %}checked{% endif %}>
+          Alt 1
+        </label>
+        <label>
+          <input type="radio" name="selected_alt" value="2" {% if vm.alt2_selected %}checked{% endif %}>
+          Alt 2
+        </label>
+      </fieldset>
+      <button type="submit" class="btn btn-primary">Spara val</button>
+    </form>
+    <p class="portal-day-placeholder">När du sparar uppdateras även veckovyn för avdelningen.</p>
+  </section>
+
+  <section class="portal-day-footer">
+    <a href="{{ url_for('ui.portal_week_unified_path', year=vm.year, week=vm.week, department_id=vm.department_id) }}" class="btn btn-secondary">Tillbaka till veckovy</a>
+  </section>
+</main>
+</body>
+</html>

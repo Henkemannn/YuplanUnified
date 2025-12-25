@@ -2,13 +2,14 @@
 
 {% block title %}Menyplanering - Admin{% endblock %}
 
-{% block content %}
-<div class="admin-header">
+{% block admin_main %}
+<section class="ua-section">
+<div class="ua-card admin-header">
     <h1>Menyplanering</h1>
     <p class="subtitle">Välj vecka för att visa och redigera Alt 2-val per avdelning</p>
 </div>
 
-<div class="card">
+<div class="ua-card card">
     <div class="card-header">
         <h2>Veckoväljare</h2>
     </div>
@@ -50,7 +51,7 @@
     </div>
 </div>
 
-<div class="info-box">
+<div class="ua-card info-box">
     <h3>Om menyplanering</h3>
     <p>
         I menyplaneringsverktyget kan du:
@@ -96,4 +97,5 @@ document.getElementById('weekForm').addEventListener('submit', function(e) {
     color: #6c757d;
 }
 </style>
+</section>
 {% endblock %}

@@ -11,31 +11,19 @@ ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 @pytest.fixture
 def app_with_diet_types(app_session: Flask):
-    """Seed database with test dietary types."""
+    """Seed database with test dietary types with strict site isolation."""
     from core.db import get_session
     from sqlalchemy import text
-    
+
     conn = get_session()
-    # Ensure table exists
-    conn.execute(text("""
-        CREATE TABLE IF NOT EXISTS dietary_types (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tenant_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            default_select INTEGER DEFAULT 0
-        )
-    """))
-    # Clear existing data
+    # Ensure sites exist (id,name only for sqlite tests)
+    conn.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL)"))
+    conn.execute(text("INSERT OR IGNORE INTO sites(id,name) VALUES('site-1','Testplats')"))
+    # Clear existing data and seed via repo to satisfy legacy NOT NULL tenant_id
     conn.execute(text("DELETE FROM dietary_types"))
-    # Seed test data
-    conn.execute(
-        text("INSERT INTO dietary_types (tenant_id, name, default_select) VALUES (:tid, :n, :ds)"),
-        {"tid": 1, "n": "Vegetarisk", "ds": 1}
-    )
-    conn.execute(
-        text("INSERT INTO dietary_types (tenant_id, name, default_select) VALUES (:tid, :n, :ds)"),
-        {"tid": 1, "n": "Glutenfri", "ds": 0}
-    )
+    from core.admin_repo import DietTypesRepo
+    DietTypesRepo().create(site_id="site-1", name="Vegetarisk", default_select=True)
+    DietTypesRepo().create(site_id="site-1", name="Glutenfri", default_select=False)
     conn.commit()
     yield app_session
     # Cleanup
@@ -45,8 +33,14 @@ def app_with_diet_types(app_session: Flask):
 
 @pytest.fixture
 def client_admin(app_with_diet_types: Flask) -> FlaskClient:
-    """Authenticated test client for admin routes."""
-    return app_with_diet_types.test_client()
+    """Authenticated test client for admin routes (with active site)."""
+    client = app_with_diet_types.test_client()
+    with client.session_transaction() as s:
+        s["role"] = "admin"
+        s["tenant_id"] = 1
+        s["user_id"] = "tester"
+        s["site_id"] = "site-1"
+    return client
 
 
 def test_admin_specialkost_list_shows_diet_types(client_admin: FlaskClient):
@@ -162,10 +156,20 @@ def test_admin_specialkost_list_empty_when_none(app_session: Flask):
     from sqlalchemy import text
     
     conn = get_session()
+    # Ensure a site exists and clear diet types
+    conn.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL)"))
+    conn.execute(text("INSERT OR IGNORE INTO sites(id,name) VALUES('site-1','Testplats')"))
     conn.execute(text("DELETE FROM dietary_types"))
     conn.commit()
-    
+
     client = app_session.test_client()
+    # Set active site to avoid redirect due to strict site isolation
+    with client.session_transaction() as s:
+        s["role"] = "admin"
+        s["tenant_id"] = 1
+        s["user_id"] = "tester"
+        s["site_id"] = "site-1"
+
     response = client.get("/ui/admin/specialkost", headers=ADMIN_HEADERS)
     assert response.status_code == 200
     html = response.data.decode()

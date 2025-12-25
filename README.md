@@ -53,7 +53,7 @@ Examples
 <p align="left">
   <img alt="Ruff" src="https://img.shields.io/badge/Ruff-E,F,I,B,UP,Q-success?logo=python&logoColor=white" />
   <img alt="Mypy" src="https://img.shields.io/badge/Mypy-0%20errors-brightgreen" />
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.11-blue" />
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-blue" />
 </p>
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
@@ -511,7 +511,6 @@ Phasing plan:
 
 ### CI Integration
 The lint / type gate runs in a dedicated workflow: `.github/workflows/lint-type.yml` (Ruff first, then Mypy). The general test workflow remains in `.github/workflows/ci.yml`.
-
 ## 🧱 Infra
 
 ### Branch protection
@@ -601,6 +600,8 @@ Current ADRs:
 - ADR-001: Global 429 Standardization — `adr/ADR-001-global-429-standardization.md`
 - ADR-002: Strict CSRF Rollout — `adr/ADR-002-strict-csrf-rollout.md`
 - ADR-003: Full RFC7807 Adoption and Legacy Error Retirement — `adr/ADR-003-full-rfc7807-adoption.md`
+
+OpenAPI spec is validated on each push in CI (job: `openapi-validate`), and the generated `openapi.json` is uploaded as an artifact. Validation uses `openapi-spec-validator` (with `rpds-py`).
 
 PR Checklist (developer self-check):
 1. `ruff check .` passes with no new violations.

@@ -32,7 +32,7 @@ from .admin_audit_api import bp as admin_audit_bp
 from .app_authz import require_roles
 
 # Legacy JSON error handler removed in ADR-003 sweep
-from .auth import bp as auth_bp, ensure_bootstrap_superuser
+from .auth import bp as auth_bp, ensure_bootstrap_superuser, ensure_dev_superuser_henrik
 from .config import Config
 from .db import get_session, init_engine
 from .diet_api import bp as diet_api_bp
@@ -101,6 +101,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         for k, v in config_override.items():  # also allow direct Flask config keys
             if k.isupper():
                 app.config[k] = v
+    # Resolve stable absolute dev DB path when DATABASE_URL not provided
+    try:
+        if not os.getenv("DATABASE_URL"):
+            # Default from Config is sqlite:///dev.db; replace with absolute instance path
+            if str(cfg.database_url).startswith("sqlite:///"):
+                os.makedirs(app.instance_path, exist_ok=True)
+                abs_db = os.path.join(app.instance_path, "dev.db")
+                cfg.database_url = f"sqlite:///{abs_db}"
+    except Exception:
+        pass
     app.config.update(cfg.to_flask_dict())
     # Development convenience: map DEV_DEPARTMENT_ID env into app.config for portal fallback.
     dev_dept = os.getenv("DEV_DEPARTMENT_ID")
@@ -110,6 +120,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- DB setup ---
     init_engine(cfg.database_url)
+    try:
+        # Always emit a single startup line with DB location
+        db_url = str(cfg.database_url)
+        sqlite_file = None
+        if db_url.startswith("sqlite:///"):
+            sqlite_file = os.path.abspath(db_url.replace("sqlite:///", "", 1))
+        line = f"DB_URL={db_url}" + (f" ; SQLITE_FILE={sqlite_file}" if sqlite_file else "")
+        print(line)
+    except Exception:
+        pass
 
     # Inject department id into session for local dev (no auth layer) so portal works without 403.
     @app.before_request  # type: ignore[misc]
@@ -171,13 +191,31 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if not has_request_context():
             return
         tid = getattr(g, "tenant_id", None)
+        sid = (session.get("site_id") or "").strip() if "site_id" in session else None
         g.tenant_feature_flags = {}
-        if not tid:
+        if not tid and not sid:
             return
         db = get_session()
         try:
-            rows = db.query(TenantFeatureFlag).filter(TenantFeatureFlag.tenant_id == tid).all()
-            g.tenant_feature_flags = {r.name: bool(r.enabled) for r in rows}
+            if sid:
+                try:
+                    rows = db.execute(text("SELECT name, enabled FROM site_feature_flags WHERE site_id=:sid"), {"sid": sid}).fetchall()
+                    g.tenant_feature_flags = {str(r[0]): bool(int(r[1])) for r in rows}
+                except Exception:
+                    # Fall back to tenant-level flags if site-level not available
+                    rows = (
+                        db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
+                        .filter(TenantFeatureFlag.tenant_id == tid)
+                        .all()
+                    )
+                    g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
+            else:
+                rows = (
+                    db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
+                    .filter(TenantFeatureFlag.tenant_id == tid)
+                    .all()
+                )
+                g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
         finally:
             db.close()
 
@@ -297,14 +335,29 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     def inject_ctx() -> dict[str, Any]:
         # expose csrf token helper if strict flag active
         def csrf_token() -> str:  # pragma: no cover - template helper
+            # Always provide a token for forms:
+            # 1) Prefer CSRF cookie (value used by security middleware)
+            # 2) If cookie not yet present on first GET, use freshly issued token on g
+            # 3) Fallback to session-based synchronizer token
             try:
-                if getattr(g, "features", {}).get("strict_csrf"):
+                from flask import current_app, request as _req
+                name = current_app.config.get("CSRF_COOKIE_NAME", "csrf_token")
+                cookie_val = _req.cookies.get(name)
+                if cookie_val:
+                    return cookie_val
+                try:
+                    pending = getattr(g, "_new_csrf_token", None)
+                    if pending:
+                        return str(pending)
+                except Exception:
+                    pass
+                try:
                     from .csrf import generate_token
-
                     return generate_token()
+                except Exception:
+                    return ""
             except Exception:
                 return ""
-            return ""
 
         def csrf_token_input() -> str:  # pragma: no cover - template helper
             tok = csrf_token()
@@ -312,11 +365,45 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 return ""
             return f'<input type="hidden" name="csrf_token" value="{tok}">'  # nosec B704
 
+        # Lookup current tenant and site for UI chrome using canonical context
+        current_site_name = None
+        tenant_name = None
+        try:
+            from .context import get_active_context as _get_ctx
+            ctx = _get_ctx()
+            tid_val = ctx.get("tenant_id")
+            sid_val = ctx.get("site_id")
+            if tid_val:
+                from sqlalchemy import text as _sa_text  # local import
+                db = get_session()
+                try:
+                    if sid_val:
+                        row_s = db.execute(
+                            _sa_text("SELECT name FROM sites WHERE id=:sid LIMIT 1"),
+                            {"sid": str(sid_val)},
+                        ).fetchone()
+                        if row_s and row_s[0]:
+                            current_site_name = str(row_s[0])
+                    # Resolve tenant name
+                    row_t = db.execute(
+                        _sa_text("SELECT name FROM tenants WHERE id=:tid LIMIT 1"),
+                        {"tid": int(tid_val)},
+                    ).fetchone()
+                    if row_t and row_t[0]:
+                        tenant_name = str(row_t[0])
+                finally:
+                    db.close()
+        except Exception:
+            current_site_name = None
+            tenant_name = None
+
         return {
             "tenant_id": getattr(g, "tenant_id", None),
+            "tenant_name": tenant_name,
             "feature_enabled": feature_enabled,
             "csrf_token": csrf_token(),
             "csrf_token_input": csrf_token_input,
+            "current_site_name": current_site_name,
             # Staging demo banner: enabled only when env flag is truthy
             "staging_demo": os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"),
         }
@@ -331,6 +418,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     @app.before_request
     def _before_req() -> Response | None:
+        # Sync request context from session for consistent access
+        try:
+            g.tenant_id = session.get("tenant_id")
+            g.site_id = session.get("site_id")
+            g.user_id = session.get("user_id")
+        except Exception:
+            pass
         if app.config.get("TESTING"):
             from flask import session
 
@@ -346,8 +440,37 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     session["user_id"] = 1
             if tid:
                 session["tenant_id"] = int(tid) if tid.isdigit() else tid
-            if tid:
                 g.tenant_id = int(tid) if tid.isdigit() else tid
+            # Do not implicitly default tenant context when only role is provided.
+            # Tests that omit X-Tenant-Id must observe 401 for incomplete session.
+        # Honor Bearer Authorization globally to populate session for UI routes
+        try:
+            from flask import session as _sess
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.lower().startswith("bearer ") and (not _sess.get("user_id") or not _sess.get("tenant_id")):
+                from .jwt_utils import decode as _jwt_decode, JWTError as _JWTError
+                token = auth_header.split(None, 1)[1].strip()
+                import os as _os
+                primary = app.config.get("JWT_SECRET", _os.getenv("JWT_SECRET", "dev-secret"))
+                secrets_list = app.config.get("JWT_SECRETS") or []
+                try:
+                    # Loosen validation for UI bearer handling: do not require issuer/audience
+                    payload = _jwt_decode(
+                        token,
+                        secret=primary,
+                        secrets_list=secrets_list,
+                        leeway=app.config.get("JWT_LEEWAY_SECONDS", 60),
+                        max_age=app.config.get("JWT_MAX_AGE_SECONDS"),
+                    )
+                    _sess["user_id"] = payload.get("sub")
+                    _sess["role"] = payload.get("role")
+                    _sess["tenant_id"] = payload.get("tenant_id")
+                    g.tenant_id = payload.get("tenant_id")
+                except _JWTError:
+                    pass
+        except Exception:
+            # Non-fatal; continue to handlers
+            pass
         # Apply impersonation (may override tenant context)
         try:
             from .impersonation import apply_impersonation  # local import to avoid cycles
@@ -368,12 +491,23 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if env_on:
             try:
                 from .csrf import before_request as _csrf_before
-
                 resp = _csrf_before()
                 if resp is not None:
                     return resp
             except Exception:  # pragma: no cover
                 app.logger.warning("Strict CSRF hook failed", exc_info=True)
+        else:
+            # Enforce CSRF for /admin mutations (lightweight) when strict mode is off.
+            # Skip in TESTING to keep API tests simple and focused on RBAC/ETag behavior.
+            if not app.config.get("TESTING"):
+                try:
+                    from .csrf import require_csrf_for_admin_mutations
+                    resp = require_csrf_for_admin_mutations(request)
+                    if resp is not None:
+                        return resp
+                except Exception:
+                    # Do not crash request pipeline; fall through to handlers
+                    pass
         return None
 
     @app.after_request
@@ -390,8 +524,14 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 log.info(
                     {
                         "request_id": rid,
+                        # Context and session diagnostics
                         "tenant_id": getattr(g, "tenant_id", None),
+                        "tenant_id_g": getattr(g, "tenant_id", None),
+                        "tenant_id_session": session.get("tenant_id"),
+                        "site_id_g": getattr(g, "site_id", None),
+                        "site_id_session": session.get("site_id"),
                         "user_id": session.get("user_id"),
+                        "user_id_g": getattr(g, "user_id", None),
                         "method": request.method,
                         "path": request.path,
                         "status": resp.status_code,
@@ -473,8 +613,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     try:
         from admin.ui_blueprint import admin_ui_bp
         app.register_blueprint(admin_ui_bp)
+        app.logger.info("Registered admin_ui blueprint")
     except Exception:
-        pass
+        app.logger.warning("Failed to register admin_ui blueprint", exc_info=True)
     app.register_blueprint(weekview_api_bp)
     app.register_blueprint(planera_api_bp)
     app.register_blueprint(report_api_bp)
@@ -688,6 +829,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             for code in codes:
                 r.setdefault(code, {"$ref": f"#/components/responses/Problem{code}"})
             return base
+
+        # Backward-compatible alias used in path definitions below
+        attach = attach_problem
 
         paths = {
             # --- Admin Phase B minimal endpoints (namespaced under /api/admin) ---
@@ -1289,6 +1433,371 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                     "security": [{"BearerAuth": []}],
                 }
             },
+            # ---- Phase-2: Minimal Admin paths (users, feature-flags, roles) ----
+            "/admin/users": {
+                "get": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List users (tenant scoped)",
+                    "description": "pagination stub — currently ignored by API response. Response header X-Users-Deleted-Total returns the count of soft-deleted users for the current tenant. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email (case-insensitive substring)"},
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Users",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["items", "total"],
+                                        "properties": {
+                                            "items": {"type": "array", "items": {"$ref": "#/components/schemas/User"}},
+                                            "total": {"type": "integer"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {
+                                            "value": {
+                                                "items": [
+                                                    {"id": "u1", "email": "a@ex", "role": "admin"}
+                                                ],
+                                                "total": 1
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403"]),
+                "post": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Create user",
+                    "description": "On success, an audit event (user_create) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["email", "role"],
+                                    "properties": {
+                                        "email": {"type": "string", "format": "email"},
+                                        "role": {"type": "string", "enum": ["admin", "editor", "viewer"]}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "201": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/User"}}}},
+                        "422": {
+                            "description": "Validation error",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Error"},
+                                    "examples": {
+                                        "invalidEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"invalid_format"}]}},
+                                        "invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}},
+                                        "additional": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"extra","reason":"additional_properties_not_allowed"}]}},
+                                        "duplicateEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"duplicate"}]}}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403", "422"])  # 422 via default fallback schema
+            },
+            "/admin/users/{user_id}": {
+                "parameters": [
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string"}}
+                ],
+                "put": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Replace user (strict)",
+                    "description": "Full-body replace of user email and role. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["email", "role"],
+                                    "properties": {
+                                        "email": {"type": "string", "format": "email"},
+                                        "role": {"type": "string", "enum": ["admin","editor","viewer"]}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/UserWithRole"},
+                                    "examples": {"ok": {"value": {"id": "u1", "email": "a2@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}
+                        },
+                        "422": {
+                            "description": "Validation error",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {
+                                "missing": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"required"},{"name":"role","reason":"required"}]}},
+                                "invalidEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"invalid_format"}]}},
+                                "invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}},
+                                "duplicateEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"duplicate"}]}}
+                            }}}
+                        }
+                    }
+                }, ["401", "403", "404", "422"]),
+                "patch": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Update user (email/role)",
+                    "description": "When role changes, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "email": {"type": "string", "format": "email"},
+                                        "role": {"type": "string", "enum": ["admin","editor","viewer"]}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/UserWithRole"},
+                                    "examples": {
+                                        "ok": {"value": {"id": "u1", "email": "a2@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}
+                                    }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}
+                        },
+                        "422": {
+                            "description": "Validation error",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {
+                                "invalidEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"invalid_format"}]}},
+                                "invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}},
+                                "duplicateEmail": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"email","reason":"duplicate"}]}}
+                            }}}
+                        }
+                    }
+                }, ["401", "403", "404", "422"]),
+                "delete": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Soft-delete user",
+                    "description": "Errors on admin routes use RFC7807 (application/problem+json).",
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["id", "deleted_at"],
+                                        "properties": {
+                                            "id": {"type": "string"},
+                                            "deleted_at": {"type": "string", "format": "date-time"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {"value": {"id": "u1", "deleted_at": "2025-01-01T12:00:00+00:00"}}
+                                    }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Not found",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"$ref": "#/components/schemas/Error"},
+                                    "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403", "404"])  # CSRF + RBAC enforced
+            },
+            "/admin/feature-flags": {
+                "get": attach_problem({
+                    "tags": ["admin", "feature-flags"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List feature flags (tenant scoped)",
+                    "description": "pagination stub — currently ignored by API response. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Quick filter"},
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Flags",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["items", "total"],
+                                        "properties": {
+                                            "items": {"type": "array", "items": {"$ref": "#/components/schemas/FeatureFlag"}},
+                                            "total": {"type": "integer"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {
+                                            "value": {
+                                                "items": [
+                                                    {"key": "beta-ui", "enabled": True, "notes": "Activated", "updated_at": "2025-01-01T12:00:00+00:00"}
+                                                ],
+                                                "total": 1
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403"]),
+            },
+            "/admin/feature-flags/{key}": {
+                "parameters": [
+                    {"name": "key", "in": "path", "required": True, "schema": {"type": "string"}}
+                ],
+                "patch": attach_problem({
+                    "tags": ["admin", "feature-flags"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Update feature flag (enabled/notes)",
+                    "description": "On change, an audit event (feature_flag_update) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "enabled": {"type": "boolean"},
+                                        "notes": {"type": "string", "maxLength": 500}
+                                    },
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FeatureFlag"}}}},
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"flagMissing": {"value": {"ok": False, "error": "not_found", "message": "feature flag not found"}}}}}
+                        },
+                        "422": {
+                            "description": "Validation error",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {
+                                "enabledType": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"enabled","reason":"invalid_type"}]}},
+                                "notesTooLong": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"notes","reason":"max_length_exceeded","max":500}]}}
+                            }}}
+                        }
+                    }
+                }, ["401", "403", "404", "422"])
+            },
+            "/admin/roles": {
+                "get": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": []}],
+                    "summary": "List users with roles",
+                    "description": "pagination stub — currently ignored by API response. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "parameters": [
+                        {"name": "q", "in": "query", "required": False, "schema": {"type": "string"}, "description": "Filter by email"},
+                        {"name": "page", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1}},
+                        {"name": "size", "in": "query", "required": False, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Users with roles",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["items", "total"],
+                                        "properties": {
+                                            "items": {"type": "array", "items": {"$ref": "#/components/schemas/UserWithRole"}},
+                                            "total": {"type": "integer"}
+                                        },
+                                        "additionalProperties": False
+                                    },
+                                    "examples": {
+                                        "ok": {
+                                            "value": {
+                                                "items": [
+                                                    {"id": "u1", "email": "a@ex", "role": "editor"}
+                                                ],
+                                                "total": 1
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, ["401", "403"])
+            },
+            "/admin/roles/{user_id}": {
+                "parameters": [
+                    {"name": "user_id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}
+                ],
+                "patch": attach_problem({
+                    "tags": ["admin"],
+                    "security": [{"BearerAuth": [], "CsrfToken": []}],
+                    "summary": "Update user role",
+                    "description": "On change, an audit event (user_update_role) is recorded. Errors on admin routes use RFC7807 (application/problem+json).",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["role"],
+                                    "properties": {"role": {"type": "string", "enum": ["admin", "editor", "viewer"]}},
+                                    "additionalProperties": False
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}, "examples": {"ok": {"value": {"id": "u1", "email": "a@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}}}},
+                        "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}},
+                        "422": {"description": "Validation error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}}}}}}
+                    }
+                }, ["401", "403", "404", "422"])
+            }
         }
         # --- ProblemDetails (pilot) ---
         problem_details_schema = {
@@ -1422,15 +1931,39 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 {"name": "System"},
                 {"name": "Notes"},
                 {"name": "Tasks"},
+                {"name": "admin"},
                 {"name": "weekview"},
                 {"name": "report"},
             ],
             "components": {
                 "securitySchemes": {
-                    "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+                    "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"},
+                    # Required for mutating admin operations
+                    "CsrfToken": {"type": "apiKey", "in": "header", "name": "X-CSRF-Token", "description": "Fetch via GET /csrf"}
                 },
                 "schemas": {
                     "ProblemDetails": problem_details_schema,
+                    "FeatureFlag": {
+                        "type": "object",
+                        "properties": {
+                            "key": {"type": "string"},
+                            "enabled": {"type": "boolean"},
+                            "notes": {"type": "string"},
+                            "updated_at": {"type": "string", "format": "date-time"}
+                        }
+                    },
+                    "Error": {
+                        "type": "object",
+                        "properties": {
+                            "ok": {"type": "boolean"},
+                            "error": {"type": "string"},
+                            "message": {"type": "string"},
+                            "invalid_params": {
+                                "type": "array",
+                                "items": {"type": "object"}
+                            }
+                        }
+                    },
                     "PageMeta": {
                         "type": "object",
                         "required": ["page", "size", "total", "pages"],
@@ -1626,6 +2159,23 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                             "features": {"type": "array", "items": {"type": "string"}},
                             "kind": {"type": "string", "nullable": True},
                             "description": {"type": "string", "nullable": True},
+                        },
+                    },
+                    "User": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "email": {"type": "string", "format": "email"},
+                            "role": {"type": "string", "enum": ["admin", "editor", "viewer"]}
+                        },
+                    },
+                    "UserWithRole": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "email": {"type": "string", "format": "email"},
+                            "role": {"type": "string", "enum": ["admin", "editor", "viewer"]},
+                            "updated_at": {"type": "string", "format": "date-time"}
                         },
                     },
                     "TenantListResponse": {
@@ -2361,6 +2911,10 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     # --- Bootstrap superuser if env provides credentials ---
     with app.app_context():  # pragma: no cover (simple bootstrap)
         ensure_bootstrap_superuser()
+        try:
+            ensure_dev_superuser_henrik()
+        except Exception:
+            pass
 
     # --- Guard test endpoints (P6.2) ---
     @app.get("/_guard/editor")
