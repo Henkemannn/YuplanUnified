@@ -97,6 +97,12 @@ def patch_weekview_specialdiets_mark() -> Response:
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
+    site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
+    site_body = (data.get("site_id") or "").strip()
+    if site_ctx and not site_body:
+        return bad_request("invalid_site_id")
+    if site_ctx and site_body and site_ctx != site_body:
+        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     department_id = (data.get("department_id") or "").strip()
     local_date = (data.get("local_date") or "").strip()
     meal = (data.get("meal") or "").strip()
@@ -123,7 +129,7 @@ def patch_weekview_specialdiets_mark() -> Response:
         new_etag = _service.toggle_marks(tid, year, week, department_id, etag, [op])
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
-    resp = jsonify({"updated": 1})
+    resp = jsonify({"updated": 1, "status": "ok"})
     resp.headers["ETag"] = new_etag
     return resp
 
@@ -163,6 +169,12 @@ def patch_weekview() -> Response:
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
+    site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
+    site_body = (data.get("site_id") or "").strip()
+    if site_ctx and not site_body:
+        return bad_request("invalid_site_id")
+    if site_ctx and site_body and site_ctx != site_body:
+        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     body_tid = data.get("tenant_id")
     if body_tid is not None and str(body_tid) != str(tid):
         return bad_request("tenant_mismatch")
@@ -201,7 +213,7 @@ def patch_weekview() -> Response:
         new_etag = _service.toggle_marks(tid, year, week, department_id, etag, ops)
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
-    resp = jsonify({"updated": len(ops)})
+    resp = jsonify({"updated": len(ops), "status": "ok"})
     resp.headers["ETag"] = new_etag
     return resp
 
@@ -219,6 +231,12 @@ def patch_weekview_residents() -> Response:
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
+    site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
+    site_body = (data.get("site_id") or "").strip()
+    if site_ctx and not site_body:
+        return bad_request("invalid_site_id")
+    if site_ctx and site_body and site_ctx != site_body:
+        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     body_tid = data.get("tenant_id")
     if body_tid is not None and str(body_tid) != str(tid):
         return bad_request("tenant_mismatch")
@@ -257,7 +275,7 @@ def patch_weekview_residents() -> Response:
         new_etag = _service.update_residents_counts(tid, year, week, department_id, etag, items)
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
-    resp = jsonify({"updated": len(items)})
+    resp = jsonify({"updated": len(items), "status": "ok"})
     resp.headers["ETag"] = new_etag
     return resp
 
@@ -280,6 +298,12 @@ def patch_weekview_alt2() -> Response:
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
+    site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
+    site_body = (data.get("site_id") or "").strip()
+    if site_ctx and not site_body:
+        return bad_request("invalid_site_id")
+    if site_ctx and site_body and site_ctx != site_body:
+        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     body_tid = data.get("tenant_id")
     if body_tid is not None and str(body_tid) != str(tid):
         return bad_request("tenant_mismatch")
@@ -311,6 +335,6 @@ def patch_weekview_alt2() -> Response:
         new_etag = _service.update_alt2_flags(tid, year, week, department_id, etag, days)
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
-    resp = jsonify({"updated": len(days)})
+    resp = jsonify({"updated": len(days), "status": "ok"})
     resp.headers["ETag"] = new_etag
     return resp
