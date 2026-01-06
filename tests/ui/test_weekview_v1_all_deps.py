@@ -53,11 +53,12 @@ def test_toggle_flow_marks_persist_and_report_shows_special():
     app = create_app({"TESTING": True})
     client: FlaskClient = app.test_client()
     site, depA, depB, dt_id = setup_data()
-
-    # Ensure active site context for strict validation
-    with client.session_transaction() as s:
-        s["site_id"] = site["id"]
-        s["tenant_id"] = 1
+    # Align session site context
+    client.post(
+        "/ui/select-site",
+        data={"site_id": site["id"], "next": "/"},
+        headers=_login_headers(),
+    )
 
     iso = _date.today().isocalendar()
     year, week = iso[0], iso[1]

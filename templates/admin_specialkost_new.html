@@ -1,42 +1,46 @@
-{% extends "_base.html" %}
-{% block title %}Ny Kosttyp – Admin{% endblock %}
-{% block head %}
+{% extends "ui/unified_admin_base.html" %}
+{% block admin_title %}Ny Kosttyp{% endblock %}
+{% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 {% endblock %}
-{% block content %}
-<div class="admin-container">
-  <header class="admin-header">
-    <h1>Lägg till ny kosttyp</h1>
-    <p class="admin-subtitle">Skapa en ny specialkost</p>
-  </header>
+{% block admin_main %}
+  <section class="ua-section">
+    <div class="ua-card">
+      <h1>Lägg till ny kosttyp</h1>
+      <p class="admin-intro">Skapa en ny specialkosttyp. Fält och actions bibehålls.</p>
+    </div>
+  </section>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="admin-flash-messages">
-        {% for category, message in messages %}
-          <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
-        {% endfor %}
-      </div>
+      <section class="admin-card">
+        <div class="admin-flash-messages">
+          {% for category, message in messages %}
+            <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      </section>
     {% endif %}
   {% endwith %}
 
-  <form method="POST" class="admin-form">
-    <div class="admin-form-group">
-      <label for="name">Kosttypsnamn</label>
-      <input type="text" id="name" name="name" required>
-    </div>
+  <section class="ua-section">
+    <div class="ua-card">
+      <form method="POST" class="admin-form">
+      <div class="admin-form-row">
+        <label for="name">Kosttypsnamn</label>
+        <input type="text" id="name" name="name" required>
+      </div>
 
-    <div class="admin-form-group">
-      <label>
+      <div class="admin-form-row">
+        <label for="default_select">Förinställd</label>
         <input type="checkbox" id="default_select" name="default_select">
-        Förinställd (förvalt vid ny användare)
-      </label>
-    </div>
+      </div>
 
-    <div class="admin-form-actions">
-      <button type="submit" class="admin-btn-primary">Spara</button>
-      <a href="{{ url_for('admin_ui.admin_specialkost_list') }}" class="admin-btn-secondary">Avbryt</a>
+        <div class="admin-form-actions">
+          <button type="submit" class="btn btn-primary">Spara</button>
+          <a href="{{ url_for('admin_ui.admin_specialkost_list') }}" class="btn btn-secondary">Avbryt</a>
+        </div>
+      </form>
     </div>
-  </form>
-</div>
+  </section>
 {% endblock %}

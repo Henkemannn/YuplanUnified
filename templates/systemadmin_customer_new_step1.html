@@ -1,0 +1,74 @@
+{% extends "_base.html" %}
+{% set hide_global_nav = True %}
+{% block title %}SystemAdmin · Ny kund · Steg 1{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+{% endblock %}
+{% block content %}
+<main class="sa-root sa-theme-dark">
+  <aside class="sa-sidebar">
+    <div class="sa-sidebar-header">
+      <img class="sa-logo-mark" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="32" height="32">
+      <div class="sa-logo-sub">Yuplan Örnnästet</div>
+    </div>
+    <nav class="sa-nav">
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_dashboard') }}"><span class="sa-icon">📊</span> Översikt</a>
+      <a class="sa-nav-item sa-active" href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}"><span class="sa-icon">🏢</span> Ny kund</a>
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_customers') }}"><span class="sa-icon">📋</span> Kunder</a>
+    </nav>
+    <div class="sa-sidebar-footer"><span>v1.0 · Dev</span></div>
+  </aside>
+
+  <section class="sa-main">
+    <header class="sa-header">
+      <div>
+        <h1>Steg 1 · Kunduppgifter</h1>
+        <p class="sa-subtitle">Grunda kundens basinformation.</p>
+      </div>
+    </header>
+
+    <section class="sa-grid">
+      <article class="sa-card sa-card-wide">
+        <form method="post" action="{{ url_for('admin_ui.systemadmin_customer_new_step1_post') }}" class="sa-form">
+          {{ csrf_token_input()|safe }}
+          <div class="admin-form-row">
+            <label for="tenant_name">Kundnamn</label>
+            <input type="text" id="tenant_name" name="tenant_name" value="{{ vm.data.tenant_name or '' }}" required>
+          </div>
+          
+          <div class="admin-form-row">
+            <label for="customer_type">Kundtyp</label>
+            <select id="customer_type" name="customer_type" required>
+              {% set ct = vm.data.customer_type or '' %}
+              <option value="Kommun" {% if ct=='Kommun' %}selected{% endif %}>Kommun</option>
+              <option value="Offshore" {% if ct=='Offshore' %}selected{% endif %}>Offshore</option>
+              <option value="Hotell / Storkök" {% if ct=='Hotell / Storkök' %}selected{% endif %}>Hotell / Storkök</option>
+              <option value="Vård & omsorg" {% if ct=='Vård & omsorg' %}selected{% endif %}>Vård & omsorg</option>
+              <option value="Skola" {% if ct=='Skola' %}selected{% endif %}>Skola</option>
+              <option value="Annat" {% if ct=='Annat' %}selected{% endif %}>Annat</option>
+            </select>
+          </div>
+          <div class="admin-form-row">
+            <label for="contact_name">Kontaktperson</label>
+            <input type="text" id="contact_name" name="contact_name" value="{{ vm.data.contact_name or '' }}">
+          </div>
+          <div class="admin-form-row">
+            <label for="contact_email">Kontaktmail</label>
+            <input type="email" id="contact_email" name="contact_email" value="{{ vm.data.contact_email or '' }}">
+          </div>
+          <div class="admin-form-row">
+            <label for="contact_phone">Telefon</label>
+            <input type="text" id="contact_phone" name="contact_phone" value="{{ vm.data.contact_phone or '' }}">
+          </div>
+          <button type="submit" class="sa-btn sa-btn-primary">Nästa steg</button>
+          <a class="sa-btn sa-btn-secondary" href="{{ url_for('admin_ui.systemadmin_customers') }}">Avbryt</a>
+        </form>
+        
+      </article>
+    </section>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/systemadmin.js') }}"></script>
+{% endblock %}

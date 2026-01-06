@@ -76,8 +76,15 @@ def test_report_math_and_clamp_with_weekview_data(client_admin):
         headers=_headers("admin"),
     )
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     year, week = 2025, 45
     wv_base = f"/api/weekview?year={year}&week={week}&department_id={dep}"
+    # Align session site context for weekview mutations
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site, "next": "/"},
+        headers=_headers("admin"),
+    )
 
     # Get initial ETag for weekview
     r0 = _get(client_admin, "admin", wv_base)
@@ -86,6 +93,7 @@ def test_report_math_and_clamp_with_weekview_data(client_admin):
 
     # Seed residents counts: lunch d1=10, d2=5
     payload_res = {
+        "site_id": site,
         "department_id": dep,
         "year": year,
         "week": week,
@@ -113,7 +121,7 @@ def test_report_math_and_clamp_with_weekview_data(client_admin):
         client_admin,
         "editor",
         "/api/weekview",
-        json={"department_id": dep, "year": year, "week": week, "operations": ops},
+        json={"site_id": site, "department_id": dep, "year": year, "week": week, "operations": ops},
         extra_headers={"If-Match": etag1},
     )
     assert r2.status_code == 200

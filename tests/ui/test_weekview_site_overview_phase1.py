@@ -62,6 +62,12 @@ def test_weekview_site_overview_phase1(client_admin):
 
     # Materialize baseline + set data for Dep A
     base_a = f"/api/weekview?year={year}&week={week}&department_id={dep_a}"
+    # Align session site context
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site_id, "next": "/"},
+        headers=_h("admin"),
+    )
     r0a = client_admin.get(base_a, headers=_h("admin"))
     assert r0a.status_code == 200 and ETAG_RE.match(r0a.headers.get("ETag") or "")
     etag_a = r0a.headers.get("ETag")
@@ -69,7 +75,7 @@ def test_weekview_site_overview_phase1(client_admin):
     # Alt2 on Mon (1) and Wed (3); residents lunch (Mon 10) and dinner (Tue 5)
     r_alt2_a = client_admin.patch(
         "/api/weekview/alt2",
-        json={"tenant_id": 1, "department_id": dep_a, "year": year, "week": week, "days": [1, 3]},
+        json={"tenant_id": 1, "site_id": site_id, "department_id": dep_a, "year": year, "week": week, "days": [1, 3]},
         headers={**_h("editor"), "If-Match": etag_a},
     )
     assert r_alt2_a.status_code in (200, 201)
@@ -79,6 +85,7 @@ def test_weekview_site_overview_phase1(client_admin):
         "/api/weekview/residents",
         json={
             "tenant_id": 1,
+            "site_id": site_id,
             "department_id": dep_a,
             "year": year,
             "week": week,
@@ -100,6 +107,7 @@ def test_weekview_site_overview_phase1(client_admin):
         "/api/weekview/residents",
         json={
             "tenant_id": 1,
+            "site_id": site_id,
             "department_id": dep_b,
             "year": year,
             "week": week,

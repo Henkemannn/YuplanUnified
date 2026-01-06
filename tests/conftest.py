@@ -132,6 +132,15 @@ def client_admin(app_session):
     c = app_session.test_client()
     # Ensure clean base environ to avoid leakage of test_claims between tests
     c.environ_base = {}
+    # Set a default active site for UI routes to satisfy strict scoping
+    try:
+        from core.admin_repo import SitesRepo
+        with app_session.app_context():
+            site, _ = SitesRepo().create_site("Default Test Site")
+        with c.session_transaction() as sess:
+            sess["site_id"] = site["id"]
+    except Exception:
+        pass
     return c
 
 
@@ -139,6 +148,15 @@ def client_admin(app_session):
 def client_user(app_session):
     c = app_session.test_client()
     c.environ_base = {}
+    # Ensure a default active site for UI routes
+    try:
+        from core.admin_repo import SitesRepo
+        with app_session.app_context():
+            site, _ = SitesRepo().create_site("Default Test Site")
+        with c.session_transaction() as sess:
+            sess["site_id"] = site["id"]
+    except Exception:
+        pass
     return c
 
 
@@ -146,6 +164,14 @@ def client_user(app_session):
 def client_superuser(app_session):
     c = app_session.test_client()
     c.environ_base = {}
+    try:
+        from core.admin_repo import SitesRepo
+        with app_session.app_context():
+            site, _ = SitesRepo().create_site("Default Test Site")
+        with c.session_transaction() as sess:
+            sess["site_id"] = site["id"]
+    except Exception:
+        pass
     return c
 
 
@@ -160,6 +186,14 @@ def client_no_tenant(app_session):
 def client_cook(app_session):
     c = app_session.test_client()
     c.environ_base = {}
+    try:
+        from core.admin_repo import SitesRepo
+        with app_session.app_context():
+            site, _ = SitesRepo().create_site("Default Test Site")
+        with c.session_transaction() as sess:
+            sess["site_id"] = site["id"]
+    except Exception:
+        pass
     return c
 
 

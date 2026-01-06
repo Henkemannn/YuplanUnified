@@ -96,7 +96,6 @@
             <div class="meal-section meal-section--lunch"
                  data-meal-cell
                  data-date="{{ day.date }}"
-                data-day-of-week="{{ day.day_of_week }}"
                  data-meal-type="lunch"
                  data-registered="{{ 'true' if day.lunch_registered else 'false' }}"
                  tabindex="0"
@@ -158,10 +157,6 @@
                       tabindex="0"
                       data-diet-type-id="{{ d.diet_type_id }}"
                       data-meal="lunch"
-                      data-year="{{ vm.year }}"
-                      data-week="{{ vm.week }}"
-                      data-department-id="{{ vm.department_id }}"
-                      data-day-of-week="{{ day.day_of_week }}"
                       data-marked="{{ 'true' if d.marked else 'false' }}"
                     >{{ d.diet_name }} [{{ d.resident_count }}]</span>
                   {% endfor %}
@@ -184,7 +179,6 @@
               <div class="meal-section meal-section--dinner"
                    data-meal-cell
                    data-date="{{ day.date }}"
-                   data-day-of-week="{{ day.day_of_week }}"
                    data-meal-type="dinner"
                    data-registered="{{ 'true' if day.dinner_registered else 'false' }}"
                    tabindex="0"

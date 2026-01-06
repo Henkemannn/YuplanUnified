@@ -78,10 +78,14 @@ def test_list_legacy_cook_requires_admin(client):
     # login as viewer -> 403
     _login(client, "viewer1@example.com")
     r = client.get("/admin/flags/legacy-cook")
+    # Admin endpoints now return RFC7807 ProblemDetails for errors
     assert r.status_code == 403
     body = r.get_json()
-    # Central forbidden handler returns generic message when roles tuple used; required_role may be absent
-    assert body["ok"] is False and body["error"] == "forbidden"
+    assert isinstance(body, dict)
+    assert body.get("title") == "Forbidden"
+    assert body.get("status") == 403
+    # Detail may be generic when roles tuple used; ensure it's present as a string
+    assert isinstance(body.get("detail"), str)
 
 
 def test_list_legacy_cook_happy(client):

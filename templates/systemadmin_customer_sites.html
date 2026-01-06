@@ -1,0 +1,104 @@
+{% extends "_base.html" %}
+{% set hide_global_nav = True %}
+{% block title %}SystemAdmin · {{ vm.tenant_name }} · Sites{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+{% endblock %}
+{% block content %}
+<main class="sa-root sa-theme-dark">
+  <aside class="sa-sidebar">
+    <div class="sa-sidebar-header">
+      <img class="sa-logo-mark" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="32" height="32">
+      <div class="sa-logo-sub">Yuplan Örnnästet</div>
+    </div>
+    <nav class="sa-nav">
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_dashboard') }}"><span class="sa-icon">📊</span> Översikt</a>
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_customers') }}"><span class="sa-icon">🏢</span> Kunder</a>
+      <span class="sa-nav-item sa-active"><span class="sa-icon">🧭</span> Sites</span>
+    </nav>
+    <div class="sa-sidebar-footer"><span>v1.0 · Dev</span></div>
+  </aside>
+
+  <section class="sa-main">
+    <header class="sa-header">
+      <div>
+        <h1>{{ vm.tenant_name }}</h1>
+        <p class="sa-subtitle">Sites (anläggningar) för denna kund.</p>
+      </div>
+      <div class="sa-header-actions">
+        <a href="{{ url_for('admin_ui.systemadmin_customers') }}" class="sa-btn sa-btn-secondary">⬅ Tillbaka</a>
+      </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="sa-flashes">
+          {% for category, message in messages %}
+            <div class="sa-flash sa-flash-{{ category }}">{{ message|safe }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="sa-grid">
+      <article class="sa-card sa-card-wide">
+        <h2>Befintliga sites</h2>
+        {% if vm.sites %}
+        <div class="sa-table-wrap">
+          <table class="sa-table">
+            <thead><tr><th>Namn</th><th>Åtgärder</th></tr></thead>
+            <tbody>
+              {% for s in vm.sites %}
+              <tr>
+                <td>{{ s.name }}</td>
+                <td>
+                  <a class="sa-btn sa-btn-secondary sa-btn-small" href="{{ url_for('admin_ui.systemadmin_switch_site', site_id=s.id) }}" target="_blank">Öppna admin</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+          <p>Inga sites ännu.</p>
+        {% endif %}
+      </article>
+
+      <article class="sa-card sa-card-wide">
+        <h2>Skapa ny site + admin</h2>
+        <form method="post" action="{{ url_for('admin_ui.systemadmin_customer_sites_create', tenant_id=vm.tenant_id) }}" class="sa-form">
+          {{ csrf_token_input()|safe }}
+          <div class="admin-form-row">
+            <label for="site_name">Site-namn</label>
+            <input type="text" id="site_name" name="site_name" placeholder="t.ex. Östergården" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="admin_email">Admin e-post</label>
+            <input type="email" id="admin_email" name="admin_email" placeholder="namn@example.com" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="admin_password">Admin lösenord</label>
+            <input type="password" id="admin_password" name="admin_password" placeholder="Minst 8 tecken" required>
+          </div>
+          <h3>Moduler för site</h3>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_weekview"> Weekview</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_planera"> Planera</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_portal"> Portal</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_report"> Rapport</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_menu_import"> Menyimport</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_specialkost"> Specialkost</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_recipes"> Recept</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_prep"> Prep</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_freeze"> Frys</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_husk_bestill"> Husk Bestill</label></div>
+          <div class="admin-form-row"><label><input type="checkbox" name="sf_integrations"> Integrationer</label></div>
+          <button type="submit" class="sa-btn sa-btn-primary">Skapa site och admin</button>
+        </form>
+      </article>
+    </section>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/systemadmin.js') }}"></script>
+{% endblock %}

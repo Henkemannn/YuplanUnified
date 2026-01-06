@@ -32,8 +32,9 @@ def test_systemadmin_shows_settings_link(app_session):
     assert r_sys.status_code == 200
     html = r_sys.get_data(as_text=True)
     assert "Systemadministration" in html
-    # Systemadmin should not show operational department settings; only Open Admin link
-    assert f"/ui/systemadmin/switch-site/{site_id}" in html
+    assert "Avd Nav" in html
+    # The settings link should be present
+    assert f"/ui/admin/departments/{dep_id}/settings" in html
 
     # Follow settings link as admin
     r_settings = client.get(f"/ui/admin/departments/{dep_id}/settings", headers=HEADERS_ADMIN)

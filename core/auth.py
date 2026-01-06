@@ -40,7 +40,11 @@ _RATE_LIMIT_STORE: dict[str, dict[str, float | int]] = {}
 
 
 def _json_error(msg: str, code: int = 400):
-    return jsonify({"error": msg, "message": msg}), code
+    # Standardize unauthorized detail expected by tests
+    normalized = msg
+    if code == 401 and msg == "auth required":
+        normalized = "authentication required"
+    return jsonify({"error": normalized, "message": normalized}), code
 
 
 def set_csrf_cookie(resp, token: str):
@@ -52,7 +56,21 @@ def set_csrf_cookie(resp, token: str):
     """
     from .cookies import set_secure_cookie
 
-    set_secure_cookie(resp, current_app.config.get("CSRF_COOKIE_NAME", "csrf_token"), token, httponly=False, samesite="Strict")
+    # In DEBUG/TESTING use Lax to reduce local cross-site blocking; Strict in other modes
+    samesite_val = "Strict"
+    try:
+        import os as _os
+        if not current_app.config.get("TESTING") and _os.getenv("DEV_CSRF_LAX", "0") in ("1", "true", "yes"):
+            samesite_val = "Lax"
+    except Exception:
+        pass
+    set_secure_cookie(
+        resp,
+        current_app.config.get("CSRF_COOKIE_NAME", "csrf_token"),
+        token,
+        httponly=False,
+        samesite=samesite_val,
+    )
 
 
 def require_roles(*roles: str):
@@ -134,8 +152,104 @@ def login():
         resp.set_cookie("yp_demo", role, httponly=True, samesite="Lax")
         return resp
     data = request.get_json(silent=True) or {}
+    # Fallback to form fields when JSON isn't provided (browser form posts)
+    if not data:
+        data = {"email": request.form.get("email"), "password": request.form.get("password")}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
+    # DEV-only diagnostic logging to help debug login payload parsing
+    try:
+        import os as _os
+        from flask import g as _g
+        _dev_mode = (
+            (current_app.config.get("APP_ENV") == "dev")
+            or (_os.getenv("APP_ENV", "").lower() == "dev")
+            or (_os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"))
+        )
+        if _dev_mode:
+            j = request.get_json(silent=True) or {}
+            # Resolve DB URL + sqlite file path for request context
+            _db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI")
+            _sqlite_file = None
+            try:
+                if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
+                    import os as _os_fp
+                    _sqlite_file = _os_fp.path.abspath(_db_url.replace("sqlite:///", "", 1))
+            except Exception:
+                _sqlite_file = None
+            try:
+                import logging as _logging
+                _logging.warning(
+                    {
+                        "dev_auth_login_debug": True,
+                        "request_id": getattr(_g, "request_id", None),
+                        "content_type": request.content_type,
+                        "form_keys": list(request.form.keys()),
+                        "json_keys": list(j.keys()),
+                        "email_empty": (not bool(email)),
+                        "password_empty": (not bool(password)),
+                        "db_url": _db_url,
+                        "sqlite_file": _sqlite_file,
+                    }
+                )
+            except Exception:
+                pass
+            # Append compact line to instance/auth_debug.log (DEV-only)
+            try:
+                # Mask email: keep first 3 of local part + domain
+                _raw_email = (email or "").strip().lower()
+                _em_local, _em_dom = (None, None)
+                if "@" in _raw_email:
+                    _em_local, _em_dom = _raw_email.split("@", 1)
+                _masked_email = (
+                    (_em_local[:3] + "***@" + _em_dom) if (_em_local and _em_dom) else (_raw_email[:3] + "***")
+                )
+                _line = {
+                    "request_id": getattr(_g, "request_id", None),
+                    "content_type": request.content_type,
+                    "form_keys": list(request.form.keys()),
+                    "json_keys": list(j.keys()),
+                    "email_lower_masked": _masked_email,
+                    "password_present": bool(password),
+                    "db_url": _db_url,
+                    "sqlite_file": _sqlite_file,
+                }
+                import json as _json
+                import os as _os2
+                _os2.makedirs(current_app.instance_path, exist_ok=True)
+                _path = _os2.path.join(current_app.instance_path, "auth_debug.log")
+                with open(_path, "a", encoding="utf-8") as _fh:
+                    _fh.write(_json.dumps(_line, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
+            try:
+                print(
+                    "AUTH_DEBUG:",
+                    {
+                        "request_id": getattr(_g, "request_id", None),
+                        "content_type": request.content_type,
+                        "form_keys": list(request.form.keys()),
+                        "json_keys": list(j.keys()),
+                        "email_empty": (not bool(email)),
+                        "password_empty": (not bool(password)),
+                    },
+                    flush=True,
+                )
+            except Exception:
+                pass
+            current_app.logger.warning(
+                {
+                    "dev_auth_login_debug": True,
+                    "request_id": getattr(_g, "request_id", None),
+                    "content_type": request.content_type,
+                    "form_keys": list(request.form.keys()),
+                    "json_keys": list(j.keys()),
+                    "email_empty": (not bool(email)),
+                    "password_empty": (not bool(password)),
+                }
+            )
+    except Exception:
+        pass
     # Always issue a CSRF cookie for clients (tests assert cookie presence even on errors)
     csrf_cookie_name = current_app.config.get("CSRF_COOKIE_NAME", "csrf_token")
     csrf_token = request.cookies.get(csrf_cookie_name)
@@ -144,6 +258,39 @@ def login():
 
         csrf_token = secrets.token_hex(16)
     if not email or not password:
+        # DEV-only: precise missing credentials reason
+        try:
+            import os as _os
+            from flask import g as _g
+            _dev_mode = (
+                (current_app.config.get("APP_ENV") == "dev")
+                or (_os.getenv("APP_ENV", "").lower() == "dev")
+                or (_os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"))
+            )
+            if _dev_mode:
+                _db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI")
+                _sqlite_file = None
+                try:
+                    if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
+                        import os as _os_fp
+                        _sqlite_file = _os_fp.path.abspath(_db_url.replace("sqlite:///", "", 1))
+                except Exception:
+                    _sqlite_file = None
+                import json as _json, os as _os2
+                _os2.makedirs(current_app.instance_path, exist_ok=True)
+                _path = _os2.path.join(current_app.instance_path, "auth_debug.log")
+                _entry = {
+                    "request_id": getattr(_g, "request_id", None),
+                    "reject_reason": "missing_credentials",
+                    "user_found": False,
+                    "password_ok": False,
+                    "db_url": _db_url,
+                    "sqlite_file": _sqlite_file,
+                }
+                with open(_path, "a", encoding="utf-8") as _fh:
+                    _fh.write(_json.dumps(_entry, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
         resp = make_response(jsonify({"error": "missing credentials", "message": "missing credentials"}), 400)
         set_csrf_cookie(resp, csrf_token)
         return resp
@@ -163,6 +310,40 @@ def login():
         # rec = {failures: int, first: ts, lock_until: ts?}
         lock_until = rec.get("lock_until")
         if lock_until and lock_until > now:
+            # DEV-only: log reject reason
+            try:
+                import os as _os
+                from flask import g as _g
+                _dev_mode = (
+                    (current_app.config.get("APP_ENV") == "dev")
+                    or (_os.getenv("APP_ENV", "").lower() == "dev")
+                    or (_os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"))
+                )
+                if _dev_mode:
+                    _db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI")
+                    _sqlite_file = None
+                    try:
+                        if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
+                            import os as _os_fp
+                            _sqlite_file = _os_fp.path.abspath(_db_url.replace("sqlite:///", "", 1))
+                    except Exception:
+                        _sqlite_file = None
+                    import json as _json
+                    import os as _os2
+                    _os2.makedirs(current_app.instance_path, exist_ok=True)
+                    _path = _os2.path.join(current_app.instance_path, "auth_debug.log")
+                    _entry = {
+                        "request_id": getattr(_g, "request_id", None),
+                        "reject_reason": "rate_limited",
+                        "user_found": False,
+                        "password_ok": False,
+                        "db_url": _db_url,
+                        "sqlite_file": _sqlite_file,
+                    }
+                    with open(_path, "a", encoding="utf-8") as _fh:
+                        _fh.write(_json.dumps(_entry, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
             resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
             resp.headers["Retry-After"] = str(int(lock_until - now))
             return resp
@@ -175,8 +356,12 @@ def login():
         store[key] = rec
     db = get_session()
     try:
+        # Login user lookup: filter by exact match on email with lowercased input from above.
+        # No tenant/site filters; no is_active enforced.
         user = db.query(User).filter(User.email == email).first()
-        if not user or not check_password_hash(user.password_hash, password):
+        user_found = bool(user)
+        password_ok = bool(user and check_password_hash(user.password_hash, password))
+        if (not user_found) or (not password_ok):
             rec["failures"] += 1
             if rec["failures"] >= max_failures:
                 rec["lock_until"] = now + lock_sec
@@ -186,6 +371,46 @@ def login():
                 resp.headers["Retry-After"] = str(lock_sec)
                 set_csrf_cookie(resp, csrf_token)
                 return resp
+            # DEV-only: log reject reason for 401
+            try:
+                import os as _os
+                from flask import g as _g
+                _dev_mode = (
+                    (current_app.config.get("APP_ENV") == "dev")
+                    or (_os.getenv("APP_ENV", "").lower() == "dev")
+                    or (_os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"))
+                )
+                if _dev_mode:
+                    _db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI")
+                    _sqlite_file = None
+                    try:
+                        if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
+                            import os as _os_fp
+                            _sqlite_file = _os_fp.path.abspath(_db_url.replace("sqlite:///", "", 1))
+                    except Exception:
+                        _sqlite_file = None
+                    import json as _json
+                    import os as _os2
+                    _os2.makedirs(current_app.instance_path, exist_ok=True)
+                    _path = _os2.path.join(current_app.instance_path, "auth_debug.log")
+                    _reason = "user_not_found" if not user_found else ("password_mismatch" if not password_ok else "unknown")
+                    # Additional hints
+                    if user_found and hasattr(user, "is_active") and not bool(getattr(user, "is_active")):
+                        _reason = "user_inactive"
+                    if user_found and getattr(user, "tenant_id", None) is None:
+                        _reason = "tenant_missing"
+                    _entry = {
+                        "request_id": getattr(_g, "request_id", None),
+                        "reject_reason": _reason,
+                        "user_found": user_found,
+                        "password_ok": password_ok,
+                        "db_url": _db_url,
+                        "sqlite_file": _sqlite_file,
+                    }
+                    with open(_path, "a", encoding="utf-8") as _fh:
+                        _fh.write(_json.dumps(_entry, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
             resp = make_response(jsonify({"error": "invalid credentials", "message": "invalid credentials"}), 401)
             set_csrf_cookie(resp, csrf_token)
             return resp
@@ -211,21 +436,48 @@ def login():
         session["tenant_id"] = user.tenant_id
         # CSRF token issuance (double submit). Provide if not present already.
         # csrf_token already prepared above
-        resp = make_response(
-            jsonify(
-                {
-                    "ok": True,
-                    "access_token": access,
-                    "refresh_token": refresh,
-                    "token_type": "Bearer",
-                    "expires_in": DEFAULT_ACCESS_TTL,
-                    "csrf_token": csrf_token,
-                    "role": user.role,
-                }
+        # Decide response based on request type: HTML form vs JSON client
+        wants_html = False
+        try:
+            ctype = (request.content_type or "").lower()
+            accept = (request.headers.get("Accept") or "").lower()
+            if ("application/json" not in ctype) and (request.form) and ("text/html" in accept or not accept or "application/json" not in accept):
+                wants_html = True
+        except Exception:
+            wants_html = False
+        if wants_html:
+            # HTML form flow: redirect to appropriate landing
+            from flask import redirect, url_for
+            target = None
+            try:
+                r = (session.get("role") or "").lower()
+                if r == "superuser":
+                    target = url_for("admin_ui.systemadmin_dashboard")
+                elif r == "admin":
+                    target = url_for("ui.admin_dashboard")
+                else:
+                    target = url_for("ui.weekview_ui")
+            except Exception:
+                target = "/"
+            resp = redirect(target, code=302)
+            set_csrf_cookie(resp, csrf_token)
+            return resp
+        else:
+            resp = make_response(
+                jsonify(
+                    {
+                        "ok": True,
+                        "access_token": access,
+                        "refresh_token": refresh,
+                        "token_type": "Bearer",
+                        "expires_in": DEFAULT_ACCESS_TTL,
+                        "csrf_token": csrf_token,
+                        "role": user.role,
+                    }
+                )
             )
-        )
-        set_csrf_cookie(resp, csrf_token)
-        return resp
+            set_csrf_cookie(resp, csrf_token)
+            return resp
     finally:
         db.close()
 
@@ -440,5 +692,85 @@ def ensure_bootstrap_superuser():
             current_app.logger.info("Bootstrap superuser created: %s", email)
         except Exception:
             pass
+    finally:
+        db.close()
+
+
+# --- Dev Seed: Named Superuser (Henrik) ---
+def ensure_dev_superuser_henrik():
+    """Ensure a developer superuser exists for local runs.
+
+    Controlled by env flags: if either DEV_CREATE_ALL or YUPLAN_SEED_HENRIK is truthy,
+    create (or update) a superuser with the specified credentials. Safe no-op if tables
+    are missing and auto-create not allowed.
+    """
+    import os as _os
+    from werkzeug.security import generate_password_hash as _gph
+
+    seed_enabled = (
+        _os.getenv("YUPLAN_SEED_HENRIK", "0").lower() in ("1", "true", "yes")
+        or _os.getenv("DEV_CREATE_ALL", "0").lower() in ("1", "true", "yes")
+    )
+    if not seed_enabled:
+        return
+    try:
+        db = get_session()
+    except Exception:
+        return
+    try:
+        # Optionally create schema
+        try:
+            if _os.getenv("DEV_CREATE_ALL", "0").lower() in ("1", "true", "yes"):
+                from .db import create_all as _create_all
+
+                _create_all()
+        except Exception:
+            pass
+        # Ensure basic tables exist by best-effort inspection
+        try:
+            from sqlalchemy import inspect as _sa_inspect  # type: ignore
+
+            insp = _sa_inspect(db.bind)
+            if not (insp.has_table("users") and insp.has_table("tenants")):
+                return
+        except Exception:
+            pass
+        # Seed tenant if missing
+        try:
+            t = db.query(Tenant).first()
+            if not t:
+                t = Tenant(name="Primary")
+                db.add(t)
+                db.flush()
+        except Exception:
+            return
+        # Upsert Henrik user (DEV-only known-good). Allow override via env; default to Hen1024.
+        email = "Henrik.Jonsson@Yuplan.se"
+        import os as _os
+        password = _os.getenv("YUPLAN_SEED_HENRIK_PASSWORD", "Hen1024")
+        user = db.query(User).filter(User.email == email.lower()).first()
+        if not user:
+            user = User(
+                tenant_id=t.id,
+                email=email.lower(),
+                username=email.lower(),
+                password_hash=_gph(password),
+                role="superuser",
+                full_name="Henrik Jonsson",
+                is_active=True,
+                unit_id=None,
+            )
+            db.add(user)
+        else:
+            # Keep idempotent but ensure role remains superuser
+            user.role = "superuser"
+            if not user.full_name:
+                user.full_name = "Henrik Jonsson"
+            # Always refresh password hash to match requested DEV credentials
+            try:
+                user.password_hash = _gph(password)
+            except Exception:
+                pass
+        db.commit()
     finally:
         db.close()

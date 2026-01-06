@@ -38,11 +38,12 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(200), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(50))  # admin, unit_portal, cook, superuser
-    full_name: Mapped[str] = mapped_column(String(200), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"), nullable=True)
-    refresh_token_jti: Mapped[str] = mapped_column(String(64), nullable=True)
-
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
+    refresh_token_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
 
 class Unit(Base):
     __tablename__ = "units"
@@ -228,6 +229,10 @@ class TenantFeatureFlag(Base):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     name: Mapped[str] = mapped_column(String(80))  # e.g. module.offshore, waste.metrics
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Optional notes for admins; tests only require acceptance, not usage
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Updated timestamp used by tests for stale-state; default to utcnow
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 # --- Tenant Metadata ---

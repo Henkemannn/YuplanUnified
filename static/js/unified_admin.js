@@ -23,6 +23,8 @@
         setupButtonRipple();
         setupSmoothTableHover();
         setupSmoothScroll();
+        setupModalHandlers();
+        setupSiteContextWarning();
         
         // Check mobile on load
         if (window.innerWidth <= 768) {
@@ -63,6 +65,56 @@
         });
     }
     
+    // ========================================================================
+    // Modal Handlers (data-modal-target / data-modal-close)
+    // ========================================================================
+    function setupModalHandlers() {
+        // Open handler
+        document.addEventListener('click', function (event) {
+            const trigger = event.target.closest('[data-modal-target]');
+            if (!trigger) return;
+
+            const selector = trigger.getAttribute('data-modal-target');
+            if (!selector) return;
+
+            const dialog = document.querySelector(selector);
+            if (!dialog) return;
+
+            try {
+                if (typeof dialog.showModal === 'function') {
+                    dialog.showModal();
+                    dialog.classList.add('ua-modal-open');
+                } else {
+                    dialog.setAttribute('open', 'open');
+                    dialog.classList.add('ua-modal-open');
+                }
+            } catch (e) {
+                dialog.setAttribute('open', 'open');
+                dialog.classList.add('ua-modal-open');
+            }
+        });
+
+        // Close handler
+        document.addEventListener('click', function (event) {
+            const closeBtn = event.target.closest('[data-modal-close]');
+            if (!closeBtn) return;
+
+            const dialog = closeBtn.closest('dialog.ua-modal');
+            if (!dialog) return;
+
+            try {
+                if (typeof dialog.close === 'function') {
+                    dialog.close();
+                } else {
+                    dialog.removeAttribute('open');
+                }
+            } catch (e) {
+                dialog.removeAttribute('open');
+            }
+            dialog.classList.remove('ua-modal-open');
+        });
+    }
+
     function toggleSidebar() {
         if (sidebarOpen) {
             closeSidebar();
@@ -155,6 +207,39 @@
     function getCsrfToken() {
         const meta = document.querySelector('meta[name="csrf-token"]');
         return meta ? meta.getAttribute('content') : '';
+    }
+
+    function getMeta(name) {
+        const m = document.querySelector(`meta[name="${name}"]`);
+        return m ? m.getAttribute('content') : '';
+    }
+
+    function setupSiteContextWarning() {
+        try {
+            const current = getMeta('current-site-id');
+            const url = new URL(window.location.href);
+            const qSite = (url.searchParams.get('site_id') || '').trim();
+            const root = document.querySelector('.ua-root');
+            const pageSite = root ? (root.getAttribute('data-page-site-id') || '').trim() : '';
+            const expected = qSite || pageSite;
+            if (expected && current && expected !== current) {
+                // If server already rendered a banner, skip duplicating
+                if (document.getElementById('site-context-banner')) return;
+                const banner = document.createElement('div');
+                banner.id = 'site-context-banner';
+                banner.className = 'ua-flash ua-flash-warning';
+                banner.setAttribute('role', 'alert');
+                banner.style.margin = '8px 16px';
+                banner.innerHTML = `Du har bytt arbetsplats i en annan flik. Ladda om för att se aktuell arbetsplats.
+                  <button type="button" class="ua-btn ua-btn-small" style="margin-left:12px;">Ladda om</button>`;
+                const btn = banner.querySelector('button');
+                if (btn) btn.addEventListener('click', () => location.reload());
+                const main = document.querySelector('.ua-main');
+                if (main) main.prepend(banner);
+            }
+        } catch (e) {
+            // no-op
+        }
     }
     
     // ========================================================================

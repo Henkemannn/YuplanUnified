@@ -39,9 +39,22 @@ def install_support_log_handler() -> None:
     # Avoid duplicate attachment if reloaded
     if any(isinstance(h, SupportLogHandler) for h in root.handlers):
         return
-    h = SupportLogHandler(level=logging.WARNING)
+    try:
+        import os as _os
+        lvl = logging.WARNING
+        if _os.getenv("APP_ENV", "").lower() == "dev" or _os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"):
+            lvl = logging.INFO
+        h = SupportLogHandler(level=lvl)
+    except Exception:
+        h = SupportLogHandler(level=logging.WARNING)
     h.setFormatter(logging.Formatter("%(message)s"))
     root.addHandler(h)
+    try:
+        flog = logging.getLogger("flask.app")
+        if not any(isinstance(x, SupportLogHandler) for x in flog.handlers):
+            flog.addHandler(h)
+    except Exception:
+        pass
 
 
 __all__ = ["LOG_BUFFER", "install_support_log_handler"]

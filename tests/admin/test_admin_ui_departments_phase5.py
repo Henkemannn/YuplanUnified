@@ -57,6 +57,8 @@ def app_with_departments(app_session: Flask) -> Flask:
 
 def test_admin_departments_list_shows_departments(app_with_departments: Flask, client_admin: FlaskClient) -> None:
     """GET /ui/admin/departments should list all departments with site names."""
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = "site-test-1"
     resp = client_admin.get("/ui/admin/departments", headers=ADMIN_HEADERS)
     assert resp.status_code == 200
     html = resp.data.decode()
@@ -68,6 +70,8 @@ def test_admin_departments_list_shows_departments(app_with_departments: Flask, c
 
 def test_admin_department_edit_get_shows_form(app_with_departments: Flask, client_admin: FlaskClient) -> None:
     """GET /ui/admin/departments/<id>/edit should show edit form with current values."""
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = "site-test-1"
     resp = client_admin.get("/ui/admin/departments/dept-test-1/edit", headers=ADMIN_HEADERS)
     assert resp.status_code == 200
     html = resp.data.decode()
@@ -79,6 +83,8 @@ def test_admin_department_edit_get_shows_form(app_with_departments: Flask, clien
 
 def test_admin_department_edit_post_updates_department(app_with_departments: Flask, client_admin: FlaskClient) -> None:
     """POST /ui/admin/departments/<id>/edit should update department and redirect to list."""
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = "site-test-1"
     resp = client_admin.post(
         "/ui/admin/departments/dept-test-1/edit",
         data={

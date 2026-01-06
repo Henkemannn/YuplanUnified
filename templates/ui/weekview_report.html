@@ -16,6 +16,7 @@
     <h1>Veckorapport – Registrering</h1>
     <span style="position:absolute;left:-9999px;">Statistik – vecka</span>
     <span class="report-meta">År {{ vm.year }} • Vecka {{ vm.week }}</span>
+      <span class="report-meta" aria-hidden="true">Lunch – Boende · Kväll – Boende</span>
       <span class="report-meta" aria-hidden="true">Lunch – Boende · Middag – Boende</span>
     <a class="btn btn-primary" href="{{ url_for('ui.reports_weekly_csv', site_id=vm.site_id, year=vm.year, week=vm.week) }}">Exportera CSV</a>
     {% if vm.department_scope == 'single' and vm.departments and vm.departments|length == 1 %}
@@ -24,6 +25,7 @@
       <span class="report-meta">Alla avdelningar</span>
     {% endif %}
   </div>
+  <div class="report-meta">Lunch och Kväll summeras per avdelning.</div>
   <div class="coming">
     <strong>Registreringsöversikt</strong>
     {% if vm.prev_week and vm.next_week %}

@@ -44,7 +44,14 @@ def test_rbac_and_preconditions(client_admin):
 @pytest.mark.usefixtures("enable_weekview")
 def test_happy_path_and_412(client_admin):
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
+    # Align session site context
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site, "next": "/"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
 
     # Initial GET -> v0
     r0 = _get(client_admin, "admin", base)
@@ -54,7 +61,7 @@ def test_happy_path_and_412(client_admin):
 
     # PATCH with If-Match v0 -> v1
     ops = [{"day_of_week": 1, "meal": "lunch", "diet_type": "normal", "marked": True}]
-    p = {"department_id": dep, "year": 2025, "week": 45, "operations": ops}
+    p = {"site_id": site, "department_id": dep, "year": 2025, "week": 45, "operations": ops}
     r1 = _patch(client_admin, "editor", "/api/weekview", json=p, extra_headers={"If-Match": etag0})
     assert r1.status_code == 200
     etag1 = r1.headers.get("ETag")
@@ -82,10 +89,17 @@ def test_happy_path_and_412(client_admin):
 @pytest.mark.parametrize("meal", ["breakfast", "snack"])  # invalid meals
 def test_validation_errors(client_admin, meal):
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site, "next": "/"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
     r0 = _get(client_admin, "admin", base)
     etag0 = r0.headers.get("ETag")
     p = {
+        "site_id": site,
         "department_id": dep,
         "year": 2025,
         "week": 45,
@@ -98,14 +112,20 @@ def test_validation_errors(client_admin, meal):
 @pytest.mark.usefixtures("enable_weekview")
 def test_batch_semantics_and_idempotence(client_admin):
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site, "next": "/"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
     etag0 = _get(client_admin, "admin", base).headers.get("ETag")
 
     ops = [
         {"day_of_week": 1, "meal": "lunch", "diet_type": "normal", "marked": True},
         {"day_of_week": 2, "meal": "dinner", "diet_type": "veg", "marked": True},
     ]
-    p = {"department_id": dep, "year": 2025, "week": 45, "operations": ops}
+    p = {"site_id": site, "department_id": dep, "year": 2025, "week": 45, "operations": ops}
 
     r1 = _patch(client_admin, "admin", "/api/weekview", json=p, extra_headers={"If-Match": etag0})
     assert r1.status_code == 200

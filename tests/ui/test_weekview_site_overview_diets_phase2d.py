@@ -51,6 +51,12 @@ def test_weekview_site_overview_diets_phase2d(client_admin):
 
     # Materialize baseline + capture ETags for each department
     base_a = f"/api/weekview?year={year}&week={week}&department_id={dep_a}"
+    # Align session site context
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site_id, "next": "/"},
+        headers=_h("admin"),
+    )
     r0a = client_admin.get(base_a, headers=_h("admin"))
     assert r0a.status_code == 200 and ETAG_RE.match(r0a.headers.get("ETag") or "")
     etag_a = r0a.headers.get("ETag")

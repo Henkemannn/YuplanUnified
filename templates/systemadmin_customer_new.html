@@ -1,0 +1,92 @@
+{% extends "_base.html" %}
+{% set hide_global_nav = True %}
+{% block title %}SystemAdmin · Ny kund{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+{% endblock %}
+{% block content %}
+<main class="sa-root sa-theme-dark">
+  <aside class="sa-sidebar">
+    <div class="sa-sidebar-header">
+      <img class="sa-logo-mark" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="32" height="32">
+      <div class="sa-logo-sub">Yuplan Örnnästet</div>
+    </div>
+    <nav class="sa-nav">
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_dashboard') }}">
+        <span class="sa-icon">📊</span> Översikt
+      </a>
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_customers') }}">
+        <span class="sa-icon">🏢</span> Kunder
+      </a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">👥</span> Användare</a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">🧩</span> Moduler</a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">📑</span> Kontrakt</a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">📉</span> Loggar & Health</a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">⚙️</span> Inställningar</a>
+    </nav>
+    <div class="sa-sidebar-footer"><span>v1.0 · Dev</span></div>
+  </aside>
+
+  <section class="sa-main">
+    <header class="sa-header">
+      <div>
+        <h1>Skapa ny kund</h1>
+        <p class="sa-subtitle">Fyll i detaljer nedan för att skapa kund och site.</p>
+      </div>
+    </header>
+
+    <section class="sa-grid">
+      <article class="sa-card sa-card-wide">
+        <h2>Uppgifter</h2>
+        <form method="post" action="{{ url_for('admin_ui.systemadmin_create_customer') }}" class="sa-form">
+          {{ csrf_token_input() }}
+          <div class="admin-form-row">
+            <label for="tenant_name">Kundnamn</label>
+            <input type="text" id="tenant_name" name="tenant_name" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="site_name">Site / enhet</label>
+            <input type="text" id="site_name" name="site_name" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="customer_type">Kundtyp</label>
+            <select id="customer_type" name="customer_type">
+              <option value="Kommun">Kommun</option>
+              <option value="Offshore">Offshore</option>
+              <option value="Hotell">Hotell</option>
+              <option value="Skola">Skola</option>
+              <option value="Vård">Vård</option>
+              <option value="Annat">Annat</option>
+            </select>
+          </div>
+          <div class="admin-form-row">
+            <label for="contact_name">Kontaktperson</label>
+            <input type="text" id="contact_name" name="contact_name">
+          </div>
+          <div class="admin-form-row">
+            <label for="contact_email">Kontaktmail</label>
+            <input type="email" id="contact_email" name="contact_email">
+          </div>
+          <div class="admin-form-row">
+            <label for="contact_phone">Telefon</label>
+            <input type="tel" id="contact_phone" name="contact_phone">
+          </div>
+          <div class="admin-form-row">
+            <label for="admin_email">Admin e-post</label>
+            <input type="email" id="admin_email" name="admin_email" required>
+          </div>
+          <div class="admin-form-row">
+            <label for="admin_password">Admin lösenord</label>
+            <input type="password" id="admin_password" name="admin_password" required>
+          </div>
+          <button type="submit" class="sa-btn sa-btn-primary">Skapa kund</button>
+          <a class="sa-btn sa-btn-secondary" href="{{ url_for('admin_ui.systemadmin_customers') }}">Avbryt</a>
+        </form>
+      </article>
+    </section>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/systemadmin.js') }}"></script>
+{% endblock %}

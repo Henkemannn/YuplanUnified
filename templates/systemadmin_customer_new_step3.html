@@ -1,0 +1,82 @@
+{% extends "_base.html" %}
+{% set hide_global_nav = True %}
+{% block title %}SystemAdmin · Ny kund · Steg 3{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+{% endblock %}
+{% block content %}
+<main class="sa-root sa-theme-dark">
+  <aside class="sa-sidebar">
+    <div class="sa-sidebar-header">
+      <img class="sa-logo-mark" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="32" height="32">
+      <div class="sa-logo-sub">Yuplan Örnnästet</div>
+    </div>
+    <nav class="sa-nav">
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_dashboard') }}"><span class="sa-icon">📊</span> Översikt</a>
+      <a class="sa-nav-item sa-active" href="{{ url_for('admin_ui.systemadmin_customer_new_step3') }}"><span class="sa-icon">🧩</span> Moduler</a>
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_customers') }}"><span class="sa-icon">📋</span> Kunder</a>
+    </nav>
+    <div class="sa-sidebar-footer"><span>v1.0 · Dev</span></div>
+  </aside>
+
+  <section class="sa-main">
+    <header class="sa-header">
+      <div>
+        <h1>Steg 3 · Moduler</h1>
+        <p class="sa-subtitle">Aktivera rätt funktioner för kunden.</p>
+      </div>
+    </header>
+
+    <section class="sa-grid">
+      <article class="sa-card sa-card-wide">
+        <form method="post" action="{{ url_for('admin_ui.systemadmin_customer_new_step3_post') }}" class="sa-form">
+          {{ csrf_token_input()|safe }}
+          {% set ct = vm.data.customer_type or '' %}
+          {% set default_bas = (ct=='Kommun') %}
+          {% set default_off = (ct=='Offshore') %}
+          <h3>Basmoduler</h3>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_weekview" {% if default_bas %}checked{% endif %}> Weekview</label>
+          </div>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_planera" {% if default_bas %}checked{% endif %}> Planera</label>
+          </div>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_portal" {% if default_bas %}checked{% endif %}> Portal</label>
+          </div>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_report" {% if default_bas %}checked{% endif %}> Rapport</label>
+          </div>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_menu_import" {% if default_bas %}checked{% endif %}> Menyimport</label>
+          </div>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_specialkost" {% if default_bas %}checked{% endif %}> Specialkost</label>
+          </div>
+          <h3>Avancerade</h3>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_recipes" {% if default_off %}checked{% endif %}> Recept</label>
+          </div>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_prep" {% if default_off %}checked{% endif %}> Prep</label>
+          </div>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_freeze" {% if default_off %}checked{% endif %}> Frys</label>
+          </div>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_husk_bestill" {% if default_off %}checked{% endif %}> Husk Bestill</label>
+          </div>
+          <div class="admin-form-row">
+            <label><input type="checkbox" name="modules_integrations"> Integrationer</label>
+          </div>
+          <button type="submit" class="sa-btn sa-btn-primary">Nästa steg</button>
+          <a class="sa-btn sa-btn-secondary" href="{{ url_for('admin_ui.systemadmin_customer_new_step2') }}">Tillbaka</a>
+        </form>
+      </article>
+    </section>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/systemadmin.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block admin_title %}Välj site{% endblock %}
+{% block admin_subtitle %}Välj arbetsplats för din session{% endblock %}
+
+{% block admin_main %}
+<section class="ua-section">
+  <div class="ua-card">
+    <form method="post" action="{{ url_for('ui.select_site_post') }}">
+      {{ csrf_token_input()|safe }}
+      <input type="hidden" name="next" value="{{ vm.next }}">
+      {% if vm.sites and vm.sites|length > 0 %}
+        <label for="site_id"><strong>Site</strong></label>
+        <select id="site_id" name="site_id" class="ua-input">
+          {% for s in vm.sites %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+          {% endfor %}
+        </select>
+        <div style="margin-top:8px;">
+          <button class="ua-button ua-button-primary">Välj</button>
+        </div>
+      {% else %}
+        <p class="ua-muted">Inga sites hittades för din kund. Skapa en site via Systemadmin.</p>
+      {% endif %}
+    </form>
+  </div>
+</section>
+{% endblock %}

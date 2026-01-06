@@ -1,3 +1,132 @@
+.admin-quicklinks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+/* Hide only legacy duplicates; keep UA sidebar visible */
+.legacy-admin-nav,
+.legacy-sidebar-toggle,
+.legacy-bottom-toggle,
+.admin-bottom-toggle,
+.sidebar-bottom-toggle {
+    display: none !important;
+}
+.admin-section {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+.admin-intro {
+    margin: 0 0 16px 0;
+    color: #4b5563;
+    font-size: 0.95rem;
+}
+
+.admin-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    margin-bottom: 16px;
+}
+
+/* Admin Grid for dashboard-like layouts */
+.admin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--yp-gap);
+    margin-top: var(--yp-gap);
+}
+
+.admin-header {
+    margin: 0 0 var(--yp-gap) 0;
+}
+
+.admin-subtitle {
+    color: var(--admin-text-secondary);
+    margin-top: 4px;
+}
+
+.admin-link-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.admin-link-list li + li { margin-top: 8px; }
+
+.admin-status-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.admin-status-list li + li { margin-top: 6px; }
+
+.btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+
+.admin-card h2 {
+    margin-top: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: none;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.btn-primary { background-color: #2563eb; color: #ffffff; }
+.btn-secondary { background-color: #e5e7eb; color: #111827; }
+.btn-danger { background-color: #dc2626; color: #ffffff; }
+
+.admin-card table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+}
+
+.admin-card th,
+.admin-card td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 0.9rem;
+}
+
+.admin-card th {
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+}
+
+.admin-card tr:nth-child(even) td { background: #f9fafb; }
+
+.admin-form-row { margin-bottom: 8px; }
+.admin-form-row label { display: block; font-size: 0.85rem; margin-bottom: 2px; color: #374151; }
+.admin-form-row input,
+.admin-form-row select {
+    width: 100%;
+    max-width: 260px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 900px) {
+    .admin-section { padding: 12px; }
+    .admin-card { padding: 12px 14px; }
+    .admin-card table { font-size: 0.85rem; }
+}
 /*
  * Unified Admin Panel - CSS
  * Phase 1: Navigation shell and dashboard
@@ -65,18 +194,154 @@
 }
 
 /* ============================================================================
-   Base Layout
+   Base Layout (ua-*)
    ============================================================================ */
-
-body.admin-shell {
-    margin: 0;
-    padding: 0;
-    font-family: var(--font-family);
-    background-color: var(--admin-bg-page);
-    color: var(--admin-text-primary);
-    display: flex;
+/* New clean layout without overlay/position fixed */
+.ua-root {
     min-height: 100vh;
+    display: flex;
+    background: #020617;
+    color: #e5e7eb;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
 }
+
+.ua-theme-dark { display: contents; }
+
+/* Optional light theme variant using Yuplan tokens without affecting default layout */
+.ua-root.ua-theme-light {
+    background: var(--yp-color-bg-alt);
+    color: var(--yp-color-text);
+    font-family: var(--yp-font-family);
+}
+.ua-root.ua-theme-light .ua-sidebar {
+    background: var(--yp-color-bg);
+    border-right: 1px solid var(--yp-color-border);
+}
+.ua-root.ua-theme-light .ua-topbar {
+    background: var(--yp-color-bg);
+    border-bottom: 1px solid var(--yp-color-border);
+}
+.ua-root.ua-theme-light .ua-topbar-title { color: var(--yp-color-text); text-shadow: none; }
+.ua-root.ua-theme-light .ua-topbar-subtitle { color: var(--yp-color-text-muted); }
+.ua-root.ua-theme-light .ua-main { background: var(--yp-color-bg-alt); }
+.ua-root.ua-theme-light .ua-logo-mark { border-color: var(--yp-color-primary); }
+.ua-root.ua-theme-light .ua-nav-item { color: var(--yp-color-text); }
+.ua-root.ua-theme-light .ua-nav-item:hover { background: var(--yp-color-secondary-light); }
+.ua-root.ua-theme-light .ua-nav-item-active { background: var(--yp-color-primary-light); border: 1px solid var(--yp-color-primary); }
+.ua-root.ua-theme-light .ua-card { background: var(--yp-color-bg-elevated); border: 1px solid var(--yp-color-border); box-shadow: var(--yp-shadow-md); }
+.ua-root.ua-theme-light .ua-card h2 { color: var(--yp-color-text); }
+.ua-root.ua-theme-light .ua-card p { color: var(--yp-color-text-muted); }
+
+.ua-sidebar {
+    width: 240px;
+    padding: 16px 14px;
+    background: #020617;
+    border-right: 1px solid rgba(148, 163, 184, 0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ua-shell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.ua-topbar {
+    padding: 16px 24px 8px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    background: #020617;
+}
+
+.ua-topbar-title { font-size: 1.4rem; font-weight: 700; margin: 0; color: #f8fafc; text-shadow: 0 1px 2px rgba(2,6,23,0.6); }
+.ua-topbar-subtitle { margin: 4px 0 0; font-size: 1rem; color: #e2e8f0; opacity: 0.95; }
+
+.ua-main {
+    padding: 20px 24px 32px;
+    background:
+      radial-gradient(circle at top left, rgba(56,189,248,0.10), transparent 55%),
+      radial-gradient(circle at bottom right, rgba(74,222,128,0.10), transparent 60%),
+      #020617;
+}
+
+.ua-sidebar-logo { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 10px 12px; margin: 6px 8px 10px; background: rgba(255,255,255,0.10); border: 1px solid rgba(148,163,184,0.35); border-radius: 10px; }
+.ua-logo-mark {
+    width: 28px; height: 28px; border-radius: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #0b1220; box-shadow: 0 1px 2px rgba(2,6,23,0.5);
+}
+.ua-logo-img { width: 18px; height: 18px; display: block; }
+.ua-logo-text { font-size: 0.95rem; color: #f8fafc; text-shadow: 0 1px 2px rgba(2,6,23,0.5); }
+
+/* Optional: playful spin animation for the logo mark */
+@keyframes ua-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+/* Spin on hover for subtlety; can be made continuous by moving animation to base rule */
+.ua-sidebar .ua-logo-mark:hover .ua-logo-img {
+    animation: ua-spin 800ms linear;
+}
+
+.ua-nav { display: flex; flex-direction: column; gap: 4px; }
+.ua-nav-item {
+    display: block; padding: 6px 8px; border-radius: 999px;
+    font-size: 0.9rem; text-decoration: none; color: #e5e7eb; opacity: 0.85;
+}
+.ua-nav-item:hover { background: rgba(148, 163, 184, 0.2); opacity: 1; }
+.ua-nav-item-active { background: rgba(56, 189, 248, 0.16); border: 1px solid rgba(56, 189, 248, 0.8); opacity: 1; }
+
+/* Hide legacy test token spans that live inside UA nav */
+.ua-sidebar .ua-nav span { display: none !important; }
+
+.ua-section { margin-bottom: 18px; }
+.ua-card {
+    background: var(--yp-color-bg-elevated);
+    border-radius: 16px;
+    padding: 16px 18px;
+    border: 1px solid var(--yp-color-border);
+    box-shadow: var(--yp-shadow-md);
+}
+.ua-card h2 { margin: 0 0 4px; font-size: 1.1rem; color: var(--yp-color-text); }
+.ua-card p { margin: 0 0 8px; font-size: 0.9rem; color: var(--yp-color-text-muted); }
+
+/* ============================================================================
+     Modal Styles (dialog + fallback)
+     ============================================================================ */
+dialog.ua-modal { border: none; padding: 0; background: transparent; }
+dialog.ua-modal::backdrop { background: rgba(0,0,0,0.4); }
+.ua-modal-open { /* Fallback overlay when showModal() unavailable */
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.4);
+    z-index: 1000;
+}
+.ua-modal-inner {
+    min-width: 320px;
+    max-width: 640px;
+    margin: 0 auto;
+    background: var(--yp-color-bg-elevated);
+    color: var(--yp-color-text);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    box-shadow: var(--yp-shadow-lg);
+}
+.ua-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.ua-modal-body { margin: 8px 0; }
+.ua-modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.ua-modal-close { background: none; border: none; font-size: 1.25rem; cursor: pointer; }
+
+.ua-flashes { margin-bottom: 12px; }
+.ua-flash { padding: 8px 10px; font-size: 0.85rem; border-radius: 8px; margin-bottom: 4px; }
+.ua-flash-success { background: rgba(22, 163, 74, 0.15); border: 1px solid rgba(34, 197, 94, 0.8); }
+.ua-flash-error { background: rgba(220, 38, 38, 0.15); border: 1px solid rgba(248, 113, 113, 0.9); }
 
 /* ============================================================================
    Sidebar - Premium Dark Theme
@@ -88,11 +353,8 @@ body.admin-shell {
     color: var(--admin-text-light);
     display: flex;
     flex-direction: column;
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 1000;
+    position: static;
+    z-index: 10;
     transition: transform var(--transition-base);
     box-shadow: var(--yp-shadow-lg);
 }
@@ -122,7 +384,7 @@ body.admin-shell {
     padding: var(--yp-gap-sm);
     border-radius: var(--yp-radius-sm);
     transition: background-color var(--transition-fast);
-    display: none; /* Hidden on desktop */
+    display: inline-flex; /* Visible on desktop */
 }
 
 .sidebar-toggle:hover {
@@ -136,11 +398,27 @@ body.admin-shell {
     overflow-y: auto;
     padding: var(--yp-gap) 0;
 }
+/* When running inside the unified shell, only keep the UA nav */
+.ua-root .ua-sidebar.admin-sidebar > nav:not(.ua-nav),
+.ua-shell .ua-sidebar.admin-sidebar > nav:not(.ua-nav) {
+    display: none !important;
+}
+.ua-root .ua-sidebar.admin-sidebar > nav.ua-nav,
+.ua-shell .ua-sidebar.admin-sidebar > nav.ua-nav {
+    display: flex !important;
+    flex-direction: column;
+}
 
 .nav-list {
     list-style: none;
     margin: 0;
     padding: 0;
+}
+/* Legacy .sidebar-nav with .nav-list already has inline display:none in template */
+/* Additionally, hide legacy `_admin_sidebar.html` nav when unified shell is present */
+.ua-root .admin-sidebar .admin-nav,
+.ua-shell .admin-sidebar .admin-nav {
+    display: none !important;
 }
 
 .nav-link {
@@ -196,6 +474,11 @@ body.admin-shell {
     padding: var(--spacing-lg);
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
+/* Hide legacy footer/user info when UA header provides context */
+.admin-sidebar .sidebar-footer,
+.admin-sidebar .user-info {
+    display: none !important;
+}
 
 .user-info {
     display: flex;
@@ -221,7 +504,8 @@ body.admin-shell {
 
 .admin-content {
     flex: 1;
-    margin-left: var(--sidebar-width);
+    /* UA shell uses flex layout, so no forced margin needed */
+    margin-left: 0;
     display: flex;
     flex-direction: column;
     min-height: 100vh;
@@ -279,8 +563,8 @@ body.admin-shell {
     margin: 0;
     font-size: var(--yp-font-size-2xl);
     font-weight: var(--yp-font-weight-bold);
-    color: white;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    color: #ffffff;
+    text-shadow: 0 2px 4px rgba(2, 6, 23, 0.7);
 }
 
 .header-right {
@@ -290,11 +574,18 @@ body.admin-shell {
 }
 
 .current-week-badge {
-    background-color: rgba(255, 255, 255, 0.25);
-    color: white;
-    backdrop-filter: blur(10px);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(56, 189, 248, 0.18));
+    color: #ffffff;
+    padding: 6px 12px;
+    border: 1px solid rgba(56, 189, 248, 0.6);
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(2, 6, 23, 0.35);
     font-weight: var(--yp-font-weight-semibold);
 }
+.current-week-badge::before { content: "📅"; }
 
 /* ============================================================================
    Flash Messages
@@ -387,13 +678,14 @@ body.admin-shell {
     margin: 0 0 var(--yp-gap-sm) 0;
     font-size: var(--yp-font-size-3xl);
     font-weight: var(--yp-font-weight-bold);
-    color: var(--admin-text-primary);
+    color: #f8fafc;
+    text-shadow: 0 2px 4px rgba(2,6,23,0.75);
 }
 
 .dashboard-subtitle {
     margin: 0;
     font-size: var(--yp-font-size-lg);
-    color: var(--admin-text-secondary);
+    color: #e2e8f0;
 }
 
 /* Quick Links Grid - Enhanced */
@@ -461,7 +753,8 @@ body.admin-shell {
 .card-description {
     margin: 0;
     font-size: var(--yp-font-size-base);
-    color: var(--admin-text-secondary);
+    /* Improve readability */
+    color: #cbd5e1;
     flex: 1;
     line-height: 1.6;
 }
@@ -539,22 +832,17 @@ button[class*="yp-button"] {
 
 @media (max-width: 768px) {
     /* Sidebar becomes overlay on mobile */
-    .admin-sidebar {
-        transform: translateX(-100%);
-    }
+    .admin-sidebar { transform: translateX(-100%); position: fixed; top: 0; left: 0; bottom: 0; }
     
     .admin-sidebar.is-open {
         transform: translateX(0);
     }
     
-    .admin-content {
-        margin-left: 0;
-    }
+    .admin-content { margin-left: 0; }
     
-    .mobile-menu-toggle,
-    .sidebar-toggle {
-        display: block;
-    }
+    /* Show only one toggle to avoid duplicates */
+    .mobile-menu-toggle { display: block; }
+    .sidebar-toggle { display: none; }
     
     .quick-links-grid {
         grid-template-columns: 1fr;
