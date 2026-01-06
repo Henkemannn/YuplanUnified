@@ -29,7 +29,7 @@ def index():  # pragma: no cover - legacy landing retained under /home
 
 
 @bp.route("/ui/login", methods=["GET", "POST"])
-def ui_login():  # Simple HTML login that sets session directly
+def ui_login():  # Simple HTML login that sets session directly or redirects to auth login
     from werkzeug.security import check_password_hash
     from .db import get_session as _get_session
     from .models import User
@@ -92,7 +92,16 @@ def ui_login():  # Simple HTML login that sets session directly
             return resp
         finally:
             db.close()
-    return render_template("login.html", vm={})
+    # For GET, prefer the polished auth login page and preserve `next` parameter
+    try:
+        next_url = (request.args.get("next") or "/").strip()
+        from urllib.parse import quote
+        enc_next = quote(next_url, safe="")
+        # Redirect to /auth/login with URL-encoded next param for consistency with tests
+        return redirect(url_for("auth.login_get") + (f"?next={enc_next}" if enc_next else ""))
+    except Exception:
+        # Fallback to legacy inline login template if routing fails
+        return render_template("login.html", vm={})
 
 
 # Dev helper: set session from current bearer or bootstrap superuser, then redirect

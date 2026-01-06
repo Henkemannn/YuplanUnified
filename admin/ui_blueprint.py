@@ -994,14 +994,28 @@ def systemadmin_customer_sites_create(tenant_id: int):
     site_id = name.lower().replace(" ", "-")
     db = get_session()
     try:
-        # Dev-only schema helpers
-        if os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"):
+        # Ensure sites table exists and has tenant_id column (SQLite/dev friendly)
+        try:
+            db.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER, notes TEXT, updated_at TEXT)"))
+        except Exception:
+            pass
+        # Detect and add tenant_id if missing (SQLite)
+        try:
+            cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
+            has_tenant_col = any(str(c[1]) == "tenant_id" for c in cols)
+            if not has_tenant_col:
+                try:
+                    db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+                except Exception:
+                    pass
+                try:
+                    db.execute(text("CREATE INDEX IF NOT EXISTS idx_sites_tenant_id ON sites(tenant_id)"))
+                except Exception:
+                    pass
+        except Exception:
+            # Best-effort for non-SQLite environments
             try:
-                db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER)"))
-            except Exception:
-                pass
-            try:
-                db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+                db.execute(text("CREATE INDEX IF NOT EXISTS idx_sites_tenant_id ON sites(tenant_id)"))
             except Exception:
                 pass
         # Ensure site_feature_flags exists before insert (safe no-op if present)
@@ -1009,7 +1023,11 @@ def systemadmin_customer_sites_create(tenant_id: int):
             db.execute(text("CREATE TABLE IF NOT EXISTS site_feature_flags(site_id TEXT, name TEXT, enabled INTEGER, PRIMARY KEY(site_id, name))"))
         except Exception:
             pass
-        db.execute(text("INSERT OR REPLACE INTO sites(id,name,version,tenant_id) VALUES(:id,:name,0,:t)"), {"id": site_id, "name": name, "t": tenant_id})
+        # Robust insert: prefer including tenant_id; if column absent, fallback to insert without it
+        try:
+            db.execute(text("INSERT OR REPLACE INTO sites(id,name,version,tenant_id) VALUES(:id,:name,0,:t)"), {"id": site_id, "name": name, "t": tenant_id})
+        except Exception:
+            db.execute(text("INSERT OR REPLACE INTO sites(id,name,version) VALUES(:id,:name,0)"), {"id": site_id, "name": name})
         # Persist selected site modules as feature flags
         module_names = [
             "weekview","planera","portal","report","menu_import","specialkost",
@@ -1138,7 +1156,7 @@ def systemadmin_customer_create():
 
 
 @admin_ui_bp.get("/ui/systemadmin/switch-site/<site_id>")
-@require_roles("superuser")
+@require_roles("superuser", "admin")
 def systemadmin_switch_site(site_id: str):
     """Start impersonation for the tenant mapped to given site, then go to admin dashboard."""
     db = get_session()

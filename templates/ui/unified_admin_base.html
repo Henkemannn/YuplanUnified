@@ -13,13 +13,14 @@
 {% block head %}
 <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-proposal.svg') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/unified_admin.css') }}">
+<meta name="current-site-id" content="{{ session.get('site_id') or '' }}">
 {% endblock %}
 
 {% block content %}
 {% from 'includes/yuplan_header.html' import yuplan_header %}
 {{ yuplan_header(current_user=session.get('username') or session.get('role')) }}
 
-<div class="ua-root ua-theme-light">
+<div class="ua-root ua-theme-light" data-page-site-id="{{ (vm.site.id if vm.site and vm.site.id else (vm.site_id if vm.site_id else '')) }}">
   <aside class="admin-sidebar ua-sidebar" id="adminSidebar">
     <div class="ua-sidebar-logo">
       <span class="ua-logo-mark" aria-label="Yuplan logo">
@@ -55,10 +56,23 @@
             {% endif %}
           {% endblock %}
         </p>
+        <p class="ua-topbar-context" style="font-size:.85rem;color:#6b7280;">
+          {% set _tenant = vm.tenant_name or tenant_name %}
+          {% set _site = vm.site_name or current_site_name %}
+          {% if session.get('role') in ['superuser','admin'] %}
+            Tenant: {{ _tenant or '—' }} | Site: {{ _site or '—' }} | site_id: {{ session.get('site_id') or '—' }}
+          {% endif %}
+        </p>
       </div>
     </header>
 
     <main class="ua-main">
+      {% if request.args.get('site_id') and session.get('site_id') and request.args.get('site_id') != session.get('site_id') %}
+      <div id="site-context-banner" class="ua-flash ua-flash-warning" role="alert" style="margin: 8px 16px;">
+        Du har bytt arbetsplats i en annan flik. Ladda om för att se aktuell arbetsplats.
+        <button type="button" class="ua-btn ua-btn-small" onclick="location.reload()" style="margin-left:12px;">Ladda om</button>
+      </div>
+      {% endif %}
       <div class="content-header">
         <span class="current-week-badge" aria-label="Aktuell vecka">Vecka {{ vm.current_week or '' }}</span>
       </div>

@@ -109,9 +109,15 @@ def test_portal_diets_render(client_admin):
     _seed_base(app, site_id, dep_id, year, week)
     # Simulate diet defaults via marks/residents (simplified by setting counts)
     # Use residents PATCH to set lunch counts (not directly diets, but ensures counts visible)
+    # Align session site context
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site_id, "next": "/"},
+        headers=_h("admin"),
+    )
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
     etag0 = r0.headers.get("ETag")
-    r_res = client_admin.patch("/api/weekview/residents", json={"tenant_id":1,"department_id":dep_id,"year":year,"week":week,"items":[{"day_of_week":1,"meal":"lunch","count":18}]}, headers={**_h("admin"), "If-Match": etag0})
+    r_res = client_admin.patch("/api/weekview/residents", json={"tenant_id":1, "site_id": site_id, "department_id":dep_id,"year":year,"week":week,"items":[{"day_of_week":1,"meal":"lunch","count":18}]}, headers={**_h("admin"), "If-Match": etag0})
     assert r_res.status_code in (200,201)
     r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
     html = r.get_data(as_text=True)

@@ -66,17 +66,9 @@ class CookDashboardService:
         iso = today.isocalendar()
         year, week = iso[0], iso[1]
 
-        # Fallback: resolve a site if none provided
+        # No fallback: callers must provide active site explicitly
         if not site_id:
-            db = get_session()
-            try:
-                row = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
-                if row:
-                    site_id = str(row[0])
-                else:
-                    site_id = ""
-            finally:
-                db.close()
+            return CookDashboardVM(departments=[], site_name="", week=week, year=year)
 
         # Departments for site
         db = get_session()

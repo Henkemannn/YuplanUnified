@@ -53,6 +53,12 @@ def test_toggle_flow_marks_persist_and_report_shows_special():
     app = create_app({"TESTING": True})
     client: FlaskClient = app.test_client()
     site, depA, depB, dt_id = setup_data()
+    # Align session site context
+    client.post(
+        "/ui/select-site",
+        data={"site_id": site["id"], "next": "/"},
+        headers=_login_headers(),
+    )
 
     iso = _date.today().isocalendar()
     year, week = iso[0], iso[1]

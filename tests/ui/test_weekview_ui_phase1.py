@@ -58,13 +58,19 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
 
     # Get baseline ETag then set alt2 + residents
     base = f"/api/weekview?year={year}&week={week}&department_id={dep_id}"
+    # Align session site context
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site_id, "next": "/"},
+        headers=_h("admin"),
+    )
     r0 = client_admin.get(base, headers=_h("admin"))
     assert r0.status_code == 200 and ETAG_RE.match(r0.headers.get("ETag") or "")
     etag0 = r0.headers.get("ETag")
 
     r_alt2 = client_admin.patch(
         "/api/weekview/alt2",
-        json={"tenant_id": 1, "department_id": dep_id, "year": year, "week": week, "days": [1]},
+        json={"tenant_id": 1, "site_id": site_id, "department_id": dep_id, "year": year, "week": week, "days": [1]},
         headers={**_h("editor"), "If-Match": etag0},
     )
     assert r_alt2.status_code in (200, 201)
@@ -74,6 +80,7 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
         "/api/weekview/residents",
         json={
             "tenant_id": 1,
+            "site_id": site_id,
             "department_id": dep_id,
             "year": year,
             "week": week,

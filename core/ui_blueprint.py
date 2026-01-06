@@ -46,11 +46,26 @@ def api_weekview_specialdiets_mark():
         "diet_type": diet_type_id,
         "marked": desired_state,
     }
+    # Enforce site isolation: department must belong to active session site
+    try:
+        active_site = (session.get("site_id") or "").strip()
+        if not active_site:
+            # Missing site context -> treat as bad request to force selection first
+            return jsonify({"type": "about:blank", "title": "invalid_site_id"}), 400
+        db = get_session()
+        row = db.execute(text("SELECT site_id FROM departments WHERE id=:d"), {"d": department_id}).fetchone()
+        if row is None:
+            return jsonify({"type": "about:blank", "title": "invalid_department_id"}), 400
+        dept_site = str(row[0])
+        if dept_site != active_site:
+            return jsonify({"type": "about:blank", "title": "site_mismatch"}), 403
+    except Exception:
+        pass
     svc = WeekviewService()
     if_match = request.headers.get("If-Match") or ""
     try:
         new_etag = svc.toggle_marks(g.tenant_id or 0, year, week, department_id, if_match, [op])
-        resp = jsonify({"status": "ok"})
+        resp = jsonify({"status": "ok", "marked": desired_state})
         resp.headers["ETag"] = new_etag
         return resp, 200
     except Exception:
@@ -222,6 +237,32 @@ def landing_root():
 # ============================================================================
 # Systemadmin (Superuser) – Sites + Departments (Phase 1)
 # ============================================================================
+
+@ui_bp.get("/ui/systemadmin/dashboard")
+@require_roles("superuser")
+def systemadmin_dashboard():
+    """Render SystemAdmin overview dashboard (card/grid view).
+
+    UI-only: lists customers as cards and exposes CTA to create customer.
+    """
+    # Resolve current user name for greeting
+    user_name = (session.get("full_name") or session.get("user_email") or "SystemAdmin")
+    # Build tenants list with site_count for card view
+    db = get_session()
+    tenants_vm: list[dict[str, object]] = []
+    try:
+        rows = db.execute(text("SELECT t.id, t.name, COUNT(s.id) AS site_count FROM tenants t LEFT JOIN sites s ON s.tenant_id=t.id GROUP BY t.id, t.name ORDER BY t.name")).fetchall()
+        for r in rows:
+            tenants_vm.append({"id": int(r[0]), "name": str(r[1] or ""), "site_count": int(r[2] or 0)})
+    except Exception:
+        tenants_vm = []
+    finally:
+        db.close()
+    vm = {"user_name": user_name, "tenants": tenants_vm}
+    return render_template("systemadmin_dashboard.html", vm=vm)
+
+# Note: Sites listing for a tenant is provided by existing admin routes.
+
 
 @ui_bp.get("/ui/admin/system")
 @require_roles("superuser")
@@ -640,20 +681,18 @@ def admin_diets_create():
 def admin_system_diet_create():
     from flask import redirect, url_for, flash
     name = (request.form.get("name") or "").strip()
-    site_id = (request.args.get("site_id") or "").strip()
+    # Strictly require active site from context; do not accept request args or fallback
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = ctx.get("site_id") or ""
     if not name:
         flash("Namn måste anges.", "error")
         return redirect(url_for("ui.admin_system_page"))
     try:
         from core.admin_repo import DietTypesRepo
         if not site_id:
-            # Fallback to first site on system page when not provided
-            db = get_session()
-            try:
-                row_site = db.execute(text("SELECT id FROM sites ORDER BY name LIMIT 1")).fetchone()
-                site_id = str(row_site[0]) if row_site else ""
-            finally:
-                db.close()
+            # Enforce selection of active site
+            return redirect(url_for("ui.select_site", next=url_for("ui.admin_system_page")))
         if not site_id:
             raise ValueError("missing_site_context")
         DietTypesRepo().create(site_id=site_id, name=name, default_select=False)
@@ -732,12 +771,16 @@ def planera_mark_done():
             # Align with UI tests: redirect unauthenticated to login
             from flask import redirect
             return redirect("/login")
+        active_site_id = (session.get("site_id") or "").strip()
         site_id = (request.form.get("site_id") or request.args.get("site_id") or "").strip()
         date_str = (request.form.get("date") or request.args.get("date") or "").strip()
         meal = (request.form.get("meal") or request.args.get("meal") or "").strip()
         dep_ids = request.form.getlist("department_ids") or []
         if not site_id or not date_str or meal not in ("lunch", "dinner"):
             return jsonify({"error": "bad_request", "message": "Missing site/date/meal"}), 400
+        # Guard: reject writes for another site than the active session site
+        if active_site_id and site_id and site_id != active_site_id:
+            return jsonify({"error": "forbidden", "message": "Site mismatch"}), 403
         if not dep_ids:
             return jsonify({"error": "bad_request", "message": "No departments selected"}), 400
         try:
@@ -1640,8 +1683,8 @@ def admin_specialkost_list():
     from core.admin_repo import DietTypesRepo
     role = session.get("role")
     repo = DietTypesRepo()
-    # Resolve active site; if missing, fall back to first site for convenience in tests
-    site_id = (session.get("site_id") or (request.args.get("site_id") or "").strip())
+    # Resolve active site strictly from session; do not accept request args override
+    site_id = session.get("site_id")
     if not site_id:
         # Strict site isolation: require site selection
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_list")))
@@ -1667,8 +1710,8 @@ def admin_specialkost_create():
     if not name:
         flash("Namn måste anges.", "error")
         return redirect(url_for("ui.admin_specialkost_new_form"))
-    # Determine site (strict)
-    site_id = (session.get("site_id") or (request.args.get("site_id") or "").strip())
+    # Determine site (strict): only session site is allowed
+    site_id = session.get("site_id")
     if not site_id:
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_new_form")))
     DietTypesRepo().create(site_id=site_id, name=name, default_select=default_select)
@@ -1686,7 +1729,7 @@ def admin_specialkost_edit_form(kosttyp_id: int):
         flash("Kosttyp hittades inte.", "error")
         return redirect(url_for("ui.admin_specialkost_list"))
     # Strict site isolation: only allow editing items for active site
-    active_site_id = session.get("site_id") or (request.args.get("site_id") or "").strip()
+    active_site_id = session.get("site_id")
     if not active_site_id:
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_edit_form", kosttyp_id=kosttyp_id)))
     if str(item.get("site_id") or "") != str(active_site_id):
@@ -1703,7 +1746,7 @@ def admin_specialkost_update(kosttyp_id: int):
     name = (request.form.get("name") or "").strip()
     default_select = bool(request.form.get("default_select"))
     # Verify site match
-    active_site_id = session.get("site_id") or (request.args.get("site_id") or "").strip()
+    active_site_id = session.get("site_id")
     if not active_site_id:
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_edit_form", kosttyp_id=kosttyp_id)))
     item = DietTypesRepo().get_by_id(kosttyp_id)
@@ -2110,10 +2153,9 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
             row = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
             site_name = row[0] if row else None
         else:
-            # Default to first site if not provided
-            row = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
-            if row:
-                site_id = str(row[0]); site_name = str(row[1] or "")
+            # Strict isolation: require active site; redirect handled by caller routes
+            site_id = None
+            site_name = None
         if not site_name:
             # Allow unknown site_id for report UI; render empty report
             site_name = site_id or ""
@@ -2421,14 +2463,20 @@ def reports_weekly_csv():
 def cook_dashboard_ui():
     from .cook_dashboard_service import CookDashboardService
     tenant_id = int(session.get("tenant_id") or 1)
-    site_id = (request.args.get("site_id") or "").strip()
+    # Strictly use active site from context; do not accept query overrides
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = (ctx.get("site_id") or "").strip()
+    if not site_id:
+        from flask import redirect, url_for
+        return redirect(url_for("ui.select_site", next="/ui/cook/dashboard"))
     date_str = (request.args.get("date") or "").strip()
     try:
         today = _date.fromisoformat(date_str) if date_str else _date.today()
     except Exception:
         today = _date.today()
     svc = CookDashboardService()
-    vm = svc.get_view(tenant_id=tenant_id, site_id=site_id or None, today=today)
+    vm = svc.get_view(tenant_id=tenant_id, site_id=site_id, today=today)
     return render_template("ui/unified_cook_dashboard_phase5.html", vm=vm)
 
 
@@ -4261,54 +4309,12 @@ def planera_day_ui_v2():
 # ----------------------------------------------------------------------------
 # Systemadmin – Switch Active Site and enter Admin
 # ----------------------------------------------------------------------------
-@ui_bp.get("/ui/systemadmin/switch-site/<site_id>")
+@ui_bp.get("/ui/systemadmin/switch-site-core/<site_id>")
 @require_roles("superuser", "admin")
 def systemadmin_switch_site(site_id: str):
-    """Switch active site context and redirect into Admin dashboard.
-
-    Preserves authenticated user and role while clearing other session keys.
-    """
-    try:
-        uid = session.get("user_id")
-        role = session.get("role")
-        tid = session.get("tenant_id")
-    except Exception:
-        uid = None
-        role = None
-        tid = None
-    try:
-        # Try to resolve tenant_id from site when available
-        resolved_tid = None
-        db = get_session()
-        try:
-            # Detect tenant_id column
-            cols = {r[1] for r in db.execute(text("PRAGMA table_info('sites')")).fetchall()}
-            if "tenant_id" in cols:
-                row = db.execute(text("SELECT tenant_id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-                if row and row[0] is not None:
-                    resolved_tid = int(row[0]) if str(row[0]).isdigit() else row[0]
-        except Exception:
-            pass
-        finally:
-            try:
-                db.close()
-            except Exception:
-                pass
-        session.clear()
-        if uid is not None:
-            session["user_id"] = uid
-        if role is not None:
-            session["role"] = role
-        # Prefer tenant resolved from site; else keep previous
-        if resolved_tid is not None:
-            session["tenant_id"] = resolved_tid
-        elif tid is not None:
-            session["tenant_id"] = tid
-        session["site_id"] = str(site_id).strip()
-    except Exception:
-        # Fallback: do not crash on session issues
-        pass
-    return redirect(url_for("ui.admin_dashboard"))
+    """Delegate to canonical admin UI switch-site route to set session context."""
+    from flask import redirect, url_for
+    return redirect(url_for("admin_ui.systemadmin_switch_site", site_id=site_id))
 
 
 # ============================================================================

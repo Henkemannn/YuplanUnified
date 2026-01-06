@@ -31,6 +31,12 @@ def test_etag_stale_then_retry_with_fresh_etag():
     app = create_app({"TESTING": True})
     client: FlaskClient = app.test_client()
     site, dep, dt_id = seed_basic()
+    # Align session site context for mutations
+    client.post(
+        "/ui/select-site",
+        data={"site_id": site["id"], "next": "/"},
+        headers=_login_headers(),
+    )
 
     iso = _date.today().isocalendar()
     year, week = iso[0], iso[1]

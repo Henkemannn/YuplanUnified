@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="sv">
 <head>
   <meta charset="utf-8">
@@ -82,6 +82,12 @@
   Yuplan &copy; {{ 2025 }} • Request ID: <span id="reqid">{{ g.request_id if g.request_id else '' }}</span>
   {% if has_role('admin','superuser') %}
     <a class="support-link" href="{{ url_for('support.support_home').replace('/admin/support/', '/admin/support/ui') }}" target="_blank" rel="noopener">Support</a>
+  {% endif %}
+  {% if dev_mode %}
+  <div class="dev-footer" style="margin-top:8px;font-size:12px;color:#6b7280">
+    Runtime: {{ runtime_branch or 'unknown' }}@{{ runtime_commit or 'unknown' }}
+    {% if runtime_sqlite_file %} | DB: {{ runtime_sqlite_file }}{% endif %}
+  </div>
   {% endif %}
 </footer>
 {% block scripts %}{% endblock %}

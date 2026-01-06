@@ -30,7 +30,14 @@ def enable_weekview(client_admin):
 def test_phase1_days_payload_includes_menu_alt2_and_residents(client_admin):
     year, week = 2025, 45
     dep_id = str(uuid.uuid4())
+    site_id = str(uuid.uuid4())
     base = f"/api/weekview?year={year}&week={week}&department_id={dep_id}"
+    # Align session site context
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site_id, "next": "/"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
 
     # Initial GET -> ETag + baseline payload
     r0 = _get(client_admin, "admin", base)
@@ -73,6 +80,7 @@ def test_phase1_days_payload_includes_menu_alt2_and_residents(client_admin):
         "/api/weekview/alt2",
         json={
             "tenant_id": 1,
+            "site_id": site_id,
             "department_id": dep_id,
             "year": year,
             "week": week,
@@ -89,6 +97,7 @@ def test_phase1_days_payload_includes_menu_alt2_and_residents(client_admin):
         "/api/weekview/residents",
         json={
             "tenant_id": 1,
+            "site_id": site_id,
             "department_id": dep_id,
             "year": year,
             "week": week,

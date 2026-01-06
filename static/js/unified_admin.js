@@ -24,6 +24,7 @@
         setupSmoothTableHover();
         setupSmoothScroll();
         setupModalHandlers();
+        setupSiteContextWarning();
         
         // Check mobile on load
         if (window.innerWidth <= 768) {
@@ -206,6 +207,39 @@
     function getCsrfToken() {
         const meta = document.querySelector('meta[name="csrf-token"]');
         return meta ? meta.getAttribute('content') : '';
+    }
+
+    function getMeta(name) {
+        const m = document.querySelector(`meta[name="${name}"]`);
+        return m ? m.getAttribute('content') : '';
+    }
+
+    function setupSiteContextWarning() {
+        try {
+            const current = getMeta('current-site-id');
+            const url = new URL(window.location.href);
+            const qSite = (url.searchParams.get('site_id') || '').trim();
+            const root = document.querySelector('.ua-root');
+            const pageSite = root ? (root.getAttribute('data-page-site-id') || '').trim() : '';
+            const expected = qSite || pageSite;
+            if (expected && current && expected !== current) {
+                // If server already rendered a banner, skip duplicating
+                if (document.getElementById('site-context-banner')) return;
+                const banner = document.createElement('div');
+                banner.id = 'site-context-banner';
+                banner.className = 'ua-flash ua-flash-warning';
+                banner.setAttribute('role', 'alert');
+                banner.style.margin = '8px 16px';
+                banner.innerHTML = `Du har bytt arbetsplats i en annan flik. Ladda om för att se aktuell arbetsplats.
+                  <button type="button" class="ua-btn ua-btn-small" style="margin-left:12px;">Ladda om</button>`;
+                const btn = banner.querySelector('button');
+                if (btn) btn.addEventListener('click', () => location.reload());
+                const main = document.querySelector('.ua-main');
+                if (main) main.prepend(banner);
+            }
+        } catch (e) {
+            // no-op
+        }
     }
     
     // ========================================================================

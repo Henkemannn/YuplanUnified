@@ -33,7 +33,13 @@ def enable_weekview(client_admin):
 @pytest.mark.usefixtures("enable_weekview")
 def test_conditional_get_304_and_refresh_after_mutation(client_admin):
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site, "next": "/"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
 
     r0 = _get(client_admin, "viewer", base)
     assert r0.status_code == 200
@@ -47,6 +53,7 @@ def test_conditional_get_304_and_refresh_after_mutation(client_admin):
 
     # Perform a mutation -> ETag changes
     p = {
+        "site_id": site,
         "department_id": dep,
         "year": 2025,
         "week": 45,
@@ -66,10 +73,18 @@ def test_conditional_get_304_and_refresh_after_mutation(client_admin):
 @pytest.mark.usefixtures("enable_weekview")
 def test_residents_counts_write_and_readback(client_admin):
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
+    # Align session site context with our test site
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site, "next": "/"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
     etag0 = _get(client_admin, "admin", base).headers.get("ETag")
 
     payload = {
+        "site_id": site,
         "department_id": dep,
         "year": 2025,
         "week": 45,
@@ -93,10 +108,17 @@ def test_residents_counts_write_and_readback(client_admin):
 @pytest.mark.usefixtures("enable_weekview")
 def test_alt2_flags_write_and_clear(client_admin):
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
+    # Align session site context with our test site
+    client_admin.post(
+        "/ui/select-site",
+        data={"site_id": site, "next": "/"},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
     etag0 = _get(client_admin, "admin", base).headers.get("ETag")
 
-    p1 = {"department_id": dep, "year": 2025, "week": 45, "days": [2, 5]}
+    p1 = {"site_id": site, "department_id": dep, "year": 2025, "week": 45, "days": [2, 5]}
     r1 = _patch(client_admin, "editor", "/api/weekview/alt2", json=p1, extra_headers={"If-Match": etag0})
     assert r1.status_code == 200
     etag1 = r1.headers.get("ETag")

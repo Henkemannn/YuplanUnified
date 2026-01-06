@@ -65,6 +65,9 @@ def test_post_mark_done_and_reflect_in_get(client_admin):
     app = client_admin.application
     site_id, dep_ids = _seed_site_with_departments(app, dep_count=3)
     today = _date.today()
+    # Align active session site with the target site to satisfy strict scoping
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     # POST mark two departments as done
     payload = {
         "site_id": site_id,

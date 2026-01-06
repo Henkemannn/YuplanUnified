@@ -8,7 +8,7 @@
 <main class="sa-root sa-theme-dark">
   
   <!-- SIDEBAR -->
-  <aside class="sa-sidebar">
+  <aside class="sa-sidebar">                                                                                  
     <div class="sa-sidebar-header">
       <img class="sa-logo-mark" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="32" height="32">
       <div class="sa-logo-sub">Yuplan Örnnästet</div>
@@ -55,6 +55,7 @@
       </div>
 
       <div class="sa-header-actions">
+        <a href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}" class="sa-btn sa-btn-primary">➕ Skapa kund</a>
         <div class="sa-clock">
           <span id="sa-clock-time">--:--</span>
           <span id="sa-clock-date">--</span>
@@ -67,16 +68,17 @@
     <section class="sa-grid">
       
       <article class="sa-card sa-card-wide">
-        <h2>Kundöversikt</h2>
+        <h2>Kunder</h2>
         <p class="sa-card-sub">Aktiva kunder på din plattform</p>
 
         <div class="sa-customer-grid">
-          {% for c in vm.customers %}
+          {% for t in vm.tenants %}
           <div class="sa-customer-card">
-            <h3>{{ c.site_name }}</h3>
-            <p class="sa-meta">Tenant: {{ c.tenant_name }}</p>
-
-            <a class="sa-btn sa-btn-secondary" href="{{ url_for('ui.admin_dashboard') }}">Öppna admin</a>
+            <h3>{{ t.name }}</h3>
+            <p class="sa-meta">Sites: {{ t.site_count }}</p>
+            <div class="sa-actions">
+              <a class="sa-btn sa-btn-small" href="{{ url_for('admin_ui.systemadmin_customer_sites', tenant_id=t.id) }}">Visa sites</a>
+            </div>
           </div>
           {% endfor %}
         </div>

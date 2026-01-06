@@ -121,13 +121,48 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     # --- DB setup ---
     init_engine(cfg.database_url)
     try:
-        # Always emit a single startup line with DB location
+        # Always emit a single startup line with DB location and git info
         db_url = str(cfg.database_url)
         sqlite_file = None
         if db_url.startswith("sqlite:///"):
             sqlite_file = os.path.abspath(db_url.replace("sqlite:///", "", 1))
+        # Try to resolve git branch and short commit
+        branch = None
+        commit = None
+        try:
+            import subprocess as _sp
+            branch = _sp.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))).decode("utf-8").strip()
+            commit = _sp.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))).decode("utf-8").strip()
+        except Exception:
+            # Fallback: read .git/HEAD
+            try:
+                root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+                head_path = os.path.join(root, ".git", "HEAD")
+                if os.path.exists(head_path):
+                    with open(head_path, "r", encoding="utf-8") as fh:
+                        head = fh.read().strip()
+                    if head.startswith("ref:"):
+                        ref = head.split(None, 1)[1]
+                        branch = os.path.basename(ref)
+                        ref_path = os.path.join(root, ".git", ref.replace("ref:", "").strip())
+                        if os.path.exists(ref_path):
+                            with open(ref_path, "r", encoding="utf-8") as rf:
+                                commit = rf.read().strip()[:7]
+                    else:
+                        commit = head[:7]
+            except Exception:
+                pass
+        # Store in app config for templates/context
+        if branch:
+            app.config["RUNTIME_GIT_BRANCH"] = branch
+        if commit:
+            app.config["RUNTIME_GIT_COMMIT"] = commit
+        if sqlite_file:
+            app.config["RUNTIME_SQLITE_FILE"] = sqlite_file
         line = f"DB_URL={db_url}" + (f" ; SQLITE_FILE={sqlite_file}" if sqlite_file else "")
         print(line)
+        if branch or commit:
+            print(f"RUNTIME: branch={branch or 'unknown'} commit={commit or 'unknown'} sqlite_file={sqlite_file or ''}")
     except Exception:
         pass
 
@@ -316,12 +351,32 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         # Always return problem+json and record incident
         from .audit_events import record_audit_event
         from .http_errors import internal_server_error
-
-        app.logger.exception("Unhandled exception (problem mode)")
+        # DEV-only detailed traceback including request_id/incident_id for debugging
+        try:
+            import os as _os
+            from flask import g as _g
+            if _os.getenv("APP_ENV", "").lower() == "dev" or _os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"):
+                app.logger.exception("UNHANDLED_EXCEPTION request_id=%s", getattr(_g, "request_id", None))
+            else:
+                app.logger.exception("Unhandled exception (problem mode)")
+        except Exception:
+            # Fall back to default message
+            app.logger.exception("Unhandled exception (problem mode)")
         resp = internal_server_error()
         try:
             payload = resp.get_json() or {}
             if isinstance(payload, dict):
+                try:
+                    import os as _os
+                    from flask import g as _g
+                    if _os.getenv("APP_ENV", "").lower() == "dev" or _os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"):
+                        app.logger.exception(
+                            "PROBLEM_RESPONSE incident_id=%s request_id=%s",
+                            payload.get("incident_id"),
+                            getattr(_g, "request_id", None),
+                        )
+                except Exception:
+                    pass
                 record_audit_event("incident", incident_id=payload.get("incident_id"))
                 record_audit_event(
                     "problem_response", status=payload.get("status"), type=payload.get("type")
@@ -397,6 +452,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             current_site_name = None
             tenant_name = None
 
+        # Dev flags for template footer
+        dev_mode = False
+        try:
+            dev_mode = os.getenv("APP_ENV", "").lower() == "dev" or os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes")
+        except Exception:
+            dev_mode = False
+
         return {
             "tenant_id": getattr(g, "tenant_id", None),
             "tenant_name": tenant_name,
@@ -406,6 +468,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             "current_site_name": current_site_name,
             # Staging demo banner: enabled only when env flag is truthy
             "staging_demo": os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"),
+            # Runtime info for DEV footer
+            "dev_mode": dev_mode,
+            "runtime_branch": current_app.config.get("RUNTIME_GIT_BRANCH"),
+            "runtime_commit": current_app.config.get("RUNTIME_GIT_COMMIT"),
+            "runtime_sqlite_file": current_app.config.get("RUNTIME_SQLITE_FILE"),
         }
 
     # --- Logging / timing middleware ---

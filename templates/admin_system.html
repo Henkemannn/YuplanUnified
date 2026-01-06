@@ -32,6 +32,12 @@
       <h2>Avdelningar</h2>
       {% if vm.selected_site %}
         <p class="muted">Arbetsplats: {{ vm.selected_site.name }}</p>
+        <form method="post" action="{{ url_for('ui.select_site_post') }}" class="inline-form" style="margin: 8px 0 16px;">
+          {% if g.features.get('strict_csrf') %}{{ csrf_token_input()|safe }}{% endif %}
+          <input type="hidden" name="site_id" value="{{ vm.selected_site.id }}">
+          <input type="hidden" name="next" value="{{ url_for('ui.admin_dashboard') }}">
+          <button class="btn" type="submit">Öppna admin</button>
+        </form>
         <table>
           <thead>
             <tr><th>Avdelning</th><th>Åtgärder</th></tr>
