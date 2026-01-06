@@ -25,6 +25,7 @@
         setupSmoothScroll();
         setupModalHandlers();
         setupSiteContextWarning();
+        setupSiteContextVersionSync();
         
         // Check mobile on load
         if (window.innerWidth <= 768) {
@@ -237,6 +238,42 @@
                 const main = document.querySelector('.ua-main');
                 if (main) main.prepend(banner);
             }
+        } catch (e) {
+            // no-op
+        }
+    }
+
+    // Cross-tab site context change detection using localStorage
+    function setupSiteContextVersionSync() {
+        try {
+            const root = document.querySelector('.ua-root');
+            const currentVersion = getMeta('current-site-id') || (root ? root.getAttribute('data-site-context-version') : '') || '';
+            // Persist current version so other tabs can react
+            if (currentVersion) {
+                const prev = localStorage.getItem('site_context_version');
+                if (prev !== currentVersion) {
+                    localStorage.setItem('site_context_version', currentVersion);
+                }
+            }
+            // Listen for changes from other tabs
+            window.addEventListener('storage', function(e) {
+                if (e.key !== 'site_context_version') return;
+                const newVal = (e.newValue || '').trim();
+                if (!newVal || newVal === currentVersion) return;
+                // Show non-intrusive banner prompting reload (no auto-switch)
+                if (document.getElementById('site-context-banner')) return;
+                const banner = document.createElement('div');
+                banner.id = 'site-context-banner';
+                banner.className = 'ua-flash ua-flash-warning';
+                banner.setAttribute('role', 'alert');
+                banner.style.margin = '8px 16px';
+                banner.innerHTML = `Aktiv arbetsplats har ändrats i en annan flik. Ladda om sidan för att visa rätt data.
+                  <button type="button" class="ua-btn ua-btn-small" style="margin-left:12px;">Ladda om</button>`;
+                const btn = banner.querySelector('button');
+                if (btn) btn.addEventListener('click', () => location.reload());
+                const main = document.querySelector('.ua-main');
+                if (main) main.prepend(banner);
+            });
         } catch (e) {
             // no-op
         }
