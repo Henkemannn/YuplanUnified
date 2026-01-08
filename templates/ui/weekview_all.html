@@ -44,7 +44,7 @@
       <span>Vecka {{ vm.week }} – {{ vm.year }}</span>
       <a class="yp-button" href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, year=vm.year, week=next_w) }}" aria-label="Nästa vecka">▶︎</a>
     </div>
-    {% if vm.sites %}
+    {% if vm.allow_site_switch and vm.sites %}
       <div class="meta-row" style="margin-top:6px;">
         <strong>Aktiv site:</strong> {{ vm.site_name }}
         {% set base_q = {'year': vm.week, 'week': vm.week} %}

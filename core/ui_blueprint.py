@@ -46,18 +46,17 @@ def api_weekview_specialdiets_mark():
         "diet_type": diet_type_id,
         "marked": desired_state,
     }
-    # Enforce site isolation: department must belong to active session site
+    # Enforce site isolation with sane defaults:
+    # - If session site is present and locked/hard-bound, require it matches department's site
+    # - If session site is missing, infer site from department and proceed
     try:
-        active_site = (session.get("site_id") or "").strip()
-        if not active_site:
-            # Missing site context -> treat as bad request to force selection first
-            return jsonify({"type": "about:blank", "title": "invalid_site_id"}), 400
         db = get_session()
         row = db.execute(text("SELECT site_id FROM departments WHERE id=:d"), {"d": department_id}).fetchone()
         if row is None:
             return jsonify({"type": "about:blank", "title": "invalid_department_id"}), 400
         dept_site = str(row[0])
-        if dept_site != active_site:
+        active_site = (session.get("site_id") or "").strip()
+        if active_site and dept_site != active_site:
             return jsonify({"type": "about:blank", "title": "site_mismatch"}), 403
     except Exception:
         pass
@@ -122,9 +121,39 @@ COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 def select_site():
     """Simple site selection page: choose active site for current tenant."""
     next_url = (request.args.get("next") or "/").strip()
+    # Fast-path: if session indicates site lock, never show selector
+    try:
+        if session.get("site_lock") and session.get("site_id"):
+            return redirect(url_for("ui.admin_dashboard"))
+    except Exception:
+        pass
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
     tid = ctx.get("tenant_id")
+    # Enforce hard-bound site users to never see the site selector
+    try:
+        uid = session.get("user_id")
+        role = (session.get("role") or "").strip().lower()
+        if uid is not None:
+            from core.db import get_session as _gs
+            from sqlalchemy import text as _t
+            db2 = _gs()
+            try:
+                row = db2.execute(_t("SELECT site_id FROM users WHERE id=:u"), {"u": int(uid)}).fetchone()
+                bound_site = (row[0] if row else None)
+            finally:
+                try:
+                    db2.close()
+                except Exception:
+                    pass
+            if bound_site:
+                session["site_id"] = str(bound_site)
+                return redirect(url_for("ui.admin_dashboard"))
+            # Customer admins without a bound site must not use the selector
+            if role == "admin" and not bound_site:
+                return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_unbound"}), 403
+    except Exception:
+        pass
     # Require tenant context to show site selector; otherwise redirect
     if tid is None:
         role = (session.get("role") or "").strip().lower()
@@ -145,11 +174,49 @@ def select_site():
 def select_site_post():
     site_id = (request.form.get("site_id") or "").strip()
     next_url = (request.form.get("next") or "/").strip()
+    # Session-enforced site lock: block switching away from locked site
+    if session.get("site_lock"):
+        s_site = session.get("site_id")
+        if s_site and str(site_id) != str(s_site):
+            return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_locked"}), 403
+        # If same as current, proceed but normalize value
+        site_id = s_site or site_id
+    # If user is hard-bound to a site, forbid switching to any other
+    try:
+        uid = session.get("user_id")
+        role = (session.get("role") or "").strip().lower()
+        if uid is not None:
+            from core.db import get_session as _gs
+            from sqlalchemy import text as _t
+            db2 = _gs()
+            try:
+                row = db2.execute(_t("SELECT site_id FROM users WHERE id=:u"), {"u": int(uid)}).fetchone()
+                bound_site = (row[0] if row else None)
+            finally:
+                try:
+                    db2.close()
+                except Exception:
+                    pass
+            if bound_site and str(site_id) != str(bound_site):
+                from flask import abort
+                return abort(403)
+            if bound_site:
+                site_id = str(bound_site)
+            # Unbound customer admin: misconfiguration; do not allow selecting any site
+            if role == "admin" and not bound_site:
+                return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_unbound"}), 403
+    except Exception:
+        pass
     if not site_id:
         flash("Välj en site.", "warning")
         return redirect(url_for("ui.select_site", next=next_url))
     try:
         session["site_id"] = site_id
+        # Bump cross-tab site context version for banner detection
+        try:
+            session["site_context_version"] = str(uuid.uuid4())
+        except Exception:
+            session["site_context_version"] = str(int(__import__("time").time()))
     except Exception:
         pass
     return redirect(next_url or "/")
@@ -802,8 +869,14 @@ def planera_mark_done():
 @require_roles(*SAFE_UI_ROLES)
 def weekview_ui():
     # Validate query params - default to current week if not provided
-    site_id = (request.args.get("site_id") or "").strip()
+    req_site_id = (request.args.get("site_id") or "").strip()
     department_id = (request.args.get("department_id") or "").strip()
+    # Enforce site-lock for bound admins: ignore querystring site_id
+    session_site_id = (session.get("site_id") or "").strip()
+    site_lock = bool(session.get("site_lock"))
+    role = (session.get("role") or "").strip()
+    # Effective site is the bound site when locked; otherwise use query arg
+    site_id = session_site_id if (site_lock and session_site_id) else req_site_id
     
     # Get current ISO week as default
     today = _date.today()
@@ -828,7 +901,7 @@ def weekview_ui():
     if week < 1 or week > 53:
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
 
-    # Resolve names (sites/departments)
+    # Resolve names (sites/departments) using effective site_id
     db = get_session()
     try:
         site_name = None
@@ -852,6 +925,7 @@ def weekview_ui():
     if not (department_id and department_id.strip()):
         # Resolve site_id strictly from active context; if missing → redirect to selector
         if not site_id:
+            # If site-locked, rely on session; otherwise try active context
             from .context import get_active_context as _get_ctx
             ctx = _get_ctx()
             site_id = ctx.get("site_id") or ""
@@ -861,14 +935,17 @@ def weekview_ui():
                 return redirect(url_for('ui.select_site', next=target))
         # Fetch sites for selector (tenant-scoped minimal)
         from .admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
+        # P0 security: do NOT load sites list if site-locked
         try:
             tid = session.get("tenant_id")
-            role = session.get("role")
-            if role == "superuser":
-                all_sites = SitesRepo().list_sites()
+            if site_lock:
+                all_sites = []
             else:
-                # Non-superusers: restrict to current tenant when possible
-                all_sites = SitesRepo().list_sites_for_tenant(tid) if tid is not None else []
+                if role == "superuser":
+                    all_sites = SitesRepo().list_sites()
+                else:
+                    # Non-superusers: restrict to current tenant when possible
+                    all_sites = SitesRepo().list_sites_for_tenant(tid) if tid is not None else []
         except Exception:
             all_sites = []
         # Fetch departments for active site
@@ -908,7 +985,9 @@ def weekview_ui():
             "current_week": current_week,
             "departments": deps,
             "diet_name_map": diet_name_map,
-            "sites": all_sites,
+            # P0 security: suppress site switching for locked admins
+            "allow_site_switch": (not site_lock),
+            "sites": all_sites if (not site_lock) else [],
             "active_site": site_id,
         }
         try:
@@ -3692,6 +3771,7 @@ def admin_users_create():
     full_name = request.form.get("full_name", "").strip()
     password = request.form.get("password", "").strip()
     role = request.form.get("role", "staff").strip()
+    active_site = (session.get("site_id") or "").strip()
     
     # Validate
     repo = AdminUserRepo()
@@ -3725,6 +3805,11 @@ def admin_users_create():
     if role not in valid_roles:
         flash("Ogiltig roll.", "error")
         return redirect(url_for("ui.admin_users_new_form"))
+
+    # Enforce site binding for customer admins: require active site context
+    if role == "admin" and not active_site:
+        flash("Admin-konton måste vara bundna till en site.", "error")
+        return redirect(url_for("ui.admin_users_new_form"))
     
     # Create user
     try:
@@ -3735,7 +3820,8 @@ def admin_users_create():
             password=password,
             full_name=full_name or None,
             role=role,
-            is_active=True
+            is_active=True,
+            site_id=active_site if role == "admin" else None,
         )
         flash(f"Användare '{username}' skapad.", "success")
     except Exception as e:
@@ -3846,6 +3932,18 @@ def admin_users_update(user_id: int):
             full_name=full_name or None,
             role=role
         )
+        # If role transitioned to admin, ensure site binding is set
+        if role == "admin":
+            active_site = (session.get("site_id") or "").strip()
+            if not active_site:
+                flash("Admin-konton måste vara bundna till en site.", "error")
+                return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
+            db = get_session()
+            try:
+                db.execute(text("UPDATE users SET site_id=:sid WHERE id=:uid"), {"sid": active_site, "uid": user_id})
+                db.commit()
+            finally:
+                db.close()
         flash(f"Användare '{user['username']}' uppdaterad.", "success")
     except Exception as e:
         flash(f"Kunde inte uppdatera användare: {str(e)}", "error")
