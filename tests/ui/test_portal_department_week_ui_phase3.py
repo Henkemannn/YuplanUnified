@@ -41,7 +41,8 @@ def test_navigation_data_attrs_present(client_admin):
     _enable_weekview(client_admin)
     year, week = 2025, 52
     sid, did = _seed_menu(app, year, week)
-    r = client_admin.get(f"/portal/week?site_id={sid}&department_id={did}&year={year}&week={week}", headers=ADMIN_HEADERS)
+    # Use superuser to allow site override via querystring per hardened policy
+    r = client_admin.get(f"/portal/week?site_id={sid}&department_id={did}&year={year}&week={week}", headers=_h("superuser"))
     assert r.status_code == 200
     html = r.get_data(as_text=True)
     # Container-level dataset

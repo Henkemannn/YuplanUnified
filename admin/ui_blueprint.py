@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask import Blueprint, render_template, request, current_app, redirect, url_for, flash, make_response, jsonify
+import uuid
 from core.app_authz import require_roles
 from core.db import get_session
 from core.admin_repo import DepartmentsRepo, SitesRepo, DietTypesRepo
@@ -106,10 +107,8 @@ def systemadmin_root():
 @admin_ui_bp.get("/ui/admin/dashboard")
 @require_roles("admin","superuser")
 def admin_dashboard() -> str:  # type: ignore[override]
-    # Redirect to unified Kundadmin outside of TESTING to avoid the legacy view.
-    from flask import current_app
-    if not current_app.config.get("TESTING"):
-        return redirect(url_for("ui.admin_dashboard"))
+    # Always redirect legacy dashboard to canonical /ui/admin
+    return redirect(url_for("ui.admin_dashboard"))
     # Feature flag gate (future extension). Currently always enabled in tests via ff.admin.enabled.
     db = get_session()
     try:
@@ -506,10 +505,14 @@ def admin_menu_import() -> str:  # type: ignore[override]
 @admin_ui_bp.post("/ui/admin/menu-import/upload")
 @require_roles("admin", "superuser")
 def admin_menu_import_upload() -> str:  # type: ignore[override]
-    """Handle CSV menu file upload and import."""
+    """Handle menu file upload and import/preview.
+
+    Supports CSV (import) and DOCX/XLSX/PDF (preview-only for DOCX in M3.1).
+    """
     from core.menu_csv_parser import parse_menu_csv, csv_rows_to_import_result, MenuCSVParseError
     from core.menu_import_service import MenuImportService
     from core.menu_service import MenuServiceDB
+    from core.menu_docx_parser import parse_menu_docx, MenuDocxParseError
     
     tenant_id = 1  # TODO: Extract from session when multi-tenancy enabled
     uploaded_file = request.files.get("menu_file")
@@ -518,14 +521,27 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
         flash("Ingen fil vald.", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
     
-    # If not CSV: accept .pdf as placeholder (Phase 7), otherwise reject (Phase 8)
+    # If not CSV: handle DOCX preview-only in M3.1; accept PDF as placeholder
     if not uploaded_file.filename.lower().endswith('.csv'):
-        if uploaded_file.filename.lower().endswith('.pdf'):
+        fname = uploaded_file.filename.lower()
+        if fname.endswith('.pdf'):
             flash(f"Menyfil '{uploaded_file.filename}' mottagen (implementeras senare).", "success")
             return redirect(url_for("admin_ui.admin_menu_import"))
-        else:
-            flash("Ogiltigt menyformat eller saknad fil.", "danger")
-            return redirect(url_for("admin_ui.admin_menu_import"))
+        if fname.endswith('.docx'):
+            try:
+                preview = parse_menu_docx(uploaded_file.stream)
+                # Default year: current ISO year
+                import datetime as _dt
+                iso_year = _dt.date.today().isocalendar()[0]
+                vm = {"preview": preview, "filename": uploaded_file.filename, "year": iso_year}
+                # Render preview page (no DB writes in M3.1)
+                return render_template("admin_menu_import_preview.html", vm=vm)
+            except MenuDocxParseError as e:
+                flash(f"Ogiltigt menyformat: {e}", "danger")
+                return redirect(url_for("admin_ui.admin_menu_import"))
+        # Unknown extension: reject
+        flash("Ogiltigt menyformat eller saknad fil.", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
     
     try:
         # Parse CSV
@@ -552,6 +568,72 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
         return redirect(url_for("admin_ui.admin_menu_import"))
     except Exception as e:
         flash(f"Importfel: {e}", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+
+
+@admin_ui_bp.post("/ui/admin/menu-import/preview/save")
+@require_roles("admin", "superuser")
+def admin_menu_import_preview_save() -> str:  # type: ignore[override]
+    """Persist parsed DOCX preview into weekview_menus for the active site.
+
+    Expects form fields: year, week_start, week_end, days_json (serialized preview days).
+    Site is resolved via session (site-lock applies).
+    """
+    try:
+        from core.context import get_active_context
+        from core.menu_repo import MenuRepo
+        import json
+        year = int((request.form.get("year") or "").strip())
+        weeks_json = (request.form.get("weeks_json") or "").strip()
+        if not year or not weeks_json:
+            flash("Ogiltiga uppgifter för sparande.", "danger")
+            return redirect(url_for("admin_ui.admin_menu_import"))
+        ctx = get_active_context()
+        site_id = ctx.get("site_id")
+        if not site_id:
+            flash("Ingen aktiv site vald.", "danger")
+            return redirect(url_for("admin_ui.admin_menu_import"))
+        try:
+            weeks_map = json.loads(weeks_json)
+        except Exception:
+            flash("Ogiltig preview-data.", "danger")
+            return redirect(url_for("admin_ui.admin_menu_import"))
+        repo = MenuRepo()
+        # Persist only non-empty entries to avoid false menu presence
+        saved_weeks: list[int] = []
+        for wk_str, wk_obj in (weeks_map or {}).items():
+            try:
+                w = int(wk_str)
+            except Exception:
+                continue
+            saved_weeks.append(w)
+            days = (wk_obj or {}).get("days") or {}
+            for day_idx in range(1, 8):
+                d = days.get(str(day_idx)) or days.get(day_idx) or {}
+                lunch = d.get("lunch") or {}
+                dinner = d.get("dinner") or {}
+                # Lunch
+                l_a1 = (lunch.get("alt1_text") or "").strip()
+                l_a2 = (lunch.get("alt2_text") or "").strip()
+                l_ds = (lunch.get("dessert") or "").strip()
+                if any([l_a1, l_a2, l_ds]):
+                    repo.upsert_menu_item(site_id, year, w, day_idx, "lunch", l_a1 or None, l_a2 or None, l_ds or None)
+                # Dinner
+                d_a1 = (dinner.get("alt1_text") or "").strip()
+                d_a2 = (dinner.get("alt2_text") or "").strip()
+                d_ds = (dinner.get("dessert") or "").strip()
+                if any([d_a1, d_a2, d_ds]):
+                    repo.upsert_menu_item(site_id, year, w, day_idx, "dinner", d_a1 or None, d_a2 or None, d_ds or None)
+        saved_weeks.sort()
+        if not saved_weeks:
+            flash("Inga veckor sparade.", "warning")
+        elif len(saved_weeks) == 1:
+            flash(f"Sparade v. {saved_weeks[0]} ({year}).", "success")
+        else:
+            flash(f"Sparade v. {saved_weeks[0]}–{saved_weeks[-1]} ({year}).", "success")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+    except Exception as e:
+        flash(f"Sparfel: {e}", "danger")
         return redirect(url_for("admin_ui.admin_menu_import"))
 
 
@@ -1041,13 +1123,18 @@ def systemadmin_customer_sites_create(tenant_id: int):
                     {"sid": site_id, "name": m},
                 )
         # Create site-admin user for the tenant
+        # Canonicalize email/username to match login behavior and IDNA
+        from core.ident import canonicalize_identifier
+        norm_email = canonicalize_identifier(admin_email or "")
         pw_hash = generate_password_hash(admin_password)
         user = User(
             tenant_id=tenant_id,
-            email=admin_email,
+            email=norm_email,
             password_hash=pw_hash,
             role="admin",
             unit_id=None,
+            site_id=site_id,
+            username=norm_email,
         )
         db.add(user)
         db.commit()
@@ -1174,6 +1261,12 @@ def systemadmin_switch_site(site_id: str):
         # Persist selected site context and start impersonation for tenant
         from flask import session as _sess
         _sess["site_id"] = site_id
+        # Also update cross-tab site context version so other tabs can detect change
+        try:
+            _sess["site_context_version"] = str(uuid.uuid4())
+        except Exception:
+            import time as _t
+            _sess["site_context_version"] = str(int(_t.time()))
         start_impersonation(tenant_id, f"switch-site:{site_id}")
     except Exception:
         flash("Kunde inte starta impersonation.", "danger")

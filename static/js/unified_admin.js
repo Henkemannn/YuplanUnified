@@ -26,6 +26,7 @@
         setupModalHandlers();
         setupSiteContextWarning();
         setupSiteContextVersionSync();
+        setupAdminDepartmentsCreateForm();
         
         // Check mobile on load
         if (window.innerWidth <= 768) {
@@ -92,6 +93,53 @@
             } catch (e) {
                 dialog.setAttribute('open', 'open');
                 dialog.classList.add('ua-modal-open');
+            }
+
+            // Populate menu modal if requested
+            if (trigger.classList.contains('js-open-menu-modal')) {
+                try {
+                    const year = parseInt(trigger.getAttribute('data-year') || '0', 10);
+                    const week = parseInt(trigger.getAttribute('data-week') || '0', 10);
+                    const day = parseInt(trigger.getAttribute('data-day') || '0', 10);
+                    const dayNames = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'];
+                    const titleDayEl = dialog.querySelector('.js-menu-day-name');
+                    if (titleDayEl && day >= 1 && day <= 7) {
+                        titleDayEl.textContent = dayNames[day - 1];
+                    }
+                    const url = `/api/menu/day?year=${encodeURIComponent(year)}&week=${encodeURIComponent(week)}&day=${encodeURIComponent(day)}`;
+                    fetch(url, { headers: { 'Accept': 'application/json' } })
+                        .then(r => r.ok ? r.json() : Promise.reject(new Error('bad_response')))
+                        .then(j => {
+                            const lunch = (j && j.lunch) || { alt1_text: '', alt2_text: '', dessert: '' };
+                            const dinner = (j && j.dinner) || { alt1_text: '', alt2_text: '', dessert: '' };
+                            const setText = (sel, txt) => {
+                                const el = dialog.querySelector(sel);
+                                if (el) el.textContent = (txt && String(txt).trim()) ? String(txt) : '—';
+                            };
+                            const toggleRow = (rowSel, val) => {
+                                const row = dialog.querySelector(rowSel);
+                                if (!row) return;
+                                const has = (val && String(val).trim().length > 0);
+                                row.style.display = has ? '' : 'none';
+                            };
+                            setText('.js-menu-lunch-alt1', lunch.alt1_text || '');
+                            setText('.js-menu-lunch-alt2', lunch.alt2_text || '');
+                            setText('.js-menu-lunch-dessert', lunch.dessert || '');
+                            setText('.js-menu-dinner-alt1', dinner.alt1_text || '');
+                            setText('.js-menu-dinner-alt2', dinner.alt2_text || '');
+                            setText('.js-menu-dinner-dessert', dinner.dessert || '');
+                            // Hide optional rows when empty
+                            toggleRow('.js-row-lunch-alt2', lunch.alt2_text || '');
+                            toggleRow('.js-row-lunch-dessert', lunch.dessert || '');
+                            toggleRow('.js-row-dinner-alt2', dinner.alt2_text || '');
+                            toggleRow('.js-row-dinner-dessert', dinner.dessert || '');
+                        })
+                        .catch(() => {
+                            // Leave placeholders if fetch fails
+                        });
+                } catch (e) {
+                    // no-op
+                }
             }
         });
 
@@ -246,8 +294,13 @@
     // Cross-tab site context change detection using localStorage
     function setupSiteContextVersionSync() {
         try {
+            const body = document.body;
             const root = document.querySelector('.ua-root');
-            const currentVersion = getMeta('current-site-id') || (root ? root.getAttribute('data-site-context-version') : '') || '';
+            // Prefer explicit version datum over site_id meta
+            const currentVersion = (body && body.getAttribute('data-site-context-version'))
+                || (root ? root.getAttribute('data-site-context-version') : '')
+                || getMeta('current-site-id')
+                || '';
             // Persist current version so other tabs can react
             if (currentVersion) {
                 const prev = localStorage.getItem('site_context_version');
@@ -427,6 +480,64 @@
         toggleSidebar: toggleSidebar,
         getCsrfToken: getCsrfToken
     };
+
+    // ========================================================================
+    // Departments Create Form (CSP-safe toggles)
+    // ========================================================================
+    function setupAdminDepartmentsCreateForm() {
+        const form = document.querySelector('form.department-form#department-create-form');
+        const createModal = document.getElementById('residents-variation-modal-create');
+        if (!form) return; // Only on create/edit page
+
+        // Toggle fixed/variable required state without inline styles
+        function updateMode() {
+            const checked = form.querySelector('input[name="resident_count_mode_choice"]:checked');
+            const mode = checked ? checked.value : 'fixed';
+            const fixedInput = form.querySelector('.js-fixed-input');
+            if (fixedInput) {
+                if (mode === 'fixed') {
+                    fixedInput.removeAttribute('disabled');
+                    fixedInput.setAttribute('required', 'required');
+                } else {
+                    fixedInput.removeAttribute('required');
+                }
+            }
+        }
+
+        // Toggle week selector visibility by class + disable inputs
+        function updateWeekScope() {
+            if (!createModal) return;
+            const scopeInput = createModal.querySelector('input[name="variation_scope_create"]:checked');
+            const scope = scopeInput ? scopeInput.value : 'forever';
+            const sel = createModal.querySelector('.js-week-selector');
+            if (!sel) return;
+            const isWeek = scope === 'week';
+            sel.classList.toggle('is-hidden', !isWeek);
+            sel.setAttribute('aria-hidden', isWeek ? 'false' : 'true');
+            sel.querySelectorAll('input, select').forEach(el => {
+                if (isWeek) el.removeAttribute('disabled');
+                else el.setAttribute('disabled', 'disabled');
+            });
+        }
+
+        // Bind events
+        form.addEventListener('change', function (ev) {
+            if (ev.target && ev.target.name === 'resident_count_mode_choice') {
+                updateMode();
+            }
+        });
+        if (createModal) {
+            createModal.addEventListener('change', function (ev) {
+                if (ev.target && ev.target.name === 'variation_scope_create') {
+                    updateWeekScope();
+                }
+            });
+        }
+
+        // Initial state
+        updateMode();
+        updateWeekScope();
+    }
     
     // ========================================================================
     // Auto-init on DOM ready

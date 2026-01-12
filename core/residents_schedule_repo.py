@@ -103,3 +103,13 @@ class ResidentsScheduleRepo:
             db.commit()
         finally:
             db.close()
+
+    def delete_all(self, department_id: str) -> None:
+        """Delete all variation rows (both week-specific and forever)."""
+        self._ensure_table()
+        db = get_session()
+        try:
+            db.execute(text("DELETE FROM department_residents_schedule WHERE department_id=:d"), {"d": department_id})
+            db.commit()
+        finally:
+            db.close()

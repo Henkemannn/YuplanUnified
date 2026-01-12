@@ -36,14 +36,45 @@ def ui_login():  # Simple HTML login that sets session directly or redirects to 
     from .auth import set_csrf_cookie as _set_csrf_cookie
     from flask import make_response
     if request.method == "POST":
-        email = (request.form.get("email") or "").strip().lower()
+        from .ident import canonicalize_identifier
+        email = canonicalize_identifier(request.form.get("email") or "")
         password = request.form.get("password") or ""
         if not email or not password:
             return render_template("login.html", vm={"error": "Saknade uppgifter"})
         db = _get_session()
         try:
-            user = db.query(User).filter(User.email == email).first()
-            if not user or not check_password_hash(user.password_hash, password):
+            identifier = email
+            lookup_method = "email"
+            user = db.query(User).filter(User.email == identifier).first()
+            if not user:
+                # Fallback: try username match for robustness
+                try:
+                    user = db.query(User).filter(User.username == identifier).first()
+                    if user:
+                        lookup_method = "username"
+                except Exception:
+                    user = None
+            # Determine diagnostic result without changing UX
+            result = "not_found"
+            if user:
+                is_inactive = (not bool(getattr(user, "is_active", True))) or (getattr(user, "deleted_at", None) is not None)
+                if is_inactive:
+                    result = "found_inactive"
+                else:
+                    if check_password_hash(user.password_hash, password):
+                        result = "found_active_password_ok"
+                    else:
+                        result = "found_active_password_bad"
+            try:
+                current_app.logger.info({
+                    "login_html": True,
+                    "identifier": identifier,
+                    "lookup_method": lookup_method,
+                    "result": result,
+                })
+            except Exception:
+                pass
+            if (not user) or result != "found_active_password_ok":
                 return render_template("login.html", vm={"error": "Ogiltiga uppgifter"})
             # Set session
             try:
@@ -61,18 +92,22 @@ def ui_login():  # Simple HTML login that sets session directly or redirects to 
                     session["full_name"] = user.full_name
             except Exception:
                 pass
-            # Auto-select site for single-site admins to avoid selector
+            # Enforce hard-binding for customer admins: if users.site_id is set, lock session to that site
             try:
                 if user.role == "admin":
-                    from .admin_repo import SitesRepo as _SitesRepo
-                    repo = _SitesRepo()
-                    # Prefer tenant-scoped listing when available
-                    sites = repo.list_sites_for_tenant(user.tenant_id) or []
-                    if not sites:
-                        # Fallback to global listing in sqlite/dev environments
-                        sites = repo.list_sites() or []
-                    if len(sites) == 1:
-                        session["site_id"] = str(sites[0]["id"])  # single-site shortcut
+                    bound_site = getattr(user, "site_id", None)
+                    if bound_site:
+                        session["site_id"] = str(bound_site)
+                        try:
+                            session["site_lock"] = True
+                        except Exception:
+                            pass
+                        try:
+                            import uuid as _uuid
+                            session["site_context_version"] = str(_uuid.uuid4())
+                        except Exception:
+                            import time as _t
+                            session["site_context_version"] = str(int(_t.time()))
             except Exception:
                 pass
             # Ensure CSRF cookie

@@ -17,12 +17,19 @@ def test_admin_ui_dashboard_phase2_site_filter_and_search(client_admin):
             db.commit()
         finally:
             db.close()
-    resp = client_admin.get("/ui/admin/dashboard?site_id=site-1", headers={"X-User-Role":"admin","X-Tenant-Id":"1"})
+    # Use canonical admin route; provide active site via header in tests
+    resp = client_admin.get(
+        "/ui/admin",
+        headers={
+            "X-User-Role": "admin",
+            "X-Tenant-Id": "1",
+            "X-Site-Id": "site-1",
+        },
+    )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    # Select contains both sites and site-1 is selected
-    assert '<option value="site-1" selected>' in html
-    assert '<option value="site-2"' in html
-    # Only departments from site-1 are listed
-    assert 'Avd A' in html and 'Avd B' in html
-    assert 'Avd C' not in html
+    # Unified admin dashboard content checks
+    assert "Idag i köket" in html
+    assert "Veckostatus" in html
+    assert "Meny framåt" in html
+    assert "Kom ihåg att beställa" in html

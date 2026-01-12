@@ -113,6 +113,9 @@ def create_all() -> (
                             conn.execute(text("ALTER TABLE users ADD COLUMN full_name TEXT NULL"))
                         if "is_active" not in ucols:
                             conn.execute(text("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"))
+                        # Site binding for strict site isolation (nullable)
+                        if "site_id" not in ucols:
+                            conn.execute(text("ALTER TABLE users ADD COLUMN site_id TEXT NULL"))
                         # Create a unique index for username if it doesn't exist
                         try:
                             idx_rows = conn.execute(text("SELECT name FROM sqlite_master WHERE type='index' AND name='ux_users_username'"))
@@ -125,6 +128,11 @@ def create_all() -> (
                                 conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_users_username ON users(username)"))
                         # Backfill is_active to 1 where NULL (defensive if prior partial rows exist)
                         conn.execute(text("UPDATE users SET is_active = COALESCE(is_active, 1) WHERE is_active IS NULL"))
+                        # Backfill username where NULL to email to support deterministic login
+                        try:
+                            conn.execute(text("UPDATE users SET username = email WHERE username IS NULL"))
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 

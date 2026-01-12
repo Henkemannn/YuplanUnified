@@ -14,7 +14,15 @@ def test_admin_ui_dashboard_lists_departments(client_admin):
             db.commit()
         finally:
             db.close()
-    resp = client_admin.get("/ui/admin/dashboard", headers={"X-User-Role":"admin","X-Tenant-Id":"1"})
+    # Use canonical admin route and set active site via header in tests
+    resp = client_admin.get(
+        "/ui/admin",
+        headers={
+            "X-User-Role": "admin",
+            "X-Tenant-Id": "1",
+            "X-Site-Id": "11111111-2222-3333-4444-555555555555",
+        },
+    )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "Admin" in html

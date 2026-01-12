@@ -142,8 +142,9 @@ class ReportRepo:
     def get_versions(
         self, tenant_id: int | str, year: int, week: int, department_id: Optional[str] = None
     ) -> Tuple[Dict[str, int], int, int]:
-        """Return mapping dept->version and (vmax, n).
-        vmax and n are computed across filtered departments (or all departments when department_id is None).
+        """Return mapping dept->version and (vmax, nsum).
+        - `vmax`: maximum version across filtered departments
+        - `nsum`: sum of versions across filtered departments (ensures ETag changes on any mutation)
         """
         self._ensure_schema()
         db = get_session()
@@ -166,10 +167,10 @@ class ReportRepo:
             mapping = {str(r[0]): int(r[1]) for r in rows}
             if mapping:
                 vmax = max(mapping.values())
-                n = len(mapping)
+                nsum = sum(mapping.values())
             else:
-                vmax, n = 0, 0
-            return mapping, vmax, n
+                vmax, nsum = 0, 0
+            return mapping, vmax, nsum
         finally:
             db.close()
 

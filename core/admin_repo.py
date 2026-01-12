@@ -139,6 +139,7 @@ class DepartmentsRepo:
         name: str,
         resident_count_mode: str,
         resident_count_fixed: int | None,
+        notes: str | None = None,
     ) -> tuple[dict, int]:
         db = get_session()
         try:
@@ -162,27 +163,56 @@ class DepartmentsRepo:
                         """
                     )
                 )
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version)
-                        VALUES(:id, :site_id, :name, :mode, :fixed, 0)
-                        """
-                    ),
-                    {"id": did, "site_id": site_id, "name": name, "mode": resident_count_mode, "fixed": rc_fixed},
-                )
+                if notes is not None and str(notes).strip() != "":
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes, version)
+                            VALUES(:id, :site_id, :name, :mode, :fixed, :notes, 0)
+                            """
+                        ),
+                        {"id": did, "site_id": site_id, "name": name, "mode": resident_count_mode, "fixed": rc_fixed, "notes": str(notes).strip()},
+                    )
+                else:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version)
+                            VALUES(:id, :site_id, :name, :mode, :fixed, 0)
+                            """
+                        ),
+                        {"id": did, "site_id": site_id, "name": name, "mode": resident_count_mode, "fixed": rc_fixed},
+                    )
             else:
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed)
-                        VALUES(:id, :site_id, :name, :mode, :fixed)
-                        """
-                    ),
-                    {"id": did, "site_id": site_id, "name": name, "mode": resident_count_mode, "fixed": rc_fixed},
-                )
+                # Detect optional notes column in non-sqlite and include when present
+                has_notes = False
+                try:
+                    chk = db.execute(text("SELECT 1 FROM information_schema.columns WHERE table_name='departments' AND column_name='notes'"))
+                    has_notes = chk.fetchone() is not None
+                except Exception:
+                    has_notes = False
+                if has_notes and notes is not None and str(notes).strip() != "":
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes)
+                            VALUES(:id, :site_id, :name, :mode, :fixed, :notes)
+                            """
+                        ),
+                        {"id": did, "site_id": site_id, "name": name, "mode": resident_count_mode, "fixed": rc_fixed, "notes": str(notes).strip()},
+                    )
+                else:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed)
+                            VALUES(:id, :site_id, :name, :mode, :fixed)
+                            """
+                        ),
+                        {"id": did, "site_id": site_id, "name": name, "mode": resident_count_mode, "fixed": rc_fixed},
+                    )
             db.commit()
-            return {"id": did, "site_id": site_id, "name": name, "resident_count_mode": resident_count_mode, "resident_count_fixed": rc_fixed}, 0
+            return {"id": did, "site_id": site_id, "name": name, "resident_count_mode": resident_count_mode, "resident_count_fixed": rc_fixed, "notes": (str(notes).strip() if notes else "")}, 0
         except Exception:
             db.rollback()
             raise

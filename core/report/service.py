@@ -14,6 +14,7 @@ class ReportService:
         return f'W/"report:dept:{department_id}:year:{year}:week:{week}:v{version}"'
 
     def _build_etag_site(self, year: int, week: int, vmax: int, n: int) -> str:
+        # Site-level ETag format expected by tests: only v and n
         return f'W/"report:site:year:{year}:week:{week}:v{vmax}:n{n}"'
 
     def compute(

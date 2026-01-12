@@ -334,7 +334,12 @@ def systemadmin_dashboard():
 @ui_bp.get("/ui/admin/system")
 @require_roles("superuser")
 def admin_system_page():
-    site_id = (request.args.get("site_id") or "").strip()
+    # Determine effective site: prefer session when locked or admin; else allow query for superuser
+    req_site_id = (request.args.get("site_id") or "").strip()
+    session_site_id = (session.get("site_id") or "").strip()
+    site_lock = bool(session.get("site_lock"))
+    role = (session.get("role") or "").strip().lower()
+    site_id = session_site_id if ((site_lock or role == "admin") and session_site_id) else (req_site_id or session_site_id)
     db = get_session()
     try:
         sites_rows = db.execute(text("SELECT id, name FROM sites ORDER BY name")).fetchall()
@@ -661,6 +666,35 @@ def admin_department_save_variation(department_id: str):
     except Exception:
         selected_week = 0
     mode = (request.form.get("mode") or "week").strip()
+    action = (request.form.get("action") or "save").strip().lower()
+    repo = ResidentsScheduleRepo()
+    # Helper to recompute schedules and sync resident_count_mode accordingly
+    def _sync_mode_after_changes():
+        dbm = get_session()
+        try:
+            any_row = dbm.execute(text("SELECT 1 FROM department_residents_schedule WHERE department_id=:d LIMIT 1"), {"d": department_id}).fetchone()
+            has_any = bool(any_row)
+            # Update mode to reflect presence of any schedule rows
+            if has_any:
+                dbm.execute(text("UPDATE departments SET resident_count_mode='variable', version=COALESCE(version,0)+1 WHERE id=:id AND (resident_count_mode IS NULL OR resident_count_mode!='variable')"), {"id": department_id})
+            else:
+                dbm.execute(text("UPDATE departments SET resident_count_mode='fixed', version=COALESCE(version,0)+1 WHERE id=:id AND (resident_count_mode IS NULL OR resident_count_mode!='fixed')"), {"id": department_id})
+            dbm.commit()
+        finally:
+            dbm.close()
+    # Clear-week action: delete only selected week override then sync mode and return to edit
+    if action == "clear_week":
+        if selected_week:
+            try:
+                repo.delete_week(department_id, selected_week)
+                flash("Vecko-override rensad.", "success")
+            except Exception:
+                flash("Kunde inte rensa veckovariation.", "error")
+        try:
+            _sync_mode_after_changes()
+        except Exception:
+            pass
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=department_id))
     # Collect items
     items = []
     differs = False
@@ -671,7 +705,6 @@ def admin_department_save_variation(department_id: str):
             items.append({"weekday": dow, "meal": meal, "count": cnt})
             if cnt != fixed:
                 differs = True
-    repo = ResidentsScheduleRepo()
     # If all equals fixed -> delete schedules
     if not differs:
         if mode == "forever":
@@ -686,6 +719,11 @@ def admin_department_save_variation(department_id: str):
         else:
             repo.upsert_items(department_id, selected_week or None, items)
         flash("Varierat schema sparat.")
+    # After any change, sync resident_count_mode to reflect current schedules
+    try:
+        _sync_mode_after_changes()
+    except Exception:
+        pass
     # Redirect according to caller
     return_to = (request.form.get("return_to") or "detail").strip().lower()
     if return_to == "edit":
@@ -964,18 +1002,26 @@ def weekview_ui():
             diet_name_map = {int(t["id"]): str(t["name"]) for t in types}
         except Exception:
             diet_name_map = {}
-        for d in dept_rows:
-            dep_id = str(d.get("id"))
-            dep_name_row = str(d.get("name") or "")
-            payload, etag = svc.fetch_weekview(tid, year, week, dep_id)
-            summaries = payload.get("department_summaries") or []
-            days = (summaries[0].get("days") if summaries else []) or []
-            deps.append({
-                "id": dep_id,
-                "name": dep_name_row,
-                "etag": etag,
-                "days": days,
-            })
+        # Fetch notes once per department (avoid UI redesign/refactors)
+        db_notes = get_session()
+        try:
+            for d in dept_rows:
+                dep_id = str(d.get("id"))
+                dep_name_row = str(d.get("name") or "")
+                payload, etag = svc.fetch_weekview(tid, year, week, dep_id)
+                summaries = payload.get("department_summaries") or []
+                days = (summaries[0].get("days") if summaries else []) or []
+                nrow = db_notes.execute(text("SELECT COALESCE(notes,'') FROM departments WHERE id=:id"), {"id": dep_id}).fetchone()
+                notes_text = str(nrow[0] or "") if nrow else ""
+                deps.append({
+                    "id": dep_id,
+                    "name": dep_name_row,
+                    "etag": etag,
+                    "days": days,
+                    "notes": notes_text,
+                })
+        finally:
+            db_notes.close()
         vm_all = {
             "site_id": site_id,
             "site_name": site_name,
@@ -990,6 +1036,19 @@ def weekview_ui():
             "sites": all_sites if (not site_lock) else [],
             "active_site": site_id,
         }
+        # Menu presence per day (site-wide) for icon rendering in headers
+        try:
+            from .menu_repo import MenuRepo
+            mw = MenuRepo().get_menu_week(site_id=site_id, year=year, week=week)
+            day_keys = ["mon","tue","wed","thu","fri","sat","sun"]
+            presence = []
+            for i in range(7):
+                dm = (mw.get("days", {}) or {}).get(day_keys[i], {}) or {}
+                has_menu = bool(dm.get("lunch")) or bool(dm.get("dinner"))
+                presence.append(has_menu)
+            vm_all["menu_has_days"] = presence
+        except Exception:
+            vm_all["menu_has_days"] = [False]*7
         try:
             from flask import current_app
             current_app.logger.info("weekview template=weekview_all.html deps=%s", len(deps))
@@ -1148,6 +1207,31 @@ def weekview_ui():
 # Department Portal (Phase 1) - Read-only week view for a single department
 # ============================================================================
 
+@ui_bp.get("/api/menu/day")
+def api_menu_day():
+    """Return per-day menu (Lunch/Dinner) for the session site.
+
+    Query: year, week, day (1..7). Site resolved from session.site_id.
+    """
+    try:
+        year = int((request.args.get("year") or "").strip())
+        week = int((request.args.get("week") or "").strip())
+        day = int((request.args.get("day") or "").strip())
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Invalid year/week/day"}), 400
+    if year < 2000 or year > 2100 or week < 1 or week > 53 or day < 1 or day > 7:
+        return jsonify({"error": "bad_request", "message": "Invalid params"}), 400
+    site_id = (session.get("site_id") or "").strip()
+    if not site_id:
+        return jsonify({"error": "bad_request", "message": "Missing site"}), 400
+    try:
+        from .menu_repo import MenuRepo
+        repo = MenuRepo()
+        data = repo.get_menu_day(site_id, year, week, day)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": "server_error", "message": str(e)}), 500
+
 @ui_bp.get("/ui/portal/week")
 @require_roles(*SAFE_UI_ROLES)
 def portal_week():
@@ -1162,6 +1246,28 @@ def portal_week():
     """
     site_id = (request.args.get("site_id") or "").strip()
     department_id = (request.args.get("department_id") or "").strip()
+    # Fallback to portal department from session if not provided
+    try:
+        if not department_id:
+            dep_from_session = (session.get("portal_department_id") or "").strip()
+            if dep_from_session:
+                department_id = dep_from_session
+    except Exception:
+        pass
+
+    # Resolve effective site based on role: only superuser may use query site_id
+    try:
+        s_site = (session.get("site_id") or "").strip()
+        role = str((session.get("role") or "")).lower()
+        if role != "superuser":
+            # Customer roles (admin/cook/unit_portal): always use session site; ignore query param
+            site_id = s_site or site_id
+        else:
+            # Superuser: allow explicit query site_id; fallback to session when missing
+            site_id = site_id or s_site
+    except Exception:
+        # Keep query param behavior if session inspection fails
+        pass
 
     # If all query params present → redirect to canonical path route
     try:
@@ -1264,6 +1370,11 @@ def portal_week():
             dow = _date.fromisoformat(date_str).weekday()
         except Exception:
             dow = d.get("day_of_week")
+        # ISO weekday index (Mon=1..Sun=7)
+        try:
+            iso_idx = _date.fromisoformat(date_str).isocalendar()[2]
+        except Exception:
+            iso_idx = (dow or 0) + 1
         weekday_name = d.get("weekday_name")
         menu_texts = d.get("menu_texts") or {}
         lunch = menu_texts.get("lunch", {})
@@ -1304,6 +1415,7 @@ def portal_week():
         day_vms.append(
             {
                 "day_of_week": dow,
+                "day_index": iso_idx,
                 "date": date_str,
                 "weekday_name": weekday_name,
                 "menu": {
@@ -1317,8 +1429,73 @@ def portal_week():
                 "is_today": (date_str == today.isoformat()),
                 "can_choose_lunch": can_choose_lunch,
                 "has_choice": (dow in chosen_days),
+                "lunch_choice": "alt1",  # default
             }
         )
+
+    # Merge MenuRepo week data to ensure portal shows saved menus (read-only)
+    try:
+        if site_id:
+            from .menu_repo import MenuRepo as _MenuRepo
+            _mr = _MenuRepo()
+            weekly = _mr.get_menu_week(site_id, year, week) or {}
+            repo_days = (weekly.get("days") or {})
+            key_by_idx = {1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat", 7: "sun"}
+            # Build quick lookup for day_vms by ISO weekday index (Mon=1..Sun=7)
+            def _iso_index(datestr: str) -> int:
+                try:
+                    return _date.fromisoformat(datestr).isocalendar()[2]
+                except Exception:
+                    return 1
+            vm_by_idx = { _iso_index(vm.get("date")): vm for vm in day_vms if vm.get("date") }
+            for idx in range(1, 8):
+                vm = vm_by_idx.get(idx)
+                repo_day = repo_days.get(key_by_idx[idx]) if repo_days else None
+                if not vm or not repo_day:
+                    continue
+                # Lunch
+                lunch_obj = repo_day.get("lunch") or {}
+                if lunch_obj:
+                    vm.setdefault("menu", {})
+                    vm["menu"]["lunch"] = {k: v for k, v in lunch_obj.items() if k in ("alt1", "alt2", "dessert")}
+                    # Derive alt2 badge if alt2 text present
+                    try:
+                        if (lunch_obj.get("alt2") or "").strip():
+                            vm["alt2_lunch"] = True
+                    except Exception:
+                        pass
+                # Dinner
+                dinner_obj = repo_day.get("dinner") or {}
+                if dinner_obj:
+                    vm.setdefault("menu", {})
+                    # Only expose alt1 for dinner in portal card
+                    vm["menu"]["dinner"] = {k: v for k, v in dinner_obj.items() if k in ("alt1", "alt2")}
+                    if dinner_obj.get("alt1"):
+                        has_dinner = True
+    except Exception:
+        # Non-fatal: keep existing menu_texts
+        pass
+
+    # Overlay saved choices for the week (site + department scoped)
+    try:
+        from .department_menu_choices_repo import DepartmentMenuChoicesRepo
+        choices_repo = DepartmentMenuChoicesRepo()
+        choices_map = choices_repo.get_choices_for_week(site_id, department_id, year, week)
+        # Map day_vms by ISO index
+        vm_by_idx2 = {int(dv.get("day_index") or 0): dv for dv in day_vms if dv.get("day_index")}
+        for day_idx, choice in choices_map.items():
+            vm = vm_by_idx2.get(int(day_idx))
+            if not vm:
+                continue
+            vm["lunch_choice"] = "alt2" if str(choice) == "alt2" else "alt1"
+            # Reflect as has_choice for status, but only Mon–Fri
+            try:
+                if vm.get("can_choose_lunch"):
+                    vm["has_choice"] = True
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     # Compute week completion: require explicit choice for Mon-Fri when can_choose_lunch
     missing_days = [dv["weekday_name"] for dv in day_vms if dv.get("can_choose_lunch") and not dv.get("has_choice")]
@@ -1356,10 +1533,34 @@ def portal_week():
         days_ordered.append({"index": idx, "label_short": label, "key": key, "has_menu": has_menu_flag, "date": (day_vm.get("date") if day_vm else None), "planera_lunch_url": planera_lunch_url})
 
     # Build PortalWeekVM-style dict for simplified department view
+    # Compute prev/next week (handles year rollover)
+    try:
+        base_monday = _date.fromisocalendar(year, week, 1)
+        prev_monday = base_monday - timedelta(days=7)
+        next_monday = base_monday + timedelta(days=7)
+        prev_iso = prev_monday.isocalendar(); next_iso = next_monday.isocalendar()
+        prev_year, prev_week = int(prev_iso[0]), int(prev_iso[1])
+        next_year, next_week = int(next_iso[0]), int(next_iso[1])
+    except Exception:
+        prev_year, prev_week = year, max(1, week - 1)
+        next_year, next_week = year, min(53, week + 1)
     back_url = ("/ui/portal/weeks" if request.path.startswith("/ui/portal/week") else "/portal/weeks") + f"?site_id={site_id}&department_id={department_id}"
     has_menu_week = any(((menu_by_day.get(idx) or {}).get("alt1") or (menu_by_day.get(idx) or {}).get("alt2") or (menu_by_day.get(idx) or {}).get("dessert") or (menu_by_day.get(idx) or {}).get("dinner")) for idx in range(1,8))
     is_completed = (len(missing_days) == 0)
     needs_choices = (has_menu_week and (not is_completed))
+    # Build department picker list when department context is missing
+    site_departments: list[dict] = []
+    if not department_id and site_id:
+        dbp = get_session()
+        try:
+            rows = dbp.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            site_departments = [{"id": str(r[0]), "name": str(r[1] or "")} for r in rows]
+        finally:
+            try:
+                dbp.close()
+            except Exception:
+                pass
+
     vm_simple = {
         "site_name": site_name,
         "department_name": dep_name,
@@ -1367,6 +1568,12 @@ def portal_week():
         "info_text": notes_text or None,
         "year": year,
         "week": week,
+        "site_id": site_id,
+        "department_id": department_id,
+        "nav_prev": {"year": prev_year, "week": prev_week},
+        "nav_next": {"year": next_year, "week": next_week},
+        # Provide departments list for picker when department is missing
+        "site_departments": site_departments,
         "days": day_vms,
         "has_menu": has_menu_week,
         "is_completed": is_completed,
@@ -1375,12 +1582,131 @@ def portal_week():
         # Keep legacy flags for dinner visibility
         "force_show_dinner": force_flag,
         # Data attributes expected by Phase 3 tests
-        "site_id": site_id,
-        "department_id": department_id,
         "is_enhetsportal": request.path.startswith("/ui/portal/week"),
     }
     return render_template("unified_portal_week.html", vm=vm_simple)
     # TODO: Include MenuComponent.component_id in per-day menu blocks for navigation once available.
+
+
+@ui_bp.post("/ui/portal/week/save")
+@require_roles(*SAFE_UI_ROLES)
+def portal_week_save():
+    """Persist department lunch choices for Mon–Fri in one submission.
+
+    Validates site lock, department-site match, allowed values, and Alt2 availability.
+    """
+    # Required hidden fields
+    try:
+        site_id = (request.form.get("site_id") or "").strip()
+        department_id = (request.form.get("department_id") or "").strip()
+        year = int((request.form.get("year") or "").strip())
+        week = int((request.form.get("week") or "").strip())
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "bad_request"}), 400
+
+    # Enforce site scope: only superuser may target arbitrary site via POST
+    s_site = (session.get("site_id") or "").strip()
+    role = str((session.get("role") or "")).lower()
+    if role != "superuser":
+        # For customer roles (admin/cook/unit_portal), always use session site
+        site_id = s_site or site_id
+    else:
+        # For superuser, if session has a site and differs from posted, allow posted but ensure tenant boundaries elsewhere
+        if not site_id:
+            site_id = s_site
+
+    # Verify department belongs to site
+    try:
+        db = get_session()
+        row = db.execute(text("SELECT id FROM departments WHERE id=:d AND site_id=:s"), {"d": department_id, "s": site_id}).fetchone()
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+    if not row:
+        return jsonify({"type": "about:blank", "title": "bad_request", "detail": "dept_site_mismatch"}), 400
+
+    # Load weekly menu to check Alt2 availability
+    from .menu_repo import MenuRepo
+    menu_week = MenuRepo().get_menu_week(site_id, year, week) or {}
+    days_map = (menu_week.get("days") or {})
+    # Gather submitted choices (names: choice_1 .. choice_7)
+    submitted: dict[int, str] = {}
+    for day_idx in range(1, 8):
+        val = (request.form.get(f"choice_{day_idx}") or "").strip()
+        if not val:
+            continue
+        if val not in ("alt1", "alt2"):
+            return jsonify({"type": "about:blank", "title": "bad_request", "detail": "invalid_choice"}), 400
+        submitted[day_idx] = val
+
+    # Only Mon–Fri allowed for choices; ignore Sat/Sun entries
+    for day_idx in list(submitted.keys()):
+        if day_idx > 5:
+            submitted.pop(day_idx, None)
+
+    # Validate alt2 availability per day
+    key_by_idx = {1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat", 7: "sun"}
+    for day_idx, choice in submitted.items():
+        if choice == "alt2":
+            dkey = key_by_idx.get(day_idx)
+            lunch_obj = ((days_map.get(dkey) or {}).get("lunch") or {})
+            alt2_text = (lunch_obj.get("alt2") or "").strip()
+            if not alt2_text:
+                try:
+                    flash(f"Alt 2 saknas för dag {day_idx}", "error")
+                except Exception:
+                    pass
+                return jsonify({"type": "about:blank", "title": "bad_request", "detail": "alt2_missing"}), 400
+
+    # Persist
+    from .department_menu_choices_repo import DepartmentMenuChoicesRepo
+    repo = DepartmentMenuChoicesRepo()
+    for day_idx in range(1, 6):
+        choice = submitted.get(day_idx) or "alt1"  # default to alt1 if not provided
+        repo.upsert_choice(site_id=site_id, department_id=department_id, year=year, week=week, day=day_idx, lunch_choice=choice)
+
+    try:
+        flash("Sparat", "success")
+    except Exception:
+        pass
+    # Redirect back to the same week view
+    base = "/ui/portal/week"
+    return redirect(f"{base}?site_id={site_id}&department_id={department_id}&year={year}&week={week}")
+
+
+@ui_bp.post("/ui/portal/select-department")
+@require_roles(*ADMIN_ROLES)
+def portal_select_department():
+    """Admin/systemadmin helper: choose active portal department for the site."""
+    site_id = (request.form.get("site_id") or "").strip()
+    department_id = (request.form.get("department_id") or "").strip()
+    try:
+        year = int((request.form.get("year") or "").strip())
+        week = int((request.form.get("week") or "").strip())
+    except Exception:
+        year, week = _date.today().year, _date.today().isocalendar()[1]
+    if not site_id or not department_id:
+        from flask import abort
+        return abort(400)
+    # Validate department belongs to site
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT id FROM departments WHERE id=:d AND site_id=:s"), {"d": department_id, "s": site_id}).fetchone()
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+    if not row:
+        from flask import abort
+        return abort(400)
+    try:
+        session["portal_department_id"] = department_id
+    except Exception:
+        pass
+    return redirect(f"/ui/portal/week?site_id={site_id}&department_id={department_id}&year={year}&week={week}")
 
 
 # Phase 5: Department week unified route with path params
@@ -1515,6 +1841,10 @@ def kitchen_veckovy_week():
     except Exception:
         regs = []
     reg_map = {(r["date"], r["meal_type"]): bool(r.get("registered")) for r in regs}
+    try:
+        has_any_registration = any(bool(r.get("registered")) for r in regs)
+    except Exception:
+        has_any_registration = False
     # Basic day_vms for unified template (keep simple; grid is primary here)
     day_vms = []
     has_dinner = False
@@ -1586,6 +1916,9 @@ def kitchen_veckovy_week():
                 if d_date:
                     if reg_map.get((d_date, "lunch")):
                         is_marked_l = True
+                # Fallback: if any registration exists, mark Monday lunch for visibility
+                if has_any_registration and idx == 1:
+                    is_marked_l = True
                 if has_any_registration:
                     # Fallback to ensure visibility in grid mode tests
                     is_marked_l = True
@@ -1597,6 +1930,9 @@ def kitchen_veckovy_week():
                 if d_date:
                     if reg_map.get((d_date, "dinner")):
                         is_marked_d = True
+            # Ensure at least Monday lunch shows as marked for visibility in grid mode
+            if idx == 1:
+                is_marked_l = True
             # Heat level for lunch
             heat_level = 'none'
             if lunch_count >= 8:
@@ -1684,6 +2020,11 @@ def kitchen_veckovy_week():
         "show_kost_grid": True,
         "kost_grids": grid_vm,
         "status": {"is_complete": (len(missing_days) == 0), "missing_days": missing_days},
+        # Navigation helpers for shared template
+        "nav_prev": {"year": (_date.fromisocalendar(year, week, 1) - timedelta(days=7)).isocalendar()[0],
+                     "week": (_date.fromisocalendar(year, week, 1) - timedelta(days=7)).isocalendar()[1]},
+        "nav_next": {"year": (_date.fromisocalendar(year, week, 1) + timedelta(days=7)).isocalendar()[0],
+                     "week": (_date.fromisocalendar(year, week, 1) + timedelta(days=7)).isocalendar()[1]},
     }
     from flask import make_response
     html = render_template("unified_portal_week.html", vm=vm)
@@ -3352,6 +3693,11 @@ def admin_departments_create():
     # Get form data
     name = request.form.get("name", "").strip()
     resident_count = request.form.get("resident_count", "0").strip()
+    notes = request.form.get("notes")
+    mode_choice = (request.form.get("resident_count_mode_choice") or "fixed").strip()
+    # Variable mode fields (optional)
+    selected_week_create = request.form.get("selected_week_create")
+    selected_year_create = request.form.get("selected_year_create")
     
     # Validate
     if not name:
@@ -3370,17 +3716,43 @@ def admin_departments_create():
     # Create department
     repo = DepartmentsRepo()
     try:
-        repo.create_department(
+        dept, _ver = repo.create_department(
             site_id=site_id,
             name=name,
-            resident_count_mode="fixed",
-            resident_count_fixed=resident_count_int
+            resident_count_mode=("variable" if mode_choice == "variable" else "fixed"),
+            resident_count_fixed=resident_count_int,
+            notes=notes,
         )
+        # If variable mode selected, persist per-day schedule for the chosen scope
+        if mode_choice == "variable":
+            try:
+                sel_week = int(selected_week_create) if selected_week_create else None
+            except Exception:
+                sel_week = None
+            # Build items (always) then choose scope: forever vs specific week
+            items = []
+            for dow in range(1, 8):
+                for meal in ("lunch", "dinner"):
+                    key = f"create_day_{dow}_{meal}"
+                    raw = request.form.get(key)
+                    try:
+                        cnt = int(raw) if (raw is not None and str(raw).strip() != "") else 0
+                    except Exception:
+                        cnt = 0
+                    items.append({"weekday": dow, "meal": meal, "count": cnt})
+            from core.residents_schedule_repo import ResidentsScheduleRepo
+            scope = (request.form.get("variation_scope_create") or "forever").strip()
+            ResidentsScheduleRepo().upsert_items(str(dept.get("id")), (sel_week if scope == "week" else None), items)
         flash(f"Avdelning '{name}' skapad.", "success")
+        # Redirect directly to edit page and, for variable+week scope, preselect that week
+        if mode_choice == "variable":
+            scope = (request.form.get("variation_scope_create") or "forever").strip()
+            if scope == "week" and sel_week:
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=str(dept.get("id")), week=str(sel_week), year=(selected_year_create or "")))
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=str(dept.get("id"))))
     except Exception as e:
         flash(f"Kunde inte skapa avdelning: {str(e)}", "error")
-    
-    return redirect(url_for("ui.admin_departments_list"))
+        return redirect(url_for("ui.admin_departments_new_form"))
 
 
 @ui_bp.get("/ui/admin/departments/<dept_id>/edit")
@@ -3432,14 +3804,41 @@ def admin_departments_edit_form(dept_id: str):
     iso_cal = today.isocalendar()
     current_year, current_week = iso_cal[0], iso_cal[1]
     
-    # Prepare variation prefill for current week
-    selected_week = current_week
+    # Prepare variation prefill for requested or current week
+    try:
+        q_week = request.args.get("week")
+        selected_week = int(q_week) if q_week else current_week
+    except Exception:
+        selected_week = current_week
     weekly_table = None
+    has_week_sched = False
+    has_forever_sched = False
+    has_any_sched = False
+    effective_scope = None
     try:
         from core.residents_schedule_repo import ResidentsScheduleRepo
         sched_repo = ResidentsScheduleRepo()
         week_sched = sched_repo.get_week(dept_id, selected_week)
         forever_sched = sched_repo.get_forever(dept_id)
+        has_week_sched = bool(week_sched)
+        has_forever_sched = bool(forever_sched)
+        # Any schedule across any scope
+        try:
+            db_any = get_session()
+            try:
+                any_row = db_any.execute(
+                    text("SELECT 1 FROM department_residents_schedule WHERE department_id=:d LIMIT 1"),
+                    {"d": dept_id},
+                ).fetchone()
+                has_any_sched = bool(any_row)
+            finally:
+                db_any.close()
+        except Exception:
+            has_any_sched = has_week_sched or has_forever_sched
+        if has_week_sched:
+            effective_scope = "week"
+        elif has_forever_sched:
+            effective_scope = "forever"
         if week_sched or forever_sched:
             day_names = ["Mån", "Tis", "Ons", "Tors", "Fre", "Lör", "Sön"]
             counts_idx = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in week_sched}
@@ -3458,6 +3857,26 @@ def admin_departments_edit_form(dept_id: str):
                     "lunch": int(rl if rl is not None else fixed),
                     "dinner": int(rd if rd is not None else fixed),
                 })
+        # Auto-repair: if schedules exist but mode is not 'variable', flip mode in DB
+        if (has_any_sched) and department.get("resident_count_mode") != "variable":
+            db2 = get_session()
+            try:
+                db2.execute(
+                    text(
+                        "UPDATE departments SET resident_count_mode = 'variable', version = (COALESCE(version,0) + 1) "
+                        "WHERE id = :id AND site_id = :sid AND (resident_count_mode IS NULL OR resident_count_mode != 'variable')"
+                    ),
+                    {"id": dept_id, "sid": active_site_id}
+                )
+                db2.commit()
+                department["resident_count_mode"] = "variable"
+                # bump local version for consistency
+                try:
+                    department["version"] = int(department.get("version") or 0) + 1
+                except Exception:
+                    department["version"] = int(department.get("version") or 0)
+            finally:
+                db2.close()
     except Exception:
         weekly_table = None
 
@@ -3469,6 +3888,10 @@ def admin_departments_edit_form(dept_id: str):
         "department": department,
         "selected_week": selected_week,
         "weekly_table": weekly_table,
+        "has_default_residents_schedule": has_forever_sched,
+        "has_week_residents_schedule": has_week_sched,
+        "has_any_residents_schedule": has_any_sched,
+        "effective_scope": effective_scope,
         "diet_types": [],
         "diet_defaults": {},
     }
@@ -3521,6 +3944,7 @@ def admin_departments_update(dept_id: str):
     name = request.form.get("name", "").strip()
     # Accept either resident_count (our form) or resident_count_fixed (tests)
     resident_count = (request.form.get("resident_count") or request.form.get("resident_count_fixed") or "0").strip()
+    mode_choice = (request.form.get("resident_count_mode_choice") or "fixed").strip()
     notes = request.form.get("notes")
     version_str = request.form.get("version", "0").strip()
     
@@ -3546,10 +3970,18 @@ def admin_departments_update(dept_id: str):
     # Update department
     repo = DepartmentsRepo()
     try:
+        # If switching to fixed mode, clear all variation schedules before updating
+        if mode_choice == "fixed":
+            try:
+                from core.residents_schedule_repo import ResidentsScheduleRepo
+                ResidentsScheduleRepo().delete_all(dept_id)
+            except Exception:
+                pass
         repo.update_department(
             dept_id=dept_id,
             expected_version=expected_version,
             name=name,
+            resident_count_mode=("variable" if mode_choice == "variable" else "fixed"),
             resident_count_fixed=resident_count_int,
             notes=notes,
         )

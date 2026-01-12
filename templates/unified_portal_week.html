@@ -34,8 +34,40 @@
     <a href="{{ vm.back_url }}" class="yp-link">&larr; Till vecköversikten</a>
 
     <h1>Vecka {{ vm.week }} – {{ vm.department_name }}</h1>
+    <div class="portal-week-nav">
+      <a class="yp-btn" href="/ui/portal/week?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&year={{ vm.nav_prev.year }}&week={{ vm.nav_prev.week }}" aria-label="Föregående vecka">&larr; Föregående</a>
+      <form method="get" action="/ui/portal/week" class="portal-week-jump" style="display:inline-flex;gap:6px;align-items:center;">
+        <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+        <input type="hidden" name="department_id" value="{{ vm.department_id }}">
+        <label>Hoppa till:</label>
+        <input type="number" min="2000" max="2100" name="year" value="{{ vm.year }}" style="width:80px;">
+        <input type="number" min="1" max="53" name="week" value="{{ vm.week }}" style="width:60px;">
+        <button type="submit" class="yp-btn">Gå</button>
+      </form>
+      <a class="yp-btn" href="/ui/portal/week?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&year={{ vm.nav_next.year }}&week={{ vm.nav_next.week }}" aria-label="Nästa vecka">Nästa &rarr;</a>
+    </div>
     <p>Boendeantal: {{ vm.residents_count }}</p>
     <p>Boende: {{ vm.residents_count }}</p>
+
+    <p>Avdelning: {{ vm.department_name }}</p>
+
+    {% if not vm.department_id %}
+      <div class="yp-banner yp-banner-warning">Ingen avdelning vald (portal-login krävs)</div>
+      {% if vm.site_departments and vm.site_departments|length > 0 %}
+      <form method="post" action="/ui/portal/select-department" class="portal-department-picker" style="margin:10px 0;display:flex;gap:8px;align-items:center;">
+        <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+        <input type="hidden" name="year" value="{{ vm.year }}">
+        <input type="hidden" name="week" value="{{ vm.week }}">
+        <label for="portal-department-select">Välj avdelning:</label>
+        <select id="portal-department-select" name="department_id">
+          {% for d in vm.site_departments %}
+            <option value="{{ d.id }}">{{ d.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="yp-btn">Öppna portal</button>
+      </form>
+      {% endif %}
+    {% endif %}
 
     {% if vm.info_text %}
       <p class="portal-note">{{ vm.info_text }}</p>
@@ -77,6 +109,11 @@
   </nav>
   
 
+  <form method="post" action="/ui/portal/week/save" class="portal-week-form">
+    <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+    <input type="hidden" name="department_id" value="{{ vm.department_id }}">
+    <input type="hidden" name="year" value="{{ vm.year }}">
+    <input type="hidden" name="week" value="{{ vm.week }}">
   <section class="portal-day-grid" aria-label="Veckans meny">
     {% for day in vm.days %}
     <article class="yp-card portal-day-card" data-is-today="{{ 'true' if day.is_today else 'false' }}">
@@ -90,7 +127,7 @@
       </div>
       <div style="position:absolute;left:-9999px;" aria-hidden="true">Boende: {{ day.residents.lunch }}</div>
 
-       <div class="meal-block" role="button" tabindex="0"
+      <div class="meal-block" role="button" tabindex="0"
         aria-label="Lunch {{ day.weekday_name }} {{ day.date }}{{ ', Registrerad' if day.registered.lunch else '' }}{{ ', Alt 2' if day.alt2_lunch else '' }}"
         data-day="{{ day.date }}" data-day-key="{{ day.date }}" data-meal="lunch" data-can-choose-lunch="{{ 'true' if day.can_choose_lunch else 'false' }}">
         <div class="meal-block__header">
@@ -114,6 +151,25 @@
         {% endif %}
         {% if day.menu.lunch.dessert %}
         <div class="meal-text meal-text--dessert">{{ day.menu.lunch.dessert }}</div>
+        {% endif %}
+        {% if day.can_choose_lunch %}
+        <div class="meal-choice">
+          <label class="yp-radio">
+            <input type="radio" name="choice_{{ day.day_index }}" value="alt1" {% if day.lunch_choice != 'alt2' %}checked{% endif %}>
+            <span>Alt 1</span>
+          </label>
+          {% if day.menu.lunch.alt2 %}
+          <label class="yp-radio">
+            <input type="radio" name="choice_{{ day.day_index }}" value="alt2" {% if day.lunch_choice == 'alt2' %}checked{% endif %}>
+            <span>Alt 2</span>
+          </label>
+          {% else %}
+          <label class="yp-radio yp-radio--disabled">
+            <input type="radio" name="choice_{{ day.day_index }}" value="alt2" disabled>
+            <span>Alt 2 (saknas)</span>
+          </label>
+          {% endif %}
+        </div>
         {% endif %}
         <div class="residents-counter">
           <span class="res-icon">👥</span>
@@ -162,6 +218,10 @@
     </article>
     {% endfor %}
   </section>
+  <div class="portal-week-actions">
+    <button type="submit" class="yp-btn"{% if not vm.department_id %} disabled{% endif %}>Spara menyval</button>
+  </div>
+  </form>
 
   {% if vm.show_kost_grid %}
   <h1 class="veckovy-title">Veckovy – kök</h1>

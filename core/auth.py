@@ -6,6 +6,7 @@ from collections.abc import Callable
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, make_response, request, session, render_template
+from sqlalchemy import text
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_session
@@ -155,7 +156,8 @@ def login():
     # Fallback to form fields when JSON isn't provided (browser form posts)
     if not data:
         data = {"email": request.form.get("email"), "password": request.form.get("password")}
-    email = (data.get("email") or "").strip().lower()
+    from .ident import canonicalize_identifier
+    email = canonicalize_identifier(data.get("email") or "")
     password = data.get("password") or ""
     # DEV-only diagnostic logging to help debug login payload parsing
     try:
@@ -356,11 +358,67 @@ def login():
         store[key] = rec
     db = get_session()
     try:
-        # Login user lookup: filter by exact match on email with lowercased input from above.
-        # No tenant/site filters; no is_active enforced.
-        user = db.query(User).filter(User.email == email).first()
+        # Login user lookup is deterministic: prefer email (normalized) then fallback to username.
+        # No tenant/site filters here; we scope after identity resolution.
+        try:
+            identifier = email
+            lookup_method = "email"
+            user = db.query(User).filter(User.email == identifier).first()
+            if not user:
+                try:
+                    user = db.query(User).filter(User.username == identifier).first()
+                    if user:
+                        lookup_method = "username"
+                except Exception:
+                    user = None
+        except Exception as e:
+            # Fallback for legacy SQLite schemas missing users.site_id: perform raw select
+            import sqlalchemy
+            if isinstance(e, sqlalchemy.exc.OperationalError) and "no such column: users.site_id" in str(e):
+                # Try by email first
+                row = db.execute(text("SELECT id, tenant_id, email, password_hash, role, full_name, is_active, deleted_at, username FROM users WHERE email=:e LIMIT 1"), {"e": identifier}).fetchone()
+                if not row:
+                    # Fallback by username
+                    row = db.execute(text("SELECT id, tenant_id, email, password_hash, role, full_name, is_active, deleted_at, username FROM users WHERE username=:u LIMIT 1"), {"u": identifier}).fetchone()
+                    if row:
+                        lookup_method = "username"
+                if row:
+                    from types import SimpleNamespace
+                    user = SimpleNamespace(
+                        id=int(row[0]) if row[0] is not None else None,
+                        tenant_id=int(row[1]) if row[1] is not None else None,
+                        email=str(row[2]) if row[2] is not None else None,
+                        password_hash=str(row[3]) if row[3] is not None else "",
+                        role=str(row[4]) if row[4] is not None else "viewer",
+                        full_name=str(row[5]) if row[5] is not None else None,
+                        is_active=bool(row[6]) if row[6] is not None else True,
+                        deleted_at=row[7] if len(row) > 7 else None,
+                        username=str(row[8]) if len(row) > 8 and row[8] is not None else None,
+                        site_id=None,
+                    )
+                else:
+                    user = None
+            else:
+                raise
         user_found = bool(user)
-        password_ok = bool(user and check_password_hash(user.password_hash, password))
+        is_inactive = bool(user_found and ((not bool(getattr(user, "is_active", True))) or (getattr(user, "deleted_at", None) is not None)))
+        password_ok = bool(user and (not is_inactive) and check_password_hash(user.password_hash, password))
+        # Emit a single structured INFO log line for diagnostics (no secrets)
+        try:
+            current_app.logger.info({
+                "login_json": True,
+                "identifier": email,
+                "lookup_method": lookup_method if user_found else "email_first",
+                "result": (
+                    "not_found" if not user_found else (
+                        "found_inactive" if is_inactive else (
+                            "found_active_password_ok" if password_ok else "found_active_password_bad"
+                        )
+                    )
+                ),
+            })
+        except Exception:
+            pass
         if (not user_found) or (not password_ok):
             rec["failures"] += 1
             if rec["failures"] >= max_failures:
@@ -446,22 +504,106 @@ def login():
         except Exception:
             wants_html = False
         if wants_html:
-            # HTML form flow: redirect to appropriate landing
+            # HTML form flow: role-aware redirect with admin site selection logic
             from flask import redirect, url_for
-            target = None
             try:
                 r = (session.get("role") or "").lower()
                 if r == "superuser":
-                    target = url_for("admin_ui.systemadmin_dashboard")
+                    # Canonical systemadmin landing
+                    resp = redirect(url_for("admin_ui.systemadmin_dashboard"), code=302)
+                    set_csrf_cookie(resp, csrf_token)
+                    return resp
                 elif r == "admin":
-                    target = url_for("ui.admin_dashboard")
+                    # Admin: if exactly one site -> set site_id and go to /ui/admin
+                    # else -> force site selector with next=/ui/admin
+                    # Prefer tenant-scoped count when schema supports it; otherwise use global count
+                    from sqlalchemy import text as _sql_text
+                    count = 0
+                    sid_val = None
+                    db = get_session()
+                    try:
+                        # If the user is hard-bound to a site, enforce it and skip selector entirely
+                        try:
+                            bound_site = getattr(user, "site_id", None)
+                        except Exception:
+                            bound_site = None
+                        if bound_site:
+                            session["site_id"] = str(bound_site)
+                            # Mark session as site-locked to prevent selector use
+                            try:
+                                session["site_lock"] = True
+                            except Exception:
+                                pass
+                            try:
+                                import uuid as _uuid
+                                session["site_context_version"] = str(_uuid.uuid4())
+                            except Exception:
+                                import time as _t
+                                session["site_context_version"] = str(int(_t.time()))
+                            resp = redirect(url_for("ui.admin_dashboard"), code=302)
+                            set_csrf_cookie(resp, csrf_token)
+                            return resp
+                        has_tenant_col = False
+                        try:
+                            cols = db.execute(_sql_text("PRAGMA table_info('sites')")).fetchall()
+                            has_tenant_col = any(str(c[1]) == "tenant_id" for c in cols)
+                        except Exception:
+                            has_tenant_col = False
+                        # Always prefer tenant-scoped when tenant_id is available in schema AND session
+                        # NOTE: Tenant-scoped auto-select is the default when the schema provides
+                        # a `tenant_id` column on `sites` and a tenant context exists in session.
+                        # The global count fallback below is strictly for legacy schemas that do
+                        # not yet include `tenant_id` — behavior remains unchanged; no refactor.
+                        if has_tenant_col and (session.get("tenant_id") is not None):
+                            row = db.execute(
+                                _sql_text("SELECT COUNT(1) FROM sites WHERE tenant_id=:t"),
+                                {"t": int(session.get("tenant_id"))},
+                            ).fetchone()
+                            count = int(row[0]) if row else 0
+                            if count == 1:
+                                r2 = db.execute(
+                                    _sql_text("SELECT id FROM sites WHERE tenant_id=:t LIMIT 1"),
+                                    {"t": int(session.get("tenant_id"))},
+                                ).fetchone()
+                                sid_val = r2[0] if r2 else None
+                        else:
+                            # Fallback to global count only when tenant scoping isn't possible
+                            row = db.execute(_sql_text("SELECT COUNT(1) FROM sites")).fetchone()
+                            count = int(row[0]) if row else 0
+                            if count == 1:
+                                r2 = db.execute(_sql_text("SELECT id FROM sites LIMIT 1")).fetchone()
+                                sid_val = r2[0] if r2 else None
+                    finally:
+                        db.close()
+                    if count == 1 and sid_val:
+                        session["site_id"] = str(sid_val)
+                        # Bump site_context_version for cross-tab detection
+                        try:
+                            import uuid as _uuid
+                            session["site_context_version"] = str(_uuid.uuid4())
+                        except Exception:
+                            import time as _t
+                            session["site_context_version"] = str(int(_t.time()))
+                        resp = redirect(url_for("ui.admin_dashboard"), code=302)
+                        set_csrf_cookie(resp, csrf_token)
+                        return resp
+                    else:
+                        try:
+                            session.pop("site_id", None)
+                        except Exception:
+                            pass
+                        # Send to selector with canonical next
+                        resp = redirect(url_for("ui.select_site", next=url_for("ui.admin_dashboard")), code=302)
+                        set_csrf_cookie(resp, csrf_token)
+                        return resp
                 else:
-                    target = url_for("ui.weekview_ui")
+                    resp = redirect(url_for("ui.weekview_ui"), code=302)
+                    set_csrf_cookie(resp, csrf_token)
+                    return resp
             except Exception:
-                target = "/"
-            resp = redirect(target, code=302)
-            set_csrf_cookie(resp, csrf_token)
-            return resp
+                resp = redirect("/", code=302)
+                set_csrf_cookie(resp, csrf_token)
+                return resp
         else:
             resp = make_response(
                 jsonify(

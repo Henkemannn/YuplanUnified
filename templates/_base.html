@@ -16,7 +16,7 @@
   <!-- Inline styles removed for CSP; rely on external CSS -->
   {% block head %}{% endblock %}
 </head>
-<body>
+<body data-site-context-version="{{ session.get('site_context_version') or '' }}">
 {% if not hide_global_nav %}
 <nav class="main-nav">
   {% set is_systemadmin_ctx = (request.endpoint=='ui.admin_system_page' or request.path.startswith('/ui/admin/system')) %}

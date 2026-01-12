@@ -13,12 +13,19 @@ def test_admin_ui_dashboard_phase3_modules_cards(client_admin):
             db.commit()
         finally:
             db.close()
-    resp = client_admin.get("/ui/admin/dashboard?site_id=site-x", headers={"X-User-Role":"admin","X-Tenant-Id":"1"})
+    # Use canonical admin route; provide active site via header in tests
+    resp = client_admin.get(
+        "/ui/admin",
+        headers={
+            "X-User-Role": "admin",
+            "X-Tenant-Id": "1",
+            "X-Site-Id": "site-x",
+        },
+    )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert "Moduler" in html
-    assert "Avdelningsportal" in html
-    assert "Planera" in html
-    assert "Rapport" in html
-    # Placeholder cards present
-    assert "Menyimport" in html and "Specialkost" in html and "Recept" in html and "Turnus" in html
+    # Unified admin dashboard presence checks
+    assert "Idag i köket" in html
+    assert "Veckostatus" in html
+    assert "Meny framåt" in html
+    assert "Kommunikation mellan avdelningar" in html

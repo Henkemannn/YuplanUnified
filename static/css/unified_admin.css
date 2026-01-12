@@ -268,6 +268,19 @@
       #020617;
 }
 
+/* iPad-friendly inputs/buttons within UA shell */
+.ua-root .yp-input,
+.ua-root input[type="text"],
+.ua-root input[type="number"],
+.ua-root textarea,
+.ua-root select {
+    min-height: 44px;
+}
+.ua-root .yp-button,
+.ua-root button[class*="yp-button"] {
+    min-height: 44px;
+}
+
 .ua-sidebar-logo { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 10px 12px; margin: 6px 8px 10px; background: rgba(255,255,255,0.10); border: 1px solid rgba(148,163,184,0.35); border-radius: 10px; }
 .ua-logo-mark {
     width: 28px; height: 28px; border-radius: 6px;
@@ -309,6 +322,18 @@
 .ua-card h2 { margin: 0 0 4px; font-size: 1.1rem; color: var(--yp-color-text); }
 .ua-card p { margin: 0 0 8px; font-size: 0.9rem; color: var(--yp-color-text-muted); }
 
+/* Tables */
+.ua-table { width: 100%; border-collapse: collapse; }
+.ua-table th, .ua-table td { padding: 10px 12px; border-bottom: 1px solid var(--yp-color-border); }
+.ua-table th { text-align: left; font-weight: 600; color: var(--yp-color-text-muted); font-size: 0.9rem; }
+.ua-table-compact th, .ua-table-compact td { padding: 6px 8px; }
+
+/* Empty state component */
+.ua-empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 20px; border: 1px dashed var(--yp-color-border); border-radius: var(--yp-radius); background: var(--yp-color-bg); }
+.ua-empty-icon { font-size: 1.8rem; opacity: 0.7; }
+.ua-empty-title { margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--yp-color-text); }
+.ua-empty-desc { margin: 0 0 8px; color: var(--yp-color-text-muted); }
+
 /* ============================================================================
      Modal Styles (dialog + fallback)
      ============================================================================ */
@@ -337,6 +362,30 @@ dialog.ua-modal::backdrop { background: rgba(0,0,0,0.4); }
 .ua-modal-body { margin: 8px 0; }
 .ua-modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .ua-modal-close { background: none; border: none; font-size: 1.25rem; cursor: pointer; }
+
+/* Modal responsive/full-screen sheet and sticky header/footer */
+.ua-modal-wide { max-width: 95vw; width: 95vw; }
+.ua-modal-inner { height: 95vh; max-height: 95vh; display:flex; flex-direction:column; }
+.ua-modal-header--sticky { position: sticky; top: 0; background: var(--admin-bg-card, #fff); z-index: 2; }
+.ua-modal-footer--sticky { position: sticky; bottom: 0; background: var(--admin-bg-card, #fff); z-index: 2; }
+.ua-modal-body--scroll { overflow:auto; -webkit-overflow-scrolling: touch; flex: 1; }
+.ua-icon-btn { background: none; border: none; cursor: pointer; font-size: 1rem; line-height: 1; padding: 2px 4px; }
+.ua-icon-btn:hover { opacity: 0.8; }
+@media (max-width: 768px) {
+    .ua-modal-wide { max-width: 100vw; width: 100vw; }
+    .ua-modal-inner { height: 95vh; max-height: 95vh; }
+}
+
+/* Utility: hide via class (CSP-safe) */
+.is-hidden { display: none !important; }
+
+/* Inline department notes (Veckovy v1) */
+.ua-note-box { display:flex; align-items:flex-start; gap:6px; margin-top:6px; padding:6px 8px; background: rgba(0,0,0,0.04); border-left: 3px solid #90caf9; color: #555; font-size: 14px; }
+.ua-note-icon { line-height: 1; }
+.ua-note-text { white-space: pre-wrap; }
+
+/* Weekview alt2 lunch highlight */
+.ua-alt2 { background: rgba(255, 235, 59, 0.25); box-shadow: inset 0 0 0 1px rgba(255, 193, 7, 0.5); }
 
 .ua-flashes { margin-bottom: 12px; }
 .ua-flash { padding: 8px 10px; font-size: 0.85rem; border-radius: 8px; margin-bottom: 4px; }

@@ -142,7 +142,11 @@
         {% endfor %}
       </table>
     {% else %}
-      <p class="ua-muted">Inga specialkosttyper definierade.</p>
+      <div class="ua-empty-state">
+        <div class="ua-empty-icon">🥗</div>
+        <div class="ua-empty-title">Inga specialkosttyper</div>
+        <p class="ua-empty-desc">Inga specialkosttyper definierade.</p>
+      </div>
     {% endif %}
     <div style="margin-top:8px; display:flex; gap:8px;">
       <a class="ua-button ua-button-secondary" href="{{ url_for('ui.admin_departments_edit_form', dept_id=vm.department.id) }}">Redigera specialkost</a>

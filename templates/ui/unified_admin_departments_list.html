@@ -28,12 +28,12 @@
     
     {% if vm.departments and vm.departments|length > 0 %}
     <div class="departments-table-wrapper">
-        <table class="yp-table departments-table">
+        <table class="ua-table">
             <thead>
                 <tr>
-                    <th>NAMN</th>
-                    <th>SITE</th>
-                    <th>ANTAL BOENDE</th>
+                    <th>Namn</th>
+                    <th>Site</th>
+                    <th>Antal boende</th>
                     <th class="actions-column">ÅTGÄRDER</th>
                 </tr>
             </thead>
@@ -41,7 +41,7 @@
                 {% for dept in vm.departments %}
                 <tr>
                                         <td class="dept-name">
-                                                <a href="{{ url_for('ui.admin_department_detail', department_id=dept.id) }}" class="dept-link">{{ dept.name }}</a>
+                                            <a href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}" class="dept-link">{{ dept.name }}</a>
                                                 {% if dept.notes %}
                                                     <div class="ua-dept-notes">ℹ {{ dept.notes }}</div>
                                                 {% endif %}
@@ -81,16 +81,12 @@
         </table>
     </div>
     {% else %}
-    <div class="empty-state">
-        <div class="empty-icon">📋</div>
-        <h3 class="empty-title">Inga avdelningar hittades</h3>
-        <p class="empty-description">
-            Skapa din första avdelning för att komma igång.
-        </p>
-        <a href="{{ url_for('ui.admin_departments_new_form') }}" class="yp-button yp-button-primary">
-            <span class="btn-icon">➕</span>
-            Lägg till avdelning
-        </a>
+    <div class="ua-empty-state">
+        <div class="ua-empty-icon">📋</div>
+        <div class="ua-empty-title">Inga avdelningar</div>
+        <p class="ua-empty-desc">Skapa din första avdelning för att komma igång.</p>
+        <a href="{{ url_for('ui.admin_departments_new_form') }}" class="yp-button yp-button-primary">➕ Lägg till avdelning</a>
+        <span style="display:none">Inga avdelningar hittades</span>
     </div>
     {% endif %}
     

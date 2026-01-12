@@ -72,13 +72,27 @@
     <div class="dep-header">
       <h2>{{ dep.name }}</h2>
       <div class="meta-row">Vecka {{ vm.week }}, {{ vm.year }}</div>
+      {% if dep.notes %}
+      <div class="ua-note-box">
+        <span class="ua-note-icon" aria-hidden="true">ℹ️</span>
+        <span class="ua-note-text">{{ dep.notes }}</span>
+      </div>
+      {% endif %}
     </div>
     <table class="ua-table weekview">
       <thead>
         <tr>
           <th></th>
-          {% for dn in day_names %}
-            <th colspan="2">{{ dn }}</th>
+          {% for i in range(0, day_names|length) %}
+            {% set dn = day_names[i] %}
+            {% set has_menu = (vm.menu_has_days[i] if vm.menu_has_days is defined else False) %}
+            <th colspan="2" class="week-day-header" data-day="{{ i+1 }}">
+              <span>{{ dn }}</span>
+              {% if has_menu %}
+                <button type="button" class="ua-icon-btn js-open-modal js-open-menu-modal" aria-label="Visa meny för {{ dn }}"
+                        data-modal-target="#menu-day-modal-{{ dep.id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day="{{ i+1 }}">📋</button>
+              {% endif %}
+            </th>
           {% endfor %}
         </tr>
         <tr>
@@ -93,16 +107,31 @@
         <tr class="boende-row">
           <td><strong>Boende</strong></td>
           {% for d in dep.days %}
-            <td>{{ (d.residents or {}).lunch or 0 }}</td>
+            <td class="{% if d.alt2_lunch %}ua-alt2{% endif %}">{{ (d.residents or {}).lunch or 0 }}</td>
             <td class="kvall">{{ (d.residents or {}).dinner or 0 }}</td>
           {% endfor %}
         </tr>
         {% set diet_ids = [] %}
+        {# Union: defaults > 0 OR any marked anywhere in the week (lunch/dinner) #}
         {% if dep.days and dep.days|length > 0 %}
+          {# Defaults > 0 from first day lunch (representative of default counts) #}
           {% for it in (dep.days[0].diets.lunch if dep.days[0].diets and dep.days[0].diets.lunch else []) %}
-            {% if it.resident_count > 0 %}
+            {% if it.resident_count > 0 and it.diet_type_id not in diet_ids %}
               {% set _ = diet_ids.append(it.diet_type_id) %}
             {% endif %}
+          {% endfor %}
+          {# Add any diet types that are marked in any day/meal #}
+          {% for day in dep.days %}
+            {% for it in (day.diets.lunch if day.diets and day.diets.lunch else []) %}
+              {% if it.marked and it.diet_type_id not in diet_ids %}
+                {% set _ = diet_ids.append(it.diet_type_id) %}
+              {% endif %}
+            {% endfor %}
+            {% for it in (day.diets.dinner if day.diets and day.diets.dinner else []) %}
+              {% if it.marked and it.diet_type_id not in diet_ids %}
+                {% set _ = diet_ids.append(it.diet_type_id) %}
+              {% endif %}
+            {% endfor %}
           {% endfor %}
         {% endif %}
         {% for dtid in diet_ids %}
@@ -112,7 +141,7 @@
               {% set day = dep.days[i] %}
               {% set lunch_cell = (day.diets.lunch | selectattr('diet_type_id','equalto', dtid) | list | first) %}
               {% set dinner_cell = (day.diets.dinner | selectattr('diet_type_id','equalto', dtid) | list | first) %}
-              <td class="diet-cell {% if lunch_cell and lunch_cell.marked %}marked{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Lunch" data-diet-id="{{ dtid }}">
+              <td class="diet-cell {% if lunch_cell and lunch_cell.marked %}marked{% endif %} {% if day.alt2_lunch %}ua-alt2{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Lunch" data-diet-id="{{ dtid }}">
                 {{ lunch_cell.resident_count if lunch_cell else 0 }}
               </td>
               <td class="diet-cell kvall {% if dinner_cell and dinner_cell.marked %}marked{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Kväll" data-diet-id="{{ dtid }}">
@@ -124,6 +153,36 @@
       </tbody>
     </table>
     <p class="ua-muted">Klicka i rutan för att markera/avmarkera specialkost.</p>
+    <!-- Modal: Meny per dag (read-only) -->
+    <dialog id="menu-day-modal-{{ dep.id }}" class="ua-modal ua-modal-wide" aria-labelledby="menu-day-title-{{ dep.id }}" aria-modal="true">
+      <div class="ua-modal-inner">
+        <header class="ua-modal-header ua-modal-header--sticky">
+          <h3 id="menu-day-title-{{ dep.id }}">Meny – <span class="js-menu-day-name">Dag</span> (v{{ vm.week }} {{ vm.year }})</h3>
+          <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
+        </header>
+        <div class="ua-modal-body ua-modal-body--scroll">
+          <section class="ua-section">
+            <h4>Lunch</h4>
+            <div class="ua-grid">
+              <div class="ua-grid-row js-row-lunch-alt1"><div>Alt 1</div><div class="js-menu-lunch-alt1">—</div></div>
+              <div class="ua-grid-row js-row-lunch-alt2"><div>Alt 2</div><div class="js-menu-lunch-alt2">—</div></div>
+              <div class="ua-grid-row js-row-lunch-dessert"><div>Dessert</div><div class="js-menu-lunch-dessert">—</div></div>
+            </div>
+          </section>
+          <section class="ua-section">
+            <h4>Kväll</h4>
+            <div class="ua-grid">
+              <div class="ua-grid-row js-row-dinner-alt1"><div>Kvällens rätt</div><div class="js-menu-dinner-alt1">—</div></div>
+              <div class="ua-grid-row js-row-dinner-alt2"><div>Alt 2</div><div class="js-menu-dinner-alt2">—</div></div>
+              <div class="ua-grid-row js-row-dinner-dessert"><div>Dessert</div><div class="js-menu-dinner-dessert">—</div></div>
+            </div>
+          </section>
+        </div>
+        <footer class="ua-modal-footer ua-modal-footer--sticky">
+          <button type="button" class="ua-button ua-button-ghost" data-modal-close>Stäng</button>
+        </footer>
+      </div>
+    </dialog>
   </div>
 </section>
 {% endfor %}

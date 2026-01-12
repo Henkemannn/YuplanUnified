@@ -71,7 +71,12 @@
           </table>
         </div>
         {% else %}
-          <p>Inga kunder att visa ännu.</p>
+          <div class="sa-empty-state">
+            <div class="sa-empty-icon">🏢</div>
+            <h3>Inga kunder</h3>
+            <p class="sa-empty-desc">Det finns inga registrerade kunder. Skapa en ny kund för att komma igång.</p>
+            <a href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}" class="sa-btn sa-btn-primary">➕ Skapa kund</a>
+          </div>
         {% endif %}
       </article>
     </section>

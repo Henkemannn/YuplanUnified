@@ -20,9 +20,9 @@
   {% endif %}
 {% endwith %}
 
-<div class="ua-card card">
-  <div class="card-body">
-    <table class="yp-table">
+<div class="ua-card">
+  {% if vm.diet_types and vm.diet_types|length > 0 %}
+    <table class="ua-table">
       <thead>
         <tr>
           <th>Namn</th>
@@ -43,12 +43,17 @@
             </form>
           </td>
         </tr>
-        {% else %}
-        <tr><td colspan="3">Inga kosttyper hittades.</td></tr>
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  {% else %}
+    <div class="ua-empty-state">
+      <div class="ua-empty-icon">🥗</div>
+      <div class="ua-empty-title">Inga kosttyper</div>
+      <p class="ua-empty-desc">Skapa din första kosttyp för att kunna registrera specialkost.</p>
+      <a href="{{ url_for('ui.admin_specialkost_new_form') }}" class="yp-button yp-button-primary">➕ Lägg till kosttyp</a>
+    </div>
+  {% endif %}
 </div>
 </section>
 {% endblock %}

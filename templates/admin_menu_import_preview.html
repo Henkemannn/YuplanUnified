@@ -1,0 +1,61 @@
+{% extends "ui/unified_admin_base.html" %}
+{% block page_title %}Menyimport – Förhandsgranskning{% endblock %}
+{% block admin_main %}
+<section class="ua-section">
+  <div class="ua-card">
+    <h2>Förhandsgranskning: {{ vm.filename }}</h2>
+    {% set week_keys = vm.preview.weeks.keys() if vm.preview.weeks else [] %}
+    {% if week_keys %}
+      {% set sorted_weeks = week_keys|list|sort %}
+      <p>Veckor: v. {{ sorted_weeks[0] }}{% if sorted_weeks|length>1 %}–{{ sorted_weeks[-1] }}{% endif %}</p>
+    {% else %}
+      <p>Veckor: —</p>
+    {% endif %}
+  </div>
+</section>
+<section class="ua-section">
+  <div class="ua-card">
+    <h3>Innehåll</h3>
+    {% set preview_week = (sorted_weeks[0] if week_keys else None) %}
+    <table class="ua-table">
+      <thead>
+        <tr>
+          <th>Dag</th>
+          <th>Lunch Alt 1</th>
+          <th>Lunch Alt 2</th>
+          <th>Lunch Dessert</th>
+          <th>Kväll Alt 1</th>
+          <th>Kväll Alt 2</th>
+          <th>Kväll Dessert</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set labels = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
+        {% for i in range(1,8) %}
+          {% set d = (vm.preview.weeks[preview_week].days[i] if preview_week else {'lunch': {'alt1_text':'','alt2_text':'','dessert':''}, 'dinner': {'alt1_text':'','alt2_text':'','dessert':''}}) %}
+          <tr>
+            <td>{{ labels[i-1] }}</td>
+            <td>{{ d.lunch.alt1_text or '—' }}</td>
+            <td>{{ d.lunch.alt2_text or '—' }}</td>
+            <td>{{ d.lunch.dessert or '—' }}</td>
+            <td>{{ d.dinner.alt1_text or '—' }}</td>
+            <td>{{ d.dinner.alt2_text or '—' }}</td>
+            <td>{{ d.dinner.dessert or '—' }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <form method="post" action="{{ url_for('admin_ui.admin_menu_import_preview_save') }}" class="ua-form" style="margin-top: 1rem;">
+      {{ csrf_token_input()|safe }}
+      <input type="hidden" name="year" value="{{ vm.year }}" />
+      <input type="hidden" name="weeks_json" value='{{ vm.preview.weeks|tojson }}' />
+      <button type="submit" class="ua-button">Spara</button>
+    </form>
+  </div>
+</section>
+<section class="ua-section">
+  <div class="ua-card">
+    <a href="{{ url_for('admin_ui.admin_menu_import') }}" class="ua-button ua-button-secondary">Tillbaka</a>
+  </div>
+</section>
+{% endblock %}

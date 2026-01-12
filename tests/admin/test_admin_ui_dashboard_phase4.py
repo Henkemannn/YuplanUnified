@@ -21,12 +21,18 @@ def test_admin_ui_dashboard_phase4_feature_flag_gating(client_admin):
             db.commit()
         finally:
             db.close()
-    resp = client_admin.get("/ui/admin/dashboard?site_id=site-flag", headers={"X-User-Role":"admin","X-Tenant-Id":"1"})
+    # Use canonical admin route; provide active site via header in tests
+    resp = client_admin.get(
+        "/ui/admin",
+        headers={
+            "X-User-Role": "admin",
+            "X-Tenant-Id": "1",
+            "X-Site-Id": "site-flag",
+        },
+    )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    # Enabled modules should appear
-    assert "Avdelningsportal" in html and "Rapport" in html
-    # Disabled Planera module card should not appear (ignore global nav link)
+    # Unified admin dashboard content
+    assert "Idag i köket" in html and "Veckostatus" in html
+    # Legacy module card header should not exist in unified dashboard
     assert "<h3>Planera</h3>" not in html
-    # Icon presence sanity check (portal icon 🍽️)
-    assert "🍽️" in html

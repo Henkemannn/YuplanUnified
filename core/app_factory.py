@@ -24,6 +24,7 @@ import os
 from dotenv import load_dotenv
 
 from flask import Flask, g, jsonify, request, session, send_from_directory, current_app
+from sqlalchemy import text
 import mimetypes
 from werkzeug.wrappers.response import Response
 
@@ -101,11 +102,14 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         for k, v in config_override.items():  # also allow direct Flask config keys
             if k.isupper():
                 app.config[k] = v
-    # Resolve stable absolute dev DB path when DATABASE_URL not provided
+    # Resolve stable absolute dev DB path when DATABASE_URL not provided.
+    # Respect explicit override: if caller passed database_url in config_override,
+    # do NOT rewrite it to instance/dev.db.
     try:
         if not os.getenv("DATABASE_URL"):
-            # Default from Config is sqlite:///dev.db; replace with absolute instance path
-            if str(cfg.database_url).startswith("sqlite:///"):
+            _override_supplied = bool(config_override and ("database_url" in config_override))
+            # Default from Config is sqlite:///dev.db; replace with absolute instance path only when not overridden
+            if (not _override_supplied) and str(cfg.database_url).startswith("sqlite///"):
                 os.makedirs(app.instance_path, exist_ok=True)
                 abs_db = os.path.join(app.instance_path, "dev.db")
                 cfg.database_url = f"sqlite:///{abs_db}"
@@ -119,7 +123,10 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     # ProblemDetails is canonical now (ADR-003). No problem-only flag propagation.
 
     # --- DB setup ---
-    init_engine(cfg.database_url)
+    # If a database_url was explicitly overridden for this app instance,
+    # reinitialize the engine to honor the new target (isolated test DBs).
+    force_db = bool(config_override and ("database_url" in config_override or "SQLALCHEMY_DATABASE_URI" in config_override))
+    init_engine(cfg.database_url, force=force_db)
     try:
         # Always emit a single startup line with DB location and git info
         db_url = str(cfg.database_url)
@@ -164,6 +171,42 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if branch or commit:
             print(f"RUNTIME: branch={branch or 'unknown'} commit={commit or 'unknown'} sqlite_file={sqlite_file or ''}")
     except Exception:
+        pass
+
+    # --- Runtime schema alignment ---
+    # Ensure critical columns exist to avoid 500s when models expect them.
+    # Run in non-testing apps, and also in dev environment even under TESTING
+    # to keep local dev DBs aligned with current models.
+    try:
+        if (not app.config.get("TESTING")) or (os.getenv("APP_ENV", "").lower() == "dev"):
+            db = get_session()
+            try:
+                # SQLite: add users.site_id if missing (string, nullable)
+                if db.bind.dialect.name == "sqlite":
+                    cols = db.execute(text("PRAGMA table_info('users')")).fetchall()
+                    has_site_id = any(str(c[1]) == "site_id" for c in cols)
+                    if not has_site_id:
+                        db.execute(text("ALTER TABLE users ADD COLUMN site_id TEXT NULL"))
+                        db.commit()
+                else:
+                    # For other backends, prefer proper migrations; log guidance
+                    try:
+                        cols = db.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='users'"))
+                        names = {str(r[0]) for r in cols}
+                        if "site_id" not in names:
+                            current_app.logger.error(
+                                "Missing users.site_id column. Please run the Alembic migration to add it."
+                            )
+                    except Exception:
+                        # Best-effort only; avoid crashing startup
+                        pass
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+    except Exception:
+        # Do not fail startup if alignment process encounters errors; tests will surface issues.
         pass
 
     # Inject department id into session for local dev (no auth layer) so portal works without 403.
@@ -235,22 +278,36 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             if sid:
                 try:
                     rows = db.execute(text("SELECT name, enabled FROM site_feature_flags WHERE site_id=:sid"), {"sid": sid}).fetchall()
-                    g.tenant_feature_flags = {str(r[0]): bool(int(r[1])) for r in rows}
+                    if rows:
+                        g.tenant_feature_flags = {str(r[0]): bool(int(r[1])) for r in rows}
+                    else:
+                        # No site-scoped overrides; fall back to tenant-level
+                        rows = (
+                            db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
+                            .filter(TenantFeatureFlag.tenant_id == tid)
+                            .all()
+                        )
+                        g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
                 except Exception:
-                    # Fall back to tenant-level flags if site-level not available
+                    try:
+                        rows = (
+                            db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
+                            .filter(TenantFeatureFlag.tenant_id == tid)
+                            .all()
+                        )
+                        g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
+                    except Exception:
+                        g.tenant_feature_flags = {}
+            else:
+                try:
                     rows = (
                         db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
                         .filter(TenantFeatureFlag.tenant_id == tid)
                         .all()
                     )
                     g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
-            else:
-                rows = (
-                    db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
-                    .filter(TenantFeatureFlag.tenant_id == tid)
-                    .all()
-                )
-                g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
+                except Exception:
+                    g.tenant_feature_flags = {}
         finally:
             db.close()
 
@@ -497,6 +554,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
             role = request.headers.get("X-User-Role")
             tid = request.headers.get("X-Tenant-Id")
+            sid = request.headers.get("X-Site-Id")
             uid = request.headers.get("X-User-Id")
             if role:
                 session["role"] = role
@@ -508,6 +566,35 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             if tid:
                 session["tenant_id"] = int(tid) if tid.isdigit() else tid
                 g.tenant_id = int(tid) if tid.isdigit() else tid
+            if sid:
+                # Allow explicit site context in tests via header
+                session["site_id"] = sid
+                g.site_id = sid
+            # Ensure test DB has sites.tenant_id to avoid insert errors in tests that seed with tenant_id
+            try:
+                from sqlalchemy import text as _sa_text
+                db = get_session()
+                try:
+                    cols = db.execute(_sa_text("PRAGMA table_info(sites)")).fetchall()
+                    has_tenant = any(str(c[1]) == "tenant_id" for c in cols)
+                except Exception:
+                    has_tenant = False
+                if not has_tenant:
+                    try:
+                        db.execute(_sa_text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+                    except Exception:
+                        pass
+                    try:
+                        db.execute(_sa_text("CREATE INDEX IF NOT EXISTS idx_sites_tenant_id ON sites(tenant_id)"))
+                    except Exception:
+                        pass
+                try:
+                    db.close()
+                except Exception:
+                    pass
+            except Exception:
+                # Non-fatal in tests
+                pass
             # Do not implicitly default tenant context when only role is provided.
             # Tests that omit X-Tenant-Id must observe 401 for incomplete session.
         # Honor Bearer Authorization globally to populate session for UI routes

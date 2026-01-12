@@ -178,9 +178,28 @@ def patch_weekview() -> Response:
         return bad_request("tenant_missing")
     site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
     site_body = (data.get("site_id") or "").strip()
-    # Only enforce mismatch when both body and session specify site ids
+    # Only enforce mismatch when locked or user is hard-bound to a site
     if site_ctx and site_body and site_ctx != site_body:
-        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
+        locked = bool(session.get("site_lock"))
+        hard_bound = False
+        try:
+            uid = session.get("user_id")
+            if uid is not None:
+                from .db import get_session as _gs
+                from sqlalchemy import text as _t
+                _db = _gs()
+                try:
+                    row = _db.execute(_t("SELECT site_id FROM users WHERE id=:u"), {"u": int(uid)}).fetchone()
+                    hard_bound = bool(row and row[0])
+                finally:
+                    try:
+                        _db.close()
+                    except Exception:
+                        pass
+        except Exception:
+            hard_bound = False
+        if locked or hard_bound:
+            return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     body_tid = data.get("tenant_id")
     if body_tid is not None and str(body_tid) != str(tid):
         return bad_request("tenant_mismatch")
@@ -239,9 +258,28 @@ def patch_weekview_residents() -> Response:
         return bad_request("tenant_missing")
     site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
     site_body = (data.get("site_id") or "").strip()
-    # Only enforce mismatch when both body and session specify site ids
+    # Only enforce mismatch when locked or user is hard-bound to a site
     if site_ctx and site_body and site_ctx != site_body:
-        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
+        locked = bool(session.get("site_lock"))
+        hard_bound = False
+        try:
+            uid = session.get("user_id")
+            if uid is not None:
+                from .db import get_session as _gs
+                from sqlalchemy import text as _t
+                _db = _gs()
+                try:
+                    row = _db.execute(_t("SELECT site_id FROM users WHERE id=:u"), {"u": int(uid)}).fetchone()
+                    hard_bound = bool(row and row[0])
+                finally:
+                    try:
+                        _db.close()
+                    except Exception:
+                        pass
+        except Exception:
+            hard_bound = False
+        if locked or hard_bound:
+            return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     body_tid = data.get("tenant_id")
     if body_tid is not None and str(body_tid) != str(tid):
         return bad_request("tenant_mismatch")
@@ -305,9 +343,28 @@ def patch_weekview_alt2() -> Response:
         return bad_request("tenant_missing")
     site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
     site_body = (data.get("site_id") or "").strip()
-    # Only enforce mismatch when both body and session specify site ids
+    # Only enforce mismatch when locked or user is hard-bound to a site
     if site_ctx and site_body and site_ctx != site_body:
-        return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
+        locked = bool(session.get("site_lock"))
+        hard_bound = False
+        try:
+            uid = session.get("user_id")
+            if uid is not None:
+                from .db import get_session as _gs
+                from sqlalchemy import text as _t
+                _db = _gs()
+                try:
+                    row = _db.execute(_t("SELECT site_id FROM users WHERE id=:u"), {"u": int(uid)}).fetchone()
+                    hard_bound = bool(row and row[0])
+                finally:
+                    try:
+                        _db.close()
+                    except Exception:
+                        pass
+        except Exception:
+            hard_bound = False
+        if locked or hard_bound:
+            return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     body_tid = data.get("tenant_id")
     if body_tid is not None and str(body_tid) != str(tid):
         return bad_request("tenant_mismatch")

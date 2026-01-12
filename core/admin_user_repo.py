@@ -7,6 +7,7 @@ from typing import Optional
 
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
+from .ident import canonicalize_identifier
 
 from .db import get_session
 from .models import User
@@ -77,19 +78,23 @@ class AdminUserRepo:
             db.close()
 
     def create_user(
-        self, 
+        self,
         tenant_id: int,
         username: str,
         email: str,
         password: str,
         full_name: Optional[str] = None,
         role: str = "staff",
-        is_active: bool = True
+        is_active: bool = True,
+        site_id: Optional[str] = None,
     ) -> int:
         """
         Create a new user.
         Returns the new user ID.
         """
+        # Canonicalize identity to ensure unicode domains are stored as IDNA
+        canon_email = canonicalize_identifier(email or "")
+        canon_username = canonicalize_identifier(username or canon_email)
         password_hash = generate_password_hash(password)
         
         db = get_session()
@@ -97,12 +102,13 @@ class AdminUserRepo:
             # Use ORM for creation
             user = User(
                 tenant_id=tenant_id,
-                username=username,
-                email=email,
+                username=canon_username or canon_email,  # ensure non-null username
+                email=canon_email,
                 password_hash=password_hash,
                 full_name=full_name,
                 role=role,
-                is_active=is_active
+                is_active=is_active,
+                site_id=site_id if role == "admin" else None,
             )
             db.add(user)
             db.commit()

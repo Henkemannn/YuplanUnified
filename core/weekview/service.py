@@ -256,15 +256,21 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
             except Exception:
                 diet_defaults = {}
 
-            # Build mark index from raw marks list if present
+            # Build mark index from raw marks list if present, and collect marked diet types
             marks = summary.get("marks", []) or []
             marked_idx: set[tuple[int, str, str]] = set()
+            marked_diet_types: set[str] = set()
             try:
                 for m in marks:
                     if bool(m.get("marked")):
-                        marked_idx.add((int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type"))))
+                        dow_i = int(m.get("day_of_week"))
+                        meal_s = str(m.get("meal"))
+                        dt_s = str(m.get("diet_type"))
+                        marked_idx.add((dow_i, meal_s, dt_s))
+                        marked_diet_types.add(dt_s)
             except Exception:
                 marked_idx = set()
+                marked_diet_types = set()
 
             days_out: list[dict[str, Any]] = []
             for dow in range(1, 8):
@@ -312,15 +318,18 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                 if dinner_obj:
                     menu_texts["dinner"] = dinner_obj
 
-                # Build diets list per meal using department defaults and marks
+                # Build diets list per meal using union of defaults and any marked diet types
                 def _build_diets(meal_name: str) -> list[dict[str, Any]]:
                     out: list[dict[str, Any]] = []
-                    for dt_id, default_cnt in sorted(diet_defaults.items()):
+                    # Union: defaults (may be 0) plus any diet types marked anywhere in the week
+                    all_ids: set[str] = set(diet_defaults.keys()) | set(marked_diet_types)
+                    for dt_id in sorted(all_ids):
+                        default_cnt = int(diet_defaults.get(dt_id, 0))
                         out.append(
                             {
                                 "diet_type_id": dt_id,
                                 "diet_name": dt_id,  # TODO: map id->human name via diet types registry
-                                "resident_count": int(default_cnt),
+                                "resident_count": default_cnt,
                                 "marked": (dow, meal_name, dt_id) in marked_idx,
                             }
                         )

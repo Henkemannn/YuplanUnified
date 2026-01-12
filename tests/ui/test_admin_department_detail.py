@@ -150,8 +150,8 @@ def test_departments_list_shows_link_and_varierat_badge(app_session: Flask, clie
     r = client_admin.get("/ui/admin/departments", headers=HEADERS_ADMIN)
     assert r.status_code == 200
     html = r.data.decode()
-    # Link to detail page
-    assert f"/ui/admin/departments/{dept['id']}/detail" in html
+    # Link should route to canonical edit page
+    assert f"/ui/admin/departments/{dept['id']}/edit" in html
     # Notes are visible
     assert "Viktig info" in html
     # Varierat badge present

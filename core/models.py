@@ -41,6 +41,8 @@ class User(Base):
     full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
+    # Optional hard binding to a single site (enforced by UI routes)
+    site_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     refresh_token_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)

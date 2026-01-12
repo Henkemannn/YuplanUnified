@@ -60,7 +60,11 @@
           </table>
         </div>
         {% else %}
-          <p>Inga sites ännu.</p>
+          <div class="sa-empty-state">
+            <div class="sa-empty-icon">🧭</div>
+            <h3>Inga sites</h3>
+            <p class="sa-empty-desc">Denna kund saknar sites. Skapa en site och adminanvändare nedan.</p>
+          </div>
         {% endif %}
       </article>
 
@@ -92,7 +96,7 @@
           <div class="admin-form-row"><label><input type="checkbox" name="sf_freeze"> Frys</label></div>
           <div class="admin-form-row"><label><input type="checkbox" name="sf_husk_bestill"> Husk Bestill</label></div>
           <div class="admin-form-row"><label><input type="checkbox" name="sf_integrations"> Integrationer</label></div>
-          <button type="submit" class="sa-btn sa-btn-primary">Skapa site och admin</button>
+          <button type="submit" class="sa-btn sa-btn-primary">Skapa site och adminanvändare</button>
         </form>
       </article>
     </section>

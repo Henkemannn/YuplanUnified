@@ -64,7 +64,12 @@ def test_portal_basic_content(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 46
     _seed_base(app, site_id, dep_id, year, week)
-    r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
+    # Bind session to seeded site for admin (hardened portal ignores query site for customer admins)
+    with client_admin.session_transaction() as s:
+        s["site_id"] = site_id
+        s["site_lock"] = True
+        s["role"] = "admin"
+    r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("superuser"))
     html = r.get_data(as_text=True)
     assert "Avdelningsportalen" in html
     assert f"Vecka {week}, {year}" in html
@@ -77,12 +82,17 @@ def test_portal_alt2_badge_visible(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 47
     _seed_base(app, site_id, dep_id, year, week)
+    # Bind session to seeded site for admin
+    with client_admin.session_transaction() as s:
+        s["site_id"] = site_id
+        s["site_lock"] = True
+        s["role"] = "admin"
     # Set alt2 flag for Monday
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
     etag0 = r0.headers.get("ETag"); assert ETAG_RE.match(etag0)
     r_alt2 = client_admin.patch("/api/weekview/alt2", json={"tenant_id":1,"department_id":dep_id,"year":year,"week":week,"days":[1]}, headers={**_h("editor"), "If-Match": etag0})
     assert r_alt2.status_code in (200,201)
-    r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
+    r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("superuser"))
     html = r.get_data(as_text=True)
     assert "⚡ Alt 2" in html or "yp-badge-warning" in html
 
@@ -92,12 +102,17 @@ def test_portal_registration_badge(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 48
     _seed_base(app, site_id, dep_id, year, week)
+    # Bind session to seeded site for admin
+    with client_admin.session_transaction() as s:
+        s["site_id"] = site_id
+        s["site_lock"] = True
+        s["role"] = "admin"
     # Upsert registration for Monday lunch
     from core.meal_registration_repo import MealRegistrationRepo
     repo = MealRegistrationRepo(); repo.ensure_table_exists()
     monday = _date.fromisocalendar(year, week, 1).isoformat()
     repo.upsert_registration(tenant_id=1, site_id=site_id, department_id=dep_id, date_str=monday, meal_type="lunch", registered=True)
-    r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
+    r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("superuser"))
     html = r.get_data(as_text=True)
     assert "Registrerad" in html
 
