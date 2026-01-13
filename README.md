@@ -603,6 +603,8 @@ Current ADRs:
 
 OpenAPI spec is validated on each push in CI (job: `openapi-validate`), and the generated `openapi.json` is uploaded as an artifact. Validation uses `openapi-spec-validator` (with `rpds-py`).
 
+OpenAPI spec is validated on each push in CI (job: `openapi-validate`), and the generated `openapi.json` is uploaded as an artifact. Validation uses `openapi-spec-validator` (with `rpds-py`).
+
 PR Checklist (developer self-check):
 1. `ruff check .` passes with no new violations.
 2. `mypy core modules` shows no increased error count (preferably reduced).

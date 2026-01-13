@@ -30,7 +30,6 @@ FORM_FIELD = "csrf_token"
 # Endpoint (blueprint) prefixes to enforce (incremental rollout)
 ENFORCED_PREFIXES = [
     "/diet/",
-    "/ui/admin/menu-import/",
     "/api/superuser/",
 ]
 
@@ -44,28 +43,14 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def _problem_missing() -> Response:
-    payload = {
-        "type": "https://example.com/problems/csrf_missing",
-        "title": "Forbidden",
-        "status": 403,
-        "detail": "csrf_missing",
-    }
-    resp = jsonify(payload)
+    resp = jsonify({"ok": False, "error": "forbidden", "message": "csrf_missing"})
     resp.status_code = 403
-    resp.mimetype = "application/problem+json"
     return resp
 
 
 def _problem_invalid() -> Response:
-    payload = {
-        "type": "https://example.com/problems/csrf_invalid",
-        "title": "Forbidden",
-        "status": 403,
-        "detail": "csrf_invalid",
-    }
-    resp = jsonify(payload)
+    resp = jsonify({"ok": False, "error": "forbidden", "message": "csrf_invalid"})
     resp.status_code = 403
-    resp.mimetype = "application/problem+json"
     return resp
 
 
@@ -167,9 +152,6 @@ def require_csrf_for_admin_mutations(req) -> Response | None:
             return None
         path = req.path or "/"
         if not path.startswith("/admin"):
-            return None
-        # Exempt limits API from lightweight CSRF; covered by rate limit tests and RBAC
-        if path.startswith("/admin/limits"):
             return None
         # Only enforce CSRF for admin role to keep RBAC semantics for viewer intact
         try:

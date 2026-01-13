@@ -139,6 +139,13 @@ jobs:
         run: |
           pytest tests/admin -v --maxfail=1 --disable-warnings
 
+      # Phase 2 DoD gate – admin authz must stay green
+      - name: Run admin test suite (must stay green)
+        env:
+          DATABASE_URL: sqlite:///ci.db
+        run: |
+          pytest tests/admin -v --maxfail=1 --disable-warnings
+
       - name: Archive test results (optional placeholder)
         if: always()
         run: echo "Add coverage or junit XML export later."
