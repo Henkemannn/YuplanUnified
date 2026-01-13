@@ -1,8 +1,54 @@
+## Problem Details (RFC7807) — Full Adoption
+
+What
+- All endpoints now return RFC7807 Problem Details for error responses (4xx/5xx).
+
+Behavior
+- Content type: application/problem+json
+- Required fields: type, title, status, detail
+- Extensions: request_id (always), incident_id (500), errors[] (422), retry_after (429), required_role (403 when applicable)
+
+Request correlation
+- X-Request-Id header is echoed as payload.request_id in problem responses.
+
+Examples
+- 401 Unauthorized
+  - type: https://example.com/errors/unauthorized
+  - title: Unauthorized
+  - status: 401
+  - detail: unauthorized
+  - request_id: 11111111-1111-1111-1111-111111111111
+- 422 Validation
+  - type: https://example.com/errors/validation_error
+  - title: Unprocessable Entity
+  - status: 422
+  - detail: validation_error
+  - errors: [{"field": "name", "message": "required"}]
+  - request_id: 22222222-2222-2222-2222-222222222222
+- 429 Too Many Requests
+  - type: https://example.com/errors/rate_limited
+  - title: Too Many Requests
+  - status: 429
+  - detail: rate_limited
+  - retry_after: 30
+  - limit: tasks_mutations
+  - headers: Retry-After: 30
+- 500 Incident
+  - type: https://example.com/errors/internal_error
+  - title: Internal Server Error
+  - status: 500
+  - detail: internal_error
+  - incident_id: 33333333-3333-3333-3333-333333333333
+  - request_id: 33333333-3333-3333-3333-333333333333
 # Yuplan Unified Platform (Scaffold)
 
 [![CI](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/ci.yml)
 [![OpenAPI](https://github.com/Henkemannn/YuplanUnified/actions/workflows/openapi.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/openapi.yml)
 [![markdownlint](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/markdownlint.yml)
+[![CodeQL](https://github.com/Henkemannn/YuplanUnified/actions/workflows/codeql.yml/badge.svg)](https://github.com/Henkemannn/YuplanUnified/actions/workflows/codeql.yml)
+[![API](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Henkemannn/YuplanUnified/master/status/api_status.json)](./)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Henkemannn/YuplanUnified/master/status/coverage-badge.json)](./)
+[![GA](https://img.shields.io/badge/GA-v1.0.0-green)](RELEASE_NOTES_v1.0.0.md)
 
 <p align="left">
   <img alt="Ruff" src="https://img.shields.io/badge/Ruff-E,F,I,B,UP,Q-success?logo=python&logoColor=white" />
@@ -11,6 +57,152 @@
 </p>
 
 This repository scaffold is the starting point for merging the Municipal (Kommun) and Offshore Yuplan applications into a single multi-tenant, module-driven platform.
+
+### Supported Python
+
+- Target runtime is Python 3.11. Newer interpreters (e.g., 3.14) are currently unsupported due to upstream typing changes affecting SQLAlchemy 2.0.x. Use a 3.11 virtual environment locally or run via the Dockerfile.
+
+### Local Dev: Stable Startup (Department Portal)
+
+To avoid repeated reinstall of dependencies and 403 errors on the portal UI:
+
+1. Create the virtual environment once (Python 3.11):
+  ```powershell
+  py -3.11 -m venv .venv
+  ```
+2. Activate for each new terminal/session:
+  ```powershell
+  .\.venv\Scripts\Activate.ps1
+  ```
+3. Install dependencies only when `requirements.txt` changes:
+  ```powershell
+  pip install -r requirements.txt
+  ```
+4. Persist the department portal fallback by adding to `.env` (already appended):
+  ```dotenv
+  DEV_DEPARTMENT_ID=11111111-2222-3333-4444-555555555555
+  ```
+  The app now auto-loads `.env` (via `python-dotenv`) so the debug reloader keeps this value.
+5. Start the app:
+  ```powershell
+  python run.py
+  ```
+6. Visit the portal week view:
+  - UI (HTML): `http://127.0.0.1:5000/ui/portal/department/week?year=2025&week=47`
+  - JSON API (silent refresh): `http://127.0.0.1:5000/portal/department/week?year=2025&week=47`
+
+### Demo Mode (First-Time Evaluation)
+Add `&demo=1` to the UI URL for a smoother first impression when only seed data exists:
+
+`http://127.0.0.1:5000/ui/portal/department/week?year=2025&week=47&demo=1`
+
+In demo mode:
+- Silent refresh runs automatically and a single auto-retry of a menuval sparning (Alt1/Alt2) happens after en konflikt (412).
+- Konfliktmeddelandet använder mildare text (fokus på uppdatering i stället för att blockera).
+- Du slipper direkt behöva klicka “Ladda om” om testdata är äldre än din vy.
+
+Omit `demo=1` to test the full optimistic concurrency & manual konfliktflöde.
+
+If you see a 403 on the UI page it means `DEV_DEPARTMENT_ID` was not loaded—confirm it exists in `.env` and you are running under Python 3.11 with the venv activated. Avoid deleting `.venv` unless changing Python major version.
+
+### Why Not Python 3.14 Yet?
+SQLAlchemy 2.0.x introduces forward-typing assumptions that are unstable under 3.14 preview builds, causing internal type errors in dev. Sticking to 3.11 ensures stable imports, consistent test results (387 passing), and avoids unnecessary environment rebuilds.
+
+
+
+## Staging quickstart
+- Access and demo guardrails: see `docs/staging-access.md` (simple auth, CSRF, DEMO_UI)
+- Smoke run log: see `docs/staging-smoke_2025-11-11.md`
+- One-liners (Windows):
+  - `make login-ps` (or `pwsh -File scripts/login.ps1`)
+  - `make smoke-ps` (or `pwsh -File scripts/smoke.ps1 -BaseUrl https://yuplan-unified-staging.fly.dev -SiteId <SITE_ID> -Week 51`)
+ - See `docs/staging_demo_kommun_core.md` for how to seed the Demo Kommun environment locally and on Fly.io.
+
+## Staging environment (Fly.io)
+
+Current staging URL: https://yuplan-unified-staging-icy-wave-9332.fly.dev/
+
+Landing page `/` links to health (`/health` + `/healthz`), docs (`/docs/`), and the OpenAPI spec (`/openapi.json`).
+
+### Database driver
+
+Staging runs on Postgres (Fly managed cluster) — preferred over SQLite for concurrency & realistic query planning. SQLite is still usable locally and in CI for light tests. Migrations are Alembic-driven; never rely on `create_all` in staging.
+
+### Initialize schema & minimal seed (local dev)
+
+PowerShell (Windows):
+```powershell
+python tools/init_db.py
+```
+
+Bash (macOS/Linux):
+```bash
+python tools/init_db.py
+```
+
+This runs all Alembic migrations (multi-head safe) and seeds tenant `demo` with units `Alpha`, `Bravo`.
+
+### Week view seed example
+
+PowerShell:
+```powershell
+python tools/seed_weekview.py --tenant demo --year 2025 --week 45 --departments Alpha Bravo
+```
+
+Bash:
+```bash
+python tools/seed_weekview.py --tenant demo --year 2025 --week 45 --departments Alpha Bravo
+```
+
+### Postgres staging runbook
+
+See `docs/staging_postgres_runbook.md` for end-to-end commands to:
+1. Provision a Fly Postgres cluster
+2. Attach and set `DATABASE_URL`
+3. Run migrations + seed inside the machine
+4. Validate health
+
+If switching to a fresh database or re-running migrations in-place, ensure no conflicting heads (we use `upgrade heads`).
+
+
+## Contributing
+See CONTRIBUTING.md for branching, PR, and quality gates. Use the GitHub Issue templates for GA checklist and roadmap kickoff from the New Issue menu.
+
+## Quick reference (OpenAPI)
+* PowerShell helpers: `./scripts/dev.ps1; Invoke-OpenAPIWorkflow` fetches spec, semantic diff, optional spectral lint, focused tests.
+* Fetch only: `./scripts/dev.ps1; Get-OpenAPISpec` writes `openapi.json` (badge workflow in CI consumes semantic diff artifacts).
+* Local Python fetch (fallback /docs/openapi.json):
+  ```
+  python fetch_openapi_local.py --base-url http://localhost:5000 --output openapi.json
+  ```
+* Diff vs baseline manually:
+  ```
+  python scripts/openapi_diff.py specs/openapi.baseline.json openapi.json --report openapi-diff.txt
+  ```
+* Breaking changes cause non‑zero exit in diff script; baseline must be updated intentionally in same PR.
+
+## Pre-commit (lokalt)
+Kör snabb säkerhetskontroll innan commit:
+```bash
+pip install pip-audit
+pip-audit
+```
+(*Valfritt:* vi kan lägga till en `.pre-commit-config.yaml` hook senare.)
+
+## Pre-commit
+Installera hooks lokalt:
+```bash
+pip install pre-commit
+pre-commit install
+```
+Kör alla hooks manuellt:
+```bash
+pre-commit run --all-files
+```
+Kör pip-audit manuellt (manual stage):
+```bash
+pre-commit run pip-audit --all-files
+```
 
 ## Versioning & Release
 We follow Semantic Versioning (SemVer):
@@ -29,6 +221,61 @@ Release workflow: automatically produces OpenAPI diff artifacts (`openapi-diff.t
 After `v1.0.0-beta`: Further additive changes bump MINOR; any breaking change requires a MAJOR plan (`2.0.0`) unless explicitly deferred pre-GA.
 
 For the exact steps, see **[RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md)**.
+
+### Feature Flag: Strict CSRF
+An opt-in stricter CSRF enforcement layer can be enabled with environment variable `YUPLAN_STRICT_CSRF=1`.
+
+When active:
+* A per-session token is generated and exposed to templates and JS (meta tag `csrf-token`).
+* Mutating requests under selected prefixes (`/diet/`, `/superuser/impersonate/`) MUST include `X-CSRF-Token` header or form field `csrf_token`.
+* Failures return RFC7807 problem+json (`csrf_missing` or `csrf_invalid`).
+* A lightweight fetch wrapper (`/static/js/http.js`) auto-injects the header in the UI.
+* Prefix list expands gradually as tests migrate.
+
+Disable by omitting or setting the variable to `0` (legacy protections remain in place).
+
+### Release helper
+PowerShell (Windows):
+```powershell
+pwsh -File tools/release.ps1 -Kind patch   # or minor / major
+```
+Make (macOS/Linux):
+```bash
+make release-patch    # or make release-minor / make release-major
+```
+This will:
+1. Ensure working tree clean
+2. Bump version via `tools/bump_version.py`
+3. Commit "chore(release): bump version to X.Y.Z"
+4. Tag `vX.Y.Z` and push (unless `-NoPush` used in PowerShell)
+5. Trigger `.github/workflows/release.yml` which builds the GitHub Release body from notes or template.
+
+## Deprecation policy
+
+We avoid breaking changes. When removal or incompatible changes are required we follow an announce–deprecate–sunset cycle:
+
+### Marking
+* HTTP headers on deprecated endpoints:
+  * `Deprecation: true` (or an ISO date per RFC 8594)
+  * `Sunset: <http-date>` (date support ends)
+  * `Link: <https://api.example.com/docs/migrations/XYZ>; rel="sunset"`
+* `Warning: 299 api.example.com "Deprecated: will be removed on YYYY-MM-DD"`
+* CHANGELOG entry under Unreleased + release notes.
+* During deprecation window the API status badge will normally show `changed` (yellow) if additive shims are present.
+
+### Timelines (minimum)
+* Response shape additive (new optional fields): no grace needed.
+* Field removals: ≥ 90 days.
+* Endpoint removal / contract-breaking change: ≥ 180 days.
+
+### Communication
+* Versioned docs page with migration examples.
+* For enterprise / partners: outbound email (contact list) at announce + 30d before sunset.
+
+### Versioning
+* If an immediate incompatible change is unavoidable: bump MAJOR and/or ship a new path or versioned media type; prefer feature flag–guarded behavior until consumers migrate.
+
+---
 
 ## Vision
 Provide a Core domain (Menus, Diets, Attendance, Users, Tenants) with optional modules activated per customer (turnus scheduling, waste metrics, prep/freezer tasks, messaging, alt1/alt2 workflow, etc.). Superusers can enable modules on demand.
@@ -52,9 +299,14 @@ unified_platform/
 ## Quick Start (Dev)
 1. Create virtualenv & install deps (or use `make install` / `Install-Deps`):
    ```
-   python -m venv .venv
-   .venv\Scripts\activate  # Windows
-   pip install -r requirements.txt
+  # Windows (ensure Python 3.11)
+  py -3.11 -m venv .venv
+  .venv\Scripts\activate
+  pip install -r requirements.txt
+  # macOS/Linux
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements.txt
    ```
 2. Copy .env.example to .env and adjust values.
 3. Run initial migrations (schema is migration-driven; DEV_CREATE_ALL is deprecated):
@@ -116,6 +368,18 @@ unified_platform/
   - `bom=1` — prepend UTF-8 BOM for Excel
 * Streaming uses generator + `yield_per` for low memory footprint.
 
+### Rapport – Exportera PDF (Pass D)
+Klientside-PDF via webbläsarens print-funktion. Ingen serverändring krävs och CSP-respekteras.
+
+- UI: Knapp “Export PDF” i Rapport-panelen (disabled tills data finns via “Läs in”).
+- Funktion: `exportReportPdf(reportJson, week)` bygger en print-vy (rubrik, tabell, summering) och anropar `window.print()`.
+- CSS: `@media print` sätter A4, 12mm marginaler, döljer header/meny/knappar och justerar rutnätskort.
+- Tillgänglighet: Fokus återställs till knappen efter utskrift.
+
+Manuell verifikation:
+1) Öppna “Rapport”, välj vecka och klicka “Läs in”.
+2) Klicka “Export PDF” → Förhandsgranskning visar rubrik, tabell och totals. Avbryt/Skriv ut enligt behov.
+
 #### Feature Flag: `rate_limit_export`
 The export endpoints have an optional opt-in rate limit controlled per tenant via the `rate_limit_export` feature flag.
 
@@ -131,10 +395,7 @@ Default: OFF (no throttling). When enabled for a tenant:
 * Default quota: 10 requests per 60s window (registry key `admin_limits_write`).
 * Per-tenant override supported via `FEATURE_LIMITS_JSON` using key `tenant:<id>:admin_limits_write`.
 * Registry global override via `FEATURE_LIMITS_DEFAULTS_JSON` key `admin_limits_write`.
-* Exceeding quota yields HTTP 429 with JSON:
-  ```json
-  {"ok": false, "error": "rate_limited", "message": "Rate limit exceeded for admin_limits_write", "retry_after": 42, "limit": "admin_limits_write"}
-  ```
+* Exceeding quota yields HTTP 429 ProblemDetails (application/problem+json) with fields: status=429, type=/rate_limited, retry_after, limit and header Retry-After.
 * Metrics emitted: `rate_limit.hit` (tags: name=admin_limits_write, outcome=allow|block, window=60) and `rate_limit.lookup` (source=fallback|default|tenant).
 
 Enable for a pilot tenant via:
@@ -143,11 +404,7 @@ POST /admin/feature_flags
 {"name": "rate_limit_admin_limits_write", "enabled": true}
 ```
 
-* Exceeding the quota results in HTTP 429 with JSON body:
-  ```json
-  {"ok": false, "error": "rate_limited", "message": "Rate limit exceeded for export_notes_csv", "retry_after": 37, "limit": "export_notes_csv"}
-  ```
-  and header `Retry-After: <seconds>`.
+* Exceeding the quota results in HTTP 429 ProblemDetails and header `Retry-After: <seconds>`.
 
 Enable via Admin API (role editor/admin allowed to manage flags):
 ```
@@ -254,6 +511,97 @@ Phasing plan:
 
 ### CI Integration
 The lint / type gate runs in a dedicated workflow: `.github/workflows/lint-type.yml` (Ruff first, then Mypy). The general test workflow remains in `.github/workflows/ci.yml`.
+## 🧱 Infra
+
+### Branch protection
+Regler för `master` versioneras i `infra/bp.json`. Detta är source of truth för vilka status‑checks och skydd som gäller.
+
+### Sync
+Kör `tools/sync_branch_protection.py` eller följ instruktionerna i `docs/branch-protection.md` för att tillämpa reglerna via GitHub‑API.
+
+## Architecture Decisions
+
+## Staging deploy (v0.4)
+
+This release adds a containerized runtime and a simple health endpoint to make the app easy to deploy to a staging environment.
+
+Included:
+- Dockerfile (Python slim, non-root) running `gunicorn core.app_factory:create_app()` on port 8080
+- `gunicorn.conf.py` (timeout=60, loglevel=info)
+- Health endpoint at `GET /healthz` returning `{ "status": "ok" }`
+- `.env.example` with common variables
+- Optional tools: `tools/init_db.py` (alembic + minimal seed), `tools/seed_weekview.py` (dev-only weekview seed)
+- Fly.io manifest `fly.toml` (you can alternatively use Render with the same Dockerfile)
+
+### Environment variables
+
+Copy `.env.example` and set the following (names mirror staging defaults):
+
+- DATABASE_URL (e.g. `postgresql+psycopg://user:pass@host:5432/yuplan`)
+- SECRET_KEY (any random string for session signing)
+- FF_WEEKVIEW_ENABLED=true
+- FF_REPORT_ENABLED=true
+- FF_ADMIN_ENABLED=false
+
+Feature flags default here are for convenience; per-tenant DB overrides take precedence.
+
+### Deploy on Fly.io
+
+Prerequisites:
+- Fly CLI installed and authenticated
+- A Postgres instance (Fly Postgres or external)
+
+Steps:
+
+```powershell
+fly launch --no-deploy
+# Set secrets (examples):
+fly secrets set DATABASE_URL="postgresql+psycopg://user:pass@host:5432/yuplan" SECRET_KEY="change-me"
+# Deploy
+fly deploy
+```
+
+Health check: `GET /healthz` → 200 with `{ "status": "ok" }`.
+
+### Optional: Render
+
+If deploying on Render instead, use the Dockerfile, set the Health Check Path to `/healthz`, and configure environment variables from `.env.example`.
+
+### Database init (optional)
+
+Run Alembic and seed minimal data:
+
+```powershell
+$env:DATABASE_URL = "postgresql+psycopg://user:pass@host:5432/yuplan"
+python tools/init_db.py
+```
+
+Dev-only seed example for weekview data:
+
+```powershell
+$env:DATABASE_URL = "sqlite:///unified.db"  # or Postgres URL
+python tools/seed_weekview.py --year 2025 --week 45
+```
+
+### Smoke tests
+
+After deploy, validate the following:
+
+- GET `/healthz` → 200
+- GET `/api/weekview?...` → 200 + ETag
+- PATCH `/api/weekview` with If-Match → 200 + new ETag
+- GET `/api/weekview` with If-None-Match → 304
+- GET `/api/report?...` → 200 + ETag
+- GET `/api/report/export?...&format=csv|xlsx` → 200 + file
+
+- See ADR index: `adr/README.md`
+
+Current ADRs:
+- ADR-001: Global 429 Standardization — `adr/ADR-001-global-429-standardization.md`
+- ADR-002: Strict CSRF Rollout — `adr/ADR-002-strict-csrf-rollout.md`
+- ADR-003: Full RFC7807 Adoption and Legacy Error Retirement — `adr/ADR-003-full-rfc7807-adoption.md`
+
+OpenAPI spec is validated on each push in CI (job: `openapi-validate`), and the generated `openapi.json` is uploaded as an artifact. Validation uses `openapi-spec-validator` (with `rpds-py`).
 
 OpenAPI spec is validated on each push in CI (job: `openapi-validate`), and the generated `openapi.json` is uploaded as an artifact. Validation uses `openapi-spec-validator` (with `rpds-py`).
 
@@ -428,8 +776,21 @@ Example enable (admin session or test header injection):
 POST /features/set { "name": "openapi_ui", "enabled": true }
 ```
 
-The OpenAPI spec is currently a hand-maintained subset; extend `openapi.json` generation in `core/app_factory.py` for new endpoints.
+The OpenAPI spec is generated in `core/app_factory.py` and can merge modular parts:
+
+Environment toggle:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAPI_INCLUDE_PARTS` | `true` | When truthy merges `openapi/parts/admin.yml` (and future parts) into `/openapi.json`. Set to `0`/`false`/`no` to disable. |
+
+Admin endpoints and schemas live in `openapi/parts/admin.yml` and are automatically merged unless disabled.
 See docs/ for full architecture, data model, migration plan, module definitions, roadmap, deployment guidance.
+
+### Weekly Report Exports
+- CSV: see `docs/report_weekly_export_csv.md` (if present)
+- Excel (XLSX): see `docs/report_weekly_export_excel.md`
+ - PDF: see `docs/report_weekly_export_pdf.md`
 
 ### OpenAPI Baseline & Semantic Diff
 To guard against accidental breaking API changes, CI enforces a committed baseline at `specs/openapi.baseline.json` (HARD policy – build fails if missing) and performs a semantic diff:
@@ -462,6 +823,34 @@ Breakage rules (treated as breaking and fail the job):
 
 Widenings allowed (examples): removing `pattern`, increasing `maxLength`, decreasing `minLength`, adding new optional properties, adding enum values, adding new paths/operations/responses/content-types.
 
+## 🔐 Confidentiality Notice
+Yuplan är proprietär mjukvara. © 2025 Henrik Jonsson — All Rights Reserved.
+All kod, dokumentation och data tillhör Henrik Jonsson. Obehörig användning är förbjuden.
+
+## Strict typing pockets (RC1)
+
+The goal for RC1 is to keep noise low while ensuring core reliability. “Strict: Yes” means `mypy --strict` (or equivalent config) passes for that module; “No” means temporarily relaxed while we iterate.
+
+| Module                       | Strict | Notes                                                     |
+|-----------------------------|:------:|-----------------------------------------------------------|
+| `core.errors`               |  Yes   | Central error types and helpers.                          |
+| `core.http_errors`          |  Yes   | RFC7807 mapping; kept small and well-typed.               |
+| `core.csrf`                 |  Yes   | Token utilities; decorator noise silenced as needed.      |
+| `core.app_factory`          |  Yes   | Return types for app/blueprints typed.                    |
+| `core.rate_limit`           |  Yes   | Public API typed; helpers annotated.                      |
+| `core.limit_registry`       |  Yes   | Registry generics constrained.                            |
+| `core.audit_events`         |  Yes   | Event dataclasses/TypedDicts locked down.                 |
+| `core.audit_repo`           |  Yes   | Narrow I/O surface; typed repository methods.             |
+| `core.jwt_utils`            |  Yes   | (From earlier pocket)                                     |
+| `core.db`                   |  Yes   | (From earlier pocket)                                     |
+| `core.*_api`                |   No   | RC1 noise bucket—gradual re-enable post-RC.               |
+| `core.ui_blueprint`         |   No   | DTO/view-model churn; enable after endpoints stabilize.   |
+| `legacy/*`                  |   No   | Excluded in RC1.                                          |
+| `importers/*`               |   No   | Deferred; high change rate.                               |
+| `telemetry/*`               |   No   | Deferred; pending event schema freeze.                    |
+
+Re-enable plan (post-RC): reintroduce modules one at a time; prefer `TypedDict`/`Protocol` facades over deep refactors; keep diffs small.
+
 Updating the baseline intentionally:
 1. Implement your API change and update spec generation.
 2. Regenerate spec locally:
@@ -485,6 +874,73 @@ Semantic diff script location: `scripts/openapi_diff.py` (pure stdlib, no depend
 
 
 ## Error Model
+## Error model (RFC 7807)
+
+In parallel with the compact legacy envelope we support (and will migrate fully to) RFC 7807 problem details using media type `application/problem+json`.
+
+Fields:
+- `type` (string, URI) – Stable identifier for the problem category.
+- `title` (string) – Short, human stable headline.
+- `status` (number) – HTTP status code.
+- `detail` (string) – Human-readable description of this specific occurrence.
+- `instance` (string, URI, optional) – Correlates this occurrence (mirrors `request_id`).
+- `errors` (object, optional) – Field specific validation errors: `{ "field": ["msg1", "msg2"] }`.
+
+Problem type registry (initial set):
+
+| type | title | http status | when used |
+|------|-------|------------:|-----------|
+| `about:blank` | Standard HTTP error | varies | Fallback
+| `https://api.example.com/problems/validation` | Validation failed | 400 / 422 | Invalid payload / parameter
+| `https://api.example.com/problems/unauthorized` | Unauthorized | 401 | Missing / bad token
+| `https://api.example.com/problems/forbidden` | Forbidden | 403 | Lacking permission / role
+| `https://api.example.com/problems/not-found` | Resource not found | 404 | Entity missing
+| `https://api.example.com/problems/unsupported-media-type` | Unsupported media type | 415 | Wrong `Content-Type`
+| `https://api.example.com/problems/rate-limited` | Rate limit exceeded | 429 | Too many requests
+| `https://api.example.com/problems/internal` | Internal error | 500 | Unexpected error
+
+HTTP Headers:
+* Always: `Content-Type: application/problem+json`
+* On 429: include `Retry-After` + any relevant `X-RateLimit-*` headers.
+
+Examples:
+
+Validation (422):
+```json
+{
+  "type": "https://api.example.com/problems/validation",
+  "title": "Validation failed",
+  "status": 422,
+  "detail": "title must not be empty",
+  "errors": {"title": ["must not be empty", "min length is 1"]}
+}
+```
+Unsupported media (415):
+```json
+{
+  "type": "https://api.example.com/problems/unsupported-media-type",
+  "title": "Unsupported media type",
+  "status": 415,
+  "detail": "Expected Content-Type application/json"
+}
+```
+Rate limited (429):
+```json
+{
+  "type": "https://api.example.com/problems/rate-limited",
+  "title": "Rate limit exceeded",
+  "status": 429,
+  "detail": "Try again later"
+}
+```
+
+Implementation notes:
+* `title` derived from the registered problem type (not user input).
+* `detail` is request-specific and safe to show to end user (no stack traces / secrets).
+* `instance` should correlate with logs (`request_id`) for support.
+
+See also: `docs/problems.md` for the full problem type catalog with examples and client handling tips.
+
 All API error responses share a compact, stable JSON envelope:
 
 ```json
@@ -922,3 +1378,29 @@ Proprietary & Confidential. All rights reserved.
 
 ---
 Generated scaffold intended for iterative build with AI assistance (Copilot). Follow the roadmap phases to implement functionality safely.
+
+Add a section linking to the idea bank
+💡 New Ideas
+
+Concept sketches and early features are kept in new_ideas/
+.
+
+## Secrets & privacy
+
+### Superuser password (local/CI)
+The script `scripts/set_superuser.py` no longer contains a hardcoded password. It requires the environment variable `YUPLAN_SUPERUSER_PASSWORD` to be set.
+
+- Local (PowerShell):
+  - `$env:YUPLAN_SUPERUSER_PASSWORD = "<strong password>"`
+  - `python scripts/set_superuser.py`
+
+- CI (GitHub Actions):
+  - Add a repository secret named `YUPLAN_SUPERUSER_PASSWORD` and expose it to jobs that need to seed the superuser.
+  - Example step:
+    - `env: { YUPLAN_SUPERUSER_PASSWORD: ${{ secrets.YUPLAN_SUPERUSER_PASSWORD }} }`
+
+Important: Never commit secrets. `.gitignore` already ignores `.env*`, `secrets.*`, and `credentials.*` files.
+
+### Unified Portal – Department Week View
+See `docs/portal_department_week.md` for the unified portal department week view (Avdelningsvy/Veckovy).
+See `docs/planera_day_unified.md` for the unified meal/day details view.

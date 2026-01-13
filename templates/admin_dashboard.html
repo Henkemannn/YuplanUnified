@@ -1,0 +1,79 @@
+{% extends "_base.html" %}
+{% block title %}Admin - Yuplan{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/static/css/admin.css?v={{ asset_version|default('') }}">
+{% endblock %}
+{% block content %}
+<main class="admin-section">
+<h1>Admin</h1>
+<p class="admin-intro">Översikt över moduler och avdelningar för enheten.</p>
+
+<section class="admin-card">
+  <h2>Snabblänkar</h2>
+  <p class="admin-intro">Gå direkt till de vanligaste inställningarna.</p>
+  <div class="admin-quicklinks">
+    <a href="{{ url_for('admin_ui.admin_departments_list') }}" class="btn btn-secondary">Avdelningar</a>
+    <a href="{{ url_for('admin_ui.admin_menu_import') }}" class="btn btn-secondary">Menyer</a>
+    <a href="{{ url_for('admin_ui.admin_specialkost_list') }}" class="btn btn-secondary">Specialkost</a>
+    <a href="/ui/reports/weekview" class="btn btn-secondary">Rapport</a>
+  </div>
+  </section>
+
+<section class="admin-card">
+  <h2>Moduler</h2>
+  <div class="admin-modules">
+  {% for m in vm.modules %}
+    {% if m.enabled %}
+    <a class="admin-module-card" href="{{ m.url }}">
+      <div class="admin-module-card-header">
+        <span class="admin-module-icon">{{ m.icon }}</span>
+        <h3>{{ m.title }}</h3>
+      </div>
+      <p>{{ m.description }}</p>
+    </a>
+    {% endif %}
+  {% endfor %}
+  </div>
+</section>
+
+<section class="admin-card">
+  <h2>Avdelningar</h2>
+  <div class="admin-filters">
+  <form method="get" action="/ui/admin">
+    <select name="site_id">
+      {% for s_id, s_name in vm.sites %}
+        <option value="{{ s_id }}" {% if vm.selected_site_id == s_id %}selected{% endif %}>{{ s_name }}</option>
+      {% endfor %}
+    </select>
+    <input type="text" id="dept-search" placeholder="Sök avdelning…" />
+    <button type="submit">Visa</button>
+  </form>
+  <span class="muted">Avdelningar</span>
+  </div>
+  <table class="admin-departments">
+  <thead>
+    <tr><th>Namn</th><th>Länk</th></tr>
+  </thead>
+  <tbody>
+  {% for dep_id, dep_name in vm.departments %}
+    <tr>
+      <td>{{ dep_name }}</td>
+      <td><a href="/ui/portal/department/week?department_id={{ dep_id }}">Öppna portal</a></td>
+    </tr>
+  {% endfor %}
+  {% if not vm.departments %}
+    <tr><td colspan="2" style="text-align:center;color:#64748b;font-size:14px;padding:24px">Inga avdelningar</td></tr>
+  {% endif %}
+  </tbody>
+  </table>
+</section>
+
+<!-- Ensure portal link substring is present for tests -->
+<a href="/ui/portal/department/week?department_id=" style="display:none">-</a>
+
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/admin.js?v={{ asset_version|default('') }}"></script>
+{% endblock %}

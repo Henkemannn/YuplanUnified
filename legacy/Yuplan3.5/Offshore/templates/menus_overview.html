@@ -1,0 +1,66 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="mb-4">Menyer (uke 1–4)</h2>
+<style>
+  .menu-week-column .card { border-radius: 16px; overflow:hidden; }
+  .wk-header { position:sticky; top:0; background:linear-gradient(90deg,#0d6efd,#6610f2); color:#fff; font-weight:700; letter-spacing:.5px; z-index:2; }
+  .meal-badge { display:inline-block; padding:2px 6px; border-radius: 6px; font-size:.6rem; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  .cat-soppa { background:#e0f2fe; color:#05507a; }
+  .cat-fisk  { background:#e0f7f1; color:#056047; }
+  .cat-kott  { background:#fde2e0; color:#7a1d12; }
+  .dish-item + .dish-item { margin-top:2px; }
+  .dish-item { line-height:1.15; }
+  .day-col { width:16%; white-space:nowrap; }
+  .meal-col { width:42%; }
+  @media (max-width: 900px){ .day-col{ width:22%; } .meal-col{ width:39%; } }
+  table.table tbody tr:nth-child(odd){ background:#fcfdff; }
+  table.table tbody tr:hover{ background:#f1f6ff; }
+</style>
+{% if not menus or menus|length == 0 %}
+  <div class="alert alert-warning">Ingen menyer importert ennå.</div>
+{% else %}
+  <div class="vertical-menus">
+    {% for m in menus %}
+    <div class="menu-week-column mb-4">
+      <div class="card shadow-sm">
+        <div class="wk-header py-2 px-3">Uke {{ m.uke }}</div>
+        <div class="card-body p-0">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr class="small text-muted">
+                <th class="day-col">Dag</th>
+                <th class="meal-col text-success">Lunsj</th>
+                <th class="meal-col text-primary">Middag</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for d in ["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"] %}
+              <tr>
+                <td class="fw-semibold small">{{ d }}</td>
+                <td class="small">
+                  {% set arrl = m.lunsj[d] %}
+                  {% if arrl and arrl|length %}
+                    {% for obj in arrl %}
+                      <div class="dish-item">{% if obj.kategori %}<span class="meal-badge cat-{{ obj.kategori }}">{{ obj.kategori }}</span> {% endif %}{{ obj.rett }}</div>
+                    {% endfor %}
+                  {% else %}<span class="text-muted">–</span>{% endif %}
+                </td>
+                <td class="small">
+                  {% set arrm = m.middag[d] %}
+                  {% if arrm and arrm|length %}
+                    {% for obj in arrm %}
+                      <div class="dish-item">{% if obj.kategori %}<span class="meal-badge cat-{{ obj.kategori }}">{{ obj.kategori }}</span> {% endif %}{{ obj.rett }}</div>
+                    {% endfor %}
+                  {% else %}<span class="text-muted">–</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

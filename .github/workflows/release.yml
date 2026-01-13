@@ -1,0 +1,68 @@
+name: Create Release from Tag
+
+on:
+  workflow_run:
+    workflows: ["Validate Tag Matches VERSION"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g., v1.0.1). If empty, uses HEAD's exact tag."
+        required: false
+        default: ""
+
+permissions: read-all
+
+jobs:
+  release:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success')
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (by tag or by triggering SHA)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.workflow_run.head_sha }}
+
+      - name: Resolve tag and date
+        id: resolve_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="$(git describe --tags --exact-match 2>/dev/null || true)"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not determine tag (ensure push tag exists)"
+            exit 1
+          fi
+          echo "TAG_NAME=$TAG" >> $GITHUB_ENV
+          echo "DATE=$(date -u +%F)" >> $GITHUB_ENV
+          echo "tag_name=$TAG" >> $GITHUB_OUTPUT
+          echo "DATE=$(date -u +%F)" >> $GITHUB_OUTPUT
+
+      - name: Build release body (notes or template)
+        run: |
+          set -e
+          NOTES="RELEASE_NOTES_${TAG_NAME}.md"
+          if [ -f "$NOTES" ]; then
+            cp "$NOTES" body.md
+            echo "Using $NOTES"
+          elif [ -f ".github/release_body_template.md" ]; then
+            sed "s/vX.Y.Z/${TAG_NAME}/g; s/YYYY-MM-DD/${DATE}/g" .github/release_body_template.md > body.md
+            echo "Using template with ${TAG_NAME}"
+          else
+            printf "# Yuplan ${TAG_NAME}\n\n(Release notes not found.)\n" > body.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.resolve_tag.outputs.tag_name }}
+          name: Yuplan ${{ steps.resolve_tag.outputs.tag_name }}
+          body_path: body.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

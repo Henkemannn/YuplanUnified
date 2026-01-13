@@ -8,10 +8,19 @@ from flask import Response
 from .metrics import increment
 
 DEFAULT_SUNSET = os.getenv("DEPRECATION_NOTES_TASKS_SUNSET", "Wed, 01 Jan 2026 00:00:00 GMT")
-DEFAULT_URL = os.getenv("DEPRECATION_NOTES_TASKS_URL", "https://example.com/docs/deprecations#notes-tasks-alias")
+DEFAULT_URL = os.getenv(
+    "DEPRECATION_NOTES_TASKS_URL", "https://example.com/docs/deprecations#notes-tasks-alias"
+)
 
-def apply_deprecation(resp: Response, *, aliases: Iterable[str], endpoint: str,
-                      sunset: str | None = None, url: str | None = None) -> None:
+
+def apply_deprecation(
+    resp: Response,
+    *,
+    aliases: Iterable[str],
+    endpoint: str,
+    sunset: str | None = None,
+    url: str | None = None,
+) -> None:
     """Attach RFC 8594 deprecation headers for legacy alias keys.
 
     Also emits a telemetry metric capturing endpoint + alias list.
@@ -28,5 +37,6 @@ def apply_deprecation(resp: Response, *, aliases: Iterable[str], endpoint: str,
         increment("deprecation.alias.emitted", {"endpoint": endpoint, "aliases": alias_list})
     except Exception:  # noqa: BLE001
         pass
+
 
 __all__ = ["apply_deprecation", "DEFAULT_SUNSET", "DEFAULT_URL"]

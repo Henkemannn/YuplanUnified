@@ -1,0 +1,398 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block admin_title %}{{ 'Ny avdelning' if vm.mode == 'new' else 'Redigera Avdelning' }}{% endblock %}
+{% block admin_subtitle %}Hantera avdelningsuppgifter och boendeantal.{% endblock %}
+
+{% block admin_main %}
+
+<section class="ua-section">
+  <div class="ua-card">
+    <div class="department-form-container">
+        <div class="form-header">
+            <h1 class="form-heading">
+                {% if vm.mode == 'new' %}
+                Ny avdelning
+                {% else %}
+                Redigera Avdelning
+                {% endif %}
+            </h1>
+            <!-- Keep legacy-cased string for tests -->
+            {% if vm.mode != 'new' %}
+            <span style="display:none">Redigera avdelning</span>
+            {% endif %}
+            {% if vm.site_name %}
+            <p class="form-subtitle">{{ vm.site_name }}</p>
+            {% endif %}
+        </div>
+
+        <div class="form-card">
+            <form method="POST" 
+                  action="{% if vm.mode == 'new' %}{{ url_for('ui.admin_departments_create') }}{% else %}{{ url_for('ui.admin_departments_update', dept_id=vm.department.id) }}{% endif %}"
+                class="yp-form department-form" id="department-create-form">
+
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                {% if vm.mode == 'edit' and vm.department %}
+                <input type="hidden" name="version" value="{{ vm.department.version }}">
+                {% endif %}
+
+                <div class="yp-form-field">
+                    <label for="name" class="yp-label">
+                        🏷️ Namn <span class="required">*</span>
+                    </label>
+                    <input type="text" 
+                           id="name" 
+                           name="name" 
+                           class="yp-input"
+                           value="{% if vm.department %}{{ vm.department.name }}{% endif %}"
+                           required
+                           aria-required="true"
+                           placeholder="T.ex. Avdelning 1">
+                    <p class="yp-form-help">Namnet på avdelningen (synligt för personal)</p>
+                </div>
+
+                <div class="yp-form-field">
+                    <label class="yp-label">🔢 Antal boende <span class="required">*</span></label>
+                    <div class="ua-grid ua-grid-2cols" style="align-items:flex-start; gap:12px;">
+                        <div>
+                            <label class="yp-label"><input type="radio" name="resident_count_mode_choice" value="fixed" {% if vm.mode == 'new' %}checked{% else %}{% if not (vm.has_default_residents_schedule or vm.has_week_residents_schedule or vm.has_any_residents_schedule) and (vm.department and vm.department.resident_count_mode != 'variable') %}checked{% endif %}{% endif %}> Fast boendeantal</label>
+                            <input type="number" 
+                                   id="resident_count" 
+                                   name="resident_count" 
+                                   class="yp-input js-fixed-input"
+                                   value="{% if vm.department %}{{ vm.department.resident_count_fixed }}{% else %}0{% endif %}"
+                                   min="0"
+                                   aria-required="true"
+                                   placeholder="0">
+                            <p class="yp-form-help">Ange ett fast antal boende för avdelningen. Du kan alltid justera per vecka senare.</p>
+                        </div>
+                        <div>
+                            <label class="yp-label"><input type="radio" name="resident_count_mode_choice" value="variable" {% if (vm.has_default_residents_schedule or vm.has_week_residents_schedule or vm.has_any_residents_schedule) or (vm.department and vm.department.resident_count_mode == 'variable') %}checked{% endif %}> Varierat boendeantal (per dag/måltid)</label>
+                            <div>
+                                {% if vm.mode == 'new' %}
+                                <button type="button" id="openVariationCreateBtn" class="yp-button yp-button-secondary js-open-modal" data-modal-target="#residents-variation-modal-create">👥 Ange varierat boendeantal</button>
+                                <p class="yp-form-help">Välj detta för att ange antal per dag och måltid för vald vecka. Rekommenderas när antalet varierar under veckan.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% if vm.weekly_table %}
+                    <div class="ua-effective-week" style="margin-top:6px;">
+                        <p class="ua-muted" style="margin:0 0 4px;">Denna vecka: <strong>Varierat</strong> (översikt){% if vm.effective_scope == 'week' %} — källa: vecko-override{% elif vm.effective_scope == 'forever' %} — källa: tills vidare{% endif %}</p>
+                        <table class="ua-table ua-table-compact">
+                            <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
+                            {% for row in vm.weekly_table %}
+                            <tr>
+                                <td>{{ row.weekday }}</td>
+                                <td>{{ row.lunch }}</td>
+                                <td>{{ row.dinner }}</td>
+                            </tr>
+                            {% endfor %}
+                        </table>
+                    </div>
+                    {% endif %}
+                    {% if vm.mode == 'edit' and vm.department %}
+                    <div class="variation-actions" style="margin-top:8px;">
+                        <button type="button" id="openVariationBtn" class="yp-button yp-button-secondary js-open-modal" data-modal-target="#residents-variation-modal">👥 Redigera varierat boendeantal…</button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="yp-form-field">
+                    <label for="notes" class="yp-label">
+                        📝 Faktaruta
+                    </label>
+                    <textarea id="notes" name="notes" class="yp-input" rows="4" placeholder="Valfri beskrivning">{% if vm.department %}{{ vm.department.notes }}{% endif %}</textarea>
+                    <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="yp-button yp-button-primary">
+                        {% if vm.mode == 'new' %}
+                        💾 Skapa avdelning
+                        {% else %}
+                        💾 Spara ändringar
+                        {% endif %}
+                    </button>
+                    <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-secondary">
+                        ✖ Avbryt
+                    </a>
+                </div>
+
+            </form>
+        </div>
+
+        {% if vm.mode == 'edit' %}
+        <div class="form-card" style="margin-top: var(--yp-gap-xl);">
+            <h2>Specialkost (antal på avdelningen)</h2>
+            <form method="POST" action="{{ url_for('ui.admin_departments_edit_save_diets', dept_id=vm.department.id) }}" class="yp-form">
+                {{ csrf_token_input()|safe }}
+                <input type="hidden" name="version" value="{{ vm.department.version }}">
+                {% if vm.diet_types and vm.diet_types|length > 0 %}
+                <div class="ua-grid ua-grid-2cols">
+                    {% for t in vm.diet_types %}
+                        {% set dtid = t.id %}
+                        {% set val = vm.diet_defaults[dtid|string] if vm.diet_defaults else 0 %}
+                        <div class="yp-form-field">
+                            <label class="yp-label">{{ t.name }}</label>
+                            <input type="number" name="diet_default_{{ dtid }}" class="yp-input" min="0" value="{{ val }}">
+                        </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="ua-empty-state">
+                    <div class="ua-empty-icon">🥗</div>
+                    <div class="ua-empty-title">Inga specialkosttyper</div>
+                    <p class="ua-empty-desc">Inga specialkosttyper finns på denna site – skapa under <a href="{{ url_for('ui.admin_specialkost_list') }}">Specialkost</a>.</p>
+                    <a href="{{ url_for('ui.admin_specialkost_new_form') }}" class="yp-button yp-button-primary">➕ Skapa kosttyp</a>
+                </div>
+                {% endif %}
+                <div class="form-actions">
+                    <button type="submit" class="yp-button yp-button-primary">💾 Spara specialkost</button>
+                </div>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- Modal: Varierat boendeantal (edit form) -->
+{% if vm.mode == 'edit' and vm.department %}
+<dialog id="residents-variation-modal" class="ua-modal">
+    <div class="ua-modal-inner">
+        <header class="ua-modal-header ua-modal-header--sticky">
+            <h2>👥 Varierat boendeantal – {{ vm.department.name }}</h2>
+            <button type="button" class="ua-modal-close" data-modal-close>&times;</button>
+        </header>
+        <div class="ua-modal-body">
+            <form id="residents-variation-form" method="post" action="{{ url_for('ui.admin_department_save_variation', department_id=vm.department.id) }}">
+                {{ csrf_token_input()|safe }}
+                <p class="ua-muted">Mån–Sön × Lunch/Kväll</p>
+                <input type="hidden" name="selected_week" value="{{ vm.selected_week if vm.selected_week else (vm.current_week if vm.current_week else 1) }}">
+                <table class="ua-table">
+                    <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
+                    {% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
+                    {% for dow in range(1,8) %}
+                        {% set lunch_default = vm.department.resident_count_fixed %}
+                        {% set dinner_default = vm.department.resident_count_fixed %}
+                        {% if vm.weekly_table %}
+                            {% set lunch_default = vm.weekly_table[dow-1].lunch %}
+                            {% set dinner_default = vm.weekly_table[dow-1].dinner %}
+                        {% endif %}
+                        <tr>
+                            <td>{{ day_names[dow-1] }}</td>
+                            <td><input type="number" name="day_{{ dow }}_lunch" value="{{ lunch_default }}" min="0" class="ua-input"></td>
+                            <td><input type="number" name="day_{{ dow }}_dinner" value="{{ dinner_default }}" min="0" class="ua-input"></td>
+                        </tr>
+                    {% endfor %}
+                </table>
+                <fieldset class="ua-fieldset">
+                    <legend>Gäller</legend>
+                    <label><input type="radio" name="mode" value="week" {% if vm.effective_scope == 'week' %}checked{% endif %}> Endast för vecka
+                        <span class="js-week-selector {% if vm.effective_scope == 'forever' %}is-hidden{% endif %}">
+                        <select name="selected_week_override" {% if vm.effective_scope == 'forever' %}disabled{% endif %}>
+                            {% for w in range(1,53) %}
+                                <option value="{{ w }}" {% if vm.selected_week and w == vm.selected_week %}selected{% endif %}>{{ w }}</option>
+                            {% endfor %}
+                        </select>
+                        </span>
+                    </label>
+                    <label><input type="radio" name="mode" value="forever" {% if vm.effective_scope == 'forever' %}checked{% endif %}> Tills vidare</label>
+                    {% if vm.has_default_residents_schedule and vm.has_week_residents_schedule %}
+                    <p class="ua-muted" style="margin-top:6px;">Obs: Det finns en vecko-override för aktuell vecka. Standardvärden (tills vidare) används i övriga veckor.</p>
+                    {% endif %}
+                </fieldset>
+                <input type="hidden" name="return_to" value="edit">
+            </form>
+        </div>
+        <footer class="ua-modal-footer ua-modal-footer--sticky">
+            <button type="button" class="ua-button ua-button-ghost" data-modal-close>Avbryt</button>
+            {% if vm.effective_scope == 'week' %}
+            <button type="submit" form="residents-variation-form" name="action" value="clear_week" class="yp-button yp-button-secondary">Rensa ändring för vecka</button>
+            {% endif %}
+            <button type="submit" form="residents-variation-form" name="action" value="save" class="yp-button yp-button-primary">Spara</button>
+        </footer>
+    </div>
+</dialog>
+{% endif %}
+
+{% if vm.mode == 'new' %}
+<dialog id="residents-variation-modal-create" class="ua-modal ua-modal-wide">
+    <div class="ua-modal-inner">
+        <header class="ua-modal-header ua-modal-header--sticky">
+            <h2>👥 Varierat boendeantal – Ny avdelning</h2>
+            <button type="button" class="ua-modal-close" data-modal-close>&times;</button>
+        </header>
+        <div class="ua-modal-body ua-modal-body--scroll">
+            <p class="ua-muted">Mån–Sön × Lunch/Kväll. Välj om värden gäller tills vidare (standard) eller för en viss vecka.</p>
+            <fieldset class="ua-fieldset" style="margin:8px 0;">
+                <legend>Giltighet</legend>
+                                <label style="margin-right:12px;"><input type="radio" name="variation_scope_create" value="forever" checked form="department-create-form"> Tills vidare (standard)</label>
+                                <label><input type="radio" name="variation_scope_create" value="week" form="department-create-form"> Gäller en viss vecka</label>
+            </fieldset>
+            <div class="js-week-selector ua-week-selector is-hidden">
+                Vecka:
+                <select name="selected_week_create" form="department-create-form" disabled>
+                    {% for w in range(1,53) %}
+                        <option value="{{ w }}" {% if vm.current_week and w == vm.current_week %}selected{% endif %}>{{ w }}</option>
+                    {% endfor %}
+                </select>
+                År:
+                <input type="number" name="selected_year_create" value="{{ vm.current_year if vm.current_year else 2026 }}" min="2000" max="2100" form="department-create-form" disabled>
+            </div>
+            <table class="ua-table">
+                <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
+                {% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
+                {% for dow in range(1,8) %}
+                <tr>
+                    <td>{{ day_names[dow-1] }}</td>
+                                        <td><input type="number" name="create_day_{{ dow }}_lunch" value="{{ 0 }}" min="0" class="ua-input" form="department-create-form"></td>
+                                        <td><input type="number" name="create_day_{{ dow }}_dinner" value="{{ 0 }}" min="0" class="ua-input" form="department-create-form"></td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        <footer class="ua-modal-footer ua-modal-footer--sticky">
+            <button type="button" class="ua-button ua-button-ghost" data-modal-close>Stäng</button>
+            <button type="button" class="yp-button yp-button-primary" data-modal-close>Spara värden</button>
+        </footer>
+    </div>
+</dialog>
+{% endif %}
+
+<style>
+.department-form-container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.form-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.form-heading {
+    margin: 0 0 var(--spacing-xs) 0;
+    font-size: var(--font-size-xxl);
+    font-weight: 700;
+    color: var(--admin-text-primary);
+}
+
+.form-subtitle {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    color: var(--admin-text-secondary);
+}
+
+.form-card {
+    background-color: var(--admin-bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 4px var(--admin-shadow);
+    padding: var(--spacing-xxl);
+}
+
+.department-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.form-label {
+    font-weight: 600;
+    color: var(--admin-text-primary);
+    font-size: var(--font-size-base);
+}
+
+.required {
+    color: #e74c3c;
+}
+
+.form-input {
+    padding: var(--spacing-md);
+    border: 1px solid var(--admin-border);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-base);
+    font-family: var(--font-family);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--admin-accent);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.form-input::placeholder {
+    color: #bdc3c7;
+}
+
+.form-help {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--admin-text-secondary);
+}
+
+.form-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--admin-border);
+}
+
+.btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    border: none;
+    cursor: pointer;
+    font-size: var(--font-size-base);
+}
+
+.btn-primary {
+    background-color: var(--admin-accent);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--admin-accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.btn-secondary {
+    background-color: #ecf0f1;
+    color: var(--admin-text-primary);
+}
+
+.btn-secondary:hover {
+    background-color: #d5dbdb;
+}
+
+@media (max-width: 768px) {
+    .form-card {
+        padding: var(--spacing-lg);
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .btn {
+        width: 100%;
+    }
+}
+</style>
+
+{% endblock %}

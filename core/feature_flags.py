@@ -5,15 +5,18 @@ from typing import Literal, TypedDict
 
 FlagMode = Literal["simple"]  # future: "percentage", "gradual", etc.
 
+
 class FlagDefinition(TypedDict):
     name: str
     mode: FlagMode
     # For future modes we can append optional numeric fields (e.g. rollout_percent)
 
+
 class FlagState(TypedDict):
     name: str
     enabled: bool
     mode: FlagMode
+
 
 _SEED_FLAGS: tuple[FlagDefinition, ...] = (
     {"name": "menus", "mode": "simple"},
@@ -32,6 +35,7 @@ _SEED_FLAGS: tuple[FlagDefinition, ...] = (
     {"name": "inline_ui", "mode": "simple"},
 )
 
+
 class FeatureRegistry:
     """Minimal in-memory flag registry with typed definitions.
 
@@ -44,7 +48,7 @@ class FeatureRegistry:
         self._defs: dict[str, FlagDefinition] = {d["name"]: d for d in base}
         self._enabled: set[str] = {d["name"] for d in base}  # all seed flags enabled by default
         # Backwards compatibility for tests referencing internal _flags (treated as enabled set)
-        self._flags = self._enabled  # type: ignore[attr-defined]
+        self._flags: set[str] = self._enabled
 
     def enabled(self, name: str) -> bool:
         return name in self._enabled and name in self._defs
@@ -60,7 +64,7 @@ class FeatureRegistry:
         accidental silent mode changes without explicit migration.
         """
         if isinstance(definition, str):
-            definition = {"name": definition, "mode": "simple"}  # type: ignore[assignment]
+            definition = {"name": definition, "mode": "simple"}
         name = definition["name"].strip()
         if not name:
             raise ValueError("flag name empty")

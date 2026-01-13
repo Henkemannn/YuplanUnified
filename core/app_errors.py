@@ -3,6 +3,7 @@
 Copilot prompt: Create Flask error registration that returns JSON envelope {'ok': False, 'error', 'message?'} for
 400/401/403/404/422/429/500. Provide make_error(error: Literal[…], message: str|None). No Any.
 """
+
 from __future__ import annotations
 
 from typing import Literal, NotRequired, TypedDict, cast
@@ -20,6 +21,7 @@ ErrorCode = Literal[
     "internal",
 ]
 
+
 class ErrorResponse(TypedDict):
     ok: Literal[False]
     error: ErrorCode
@@ -32,6 +34,7 @@ def make_error(error: ErrorCode, message: str | None = None):  # -> Response
         payload["message"] = message
     resp = jsonify(payload)
     return resp
+
 
 _STATUS_MAPPING: dict[int, ErrorCode] = {
     400: "invalid",
@@ -66,6 +69,7 @@ def register_error_handlers(app: Flask) -> None:
                 if isinstance(data, dict):
                     data.setdefault("required_role", e.required)
                     from flask import jsonify as _json
+
                     r = _json(data)
             except Exception:
                 pass
@@ -75,7 +79,7 @@ def register_error_handlers(app: Flask) -> None:
     def _session(e: SessionError):  # type: ignore[no-untyped-def]
         r = make_error("unauthorized", str(e))
         return _attach_code(r, 401)
-    
+
     @app.errorhandler(RateLimitError)  # type: ignore[arg-type]
     def _rate_limit(e: RateLimitError):  # type: ignore[no-untyped-def]
         r = make_error("rate_limited", str(e) or "Too many requests")
@@ -86,11 +90,13 @@ def register_error_handlers(app: Flask) -> None:
                 if getattr(e, "limit", None):
                     data.setdefault("limit", e.limit)
                 from flask import jsonify as _json
+
                 r = _json(data)
         except Exception:
             pass
         r.headers["Retry-After"] = str(getattr(e, "retry_after", 1))
         return _attach_code(r, 429)
+
     # Pagination errors
     from .pagination import PaginationError  # type: ignore
 
@@ -98,12 +104,15 @@ def register_error_handlers(app: Flask) -> None:
     def _pagination(e: PaginationError):  # type: ignore[no-untyped-def]
         r = make_error("invalid", str(e))
         return _attach_code(r, 400)
+
     # Generic handlers mapping status codes to unified envelope.
     for status, code in _STATUS_MAPPING.items():
+
         def _handler(e, _status: int = status, _code: ErrorCode = code):  # type: ignore[no-untyped-def]
             msg = getattr(e, "description", None) or getattr(e, "message", None) or None
             r = make_error(_code, cast(str | None, msg))
             return _attach_code(r, _status)
+
         app.register_error_handler(status, _handler)  # type: ignore[arg-type]
 
     # Fallback 500
@@ -111,6 +120,7 @@ def register_error_handlers(app: Flask) -> None:
     def _internal(e):  # type: ignore[no-untyped-def]
         r = make_error("internal")
         return _attach_code(r, 500)
+
 
 __all__ = [
     "ErrorCode",

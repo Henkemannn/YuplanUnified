@@ -8,6 +8,7 @@ from core.app_factory import create_app
 def _client(quota=3, per=60, backend="memory"):
     # Force backend for test process
     import os
+
     os.environ["RATE_LIMIT_BACKEND"] = backend
     rl._test_reset()
     app: Flask = create_app({"TESTING": True})
@@ -23,7 +24,7 @@ def test_within_quota_allows():
     r = c.get("/_limit/test")
     assert r.status_code == 429
     data = r.get_json()
-    assert data["error"] == "rate_limited"
+    assert data.get("status") == 429 and data.get("type", " ").endswith("/rate_limited")
     assert "retry_after" in data
 
 
@@ -35,9 +36,12 @@ def test_window_reset(monkeypatch):
     assert c.get("/_limit/test").status_code == 429
     # fast-forward window by mocking time.time
     import core.rate_limiter as rl_mod
+
     orig_time = rl_mod.time.time
+
     def fake_time():
         return orig_time() + 61
+
     monkeypatch.setattr(rl_mod.time, "time", fake_time)
     try:
         assert c.get("/_limit/test").status_code == 200
@@ -57,9 +61,11 @@ def test_retry_after_positive():
 
 def test_metrics_allow_and_block(monkeypatch):
     events: list[tuple[str, dict]] = []
+
     class TestMetrics:
         def increment(self, name: str, tags):  # type: ignore[no-untyped-def]
             events.append((name, dict(tags or {})))
+
     monkeypatch.setattr(metrics_mod, "_metrics", TestMetrics())
     c = _client()
     # 5 requests => 3 allow then we expect blocks after quota

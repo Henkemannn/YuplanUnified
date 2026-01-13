@@ -56,7 +56,13 @@ def _rate_limited(kind: str) -> Any | None:
     enabled = bool(flags.get("rate_limit_import")) if isinstance(flags, dict) else False
     if enabled:
         try:
-            allow(tid, cast(int | None, session.get("user_id")), f"import_{kind}", 60, testing=current_app.config.get("TESTING", False))
+            allow(
+                tid,
+                cast(int | None, session.get("user_id")),
+                f"import_{kind}",
+                60,
+                testing=current_app.config.get("TESTING", False),
+            )
         except RateLimitExceeded:
             # Provide minimal retry hint
             return rate_limited_response(1)
@@ -64,7 +70,8 @@ def _rate_limited(kind: str) -> Any | None:
 
 
 def _file_from_request() -> FileStorage | None:
-    return cast("FileStorage | None", request.files.get("file"))
+    fs = request.files.get("file")
+    return cast(FileStorage | None, fs)
 
 
 def _file_to_bytes(fs: FileStorage) -> bytes:
@@ -83,11 +90,20 @@ def _normalize(rows: list[dict[str, str]]) -> list[ImportRow]:
     return [cast(ImportRow, nr) for nr in normalized_internal]
 
 
-def _ok(rows: list[dict[str, str]], *, fmt: Literal["csv","docx","xlsx","menu"], dry_run: bool = False) -> ImportOkResponse:
+def _ok(
+    rows: list[dict[str, str]],
+    *,
+    fmt: Literal["csv", "docx", "xlsx", "menu"],
+    dry_run: bool = False,
+) -> ImportOkResponse:
     meta: dict[str, Any] = {"count": len(rows), "format": fmt}
     if dry_run:
         meta["dry_run"] = True
-    resp: ImportOkResponse = {"ok": True, "rows": rows, "meta": cast(Any, meta)}  # meta conforms to ImportMeta
+    resp: ImportOkResponse = {
+        "ok": True,
+        "rows": rows,
+        "meta": cast(Any, meta),
+    }  # meta conforms to ImportMeta
     if dry_run:
         resp["dry_run"] = True  # legacy alias
     return resp
@@ -101,17 +117,25 @@ def _err(code: str, msg: str, status: int):
 
 def _is_csv(filename: str, mimetype: str | None) -> bool:
     low = filename.lower()
-    return low.endswith(".csv") or (mimetype in {"text/csv", "application/vnd.ms-excel", "application/octet-stream"})
+    return low.endswith(".csv") or (
+        mimetype in {"text/csv", "application/vnd.ms-excel", "application/octet-stream"}
+    )
 
 
 def _is_docx(filename: str, mimetype: str | None) -> bool:
     low = filename.lower()
-    return low.endswith(".docx") or mimetype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    return (
+        low.endswith(".docx")
+        or mimetype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
 
 
 def _is_xlsx(filename: str, mimetype: str | None) -> bool:
     low = filename.lower()
-    return low.endswith(".xlsx") or mimetype in {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/vnd.ms-excel"}
+    return low.endswith(".xlsx") or mimetype in {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+    }
 
 
 @bp.post("/csv")
@@ -130,6 +154,7 @@ def import_csv():  # Flask view
         parsed = parse_csv(data.decode("utf-8", errors="replace"))
         rows = _normalize(cast(list[dict[str, str]], parsed.rows))
         from flask import jsonify
+
         return jsonify(_ok(rows, fmt="csv"))
     except ImportValidationError:
         return _err("invalid", "Import validation failed", 400)
@@ -153,6 +178,7 @@ def import_docx():  # dynamic Response
         parsed = parse_docx(data)  # type: ignore[call-arg]
         rows = _normalize(cast(list[dict[str, str]], parsed.rows))
         from flask import jsonify
+
         return jsonify(_ok(rows, fmt="docx"))
     except ImportValidationError:
         return _err("invalid", "Import validation failed", 400)
@@ -176,18 +202,22 @@ def import_xlsx():  # dynamic Response
         parsed = parse_xlsx(data)  # type: ignore[call-arg]
         rows = _normalize(cast(list[dict[str, str]], parsed.rows))
         from flask import jsonify
+
         return jsonify(_ok(rows, fmt="xlsx"))
     except ImportValidationError:
         return _err("invalid", "Import validation failed", 400)
+
 
 __all__ = ["bp"]
 
 # --- Menu Import (legacy dry-run support for tests) ---
 try:  # pragma: no cover - optional existing importer
     from .importers.menu_importer import MenuImporter  # type: ignore[import-not-found]
+
     _importer: Any | None = MenuImporter()  # type: ignore[misc]
 except Exception:  # pragma: no cover
     _importer = None
+
 
 @bp.post("/menu")
 @require_roles(*ALLOWED_ROLES)
@@ -222,13 +252,15 @@ def import_menu():  # dynamic Response
     diff: list[dict[str, object]] = []
     for wk in getattr(result, "weeks", []):  # type: ignore[iteration-over-annotated]
         for it in getattr(wk, "items", []):
-            diff.append({
-                "day": getattr(it, "day", None),
-                "meal": getattr(it, "meal", None),
-                "variant_type": getattr(it, "variant_type", None),
-                "dish_name": getattr(it, "dish_name", None),
-                "variant_action": "create",  # placeholder (no existing lookup yet)
-            })
+            diff.append(
+                {
+                    "day": getattr(it, "day", None),
+                    "meal": getattr(it, "meal", None),
+                    "variant_type": getattr(it, "variant_type", None),
+                    "dish_name": getattr(it, "dish_name", None),
+                    "variant_action": "create",  # placeholder (no existing lookup yet)
+                }
+            )
     # Map diff entries to generic ImportRow-like minimal rows (best-effort)
     rows: list[dict[str, str]] = []
     for d in diff:
@@ -236,11 +268,13 @@ def import_menu():  # dynamic Response
         day = d.get("day")
         meal = d.get("meal")
         variant_type = d.get("variant_type")
-        rows.append({
-            "title": dish[:120],
-            "description": f"{day} {meal} {variant_type}",
-            "priority": "0",
-        })
+        rows.append(
+            {
+                "title": dish[:120],
+                "description": f"{day} {meal} {variant_type}",
+                "priority": "0",
+            }
+        )
     ok_payload = _ok(rows, fmt="menu", dry_run=dry_run)
     ok_payload["diff"] = diff  # type: ignore[index]
     return jsonify(ok_payload)

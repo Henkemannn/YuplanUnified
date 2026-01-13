@@ -1,0 +1,59 @@
+{% extends "ui/unified_admin_base.html" %}
+{% block admin_title %}Specialkost{% endblock %}
+{% block admin_subtitle %}Hantera kosttyper{% endblock %}
+{% block admin_main %}
+<section class="ua-section">
+<div class="ua-card admin-header">
+  <h1>Specialkost</h1>
+  <div class="header-actions">
+    <a href="{{ url_for('ui.admin_specialkost_new_form') }}" class="yp-button yp-button-primary">Lägg till ny kosttyp</a>
+  </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-messages">
+    {% for category, message in messages %}
+    <div class="flash flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+<div class="ua-card">
+  {% if vm.diet_types and vm.diet_types|length > 0 %}
+    <table class="ua-table">
+      <thead>
+        <tr>
+          <th>Namn</th>
+          <th>Förinställd</th>
+          <th>Åtgärder</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in vm.diet_types %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td>{{ "✓" if row.default_select else "" }}</td>
+          <td>
+            <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}">Redigera</a>
+            <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" style="display:inline">
+              {{ csrf_token_input()|safe }}
+              <button type="submit" class="yp-button yp-button-danger">Ta bort</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="ua-empty-state">
+      <div class="ua-empty-icon">🥗</div>
+      <div class="ua-empty-title">Inga kosttyper</div>
+      <p class="ua-empty-desc">Skapa din första kosttyp för att kunna registrera specialkost.</p>
+      <a href="{{ url_for('ui.admin_specialkost_new_form') }}" class="yp-button yp-button-primary">➕ Lägg till kosttyp</a>
+    </div>
+  {% endif %}
+</div>
+</section>
+{% endblock %}

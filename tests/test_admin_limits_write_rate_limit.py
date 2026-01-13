@@ -9,6 +9,7 @@ from core.models import Tenant, User
 
 # Helper to enable feature flag for tenant
 
+
 def enable_flag(app, tenant_id: int, flag: str):
     # Ensure tenant exists
     db = get_session()
@@ -18,7 +19,13 @@ def enable_flag(app, tenant_id: int, flag: str):
             t = Tenant(id=tenant_id, name=f"t{tenant_id}")  # direct id for simplicity
             db.add(t)
             # basic admin user to satisfy potential auth logic
-            u = User(tenant_id=tenant_id, email=f"admin{tenant_id}@x", password_hash="x", role="admin", unit_id=None)
+            u = User(
+                tenant_id=tenant_id,
+                email=f"admin{tenant_id}@x",
+                password_hash="x",
+                role="admin",
+                unit_id=None,
+            )
             db.add(u)
             db.commit()
         svc = app.feature_service
@@ -46,10 +53,19 @@ def make_client(flag_on: bool = False, tenant_id: int = 1):
 
 
 def do_post(c, tenant_id: int, user_id: int, quota=5):  # minimal upsert
-    return c.post("/admin/limits", headers={"X-User-Role":"admin","X-Tenant-Id":str(tenant_id),"X-User-Id":str(user_id)}, json={"tenant_id":tenant_id,"name":"exp","quota":quota,"per_seconds":60})
+    return c.post(
+        "/admin/limits",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": str(tenant_id), "X-User-Id": str(user_id)},
+        json={"tenant_id": tenant_id, "name": "exp", "quota": quota, "per_seconds": 60},
+    )
+
 
 def do_delete(c, tenant_id: int, user_id: int):
-    return c.delete("/admin/limits", headers={"X-User-Role":"admin","X-Tenant-Id":str(tenant_id),"X-User-Id":str(user_id)}, json={"tenant_id":tenant_id,"name":"exp"})
+    return c.delete(
+        "/admin/limits",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": str(tenant_id), "X-User-Id": str(user_id)},
+        json={"tenant_id": tenant_id, "name": "exp"},
+    )
 
 
 def test_write_limit_flag_off_bypass():
@@ -73,8 +89,11 @@ def test_write_limit_flag_on_enforce():
     blocked = do_post(c, 1, 1)
     assert blocked.status_code == 429, blocked.get_data()
     body = blocked.get_json()
-    assert body["error"] == "rate_limited"
-    assert body["limit"] == "admin_limits_write"
+    # RFC7807 ProblemDetails
+    assert body["type"].endswith("/rate_limited")
+    assert body["status"] == 429
+    assert body.get("detail") in ("rate_limited", "Too many requests", "Too Many Requests")
+    assert body.get("limit") == "admin_limits_write"
     assert "retry_after" in body
     assert int(blocked.headers.get("Retry-After", "0")) >= 0
 
@@ -94,14 +113,17 @@ def test_write_limit_isolation_per_user():
 def test_write_limit_lookup_metric_emitted(monkeypatch):
     hits = []
     from core import limit_registry as reg
+
     orig = reg.metrics_mod.increment
+
     def capture(name, tags=None):  # type: ignore[override]
         if name == "rate_limit.lookup" and tags and tags.get("name") == "admin_limits_write":
             hits.append(tags.get("source"))
         return orig(name, tags)
+
     monkeypatch.setattr(reg.metrics_mod, "increment", capture)
     c, app = make_client(flag_on=True)
     for _ in range(2):
         do_post(c, 1, 1)
     # At least one lookup recorded
-    assert any(src in ("default","tenant","fallback") for src in hits)
+    assert any(src in ("default", "tenant", "fallback") for src in hits)

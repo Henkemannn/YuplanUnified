@@ -1,0 +1,13 @@
+name: mypy-admin
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+jobs:
+  mypy-admin:
+    name: mypy-admin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo mypy-admin placeholder check

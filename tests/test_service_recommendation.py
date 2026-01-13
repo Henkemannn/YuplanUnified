@@ -13,9 +13,11 @@ from core.models import PortionGuideline, ServiceMetric, Tenant, User
 def app():
     return create_app({"TESTING": True, "SECRET_KEY": "test"})
 
+
 @pytest.fixture()
 def client(app: Flask):
     return app.test_client()
+
 
 @pytest.fixture()
 def setup_tenant():
@@ -28,19 +30,37 @@ def setup_tenant():
         tenant = db.query(Tenant).first()
         if not tenant:
             tenant = Tenant(name="PortionTest")
-            db.add(tenant); db.commit(); db.refresh(tenant)
+            db.add(tenant)
+            db.commit()
+            db.refresh(tenant)
         # Clean previous test artifacts
         db.query(ServiceMetric).delete()
         db.query(PortionGuideline).delete()
         db.query(User).filter(User.email == "portion_admin@example.com").delete()
         db.commit()
-        user = User(tenant_id=tenant.id, email="portion_admin@example.com", password_hash=generate_password_hash("pw"), role="admin", unit_id=None)
-        db.add(user); db.commit(); db.refresh(user)
-        guideline = PortionGuideline(tenant_id=tenant.id, unit_id=None, category="main", baseline_g_per_guest=400, protein_per_100g=10.0)
-        db.add(guideline); db.commit()
+        user = User(
+            tenant_id=tenant.id,
+            email="portion_admin@example.com",
+            password_hash=generate_password_hash("pw"),
+            role="admin",
+            unit_id=None,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        guideline = PortionGuideline(
+            tenant_id=tenant.id,
+            unit_id=None,
+            category="main",
+            baseline_g_per_guest=400,
+            protein_per_100g=10.0,
+        )
+        db.add(guideline)
+        db.commit()
         return {"tenant_id": tenant.id, "user_id": user.id}
     finally:
         db.close()
+
 
 def login(client, email):
     return client.post("/auth/login", json={"email": email, "password": "pw"})
@@ -69,9 +89,21 @@ def test_blend_few_points(client, setup_tenant):
     try:
         t_id = setup_tenant["tenant_id"]
         base_date = date.today()
-        values = [500,450,550]
+        values = [500, 450, 550]
         for i, v in enumerate(values):
-            sm = ServiceMetric(tenant_id=t_id, unit_id=1, date=base_date - timedelta(days=i), meal="lunch", dish_id=None, category="main", guest_count=100, produced_qty_kg=60, served_qty_kg=50, leftover_qty_kg=10, served_g_per_guest=v)
+            sm = ServiceMetric(
+                tenant_id=t_id,
+                unit_id=1,
+                date=base_date - timedelta(days=i),
+                meal="lunch",
+                dish_id=None,
+                category="main",
+                guest_count=100,
+                produced_qty_kg=60,
+                served_qty_kg=50,
+                leftover_qty_kg=10,
+                served_g_per_guest=v,
+            )
             db.add(sm)
         db.commit()
     finally:
@@ -89,9 +121,21 @@ def test_blend_many_points_trimmed(client, setup_tenant):
     try:
         t_id = setup_tenant["tenant_id"]
         base_date = date.today()
-        values = [300,600,500,505,495,510,490,500,500,500]
+        values = [300, 600, 500, 505, 495, 510, 490, 500, 500, 500]
         for i, v in enumerate(values):
-            sm = ServiceMetric(tenant_id=t_id, unit_id=1, date=base_date - timedelta(days=i), meal="lunch", dish_id=None, category="main", guest_count=100, produced_qty_kg=60, served_qty_kg=50, leftover_qty_kg=10, served_g_per_guest=v)
+            sm = ServiceMetric(
+                tenant_id=t_id,
+                unit_id=1,
+                date=base_date - timedelta(days=i),
+                meal="lunch",
+                dish_id=None,
+                category="main",
+                guest_count=100,
+                produced_qty_kg=60,
+                served_qty_kg=50,
+                leftover_qty_kg=10,
+                served_g_per_guest=v,
+            )
             db.add(sm)
         db.commit()
     finally:

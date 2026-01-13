@@ -1,0 +1,192 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block title %}Yuplan Unified{% endblock %}
+
+{% block admin_main %}
+<section class="ua-section">
+  <div class="ua-card admin-header">
+    <div class="header-flex">
+      <div>
+        {% if vm.departments %}
+          <h1>Statistik/Rapport</h1>
+          <p class="subtitle">Visar antal specialkost och normalkost per lunch och kvällsmat under vald vecka.</p>
+        {% elif vm.coverage_data %}
+          <h1>Veckorapport – Registrering</h1>
+          <p class="subtitle">Vecka {{ vm.week }}, {{ vm.year }}</p>
+        {% else %}
+          <h1>Veckorapport</h1>
+        {% endif %}
+      </div>
+      <div class="header-actions">
+        <a href="{{ url_for('ui.admin_menu_planning_index') }}" class="yp-button yp-button-secondary">← Tillbaka till admin</a>
+      </div>
+    </div>
+  </div>
+
+  {% if vm.departments %}
+    <div class="ua-card card">
+      <div class="card-body">
+        <form method="GET" action="/ui/admin/report/week" class="filter-bar" aria-label="Välj vecka och avdelning">
+          <div class="filter-grid">
+            <div class="filter-item">
+              <label for="year-input">År</label>
+              <input id="year-input" name="year" type="number" min="2000" max="2100" value="{{ vm.selected_year }}" />
+            </div>
+            <div class="filter-item">
+              <label for="week-input">Vecka</label>
+              <input id="week-input" name="week" type="number" min="1" max="53" value="{{ vm.selected_week }}" />
+            </div>
+            <div class="filter-item">
+              <label for="department-select">Avdelning</label>
+              <select id="department-select" name="department_id">
+                {% if vm.selected_department_id == 'ALL' %}
+                  {% for opt in vm.departments_options %}
+                    <option value="{{ opt.id }}" {% if vm.selected_department_id == opt.id %}selected{% endif %}>{{ opt.name }}</option>
+                  {% endfor %}
+                {% else %}
+                  {% for opt in vm.departments_options %}
+                    {% if opt.id == vm.selected_department_id %}
+                      <option value="{{ opt.id }}" selected>{{ opt.name }}</option>
+                    {% endif %}
+                  {% endfor %}
+                {% endif %}
+              </select>
+            </div>
+            <div class="filter-actions">
+              <button class="yp-button" type="submit">Visa</button>
+              <a class="yp-button yp-button-secondary" href="/ui/admin/report/week?year={{ vm.current_year }}&week={{ vm.current_week }}&department_id={{ vm.selected_department_id }}">Denna vecka</a>
+              <a class="yp-button" href="/ui/admin/report/week?year={{ vm.prev_year }}&week={{ vm.prev_week }}&department_id={{ vm.selected_department_id }}">Föregående vecka</a>
+              <a class="yp-button" href="/ui/admin/report/week?year={{ vm.next_year }}&week={{ vm.next_week }}&department_id={{ vm.selected_department_id }}">Nästa vecka</a>
+            </div>
+          </div>
+        </form>
+        <div class="table-responsive">
+          <div class="diets-labels">
+            <span class="ua-label">Boende Lunch</span>
+            <span class="ua-label">Boende Kväll</span>
+          </div>
+          <table class="yp-table report-table diets-report">
+            <thead>
+              <tr>
+                <th class="th-dept">Avdelning</th>
+                <th class="th-day">Veckodag</th>
+                <th class="th-count">Lunch – Special</th>
+                <th class="th-count">Lunch – Normal</th>
+                <th class="th-count">Kväll – Special</th>
+                <th class="th-count">Kväll – Normal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for dep in vm.departments %}
+                {% for row in dep.rows %}
+                  <tr>
+                    <td class="dept-cell">{{ dep.name }}</td>
+                    <td class="day-cell">{{ row.weekday_label }}</td>
+                    <td class="count-cell special">{{ row.special_lunch }}</td>
+                    <td class="count-cell normal">{{ row.normal_lunch }}</td>
+                    <td class="count-cell special">{{ row.special_dinner }}</td>
+                    <td class="count-cell normal">{{ row.normal_dinner }}</td>
+                  </tr>
+                {% endfor %}
+                <tr class="ua-sum-row diets-summary">
+                  <td class="dept-cell">{{ dep.name }} (SUMMA)</td>
+                  <td></td>
+                  <td class="count-cell special">{{ dep.week_summary.special_lunch_total }}</td>
+                  <td class="count-cell normal">{{ dep.week_summary.normal_lunch_total }}</td>
+                  <td class="count-cell special">{{ dep.week_summary.special_dinner_total }}</td>
+                  <td class="count-cell normal">{{ dep.week_summary.normal_dinner_total }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="legend-box diets-legend" aria-label="Förklaring av färgkodning">
+            <h3 class="legend-title">Förklaring</h3>
+            <div class="legend-items">
+              <span class="legend-item">
+                <span class="legend-swatch legend-swatch-special" aria-hidden="true"></span>
+                <span class="legend-label">Specialkost (markerade)</span>
+              </span>
+              <span class="legend-item">
+                <span class="legend-swatch legend-swatch-normal" aria-hidden="true"></span>
+                <span class="legend-label">Normalkost (boende − special)</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% elif vm.coverage_data %}
+    <div class="week-navigation">
+      <a class="yp-button" href="/ui/reports/weekly?year={{ vm.prev_year }}&week={{ vm.prev_week }}">Föregående vecka</a>
+      <a class="yp-button yp-button-secondary" href="/ui/reports/weekly?year={{ vm.current_year }}&week={{ vm.current_week }}">Denna vecka</a>
+      <a class="yp-button" href="/ui/reports/weekly?year={{ vm.next_year }}&week={{ vm.next_week }}">Nästa vecka</a>
+    </div>
+    <div class="ua-card card">
+      <div class="card-body">
+        <div class="table-responsive">
+          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Lunch</span>
+          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Kväll</span>
+          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Totalt</span>
+          <table class="yp-table report-table">
+            <thead>
+              <tr>
+                <th class="dept-col">AVDELNING</th>
+                <th class="count-col">LUNCH</th>
+                <th class="count-col">KVÄLL</th>
+                <th class="percent-col">TÄCKNING</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in vm.coverage_data %}
+                <tr>
+                  <td class="dept-name">{{ item.department_name }}</td>
+                  <td class="count-cell">
+                    <span class="count-badge">{{ item.lunch_registered }} / {{ item.lunch_expected }}</span>
+                    <span class="count-detail">Registrerade / Förväntade</span>
+                  </td>
+                  <td class="count-cell">
+                    <span class="count-badge">{{ item.dinner_registered }} / {{ item.dinner_expected }}</span>
+                    <span class="count-detail">Registrerade / Förväntade</span>
+                  </td>
+                  <td class="percent-cell">
+                    {% set cls = 'coverage-high' if item.coverage_percent >= 90 else ('coverage-medium' if item.coverage_percent >= 60 else 'coverage-low') %}
+                    <span class="percent-badge {{ cls }}">{{ item.coverage_percent }}%</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+  
+  {% if not vm.departments and not vm.coverage_data %}
+    <p class="help-text">Ingen data tillgänglig för vald vy.</p>
+  {% endif %}
+
+  <style>
+    .filter-bar { margin-bottom: var(--yp-gap-lg); }
+    .filter-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--yp-gap-md); align-items: end; }
+    .filter-item label { display: block; font-size: 0.9em; color: var(--yp-color-text-muted); margin-bottom: 0.25rem; }
+    .filter-actions { display: flex; gap: var(--yp-gap-sm); justify-content: flex-end; align-items: center; }
+    .diets-report { font-size: 1.05rem; }
+    .diets-report th.th-dept { width: 24%; }
+    .diets-report th.th-day { width: 16%; }
+    .diets-report th.th-count { width: 15%; text-align: center; }
+    .diets-report td.dept-cell { font-weight: var(--yp-font-weight-medium); }
+    .diets-report td.day-cell { color: var(--yp-color-text); }
+    .diets-report td.count-cell { text-align: center; }
+    .diets-report td.count-cell.special { color: #8B1A1A; font-weight: var(--yp-font-weight-semibold); }
+    .diets-report td.count-cell.normal { color: #0B3D0B; font-weight: var(--yp-font-weight-medium); }
+    .diets-summary td { font-weight: var(--yp-font-weight-semibold); }
+    .diets-summary { background-color: var(--yp-color-bg-alt); border-top: 2px solid var(--yp-color-border); }
+    .legend-box { margin-top: var(--yp-gap-xl); padding: var(--yp-gap-lg); background-color: var(--yp-color-bg-alt); border-radius: var(--yp-radius); }
+    .legend-title { font-size: 0.95em; margin-bottom: 0.5rem; }
+    .legend-swatch { display: inline-block; width: 1rem; height: 1rem; border-radius: var(--yp-radius-sm); border: 1px solid var(--yp-color-border); }
+    .legend-swatch-special { background-color: #F7E6E6; border-color: #D88; }
+    .legend-swatch-normal { background-color: #E6F3E6; border-color: #8D8; }
+    .legend-label { color: var(--yp-color-text); }
+  </style>
+</section>
+{% endblock %}

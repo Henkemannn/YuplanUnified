@@ -1,48 +1,48 @@
-## v1.0.0-beta – Release Runbook
+# Release Runbook
 
-### Preconditions
-- Target branch ready (usually `main`).
-- CI green on latest commit.
-- Baseline present: `specs/openapi.baseline.json`.
+## Pre-flight
+- [ ] CI green on `master`
+- [ ] Changelog updated
+- [ ] README updated (if needed)
 
-### 1) Local sanity
-```bash
-make openapi
-make ready
-# => ✅ Release readiness OK.
+## Tagging
+
+RC:
+
+```pwsh
+# creates v<VERSION>-rcN and pushes
+pwsh -File tools/release.ps1 -Kind rc
 ```
 
-### 2) Merge to main
+GA:
 
-Open/Update PR → ensure OpenAPI diff comment is ✅ (stable) or 🟡 (additions only).
-
-### 3) Tag
-```bash
-git checkout main && git pull
-git tag -a v1.0.0-beta -m "v1.0.0-beta"
-git push origin v1.0.0-beta
+```pwsh
+git tag -a v1.0.0 -m "GA release v1.0.0"
+git push origin v1.0.0
 ```
 
-### 4) Release workflow
+## Validation
+- [ ] CI “Validate Tag → Release” workflow passes
+- [ ] RFC7807 smoke test green
+- [ ] Ruff + mypy checks clean
 
-Auto-triggers: “Release OpenAPI Changelog”.
+## Publish Release (GitHub UI)
+- Releases → Draft new release
+- Tag: v1.0.0
+- Body: paste from `docs/RELEASE_BODY_v1.0.0.md`
+- Attach artifacts (if any)
+- Publish
 
-Manual fallback: Actions → “Release OpenAPI Changelog” → Run (target_branch=main, force_fallback=true if needed).
+## Post-publish
+- [ ] Open GA checklist issue via template
+- [ ] Open v1.1 roadmap kickoff via template
+- [ ] Create `release/<version>` branch if you need patch fixes
 
-### 5) Verify
-
-`CHANGELOG.md` prepended with “OpenAPI changes (YYYY-MM-DD)”.
-
-Artifacts present: `openapi.json`, `openapi-extras/*`, `openapi-diff/*`.
-
-### 6) GitHub Release
-
-Tag: `v1.0.0-beta`
-
-Body: paste `openapi-extras/openapi-changelog.md`.
-
-### 7) Post-release
-
+## Hotfix flow
+```pwsh
+git checkout -b hotfix/<name> master
+# commit, PR to master, tag v1.0.1, push, publish
+```
 Manually run “Security Audit” once (pip-audit).
 
 ### Common scenarios

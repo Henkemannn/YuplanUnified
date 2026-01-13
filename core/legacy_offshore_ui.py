@@ -4,6 +4,7 @@ First step: expose /superuser/panel using unified Tenants as 'rigs'.
 We DO NOT import the entire legacy app; we only reuse its template.
 Later we can progressively map more routes.
 """
+
 from __future__ import annotations
 
 from flask import Blueprint, render_template, session
@@ -16,8 +17,9 @@ bp = Blueprint(
     "legacy_offshore_ui",
     __name__,
     template_folder="../legacy/offshore/templates",  # relative to this file
-    static_folder="../legacy/offshore/static"
+    static_folder="../legacy/offshore/static",
 )
+
 
 def _tenant_to_rig_row(t: Tenant, meta: TenantMetadata | None):
     return {
@@ -26,6 +28,7 @@ def _tenant_to_rig_row(t: Tenant, meta: TenantMetadata | None):
         "description": (meta.description if meta and meta.description else ""),
         "kind": (meta.kind if meta and meta.kind else None),
     }
+
 
 @bp.before_app_request
 def _inject_superuser_flag():  # minimal compatibility; unify concept

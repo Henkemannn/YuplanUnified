@@ -9,6 +9,7 @@ Design principles:
 Runtime behavior of endpoints SHOULD NOT depend on these definitions; they
 exist for static analysis (mypy strict pocket rollout).
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal, NewType, NotRequired, TypedDict
@@ -25,17 +26,21 @@ DietTypeId = NewType("DietTypeId", int)
 AssignmentId = NewType("AssignmentId", int)
 TaskId = NewType("TaskId", int)
 
+
 ## Envelopes
 class OkBase(TypedDict):
     ok: Literal[True]
+
 
 class ErrorResponse(TypedDict, total=False):
     ok: Literal[False]
     error: str
     message: NotRequired[str]
 
+
 # --- Tasks ---
 TaskStatus = Literal["todo", "doing", "blocked", "done", "cancelled"]
+
 
 class TaskSummary(TypedDict, total=False):
     id: TaskId
@@ -45,8 +50,10 @@ class TaskSummary(TypedDict, total=False):
     assignee: NotRequired[str]
     due: NotRequired[str]
 
+
 class TaskListResponse(OkBase):
     tasks: list[TaskSummary]
+
 
 class TaskCreateRequest(TypedDict, total=False):
     title: str
@@ -55,16 +62,19 @@ class TaskCreateRequest(TypedDict, total=False):
     status: NotRequired[TaskStatus]
     done: NotRequired[bool]
 
+
 class TaskCreateResponse(OkBase, total=False):
     task_id: TaskId
     task: NotRequired[dict]
     location: NotRequired[str]
+
 
 class TaskUpdateRequest(TypedDict, total=False):
     status: NotRequired[TaskStatus]
     assignee: NotRequired[str]
     title: NotRequired[str]
     due: NotRequired[str]
+
 
 class TaskUpdateResponse(OkBase, total=False):
     updated: bool
@@ -154,12 +164,13 @@ class IngestResponse(OkBase, total=False):
     skipped: NotRequired[int]
     details: NotRequired[list]
 
+
 # --- Limits Inspection ---
 class LimitView(TypedDict, total=False):
     name: str
     quota: int
     per_seconds: int
-    source: Literal["tenant","default","fallback"]
+    source: Literal["tenant", "default", "fallback"]
     tenant_id: NotRequired[int]
 
 
@@ -207,6 +218,8 @@ class ImportOkResponse(OkBase, total=False):
     meta: ImportMeta
     # Legacy alias (sunset TBD)
     dry_run: NotRequired[bool]
+    # Menu import dry-run diff entries (free-form objects)
+    diff: NotRequired[list[dict[str, object]]]
 
 
 class ImportErrorResponse(TypedDict, total=False):

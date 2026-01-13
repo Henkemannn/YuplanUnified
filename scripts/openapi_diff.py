@@ -7,6 +7,7 @@ Exit codes:
     1 = Breaking changes detected
     2 = Usage or IO error
 """
+
 from __future__ import annotations
 
 import json
@@ -39,7 +40,11 @@ def iter_paths(spec: dict[str, Any]) -> set[str]:
 
 
 def iter_methods(path_item: dict[str, Any]) -> set[str]:
-    return {m for m in path_item if m.lower() in {"get", "put", "post", "delete", "options", "head", "patch", "trace"}}
+    return {
+        m
+        for m in path_item
+        if m.lower() in {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+    }
 
 
 def responses_of(op: dict[str, Any]) -> set[str]:
@@ -71,7 +76,7 @@ def diff_enums(old_enum: list[Any] | None, new_enum: list[Any] | None) -> tuple[
     return removed, added
 
 
-def diff_schemas(ctx: str, base_schema: dict, new_schema: dict) -> list[str]:  # type: ignore[override]
+def diff_schemas(ctx: str, base_schema: dict, new_schema: dict) -> list[str]:
     brk: list[str] = []
 
     base_ref = base_schema.get("$ref")
@@ -117,12 +122,16 @@ def diff_schemas(ctx: str, base_schema: dict, new_schema: dict) -> list[str]:  #
         # Recurse on intersecting props
         for prop in sorted(set(b_props_map) & set(n_props_map)):
             brk.extend(
-                diff_schemas(f"{ctx} property '{prop}'", b_props_map[prop] or {}, n_props_map[prop] or {})
+                diff_schemas(
+                    f"{ctx} property '{prop}'", b_props_map[prop] or {}, n_props_map[prop] or {}
+                )
             )
         return brk  # object handled
 
     # Strings: detect tighter constraints
-    if (bt or nt) == "string" or any(k in base_schema or k in new_schema for k in ("minLength", "maxLength", "pattern")):
+    if (bt or nt) == "string" or any(
+        k in base_schema or k in new_schema for k in ("minLength", "maxLength", "pattern")
+    ):
         b_min_len = base_schema.get("minLength")
         n_min_len = new_schema.get("minLength")
         if isinstance(b_min_len, int) and isinstance(n_min_len, int) and n_min_len > b_min_len:
@@ -173,6 +182,26 @@ def diff_schemas(ctx: str, base_schema: dict, new_schema: dict) -> list[str]:  #
 
 def collect_breaking_changes(baseline: dict[str, Any], new: dict[str, Any]) -> list[str]:
     brk: list[str] = []
+    base_components = baseline.get("components") or {}
+    new_components = new.get("components") or {}
+
+    def response_content_types(resp: dict[str, Any], *, is_new: bool) -> set[str]:
+        # direct content map
+        if (resp or {}).get("content"):
+            return content_types_of(resp)
+        # resolve $ref to components if present
+        ref = (resp or {}).get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/components/responses/"):
+            name = ref.split("/")[-1]
+            # Heuristic: Problem responses always use application/problem+json
+            if name.startswith("Problem"):
+                return {"application/problem+json"}
+            comps = new_components if is_new else base_components
+            target = (comps.get("responses") or {}).get(name) or {}
+            if target:
+                return content_types_of(target)
+        return set()
+
     base_paths = iter_paths(baseline)
     new_paths = iter_paths(new)
     removed_paths = base_paths - new_paths
@@ -208,12 +237,23 @@ def collect_breaking_changes(baseline: dict[str, Any], new: dict[str, Any]) -> l
                     brk.extend(diff_schemas(f"{m.upper()} {p} request", base_schema, new_schema))
             base_resp_map = base_op.get("responses") or {}
             new_resp_map = new_op.get("responses") or {}
-            for code in (base_resps & new_resps):
+            for code in base_resps & new_resps:
                 base_resp = base_resp_map.get(code, {}) or {}
                 new_resp = new_resp_map.get(code, {}) or {}
-                base_ct = content_types_of(base_resp)
-                new_ct = content_types_of(new_resp)
-                for ct in sorted(base_ct - new_ct):
+                base_ct = response_content_types(base_resp, is_new=False)
+                new_ct = response_content_types(new_resp, is_new=True)
+                removed_cts = sorted(base_ct - new_ct)
+                # Special-case: treat migration from application/json -> application/problem+json
+                # for standard error responses as non-breaking.
+                ERROR_CODES = {"400", "401", "403", "404", "409", "422", "429", "500"}
+                for ct in removed_cts:
+                    if (
+                        ct == "application/json"
+                        and code in ERROR_CODES
+                        and ("application/problem+json" in new_ct)
+                    ):
+                        # Considered a format upgrade to RFC7807; not a breaking change for this check.
+                        continue
                     brk.append(f"Removed response {code} content-type '{ct}': {m.upper()} {p}")
     return brk
 

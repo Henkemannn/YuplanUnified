@@ -3,6 +3,7 @@
 Add precise return annotations using core.api_types; keep runtime JSON stable; no Any.
 Service signatures require user_id, role, tenant_id for explicit RBAC context.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -45,7 +46,9 @@ def list_tasks(db: Session, *, tenant_id: int, user_id: int | None, role: str) -
     return {"ok": True, "tasks": [_serialize_task(t) for t in tasks]}
 
 
-def create_task(db: Session, *, tenant_id: int, user_id: int | None, role: str, payload: TaskCreateRequest) -> TaskCreateResponse:
+def create_task(
+    db: Session, *, tenant_id: int, user_id: int | None, role: str, payload: TaskCreateRequest
+) -> TaskCreateResponse:
     title = (payload.get("title") or "").strip()
     if not title:
         raise ValidationError("title required")
@@ -77,7 +80,15 @@ def create_task(db: Session, *, tenant_id: int, user_id: int | None, role: str, 
     return {"ok": True, "task_id": TaskId(t.id)}
 
 
-def update_task(db: Session, *, tenant_id: int, user_id: int | None, role: str, task_id: int, payload: TaskUpdateRequest) -> TaskUpdateResponse:
+def update_task(
+    db: Session,
+    *,
+    tenant_id: int,
+    user_id: int | None,
+    role: str,
+    task_id: int,
+    payload: TaskUpdateRequest,
+) -> TaskUpdateResponse:
     t = db.query(Task).filter(Task.id == task_id, Task.tenant_id == tenant_id).first()
     if not t:
         raise NotFoundError("task not found")
@@ -108,6 +119,7 @@ def update_task(db: Session, *, tenant_id: int, user_id: int | None, role: str, 
         db.commit()
         db.refresh(t)
     return {"ok": True, "updated": changed}
+
 
 __all__ = [
     "list_tasks",

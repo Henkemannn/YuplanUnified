@@ -27,16 +27,18 @@ HTML = """<!doctype html>
   </body>
 </html>"""
 
+
 @bp.get("/")
 def docs_index():  # pragma: no cover simple UI
     # Optional feature flag gate: openapi_ui
     # If feature flag disabled, show 404 (silent disable)
     # We reuse feature_enabled context processor if available.
-  try:
-    from flask import current_app
-    feature_fn = current_app.jinja_env.globals.get("feature_enabled")
-    if feature_fn and callable(feature_fn) and not feature_fn("openapi_ui"):
-      abort(404)
-  except Exception:  # pragma: no cover - defensive
-    pass
-  return Response(HTML, mimetype="text/html")
+    try:
+        from flask import current_app
+
+        feature_fn = current_app.jinja_env.globals.get("feature_enabled")
+        if feature_fn and callable(feature_fn) and not feature_fn("openapi_ui"):
+            abort(404)
+    except Exception:  # pragma: no cover - defensive
+        pass
+    return Response(HTML, mimetype="text/html")

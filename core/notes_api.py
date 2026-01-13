@@ -16,11 +16,22 @@ from .errors import NotFoundError, ValidationError
 from .models import Note
 from .pagination import make_page_response, parse_page_params
 from .roles import RoleLike
+from .telemetry import track_event  # optional metrics no-op if unavailable
 
 bp = Blueprint("notes_api", __name__, url_prefix="/notes")
 
-SAFE_READ_ROLES: tuple[RoleLike, RoleLike, RoleLike, RoleLike] = ("superuser","admin","cook","unit_portal")
-WRITE_ROLES: tuple[RoleLike, RoleLike, RoleLike, RoleLike] = ("superuser","admin","cook","unit_portal")  # legacy; canonical mapping applied in require_roles
+SAFE_READ_ROLES: tuple[RoleLike, RoleLike, RoleLike, RoleLike] = (
+    "superuser",
+    "admin",
+    "cook",
+    "unit_portal",
+)
+WRITE_ROLES: tuple[RoleLike, RoleLike, RoleLike, RoleLike] = (
+    "superuser",
+    "admin",
+    "cook",
+    "unit_portal",
+)  # legacy; canonical mapping applied in require_roles
 
 
 def _tenant_id():
@@ -40,8 +51,9 @@ def _serialize(note: Note):
         "updated_at": note.updated_at.isoformat() if note.updated_at else None,
     }
 
+
 @bp.get("/")
-@require_roles("superuser","admin","cook","unit_portal")
+@require_roles("superuser", "admin", "cook", "unit_portal")
 def list_notes():
     tid = _tenant_id()
     page_req = parse_page_params(dict(request.args))
@@ -50,7 +62,7 @@ def list_notes():
         user_id = session.get("user_id")
         role = session.get("role")
         base_q = db.query(Note).filter(Note.tenant_id == tid)
-        if role not in ("admin","superuser"):
+        if role not in ("admin", "superuser"):
             base_q = base_q.filter((~Note.private_flag) | (Note.user_id == user_id))  # type: ignore
         # Stable deterministic ordering: created_at DESC, id DESC
         q = base_q.order_by(Note.created_at.desc(), Note.id.desc())
@@ -68,8 +80,9 @@ def list_notes():
     finally:
         db.close()
 
+
 @bp.post("/")
-@require_roles("superuser","admin","cook","unit_portal")
+@require_roles("superuser", "admin", "cook", "unit_portal")
 def create_note():
     tid = _tenant_id()
     data = request.get_json(silent=True) or {}
@@ -79,16 +92,27 @@ def create_note():
         raise ValidationError("content required")
     db = get_session()
     try:
-        note = Note(tenant_id=tid, user_id=session.get("user_id"), content=content, private_flag=private_flag)
+        note = Note(
+            tenant_id=tid,
+            user_id=session.get("user_id"),
+            content=content,
+            private_flag=private_flag,
+        )
         db.add(note)
         db.commit()
         db.refresh(note)
+        # Telemetry: treat note creation as a 'registrering' style event for pilot visibility.
+        avd_name = session.get("unit_name") or session.get(
+            "avdelning"
+        )  # legacy fallback keys if present
+        track_event("registrering", avdelning=str(avd_name) if avd_name else None, maltid=None)
         return jsonify({"ok": True, "note": _serialize(note)})
     finally:
         db.close()
 
+
 @bp.put("/<int:note_id>")
-@require_roles("superuser","admin","cook","unit_portal")
+@require_roles("superuser", "admin", "cook", "unit_portal")
 def update_note(note_id: int):
     tid = _tenant_id()
     db = get_session()
@@ -97,7 +121,7 @@ def update_note(note_id: int):
         if not note:
             raise NotFoundError("note not found")
         role = session.get("role")
-        if note.user_id != session.get("user_id") and role not in ("admin","superuser"):
+        if note.user_id != session.get("user_id") and role not in ("admin", "superuser"):
             # Ownership required unless elevated.
             raise AuthzError("forbidden", required="admin")
         data = request.get_json(silent=True) or {}
@@ -116,8 +140,9 @@ def update_note(note_id: int):
     finally:
         db.close()
 
+
 @bp.delete("/<int:note_id>")
-@require_roles("superuser","admin","cook","unit_portal")
+@require_roles("superuser", "admin", "cook", "unit_portal")
 def delete_note(note_id: int):
     tid = _tenant_id()
     db = get_session()
@@ -126,7 +151,7 @@ def delete_note(note_id: int):
         if not note:
             raise NotFoundError("note not found")
         role = session.get("role")
-        if note.user_id != session.get("user_id") and role not in ("admin","superuser"):
+        if note.user_id != session.get("user_id") and role not in ("admin", "superuser"):
             raise AuthzError("forbidden", required="admin")
         db.delete(note)
         db.commit()

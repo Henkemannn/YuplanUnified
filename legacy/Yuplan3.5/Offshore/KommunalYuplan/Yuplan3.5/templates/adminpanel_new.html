@@ -1,0 +1,248 @@
+{% extends "base_new.html" %}
+{% block title %}Adminpanel - Yuplan{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-cog"></i> Adminpanel</h1>
+        <div class="d-flex gap-2">
+            <span class="badge" style="background: var(--info-color); color: white; padding: 0.5rem 1rem; border-radius: 20px;">
+                <i class="fas fa-calendar-alt"></i> Vecka {{ valt_vecka }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <a href="{{ url_for('meny_avdelning_admin') }}" class="card" style="text-decoration: none; color: inherit;">
+            <div class="text-center">
+                <i class="fas fa-utensils" style="font-size: 2rem; color: var(--primary-color); margin-bottom: 0.5rem;"></i>
+                <h4>Meny & Avdelningar</h4>
+                <p class="text-secondary">Hantera menytext och avdelningslogin</p>
+            </div>
+        </a>
+        
+        <a href="{{ url_for('veckovy', vecka=valt_vecka) }}" class="card" style="text-decoration: none; color: inherit;">
+            <div class="text-center">
+                <i class="fas fa-users" style="font-size: 2rem; color: var(--secondary-color); margin-bottom: 0.5rem;"></i>
+                <h4>Personalvy</h4>
+                <p class="text-secondary">Se veckans registreringar</p>
+            </div>
+        </a>
+        
+        <a href="{{ url_for('rapport') }}" class="card" style="text-decoration: none; color: inherit;">
+            <div class="text-center">
+                <i class="fas fa-chart-bar" style="font-size: 2rem; color: var(--accent-color); margin-bottom: 0.5rem;"></i>
+                <h4>Rapporter</h4>
+                <p class="text-secondary">Analys och statistik</p>
+            </div>
+        </a>
+    </div>
+
+    <!-- Vecka selector -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-calendar-week"></i> Välj aktiv vecka</h3>
+        </div>
+        <form method="GET" class="d-flex gap-2 align-items-center">
+            <label for="vecka" class="form-label" style="margin-bottom: 0; min-width: max-content;">Vecka:</label>
+            <select name="vecka" id="vecka" class="form-control" style="width: auto;" onchange="this.form.submit()">
+                {% for v in range(1, 53) %}
+                    <option value="{{ v }}" {% if v == valt_vecka %}selected{% endif %}>Vecka {{ v }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+        <!-- Lägg till avdelning -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-plus-circle"></i> Lägg till avdelning</h3>
+            </div>
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label for="avd_namn" class="form-label">Avdelningsnamn</label>
+                    <input type="text" id="avd_namn" name="avd_namn" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="boende_antal" class="form-label">Antal boende</label>
+                    <select name="boende_antal" id="boende_antal" class="form-control" required>
+                        {% for n in range(0, 21) %}
+                            <option value="{{ n }}">{{ n }} personer</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <button type="submit" name="lägg_till_avd" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Lägg till avdelning
+                </button>
+            </form>
+        </div>
+
+        <!-- Lägg till specialkost -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-utensils"></i> Lägg till specialkost</h3>
+            </div>
+            
+            <form method="POST">
+                <div class="form-group">
+                    <label for="kost_namn" class="form-label">Kosttyp</label>
+                    <input type="text" id="kost_namn" name="kost_namn" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="d-flex align-items-center gap-2">
+                        <input type="checkbox" name="formarkeras">
+                        <span>Förmarkeras automatiskt</span>
+                    </label>
+                </div>
+                
+                <button type="submit" name="lägg_till_kost" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Lägg till kosttyp
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Kopplingar -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-link"></i> Koppla kosttyper till avdelningar</h3>
+        </div>
+        
+        <form method="POST">
+            <input type="hidden" name="spara_kopplingar" value="1">
+            
+            <div style="overflow-x: auto;">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th style="min-width: 200px;">Avdelning</th>
+                            {% for kost in kosttyper %}
+                                <th style="min-width: 120px; text-align: center;">{{ kost.namn }}</th>
+                            {% endfor %}
+                            <th style="min-width: 250px;">Faktaruta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for avd in avdelningar %}
+                            <tr>
+                                <td>
+                                    <div style="font-weight: 600;">{{ avd.namn }}</div>
+                                    <div style="font-size: 0.875rem; color: var(--text-secondary);">
+                                        <i class="fas fa-users"></i>
+                                        {% if avd.boende_antal == 'varierat' %}
+                                            Varierat antal
+                                        {% else %}
+                                            {{ avd.boende_antal }} personer
+                                        {% endif %}
+                                    </div>
+                                    <a href="{{ url_for('redigera_boende', avdelning_id=avd.id, vecka=valt_vecka) }}" 
+                                       class="btn btn-sm btn-outline" style="margin-top: 0.5rem;">
+                                        <i class="fas fa-edit"></i> Redigera antal
+                                    </a>
+                                </td>
+                                {% for kost in kosttyper %}
+                                    <td style="text-align: center;">
+                                        <div class="form-group" style="margin-bottom: 0.5rem;">
+                                            <label class="d-flex align-items-center justify-content-center gap-1">
+                                                <input type="checkbox" 
+                                                       name="koppling" 
+                                                       value="{{ avd.id }}_{{ kost.id }}"
+                                                       {% if kost.id in avd.kopplade_kosttyper %}checked{% endif %}>
+                                                <span style="font-size: 0.875rem;">Aktiv</span>
+                                            </label>
+                                        </div>
+                                        <select name="antal_{{ avd.id }}_{{ kost.id }}" 
+                                                class="form-control" 
+                                                style="width: 80px; margin: 0 auto;">
+                                            {% for n in range(0, 11) %}
+                                                <option value="{{ n }}" {% if avd.kopplade_antal.get(kost.id, 1) == n %}selected{% endif %}>{{ n }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                {% endfor %}
+                                <td>
+                                    <textarea name="faktaruta_{{ avd.id }}" 
+                                              class="form-control" 
+                                              rows="3" 
+                                              placeholder="Lägg till information om avdelningen...">{{ avd.faktaruta }}</textarea>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="text-center mt-3">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save"></i> Spara alla ändringar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Ta bort specialkosttyper -->
+    <div class="card" style="border-left: 4px solid var(--danger-color);">
+        <div class="card-header" style="background: #ffebee;">
+            <h3 class="card-title" style="color: var(--danger-color);">
+                <i class="fas fa-trash-alt"></i> Ta bort specialkosttyper
+            </h3>
+        </div>
+        
+        <p class="text-secondary">Klicka på en kosttyp för att ta bort den. <strong>Varning:</strong> Detta kan inte ångras!</p>
+        
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+            {% for kost in kosttyper %}
+            <form method="POST" style="display: inline-block;">
+                <input type="hidden" name="radera_kosttyp" value="{{ kost.id }}">
+                <button type="submit" 
+                        class="btn btn-danger btn-sm" 
+                        onclick="return confirm('Är du säker på att du vill ta bort kosttypen {{ kost.namn }}? Detta kan inte ångras!')">
+                    <i class="fas fa-trash"></i> {{ kost.namn }}
+                </button>
+            </form>
+            {% endfor %}
+            {% if not kosttyper %}
+            <p class="text-secondary"><em>Inga specialkosttyper att ta bort.</em></p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+    // Auto-save indikator
+    document.addEventListener('DOMContentLoaded', function() {
+        const forms = document.querySelectorAll('form');
+        forms.forEach(form => {
+            const inputs = form.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                input.addEventListener('change', function() {
+                    // Visa att det finns osparade ändringar
+                    const saveButton = form.querySelector('button[type="submit"]');
+                    if (saveButton) {
+                        saveButton.style.background = 'var(--warning-color)';
+                        saveButton.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Spara ändringar';
+                    }
+                });
+            });
+        });
+    });
+
+    // Smooth scroll till ankare
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            document.querySelector(this.getAttribute('href')).scrollIntoView({
+                behavior: 'smooth'
+            });
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

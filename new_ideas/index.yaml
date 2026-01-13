@@ -1,0 +1,52 @@
+🌱 Yuplan – Index över nya idéer
+
+ideas:
+
+id: kommunikation_avdelning_kok
+title: Kommunikation mellan avdelning och kök
+summary: >
+Avdelningar ska kunna skicka korta meddelanden till köket direkt i sin vy.
+Funktionen kan låsas av admin eller köket.
+status: planned
+
+id: fasta_bestallningar
+title: Fasta beställningar
+summary: >
+Avdelningar kan beställa återkommande produkter direkt i sin vy.
+Kopplas till samma sektion som kommunikationen och kan låsas av admin.
+status: planned
+
+id: recept_och_oppkrift
+title: Recept / Oppskrifter
+summary: >
+Kockar kan skapa, importera och dela recept. Kopplas till meny/menydetalj
+via component_id och kan skalas efter antal portioner.
+status: planned
+
+id: husk_att_bestill
+title: Husk att bestill
+summary: >
+Smart checklista som skickas till vald mottagare på specifika dagar,
+baserad på meny och recept. Nollställs automatiskt efter beställningsdag.
+status: planned
+
+id: orderintegration
+title: Orderintegration
+summary: >
+Integrera Yuplan direkt mot externa beställningssystem (API-export av
+“Husk att bestill”-data). Tar emot orderbekräftelse och leveransstatus.
+status: planned
+
+id: menybank_och_byggare
+title: Menybank & Menybyggare
+summary: >
+Menybank där alla rätter (komponenter) har stabila ID:n. Bygg menyer via
+drag & drop och dela samma komponentbank mellan flera arbetsplatser.
+status: planned
+
+id: ai_assistant_integration
+title: Inbäddad AI-assistent
+summary: >
+AI-komponent som tolkar menyer, recept och kostdata för att föreslå
+automatiska tolkningar, justeringar och smarta förslag i appen.
+status: planned

@@ -1,0 +1,95 @@
+.portal-week-header {
+  margin-bottom: 1rem;
+}
+
+.portal-week-residents {
+  margin: 0.25rem 0;
+}
+
+.portal-week-status {
+  font-weight: 500;
+  margin-top: 0.25rem;
+}
+
+.portal-week-days {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (max-width: 900px) {
+  .portal-week-day {
+    padding: 0.5rem;
+  }
+}
+.portal-dept-week { max-width: 1120px; margin: 0 auto; padding: 16px 20px; }
+.portal-header { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 16px; border-bottom: 1px solid #e6e6e6; padding-bottom: 12px; }
+.portal-header h1 { font-size: 1.5rem; line-height: 1.3; margin: 0; font-weight: 600; }
+.portal-subtitle { margin: 2px 0 0 0; color: #666; font-size: 0.95rem; }
+.portal-week-nav a { text-decoration: none; font-size: 0.85rem; }
+.portal-week-nav span { color: #999; font-size: 0.85rem; }
+.portal-week-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; background:#fff; }
+.portal-week-table th, .portal-week-table td { border-bottom: 1px solid #ddd; padding: 10px 8px; vertical-align: top; }
+.portal-week-table th { background:#f8f9fa; font-weight:600; font-size:0.95rem; letter-spacing:.02em; text-transform:none; color:#555; }
+.portal-week-table tbody tr:nth-child(odd) { background:#fcfcfc; }
+.portal-week-table tbody tr:nth-child(even) { background:#ffffff; }
+.portal-alt-cell { min-width: 10rem; cursor:pointer; border-radius: 6px; padding: 8px; }
+.portal-alt-cell:focus-visible { outline:2px solid #0f9d58; outline-offset:2px; }
+.portal-status { margin:0.5rem 0 1rem; min-height:1.2rem; font-size:0.9rem; }
+.portal-status[data-kind="saving"] { color:#555; }
+.portal-status[data-kind="ok"] { color:#0f9d58; }
+.portal-status[data-kind="error"], .portal-status[data-kind="conflict"] { color:#d93025; }
+.portal-status button { margin-left:0.5rem; font-size:0.85rem; padding:0.1rem 0.5rem; border-radius:999px; border:1px solid #ccc; background:#f8f9fa; cursor:pointer; }
+.portal-status button:hover { background:#eee; }
+.portal-alt-selected { background-color: #e6f4ea; border-left: 3px solid #0f9d58; }
+.portal-badge-alt2 { display:inline-block; margin-top:0.25rem; padding:0.1rem 0.4rem; font-size:0.6rem; border-radius:999px; background-color:#fff3cd; border:1px solid #ffe69c; color:#7a5d00; }
+.portal-facts { margin-bottom: 0.5rem; background:#fff; padding:0.75rem 1rem; border:1px solid #e2e8f0; border-radius:8px; }
+.portal-facts-empty { color:#64748b; font-style:italic; }
+.portal-progress { margin-bottom: 0.75rem; font-weight:500; }
+.portal-day-name { font-weight:600; font-size:0.95rem; }
+.portal-day-date { font-size:0.9rem; color:#777; }
+.portal-residents-cell { font-size:0.9rem; line-height:1.4; }
+.portal-diets-cell { font-size:0.85rem; }
+/* Menu popup overlay/modal */
+.portal-menu-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; z-index:1000; }
+.portal-menu-modal { background:#fff; max-width:520px; width:90%; border-radius:8px; padding:1rem 1.25rem; box-shadow:0 10px 30px rgba(0,0,0,0.25); }
+.portal-menu-modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; }
+.portal-menu-close-btn { border:none; background:transparent; font-size:1.2rem; cursor:pointer; }
+.portal-menu-day { font-weight:500; margin-bottom:0.75rem; }
+.portal-menu-section { margin-bottom:0.5rem; }
+.portal-menu-section h3 { font-size:0.95rem; margin:0 0 0.1rem; }
+.portal-menu-section p { margin:0; }
+.portal-menu-cell { text-align:center; }
+.portal-menu-btn { border:none; background:transparent; cursor:pointer; font-size:1.1rem; }
+/* Week status panel */
+.portal-week-status { display:flex; align-items:center; gap:10px; margin:0.5rem 0 0.75rem; font-size:0.85rem; padding:8px 10px; border:1px solid #f0f0f0; border-radius:8px; background:#fafafa; }
+.yuplan-diet-pill { display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border-radius:999px; background:#eef2ff; color:#1f3a8a; border:1px solid #c7d2fe; font-size:0.85rem; }
+.portal-summary { margin-top: 18px; padding-top: 12px; }
+.portal-summary h2 { font-size: 1.1rem; margin: 0 0 8px 0; }
+.portal-actions { margin-top: 12px; display:flex; gap:8px; }
+.yp-btn { display:inline-block; padding:8px 12px; border-radius:6px; border:1px solid #e5e7eb; background:#fff; color:#1f2937; text-decoration:none; font-size:0.95rem; }
+.yp-btn:hover { background:#f9fafb; }
+.yp-btn-secondary { background:#eef2ff; color:#1e3a8a; border-color:#c7d2fe; }
+.portal-week-status-label { font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:0.6rem; color:#475569; }
+.portal-week-dots { display:flex; gap:4px; }
+.portal-week-dot { width:12px; height:12px; border-radius:50%; background:#e2e8f0; border:1px solid #cbd5e1; }
+.portal-week-dot.chosen { background:#0f9d58; border-color:#0f9d58; box-shadow:0 0 0 2px #e6f4ea; }
+.portal-sync-indicator { font-size:.85rem; color:#0f9d58; margin-left:auto; }
+.portal-sync-indicator.stale { color:#d93025; }
+/* Conflict overlay modal */
+.portal-conflict-overlay { position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; z-index:1100; }
+.portal-conflict-modal { background:#fff; padding:1rem 1.25rem; border-radius:8px; max-width:400px; width:90%; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,0.25); }
+.portal-conflict-modal h2 { margin-top:0; font-size:1.1rem; }
+.portal-conflict-modal button { margin-top:0.75rem; padding:0.45rem 1rem; border:1px solid #0f9d58; background:#0f9d58; color:#fff; border-radius:4px; cursor:pointer; font-size:0.85rem; }
+.portal-conflict-modal button:hover { background:#0b7d43; }
+.portal-conflict-active .portal-alt-cell { pointer-events:none; opacity:0.55; }
+@media (max-width: 860px){
+  .portal-week-table th, .portal-week-table td { font-size:0.85rem; }
+  .portal-alt-cell { min-width:8rem; }
+}
+@media (max-width: 720px){
+  .portal-header { flex-direction: column; align-items: flex-start; }
+}

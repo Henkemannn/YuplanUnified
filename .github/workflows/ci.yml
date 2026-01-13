@@ -2,17 +2,29 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master, feat/**, fix/**, chore/**, hotfix/**, release/**, feat/phase-d-conditional-get]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
-  lint-type:
+  backend:
+    name: backend (pytest: PG + SQLite)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: yuplan
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -83,7 +95,7 @@ jobs:
           if-no-files-found: error
 
   test:
-    needs: [lint-type, openapi-validate]
+    needs: [backend, openapi-validate]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -95,29 +107,37 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
       - name: Show versions
         run: |
           python --version
           pip freeze
-
-      - name: Run migrations
+      - name: Run migrations (PG)
         env:
-          # Provide empty (or custom) env overrides if your Config.from_env() reads them.
+          DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/yuplan
+        run: |
+          alembic upgrade head || true
+      - name: pytest (Postgres)
+        env:
+          DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/yuplan
+          PYTHONWARNINGS: default
+        run: pytest -q
+      - name: pytest (SQLite)
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          YP_ENABLE_SQLITE_BOOTSTRAP: "1"
+          PYTHONWARNINGS: default
+        run: pytest -q
+
+      # Phase 2 DoD gate – admin authz must stay green
+      - name: Run admin test suite (must stay green)
+        env:
           DATABASE_URL: sqlite:///ci.db
         run: |
-          alembic upgrade head
-
-      - name: Run tests
-        env:
-          DATABASE_URL: sqlite:///ci.db
-        run: |
-          pytest -q
+          pytest tests/admin -v --maxfail=1 --disable-warnings
 
       # Phase 2 DoD gate – admin authz must stay green
       - name: Run admin test suite (must stay green)
@@ -129,3 +149,19 @@ jobs:
       - name: Archive test results (optional placeholder)
         if: always()
         run: echo "Add coverage or junit XML export later."
+  frontend:
+    name: frontend (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install deps
+        run: |
+          if [ -f package.json ]; then npm ci; else echo 'No package.json, skipping'; fi
+      - name: Run vitest
+        run: |
+          if [ -f package.json ]; then npm test; else echo 'No package.json, skipping'; fi

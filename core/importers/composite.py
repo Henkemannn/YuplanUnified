@@ -14,5 +14,7 @@ class CompositeMenuImporter:
                 if imp.can_handle(filename, mimetype, first_bytes):
                     return imp.parse(file_bytes, filename)
             except Exception as e:
-                return MenuImportResult(weeks=[], errors=[f"Importer {imp.__class__.__name__} failed: {e}"], warnings=[])
+                return MenuImportResult(
+                    weeks=[], errors=[f"Importer {imp.__class__.__name__} failed: {e}"], warnings=[]
+                )
         return MenuImportResult(weeks=[], errors=["No importer accepted file"], warnings=[])

@@ -27,6 +27,7 @@ def _ensure_db():  # lazy init DB if not already done (reuse app factory env var
     # If application already initialized elsewhere (tests), skip.
     # For this CLI we attempt a minimal bootstrap using DATABASE_URL or fallback sqlite file.
     from core.db import init_engine
+
     url = os.getenv("DATABASE_URL") or "sqlite:///app.db"
     init_engine(url)
 
@@ -37,9 +38,13 @@ def count_before(cutoff: datetime) -> int:
 
     from core.db import get_session
     from core.models import AuditEvent
+
     db = get_session()
     try:
-        return db.execute(select(func.count()).select_from(AuditEvent).where(AuditEvent.ts < cutoff)).scalar_one()  # type: ignore[no-any-return]
+        result = db.execute(
+            select(func.count()).select_from(AuditEvent).where(AuditEvent.ts < cutoff)
+        ).scalar_one()
+        return int(result)
     finally:
         db.close()
 
@@ -49,6 +54,7 @@ def purge_before(cutoff: datetime) -> int:
 
     from core.db import get_session
     from core.models import AuditEvent
+
     db = get_session()
     try:
         res = db.execute(delete(AuditEvent).where(AuditEvent.ts < cutoff))

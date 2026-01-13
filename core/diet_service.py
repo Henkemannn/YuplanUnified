@@ -13,10 +13,21 @@ class DietService:
     def list_assignments(self, unit_id: int) -> list[dict[str, Any]]:
         db = get_session()
         try:
-            q = db.query(UnitDietAssignment, DietaryType).join(DietaryType, DietaryType.id == UnitDietAssignment.dietary_type_id).filter(UnitDietAssignment.unit_id == unit_id)
+            q = (
+                db.query(UnitDietAssignment, DietaryType)
+                .join(DietaryType, DietaryType.id == UnitDietAssignment.dietary_type_id)
+                .filter(UnitDietAssignment.unit_id == unit_id)
+            )
             out = []
             for a, d in q.all():
-                out.append({"assignment_id": a.id, "diet_type_id": d.id, "diet_name": d.name, "count": a.count})
+                out.append(
+                    {
+                        "assignment_id": a.id,
+                        "diet_type_id": d.id,
+                        "diet_name": d.name,
+                        "count": a.count,
+                    }
+                )
             return out
         finally:
             db.close()
@@ -24,7 +35,11 @@ class DietService:
     def set_assignment(self, unit_id: int, diet_type_id: int, count: int) -> int:
         db = get_session()
         try:
-            row: UnitDietAssignment | None = db.query(UnitDietAssignment).filter_by(unit_id=unit_id, dietary_type_id=diet_type_id).first()
+            row: UnitDietAssignment | None = (
+                db.query(UnitDietAssignment)
+                .filter_by(unit_id=unit_id, dietary_type_id=diet_type_id)
+                .first()
+            )
             if row is not None:
                 row.count = count
             else:
@@ -40,15 +55,14 @@ class DietService:
     def list_diet_types(self, tenant_id: int) -> list[dict[str, Any]]:
         db = get_session()
         try:
-            rows = db.query(DietaryType).filter_by(tenant_id=tenant_id).order_by(DietaryType.id).all()
-            return [
-                {"id": r.id, "name": r.name, "default_select": r.default_select}
-                for r in rows
-            ]
+            rows = (
+                db.query(DietaryType).filter_by(tenant_id=tenant_id).order_by(DietaryType.id).all()
+            )
+            return [{"id": r.id, "name": r.name, "default_select": r.default_select} for r in rows]
         finally:
             db.close()
 
-    def create_diet_type(self, tenant_id: int, name: str, default_select: bool=False) -> int:
+    def create_diet_type(self, tenant_id: int, name: str, default_select: bool = False) -> int:
         db = get_session()
         try:
             dt = DietaryType(tenant_id=tenant_id, name=name.strip(), default_select=default_select)
@@ -59,7 +73,13 @@ class DietService:
         finally:
             db.close()
 
-    def update_diet_type(self, tenant_id: int, diet_type_id: int, name: str | None=None, default_select: bool | None=None) -> bool:
+    def update_diet_type(
+        self,
+        tenant_id: int,
+        diet_type_id: int,
+        name: str | None = None,
+        default_select: bool | None = None,
+    ) -> bool:
         db = get_session()
         try:
             row = db.query(DietaryType).filter_by(tenant_id=tenant_id, id=diet_type_id).first()
@@ -92,7 +112,10 @@ class DietService:
         db = get_session()
         try:
             rows = db.query(Unit).filter_by(tenant_id=tenant_id).all()
-            return [{"id": u.id, "name": u.name, "default_attendance": u.default_attendance} for u in rows]
+            return [
+                {"id": u.id, "name": u.name, "default_attendance": u.default_attendance}
+                for u in rows
+            ]
         finally:
             db.close()
 

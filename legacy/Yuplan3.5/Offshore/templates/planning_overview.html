@@ -1,0 +1,37 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container" style="max-width:960px;">
+  <h3 class="mb-3">Planering – oversikt per rett</h3>
+  <p class="text-muted small">Viser alle retter hvor du har registrert prepp eller frysplock. Tall viser åpne / totalt.</p>
+  {% if dishes %}
+  <table class="table table-sm align-middle table-striped">
+    <thead>
+      <tr>
+        <th>Rett</th>
+        <th class="text-center">Prepp</th>
+        <th class="text-center">Frysplock</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in dishes %}
+      <tr>
+        <td><a href="{{ url_for('planning_dish_detail', dish_id=d.dish_id) }}" class="text-decoration-none">{{ d.name }}</a></td>
+        <td class="text-center">
+          {% if d.total_prep %}
+            <span class="badge {% if d.open_prep>0 %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ d.open_prep }}/{{ d.total_prep }}</span>
+          {% else %}-{% endif %}
+        </td>
+        <td class="text-center">
+          {% if d.total_frys %}
+            <span class="badge {% if d.open_frys>0 %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ d.open_frys }}/{{ d.total_frys }}</span>
+          {% else %}-{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="alert alert-info">Ingen planering funnet ennå. Legg til prepp eller frysplock fra menykortet.</div>
+  {% endif %}
+</div>
+{% endblock %}

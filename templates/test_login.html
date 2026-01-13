@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Login - Yuplan Unified</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-proposal.svg') }}">
+    
+    <!-- Unified Design System -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
+    
+    <style>
+        body {
+            font-family: var(--yp-font-family);
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--yp-gap-lg);
+            margin: 0;
+        }
+        
+        .login-container {
+            background: white;
+            border-radius: var(--yp-radius-lg);
+            box-shadow: var(--yp-shadow-xl);
+            max-width: 550px;
+            width: 100%;
+            padding: var(--yp-gap-xl);
+        }
+        
+        .login-logo {
+            text-align: center;
+            margin-bottom: var(--yp-gap-lg);
+        }
+        
+        .login-logo .yp-logo {
+            height: 64px !important;
+            max-height: 64px !important;
+            width: auto !important;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: var(--yp-color-text);
+            font-size: var(--yp-font-size-2xl);
+            font-weight: var(--yp-font-weight-bold);
+            margin-bottom: var(--yp-gap-sm);
+            text-align: center;
+        }
+        
+        .subtitle {
+            color: var(--yp-color-text-muted);
+            text-align: center;
+            margin-bottom: var(--yp-gap-lg);
+            font-size: var(--yp-font-size-sm);
+        }
+        
+        .dev-notice {
+            background: var(--yp-color-warning-light);
+            border-left: 4px solid var(--yp-color-warning);
+            padding: var(--yp-gap);
+            margin-bottom: var(--yp-gap-lg);
+            border-radius: var(--yp-radius);
+            font-size: var(--yp-font-size-sm);
+            color: var(--yp-color-warning-dark);
+        }
+        
+        .dev-notice strong {
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+        
+        .role-grid {
+            display: grid;
+            gap: var(--yp-gap);
+            margin-bottom: var(--yp-gap-lg);
+            grid-template-columns: 1fr 1fr;
+        }
+        
+        .role-button {
+            display: flex;
+            align-items: center;
+            gap: var(--yp-gap);
+            padding: var(--yp-gap) var(--yp-gap-lg);
+            background: var(--yp-color-bg-alt);
+            border: 2px solid var(--yp-color-border);
+            border-radius: var(--yp-radius-lg);
+            cursor: pointer;
+            transition: all var(--yp-transition-base);
+            text-decoration: none;
+            color: var(--yp-color-text);
+            font-family: var(--yp-font-family);
+        }
+        
+        .role-button:hover {
+            background: var(--yp-color-primary);
+            border-color: var(--yp-color-primary);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: var(--yp-shadow-md);
+        }
+        
+        .role-icon {
+            font-size: var(--yp-font-size-3xl);
+        }
+        
+        .role-info {
+            flex: 1;
+        }
+        
+        .role-name {
+            font-weight: var(--yp-font-weight-semibold);
+            font-size: var(--yp-font-size-lg);
+            margin-bottom: 0.25rem;
+        }
+        
+        .role-desc {
+            font-size: var(--yp-font-size-sm);
+            opacity: 0.7;
+        }
+        
+        .divider {
+            border: 0;
+            border-top: 1px solid var(--yp-color-border);
+            margin: var(--yp-gap-lg) 0;
+        }
+        
+        .destination-section {
+            margin-bottom: var(--yp-gap-lg);
+        }
+        
+        .destination-label {
+            font-weight: var(--yp-font-weight-semibold);
+            color: var(--yp-color-text-muted);
+            margin-bottom: var(--yp-gap-sm);
+            font-size: var(--yp-font-size-sm);
+            display: block;
+        }
+        
+        .destination-select {
+            width: 100%;
+            padding: var(--yp-gap) var(--yp-gap);
+            border: 2px solid var(--yp-color-border);
+            border-radius: var(--yp-radius);
+            font-size: var(--yp-font-size-base);
+            background: white;
+            cursor: pointer;
+            font-family: var(--yp-font-family);
+        }
+        
+        .destination-select:focus {
+            outline: none;
+            border-color: var(--yp-color-primary);
+        }
+        
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 2rem;
+            font-size: 0.875rem;
+            color: #1e40af;
+        }
+        
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .login-container { padding: var(--yp-gap-lg); max-width: 420px; }
+            .role-grid { grid-template-columns: 1fr; }
+            .role-button { padding: var(--yp-gap); }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <!-- Yuplan Logo (canonical asset per branding spec) -->
+        <div class="login-logo">
+            <img src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" class="yp-logo">
+        </div>
+        
+        <h1>Yuplan Unified – Test Login</h1>
+        <p class="subtitle">Välj roll och destination för att testa plattformen</p>
+        
+        <!-- Dev-Only Notice -->
+        <div class="dev-notice">
+            <strong>⚠️ Endast för utveckling / test</strong>
+            Denna sida används endast i utvecklingsmiljö. I produktion används riktig autentisering.
+        </div>
+        
+        <form method="POST" action="/test-login" id="loginForm">
+            {# Include CSRF token when strict CSRF is enabled (safe no-op otherwise) #}
+            {{ csrf_token_input() }}
+            <div class="destination-section">
+                <label class="destination-label">Var vill du gå?</label>
+                <select name="destination" class="destination-select" id="destSelect">
+                    <option value="/ui/cook">🍳 Cook Dashboard (Kockens arbetsvy)</option>
+                    <option value="/ui/weekview">📅 Weekview (Veckoöversikt)</option>
+                    <option value="/ui/admin">🏢 Admin Dashboard</option>
+                    <option value="/ui/admin/departments">📋 Avdelningar</option>
+                    <option value="/ui/admin/users">👥 Användare</option>
+                    <option value="/ui/reports/weekview">📊 Rapporter</option>
+                </select>
+            </div>
+            
+            <hr class="divider">
+            
+            <div class="role-grid">
+                <button type="submit" name="role" value="cook" class="role-button">
+                    <span class="role-icon">👨‍🍳</span>
+                    <div class="role-info">
+                        <div class="role-name">Cook</div>
+                        <div class="role-desc">Åtkomst till Cook Dashboard & Weekview</div>
+                    </div>
+                </button>
+                
+                <button type="submit" name="role" value="unit_portal" class="role-button">
+                    <span class="role-icon">🧑‍💼</span>
+                    <div class="role-info">
+                        <div class="role-name">Unit Portal</div>
+                        <div class="role-desc">Åtkomst till enhetsportal</div>
+                    </div>
+                </button>
+                
+                <button type="submit" name="role" value="admin" class="role-button">
+                    <span class="role-icon">🛠️</span>
+                    <div class="role-info">
+                        <div class="role-name">Admin</div>
+                        <div class="role-desc">Full åtkomst till alla sidor</div>
+                    </div>
+                </button>
+                
+                <button type="submit" name="role" value="superuser" class="role-button">
+                    <span class="role-icon">🧩</span>
+                    <div class="role-info">
+                        <div class="role-name">Superuser</div>
+                        <div class="role-desc">Obegränsad åtkomst</div>
+                    </div>
+                </button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

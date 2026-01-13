@@ -73,13 +73,21 @@ class ServiceMetricsService:
                     ServiceMetric.unit_id == norm["unit_id"],
                     ServiceMetric.date == norm["date"],
                     ServiceMetric.meal == norm["meal"],
-                    ServiceMetric.dish_id.is_(norm["dish_id"]) if norm["dish_id"] is None else ServiceMetric.dish_id == norm["dish_id"],
-                    ServiceMetric.category == norm["category"]
+                    ServiceMetric.dish_id.is_(norm["dish_id"])
+                    if norm["dish_id"] is None
+                    else ServiceMetric.dish_id == norm["dish_id"],
+                    ServiceMetric.category == norm["category"],
                 )
                 existing = db.query(ServiceMetric).filter(key_filter).first()
                 if existing:
                     updated += 1
-                    for f in ["guest_count","produced_qty_kg","served_qty_kg","leftover_qty_kg","served_g_per_guest"]:
+                    for f in [
+                        "guest_count",
+                        "produced_qty_kg",
+                        "served_qty_kg",
+                        "leftover_qty_kg",
+                        "served_g_per_guest",
+                    ]:
                         setattr(existing, f, norm.get(f))
                 else:
                     sm = ServiceMetric(**norm)
@@ -119,31 +127,39 @@ class ServiceMetricsService:
                 func.sum(ServiceMetric.guest_count).label("guest_count"),
                 func.sum(ServiceMetric.produced_qty_kg).label("produced_qty_kg"),
                 func.sum(ServiceMetric.served_qty_kg).label("served_qty_kg"),
-                func.sum(ServiceMetric.leftover_qty_kg).label("leftover_qty_kg")
-            ).filter(ServiceMetric.tenant_id == tenant_id, ServiceMetric.date >= date_from, ServiceMetric.date <= date_to)
+                func.sum(ServiceMetric.leftover_qty_kg).label("leftover_qty_kg"),
+            ).filter(
+                ServiceMetric.tenant_id == tenant_id,
+                ServiceMetric.date >= date_from,
+                ServiceMetric.date <= date_to,
+            )
             q = q.group_by(ServiceMetric.date, ServiceMetric.unit_id, ServiceMetric.meal)
             out: list[SummaryDayRow] = []
             for row in q.all():
                 served_g_per_guest = None
                 if row.guest_count and row.served_qty_kg:
                     served_g_per_guest = (row.served_qty_kg * 1000.0) / row.guest_count
-                out.append({  # type: ignore[arg-type]
-                    "date": row.d.isoformat(),
-                    "unit_id": row.unit_id,
-                    "meal": row.meal,
-                    "guest_count": int(row.guest_count or 0),
-                    "produced_qty_kg": float(row.produced_qty_kg or 0),
-                    "served_qty_kg": float(row.served_qty_kg or 0),
-                    "leftover_qty_kg": float(row.leftover_qty_kg or 0),
-                    "served_g_per_guest": served_g_per_guest
-                })
+                out.append(
+                    {
+                        "date": row.d.isoformat(),
+                        "unit_id": row.unit_id,
+                        "meal": row.meal,
+                        "guest_count": int(row.guest_count or 0),
+                        "produced_qty_kg": float(row.produced_qty_kg or 0),
+                        "served_qty_kg": float(row.served_qty_kg or 0),
+                        "leftover_qty_kg": float(row.leftover_qty_kg or 0),
+                        "served_g_per_guest": served_g_per_guest,
+                    }
+                )
             return out
         finally:
             db.close()
 
     # --- Helpers ---
-    def _normalize_row(self, r: IngestRow) -> dict[str, Any]:  # validated normalized dict with concrete python types
-        required = ["unit_id","date","meal"]
+    def _normalize_row(
+        self, r: IngestRow
+    ) -> dict[str, Any]:  # validated normalized dict with concrete python types
+        required = ["unit_id", "date", "meal"]
         for f in required:
             if f not in r:
                 raise ValueError(f"missing field {f}")
@@ -157,7 +173,7 @@ class ServiceMetricsService:
         if "meal" not in r:
             raise ValueError("missing field meal")
         meal = r["meal"]
-        if meal not in {"lunch","dinner","evening"}:
+        if meal not in {"lunch", "dinner", "evening"}:
             raise ValueError("invalid meal")
         dish_id = r.get("dish_id")
         category = r.get("category")
@@ -167,16 +183,28 @@ class ServiceMetricsService:
         produced = cast(float | int | None, r.get("produced_qty_kg"))
         served = cast(float | int | None, r.get("served_qty_kg"))
         leftover = cast(float | int | None, r.get("leftover_qty_kg"))
-        for num_field in ["guest_count","produced_qty_kg","served_qty_kg","leftover_qty_kg"]:
+        for num_field in ["guest_count", "produced_qty_kg", "served_qty_kg", "leftover_qty_kg"]:
             v_any = r.get(num_field)
             if isinstance(v_any, (int, float)) and v_any < 0:  # noqa: UP038 (tuple form fine for runtime check)
                 raise ValueError(f"{num_field} negative")
-        if isinstance(produced, (int, float)) and isinstance(served, (int, float)) and served > produced:  # noqa: UP038
+        if (
+            isinstance(produced, (int, float))
+            and isinstance(served, (int, float))
+            and served > produced
+        ):  # noqa: UP038
             raise ValueError("served > produced")
-        if isinstance(produced, (int, float)) and isinstance(leftover, (int, float)) and leftover > produced:  # noqa: UP038
+        if (
+            isinstance(produced, (int, float))
+            and isinstance(leftover, (int, float))
+            and leftover > produced
+        ):  # noqa: UP038
             raise ValueError("leftover > produced")
         served_g_per_guest = r.get("served_g_per_guest")
-        if served_g_per_guest is None and isinstance(guest_count, int) and isinstance(served, (int, float)):  # noqa: UP038
+        if (
+            served_g_per_guest is None
+            and isinstance(guest_count, int)
+            and isinstance(served, (int, float))
+        ):  # noqa: UP038
             served_g_per_guest = (served * 1000.0) / guest_count if guest_count > 0 else None
         if "unit_id" not in r:
             raise ValueError("missing field unit_id")
@@ -190,7 +218,7 @@ class ServiceMetricsService:
             "produced_qty_kg": produced,
             "served_qty_kg": served,
             "leftover_qty_kg": leftover,
-            "served_g_per_guest": served_g_per_guest
+            "served_g_per_guest": served_g_per_guest,
         }
 
     def _parse_date(self, s: str) -> date:

@@ -1,0 +1,88 @@
+{% extends "_base.html" %}
+{% set hide_global_nav = True %}
+{% block title %}SystemAdmin · Kunder{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+{% endblock %}
+{% block content %}
+<main class="sa-root sa-theme-dark">
+  <aside class="sa-sidebar">
+    <div class="sa-sidebar-header">
+      <img class="sa-logo-mark" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="32" height="32">
+      <div class="sa-logo-sub">Yuplan Örnnästet</div>
+    </div>
+    <nav class="sa-nav">
+      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_dashboard') }}">
+        <span class="sa-icon">📊</span> Översikt
+      </a>
+      <a class="sa-nav-item sa-active" href="{{ url_for('admin_ui.systemadmin_customers') }}">
+        <span class="sa-icon">🏢</span> Kunder
+      </a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">👥</span> Användare</a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">🧩</span> Moduler</a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">📑</span> Kontrakt</a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">📉</span> Loggar & Health</a>
+      <a class="sa-nav-item" href="#"><span class="sa-icon">⚙️</span> Inställningar</a>
+    </nav>
+    <div class="sa-sidebar-footer"><span>v1.0 · Dev</span></div>
+  </aside>
+
+  <section class="sa-main">
+    <header class="sa-header">
+      <div>
+        <h1>Kunder</h1>
+        <p class="sa-subtitle">Hantera alla tenants och sites i Yuplan.</p>
+      </div>
+      <div class="sa-header-actions">
+        <a href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}" class="sa-btn sa-btn-primary">➕ Skapa kund</a>
+      </div>
+    </header>
+
+    <section class="sa-grid">
+      <article class="sa-card sa-card-wide">
+        <h2>Aktiva kunder</h2>
+        <p class="sa-card-sub">Lista över tenants (kunder). Hantera sites per kund via "Visa sites".</p>
+
+        {% if vm.customers %}
+        <div class="sa-table-wrap">
+          <table class="sa-table">
+            <thead>
+              <tr>
+                <th>Kund</th>
+                <th>Antal sites</th>
+                <th>Typ</th>
+                <th>Status</th>
+                <th>Åtgärder</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in vm.customers %}
+              <tr>
+                <td>{{ c.tenant_name or '-' }}</td>
+                <td>{{ c.site_count or 0 }}</td>
+                <td>{{ c.customer_type or '-' }}</td>
+                <td>{{ c.status or 'Aktiv' }}</td>
+                <td>
+                  <a class="sa-btn sa-btn-small" href="{{ url_for('admin_ui.systemadmin_customer_sites', tenant_id=c.tenant_id) }}" target="_blank">Visa sites</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+          <div class="sa-empty-state">
+            <div class="sa-empty-icon">🏢</div>
+            <h3>Inga kunder</h3>
+            <p class="sa-empty-desc">Det finns inga registrerade kunder. Skapa en ny kund för att komma igång.</p>
+            <a href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}" class="sa-btn sa-btn-primary">➕ Skapa kund</a>
+          </div>
+        {% endif %}
+      </article>
+    </section>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/systemadmin.js') }}"></script>
+{% endblock %}

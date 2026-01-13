@@ -1,0 +1,56 @@
+.admin-departments{width:100%;border-collapse:collapse;background:#fff;font-size:14px}
+.admin-departments th,.admin-departments td{border-bottom:1px solid #eee;padding:8px 6px;text-align:left}
+.admin-departments th{background:#f8fafc;font-weight:600;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:#475569}
+.admin-departments a{text-decoration:none;color:#0f4f9d}
+.admin-filters{display:flex;gap:.5rem;margin-bottom:.75rem;align-items:center}
+.admin-modules{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin:0 0 1.25rem}
+.admin-module-card{display:block;background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 4px rgba(0,0,0,.08);text-decoration:none;color:#111827;transition:box-shadow .15s,transform .15s}
+.admin-module-card h3{margin:0 0 .4rem;font-size:1rem}
+.admin-module-card p{margin:0;font-size:.75rem;line-height:1.2}
+.admin-module-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.12);transform:translateY(-2px)}
+.admin-module-card:active{transform:translateY(0)}
+.admin-module-card-header{display:flex;align-items:center;gap:.4rem;margin:0 0 .4rem}
+.admin-module-icon{font-size:1.4rem;margin-right:.4rem;line-height:1}
+
+/* Phase 5: departments list & edit page styling */
+.admin-container{max-width:1000px;margin:0 auto;padding:2rem 1rem}
+.admin-header{margin-bottom:1.5rem}
+.admin-header h1{margin:0 0 .25rem;font-size:1.75rem;font-weight:700;color:#111827}
+.admin-subtitle{margin:0;font-size:.9rem;color:#64748b}
+.admin-table{width:100%;border-collapse:collapse;background:#fff;font-size:14px;margin-bottom:1.5rem}
+.admin-table th,.admin-table td{border-bottom:1px solid #eee;padding:10px 8px;text-align:left}
+.admin-table th{background:#f8fafc;font-weight:600;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:#475569}
+.admin-table td{color:#111827}
+.admin-empty{text-align:center;color:#94a3b8;font-style:italic;padding:2rem}
+.admin-link-btn{display:inline-block;padding:.4rem .8rem;background:#0f4f9d;color:#fff;text-decoration:none;border-radius:4px;font-size:.85rem;transition:background .15s;border:none;cursor:pointer}
+.admin-link-btn:hover{background:#0b3d7a}
+.admin-btn-danger{background:#dc2626;color:#fff}
+.admin-btn-danger:hover{background:#b91c1c}
+.admin-actions{margin-top:1rem;display:flex;gap:.75rem}
+.admin-btn-primary,.admin-btn-secondary{padding:.6rem 1.2rem;border:none;border-radius:6px;font-size:.95rem;cursor:pointer;text-decoration:none;display:inline-block;transition:background .15s}
+.admin-btn-primary{background:#0f4f9d;color:#fff}
+.admin-btn-primary:hover{background:#0b3d7a}
+.admin-btn-secondary{background:#e2e8f0;color:#334155}
+.admin-btn-secondary:hover{background:#cbd5e1}
+.admin-form{max-width:600px;background:#fff;padding:1.5rem;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.admin-form-group{margin-bottom:1.25rem}
+.admin-form-group label{display:block;margin-bottom:.4rem;font-weight:600;font-size:.9rem;color:#334155}
+.admin-form-group input[type="text"],.admin-form-group input[type="number"],.admin-form-group textarea{width:100%;padding:.6rem;border:1px solid #cbd5e1;border-radius:4px;font-size:.95rem;font-family:inherit}
+.admin-form-group textarea{resize:vertical}
+.admin-form-actions{display:flex;gap:.75rem;margin-top:1.5rem}
+.admin-flash-messages{margin-bottom:1rem}
+.admin-flash{padding:.75rem 1rem;border-radius:6px;margin-bottom:.5rem;font-size:.9rem}
+.admin-flash-success{background:#d1fae5;color:#065f46;border-left:4px solid #10b981}
+.admin-flash-error{background:#fee2e2;color:#991b1b;border-left:4px solid #ef4444}
+.admin-flash-warning{background:#fef3c7;color:#92400e;border-left:4px solid #f59e0b}
+.admin-status-banner{display:flex;align-items:center;justify-content:space-between;padding:1rem;background:#f8fafc;border-radius:8px;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
+.admin-status-badge{display:inline-block;padding:.5rem 1rem;border-radius:4px;font-weight:600;font-size:.9rem}
+.admin-status-published{background:#28a745;color:#fff}
+.admin-status-draft{background:#ffc107;color:#000}
+.admin-actions-group{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+.reload-link{color:#0f4f9d;text-decoration:underline;cursor:pointer;margin-left:.5rem}
+.admin-card{background:#fff;padding:1.5rem;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:1.5rem}
+.admin-card h3{margin:0 0 1rem;font-size:1.1rem;font-weight:600;color:#334155}
+.admin-flash-info{background:#dbeafe;color:#1e40af;border-left:4px solid #3b82f6}
+.admin-flash-danger{background:#fee2e2;color:#991b1b;border-left:4px solid#ef4444}
+

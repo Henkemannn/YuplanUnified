@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% block title %}Registrering – Vecka {{ vecka }}{% endblock %}
+{% block head %}
+<script src="{{ url_for('static', filename='script.js') }}" defer></script>
+<style>
+    .kväll { background-color: #e0ffe0; }
+    .markerad { font-weight: bold; position: relative; }
+    .markerad::before {
+        content: '';
+        display: inline-block;
+        width: 1.4em;
+        height: 1.4em;
+        border: 2px solid var(--primary-color);
+        border-radius: 50%;
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
+    .gulmarkerad { background-color: #fff7b2 !important; }
+    .kostcell:hover { cursor: pointer; background-color: var(--bg-accent); }
+    .boende-rad { font-style: italic; background: var(--bg-accent); }
+    .avdelning-rad { font-weight: bold; background: var(--bg-secondary); }
+    .dagstart { border-left: 3px solid var(--primary-color) !important; }
+    .veckodag-header { background: var(--primary-light); color: var(--text-light); }
+    
+    .table td:first-child, .table th:first-child {
+        max-width: 140px;
+        word-wrap: break-word;
+        text-align: left;
+    }
+    
+    .table td, .table th {
+        text-align: center;
+        padding: 0.75rem 0.5rem;
+    }
+    
+    .table td:first-child {
+        text-align: left;
+    }
+
+    .control-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        padding: 1rem;
+        background: var(--bg-primary);
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow-sm);
+    }
+    
+    /* Meny popup styles */
+    .meny-popup {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: var(--bg-primary);
+        border: 2px solid var(--primary-color);
+        border-radius: var(--border-radius-lg);
+        box-shadow: var(--shadow-lg);
+        padding: 1.5rem;
+        z-index: 1000;
+        max-width: 500px;
+        width: 90%;
+        display: none;
+    }
+    
+    .meny-popup-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        display: none;
+    }
+    
+    .meny-popup-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid var(--primary-light);
+    }
+    
+    .meny-popup-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--text-secondary);
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .meny-popup-close:hover {
+        color: var(--danger-color);
+    }
+    
+    .meny-alt {
+        margin-bottom: 1rem;
+        padding: 1rem;
+        border-radius: var(--border-radius);
+        border-left: 4px solid var(--primary-color);
+    }
+    
+    .meny-alt.alt1 {
+        background: var(--success-light);
+        border-left-color: var(--success-color);
+    }
+    
+    .meny-alt.alt2 {
+        background: var(--warning-light);
+        border-left-color: var(--warning-color);
+    }
+    
+    .meny-alt h5 {
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+    
+    .meny-alt.alt1 h5 {
+        color: var(--success-color);
+    }
+    
+    .meny-alt.alt2 h5 {
+        color: var(--warning-color);
+    }
+    
+    .dag-header-klickbar {
+        cursor: pointer;
+        transition: var(--transition);
+        user-select: none;
+    }
+    
+    .dag-header-klickbar:hover {
+        background: var(--primary-dark) !important;
+        transform: translateY(-1px);
+    }
+    
+    .dag-med-meny {
+        position: relative;
+    }
+    
+    .dag-med-meny::after {
+        content: "📋";
+        position: absolute;
+        top: 2px;
+        right: 4px;
+        font-size: 0.8rem;
+        opacity: 0.7;
+    }
+    
+    .vecka-form {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    @media print {
+        .control-bar, .navbar, button, input, select, form {
+            display: none !important;
+        }
+        body { background: #fff !important; color: #000 !important; }
+        .table { box-shadow: none !important; background: #fff !important; color: #000 !important; page-break-inside: avoid !important; }
+        tr, .avdelning-rad, .boende-rad { page-break-inside: avoid !important; break-inside: avoid !important; }
+        h2, h3, h4, p { page-break-after: avoid !important; break-after: avoid !important; }
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="control-bar">
+    <div class="vecka-form">
+        <form method="get" action="{{ url_for('veckovy', vecka=vecka or 1) }}">
+            <label for="vecka" class="form-label">Vecka:</label>
+            <select id="vecka" name="vecka" class="form-control" style="width: auto; display: inline-block;">
+                {% for v in range(1, 53) %}
+                    <option value="{{ v }}" {% if v == vecka %}selected{% endif %}>{{ v }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm">Byt</button>
+        </form>
+    </div>
+    <div class="actions">
+        <button onclick="window.print()" class="btn btn-secondary btn-sm">
+            <i class="fas fa-print"></i> Skriv ut
+        </button>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('planera', vecka=vecka) }}">
+            <i class="fas fa-calendar-plus"></i> Planera måltider
+        </a>
+        <a class="btn btn-secondary btn-sm" href="{{ url_for('rapport') }}">
+            <i class="fas fa-chart-bar"></i> Statistik
+        </a>
+    </div>
+</div>
+
+{% for avd in data %}
+<div class="container">
+    <h2><i class="fas fa-building"></i> {{ avd.namn }}</h2>
+    <p class="text-secondary mb-3"><i class="fas fa-info-circle"></i> {{ avd.faktaruta }}</p>
+    
+    <table class="table table-striped">
+        <tr class="avdelning-rad">
+            <td>{{ avd.namn }}</td>
+            {% for dag in ['Mån', 'Tis', 'Ons', 'Tors', 'Fre', 'Lör', 'Sön'] %}
+                <td colspan="2" class="veckodag-header dagstart dag-med-meny">{{ dag }}</td>
+            {% endfor %}
+        </tr>
+        <tr>
+            <td></td>
+            {% for dag in ['Mån', 'Tis', 'Ons', 'Tors', 'Fre', 'Lör', 'Sön'] %}
+                <td class="lunch dagstart {% if alt2_markeringar and avd.id in alt2_markeringar and dag in alt2_markeringar[avd.id] %}gulmarkerad{% endif %}">🍽️</td>
+                <td class="kväll">🌙</td>
+            {% endfor %}
+        </tr>
+        <tr class="boende-rad">
+            <td><i class="fas fa-users"></i> Boende</td>
+            {% for dag in ['Mån', 'Tis', 'Ons', 'Tors', 'Fre', 'Lör', 'Sön'] %}
+                <td class="dagstart {% if alt2_markeringar and avd.id in alt2_markeringar and dag in alt2_markeringar[avd.id] %}gulmarkerad{% endif %}">
+                    {{ avd.antal_boende_per_dag.get((dag, 'Lunch'), (0, False))[0] }}
+                </td>
+                <td class="kväll">
+                    {{ avd.antal_boende_per_dag.get((dag, 'Kväll'), (0, False))[0] }}
+                </td>
+            {% endfor %}
+        </tr>
+        {% for kost in avd.kosttyper %}
+        <tr>
+            <td>{{ kost.namn }}</td>
+            {% for cell in kost.celler %}
+                <td class="kostcell {% if loop.index0 is divisibleby 2 %}dagstart{% endif %}{% if cell.markerad %} markerad{% endif %}{% if cell.maltid == 'Kväll' %} kväll{% endif %}{% if cell.alt2_gul %} gulmarkerad{% endif %}"
+                    data-kostid="{{ cell.kosttyp_id }}"
+                    data-avdelning-id="{{ cell.avdelning_id }}"
+                    data-dag="{{ cell.dag }}"
+                    data-maltid="{{ cell.maltid }}"
+                    data-vecka="{{ vecka }}">
+                    {{ cell.antal }}
+                </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endfor %}
+
+<!-- Meny popup -->
+<div class="meny-popup-overlay" id="menyPopupOverlay"></div>
+<div class="meny-popup" id="menyPopup">
+    <div class="meny-popup-header">
+        <h4 id="menyPopupTitle">Meny för dagen</h4>
+        <button class="meny-popup-close" id="menyPopupClose">&times;</button>
+    </div>
+    <div id="menyPopupContent">
+        <!-- Meny content will be populated by JavaScript -->
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const vecka = Number("{{ vecka }}");
+    const menyData = {{ meny_data | tojson | safe }};
+    function getMenyForDag(dag) {
+        // Map Swedish day names to menyData keys (mån, tis, ons, etc)
+        const dagMapping = {
+            'Måndag': 'mån',
+            'Tisdag': 'tis',
+            'Onsdag': 'ons',
+            'Torsdag': 'tors',
+            'Fredag': 'fre',
+            'Lördag': 'lör',
+            'Söndag': 'sön'
+        };
+        const menuKey = dagMapping[dag];
+        if (!menyData || typeof menyData !== 'object') return null;
+        return menuKey && menyData[menuKey] ? menyData[menuKey] : null;
+    }
+    function showMenyPopup(dag, datum) {
+        const popup = document.getElementById('menyPopup');
+        const overlay = document.getElementById('menyPopupOverlay');
+        const title = document.getElementById('menyPopupTitle');
+        const content = document.getElementById('menyPopupContent');
+        title.textContent = `Meny för ${dag}`;
+        let menuData = getMenyForDag(dag);
+        let contentHtml = '';
+        if (menuData) {
+            contentHtml += `
+                <div class="meny-alt alt1">
+                    <h5>Alternativ 1</h5>
+                    <p>${menuData.alt1 || ''}</p>
+                </div>
+                <div class="meny-alt alt2">
+                    <h5>Alternativ 2</h5>
+                    <p>${menuData.alt2 || ''}</p>
+                </div>
+                <div class="meny-alt">
+                    <h5>Dessert</h5>
+                    <p>${menuData.dessert || menuData['dessert'] || ''}</p>
+                </div>
+                <div class="meny-alt">
+                    <h5>Kväll</h5>
+                    <p>${menuData.kväll || menuData.kvall || ''}</p>
+                </div>
+            `;
+        } else {
+            contentHtml = '<p class="text-muted">Ingen meny finns för denna dag eller vecka ännu.</p>';
+        }
+        content.innerHTML = contentHtml;
+        overlay.style.display = 'block';
+        popup.style.display = 'block';
+    }
+    function hideMenyPopup() {
+        const popup = document.getElementById('menyPopup');
+        const overlay = document.getElementById('menyPopupOverlay');
+        overlay.style.display = 'none';
+        popup.style.display = 'none';
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        // Popup event handlers
+        const closeBtn = document.getElementById('menyPopupClose');
+        const overlay = document.getElementById('menyPopupOverlay');
+        if (closeBtn) closeBtn.addEventListener('click', hideMenyPopup);
+        if (overlay) overlay.addEventListener('click', hideMenyPopup);
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                hideMenyPopup();
+            }
+        });
+        // Gör ALLA dag-headers klickbara för popup (även om dag-med-meny redan finns)
+        const dagHeaders = document.querySelectorAll('.veckodag-header');
+        dagHeaders.forEach((header, index) => {
+            const dagText = header.textContent.trim();
+            const dagAbbr = dagText.split(' ')[0];
+            const dagMapping = {
+                'Mån': 'Måndag',
+                'Tis': 'Tisdag',
+                'Ons': 'Onsdag',
+                'Tors': 'Torsdag',
+                'Fre': 'Fredag',
+                'Lör': 'Lördag',
+                'Sön': 'Söndag'
+            };
+            const fullDagName = dagMapping[dagAbbr] || dagAbbr;
+            header.classList.add('dag-header-klickbar');
+            header.addEventListener('click', function() {
+                showMenyPopup(fullDagName, fullDagName);
+            });
+        });
+    });
+</script>
+{% endblock %}

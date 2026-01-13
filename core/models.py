@@ -70,6 +70,9 @@ class Menu(Base):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
     week: Mapped[int] = mapped_column(Integer)
     year: Mapped[int] = mapped_column(Integer)
+    # Track publication status and last update for ETag/concurrency handling
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 class MenuVariant(Base):
     __tablename__ = "menu_variants"

@@ -1,0 +1,32 @@
+{% extends "_base.html" %}
+{% block title %}Specialkost – {{ vm.site.name }}{% endblock %}
+{% block content %}
+<main class="admin-section">
+  <h1>Specialkost – {{ vm.site.name }}</h1>
+  <p class="admin-intro">Hantera specialkosttyper för enheten. Ändra inte backendfält eller texter.</p>
+  <section class="admin-card">
+    <h2>Specialkosttyper</h2>
+    <table>
+      <thead>
+        <tr><th>Namn</th></tr>
+      </thead>
+      <tbody>
+        {% for d in vm.diets %}
+        <tr><td>{{ d.name }}</td></tr>
+        {% endfor %}
+        {% if not vm.diets %}
+        <tr><td class="muted">Inga specialkosttyper upplagda ännu.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+    <h3>Skapa ny specialkosttyp</h3>
+    <form method="post" action="{{ url_for('ui.admin_diets_create', site_id=vm.site.id) }}">
+      <div class="admin-form-row">
+        <label for="diet_name">Namn</label>
+        <input id="diet_name" type="text" name="name" required>
+      </div>
+      <button class="btn" type="submit">Skapa</button>
+    </form>
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "ui/unified_admin_base.html" %}
+{% block admin_title %}Redigera Kosttyp{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+{% block admin_main %}
+  <section class="ua-section">
+    <div class="ua-card">
+      <h1>Redigera Kosttyp</h1>
+      <p class="admin-intro">Hantera specialkosttyper och förinställningar. Fält och actions bibehålls.</p>
+    </div>
+  </section>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <section class="admin-card">
+        <div class="admin-flash-messages">
+          {% for category, message in messages %}
+            <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+  {% endwith %}
+
+  <section class="ua-section">
+    <div class="ua-card">
+      <form method="POST" class="admin-form">
+      <div class="admin-form-row">
+        <label for="name">Kosttypsnamn</label>
+        <input type="text" id="name" name="name" value="{{ vm.diet_type.name }}" required>
+      </div>
+
+      <div class="admin-form-row">
+        <label for="default_select">Förinställd</label>
+        <input type="checkbox" id="default_select" name="default_select" {% if vm.diet_type.default_select %}checked{% endif %}>
+      </div>
+
+        <div class="admin-form-actions">
+          <button type="submit" class="btn btn-primary">Spara</button>
+          <a href="{{ url_for('admin_ui.admin_specialkost_list') }}" class="btn btn-secondary">Avbryt</a>
+        </div>
+      </form>
+    </div>
+  </section>
+{% endblock %}

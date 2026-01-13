@@ -88,14 +88,16 @@ def index():
     </form>
     <p><small>Stöder DOCX (kommun) och XLSX (offshore) prototyp.</small></p>
     """
-    return render_template_string(BASE_HTML, content=inner, week=week, year=year, tenant_id=tenant_id, week_view=week_view)
+    return render_template_string(
+        BASE_HTML, content=inner, week=week, year=year, tenant_id=tenant_id, week_view=week_view
+    )
 
 
-@bp.route("/login", methods=["GET","POST"])
+@bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form.get("email","").strip().lower()
-        password = request.form.get("password","")
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
         if not email or not password:
             error = "Fyll i båda fälten."
         else:
@@ -104,6 +106,7 @@ def login():
             try:
                 user = db.query(User).filter(User.email == email).first()
                 from werkzeug.security import check_password_hash
+
                 if not user or not check_password_hash(user.password_hash, password):
                     error = "Fel inloggning"
                 else:

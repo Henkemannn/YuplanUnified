@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from flask import Blueprint, current_app, jsonify, render_template
+from flask import Blueprint, current_app, jsonify, render_template, redirect
 
 inline_ui_bp = Blueprint("inline_ui", __name__, template_folder="templates", static_folder="static")
+
 
 @inline_ui_bp.get("/ui/inline")
 def inline_home():  # pragma: no cover simple render
@@ -12,3 +13,9 @@ def inline_home():  # pragma: no cover simple render
         # Standardized error schema
         return jsonify({"error": "not_found", "message": "Resource not available"}), 404
     return render_template("ui/notes_tasks.html")
+
+
+@inline_ui_bp.get("/ui/inline-login")
+def login_page():  # pragma: no cover
+    # Redirect to canonical login UI
+    return redirect("/ui/login")

@@ -17,7 +17,9 @@ def _clear():
 def _add(ts, tenant_id=None, event="evt", payload=None, actor_role="admin"):
     db = get_session()
     try:
-        ae = AuditEvent(ts=ts, tenant_id=tenant_id, event=event, payload=payload, actor_role=actor_role)
+        ae = AuditEvent(
+            ts=ts, tenant_id=tenant_id, event=event, payload=payload, actor_role=actor_role
+        )
         db.add(ae)
         db.commit()
         return ae.id
@@ -58,10 +60,16 @@ def test_time_window_inclusive(app_session):
     _add(base + timedelta(seconds=20), tenant_id=1, event="late")
     repo = AuditRepo()
     # Inclusive window spanning early..late should return all
-    rows_all, total_all = repo.query(AuditQueryFilters(ts_from=base, ts_to=base + timedelta(seconds=20)), page=1, size=10)
+    rows_all, total_all = repo.query(
+        AuditQueryFilters(ts_from=base, ts_to=base + timedelta(seconds=20)), page=1, size=10
+    )
     assert total_all == 3
     # Narrow window capturing only mid
-    rows_mid, total_mid = repo.query(AuditQueryFilters(ts_from=base + timedelta(seconds=10), ts_to=base + timedelta(seconds=10)), page=1, size=10)
+    rows_mid, total_mid = repo.query(
+        AuditQueryFilters(ts_from=base + timedelta(seconds=10), ts_to=base + timedelta(seconds=10)),
+        page=1,
+        size=10,
+    )
     assert total_mid == 1
     assert rows_mid[0].event == "mid"
 

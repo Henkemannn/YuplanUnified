@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Planera – dag{% endblock %}
+{% block content %}
+<div class="planera-wrap" style="max-width:1100px;margin:0 auto;padding:1rem;font-family:system-ui,sans-serif;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+    <h1 style="margin:0;">Planera – dag</h1>
+    <button onclick="window.print()" class="print-button" style="font-size:0.75rem;padding:6px 10px;border:1px solid #888;border-radius:4px;background:#fff;cursor:pointer;">Skriv ut</button>
+  </div>
+  {% if vm.disabled %}
+    <p>Planera är inte aktiverad.</p>
+  {% elif vm.error %}
+    <p class="error">Fel: {{ vm.error }}</p>
+  {% else %}
+    <h2>{{ vm.site_name }} – {{ vm.date }}</h2>
+    {% for meal_key in ["lunch","dinner"] %}
+      {% set meal = vm.totals[meal_key] %}
+      <section class="planera-meal" style="margin-top:1rem;">
+        <h3>{{ meal_labels[meal_key] }}</h3>
+        <div style="font-size:0.85rem;color:#444;margin:4px 0 8px;">
+          Alt 1: <span style="opacity:0.7;">–</span> &nbsp; Alt 2: <span style="opacity:0.7;">–</span>
+        </div>
+        <table class="planera-table" style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+          <thead>
+            <tr style="border-bottom:1px solid #ddd;">
+              <th style="text-align:left;padding:6px 8px;">Avdelning</th>
+              <th style="text-align:left;padding:6px 8px;">Boende totalt</th>
+              <th style="text-align:left;padding:6px 8px;">Specialkost</th>
+              <th style="text-align:left;padding:6px 8px;">Normalkost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for dept in vm.departments %}
+              {% set dm = dept.meals[meal_key] %}
+              <tr style="border-bottom:1px solid #f0f0f0;">
+                <td style="padding:6px 8px;">{{ dept.department_name }}</td>
+                <td style="padding:6px 8px;">{{ dm.residents_total }}</td>
+                <td style="padding:6px 8px;">
+                  {% for diet in dm.special_diets %}
+                    <div>{{ diet.diet_name }}: {{ diet.count }}</div>
+                  {% else %}
+                    <span>–</span>
+                  {% endfor %}
+                </td>
+                <td style="padding:6px 8px;">{{ dm.normal_diet_count }}</td>
+              </tr>
+            {% endfor %}
+            <tr style="border-top:2px solid #ccc;">
+              <td style="padding:6px 8px;"><strong>Totalt kök</strong></td>
+              <td style="padding:6px 8px;">{{ meal.residents_total }}</td>
+              <td style="padding:6px 8px;">
+                {% for diet in meal.special_diets %}
+                  <div>{{ diet.diet_name }}: {{ diet.count }}</div>
+                {% else %}
+                  <span>–</span>
+                {% endfor %}
+              </td>
+              <td style="padding:6px 8px;">{{ meal.normal_diet_count }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    {% endfor %}
+  {% endif %}
+</div>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/planera_print.css') }}" media="print">
+{% endblock %}

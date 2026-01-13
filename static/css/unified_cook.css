@@ -1,0 +1,506 @@
+/* ============================================================================
+   Unified Cook Dashboard - Phase 4
+   Tablet-first, ultra-simple design for kitchen staff
+   ============================================================================ */
+
+:root {
+    --cook-primary: #2563eb;
+    --cook-success: #16a34a;
+    --cook-warning: #f59e0b;
+    --cook-danger: #dc2626;
+    --cook-muted: #6b7280;
+    --cook-bg: #f8fafc;
+    --cook-card-bg: #ffffff;
+    --cook-text-primary: #1e293b;
+    --cook-text-secondary: #64748b;
+    --cook-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --cook-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    --cook-radius: 1rem;
+    --cook-gap: 1.5rem;
+}
+
+/* ============================================================================
+   Base Layout
+   ============================================================================ */
+
+.cook-dashboard {
+    min-height: 100vh;
+    background: var(--cook-bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--cook-text-primary);
+    padding: 0;
+    margin: 0;
+}
+
+/* ============================================================================
+   Header
+   ============================================================================ */
+
+.cook-header {
+    background: linear-gradient(135deg, var(--cook-primary) 0%, #1e40af 100%);
+    color: white;
+    padding: 2rem 1.5rem;
+    box-shadow: var(--cook-shadow-lg);
+    animation: slideDown 0.4s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.dashboard-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.site-name {
+    font-size: 1rem;
+    opacity: 0.9;
+    margin: 0.5rem 0 0 0;
+}
+
+.header-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+
+.current-date {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.week-badge {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.25rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.875rem;
+}
+
+/* ============================================================================
+   Main Content
+   ============================================================================ */
+
+.cook-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    animation: fadeIn 0.6s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.section-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 1.5rem 0;
+    color: var(--cook-text-primary);
+}
+
+/* ============================================================================
+   Section A: Today's Overview (Meal Cards)
+   ============================================================================ */
+
+.today-overview {
+    margin-bottom: 3rem;
+}
+
+.meals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--cook-gap);
+}
+
+.meal-card {
+    background: var(--cook-card-bg);
+    border-radius: var(--cook-radius);
+    box-shadow: var(--cook-shadow);
+    padding: 2rem;
+    transition: all 0.3s ease;
+    animation: scaleIn 0.5s ease-out;
+    animation-fill-mode: backwards;
+}
+
+.meal-card:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.meal-card:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.meal-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--cook-shadow-lg);
+}
+
+.lunch-card {
+    border-top: 4px solid var(--cook-primary);
+}
+
+.dinner-card {
+    border-top: 4px solid #7c3aed;
+}
+
+.meal-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.meal-icon {
+    font-size: 2.5rem;
+}
+
+.meal-name {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.meal-body {
+    margin-bottom: 1.5rem;
+    min-height: 80px;
+}
+
+.dish-text {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin: 0 0 1rem 0;
+    line-height: 1.6;
+    color: var(--cook-text-primary);
+}
+
+.alt2-badge {
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+}
+
+.meal-footer {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.meal-action {
+    flex: 1;
+    min-width: 180px;
+    font-size: 1.125rem;
+    padding: 0.875rem 1.5rem;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+/* ============================================================================
+   Section B: Departments Overview
+   ============================================================================ */
+
+.departments-overview {
+    margin-bottom: 3rem;
+}
+
+.departments-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
+}
+
+.department-card {
+    padding: 1.5rem;
+    animation: scaleIn 0.5s ease-out;
+    animation-fill-mode: backwards;
+    transition: all 0.3s ease;
+}
+
+.department-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--cook-shadow-lg);
+}
+
+/* Stagger animation for department cards */
+.department-card:nth-child(1) { animation-delay: 0.1s; }
+.department-card:nth-child(2) { animation-delay: 0.15s; }
+.department-card:nth-child(3) { animation-delay: 0.2s; }
+.department-card:nth-child(4) { animation-delay: 0.25s; }
+.department-card:nth-child(5) { animation-delay: 0.3s; }
+.department-card:nth-child(6) { animation-delay: 0.35s; }
+
+.dept-header {
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.dept-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem 0;
+}
+
+.dept-count {
+    font-size: 0.875rem;
+    color: var(--cook-text-secondary);
+}
+
+.dept-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.meal-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.status-label {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    min-width: 80px;
+}
+
+/* ============================================================================
+   Section C: Quick Actions
+   ============================================================================ */
+
+.quick-actions {
+    margin-bottom: 2rem;
+}
+
+.actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.action-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    min-height: 120px;
+    font-size: 1.125rem;
+    transition: all 0.3s ease;
+}
+
+.action-button:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--cook-shadow-lg);
+}
+
+.action-icon {
+    font-size: 2.5rem;
+}
+
+.action-label {
+    font-weight: 600;
+}
+
+.refresh-button {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: white;
+}
+
+.refresh-button:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+}
+
+/* ============================================================================
+   Empty State
+   ============================================================================ */
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    background: var(--cook-card-bg);
+    border-radius: var(--cook-radius);
+    box-shadow: var(--cook-shadow);
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin: 0 0 1rem 0;
+    opacity: 0.3;
+}
+
+.empty-text {
+    font-size: 1.25rem;
+    color: var(--cook-text-secondary);
+    margin: 0;
+}
+
+/* ============================================================================
+   Footer
+   ============================================================================ */
+
+.cook-footer {
+    background: white;
+    border-top: 1px solid #e2e8f0;
+    padding: 1.5rem;
+    text-align: center;
+    margin-top: 3rem;
+}
+
+.footer-text {
+    margin: 0;
+    color: var(--cook-text-secondary);
+    font-size: 0.9375rem;
+}
+
+/* ============================================================================
+   Responsive Design
+   ============================================================================ */
+
+@media (max-width: 768px) {
+    .dashboard-title {
+        font-size: 1.5rem;
+    }
+    
+    .current-date {
+        font-size: 1.125rem;
+    }
+    
+    .header-content {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .header-meta {
+        align-items: flex-start;
+    }
+    
+    .meals-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .departments-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .actions-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .meals-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .departments-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .actions-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 1025px) {
+    .departments-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .actions-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* ============================================================================
+   Accessibility
+   ============================================================================ */
+
+.meal-card:focus-within,
+.department-card:focus-within,
+.action-button:focus {
+    outline: 3px solid var(--cook-primary);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        Department Portal Status Panel
+        ============================================================================ */
+    .cook-panel-department-status { margin-top: 1.5rem; }
+    .department-status-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+    .department-status-item { display: flex; justify-content: space-between; align-items: center; }
+    .department-status-item .department-name { font-weight: 500; }
+    .department-status-item { padding: 0.35rem 0; }
+    .department-name-link { text-decoration: none; color: inherit; display: inline-flex; align-items: center; gap: 0.25rem; }
+    .department-name-link:hover { text-decoration: underline; }
+    .department-name-icon { font-size: 0.8em; opacity: 0.7; }
+
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ============================================================================
+   Print Styles
+   ============================================================================ */
+
+@media print {
+    .cook-header,
+    .quick-actions,
+    .cook-footer {
+        display: none;
+    }
+    
+    .meal-card,
+    .department-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #e2e8f0;
+    }
+}

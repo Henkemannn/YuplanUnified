@@ -2,13 +2,15 @@
 
 Copilot prompt: Refactor require_session to raise SessionError(401) instead of returning a Response. Keep SessionData TypedDict. No Any.
 """
+
 from __future__ import annotations
 
 from typing import Literal, TypedDict, cast
 
 from flask import session as flask_session
 
-Role = Literal["superuser","admin","editor","viewer"]
+Role = Literal["superuser", "admin", "editor", "viewer"]
+
 
 class SessionData(TypedDict):
     user_id: int
@@ -43,8 +45,10 @@ def require_session(sess=flask_session) -> SessionData:
 
 class SessionError(Exception):
     """Signals a 401 unauthorized due to missing/invalid session."""
+
     def __init__(self, message: str = "authentication required"):
         super().__init__(message)
+
 
 __all__ = [
     "Role",

@@ -20,6 +20,7 @@ Feature flag gating (opt-in) allows dark launch.
 
 LimiterKeyFunc = Callable[[], str]
 
+
 def _DEF_KEY() -> str:  # default key uses tenant if present else global bucket
     return getattr(g, "tenant_id", "global")
 
@@ -34,13 +35,13 @@ def limit(
     flag_opt_in: bool = True,
     use_registry: bool = True,
 ):
-
     def decorator(fn: Callable[..., Any]):
         @wraps(fn)
         def wrapper(*args: Any, **kwargs: Any):
             # Feature flag gating: if flag provided and not enabled for tenant → bypass
             if feature_flag and has_request_context():
                 from flask import current_app as _ca, g as _g
+
                 flags = getattr(_g, "tenant_feature_flags", {})
                 enabled_val = flags.get(feature_flag)
                 if enabled_val is None:
@@ -81,8 +82,8 @@ def limit(
                 burst = q
             # Resolve strategy (env default RATE_LIMIT_ALGO else "fixed")
             env_default = os.getenv("RATE_LIMIT_ALGO", "fixed").strip().lower() or "fixed"
-            if strategy not in ("fixed","token_bucket"):
-                strategy = env_default if env_default in ("fixed","token_bucket") else "fixed"
+            if strategy not in ("fixed", "token_bucket"):
+                strategy = env_default if env_default in ("fixed", "token_bucket") else "fixed"
             key_val = key_func()
             logical_key = f"{name}:{key_val}"
             rl = get_rate_limiter("token_bucket" if strategy == "token_bucket" else "fixed")
@@ -105,12 +106,17 @@ def limit(
                 retry_after = rl.retry_after(logical_key, per_seconds=p)
                 if strategy == "token_bucket" and isinstance(rl, TokenBucketRateLimiter):  # type: ignore[arg-type]
                     with suppress(Exception):
-                        retry_after = rl.retry_after_bucket(logical_key, quota=q, per_seconds=p, burst=burst)  # type: ignore[attr-defined]
-                raise RateLimitError(f"Rate limit exceeded for {name}", retry_after=retry_after, limit=name)
+                        retry_after = rl.retry_after_bucket(
+                            logical_key, quota=q, per_seconds=p, burst=burst
+                        )  # type: ignore[attr-defined]
+                raise RateLimitError(
+                    f"Rate limit exceeded for {name}", retry_after=retry_after, limit=name
+                )
             return fn(*args, **kwargs)
 
         return wrapper
 
     return decorator
+
 
 __all__ = ["limit"]

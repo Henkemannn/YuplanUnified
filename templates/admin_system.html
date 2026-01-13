@@ -1,0 +1,71 @@
+{% extends "_base.html" %}
+{% block title %}Systemadministration{% endblock %}
+{% block content %}
+<div class="wrap">
+  <h1>Systemadministration</h1>
+  <div class="grid" style="grid-template-columns: 1fr 1fr;">
+    <section>
+      <h2>Arbetsplatser</h2>
+      <table>
+        <thead>
+          <tr><th>Namn</th><th>Välj</th></tr>
+        </thead>
+        <tbody>
+          {% for s in vm.sites %}
+          <tr>
+            <td>{{ s.name }}</td>
+            <td><a class="btn" href="{{ url_for('ui.admin_system_page', site_id=s.id) }}">Visa avdelningar</a></td>
+          </tr>
+          {% endfor %}
+          {% if not vm.sites %}
+          <tr><td colspan="2" class="muted">Inga arbetsplatser.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+      <h3>Skapa ny arbetsplats</h3>
+      <form method="post" action="{{ url_for('ui.admin_system_site_create') }}">
+        <label>Namn<br><input type="text" name="name" required></label>
+        <button class="btn" type="submit">Skapa</button>
+      </form>
+    </section>
+    <section>
+      <h2>Avdelningar</h2>
+      {% if vm.selected_site %}
+        <p class="muted">Arbetsplats: {{ vm.selected_site.name }}</p>
+        <form method="post" action="{{ url_for('ui.select_site_post') }}" class="inline-form" style="margin: 8px 0 16px;">
+          {% if g.features.get('strict_csrf') %}{{ csrf_token_input()|safe }}{% endif %}
+          <input type="hidden" name="site_id" value="{{ vm.selected_site.id }}">
+          <input type="hidden" name="next" value="{{ url_for('ui.admin_dashboard') }}">
+          <button class="btn" type="submit">Öppna admin</button>
+        </form>
+        <table>
+          <thead>
+            <tr><th>Avdelning</th><th>Åtgärder</th></tr>
+          </thead>
+          <tbody>
+            {% for d in vm.departments %}
+            <tr>
+              <td>{{ d.name }}</td>
+              <td>
+                <a class="btn" href="{{ url_for('ui.admin_department_settings_get', department_id=d.id) }}">Inställningar</a>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if not vm.departments %}
+            <tr><td class="muted" colspan="2">Inga avdelningar.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+        <h3>Skapa ny avdelning</h3>
+        <form method="post" action="{{ url_for('ui.admin_system_department_create', site_id=vm.selected_site.id) }}">
+          <label>Namn<br><input type="text" name="name" required></label>
+          <button class="btn" type="submit">Skapa</button>
+        </form>
+      {% else %}
+        <p class="muted">Välj en arbetsplats för att se avdelningar.</p>
+      {% endif %}
+    </section>
+  </div>
+  {# Diet types management removed from Systemadmin. Use /ui/admin/diets. #}
+</div>
+{% endblock %}

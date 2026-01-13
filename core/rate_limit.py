@@ -3,33 +3,38 @@ from __future__ import annotations
 import time
 
 from flask import request
+from werkzeug.wrappers.response import Response
+
+from .http_errors import too_many_requests
 
 # In-memory simple rate limiter (per-process). For production scale: replace with Redis.
 # Key: (tenant_id, user_id, bucket, minute_epoch)
 _store: dict[tuple[int | None, int | None, str, int], int] = {}
 
+
 class RateLimitExceeded(Exception):
     bucket: str
     limit: int
+
     def __init__(self, bucket: str, limit: int) -> None:
         super().__init__(bucket)
         self.bucket = bucket
         self.limit = limit
 
 
-def rate_limited_response(retry_after: int | None = None):  # lightweight central helper
-    from flask import jsonify
-    payload: dict[str, str | int | None] = {"error": "rate_limited", "message": "Too many requests"}
-    if retry_after is not None:
-        payload["retry_after"] = int(retry_after)
-    resp = jsonify(payload)
-    resp.status_code = 429
-    if retry_after is not None:
-        resp.headers["Retry-After"] = str(retry_after)
-    return resp
+def rate_limited_response(retry_after: int | None = None) -> Response:  # lightweight central helper
+    # Emit RFC7807 ProblemDetails with optional Retry-After header
+    return too_many_requests(detail="rate_limited", retry_after=retry_after)
 
 
-def allow(tenant_id: int | None, user_id: int | None, bucket: str, limit_per_minute: int, *, testing: bool = False) -> None:
+def allow(
+    tenant_id: int | None,
+    user_id: int | None,
+    bucket: str,
+    limit_per_minute: int,
+    *,
+    testing: bool = False,
+) -> None:
     # In testing mode we often skip limits; allow override via special header to force enforce for tests
     force_header = request.headers.get("X-Force-Rate-Limit") if request else None
     if testing and not force_header:
@@ -49,7 +54,9 @@ def allow(tenant_id: int | None, user_id: int | None, bucket: str, limit_per_min
         raise RateLimitExceeded(bucket, limit_per_minute)
 
 
-def remaining(tenant_id: int | None, user_id: int | None, bucket: str, limit_per_minute: int) -> int:
+def remaining(
+    tenant_id: int | None, user_id: int | None, bucket: str, limit_per_minute: int
+) -> int:
     now = int(time.time())
     minute = now // 60
     key = (tenant_id, user_id, bucket, minute)

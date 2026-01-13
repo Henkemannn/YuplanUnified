@@ -18,9 +18,7 @@ def make_docx(lines):
 
 
 def test_docx_basic_alt_detection():
-    content = [
-        "Vecka 12", "Mån: Alt1: Fiskgratäng", "Tis: Alt2: Köttfärssås", "Ons: Kväll: Soppa"
-    ]
+    content = ["Vecka 12", "Mån: Alt1: Fiskgratäng", "Tis: Alt2: Köttfärssås", "Ons: Kväll: Soppa"]
     data = make_docx(content)
     imp = DocxMenuImporter()
     res = imp.parse(data, "meny.docx")
@@ -31,7 +29,7 @@ def test_docx_basic_alt_detection():
     assert "Köttfärssås" in names
     assert "Soppa" in names
     # Evening variant should map to meal dinner and variant_type main
-    evening = [i for i in week.items if i.meal=="dinner"]
+    evening = [i for i in week.items if i.meal == "dinner"]
     assert evening and evening[0].variant_type == "main"
 
 

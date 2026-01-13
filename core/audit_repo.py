@@ -1,4 +1,5 @@
 """Audit repository: persistence + query + retention (strict pocket)."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -10,26 +11,51 @@ from .models import AuditEvent
 
 
 class AuditQueryFilters:
-    def __init__(self, tenant_id: int | None = None, event: str | None = None,
-                 ts_from: datetime | None = None, ts_to: datetime | None = None, text: str | None = None) -> None:
+    def __init__(
+        self,
+        tenant_id: int | None = None,
+        event: str | None = None,
+        ts_from: datetime | None = None,
+        ts_to: datetime | None = None,
+        text: str | None = None,
+    ) -> None:
         self.tenant_id = tenant_id
         self.event = event
         self.ts_from = ts_from
         self.ts_to = ts_to
         self.text = text
 
+
 class AuditRepo:
-    def insert(self, *, event: str, tenant_id: int | None, actor_user_id: int | None,
-               actor_role: str | None, payload: dict | None, request_id: str | None) -> None:
+    def insert(
+        self,
+        *,
+        event: str,
+        tenant_id: int | None,
+        actor_user_id: int | None,
+        actor_role: str | None,
+        payload: dict | None,
+        request_id: str | None,
+    ) -> None:
         db = get_session()
         try:
-            db.add(AuditEvent(event=event, tenant_id=tenant_id, actor_user_id=actor_user_id,
-                              actor_role=actor_role, payload=payload, request_id=request_id))
+            db.add(
+                AuditEvent(
+                    event=event,
+                    tenant_id=tenant_id,
+                    actor_user_id=actor_user_id,
+                    actor_role=actor_role,
+                    payload=payload,
+                    request_id=request_id,
+                )
+            )
             db.commit()
         finally:
             db.close()
 
-    def query(self, filters: AuditQueryFilters, page: int, size: int) -> tuple[list[AuditEvent], int]:
+    def query(
+        self, filters: AuditQueryFilters, page: int, size: int
+    ) -> tuple[list[AuditEvent], int]:
         db = get_session()
         try:
             stmt = select(AuditEvent)
@@ -65,5 +91,6 @@ class AuditRepo:
             return res.rowcount or 0
         finally:
             db.close()
+
 
 __all__ = ["AuditRepo", "AuditQueryFilters"]

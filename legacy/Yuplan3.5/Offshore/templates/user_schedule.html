@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="mb-3">Dine kommende vakter</h2>
+{% if rows and rows|length > 0 %}
+  <ul class="list-group">
+    {% for r in rows %}
+      <li class="list-group-item d-flex justify-content-between">
+        <span class="text-capitalize">{{ r['role'] or 'vakt' }}</span>
+        <span class="text-muted">{{ r['start_ts'] }} – {{ r['end_ts'] }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <div class="alert alert-info">Ingen planlagte vakter.</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Demo – Admin flows</title>
+  <link rel="stylesheet" href="/static/demo.css?v={{ asset_version|default('') }}"/>
+  <link rel="manifest" href="/manifest.webmanifest?v={{ asset_version|default('') }}">
+  <link rel="icon" href="/favicon.ico?v={{ asset_version|default('') }}">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ asset_version|default('') }}" sizes="180x180">
+  <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ asset_version|default('') }}" color="#111827">
+  <meta name="theme-color" content="#f8f9fa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
+  </head>
+  <body data-demo-ui-flag="{{ '1' if demo_ui_enabled else '0' }}">
+    <div class="app">
+      <header class="app-header">
+        <div class="brand">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/static/img/logo-mono-dark.svg?v={{ asset_version|default('') }}" />
+            <source media="(max-width: 480px)" srcset="/static/img/logo-compact.svg?v={{ asset_version|default('') }}" />
+            <img src="/static/img/logo-proposal.svg?v={{ asset_version|default('') }}" alt="Yuplan" width="40" height="40" style="border-radius:8px" />
+          </picture>
+          <h1>Yuplan Unified</h1>
+        </div>
+        <div class="controls">
+          <label>Vecka
+            <select id="header-week-select"></select>
+          </label>
+          <label>Avdelning
+            <select id="header-dept-select"></select>
+          </label>
+        </div>
+      </header>
+      <div class="app-body">
+        <aside class="app-nav" role="navigation" aria-label="Huvudmeny">
+          <a id="nav-weekview" href="#weekview" class="nav-link" aria-current="page">Veckovy</a>
+          <a id="nav-admin"   href="#admin"   class="nav-link">Admin</a>
+          <a id="nav-menyval" href="#menyval" class="nav-link">Menyval</a>
+
+          <a id="nav-alt2"    href="#alt2"    class="nav-link">Alt 2</a>
+          <a id="nav-report"  href="#report"  class="nav-link">Rapport</a>
+        </aside>
+        <main class="app-main">
+    <section id="panel-weekview" class="panel panel--active" role="region" aria-labelledby="nav-weekview" data-panel="weekview">
+      <div class="card">
+        <h3>Weekview</h3>
+        <div id="weekview" class="weekview" role="grid" aria-rowcount="2" aria-colcount="7">
+          <div class="weekview-row" role="row" aria-label="Lunch">
+            <div class="cell skel" role="gridcell" aria-colindex="1"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="2"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="3"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="4"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="5"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="6"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="7"><span class="cell-content" aria-hidden="true">—</span></div>
+          </div>
+          <div class="weekview-row" role="row" aria-label="Middag">
+            <div class="cell skel" role="gridcell" aria-colindex="1"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="2"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="3"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="4"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="5"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="6"><span class="cell-content" aria-hidden="true">—</span></div>
+            <div class="cell skel" role="gridcell" aria-colindex="7"><span class="cell-content" aria-hidden="true">—</span></div>
+          </div>
+        </div>
+        <div class="weekview-badges" aria-hidden="true">
+          <span class="badge alt2-active" title="Alt 2 aktiv">Alt 2</span>
+        </div>
+        <p class="muted">Placeholder-celler visas tills data laddats. Fokusmarkering och layout-höjd är stabil.</p>
+      </div>
+    </section>
+
+  <section id="panel-admin" class="panel" role="region" aria-labelledby="nav-admin" data-panel="admin" hidden>
+      <div class="card">
+        <h3>1) Login (simple)</h3>
+        <p class="muted">Sends POST /auth/login {role:"admin"}. Required for cookies and CSRF token.</p>
+        <button id="btnLogin">Login as admin</button>
+        <span id="loginStatus"></span>
+      </div>
+
+      <div class="row">
+        <div class="card">
+          <h3>2) Departments (ETag and If-None-Match)</h3>
+          <label>Site ID <input id="siteId" type="text" placeholder="enter site_id" /></label>
+          <div>
+            <button id="btnLoadDepts">Load departments</button>
+            <button id="btnDepts304">Conditional GET (If-None-Match)</button>
+          </div>
+          <div class="muted">Collection ETag: <span id="deptsEtag" class="et">—</span></div>
+          <div id="depts"></div>
+          <div style="margin-top:.5rem">
+            <label>Rename first department to <input id="deptNewName" type="text" placeholder="New name"/></label>
+            <button id="btnRename">PUT with If-Match</button>
+            <span id="renameStatus"></span>
+          </div>
+        </div>
+      </div>
+  </section>
+ feat/whitenoise-static-fallback
+
+  {% if csv_import_preview_enabled %}
+ master
+  <!-- CSV Import (Pass F) -->
+  <section class="panel" role="region" aria-label="Importera meny (CSV)" data-panel="admin" hidden>
+    <div class="card">
+      <h3>Importera meny (CSV)</h3>
+      <p class="muted">Klient-sida förhandsvisning och kolumn-mapping. Ingen server-skrivning ännu.</p>
+      <div class="csv-controls">
+        <button id="btnCsvImportOpen" class="btn" type="button">Importera CSV</button>
+        <input id="csvFileInput" type="file" accept=".csv" style="display:none" />
+      </div>
+      <div id="csvDropZone" class="dropzone" tabindex="0" aria-label="Släpp CSV här eller klicka för att välja">
+        Släpp CSV här, eller klicka på "Importera CSV".
+      </div>
+      <div id="csvError" class="flash flash-err" role="alert" hidden></div>
+      <div id="csvMapping" class="csv-mapping" hidden>
+        <label>Dag
+          <select id="csvMapDay"></select>
+        </label>
+        <label>Lunch
+          <select id="csvMapLunch"></select>
+        </label>
+        <label>Kväll
+          <select id="csvMapEve"></select>
+        </label>
+      </div>
+      <div id="csvSummary" class="muted" hidden></div>
+      <div id="csvPreview" class="csv-preview" hidden></div>
+      <div class="csv-actions" hidden id="csvMoreWrap">
+        <button id="csvShowMore" type="button">Visa fler</button>
+      </div>
+    </div>
+  </section>
+ feat/whitenoise-static-fallback
+
+  {% endif %}
+ master
+  <section id="panel-menyval" class="panel" role="region" aria-labelledby="nav-menyval" data-panel="menyval" hidden>
+      <div class="card">
+        <h3>3) Menyval (Alt2 mån–fre; helg Alt1)</h3>
+        <div id="menyvalStatus" class="muted" aria-live="polite"></div>
+        <div id="menyvalFlash" class="flash" aria-live="polite" hidden></div>
+        <div id="menyvalControls" class="menyval-controls" aria-describedby="menyvalHelp"></div>
+        <p id="menyvalHelp" class="muted">Välj vecka och avdelning uppe i headern. Alt 2 är inte tillgängligt på helger.</p>
+        <div class="muted">ETag: <span id="menyvalEtag" class="et">—</span></div>
+      </div>
+    </section>
+
+  <section id="panel-alt2" class="panel" role="region" aria-labelledby="nav-alt2" data-panel="alt2" hidden>
+      <div class="card">
+        <h3>3) Menyval (idempotent PUT + toggle)</h3>
+        <label>Week <input id="week" type="number" value="51" min="1" max="53"/></label>
+        <div>
+          <button id="btnLoadAlt2">Load Alt2</button>
+          <button id="btnAlt2304">Conditional GET (If-None-Match)</button>
+        </div>
+        <div class="muted">Collection ETag: <span id="alt2Etag" class="et">—</span></div>
+        <div id="alt2"></div>
+        <div style="margin-top:.5rem">
+          <button id="btnAlt2Idem">PUT idempotent (no change)</button>
+          <button id="btnAlt2Toggle">Toggle first item</button>
+          <span id="alt2Status"></span>
+        </div>
+      </div>
+    </section>
+
+  <section id="panel-report" class="panel" role="region" aria-labelledby="nav-report" data-panel="report" hidden>
+      <header class="panel-hdr">
+        <h2>Rapport</h2>
+        <div class="inline-controls">
+          <label for="reportWeek">Vecka</label>
+          <input id="reportWeek" type="number" min="1" max="53" />
+          <button id="btnLoadReport" class="btn">Läs in</button>
+          <button id="btnExportCsv" class="btn" aria-label="Exportera CSV">Export CSV</button>
+          <button id="btnExportPdf" class="btn" aria-label="Exportera PDF">Export PDF</button>
+        </div>
+      </header>
+      <div id="reportSummary" class="report-cards"></div>
+    </section>
+
+        </main>
+      </div>
+    </div>
+  <script src="/static/demo.js?v={{ asset_version }}" defer></script>
+  </body>
+</html>

@@ -5,6 +5,7 @@ or structured event sinks. For now we centralize status transition logging so
 API layers stay slimmer and logic (like ignoring no-op transitions) is kept
 consistent.
 """
+
 from __future__ import annotations
 
 from flask import g, has_request_context, session as _session
@@ -24,11 +25,24 @@ def log_event(name: str, **fields) -> None:
         tenant_id = fields.get("tenant_id")
         if tenant_id is None and has_request_context():
             tenant_id = getattr(g, "tenant_id", None) or _session.get("tenant_id")
-        actor_user_id = fields.get("actor_user_id") or (_session.get("user_id") if has_request_context() else None)
-        actor_role = fields.get("actor_role") or (_session.get("role") if has_request_context() else None)
+        actor_user_id = fields.get("actor_user_id") or (
+            _session.get("user_id") if has_request_context() else None
+        )
+        actor_role = fields.get("actor_role") or (
+            _session.get("role") if has_request_context() else None
+        )
         request_id = getattr(g, "request_id", None) if has_request_context() else None
-        payload = {k: v for k, v in fields.items() if k not in {"tenant_id", "actor_user_id", "actor_role"}}
-        AuditRepo().insert(event=name, tenant_id=tenant_id, actor_user_id=actor_user_id, actor_role=str(actor_role) if actor_role else None, payload=payload, request_id=request_id)
+        payload = {
+            k: v for k, v in fields.items() if k not in {"tenant_id", "actor_user_id", "actor_role"}
+        }
+        AuditRepo().insert(
+            event=name,
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            actor_role=str(actor_role) if actor_role else None,
+            payload=payload,
+            request_id=request_id,
+        )
     except Exception:  # pragma: no cover
         return None
 
@@ -55,7 +69,9 @@ def log(name: str, actor_id: int | None = None, tenant_id: int | None = None, me
 __all__ = ["log_task_status_transition", "log_event", "log"]
 
 
-def log_task_status_transition(db: Session, task: Task, old_status: str | None, new_status: str, user_id: int | None) -> None:
+def log_task_status_transition(
+    db: Session, task: Task, old_status: str | None, new_status: str, user_id: int | None
+) -> None:
     """Persist a TaskStatusTransition if there is a real status change.
 
     Parameters:
@@ -70,4 +86,11 @@ def log_task_status_transition(db: Session, task: Task, old_status: str | None, 
         old_status = getattr(task, "status", "done" if getattr(task, "done", False) else "todo")
     if new_status is None or old_status == new_status:  # defensive or no-op
         return
-    db.add(TaskStatusTransition(task_id=task.id, from_status=old_status, to_status=new_status, changed_by_user_id=user_id))
+    db.add(
+        TaskStatusTransition(
+            task_id=task.id,
+            from_status=old_status,
+            to_status=new_status,
+            changed_by_user_id=user_id,
+        )
+    )

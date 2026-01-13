@@ -28,14 +28,16 @@ def ensure_file(p: Path, msg: str):
 def semantic_diff_ok() -> bool:
     tmp = ROOT / "openapi-extras" / "tmp-openapi-diff.json"
     tmp.parent.mkdir(exist_ok=True, parents=True)
-    code = run([
-        sys.executable,
-        str(ROOT / "scripts" / "openapi_diff.py"),
-        str(BASELINE),
-        str(SPEC),
-        "--json-report",
-        str(tmp),
-    ])
+    code = run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "openapi_diff.py"),
+            str(BASELINE),
+            str(SPEC),
+            "--json-report",
+            str(tmp),
+        ]
+    )
     try:
         data = json.loads(tmp.read_text(encoding="utf-8"))
     except Exception:

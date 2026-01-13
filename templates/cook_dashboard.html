@@ -1,0 +1,42 @@
+{% extends "_base.html" %}
+
+{% block title %}Kockens översikt – vecka {{ vm.iso_week }}{% endblock %}
+
+{% block content %}
+<section class="cook-dashboard">
+  <header class="cook-dashboard__header">
+    <h1>Kockens översikt</h1>
+    <p>Site: {{ vm.site_name }}</p>
+    <p>Idag: {{ vm.date.isoformat() }} (vecka {{ vm.iso_week }}, {{ vm.iso_year }})</p>
+  </header>
+
+  <section class="cook-dashboard__grid">
+    <article class="cook-card">
+      <h2>Dagens meny</h2>
+      <ul>
+        <li><strong>Lunch Alt 1:</strong> {{ vm.menu_today.lunch_alt1 or "Ingen rätt" }}</li>
+        <li><strong>Lunch Alt 2:</strong> {{ vm.menu_today.lunch_alt2 or "Ingen rätt" }}</li>
+        <li><strong>Kvällsmat:</strong> {{ vm.menu_today.dinner or "Ingen rätt" }}</li>
+        <li><strong>Dessert:</strong> {{ vm.menu_today.dessert or "Ingen" }}</li>
+      </ul>
+    </article>
+
+    <article class="cook-card">
+      <h2>Dagens belastning (lunch)</h2>
+      <p><strong>Boende totalt:</strong> {{ vm.total_residents_today }}</p>
+      <p><strong>Specialkoster:</strong> {{ vm.total_specials_today }}</p>
+      <p><strong>Normalkost:</strong> {{ vm.total_normal_today }}</p>
+    </article>
+
+    <article class="cook-card">
+      <h2>Snabbnavigation</h2>
+      <div class="cook-dashboard__links" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a href="{{ vm.links.kitchen_grid }}" class="yp-button">Veckovy – kök</a>
+        <a href="{{ vm.links.planera_week }}" class="yp-button">Planera vecka</a>
+        <a href="{{ vm.links.planera_day }}" class="yp-button">Planera idag</a>
+        <a href="{{ vm.links.week_report }}" class="yp-button">Veckorapport</a>
+      </div>
+    </article>
+  </section>
+</section>
+{% endblock %}

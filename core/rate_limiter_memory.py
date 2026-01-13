@@ -1,5 +1,6 @@
 """In-process memory fixed-window rate limiter for tests.
 Not for production (single-process only)."""
+
 from __future__ import annotations
 
 import time
@@ -10,7 +11,7 @@ from .rate_limiter import RateLimiter, window_start
 class MemoryRateLimiter(RateLimiter):  # type: ignore[misc]
     def __init__(self) -> None:
         # key -> (window_start, count)
-        self._buckets: dict[str, tuple[int,int]] = {}
+        self._buckets: dict[str, tuple[int, int]] = {}
 
     def allow(self, key: str, quota: int, per_seconds: int) -> bool:
         ws = window_start(size=per_seconds)
@@ -33,5 +34,6 @@ class MemoryRateLimiter(RateLimiter):  # type: ignore[misc]
         if now >= end:
             return 0
         return end - now
+
 
 __all__ = ["MemoryRateLimiter"]

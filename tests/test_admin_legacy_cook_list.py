@@ -25,7 +25,9 @@ def _ensure_tenant(name: str) -> int:
         t = db.query(Tenant).filter_by(name=name).first()
         if not t:
             t = Tenant(name=name)
-            db.add(t); db.commit(); db.refresh(t)
+            db.add(t)
+            db.commit()
+            db.refresh(t)
         return t.id
     finally:
         db.close()
@@ -36,8 +38,16 @@ def _ensure_user(email: str, role: str, tenant_id: int) -> None:
     try:
         u = db.query(User).filter_by(email=email).first()
         if not u:
-            u = User(tenant_id=tenant_id, email=email, password_hash=generate_password_hash("pw"), role=role, unit_id=None)
-            db.add(u); db.commit(); db.refresh(u)
+            u = User(
+                tenant_id=tenant_id,
+                email=email,
+                password_hash=generate_password_hash("pw"),
+                role=role,
+                unit_id=None,
+            )
+            db.add(u)
+            db.commit()
+            db.refresh(u)
     finally:
         db.close()
 
@@ -48,7 +58,10 @@ def _login(client, email: str):
 
 def _enable_flag(client, tenant_id: int):
     # superuser toggles flag for specified tenant
-    rv = client.post("/admin/feature_flags", json={"name": "allow_legacy_cook_create", "enabled": True, "tenant_id": tenant_id})
+    rv = client.post(
+        "/admin/feature_flags",
+        json={"name": "allow_legacy_cook_create", "enabled": True, "tenant_id": tenant_id},
+    )
     assert rv.status_code == 200
 
 
@@ -65,10 +78,14 @@ def test_list_legacy_cook_requires_admin(client):
     # login as viewer -> 403
     _login(client, "viewer1@example.com")
     r = client.get("/admin/flags/legacy-cook")
+    # Admin endpoints now return RFC7807 ProblemDetails for errors
     assert r.status_code == 403
     body = r.get_json()
-    # Central forbidden handler returns generic message when roles tuple used; required_role may be absent
-    assert body["ok"] is False and body["error"] == "forbidden"
+    assert isinstance(body, dict)
+    assert body.get("title") == "Forbidden"
+    assert body.get("status") == 403
+    # Detail may be generic when roles tuple used; ensure it's present as a string
+    assert isinstance(body.get("detail"), str)
 
 
 def test_list_legacy_cook_happy(client):

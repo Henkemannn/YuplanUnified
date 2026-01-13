@@ -1,0 +1,55 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="container py-3" style="max-width:880px;">
+  <h2 class="mb-3" style="font-weight:700;">{% if recipe %}Redigera recept{% else %}Nytt recept{% endif %}</h2>
+  <form method="post" class="vstack gap-3">
+    <div>
+      <label class="form-label">Titel *</label>
+      <input name="title" class="form-control" required value="{{ recipe.title if recipe }}">
+    </div>
+    <div class="row g-3">
+      <div class="col-sm-4">
+        <label class="form-label">Källa / URL</label>
+        <input name="source_url" class="form-control" value="{{ recipe.source_url if recipe }}">
+      </div>
+      <div class="col-sm-4">
+        <label class="form-label">Basportioner</label>
+        <input type="number" name="base_portions" class="form-control" value="{{ recipe.base_portions if recipe }}">
+      </div>
+      <div class="col-sm-4">
+        <label class="form-label">Metodtyp</label>
+        <select name="method_type" class="form-select">
+          {% set mt = recipe.method_type if recipe else 'base' %}
+          {% for val,label in [('base','Bas'),('technique','Teknik'),('component','Komponent'),('garnish','Garnityr'),('generic','Generell')] %}
+            <option value="{{ val }}" {% if mt==val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div>
+      <label class="form-label">Kategorier (kommaseparerade)</label>
+      <input name="categories" class="form-control" placeholder="t.ex. fisk, bakverk" value="{{ recipe.categories if recipe }}">
+    </div>
+    <div>
+      <label class="form-label">Fritext / Metod</label>
+      <textarea name="raw_text" rows="10" class="form-control" placeholder="Klistra in recept eller steg här...">{{ recipe.raw_text if recipe }}</textarea>
+    </div>
+    <div>
+      <label class="form-label">Noteringar (intern)</label>
+      <textarea name="notes" rows="3" class="form-control">{{ recipe.notes if recipe }}</textarea>
+    </div>
+    {% if not recipe %}
+    <div>
+      <label class="form-label">(Valfritt) Knyt direkt til rett</label>
+      <input name="link_dish_id" class="form-control" placeholder="Dish ID">
+      <div class="form-text">Fyll i ID hvis du redan vet vilken rett dette gjelder.</div>
+    </div>
+    {% endif %}
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary px-4">Spara</button>
+      <a href="{{ url_for('recipe_list') }}" class="btn btn-outline-secondary">Avbryt</a>
+      {% if recipe %}<a href="{{ url_for('recipe_detail', recipe_id=recipe.id) }}" class="btn btn-link">Tilbake</a>{% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

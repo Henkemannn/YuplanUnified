@@ -33,6 +33,7 @@ def parse_docx(data: bytes) -> DOCXImportResult:
 
     # python-docx expects a path or a file-like; wrap bytes in BytesIO.
     from io import BytesIO
+
     document = docx.Document(BytesIO(data))  # type: ignore[attr-defined]
     if not document.tables:
         return DOCXImportResult(rows=[], headers=[])

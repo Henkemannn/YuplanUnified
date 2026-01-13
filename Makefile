@@ -6,7 +6,7 @@ PY ?= python
 PORT ?= 5000
 HOST ?= 127.0.0.1
 
-.PHONY: install dev test lint format spectral openapi smoke ci ready clean
+.PHONY: install dev test lint format spectral openapi smoke ci ready clean smoke-ps login-ps
 
 install:
 	$(PY) -m pip install --upgrade pip
@@ -41,10 +41,44 @@ smoke:
 		--data @/tmp/menu.json -o /tmp/smoke.json
 	test -s /tmp/smoke.json && echo "smoke ok"
 
+# Windows/PowerShell-friendly smoke against staging (requires pwsh in PATH)
+smoke-ps:
+	pwsh -File scripts/smoke.ps1
+
+login-ps:
+	pwsh -File scripts/login.ps1
+
 ci: lint test openapi spectral smoke
 
 ready:
 	$(PY) scripts/check_release_ready.py
 
+seed-varberg:
+	DATABASE_URL="${DATABASE_URL}" $(PY) -m scripts.seed_varberg_midsommar || exit 1
+
 clean:
 	rm -f openapi.json
+
+# --- Release helpers ---
+SHELL := /bin/bash
+VERSION_FILE := VERSION
+
+.PHONY: check-clean
+check-clean:
+	@test -z "$$(git status --porcelain)" || { echo "Working tree not clean"; exit 1; }
+
+.PHONY: release-major release-minor release-patch
+release-major: KIND=major
+release-minor: KIND=minor
+release-patch: KIND=patch
+
+release-major release-minor release-patch: check-clean
+	@set -e; \
+	new="$$( $(PY) tools/bump_version.py $(KIND) )"; \
+	echo "New version: $$new"; \
+	git add $(VERSION_FILE); \
+	git commit -m "chore(release): bump version to $$new"; \
+	git tag "v$$new"; \
+	git push; \
+	git push --tags; \
+	echo "Tag v$$new pushed. Release workflow will run." 

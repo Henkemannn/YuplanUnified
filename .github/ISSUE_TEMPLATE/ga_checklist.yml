@@ -1,0 +1,79 @@
+name: "GA checklist (v1.0.0)"
+description: "Release checklist to flip from RC → GA with clean typing and RFC7807 coverage"
+title: "GA checklist (v1.0.0)"
+labels: ["release", "GA", "checklist"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # ✅ GA checklist (v1.0.0)
+        **Goal:** Flip from RC → GA with zero typing noise, verified RFC7807 coverage, and clean CI.
+
+  - type: checkboxes
+    id: typing
+    attributes:
+      label: "🧩 Typing & Lint"
+      options:
+        - label: "Zero mypy errors in `core.*_api`"
+        - label: "Remove temporary `# type: ignore` lines (narrow remaining to specific error codes)"
+        - label: "Re-enable next strict pockets: `core.auth`, `core.ui_blueprint`"
+        - label: "Verify decorator wrappers use `ParamSpec` / `Concatenate`"
+        - label: "Ruff enabled in pre-commit and CI (`ruff check .` passes clean)"
+
+  - type: checkboxes
+    id: rfc7807
+    attributes:
+      label: "⚙️ Error Model (RFC7807)"
+      options:
+        - label: "All 4xx/5xx responses return `application/problem+json`"
+        - label: "Example 415 path verified in tests (see `test_rfc7807_smoke.py`)"
+        - label: "README updated with problem+json examples and field definitions"
+
+  - type: checkboxes
+    id: release
+    attributes:
+      label: "🚀 Build & Release"
+      options:
+        - label: "RC validation complete for `v1.0.0-rc1`"
+        - label: "Release tag v1.0.0 published successfully (GA)"
+        - label: "Release notes finalized (see `RELEASE_NOTES.md`)"
+        - label: "CI workflow passes (Ruff, mypy, tests)"
+
+  - type: checkboxes
+    id: docs
+    attributes:
+      label: "📚 Docs & Communication"
+      options:
+        - label: "README includes “Strict typing pockets (RC1)” table"
+        - label: "CHANGELOG updated with `[1.0.0] — 2025-10-10`"
+        - label: "GA release notes committed and linked in release body"
+        - label: "Quickstart and contributor docs mention how to expand strict pockets"
+
+  - type: checkboxes
+    id: quality
+    attributes:
+      label: "🧪 Quality Gates"
+      options:
+        - label: "Pre-commit hook runs Ruff + mypy"
+        - label: "CI workflow enforces zero lint/type errors"
+        - label: "Problem+json smoke test included in test suite"
+
+  - type: checkboxes
+    id: nice
+    attributes:
+      label: "🧭 Optional / Nice-to-Have"
+      options:
+        - label: "Add OpenAPI examples for `task create/update`"
+        - label: "Mark legacy `done` field as `readOnly: true` in spec"
+        - label: "Document error envelope for custom middleware"
+        - label: "Seed examples for tenant/module setup in README"
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Notes"
+      description: "Links, owners, timelines"
+      placeholder: "Owner, target dates, and references"
+    validations:
+      required: false

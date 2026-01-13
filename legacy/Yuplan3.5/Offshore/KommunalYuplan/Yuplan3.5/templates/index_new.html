@@ -1,0 +1,149 @@
+{% extends "base_new.html" %}
+{% block title %}Yuplan - Inloggning{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 500px; margin: 3rem auto;">
+    <div class="text-center mb-4">
+        <i class="fas fa-utensils" style="font-size: 3rem; color: var(--primary-color); margin-bottom: 1rem;"></i>
+        <h1>Välkommen till Yuplan</h1>
+        <p class="text-secondary">Hantera kostregistrering enkelt och effektivt</p>
+    </div>
+
+    <!-- Admin Login -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-user-shield"></i>
+                Administratörsinloggning
+            </h3>
+        </div>
+        
+        <form method="post" action="/admin">
+            <div class="form-group">
+                <label for="lösenord" class="form-label">Lösenord</label>
+                <input type="password" 
+                       id="lösenord" 
+                       name="lösenord" 
+                       class="form-control" 
+                       placeholder="Ange administratörslösenord" 
+                       required 
+                       autofocus>
+            </div>
+            
+            {% if fel %}
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{ fel }}
+            </div>
+            {% endif %}
+            
+            <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+                <i class="fas fa-sign-in-alt"></i>
+                Logga in som administratör
+            </button>
+        </form>
+    </div>
+
+    <!-- Password Change -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-key"></i>
+                Byt administratörslösenord
+            </h3>
+        </div>
+        
+        <form method="post" action="/byt_losenord">
+            <div class="form-group">
+                <label for="nuvarande_losenord" class="form-label">Nuvarande lösenord</label>
+                <input type="password" 
+                       id="nuvarande_losenord" 
+                       name="nuvarande_losenord" 
+                       class="form-control" 
+                       placeholder="Ange nuvarande lösenord" 
+                       required>
+            </div>
+            
+            <div class="form-group">
+                <label for="nytt_losenord" class="form-label">Nytt lösenord</label>
+                <input type="password" 
+                       id="nytt_losenord" 
+                       name="nytt_losenord" 
+                       class="form-control" 
+                       placeholder="Ange nytt lösenord" 
+                       required>
+            </div>
+            
+            <div class="form-group">
+                <label for="nytt_losenord2" class="form-label">Upprepa nytt lösenord</label>
+                <input type="password" 
+                       id="nytt_losenord2" 
+                       name="nytt_losenord2" 
+                       class="form-control" 
+                       placeholder="Upprepa det nya lösenordet" 
+                       required>
+            </div>
+            
+            {% if losenord_fel %}
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{ losenord_fel }}
+            </div>
+            {% endif %}
+            
+            {% if losenord_ok %}
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                {{ losenord_ok }}
+            </div>
+            {% endif %}
+            
+            <button type="submit" class="btn btn-secondary btn-lg" style="width: 100%;">
+                <i class="fas fa-sync-alt"></i>
+                Byt lösenord
+            </button>
+        </form>
+    </div>
+
+    <!-- Quick Links för inloggade användare -->
+    <div class="text-center mt-4">
+        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <a href="/avdelning_login" class="btn btn-outline">
+                <i class="fas fa-users"></i>
+                Avdelningsinloggning
+            </a>
+            <a href="/veckovy" class="btn btn-outline">
+                <i class="fas fa-calendar-week"></i>
+                Veckovy
+            </a>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+    // Password strength indicator
+    document.getElementById('nytt_losenord').addEventListener('input', function() {
+        const password = this.value;
+        const strength = calculatePasswordStrength(password);
+        // Lägg till visuell indikator för lösenordsstyrka
+    });
+
+    function calculatePasswordStrength(password) {
+        let score = 0;
+        if (password.length >= 8) score++;
+        if (/[A-Z]/.test(password)) score++;
+        if (/[a-z]/.test(password)) score++;
+        if (/[0-9]/.test(password)) score++;
+        if (/[^A-Za-z0-9]/.test(password)) score++;
+        return score;
+    }
+
+    // Auto-focus på första fältet
+    document.addEventListener('DOMContentLoaded', function() {
+        const firstInput = document.querySelector('input[type="password"]');
+        if (firstInput) firstInput.focus();
+    });
+</script>
+{% endblock %}
+{% endblock %}

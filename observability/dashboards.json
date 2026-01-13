@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "variables": {
+    "service.name": {"default": "api", "description": "Service label filter"},
+    "deployment.environment": {"default": "prod", "description": "Environment label filter"}
+  },
+  "panels": [
+    {
+      "id": "latency_p95",
+      "title": "API Latency p95 (ms)",
+      "metric": "api.request_latency_ms",
+      "stat": "p95",
+      "window": "5m",
+      "yUnit": "ms",
+      "thresholds": [
+        {"color": "green", "lte": 300},
+        {"color": "yellow", "lte": 450},
+        {"color": "red", "gt": 450}
+      ],
+      "queryHint": "# PromQL example (histogram):\n# histogram_quantile(0.95, sum by (le)(rate(api_request_latency_ms_bucket{service=\"$service.name\",environment=\"$deployment.environment\"}[5m])))\n# OTLP/SQL-esque: SELECT p95(latency_ms) FROM api_request_latency_ms WHERE service.name=$service.name AND deployment.environment=$deployment.environment AND ts > now()-5m",
+      "notes": "Assumes histogram buckets exported as api_request_latency_ms_bucket or OTLP histogram. Adapt label keys: service/service.name, environment/deployment.environment." 
+    },
+    {
+      "id": "rate_5xx",
+      "title": "5xx Error Rate (%)",
+      "metric": "http.responses",
+      "stat": "rate_percent",
+      "window": "5m",
+      "yUnit": "%",
+      "thresholds": [
+        {"color": "green", "lte": 1},
+        {"color": "yellow", "lte": 2},
+        {"color": "red", "gt": 2}
+      ],
+      "queryHint": "# PromQL: (sum(rate(http_requests_total{status=~\"5..\",service=\"$service.name\",environment=\"$deployment.environment\"}[5m])) / sum(rate(http_requests_total{service=\"$service.name\",environment=\"$deployment.environment\"}[5m])))*100",
+      "notes": "If using OTLP metrics, map to counter with status_code label; aggregator: 5xx / total * 100." 
+    },
+    {
+      "id": "rate_429",
+      "title": "429 Rate / Count",
+      "metric": "http.responses",
+      "stat": "rate_per_second",
+      "window": "5m",
+      "yUnit": "rps",
+      "thresholds": [
+        {"color": "green", "lte": 0.05},
+        {"color": "yellow", "lte": 0.1},
+        {"color": "red", "gt": 0.1}
+      ],
+      "queryHint": "# PromQL (rate of 429 responses): sum(rate(http_requests_total{status=\"429\",service=\"$service.name\",environment=\"$deployment.environment\"}[5m]))\n# For percentage: (429_rate / total_rate)*100",
+      "notes": "Thresholds depend on product tolerance; adjust per endpoint family if needed." 
+    },
+    {
+      "id": "rps",
+      "title": "Request Rate (RPS)",
+      "metric": "api.requests",
+      "stat": "rate_per_second",
+      "window": "5m",
+      "yUnit": "rps",
+      "thresholds": [
+        {"color": "green", "lte": 200},
+        {"color": "yellow", "lte": 400},
+        {"color": "red", "gt": 400}
+      ],
+      "queryHint": "# PromQL: sum(rate(api_requests_total{service=\"$service.name\",environment=\"$deployment.environment\"}[5m]))\n# OTLP: SELECT rate_sum(api.requests, 5m) WHERE service.name=$service.name AND deployment.environment=$deployment.environment",
+      "notes": "Capacity planning: watch for sustained elevation vs baseline; adjust thresholds for scale." 
+    },
+    {
+      "id": "registrering_rate_1m",
+      "title": "Registreringar per minut",
+      "metric": "yuplan.events_total",
+      "stat": "rate_per_minute",
+      "window": "1m",
+      "yUnit": "events/min",
+      "queryHint": "# PromQL: sum(rate(yuplan_events_total{action=\"registrering\",service=\"$service.name\",environment=\"$deployment.environment\"}[1m]))",
+      "notes": "Shows short-term activity bursts for registration events (action=registrering)."
+    },
+    {
+      "id": "registrering_top_avd_24h",
+      "title": "Registreringar per avdelning (24h)",
+      "metric": "yuplan.events_total",
+      "stat": "increase_24h",
+      "window": "24h",
+      "yUnit": "count",
+      "queryHint": "# PromQL: topk(5, sum by (avdelning)(increase(yuplan_events_total{action=\"registrering\",service=\"$service.name\",environment=\"$deployment.environment\"}[24h])))",
+      "notes": "Top 5 departments by registration volume last 24h."
+    }
+  ],
+  "notes": "This is a vendor-agnostic starter layout. Map metric names and label keys to your stack (Prometheus, Grafana Cloud, OTLP backend, etc.)."
+}

@@ -4,7 +4,9 @@ from core.limit_registry import get_limit, refresh
 
 
 def test_tenant_override_beats_default():
-    refresh({"tenant:1:export_csv": {"quota": 2, "per": 60}, "export_csv": {"quota": 9, "per": 60}}, {})
+    refresh(
+        {"tenant:1:export_csv": {"quota": 2, "per": 60}, "export_csv": {"quota": 9, "per": 60}}, {}
+    )
     ld, src = get_limit(1, "export_csv")
     assert src == "tenant" and ld["quota"] == 2
 

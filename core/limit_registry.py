@@ -20,33 +20,31 @@ Clamps:
 
 Thread-safety: simple module-level dicts; acceptable for current single-process usage.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
 from json import loads
-from typing import Any, Literal, TypedDict
-
-try:  # Python <3.11 fallback
-    from typing import NotRequired  # type: ignore
-except Exception:  # pragma: no cover
-    from typing import NotRequired  # type: ignore
+from typing import Any, Literal, NotRequired, TypedDict
 
 from . import metrics as metrics_mod
 
 
 class LimitDefinition(TypedDict, total=False):
-        """Definition of a rate limit window.
+    """Definition of a rate limit window.
 
-        Fields:
-            quota: number of events per period (required)
-            per_seconds: length of window (required)
-            burst: token bucket capacity (optional, defaults to quota when using token bucket)
-            strategy: limiting algorithm ("fixed" or "token_bucket"). Optional so existing env JSON without it still parses.
-        """
-        quota: int
-        per_seconds: int
-        burst: NotRequired[int]
-        strategy: NotRequired[Literal["fixed", "token_bucket"]]
+    Fields:
+        quota: number of events per period (required)
+        per_seconds: length of window (required)
+        burst: token bucket capacity (optional, defaults to quota when using token bucket)
+        strategy: limiting algorithm ("fixed" or "token_bucket"). Optional so existing env JSON without it still parses.
+    """
+
+    quota: int
+    per_seconds: int
+    burst: NotRequired[int]
+    strategy: NotRequired[Literal["fixed", "token_bucket"]]
+
 
 _TenantMap = dict[str, LimitDefinition]
 _DefaultMap = dict[str, LimitDefinition]
@@ -57,7 +55,11 @@ _default_limits: _DefaultMap = {}
 _FALLBACK_QUOTA = 5
 _FALLBACK_PER = 60
 _FALLBACK_BURST = 5
-_FALLBACK: LimitDefinition = {"quota": _FALLBACK_QUOTA, "per_seconds": _FALLBACK_PER, "burst": _FALLBACK_BURST}
+_FALLBACK: LimitDefinition = {
+    "quota": _FALLBACK_QUOTA,
+    "per_seconds": _FALLBACK_PER,
+    "burst": _FALLBACK_BURST,
+}
 _MAX_WINDOW = 86400
 
 
@@ -156,6 +158,7 @@ def get_limit(tenant_id: int, name: str) -> tuple[LimitDefinition, str]:
     metrics_mod.increment("rate_limit.lookup", {"name": name, "source": "fallback"})
     return _FALLBACK, "fallback"
 
+
 __all__ = [
     "LimitDefinition",
     "parse_limits",
@@ -164,14 +167,17 @@ __all__ = [
     "load_from_env",
 ]
 
+
 # Listing helpers for inspection (not performance critical)
 def list_default_names() -> list[str]:
     return sorted({k for k in _default_limits})
+
 
 def list_tenant_names(tenant_id: int) -> list[str]:
     prefix = f"tenant:{tenant_id}:"
     names = [k.split(":", 2)[2] for k in _tenant_limits if k.startswith(prefix)]
     return sorted(set(names))
+
 
 def set_override(tenant_id: int, name: str, quota: int, per_seconds: int) -> LimitDefinition:
     """Create or update a tenant-specific override (clamped)."""
@@ -179,9 +185,11 @@ def set_override(tenant_id: int, name: str, quota: int, per_seconds: int) -> Lim
     _tenant_limits[f"tenant:{tenant_id}:{name}"] = ld
     return ld
 
+
 def delete_override(tenant_id: int, name: str) -> bool:
     """Delete a tenant override; return True if existed."""
     key = f"tenant:{tenant_id}:{name}"
     return _tenant_limits.pop(key, None) is not None
 
-__all__ += ["list_default_names","list_tenant_names","set_override","delete_override"]
+
+__all__ += ["list_default_names", "list_tenant_names", "set_override", "delete_override"]

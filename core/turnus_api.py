@@ -8,20 +8,23 @@ from .turnus_service import TurnusService
 bp = Blueprint("turnus_api", __name__, url_prefix="/turnus")
 service = TurnusService()
 
+
 def current_tenant_id():
     tid = session.get("tenant_id")
     if not tid:
         raise ValueError("tenant not in session")
     return tid
 
+
 @bp.route("/templates", methods=["GET"])
-@require_roles("admin","superuser")
+@require_roles("admin", "superuser")
 def list_templates():
     tid = current_tenant_id()
     return jsonify(service.get_templates(tid))
 
+
 @bp.route("/templates", methods=["POST"])
-@require_roles("admin","superuser")
+@require_roles("admin", "superuser")
 def create_template():
     tid = current_tenant_id()
     data = request.get_json() or {}
@@ -32,8 +35,9 @@ def create_template():
     tpl_id = service.create_template(tid, name, pattern_type)
     return jsonify({"id": tpl_id})
 
+
 @bp.route("/import", methods=["POST"])
-@require_roles("admin","superuser")
+@require_roles("admin", "superuser")
 def import_shifts():
     tid = current_tenant_id()
     data = request.get_json() or {}
@@ -46,8 +50,9 @@ def import_shifts():
     result = service.import_shifts(tid, template_id, shifts)
     return jsonify(result)
 
+
 @bp.route("/slots", methods=["GET"])
-@require_roles("admin","superuser","unit_portal")
+@require_roles("admin", "superuser", "unit_portal")
 def query_slots():
     tid = current_tenant_id()
     df = request.args.get("from")

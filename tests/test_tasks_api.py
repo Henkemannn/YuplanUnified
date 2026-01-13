@@ -19,11 +19,13 @@ def auth_session(client):
     """Lightweight helper to set session-like context.
     Assumes app uses cookie-based session; we simulate via test client context.
     """
+
     def _login(role: str = "admin", tenant_id: int = 1, user_id: int = 100):
         with client.session_transaction() as sess:  # type: ignore[attr-defined]
             sess["role"] = role
             sess["tenant_id"] = tenant_id
             sess["user_id"] = user_id
+
     return _login
 
 
@@ -64,7 +66,9 @@ def test_create_task_missing_title(client, auth_session):
     resp = client.post("/tasks/", json={})
     assert resp.status_code in (400, 422)
     body = resp.get_json()
-    assert body["ok"] is False and "error" in body
+    assert body.get("status") in (400, 422) and body.get("type", "").startswith(
+        "https://example.com/errors/"
+    )
 
 
 # GIVEN: a valid task
@@ -77,7 +81,7 @@ def test_update_task_invalid_status(client, auth_session, bad):
     resp = client.patch(f"/tasks/{tid}", json={"status": bad})
     assert resp.status_code in (400, 422)
     body = resp.get_json()
-    assert body["ok"] is False
+    assert body.get("status") in (400, 422)
 
 
 # GIVEN: task belongs to tenant 1
@@ -91,7 +95,7 @@ def test_update_task_wrong_tenant_forbidden(client, auth_session):
     resp = client.patch(f"/tasks/{tid}", json={"status": "doing"})
     assert resp.status_code == 403
     body = resp.get_json()
-    assert body["ok"] is False
+    assert body.get("status") == 403
 
 
 # GIVEN: viewer role lacks permission
@@ -104,7 +108,7 @@ def test_update_task_role_forbidden(client, auth_session):
     resp = client.patch(f"/tasks/{tid}", json={"status": "done"})
     assert resp.status_code == 403
     body = resp.get_json()
-    assert body["ok"] is False
+    assert body.get("status") == 403 and body.get("type", " ").endswith("/forbidden")
 
 
 # NEW: unknown task id returns not_found envelope
@@ -113,7 +117,7 @@ def test_update_unknown_task_not_found(client, auth_session):
     resp = client.patch("/tasks/999999", json={"status": "done"})
     assert resp.status_code == 404
     body = resp.get_json()
-    assert body["ok"] is False and body.get("error") == "not_found"
+    assert body.get("status") == 404
 
 
 # NEW: tenant isolation list (tenant B cannot see tenant A tasks)
@@ -135,7 +139,7 @@ def test_create_task_role_forbidden(client, auth_session):
     resp = client.post("/tasks/", json={"title": "Z"})
     assert resp.status_code == 403
     body = resp.get_json()
-    assert body["ok"] is False and body.get("error") == "forbidden"
+    assert body.get("status") == 403
 
 
 # NEW: bad status type (int) -> validation error
@@ -145,5 +149,4 @@ def test_update_task_bad_status_type(client, auth_session):
     resp = client.patch(f"/tasks/{tid}", json={"status": 123})
     assert resp.status_code in (400, 422)
     body = resp.get_json()
-    assert body["ok"] is False
-
+    assert body.get("status") in (400, 422)

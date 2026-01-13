@@ -1,0 +1,35 @@
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-key"></i> Avdelningsinloggning</h3>
+    </div>
+    <form method="post">
+        <input type="hidden" name="spara_avd_login" value="1">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th><i class="fas fa-building"></i> Avdelning</th>
+                    <th><i class="fas fa-user"></i> Användarnamn</th>
+                    <th><i class="fas fa-lock"></i> Nytt lösenord</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for avd in avdelningar %}
+                <tr>
+                    <td><strong>{{ avd.namn }}</strong></td>
+                    <td>
+                        <input type="hidden" name="avd_login_id" value="{{ avd.id }}">
+                        <input type="text" name="anvandarnamn_{{ avd.id }}" value="{{ avd.anvandarnamn or '' }}" class="form-control" style="max-width: 150px;">
+                    </td>
+                    <td>
+                        <input type="password" name="losenord_{{ avd.id }}" placeholder="Nytt lösenord" class="form-control" style="max-width: 150px;">
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save"></i> Spara inloggning
+        </button>
+        <small class="text-secondary d-block mt-2">Lämna lösenordsfältet tomt om du inte vill ändra lösenordet.</small>
+    </form>
+</div>

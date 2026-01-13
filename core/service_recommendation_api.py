@@ -9,8 +9,9 @@ from .auth import require_roles
 
 bp = Blueprint("service_recommendation", __name__, url_prefix="/service")
 
+
 @bp.get("/recommendation")
-@require_roles("superuser","admin","cook","unit_portal")
+@require_roles("superuser", "admin", "cook", "unit_portal")
 def get_recommendation() -> RecommendationResponse | ErrorResponse:
     tenant_id = session.get("tenant_id")
     if not tenant_id:
@@ -31,15 +32,18 @@ def get_recommendation() -> RecommendationResponse | ErrorResponse:
     total_protein = None
     if protein_per_100g is not None:
         total_protein = (protein_per_100g / 100.0) * total_gram
-    return cast(RecommendationResponse, {
-        "category": category,
-        "guest_count": guest_count_int,
-        "recommended_g_per_guest": blended.recommended_g_per_guest,
-        "total_gram": total_gram,
-        "total_protein": total_protein,
-        "source": blended.source,
-        "sample_size": blended.sample_size,
-        "baseline_used": blended.baseline_used,
-        "history_mean_raw": blended.history_mean_raw,
-        "history_mean_used": blended.history_mean_used,
-    })
+    return cast(
+        RecommendationResponse,
+        {
+            "category": category,
+            "guest_count": guest_count_int,
+            "recommended_g_per_guest": blended.recommended_g_per_guest,
+            "total_gram": total_gram,
+            "total_protein": total_protein,
+            "source": blended.source,
+            "sample_size": blended.sample_size,
+            "baseline_used": blended.baseline_used,
+            "history_mean_raw": blended.history_mean_raw,
+            "history_mean_used": blended.history_mean_used,
+        },
+    )

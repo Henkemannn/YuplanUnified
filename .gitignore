@@ -1,3 +1,8 @@
+# Legacy Rigplan reference (keep locally, ignore in repo)
+Rigplan1.0/
+Rigplan1.0.zip
+Rigplan1.0*
+legacy/Rigplan1.0
 # Python
 __pycache__/
 *.py[cod]
@@ -6,6 +11,7 @@ __pycache__/
 
 # Virtual environments
 .venv/
+/.venv*/
 venv/
 env/
 
@@ -53,10 +59,21 @@ node_modules/
 # Generated exports / snapshots
 openapi_snapshot_*.json
 requirements.freeze.txt
+specs/openapi.current.json
+specs/openapi.diff.txt
+specs/openapi.diff.json
 
 # Bundles / archives
 *.bundle
 *.zip
+# Sensitive / secrets
+.env
+.env.*
+secrets.*
+credentials.*
+
+# Coverage dir
+coverage/
 # Python
 __pycache__/
 *.pyc

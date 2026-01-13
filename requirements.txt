@@ -8,5 +8,27 @@ openpyxl==3.1.5
 pytest==8.3.2
 pytest-cov==5.0.0
 openapi-spec-validator==0.7.1
+PyYAML>=6.0
+whitenoise>=6.5.0
+Flask==3.0.3
+SQLAlchemy==2.0.32
+alembic==1.13.2
+python-dotenv==1.0.1
+python-slugify==8.0.4
+python-docx==1.1.2
+openpyxl==3.1.5
+pytest==8.3.2
+pytest-cov==5.0.0
+openapi-spec-validator==0.7.1
+PyYAML>=6.0
+whitenoise>=6.5.0
 ruff==0.6.3
 mypy==1.11.2
+gunicorn==22.0.0
+# Bump to a widely available wheel series to support Windows/Python 3.13 locally
+psycopg[binary]==3.2.12
+# Explicit pins for Windows wheels used by tests
+# python-docx requires lxml; ensure a version with prebuilt wheels
+lxml>=5.3.0
+# openapi-spec-validator -> referencing -> rpds-py; ensure binary distribution is available
+rpds-py>=0.13.2

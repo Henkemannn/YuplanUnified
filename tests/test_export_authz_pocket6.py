@@ -1,10 +1,11 @@
 """Export API authz tests (P6.3 PR C)."""
 
+
 def test_export_unauthorized_no_session(client_no_tenant):
     r = client_no_tenant.get("/export/notes.csv")
     assert r.status_code == 401
     body = r.get_data(as_text=True)  # CSV endpoints return JSON error envelope via handler
-    assert '"error":"unauthorized"' in body
+    assert '"status":401' in body and "/unauthorized" in body
 
 
 def test_export_forbidden_viewer(client_admin):
@@ -12,7 +13,7 @@ def test_export_forbidden_viewer(client_admin):
     r = client_admin.get("/export/notes.csv", headers={"X-User-Role": "viewer", "X-Tenant-Id": "1"})
     assert r.status_code == 403
     txt = r.get_data(as_text=True)
-    assert '"error":"forbidden"' in txt and '"required_role":"editor"' in txt
+    assert '"status":403' in txt and "/forbidden" in txt and '"required_role":"editor"' in txt
 
 
 def test_export_happy_editor(client_admin):

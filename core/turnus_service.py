@@ -8,6 +8,7 @@ from .models import ShiftSlot, ShiftTemplate
 
 ISO_FMT = "%Y-%m-%dT%H:%M:%S"
 
+
 def parse_ts(val: str) -> datetime:
     # Accept with or without seconds
     try:
@@ -18,11 +19,17 @@ def parse_ts(val: str) -> datetime:
         # Suppress original stack to make validation error cleaner
         raise ValueError("invalid datetime format") from None
 
+
 class TurnusService:
     def get_templates(self, tenant_id: int) -> list[dict[str, Any]]:
         db = get_session()
         try:
-            rows = db.query(ShiftTemplate).filter_by(tenant_id=tenant_id).order_by(ShiftTemplate.id).all()
+            rows = (
+                db.query(ShiftTemplate)
+                .filter_by(tenant_id=tenant_id)
+                .order_by(ShiftTemplate.id)
+                .all()
+            )
             return [{"id": r.id, "name": r.name, "pattern_type": r.pattern_type} for r in rows]
         finally:
             db.close()
@@ -30,7 +37,9 @@ class TurnusService:
     def create_template(self, tenant_id: int, name: str, pattern_type: str) -> int:
         db = get_session()
         try:
-            existing: ShiftTemplate | None = db.query(ShiftTemplate).filter_by(tenant_id=tenant_id, name=name).first()
+            existing: ShiftTemplate | None = (
+                db.query(ShiftTemplate).filter_by(tenant_id=tenant_id, name=name).first()
+            )
             if existing is not None:
                 return int(existing.id)
             tpl = ShiftTemplate(tenant_id=tenant_id, name=name, pattern_type=pattern_type)
@@ -41,7 +50,9 @@ class TurnusService:
         finally:
             db.close()
 
-    def import_shifts(self, tenant_id: int, template_id: int, shifts: list[dict[str, Any]]) -> dict[str, int]:
+    def import_shifts(
+        self, tenant_id: int, template_id: int, shifts: list[dict[str, Any]]
+    ) -> dict[str, int]:
         db = get_session()
         inserted = 0
         skipped = 0
@@ -64,11 +75,30 @@ class TurnusService:
                     skipped += 1
                     continue
                 # duplicate check
-                exists = db.query(ShiftSlot).filter_by(tenant_id=tenant_id, unit_id=unit_id, start_ts=start_ts, end_ts=end_ts, role=role).first()
+                exists = (
+                    db.query(ShiftSlot)
+                    .filter_by(
+                        tenant_id=tenant_id,
+                        unit_id=unit_id,
+                        start_ts=start_ts,
+                        end_ts=end_ts,
+                        role=role,
+                    )
+                    .first()
+                )
                 if exists:
                     skipped += 1
                     continue
-                slot = ShiftSlot(tenant_id=tenant_id, unit_id=unit_id, template_id=template_id, start_ts=start_ts, end_ts=end_ts, role=role, status="planned", notes=None)
+                slot = ShiftSlot(
+                    tenant_id=tenant_id,
+                    unit_id=unit_id,
+                    template_id=template_id,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                    role=role,
+                    status="planned",
+                    notes=None,
+                )
                 db.add(slot)
                 seen.add(key)
                 inserted += 1
@@ -77,25 +107,38 @@ class TurnusService:
         finally:
             db.close()
 
-    def query_slots(self, tenant_id: int, date_from: date, date_to: date, unit_ids: list[int] | None=None, role: str | None=None) -> list[dict[str, Any]]:
+    def query_slots(
+        self,
+        tenant_id: int,
+        date_from: date,
+        date_to: date,
+        unit_ids: list[int] | None = None,
+        role: str | None = None,
+    ) -> list[dict[str, Any]]:
         db = get_session()
         try:
-            q = db.query(ShiftSlot).filter(ShiftSlot.tenant_id == tenant_id, ShiftSlot.start_ts >= datetime.combine(date_from, datetime.min.time()), ShiftSlot.start_ts <= datetime.combine(date_to, datetime.max.time()))
+            q = db.query(ShiftSlot).filter(
+                ShiftSlot.tenant_id == tenant_id,
+                ShiftSlot.start_ts >= datetime.combine(date_from, datetime.min.time()),
+                ShiftSlot.start_ts <= datetime.combine(date_to, datetime.max.time()),
+            )
             if unit_ids:
                 q = q.filter(ShiftSlot.unit_id.in_(unit_ids))
             if role:
                 q = q.filter(ShiftSlot.role == role)
             out = []
             for r in q.order_by(ShiftSlot.start_ts).all():
-                out.append({
-                    "id": r.id,
-                    "unit_id": r.unit_id,
-                    "template_id": r.template_id,
-                    "start_ts": r.start_ts.isoformat(timespec="seconds"),
-                    "end_ts": r.end_ts.isoformat(timespec="seconds"),
-                    "role": r.role,
-                    "status": r.status
-                })
+                out.append(
+                    {
+                        "id": r.id,
+                        "unit_id": r.unit_id,
+                        "template_id": r.template_id,
+                        "start_ts": r.start_ts.isoformat(timespec="seconds"),
+                        "end_ts": r.end_ts.isoformat(timespec="seconds"),
+                        "role": r.role,
+                        "status": r.status,
+                    }
+                )
             return out
         finally:
             db.close()

@@ -20,6 +20,8 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
+    dialect = conn.dialect.name if conn is not None else "sqlite"
+    false_def = sa.text("FALSE") if dialect == "postgresql" else sa.text("0")
     existing_tables = set(inspector.get_table_names())
     if "notes" not in existing_tables:
         op.create_table(
@@ -30,7 +32,7 @@ def upgrade() -> None:
             sa.Column("content", sa.Text(), nullable=False),
             sa.Column("created_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
             sa.Column("updated_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-            sa.Column("private_flag", sa.Boolean(), server_default=sa.text("0"), nullable=False)
+            sa.Column("private_flag", sa.Boolean(), server_default=false_def, nullable=False)
         )
     # Ensure index exists
     idx_names = {ix["name"] for ix in inspector.get_indexes("notes")} if "notes" in existing_tables else set()

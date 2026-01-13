@@ -1,0 +1,39 @@
+{% extends "_base.html" %}
+
+{% block title %}Yuplan – Logga in{% endblock %}
+
+{% block content %}
+  <main class="yp-page yp-page--centered" style="display:flex;align-items:center;justify-content:center;min-height:60vh;">
+    <section class="landing-hero yp-card" style="text-align:center;padding:2rem 2.5rem;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.05);max-width:560px;width:100%;">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="/static/img/logo-mono-dark.svg?v={{ asset_version|default('') }}">
+        <img src="/static/img/logo-proposal.svg?v={{ asset_version|default('') }}" alt="Yuplan" style="height:52px;display:block;margin:0 auto .75rem;max-width:100%;" />
+      </picture>
+      <h1 class="landing-title" style="margin:.25rem 0 0;font-size:clamp(1.6rem,3.5vw,2.2rem);">Yuplan</h1>
+      <p class="landing-tagline" style="color:#64748b;margin:.5rem 0 1.25rem;">Enkelt som ett Excelblad, intelligent i bakgrunden.</p>
+
+      {# Environment badge (LOCAL / STAGING / PROD) #}
+      {% set env_label = 'STAGING' if staging_demo else 'LOCAL' %}
+      <div aria-label="Miljö" style="display:inline-block;margin-bottom:1rem;">
+        <span class="yp-global-header__env-badge" style="display:inline-block;background:#e2e8f0;color:#111827;border-radius:999px;padding:.2rem .6rem;font-size:.75rem;letter-spacing:.02em;">{{ env_label }}</span>
+      </div>
+
+      {# Logged-in hint if someone visits / manually while authenticated #}
+      {% if session and session.get('user_id') %}
+        <p style="margin:.5rem 0 1rem;color:#475569;font-size:.95rem;">Du är inloggad som <strong>{{ session.get('role') or 'användare' }}</strong>.</p>
+      {% endif %}
+
+      <div style="margin-bottom:1rem">
+        <a class="yp-button yp-button--primary" href="{{ url_for('auth.login') }}" style="display:inline-block;padding:.7rem 1.1rem;border-radius:10px;background:#2cbf4f;color:#fff;text-decoration:none;font-weight:700;">
+          Logga in
+        </a>
+      </div>
+
+      <div class="landing-links" style="display:flex;gap:12px;justify-content:center;font-size:.95rem;">
+        <a href="/docs/" class="yp-link" style="color:#0b5ed7;text-decoration:none;">Dokumentation</a>
+        <span style="color:#cbd5e1">•</span>
+        <a href="/admin/support/ui" class="yp-link" style="color:#0b5ed7;text-decoration:none;">Support</a>
+      </div>
+    </section>
+  </main>
+{% endblock %}

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Yuplan Unified</title>
+    
+        <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-proposal.svg') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/unified_cook.css') }}">
+</head>
+<body class="cook-dashboard">
+        {% from 'includes/yuplan_header.html' import yuplan_header %}
+        {{ yuplan_header(
+                current_user=session.get('username') or session.get('role'),
+                current_week=vm.current_week,
+                current_year=vm.current_year
+        ) }}
+    
+        <header class="cook-header">
+                <div class="header-content">
+                        <h1 class="dashboard-title">🍳 Kockens arbetsvy</h1>
+                        {% if vm.site_name %}
+                        <p class="site-name">{{ vm.site_name }}</p>
+                        {% endif %}
+                </div>
+                <div class="header-meta">
+                        <span class="current-date">{{ vm.today_formatted }}</span>
+                        <span class="week-badge">Vecka {{ vm.current_week }}</span>
+                </div>
+        </header>
+
+        <main class="cook-content">
+                <section class="today-overview" aria-label="Dagens måltider">
+                        <h2 class="section-title">Dagens översikt</h2>
+                        <div class="meals-grid">
+                                <div class="meal-card lunch-card" id="lunchSection" role="article" aria-label="Lunch">
+                                        <div class="meal-header">
+                                                <span class="meal-icon">🍽️</span>
+                                                <h3 class="meal-name">Lunch</h3>
+                                        </div>
+                                        <div class="meal-body">
+                                                <p class="dish-text">{{ vm.today_lunch.dish }}</p>
+                                                {% if vm.today_lunch.alt2 %}
+                                                <span class="yp-badge yp-badge-warning alt2-badge" aria-label="Alt 2 vald">⚡ Alt 2</span>
+                                                {% endif %}
+                                        </div>
+                                        <div class="meal-footer">
+                                                <a href="{{ url_for('ui.weekview_ui') }}" class="yp-button yp-button-primary meal-action" aria-label="Gå till veckovy för lunch">📅 Gå till veckovy</a>
+                                        </div>
+                                </div>
+                                {% if vm.today_dinner.exists %}
+                                <div class="meal-card dinner-card" id="dinnerSection" role="article" aria-label="Kvällsmat">
+                                        <div class="meal-header">
+                                                <span class="meal-icon">🌙</span>
+                                                <h3 class="meal-name">Kvällsmat</h3>
+                                        </div>
+                                        <div class="meal-body">
+                                                <p class="dish-text">{{ vm.today_dinner.dish }}</p>
+                                                {% if vm.today_dinner.alt2 %}
+                                                <span class="yp-badge yp-badge-warning alt2-badge" aria-label="Alt 2 vald">⚡ Alt 2</span>
+                                                {% endif %}
+                                        </div>
+                                        <div class="meal-footer">
+                                                <a href="{{ url_for('ui.weekview_ui') }}" class="yp-button yp-button-primary meal-action" aria-label="Gå till veckovy för kvällsmat">📅 Gå till veckovy</a>
+                                        </div>
+                                </div>
+                                {% endif %}
+                        </div>
+                </section>
+
+                <section class="departments-overview" aria-label="Avdelningar">
+                        <h2 class="section-title">Avdelningsöversikt</h2>
+                        {% if vm.departments %}
+                        <div class="departments-grid">
+                                {% for dept in vm.departments %}
+                                <div class="department-card yp-card" role="article" aria-label="Avdelning {{ dept.name }}">
+                                        <div class="dept-header">
+                                                <h3 class="dept-name">{{ dept.name }}</h3>
+                                                <span class="dept-count">{{ dept.resident_count }} boende</span>
+                                        </div>
+                                        <div class="dept-body">
+                                                <div class="meal-status">
+                                                        <span class="status-label">🍽️ Lunch:</span>
+                                                        {% if dept.lunch_registered %}
+                                                        <span class="yp-badge yp-badge-success" aria-label="Lunch registrerad">✓ Registrerad</span>
+                                                        {% else %}
+                                                        <span class="yp-badge yp-badge-muted" aria-label="Lunch ej registrerad">Ej gjord</span>
+                                                        {% endif %}
+                                                        {% if dept.lunch_alt2 %}
+                                                        <span class="yp-badge yp-badge-warning" aria-label="Alt 2 vald för lunch">⚡</span>
+                                                        {% endif %}
+                                                </div>
+                                                {% if vm.today_dinner.exists and dept.dinner_registered is not none %}
+                                                <div class="meal-status">
+                                                        <span class="status-label">🌙 Kväll:</span>
+                                                        {% if dept.dinner_registered %}
+                                                        <span class="yp-badge yp-badge-success" aria-label="Kvällsmat registrerad">✓ Registrerad</span>
+                                                        {% else %}
+                                                        <span class="yp-badge yp-badge-muted" aria-label="Kvällsmat ej registrerad">Ej gjord</span>
+                                                        {% endif %}
+                                                        {% if dept.dinner_alt2 %}
+                                                        <span class="yp-badge yp-badge-warning" aria-label="Alt 2 vald för kväll">⚡</span>
+                                                        {% endif %}
+                                                </div>
+                                                {% endif %}
+                                        </div>
+                                </div>
+                                {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="empty-state">
+                                <p class="empty-icon">📋</p>
+                                <p class="empty-text">Inga avdelningar hittades</p>
+                        </div>
+                        {% endif %}
+                </section>
+
+                <section class="quick-actions" aria-label="Snabbval">
+                        <h2 class="section-title">Snabbval</h2>
+                        <div class="actions-grid">
+                                <a href="{{ url_for('ui.weekview_ui') }}" class="yp-button yp-button-primary action-button" aria-label="Öppna veckovy"><span class="action-icon">📅</span><span class="action-label">Veckovy</span></a>
+                                {% if vm.user_role in ['admin', 'superuser'] %}
+                                <a href="{{ url_for('ui.admin_menu_planning_index') }}" class="yp-button yp-button-secondary action-button" aria-label="Öppna menyplanering"><span class="action-icon">📝</span><span class="action-label">Menyplanering</span></a>
+                                <a href="{{ url_for('ui.reports_weekly') }}" class="yp-button yp-button-secondary action-button" aria-label="Öppna rapporter"><span class="action-icon">📊</span><span class="action-label">Rapporter</span></a>
+                                {% endif %}
+                                <a href="{{ url_for('ui.cook_dashboard') }}" class="yp-button yp-button-secondary action-button refresh-button" aria-label="Uppdatera sida"><span class="action-icon">🔄</span><span class="action-label">Uppdatera</span></a>
+                        </div>
+                </section>
+        </main>
+
+        {% from 'includes/yuplan_footer.html' import yuplan_footer %}
+        {{ yuplan_footer() }}
+        <script src="{{ url_for('static', filename='unified_ui.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/unified_cook.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+  <!-- Yuplan Logo - Light version for dark backgrounds -->
+  <defs>
+    <linearGradient id="yuplanGradientLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Icon: Plate with fork -->
+  <g id="icon">
+    <!-- Plate -->
+    <circle cx="25" cy="30" r="18" fill="url(#yuplanGradientLight)" opacity="0.2"/>
+    <circle cx="25" cy="30" r="15" fill="none" stroke="url(#yuplanGradientLight)" stroke-width="2.5"/>
+    
+    <!-- Fork -->
+    <path d="M 22 25 L 22 20 M 25 25 L 25 18 M 28 25 L 28 20 M 22 25 L 28 25 L 25 35" 
+          fill="none" stroke="url(#yuplanGradientLight)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  
+  <!-- Text: Yuplan -->
+  <text x="55" y="40" font-family="'Segoe UI', -apple-system, sans-serif" font-size="28" font-weight="700" fill="#ffffff">
+    Yuplan
+  </text>
+</svg>

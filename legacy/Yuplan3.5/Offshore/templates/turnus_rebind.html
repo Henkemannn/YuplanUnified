@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Tildel vikar i tidsrom</h2>
+<p>Rigg: {{ rig_name }}</p>
+
+<form method="post" action="{{ url_for('turnus_rebind_apply') }}" class="row g-3">
+  <div class="col-md-4">
+    <label class="form-label">Virtuell kokk</label>
+    <select class="form-select" name="role" required>
+      {% for r in roles %}
+        <option value="{{ r }}">{{ r }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">Bruker</label>
+    <select class="form-select" name="user_id" required>
+      {% for u in users %}
+        <option value="{{ u.id }}">{{ u.name or u.email }} (id {{ u.id }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label">Start</label>
+    <input class="form-control" type="date" name="start" required>
+  </div>
+  <div class="col-md-2">
+    <label class="form-label">Slutt</label>
+    <input class="form-control" type="date" name="end" required>
+  </div>
+  <div class="col-12">
+    <button class="btn btn-primary" type="submit">Bind vikar</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('turnus_overview') }}">Avbryt</a>
+  </div>
+  <div class="col-12">
+    <small class="text-muted">Dette endrer ikke global kobling. Bare valgte slots i perioden blir bundet til brukeren.</small>
+  </div>
+</form>
+
+{% endblock %}

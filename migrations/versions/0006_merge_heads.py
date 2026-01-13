@@ -7,7 +7,7 @@ Create Date: 2025-09-29
 from __future__ import annotations
 
 revision = "0006_merge_heads"
-down_revision = ("0002_tenant_metadata", "0005_update_tasks_add_prep_fields")
+down_revision = ("0002_tenant_metadata", "0005_prep_fields")
 branch_labels = None
 depends_on = None
 

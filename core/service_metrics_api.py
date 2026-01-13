@@ -16,11 +16,13 @@ from .api_types import (
 
 bp = Blueprint("metrics", __name__, url_prefix="/metrics")
 
+
 def _tenant_id():
     return session.get("tenant_id")
 
+
 @bp.post("/ingest")
-@require_roles("superuser","admin")
+@require_roles("superuser", "admin")
 def ingest_metrics() -> IngestResponse | ErrorResponse:
     tenant_id = _tenant_id()
     if not tenant_id:
@@ -31,8 +33,9 @@ def ingest_metrics() -> IngestResponse | ErrorResponse:
     res = svc.ingest(tenant_id, rows)
     return cast(IngestResponse, res)
 
+
 @bp.post("/query")
-@require_roles("superuser","admin","unit_portal")
+@require_roles("superuser", "admin", "unit_portal")
 def query_metrics() -> MetricsQueryRowsResponse | ErrorResponse:
     tenant_id = _tenant_id()
     if not tenant_id:
@@ -45,8 +48,9 @@ def query_metrics() -> MetricsQueryRowsResponse | ErrorResponse:
     rows = svc.query(tenant_id, filters)
     return cast(MetricsQueryRowsResponse, {"ok": True, "rows": rows})
 
+
 @bp.get("/summary/day")
-@require_roles("superuser","admin","unit_portal")
+@require_roles("superuser", "admin", "unit_portal")
 def summary_day() -> MetricsSummaryDayResponse | ErrorResponse:
     tenant_id = _tenant_id()
     if not tenant_id:
