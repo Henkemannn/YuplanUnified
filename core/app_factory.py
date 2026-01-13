@@ -18,6 +18,7 @@ import logging
 import time
 import uuid
 from importlib import import_module
+import os
 
 from flask import Flask, g, jsonify, request, session
 
@@ -41,9 +42,11 @@ from .models import TenantFeatureFlag
 from .notes_api import bp as notes_bp
 from .openapi_ui import bp as openapi_ui_bp
 from .service_metrics_api import bp as metrics_api_bp
+from .ui_blueprint import ui_bp
 from .service_recommendation_api import bp as service_recommendation_bp
 from .tasks_api import bp as tasks_bp
 from .turnus_api import bp as turnus_api_bp
+from .support import bp as support_bp
 
 # Map of module key -> import path:attr blueprint (for dynamic registration)
 MODULE_IMPORTS = {
@@ -53,7 +56,13 @@ MODULE_IMPORTS = {
 
 
 def create_app(config_override: dict | None = None) -> Flask:
-    app = Flask(__name__)
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(base_dir, "templates"),
+        static_url_path="/static",
+        static_folder=os.path.join(base_dir, "static"),
+    )
 
     # --- Configuration ---
     cfg = Config.from_env()
@@ -148,7 +157,15 @@ def create_app(config_override: dict | None = None) -> Flask:
     # --- Context processor ---
     @app.context_processor
     def inject_ctx():
-        return {"tenant_id": getattr(g, "tenant_id", None), "feature_enabled": feature_enabled}
+        def has_role(*roles: str) -> bool:
+            try:
+                r = session.get("role")
+                if not r:
+                    return False
+                return any(r == role for role in roles)
+            except Exception:
+                return False
+        return {"tenant_id": getattr(g, "tenant_id", None), "feature_enabled": feature_enabled, "has_role": has_role}
 
     # --- Logging / timing middleware ---
     log = logging.getLogger("unified")
@@ -179,6 +196,11 @@ def create_app(config_override: dict | None = None) -> Flask:
         g._t0 = time.perf_counter()
         g.request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
         _load_feature_flags_logic()
+        # Back-compat: expose feature flags under g.features for templates
+        try:
+            g.features = getattr(g, "tenant_feature_flags", {})  # type: ignore[attr-defined]
+        except Exception:
+            pass
         # Enforce CSRF for /admin mutations (lightweight)
         try:
             from .csrf import require_csrf_for_admin_mutations
@@ -274,6 +296,9 @@ def create_app(config_override: dict | None = None) -> Flask:
     app.register_blueprint(admin_audit_bp)
     app.register_blueprint(openapi_ui_bp)
     app.register_blueprint(inline_ui_bp)
+    app.register_blueprint(support_bp)
+    # Unified UI/Portal routes (week view, planera day, etc.)
+    app.register_blueprint(ui_bp)
 
     # Dynamic module blueprints
     for mod in cfg.default_enabled_modules:
