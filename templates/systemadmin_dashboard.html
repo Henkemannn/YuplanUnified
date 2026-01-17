@@ -15,10 +15,10 @@
     </div>
 
     <nav class="sa-nav">
-      <a class="sa-nav-item sa-active" href="{{ url_for('admin_ui.systemadmin_dashboard') }}">
+      <a class="sa-nav-item sa-active" href="/ui/systemadmin/dashboard">
         <span class="sa-icon">📊</span> Översikt
       </a>
-      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_customers') }}">
+      <a class="sa-nav-item" href="#">
         <span class="sa-icon">🏢</span> Kunder
       </a>
       <a class="sa-nav-item" href="#">
@@ -58,7 +58,7 @@
       </div>
 
       <div class="sa-header-actions">
-        <a href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}" class="sa-btn sa-btn-primary">➕ Skapa kund</a>
+        <a href="#" class="sa-btn sa-btn-primary">➕ Skapa kund</a>
         <div class="sa-clock">
           <span id="sa-clock-time">--:--</span>
           <span id="sa-clock-date">--</span>
@@ -81,7 +81,7 @@
             <h3>{{ t.name }}</h3>
             <p class="sa-meta">Sites: {{ t.site_count }}</p>
             <div class="sa-actions">
-              <a class="sa-btn sa-btn-small" href="{{ url_for('admin_ui.systemadmin_customer_sites', tenant_id=t.id) }}">Visa sites</a>
+              <a class="sa-btn sa-btn-small" href="#">Visa sites</a>
             </div>
           </div>
           {% endfor %}
@@ -91,7 +91,7 @@
           <div class="sa-empty-icon">🏢</div>
           <h3>Inga kunder ännu</h3>
           <p class="sa-empty-desc">Skapa din första kund för att börja lägga till sites.</p>
-          <a href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}" class="sa-btn sa-btn-primary">➕ Skapa kund</a>
+          <a href="#" class="sa-btn sa-btn-primary">➕ Skapa kund</a>
         </div>
         {% endif %}
       </article>

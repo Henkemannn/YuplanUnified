@@ -1,5 +1,6 @@
 from flask.testing import FlaskClient
 from sqlalchemy import text
+import uuid
 
 
 def _seed_superuser(app_session):
@@ -31,6 +32,9 @@ def _create_tenant(app_session, name="Tenant IDNA"):
     with app_session.app_context():
         db = get_session()
         try:
+            # Ensure unique tenant name to avoid UNIQUE constraint collisions across suite runs
+            if name == "Tenant IDNA":
+                name = f"{name} {uuid.uuid4().hex[:8]}"
             t = Tenant(name=name)
             db.add(t)
             db.commit()

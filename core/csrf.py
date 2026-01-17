@@ -43,14 +43,32 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def _problem_missing() -> Response:
-    resp = jsonify({"ok": False, "error": "forbidden", "message": "csrf_missing"})
+    from flask import request
+    payload = {
+        "type": "https://example.com/problems/csrf_missing",
+        "title": "Forbidden",
+        "status": 403,
+        "detail": "csrf_missing",
+        "instance": request.path,
+    }
+    resp = jsonify(payload)
     resp.status_code = 403
+    resp.mimetype = "application/problem+json"
     return resp
 
 
 def _problem_invalid() -> Response:
-    resp = jsonify({"ok": False, "error": "forbidden", "message": "csrf_invalid"})
+    from flask import request
+    payload = {
+        "type": "https://example.com/problems/csrf_invalid",
+        "title": "Forbidden",
+        "status": 403,
+        "detail": "csrf_invalid",
+        "instance": request.path,
+    }
+    resp = jsonify(payload)
     resp.status_code = 403
+    resp.mimetype = "application/problem+json"
     return resp
 
 

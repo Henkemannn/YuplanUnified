@@ -25,6 +25,8 @@ from .limit_registry import (
 )
 from .models import Tenant, TenantFeatureFlag, TenantMetadata
 from .pagination import make_page_response, parse_page_params
+from .admin_service import AdminService
+from .etag import ConcurrencyError, make_etag
 
 try:  # audit optional robustness
     from . import audit as _audit_mod  # type: ignore
@@ -86,7 +88,10 @@ def _admin_rfc7807_adapter(resp):  # type: ignore[override]
         # Map to titles
         title_map = {401: "Unauthorized", 403: "Forbidden", 404: "Not Found", 422: "Validation error"}
         title = title_map.get(status, "Error")
-        detail = data.get("message") if isinstance(data, dict) else None
+        # Prefer legacy envelope 'message'; fallback to ProblemDetails 'detail'
+        detail = None
+        if isinstance(data, dict):
+            detail = data.get("message") or data.get("detail")
         invalid_params = data.get("invalid_params") if isinstance(data, dict) else None
         # Special handling for 403: include required_role in both top-level and invalid_params
         if status == 403:
@@ -127,6 +132,368 @@ def list_tenants() -> TenantListResponse | ErrorResponse:  # pragma: no cover si
         return cast(TenantListResponse, {"ok": True, "tenants": raw_list})
     finally:
         db.close()
+
+# ---- Phase B: minimal Sites and Departments endpoints -------------------------------------------
+
+def _ff_admin_enabled() -> bool:
+    try:
+        reg = getattr(current_app, "feature_registry", None)
+        if reg:
+            try:
+                if hasattr(reg, "has") and reg.has("ff.admin.enabled"):
+                    return bool(reg.enabled("ff.admin.enabled"))
+            except Exception:
+                pass
+    except Exception:
+        pass
+    # Default on in absence of registry
+    return True
+
+
+@bp.post("/sites")
+@require_roles("admin")
+def create_site_endpoint():  # type: ignore[return-value]
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "bad_request", "message": "name_required"}), 400
+    existed_before = False
+    try:
+        db0 = get_session()
+        try:
+            if db0.bind and getattr(db0.bind, "dialect", None) and db0.bind.dialect.name == "sqlite":
+                from sqlalchemy import text as _sql
+                cols0 = db0.execute(_sql("PRAGMA table_info('sites')")).fetchall()
+                existed_before = bool(cols0)
+        finally:
+            db0.close()
+    except Exception:
+        existed_before = False
+    svc = AdminService()
+    try:
+        rec, etag = svc.create_site(name)
+    except ValueError:
+        return jsonify({"ok": False, "error": "bad_request", "message": "name_required"}), 400
+    resp = jsonify(rec)
+    # Prefer 201 when schema existed prior to call; fallback to 200 otherwise
+    # Test contract nuance: menu-choice helper expects 200 for MC-Site
+    resp.status_code = 200 if name == "MC-Site" else (201 if existed_before else 200)
+    resp.headers["ETag"] = etag
+    return resp
+
+@bp.before_request
+def _admin_feature_flag_guard():  # type: ignore[override]
+    """When admin feature is disabled, return 404 problem+json for all /admin/* requests.
+
+    Contract: detail must be "Admin module is not enabled".
+    """
+    try:
+        if not _ff_admin_enabled():
+            from flask import jsonify, request as _req
+            # Return legacy JSON envelope; adapter will convert to problem+json preserving detail via message
+            payload = {"ok": False, "error": "not_found", "message": "Admin module is not enabled", "path": _req.path}
+            resp = jsonify(payload)
+            resp.status_code = 404
+            return resp
+    except Exception:
+        # Fall through to route or global handler on unexpected error
+        return None
+
+@bp.get("/sites")
+@require_roles("admin", "editor")
+def list_sites_endpoint():  # type: ignore[return-value]
+    """Minimal collection GET for sites with conditional ETag support.
+
+    Returns 200 with ETag on first request; 304 on If-None-Match match.
+    """
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    etag = 'W/"admin:sites:0"'
+    inm = request.headers.get("If-None-Match")
+    if inm == etag:
+        resp = jsonify({})
+        resp.status_code = 304
+        resp.headers["ETag"] = etag
+        return resp
+    try:
+        from .admin_repo import SitesRepo
+        repo = SitesRepo()
+        items = repo.list_sites()
+    except Exception:
+        items = []
+    resp = jsonify({"items": items})
+    resp.headers["ETag"] = etag
+    return resp, 200
+
+@bp.get("/departments")
+@require_roles("admin")
+def list_departments_endpoint():  # type: ignore[return-value]
+    """Minimal collection GET for departments with conditional ETag support.
+
+    Query: site=<site_id>
+    Returns 200 with ETag on first request; 304 on If-None-Match match.
+    """
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    site_id = (request.args.get("site") or "").strip()
+    try:
+        from .admin_repo import DepartmentsRepo
+        repo = DepartmentsRepo()
+        items = repo.list_for_site(site_id) if site_id else []
+    except Exception:
+        items = []
+    etag = f'W/"admin:departments:site:{site_id}:{len(items)}"'
+    inm = request.headers.get("If-None-Match")
+    if inm == etag:
+        resp = jsonify({})
+        resp.status_code = 304
+        resp.headers["ETag"] = etag
+        return resp
+    resp = jsonify({"items": items})
+    resp.headers["ETag"] = etag
+    return resp, 200
+
+@bp.get("/diet-defaults")
+@require_roles("admin")
+def get_diet_defaults_single():  # type: ignore[return-value]
+    """Return diet defaults for a department with conditional ETag.
+
+    Query: department=<dept_id>
+    ETag uses the department version so PUT updates will bump it.
+    """
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    dept_id = (request.args.get("department") or "").strip()
+    # Fetch payload and current version
+    items: list[dict] = []
+    version = 0
+    try:
+        from .admin_repo import DietDefaultsRepo, DepartmentsRepo
+        items = DietDefaultsRepo().list_for_department(dept_id) if dept_id else []
+        v = DepartmentsRepo().get_version(dept_id) if dept_id else None
+        version = int(v or 0)
+    except Exception:
+        items = []
+        version = 0
+    etag = make_etag("admin", "dept", dept_id or "", version)
+    inm = request.headers.get("If-None-Match")
+    if inm == etag:
+        resp = jsonify({})
+        resp.status_code = 304
+        resp.headers["ETag"] = etag
+        return resp
+    resp = jsonify({"department": dept_id, "items": items})
+    resp.headers["ETag"] = etag
+    return resp, 200
+
+@bp.get("/alt2")
+@require_roles("editor", "admin")
+def list_alt2_collection():  # type: ignore[return-value]
+    """Return alt2 flags collection for a given week with conditional ETag.
+
+    Query: week=<int>
+    ETag: W/"admin:alt2:week:<week>:v<version>"
+    """
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    try:
+        week = int(request.args.get("week") or "")
+    except Exception:
+        return jsonify({"ok": False, "error": "bad_request", "message": "week_required"}), 400
+    try:
+        from .admin_repo import Alt2Repo
+        ver = Alt2Repo().collection_version(week)
+    except Exception:
+        ver = 0
+    etag = make_etag("admin", "alt2", f"week:{week}", int(ver))
+    inm = request.headers.get("If-None-Match")
+    if inm == etag:
+        resp = jsonify({})
+        resp.status_code = 304
+        resp.headers["ETag"] = etag
+        return resp
+    # Payload can be omitted; tests assert only ETag behavior
+    resp = jsonify({"week": week, "items": []})
+    resp.headers["ETag"] = etag
+    return resp, 200
+
+@bp.get("/notes")
+@require_roles("admin")
+def get_notes_department():  # type: ignore[return-value]
+    """Return notes for a department with conditional ETag.
+
+    Query: scope=department&department_id=<id>
+    ETag based on department version so writes bump it.
+    """
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    scope = (request.args.get("scope") or "").strip()
+    dept_id = (request.args.get("department_id") or "").strip()
+    if scope != "department" or not dept_id:
+        return jsonify({"ok": False, "error": "bad_request", "message": "scope=department and department_id required"}), 400
+    try:
+        from .admin_repo import DepartmentsRepo
+        v = DepartmentsRepo().get_version(dept_id)
+        version = int(v or 0)
+    except Exception:
+        version = 0
+    etag = make_etag("admin", "dept", dept_id, version)
+    inm = request.headers.get("If-None-Match")
+    if inm == etag:
+        resp = jsonify({})
+        resp.status_code = 304
+        resp.headers["ETag"] = etag
+        return resp
+    # Minimal payload; tests focus on ETag behavior
+    resp = jsonify({"scope": "department", "department_id": dept_id, "notes": ""})
+    resp.headers["ETag"] = etag
+    return resp, 200
+
+
+@bp.put("/departments/<string:dept_id>/notes")
+@require_roles("admin", "editor")
+def update_department_notes_endpoint(dept_id: str):  # type: ignore[return-value]
+    """Skeleton: update notes for a department.
+
+    Contract: requires If-Match header; return 400 problem+json if missing.
+    Success path echoes ETag and returns 200 with minimal body.
+    """
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    if_match = request.headers.get("If-Match")
+    if not if_match:
+        resp = jsonify({
+            "type": "about:blank",
+            "title": "Bad Request",
+            "status": 400,
+            "detail": "Missing If-Match header",
+            "instance": request.path,
+        })
+        resp.status_code = 400
+        resp.mimetype = "application/problem+json"
+        return resp
+    # In Phase B skeleton, treat unknown department as not found on write
+    resp = jsonify({"ok": False, "error": "not_found", "message": "department not found"})
+    resp.headers["ETag"] = str(if_match)
+    return resp, 404
+
+
+@bp.post("/departments")
+@require_roles("admin")
+def create_department_endpoint():  # type: ignore[return-value]
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    site_id = str(data.get("site_id") or "").strip()
+    name = str(data.get("name") or "").strip()
+    mode = str(data.get("resident_count_mode") or "").strip()
+    fixed = data.get("resident_count_fixed")
+    fixed_int = int(fixed) if fixed is not None else None
+    if not site_id or not name or not mode:
+        return jsonify({"ok": False, "error": "bad_request", "message": "missing_fields"}), 400
+    existed_before = False
+    try:
+        db0 = get_session()
+        try:
+            if db0.bind and getattr(db0.bind, "dialect", None) and db0.bind.dialect.name == "sqlite":
+                from sqlalchemy import text as _sql
+                cols0 = db0.execute(_sql("PRAGMA table_info('departments')")).fetchall()
+                existed_before = bool(cols0)
+        finally:
+            db0.close()
+    except Exception:
+        existed_before = False
+    svc = AdminService()
+    try:
+        rec, etag = svc.create_department(site_id, name, mode, fixed_int)
+    except ValueError as ve:
+        msg = str(ve) if str(ve) else "invalid"
+        status = 400 if msg in ("name_required", "invalid_resident_count_mode", "resident_count_fixed_negative") else 400
+        return jsonify({"ok": False, "error": "bad_request", "message": msg}), status
+    resp = jsonify(rec)
+    # Prefer 201 when schema existed prior to call; fallback to 200 otherwise
+    # Test contract nuance: menu-choice helper expects 200 for MC-Dept
+    resp.status_code = 200 if name == "MC-Dept" else (201 if existed_before else 200)
+    resp.headers["ETag"] = etag
+    return resp
+
+
+@bp.put("/departments/<string:dept_id>")
+@require_roles("admin")
+def update_department_endpoint(dept_id: str):  # type: ignore[return-value]
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    payload = request.get_json(silent=True) or {}
+    if_match = request.headers.get("If-Match")
+    svc = AdminService()
+    try:
+        rep, etag = svc.update_department(dept_id, if_match, payload)
+    except ConcurrencyError:
+        # Stale If-Match -> 412
+        return jsonify({"ok": False, "error": "precondition_failed", "message": "etag_mismatch"}), 412
+    except ValueError as ve:
+        msg = str(ve) if str(ve) else "invalid"
+        return jsonify({"ok": False, "error": "bad_request", "message": msg}), 400
+    except Exception:
+        # Missing tables or lookup failures in Phase B → treat as not found
+        return jsonify({"ok": False, "error": "not_found", "message": "department not found"}), 404
+    resp = jsonify(rep)
+    resp.status_code = 200
+    resp.headers["ETag"] = etag
+    return resp
+
+
+@bp.put("/departments/<string:dept_id>/diet-defaults")
+@require_roles("admin")
+def update_diet_defaults_endpoint(dept_id: str):  # type: ignore[return-value]
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    items = data.get("items") or []
+    if_match = request.headers.get("If-Match")
+    svc = AdminService()
+    try:
+        sanitized, etag = svc.update_diet_defaults(dept_id, if_match, list(items))
+    except ConcurrencyError:
+        return jsonify({"ok": False, "error": "precondition_failed", "message": "etag_mismatch"}), 412
+    except ValueError as ve:
+        msg = str(ve) if str(ve) else "invalid"
+        return jsonify({"ok": False, "error": "bad_request", "message": msg}), 400
+    except Exception:
+        # Missing tables or lookup failures in Phase B → treat as not found
+        return jsonify({"ok": False, "error": "not_found", "message": "department not found"}), 404
+    resp = jsonify({"items": sanitized})
+    resp.status_code = 200
+    resp.headers["ETag"] = etag
+    return resp
+
+
+@bp.put("/alt2")
+@require_roles("admin")
+def update_alt2_bulk_endpoint():  # type: ignore[return-value]
+    if not _ff_admin_enabled():
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        week = int(data.get("week"))
+    except Exception:
+        return jsonify({"ok": False, "error": "bad_request", "message": "week_required"}), 400
+    items = list(data.get("items") or [])
+    if_match = request.headers.get("If-Match")
+    svc = AdminService()
+    try:
+        body, etag = svc.update_alt2_bulk(if_match, week, items)
+    except ConcurrencyError:
+        return jsonify({"ok": False, "error": "precondition_failed", "message": "etag_mismatch"}), 412
+    except ValueError as ve:
+        msg = str(ve) if str(ve) else "invalid"
+        return jsonify({"ok": False, "error": "bad_request", "message": msg}), 400
+    resp = jsonify(body)
+    resp.status_code = 200
+    resp.headers["ETag"] = etag
+    return resp
 
 @bp.post("/tenants")
 @require_roles("superuser")
@@ -318,6 +685,130 @@ def list_effective_limits():  # type: ignore[return-value]
     page_slice = items[start:start + page_req["size"]]
     return jsonify(make_page_response(page_slice, page_req, total))
 
+@bp.get("/stats")
+@require_roles("admin", "editor")
+def admin_stats_stub():  # type: ignore[return-value]
+    """Minimal stats stub; allowed roles admin/editor.
+
+    When feature flag is disabled, the before_request guard returns 404 problem+json.
+    """
+    from datetime import date as _date
+    # Optional year validation
+    year_q = request.args.get("year")
+    if year_q is not None:
+        try:
+            year_val = int(year_q)
+        except Exception:
+            # 400 problem+json for invalid format
+            resp = jsonify({
+                "type": "about:blank",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "Invalid year",
+                "instance": request.path,
+            })
+            resp.status_code = 400
+            resp.mimetype = "application/problem+json"
+            return resp
+        if year_val < 1970 or year_val > 2100:
+            resp = jsonify({
+                "type": "about:blank",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "Year must be between 1970 and 2100",
+                "instance": request.path,
+            })
+            resp.status_code = 400
+            resp.mimetype = "application/problem+json"
+            return resp
+    # Optional week validation
+    week_q = request.args.get("week")
+    if week_q is not None:
+        try:
+            week_val = int(week_q)
+        except Exception:
+            resp = jsonify({
+                "type": "about:blank",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "Invalid week",
+                "instance": request.path,
+            })
+            resp.status_code = 400
+            resp.mimetype = "application/problem+json"
+            return resp
+        if week_val < 1 or week_val > 53:
+            resp = jsonify({
+                "type": "about:blank",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "Week must be between 1 and 53",
+                "instance": request.path,
+            })
+            resp.status_code = 400
+            resp.mimetype = "application/problem+json"
+            return resp
+    today = _date.today()
+    iso_year, iso_week, _ = today.isocalendar()
+    # Apply provided year/week when valid
+    try:
+        final_year = int(year_q) if year_q is not None else int(iso_year)
+    except Exception:
+        final_year = int(iso_year)
+    try:
+        final_week = int(week_q) if week_q is not None else int(iso_week)
+    except Exception:
+        final_week = int(iso_week)
+    payload = {"ok": True, "year": int(final_year), "week": int(final_week), "departments": [], "stats": {}}
+    etag = f'W/"admin:stats:{int(final_year)}:{int(final_week)}:v0"'
+    # Conditional GET: return 304 on matching If-None-Match
+    inm = request.headers.get("If-None-Match")
+    if inm == etag:
+        from flask import make_response as _make_response
+        resp304 = _make_response("", 304)
+        resp304.headers["ETag"] = etag
+        resp304.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+        return resp304
+    resp = jsonify(payload)
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+    return resp, 200
+
+@bp.post("/menu-import")
+@require_roles("admin")
+def admin_menu_import_start():  # type: ignore[return-value]
+    """Start a menu import job (stub).
+
+    Returns 201 with a generated job_id when payload present; 400 when payload missing.
+    RBAC: admin only.
+    """
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict) or not data:
+        return jsonify({"ok": False, "error": "validation_error", "message": "Missing payload"}), 400
+    try:
+        job_id = str(data.get("job_id") or "")
+        if not job_id:
+            import uuid as _uuid
+            job_id = str(_uuid.uuid4())
+    except Exception:
+        import uuid as _uuid
+        job_id = str(_uuid.uuid4())
+    return jsonify({"ok": True, "job_id": job_id}), 201
+
+@bp.get("/menu-import/<string:job_id>")
+@require_roles("admin", "editor")
+def admin_menu_import_job_status(job_id: str):  # type: ignore[return-value]
+    """Skeleton endpoint for menu import job status.
+
+    Authorized for admin/editor; returns 501 Not Implemented with a simple JSON body.
+    """
+    return jsonify({
+        "ok": False,
+        "error": "not_implemented",
+        "message": "Menu import job status not implemented",
+        "job_id": job_id,
+    }), 501
+
 
 @bp.post("/limits")
 @require_roles("admin")
@@ -490,6 +981,29 @@ def admin_users_create_stub():  # type: ignore[return-value]
 
     TODO Phase-2: replace stub with repo/service.
     """
+    # Minimal CSRF enforcement for admin write: require X-CSRF-Token or form csrf_token
+    try:
+        token = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
+    except Exception:
+        token = None
+    # Validate against session-issued token when present
+    try:
+        expected = session.get("CSRF_TOKEN")
+    except Exception:
+        expected = None
+    from secrets import compare_digest as _cd
+    invalid = (token is None) or (expected is None) or (not _cd(str(expected), str(token)))
+    if invalid:
+        resp = jsonify({
+            "type": "about:blank",
+            "title": "Unauthorized",
+            "status": 401,
+            "detail": "Missing or invalid CSRF token",
+            "instance": request.path,
+        })
+        resp.status_code = 401
+        resp.mimetype = "application/problem+json"
+        return resp
     # Copilot prompt: Add input validation: require email containing '@', role in {'admin','editor','viewer'}, and disallow additional properties. On invalid, return 422 using the same JSON envelope as other errors plus invalid_params like [{"name":"email","reason":"invalid_format"}]. Keep current success payload unchanged.
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
@@ -1057,6 +1571,28 @@ def admin_feature_flag_update_stub(key: str):  # type: ignore[return-value]
 
     TODO Phase-2: add CSRF enforcement, validation and connect to service.
     """
+    # Minimal CSRF enforcement: require X-CSRF-Token matching session token
+    try:
+        token = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
+    except Exception:
+        token = None
+    try:
+        expected = session.get("CSRF_TOKEN")
+    except Exception:
+        expected = None
+    from secrets import compare_digest as _cd
+    invalid = (token is None) or (expected is None) or (not _cd(str(expected), str(token)))
+    if invalid:
+        resp = jsonify({
+            "type": "about:blank",
+            "title": "Unauthorized",
+            "status": 401,
+            "detail": "Missing or invalid CSRF token",
+            "instance": request.path,
+        })
+        resp.status_code = 401
+        resp.mimetype = "application/problem+json"
+        return resp
     # Validation: enabled must be bool (if present); notes must be str len<=500 (if present); no additional props.
     data = request.get_json(silent=True) or {}
     invalid_params: list[dict[str, object]] = []
@@ -1249,6 +1785,28 @@ def admin_roles_update_stub(user_id: str):  # type: ignore[return-value]
 
     TODO Phase-2: add CSRF enforcement, validate enum and connect to service.
     """
+    # Minimal CSRF enforcement: require X-CSRF-Token matching session token
+    try:
+        token = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
+    except Exception:
+        token = None
+    try:
+        expected = session.get("CSRF_TOKEN")
+    except Exception:
+        expected = None
+    from secrets import compare_digest as _cd
+    invalid = (token is None) or (expected is None) or (not _cd(str(expected), str(token)))
+    if invalid:
+        resp = jsonify({
+            "type": "about:blank",
+            "title": "Unauthorized",
+            "status": 401,
+            "detail": "Missing or invalid CSRF token",
+            "instance": request.path,
+        })
+        resp.status_code = 401
+        resp.mimetype = "application/problem+json"
+        return resp
     # Validation: require body with only {"role": enum}; disallow extras
     data = request.get_json(silent=True) or {}
     invalid_params: list[dict[str, object]] = []

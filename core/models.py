@@ -32,10 +32,17 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
+    # Login identifiers
+    username: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True)
     email: Mapped[str] = mapped_column(String(200), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    # Profile & status
+    full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     role: Mapped[str] = mapped_column(String(50))  # admin, unit_portal, cook, superuser
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
+    # Optional hard site-binding for customer admins (string UUID)
+    site_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     refresh_token_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Use timezone-aware UTC timestamps for last role/user update operations
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)

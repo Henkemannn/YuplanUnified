@@ -16,7 +16,21 @@ def impersonate_start():
     tenant_id = data.get("tenant_id")
     reason = (data.get("reason") or "").strip()
     if tenant_id is None:
-        return bad_request("tenant_id_required")
+        # Return RFC7807 problem+json for validation errors (missing fields)
+        from flask import jsonify, g
+        problem = {
+            "type": "https://example.com/errors/validation",
+            "title": "Validation Error",
+            "status": 422,
+            "detail": "tenant_id is required",
+            "instance": request.path,
+            "request_id": getattr(g, "request_id", None),
+            "errors": [{"field": "tenant_id", "msg": "required"}],
+        }
+        resp = jsonify(problem)
+        resp.status_code = 422
+        resp.mimetype = "application/problem+json"
+        return resp
     try:
         tenant_id = int(tenant_id)
     except ValueError:

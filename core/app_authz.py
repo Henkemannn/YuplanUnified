@@ -57,7 +57,7 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
             sess = get_session()
             try:
                 auth_header = request.headers.get("Authorization", "")
-                if (sess is None or not sess.get("user_id")) and auth_header.lower().startswith("bearer "):
+                if auth_header.lower().startswith("bearer "):
                     token = auth_header.split(None, 1)[1].strip()
                     # Fall back to env default when config not set
                     import os as _os
@@ -71,7 +71,7 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                         leeway=current_app.config.get("JWT_LEEWAY_SECONDS", 60),
                         max_age=current_app.config.get("JWT_MAX_AGE_SECONDS"),
                     )
-                    # Populate session-like dict for downstream checks
+                    # Populate session-like dict for downstream checks, overriding any cookie session
                     session["user_id"] = payload.get("sub")
                     session["role"] = payload.get("role")
                     session["tenant_id"] = payload.get("tenant_id")

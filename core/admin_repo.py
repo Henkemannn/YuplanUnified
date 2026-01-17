@@ -29,6 +29,7 @@ class SitesRepo:
                         CREATE TABLE IF NOT EXISTS sites (
                             id TEXT PRIMARY KEY,
                             name TEXT NOT NULL,
+                            tenant_id INTEGER NULL,
                             version INTEGER NOT NULL DEFAULT 0,
                             notes TEXT NULL,
                             updated_at TEXT
@@ -74,6 +75,7 @@ class SitesRepo:
                         CREATE TABLE IF NOT EXISTS sites (
                             id TEXT PRIMARY KEY,
                             name TEXT NOT NULL,
+                            tenant_id INTEGER NULL,
                             version INTEGER NOT NULL DEFAULT 0,
                             notes TEXT NULL,
                             updated_at TEXT
@@ -102,6 +104,7 @@ class SitesRepo:
                         CREATE TABLE IF NOT EXISTS sites (
                             id TEXT PRIMARY KEY,
                             name TEXT NOT NULL,
+                            tenant_id INTEGER NULL,
                             version INTEGER NOT NULL DEFAULT 0,
                             notes TEXT NULL,
                             updated_at TEXT

@@ -23,8 +23,13 @@ from .audit import log_task_status_transition
 from .db import get_session
 from .deprecation import apply_deprecation
 from .deprecation_warn import should_warn, warn_phase_enabled
-from .http_errors import forbidden as forbidden_response
-from .errors import APIError, NotFoundError
+from .http_errors import (
+    forbidden as forbidden_response,
+    not_found as not_found_response,
+    unprocessable_entity,
+    bad_request,
+)
+from .errors import APIError, NotFoundError, ValidationError
 from .metrics import increment
 from .models import Task
 from .pagination import make_page_response, parse_page_params
@@ -168,13 +173,18 @@ def create_task() -> TaskCreateResponse | Response:
             k: v for k, v in data.items() if k in {"title", "assignee", "due", "status", "done"}
         }
         create_payload = cast(TaskCreateRequest, raw_payload)
-        result = svc_create_task(
-            db,
-            tenant_id=tid,
-            user_id=session.get("user_id"),
-            role=str(session.get("role")),
-            payload=create_payload,
-        )
+        try:
+            result = svc_create_task(
+                db,
+                tenant_id=tid,
+                user_id=session.get("user_id"),
+                role=str(session.get("role")),
+                payload=create_payload,
+            )
+        except ValidationError as e:
+            # Map to RFC7807 ProblemDetails (422 /validation_error)
+            resp = unprocessable_entity(getattr(e, "errors", []) or [], detail=str(e) or "validation_error")
+            return resp
         task_id_value = result.get("task_id")  # may be TaskId
         t = db.get(Task, int(task_id_value)) if task_id_value is not None else None  # type: ignore[arg-type]
         if t and task_id_value is not None:
@@ -185,17 +195,14 @@ def create_task() -> TaskCreateResponse | Response:
             }
         else:
             body = cast(TaskCreateResponse, {"ok": True, **result})
-        if t:
-            try:
-                body["location"] = url_for("tasks_api.get_task", task_id=t.id)
-            except Exception:
-                body["location"] = f"/tasks/{t.id}"
         # Return 201 Created + Location header (legacy tests rely on this)
         resp = jsonify(body)
         resp.status_code = 201
-        loc = body.get("location")
-        if loc:
-            resp.headers["Location"] = loc
+        if t:
+            try:
+                resp.headers["Location"] = url_for("tasks_api.get_task", task_id=t.id)
+            except Exception:
+                resp.headers["Location"] = f"/tasks/{t.id}"
         return resp
     finally:
         db.close()
@@ -209,7 +216,17 @@ def get_task(task_id: int):
     try:
         t = db.query(Task).filter(Task.id == task_id, Task.tenant_id == tid).first()
         if not t:
-            raise NotFoundError("task not found")
+            problem = {
+                "type": "https://example.com/errors/not_found",
+                "title": "Not Found",
+                "status": 404,
+                "detail": "task_not_found",
+                "instance": request.path,
+            }
+            resp = jsonify(problem)
+            resp.status_code = 404
+            resp.mimetype = "application/problem+json"
+            return resp
         role = session.get("role")
         user_id = session.get("user_id")
         if t.private_flag and t.creator_user_id != user_id and role not in ("admin", "superuser"):
@@ -221,7 +238,7 @@ def get_task(task_id: int):
 
 @bp.put("/<int:task_id>")
 @bp.patch("/<int:task_id>")
-@require_roles("editor", "admin")
+@require_roles("viewer", "editor", "admin")
 def update_task(task_id: int) -> TaskUpdateResponse | Response:
     tid = _tenant_id()
     db = get_session()
@@ -229,16 +246,34 @@ def update_task(task_id: int) -> TaskUpdateResponse | Response:
         # Fetch by id first to differentiate wrong-tenant vs missing
         t = db.query(Task).filter(Task.id == task_id).first()
         if not t:
-            raise NotFoundError("task not found")
+            # Return RFC7807 problem+json for unknown task id
+            problem = {
+                "type": "https://example.com/errors/not_found",
+                "title": "Not Found",
+                "status": 404,
+                "detail": "task not found",
+                "instance": request.path,
+            }
+            resp = jsonify(problem)
+            resp.status_code = 404
+            resp.mimetype = "application/problem+json"
+            return resp
         if t.tenant_id != tid:
-            raise AuthzError("forbidden", required="admin")
+            return forbidden_response(
+                "forbidden",
+                problem_type="https://example.com/problems/forbidden",
+            )
         role = session.get("role")
         user_id = session.get("user_id")
         # Ownership enforcement:
         # Tests assert non-owner (cook) cannot update another user's task even if public.
         # Allow only creator OR admin/superuser.
         if role not in ("admin", "superuser") and t.creator_user_id != user_id:
-            raise AuthzError("forbidden", required="editor")
+            return forbidden_response(
+                "forbidden",
+                problem_type="https://example.com/problems/forbidden",
+                required_role="editor",
+            )
         try:
             allow(
                 tid,
@@ -260,12 +295,9 @@ def update_task(task_id: int) -> TaskUpdateResponse | Response:
             status = data.get("status")
             if status not in ALLOWED_STATUS:
                 allowed_list = ", ".join(sorted(ALLOWED_STATUS))
-                # Raise 400 with detailed message containing allowed list (tests assert tokens present)
-                raise APIError(
-                    f"Invalid status '{status}'. Allowed: {allowed_list}.",
-                    error="bad_request",
-                    status=400,
-                )
+                # Return RFC7807 ProblemDetails 400 /bad_request
+                resp = bad_request(detail=f"Invalid status '{status}'. Allowed: {allowed_list}.")
+                return resp
             old_status = getattr(t, "status", "done" if t.done else "todo")
             t.done = status == "done"
             if hasattr(t, "status"):

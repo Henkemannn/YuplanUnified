@@ -777,11 +777,15 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
                     mv = MenuVariant(menu_id=menu_id, day=day, meal=meal, variant_type=variant_type, dish_id=dish_id)
                     db.add(mv)
                 updates_count += 1
-        # Update menu's updated_at timestamp
+        # Update menu's updated_at timestamp (ensure monotonic millisecond change)
         menu = db.query(Menu).filter_by(id=menu_id).first()
         if menu:
             from datetime import datetime, timezone
-            menu.updated_at = datetime.now(timezone.utc)
+            old_ms = int(menu.updated_at.timestamp() * 1000) if getattr(menu, "updated_at", None) else 0
+            now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+            if now_ms <= old_ms:
+                now_ms = old_ms + 1
+            menu.updated_at = datetime.fromtimestamp(now_ms / 1000.0, tz=timezone.utc)
         db.commit()
     finally:
         db.close()

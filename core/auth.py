@@ -510,7 +510,7 @@ def login():
                 r = (session.get("role") or "").lower()
                 if r == "superuser":
                     # Canonical systemadmin landing
-                    resp = redirect(url_for("admin_ui.systemadmin_dashboard"), code=302)
+                    resp = redirect(url_for("ui.systemadmin_dashboard"), code=302)
                     set_csrf_cookie(resp, csrf_token)
                     return resp
                 elif r == "admin":

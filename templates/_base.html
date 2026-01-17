@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}Yuplan{% endblock %}</title>
+  {# Minimal fallback: provide csrf_token_input() macro so templates calling it don't error when strict CSRF is off in tests #}
+  {% macro csrf_token_input() %}{% if g.features and g.features.get('strict_csrf') and csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% else %}{% endif %}{% endmacro %}
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/main.css?v={{ asset_version|default('') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
