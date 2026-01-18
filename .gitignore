@@ -86,6 +86,7 @@ __pycache__/
 *.sqlite3
 *.db
 /dev.db
+dev.db.bak*
 
 # Alembic cache
 migrations/versions/__pycache__/

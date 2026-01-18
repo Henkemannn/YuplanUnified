@@ -168,8 +168,35 @@ def admin_departments_list() -> str:  # type: ignore[override]
     ctx = get_active_context()
     active_site = ctx.get("site_id")
     if not active_site:
-        from flask import redirect, url_for
-        return redirect(url_for("ui.select_site", next=url_for("admin_ui.admin_departments_list")))
+        # Auto-select site when tenant has exactly one site to avoid unnecessary select-site loop
+        try:
+            from flask import session as _sess
+            tid = _sess.get("tenant_id")
+            if tid:
+                db = get_session()
+                try:
+                    # Detect tenant_id column presence (SQLite-safe)
+                    has_tid_col = True
+                    try:
+                        if db.get_bind().dialect.name == "sqlite":
+                            cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
+                            has_tid_col = any(str(c[1]) == "tenant_id" for c in cols)
+                    except Exception:
+                        has_tid_col = True
+                    if has_tid_col:
+                        row = db.execute(text("SELECT id FROM sites WHERE tenant_id=:tid ORDER BY name"), {"tid": int(tid)}).fetchall()
+                        if len(row) == 1:
+                            only_site_id = str(row[0][0])
+                            _sess["site_id"] = only_site_id
+                            active_site = only_site_id
+                    # If column missing or multiple sites, fall through to select-site
+                finally:
+                    db.close()
+        except Exception:
+            active_site = None
+        if not active_site:
+            from flask import redirect, url_for
+            return redirect(url_for("ui.select_site", next=url_for("admin_ui.admin_departments_list")))
 
     sites_repo = SitesRepo()
     depts_repo = DepartmentsRepo()
