@@ -1,26 +1,47 @@
-## Sammanfattning
-Implementerar Planera Phase P1.1: dag- och vecka-aggregation via ny `PlaneraService`, hashed weak ETags (sha1 över kanonisk JSON), samt feature flag-gating med `ff.planera.enabled` (404 när avstängd). UI (day & week) använder nu riktiga data istället för placeholders. Skeleton-tester uppdaterade så de aktiverar flaggan. Full pytest-suite passerar: 363 passed, 7 skipped.
+PR-beskrivning
 
-## Detaljer
-- Ny fil: `core/planera_service.py` för day/week aggregation (räknar marked special diets och normal-diet residual).
-- API `/api/planera/day` och `/api/planera/week`: utbytt dummy till riktig aggregation + sha1-baserad ETag + 404 om flagga disabled.
-- UI-rutter `/ui/planera/day`, `/ui/planera/week`: feature flag-gating + riktig data; week UI har TODO för department-filter.
-- Tester: skeleton justeras att lägga till flaggan innan anrop. Negativa tester (404 + 304 conditional + diet name mapping tolerans) planeras i nästa mini-PR (P1.1.1).
-- ETag-format: `W/"planera:<kind>:<sha1prefix>"`.
+Resultat
 
-## Referenser
-Se `docs/planera_module_functional_spec.md` för ursprunglig funktionell spec.
+✅ Fullt grönt testläge: 918 passed, 12 skipped, 0 failures
 
-## TODO (P1.1.1 / P1.2)
-- Department-filter i week UI (kommentar i kod).
-- Negativa tester (flag disabled 404 + If-None-Match 304).
-- Diet name mapping (ersätta placeholder med registry).
-- Export (print + CSV) kommer i P1.2.
+Ändringar
 
-## Kvalitet
-- Pytest: 363 passed, 7 skipped, inga fel.
-- Ingen ändring av befintliga weekview/report-moduler.
-- Feature flag är opt-in: ej tillagd i seed => modul avstängd tills explicit aktiverad.
+Kommun UI
 
-## Labels
-module:planera, phase:P1.1, area:api, area:ui, type:feature, ready-for-review
+- Aktiverade legacy-ändpunkter med korrekt ETag/304-stöd
+- (core/legacy_kommun_ui.py, blueprint registrerad i core/app_factory.py)
+
+RFC7807 / ProblemDetails
+
+- Centraliserad felhantering för validering, paginering och rate-limit
+- Koder: 401 / 403 / 404 / 429
+- Implementerat i core/app_errors.py
+
+Tasks API
+
+- Normaliserade valideringssvar:
+	- Skapa: 422 med typ som slutar på /validation_error
+	- Uppdatera status: 400 med typ som slutar på /bad_request
+- Ändringar i core/tasks_api.py
+
+OpenAPI
+
+- Lade till ProblemDetails (inkl. request_id)
+- Återanvändbara responses: Problem401, Problem403, Problem429
+- Uppdaterat i core/app_factory.py
+
+SQLite bootstrap
+
+- Säkrad kompatibilitet för departments.version
+- Befintlig bootstrap-strategi bibehållen
+
+Verifiering
+
+- ETag-tester (tests/test_etag_views.py)
+- Notes & Tasks-validering
+- OpenAPI security/spec
+- Full körning: pytest -q
+
+Slutsats
+
+Den här PR:en återställer alla kontraktytor efter merge, utan refactors, och lämnar projektet i ett stabilt, verifierat läge.
