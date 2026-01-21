@@ -63,11 +63,9 @@ def test_weekview_site_overview_phase1(client_admin):
     # Materialize baseline + set data for Dep A
     base_a = f"/api/weekview?year={year}&week={week}&department_id={dep_a}"
     # Align session site context
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site_id, "next": "/"},
-        headers=_h("admin"),
-    )
+    # Set session site context directly (selector is superuser-only)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     r0a = client_admin.get(base_a, headers=_h("admin"))
     assert r0a.status_code == 200 and ETAG_RE.match(r0a.headers.get("ETag") or "")
     etag_a = r0a.headers.get("ETag")

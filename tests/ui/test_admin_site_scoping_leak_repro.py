@@ -120,6 +120,9 @@ def test_admin_isolation_leak_repro(app_session, client: FlaskClient):
     # Switch to Site A admin
     resp = client.get(f"/ui/systemadmin/switch-site/{site_a}", follow_redirects=True)
     assert resp.status_code == 200
+    # Ensure session site context is set to Site A (guard can clear on tenant switch)
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_a
 
     # Create Department A under Site A
     _create_department(client, "Avd A")
@@ -149,6 +152,8 @@ def test_admin_isolation_leak_repro(app_session, client: FlaskClient):
     # Switch to Site B admin
     resp = client.get(f"/ui/systemadmin/switch-site/{site_b}", follow_redirects=True)
     assert resp.status_code == 200
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_b
 
     # Create Department B and Diet B
     _create_department(client, "Avd B")

@@ -199,11 +199,12 @@ def upgrade() -> None:
                 sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
                 sa.Column("version", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
             )
-            op.create_unique_constraint(
-                "uq_weekview_alt2_flags",
-                "weekview_alt2_flags",
-                ["tenant_id", "department_id", "year", "week", "day_of_week"],
-            )
+            # SQLite requires batch mode to add constraints (recreate table under the hood)
+            with op.batch_alter_table("weekview_alt2_flags", recreate="always") as batch_op:
+                batch_op.create_unique_constraint(
+                    "uq_weekview_alt2_flags",
+                    ["tenant_id", "department_id", "year", "week", "day_of_week"],
+                )
         # Create AFTER UPDATE triggers to emulate version bump
         def _sqlite_trigger(tbl: str):
             trig = f"{tbl}_version_bump_trg"

@@ -81,11 +81,9 @@ def test_weekview_happy_path_with_menu_data(client_admin):
 
     # Set up resident counts
     # Ensure session site context matches our seeded site
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site_id, "next": "/"},
-        headers=_h("admin"),
-    )
+    # Set session site context directly (selector is superuser-only)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     base = f"/api/weekview?year={year}&week={week}&department_id={dep_id}"
     r0 = client_admin.get(base, headers=_h("admin"))
     assert r0.status_code == 200
@@ -251,11 +249,8 @@ def test_weekview_alt2_highlighting_visible(client_admin):
 
     # Set alt2 flag for Monday
     # Ensure session site context matches our seeded site
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site_id, "next": "/"},
-        headers=_h("admin"),
-    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     base = f"/api/weekview?year={year}&week={week}&department_id={dep_id}"
     r0 = client_admin.get(base, headers=_h("admin"))
     etag0 = r0.headers.get("ETag")

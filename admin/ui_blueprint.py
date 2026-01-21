@@ -164,36 +164,42 @@ def admin_dashboard() -> str:  # type: ignore[override]
 @require_roles("admin", "superuser")
 def admin_departments_list() -> str:  # type: ignore[override]
     """List departments scoped to the active site only."""
+    try:
+        from flask import session as _sess
+        import logging as _log
+        _log.getLogger("unified").info({
+            "event": "admin_departments_entry",
+            "path": request.path,
+            "user_id": _sess.get("user_id"),
+            "tenant_id": _sess.get("tenant_id"),
+            "site_id": _sess.get("site_id"),
+        })
+    except Exception:
+        pass
     from core.context import get_active_context
     ctx = get_active_context()
     active_site = ctx.get("site_id")
     if not active_site:
-        # Auto-select site when tenant has exactly one site to avoid unnecessary select-site loop
+        # Auto-select when tenant has exactly 1 site
         try:
             from flask import session as _sess
+            from core.context import get_single_site_id_for_tenant, get_active_context as _get_ctx
             tid = _sess.get("tenant_id")
-            if tid:
-                db = get_session()
-                try:
-                    # Detect tenant_id column presence (SQLite-safe)
-                    has_tid_col = True
+            if tid and not _sess.get("site_id"):
+                sid = get_single_site_id_for_tenant(tid)
+                if sid:
+                    _sess["site_id"] = sid
+                    # Optional: bump site_context_version like select_site_post
                     try:
-                        if db.get_bind().dialect.name == "sqlite":
-                            cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
-                            has_tid_col = any(str(c[1]) == "tenant_id" for c in cols)
+                        import uuid as _uuid
+                        _sess["site_context_version"] = str(_uuid.uuid4())
                     except Exception:
-                        has_tid_col = True
-                    if has_tid_col:
-                        row = db.execute(text("SELECT id FROM sites WHERE tenant_id=:tid ORDER BY name"), {"tid": int(tid)}).fetchall()
-                        if len(row) == 1:
-                            only_site_id = str(row[0][0])
-                            _sess["site_id"] = only_site_id
-                            active_site = only_site_id
-                    # If column missing or multiple sites, fall through to select-site
-                finally:
-                    db.close()
+                        pass
+                    # Refresh context
+                    ctx = _get_ctx()
+                    active_site = ctx.get("site_id")
         except Exception:
-            active_site = None
+            pass
         if not active_site:
             from flask import redirect, url_for
             return redirect(url_for("ui.select_site", next=url_for("admin_ui.admin_departments_list")))

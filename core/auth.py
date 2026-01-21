@@ -95,7 +95,7 @@ def require_roles(*roles: str):
                         max_age=cfg.get("JWT_MAX_AGE_SECONDS"),
                     )
                     session["user_id"] = payload.get("sub")
-                    session["role"] = payload.get("role")
+                    session["role"] = _normalize_role(payload.get("role"))
                     session["tenant_id"] = payload.get("tenant_id")
                 except JWTError as e:
                     if current_app.config.get("TESTING"):
@@ -130,6 +130,15 @@ def require_roles(*roles: str):
     return decorator
 
 
+def _normalize_role(role: str | None) -> str:
+    r = (role or "").strip().lower()
+    if r == "tenant_admin":
+        return "admin"
+    if r == "system_admin":
+        return "superuser"
+    return r
+
+
 # --- Routes ---
 @bp.post("/login")
 def login():
@@ -157,99 +166,6 @@ def login():
         data = {"email": request.form.get("email"), "password": request.form.get("password")}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
-    # DEV-only diagnostic logging to help debug login payload parsing
-    try:
-        import os as _os
-        from flask import g as _g
-        _dev_mode = (
-            (current_app.config.get("APP_ENV") == "dev")
-            or (_os.getenv("APP_ENV", "").lower() == "dev")
-            or (_os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"))
-        )
-        if _dev_mode:
-            j = request.get_json(silent=True) or {}
-            # Resolve DB URL + sqlite file path for request context
-            _db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI")
-            _sqlite_file = None
-            try:
-                if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
-                    import os as _os_fp
-                    _sqlite_file = _os_fp.path.abspath(_db_url.replace("sqlite:///", "", 1))
-            except Exception:
-                _sqlite_file = None
-            try:
-                import logging as _logging
-                _logging.warning(
-                    {
-                        "dev_auth_login_debug": True,
-                        "request_id": getattr(_g, "request_id", None),
-                        "content_type": request.content_type,
-                        "form_keys": list(request.form.keys()),
-                        "json_keys": list(j.keys()),
-                        "email_empty": (not bool(email)),
-                        "password_empty": (not bool(password)),
-                        "db_url": _db_url,
-                        "sqlite_file": _sqlite_file,
-                    }
-                )
-            except Exception:
-                pass
-            # Append compact line to instance/auth_debug.log (DEV-only)
-            try:
-                # Mask email: keep first 3 of local part + domain
-                _raw_email = (email or "").strip().lower()
-                _em_local, _em_dom = (None, None)
-                if "@" in _raw_email:
-                    _em_local, _em_dom = _raw_email.split("@", 1)
-                _masked_email = (
-                    (_em_local[:3] + "***@" + _em_dom) if (_em_local and _em_dom) else (_raw_email[:3] + "***")
-                )
-                _line = {
-                    "request_id": getattr(_g, "request_id", None),
-                    "content_type": request.content_type,
-                    "form_keys": list(request.form.keys()),
-                    "json_keys": list(j.keys()),
-                    "email_lower_masked": _masked_email,
-                    "password_present": bool(password),
-                    "db_url": _db_url,
-                    "sqlite_file": _sqlite_file,
-                }
-                import json as _json
-                import os as _os2
-                _os2.makedirs(current_app.instance_path, exist_ok=True)
-                _path = _os2.path.join(current_app.instance_path, "auth_debug.log")
-                with open(_path, "a", encoding="utf-8") as _fh:
-                    _fh.write(_json.dumps(_line, ensure_ascii=False) + "\n")
-            except Exception:
-                pass
-            try:
-                print(
-                    "AUTH_DEBUG:",
-                    {
-                        "request_id": getattr(_g, "request_id", None),
-                        "content_type": request.content_type,
-                        "form_keys": list(request.form.keys()),
-                        "json_keys": list(j.keys()),
-                        "email_empty": (not bool(email)),
-                        "password_empty": (not bool(password)),
-                    },
-                    flush=True,
-                )
-            except Exception:
-                pass
-            current_app.logger.warning(
-                {
-                    "dev_auth_login_debug": True,
-                    "request_id": getattr(_g, "request_id", None),
-                    "content_type": request.content_type,
-                    "form_keys": list(request.form.keys()),
-                    "json_keys": list(j.keys()),
-                    "email_empty": (not bool(email)),
-                    "password_empty": (not bool(password)),
-                }
-            )
-    except Exception:
-        pass
     # Always issue a CSRF cookie for clients (tests assert cookie presence even on errors)
     csrf_cookie_name = current_app.config.get("CSRF_COOKIE_NAME", "csrf_token")
     csrf_token = request.cookies.get(csrf_cookie_name)
@@ -258,39 +174,6 @@ def login():
 
         csrf_token = secrets.token_hex(16)
     if not email or not password:
-        # DEV-only: precise missing credentials reason
-        try:
-            import os as _os
-            from flask import g as _g
-            _dev_mode = (
-                (current_app.config.get("APP_ENV") == "dev")
-                or (_os.getenv("APP_ENV", "").lower() == "dev")
-                or (_os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"))
-            )
-            if _dev_mode:
-                _db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI")
-                _sqlite_file = None
-                try:
-                    if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
-                        import os as _os_fp
-                        _sqlite_file = _os_fp.path.abspath(_db_url.replace("sqlite:///", "", 1))
-                except Exception:
-                    _sqlite_file = None
-                import json as _json, os as _os2
-                _os2.makedirs(current_app.instance_path, exist_ok=True)
-                _path = _os2.path.join(current_app.instance_path, "auth_debug.log")
-                _entry = {
-                    "request_id": getattr(_g, "request_id", None),
-                    "reject_reason": "missing_credentials",
-                    "user_found": False,
-                    "password_ok": False,
-                    "db_url": _db_url,
-                    "sqlite_file": _sqlite_file,
-                }
-                with open(_path, "a", encoding="utf-8") as _fh:
-                    _fh.write(_json.dumps(_entry, ensure_ascii=False) + "\n")
-        except Exception:
-            pass
         resp = make_response(jsonify({"error": "missing credentials", "message": "missing credentials"}), 400)
         set_csrf_cookie(resp, csrf_token)
         return resp
@@ -310,40 +193,6 @@ def login():
         # rec = {failures: int, first: ts, lock_until: ts?}
         lock_until = rec.get("lock_until")
         if lock_until and lock_until > now:
-            # DEV-only: log reject reason
-            try:
-                import os as _os
-                from flask import g as _g
-                _dev_mode = (
-                    (current_app.config.get("APP_ENV") == "dev")
-                    or (_os.getenv("APP_ENV", "").lower() == "dev")
-                    or (_os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"))
-                )
-                if _dev_mode:
-                    _db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI")
-                    _sqlite_file = None
-                    try:
-                        if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
-                            import os as _os_fp
-                            _sqlite_file = _os_fp.path.abspath(_db_url.replace("sqlite:///", "", 1))
-                    except Exception:
-                        _sqlite_file = None
-                    import json as _json
-                    import os as _os2
-                    _os2.makedirs(current_app.instance_path, exist_ok=True)
-                    _path = _os2.path.join(current_app.instance_path, "auth_debug.log")
-                    _entry = {
-                        "request_id": getattr(_g, "request_id", None),
-                        "reject_reason": "rate_limited",
-                        "user_found": False,
-                        "password_ok": False,
-                        "db_url": _db_url,
-                        "sqlite_file": _sqlite_file,
-                    }
-                    with open(_path, "a", encoding="utf-8") as _fh:
-                        _fh.write(_json.dumps(_entry, ensure_ascii=False) + "\n")
-            except Exception:
-                pass
             resp = make_response(jsonify({"error": "rate_limited", "message": "rate_limited"}), 429)
             resp.headers["Retry-After"] = str(int(lock_until - now))
             return resp
@@ -371,46 +220,7 @@ def login():
                 resp.headers["Retry-After"] = str(lock_sec)
                 set_csrf_cookie(resp, csrf_token)
                 return resp
-            # DEV-only: log reject reason for 401
-            try:
-                import os as _os
-                from flask import g as _g
-                _dev_mode = (
-                    (current_app.config.get("APP_ENV") == "dev")
-                    or (_os.getenv("APP_ENV", "").lower() == "dev")
-                    or (_os.getenv("YUPLAN_DEV_HELPERS", "0").lower() in ("1", "true", "yes"))
-                )
-                if _dev_mode:
-                    _db_url = current_app.config.get("SQLALCHEMY_DATABASE_URI")
-                    _sqlite_file = None
-                    try:
-                        if isinstance(_db_url, str) and _db_url.startswith("sqlite:///"):
-                            import os as _os_fp
-                            _sqlite_file = _os_fp.path.abspath(_db_url.replace("sqlite:///", "", 1))
-                    except Exception:
-                        _sqlite_file = None
-                    import json as _json
-                    import os as _os2
-                    _os2.makedirs(current_app.instance_path, exist_ok=True)
-                    _path = _os2.path.join(current_app.instance_path, "auth_debug.log")
-                    _reason = "user_not_found" if not user_found else ("password_mismatch" if not password_ok else "unknown")
-                    # Additional hints
-                    if user_found and hasattr(user, "is_active") and not bool(getattr(user, "is_active")):
-                        _reason = "user_inactive"
-                    if user_found and getattr(user, "tenant_id", None) is None:
-                        _reason = "tenant_missing"
-                    _entry = {
-                        "request_id": getattr(_g, "request_id", None),
-                        "reject_reason": _reason,
-                        "user_found": user_found,
-                        "password_ok": password_ok,
-                        "db_url": _db_url,
-                        "sqlite_file": _sqlite_file,
-                    }
-                    with open(_path, "a", encoding="utf-8") as _fh:
-                        _fh.write(_json.dumps(_entry, ensure_ascii=False) + "\n")
-            except Exception:
-                pass
+            
             resp = make_response(jsonify({"error": "invalid credentials", "message": "invalid credentials"}), 401)
             set_csrf_cookie(resp, csrf_token)
             return resp
@@ -432,8 +242,38 @@ def login():
             del store[key]
         # Persist session for tests that rely on cookie-based auth instead of bearer header
         session["user_id"] = user.id
-        session["role"] = user.role
+        session["role"] = _normalize_role(user.role)
         session["tenant_id"] = user.tenant_id
+        # Enforce site-lock contract for non-superusers: bind active site when available
+        try:
+            role_norm = (session.get("role") or "").strip().lower()
+            if role_norm != "superuser":
+                # Prefer user.site_id; otherwise auto-select single site for tenant
+                bound_site = None
+                try:
+                    sid_attr = getattr(user, "site_id", None)
+                    bound_site = str(sid_attr) if sid_attr else None
+                except Exception:
+                    bound_site = None
+                if (not bound_site) and user.tenant_id is not None:
+                    try:
+                        from .context import get_single_site_id_for_tenant as _one_site
+                        bound_site = _one_site(int(user.tenant_id))
+                    except Exception:
+                        bound_site = None
+                if bound_site:
+                    session["site_id"] = bound_site
+                    session["site_lock"] = True
+                    try:
+                        session["site_context_version"] = int(session.get("site_context_version") or 0) + 1
+                    except Exception:
+                        session["site_context_version"] = 1
+                else:
+                    # No active site could be derived; HTML flow returns 403 below for multi-site tenants,
+                    # JSON/API flow will receive a 403 when we build response.
+                    pass
+        except Exception:
+            pass
         # CSRF token issuance (double submit). Provide if not present already.
         # csrf_token already prepared above
         # Decide response based on request type: HTML form vs JSON client
@@ -446,7 +286,7 @@ def login():
         except Exception:
             wants_html = False
         if wants_html:
-            # HTML form flow: redirect to appropriate landing
+            # HTML form flow: for non-superusers without active site, deny access instead of selector
             from flask import redirect, url_for
             target = None
             try:
@@ -454,15 +294,51 @@ def login():
                 if r == "superuser":
                     target = url_for("admin_ui.systemadmin_dashboard")
                 elif r == "admin":
-                    target = url_for("ui.admin_dashboard")
+                    # If admin lacks an active site, return 403 HTML (no selector)
+                    if not (session.get("site_id") or "").strip():
+                        html = """<!doctype html><html lang='sv'><head><meta charset='utf-8'>
+<title>Åtkomst nekad</title><meta name='robots' content='noindex'>
+<style>body{font-family:system-ui;margin:3rem;color:#111}h1{font-size:1.8rem;margin-bottom:.5rem}p{margin:.25rem 0}</style>
+</head><body><h1>Åtkomst nekad</h1>
+<p>Ditt konto är inte kopplat till någon arbetsplats.</p>
+<p>Kontakta systemadministratör.</p></body></html>"""
+                        resp = make_response(html, 403)
+                        resp.headers["Content-Type"] = "text/html; charset=utf-8"
+                        set_csrf_cookie(resp, csrf_token)
+                        return resp
+                    else:
+                        target = url_for("ui.admin_dashboard")
                 else:
-                    target = url_for("ui.weekview_ui")
+                    # For customer roles, require active site context before landing
+                    if not (session.get("site_id") or "").strip():
+                        html = """<!doctype html><html lang='sv'><head><meta charset='utf-8'>
+<title>Åtkomst nekad</title><meta name='robots' content='noindex'>
+<style>body{font-family:system-ui;margin:3rem;color:#111}h1{font-size:1.8rem;margin-bottom:.5rem}p{margin:.25rem 0}</style>
+</head><body><h1>Åtkomst nekad</h1>
+<p>Ditt konto är inte kopplat till någon arbetsplats.</p>
+<p>Kontakta systemadministratör.</p></body></html>"""
+                        resp = make_response(html, 403)
+                        resp.headers["Content-Type"] = "text/html; charset=utf-8"
+                        set_csrf_cookie(resp, csrf_token)
+                        return resp
+                    else:
+                        target = url_for("ui.weekview_ui")
             except Exception:
                 target = "/"
             resp = redirect(target, code=302)
             set_csrf_cookie(resp, csrf_token)
             return resp
         else:
+            # JSON/API: if non-superuser and active site is missing, enforce 403
+            try:
+                role_norm = (session.get("role") or "").strip().lower()
+                if role_norm != "superuser" and not (session.get("site_id") or "").strip():
+                    resp = make_response(jsonify({"ok": False, "error": "forbidden", "message": "site_binding_required"}), 403)
+                    set_csrf_cookie(resp, csrf_token)
+                    return resp
+            except Exception:
+                pass
+            
             resp = make_response(
                 jsonify(
                     {

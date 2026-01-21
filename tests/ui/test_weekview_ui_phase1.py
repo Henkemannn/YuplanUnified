@@ -58,12 +58,9 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
 
     # Get baseline ETag then set alt2 + residents
     base = f"/api/weekview?year={year}&week={week}&department_id={dep_id}"
-    # Align session site context
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site_id, "next": "/"},
-        headers=_h("admin"),
-    )
+    # Align session site context directly (selector is superuser-only)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     r0 = client_admin.get(base, headers=_h("admin"))
     assert r0.status_code == 200 and ETAG_RE.match(r0.headers.get("ETag") or "")
     etag0 = r0.headers.get("ETag")
@@ -137,7 +134,9 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
         finally:
             db.close()
 
-    # Ensure weekview materialized
+    # Ensure weekview materialized (align session site first)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
     assert r0.status_code == 200
 
