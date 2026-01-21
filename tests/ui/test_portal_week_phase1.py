@@ -110,11 +110,9 @@ def test_portal_diets_render(client_admin):
     # Simulate diet defaults via marks/residents (simplified by setting counts)
     # Use residents PATCH to set lunch counts (not directly diets, but ensures counts visible)
     # Align session site context
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site_id, "next": "/"},
-        headers=_h("admin"),
-    )
+    # Set session site context directly (selector is superuser-only)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
     etag0 = r0.headers.get("ETag")
     r_res = client_admin.patch("/api/weekview/residents", json={"tenant_id":1, "site_id": site_id, "department_id":dep_id,"year":year,"week":week,"items":[{"day_of_week":1,"meal":"lunch","count":18}]}, headers={**_h("admin"), "If-Match": etag0})

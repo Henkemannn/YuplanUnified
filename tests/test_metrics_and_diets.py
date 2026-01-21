@@ -41,6 +41,9 @@ def auth_superuser(client, app):
         db.commit()
     finally:
         db.close()
+    # Bind session to a test site to satisfy strict site isolation
+    with client.session_transaction() as sess:
+        sess["site_id"] = "test-site"
     rv = client.post("/auth/login", json={"email": "root@example.com", "password": "pw"})
     assert rv.status_code == 200
     return tid
@@ -74,6 +77,9 @@ def test_diet_type_crud_and_feature_toggle(tmp_path):
         )
         assert rv.status_code == 200 and rv.get_json()["enabled"] is True
         # Login as the created admin to test diet CRUD
+        # Bind session site before admin login
+        with client.session_transaction() as sess:
+            sess["site_id"] = "test-site"
         rv = client.post("/auth/login", json={"email": "a@b.c", "password": "pw"})
         assert rv.status_code == 200
         # Create diet type

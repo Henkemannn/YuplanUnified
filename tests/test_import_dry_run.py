@@ -25,6 +25,9 @@ def _bootstrap(db):
 
 
 def _login(client, email):
+    # Bind session to a test site to satisfy strict policy
+    with client.session_transaction() as sess:
+        sess["site_id"] = "test-site"
     r = client.post("/auth/login", json={"email": email, "password": "pw"})
     assert r.status_code == 200
 

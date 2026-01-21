@@ -120,6 +120,13 @@ COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 @require_roles(*SAFE_UI_ROLES)
 def select_site():
     """Simple site selection page: choose active site for current tenant."""
+    # Superuser-only: block selector for all non-superusers
+    try:
+        role = (session.get("role") or "").strip().lower()
+        if role != "superuser":
+            return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
     next_url = (request.args.get("next") or "/").strip()
     # Fast-path: if session indicates site lock, never show selector
     try:
@@ -172,6 +179,13 @@ def select_site():
 @ui_bp.post("/ui/select-site")
 @require_roles(*SAFE_UI_ROLES)
 def select_site_post():
+    # Superuser-only: block selector post for all non-superusers
+    try:
+        role = (session.get("role") or "").strip().lower()
+        if role != "superuser":
+            return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
     site_id = (request.form.get("site_id") or "").strip()
     next_url = (request.form.get("next") or "/").strip()
     # Session-enforced site lock: block switching away from locked site
@@ -868,6 +882,7 @@ def planera_mark_done():
 @ui_bp.get("/ui/weekview")
 @require_roles(*SAFE_UI_ROLES)
 def weekview_ui():
+    
     # Validate query params - default to current week if not provided
     req_site_id = (request.args.get("site_id") or "").strip()
     department_id = (request.args.get("department_id") or "").strip()
@@ -877,7 +892,6 @@ def weekview_ui():
     role = (session.get("role") or "").strip()
     # Effective site is the bound site when locked; otherwise use query arg
     site_id = session_site_id if (site_lock and session_site_id) else req_site_id
-    
     # Get current ISO week as default
     today = _date.today()
     iso_cal = today.isocalendar()
@@ -929,6 +943,26 @@ def weekview_ui():
             from .context import get_active_context as _get_ctx
             ctx = _get_ctx()
             site_id = ctx.get("site_id") or ""
+            if not site_id:
+                # Auto-select when tenant has exactly one site
+                try:
+                    from flask import session as _sess
+                    from .context import get_single_site_id_for_tenant, get_active_context as _ctx2
+                    tid = _sess.get("tenant_id")
+                    if tid and not _sess.get("site_id"):
+                        sid = get_single_site_id_for_tenant(tid)
+                        if sid:
+                            _sess["site_id"] = sid
+                            try:
+                                import uuid as _uuid
+                                _sess["site_context_version"] = str(_uuid.uuid4())
+                            except Exception:
+                                pass
+                            # Refresh context (mirror admin fix) and use its site_id
+                            _ctx = _ctx2()
+                            site_id = _ctx.get("site_id") or sid
+                except Exception:
+                    pass
             if not site_id:
                 from flask import redirect, url_for
                 target = url_for('ui.weekview_ui', site_id='', department_id='', year=year, week=week)
@@ -3224,7 +3258,27 @@ def admin_departments_list():
 
     # Require active site; redirect to selector when missing
     if not active_site_id:
-        return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_list")))
+        # Auto-select when tenant has exactly 1 site
+        try:
+            from flask import session as _sess
+            from .context import get_single_site_id_for_tenant, get_active_context as _ctx2
+            tid = _sess.get("tenant_id")
+            if tid and not _sess.get("site_id"):
+                sid = get_single_site_id_for_tenant(tid)
+                if sid:
+                    _sess["site_id"] = sid
+                    try:
+                        import uuid as _uuid
+                        _sess["site_context_version"] = str(_uuid.uuid4())
+                    except Exception:
+                        pass
+                    # Refresh active site from context
+                    ctx = _ctx2()
+                    active_site_id = ctx.get("site_id")
+        except Exception:
+            pass
+        if not active_site_id:
+            return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_list")))
 
     db = get_session()
     try:
@@ -3821,7 +3875,6 @@ def admin_users_create():
             full_name=full_name or None,
             role=role,
             is_active=True,
-            site_id=active_site if role == "admin" else None,
         )
         flash(f"Användare '{username}' skapad.", "success")
     except Exception as e:

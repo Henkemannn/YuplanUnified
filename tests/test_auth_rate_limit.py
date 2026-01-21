@@ -55,6 +55,9 @@ def test_auth_rate_limit_basic(monkeypatch):
     # wait lock_sec
     time.sleep(2.1)
     # Now should allow correct login
+    # Seed session site binding to satisfy strict site policy
+    with client.session_transaction() as sess:
+        sess["site_id"] = "test-site"
     r = client.post("/auth/login", json={"email": user_email, "password": "pw"})
     assert r.status_code == 200
     assert r.is_json and r.get_json().get("ok") is True

@@ -538,6 +538,27 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         except Exception:
             # Non-fatal; continue to handlers
             pass
+        # Clear stale site selection if it belongs to a different tenant
+        try:
+            from flask import session as _sess
+            t_sess = _sess.get("tenant_id")
+            s_sess = _sess.get("site_id")
+            if t_sess and s_sess:
+                from .db import get_site_tenant
+                site_tenant = get_site_tenant(str(s_sess))
+                if site_tenant is not None and int(site_tenant) != int(t_sess):
+                    _sess.pop("site_id", None)
+                    g.site_id = None
+                    log.info({
+                        "event": "cleared_site_on_tenant_mismatch",
+                        "tenant_id_session": t_sess,
+                        "site_id_session": s_sess,
+                        "site_tenant": site_tenant,
+                        "path": request.path,
+                    })
+        except Exception:
+            # Non-fatal; proceed without clearing if any issue arises
+            pass
         # Apply impersonation (may override tenant context)
         try:
             from .impersonation import apply_impersonation  # local import to avoid cycles

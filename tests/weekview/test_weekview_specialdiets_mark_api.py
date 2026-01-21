@@ -41,11 +41,8 @@ def test_toggle_specialdiet_mark_with_etag(client_admin):
 
     base = f"/api/weekview?year={year}&week={week}&department_id={dep_id}"
     # Ensure session site context matches our seeded site
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site_id, "next": "/"},
-        headers=_h("admin"),
-    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     r0 = client_admin.get(base, headers=_h("admin"))
     assert r0.status_code == 200 and ETAG_RE.match(r0.headers.get("ETag") or "")
     etag = r0.headers.get("ETag")

@@ -748,7 +748,7 @@ class Alt2Repo:
         finally:
             db.close()
 
-    def collection_version(self, week: int, site_id: str | None = None) -> int:
+    def collection_version(self, week: int, site_id: str) -> int:
         db = get_session()
         try:
             if _is_sqlite(db):
@@ -768,27 +768,22 @@ class Alt2Repo:
                         """
                     )
                 )
-            if site_id:
-                row = db.execute(
-                    text(
-                        "SELECT COALESCE(MAX(version),0) FROM alt2_flags WHERE site_id=:s AND week=:w"
-                    ),
-                    {"s": str(site_id), "w": int(week)},
-                ).fetchone()
-            else:
-                row = db.execute(
-                    text("SELECT COALESCE(MAX(version),0) FROM alt2_flags WHERE week=:w"),
-                    {"w": int(week)},
-                ).fetchone()
+            row = db.execute(
+                text(
+                    "SELECT COALESCE(MAX(version),0) FROM alt2_flags WHERE site_id=:s AND week=:w"
+                ),
+                {"s": str(site_id), "w": int(week)},
+            ).fetchone()
             return int(row[0]) if row and row[0] is not None else 0
         finally:
             db.close()
 
     def current_collection_version_or_none(self, week: int) -> int:
-        return self.collection_version(week)
+        # Deprecated non-site-scoped variant: return 0 to avoid cross-site aggregation.
+        return 0
 
-    def list_for_week(self, week: int) -> list[dict]:
-        """List alt2 flags for a given week."""
+    def list_for_week(self, week: int, site_id: str) -> list[dict]:
+        """List alt2 flags for a given week and site (strictly site-scoped)."""
         db = get_session()
         try:
             if _is_sqlite(db):
@@ -810,9 +805,9 @@ class Alt2Repo:
                 )
             rows = db.execute(
                 text(
-                    "SELECT site_id, department_id, week, weekday, enabled, COALESCE(version,0) FROM alt2_flags WHERE week=:w ORDER BY department_id, weekday"
+                    "SELECT site_id, department_id, week, weekday, enabled, COALESCE(version,0) FROM alt2_flags WHERE site_id=:s AND week=:w ORDER BY department_id, weekday"
                 ),
-                {"w": int(week)},
+                {"s": str(site_id), "w": int(week)},
             ).fetchall()
             return [
                 {

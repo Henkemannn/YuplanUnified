@@ -1,0 +1,38 @@
+diff --git a/core/auth.py b/core/auth.py
+index 7d549f4..5339205 100644
+--- a/core/auth.py
++++ b/core/auth.py
+@@ -95,7 +95,7 @@ def require_roles(*roles: str):
+                         max_age=cfg.get("JWT_MAX_AGE_SECONDS"),
+                     )
+                     session["user_id"] = payload.get("sub")
+-                    session["role"] = payload.get("role")
++                    session["role"] = _normalize_role(payload.get("role"))
+                     session["tenant_id"] = payload.get("tenant_id")
+                 except JWTError as e:
+                     if current_app.config.get("TESTING"):
+@@ -130,6 +130,15 @@ def require_roles(*roles: str):
+     return decorator
+ 
+ 
++def _normalize_role(role: str | None) -> str:
++    r = (role or "").strip().lower()
++    if r == "tenant_admin":
++        return "admin"
++    if r == "system_admin":
++        return "superuser"
++    return r
++
++
+ # --- Routes ---
+ @bp.post("/login")
+ def login():
+@@ -432,7 +441,7 @@ def login():
+             del store[key]
+         # Persist session for tests that rely on cookie-based auth instead of bearer header
+         session["user_id"] = user.id
+-        session["role"] = user.role
++        session["role"] = _normalize_role(user.role)
+         session["tenant_id"] = user.tenant_id
+         # CSRF token issuance (double submit). Provide if not present already.
+         # csrf_token already prepared above

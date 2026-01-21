@@ -215,3 +215,46 @@ def create_all() -> (
     except Exception:
         # Silent fallback – tests will surface issues if schema still missing.
         pass
+
+
+def get_site_tenant(site_id: str) -> int | None:
+    """Return the tenant_id for a given site_id, or None if unavailable.
+
+    SQLite dev schemas may lack sites.tenant_id; in that case we safely return None.
+    """
+    if _engine is None:
+        raise RuntimeError("Engine not initialized")
+    # Prefer session helper to reuse connection pool
+    try:
+        sess = get_session()
+    except Exception:
+        sess = None
+    try:
+        conn = (sess.connection() if sess is not None else _engine.connect())
+        try:
+            # Detect SQLite column presence via PRAGMA
+            if conn.dialect.name == "sqlite":
+                try:
+                    rows = conn.execute(text("PRAGMA table_info('sites')")).fetchall()
+                    cols = {str(r[1]) for r in rows}
+                    if "tenant_id" not in cols:
+                        return None
+                except Exception:
+                    return None
+            row = conn.execute(text("SELECT tenant_id FROM sites WHERE id = :sid"), {"sid": site_id}).fetchone()
+            if not row:
+                return None
+            val = row[0]
+            return int(val) if val is not None else None
+        finally:
+            try:
+                if sess is None:
+                    conn.close()
+            except Exception:
+                pass
+    finally:
+        try:
+            if sess is not None:
+                sess.close()
+        except Exception:
+            pass

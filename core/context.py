@@ -37,3 +37,21 @@ def get_active_context() -> ActiveContext:
 
 
 __all__ = ["get_active_context", "ActiveContext"]
+
+
+def get_single_site_id_for_tenant(tenant_id: int | str) -> str | None:
+    """Return the only site_id for a tenant if exactly one exists; else None.
+
+    Uses SitesRepo to respect existing data access and SQLite-safe behavior.
+    """
+    try:
+        from .admin_repo import SitesRepo
+        sites = SitesRepo().list_sites_for_tenant(tenant_id)
+        if isinstance(sites, list) and len(sites) == 1:
+            one = sites[0]
+            # SitesRepo returns dicts {id,name,version}
+            sid = (one.get("id") if isinstance(one, dict) else None)
+            return str(sid) if sid else None
+    except Exception:
+        return None
+    return None

@@ -55,7 +55,13 @@ We use a CVSS v3.1 inspired severity mapping. If exploitability is low and there
 | Release Readiness Script | Ensures baseline, tests, lint, diff status before tagging. |
 | Error Hygiene | All 4xx/5xx errors use RFC7807 Problem Details. 429 always sets `Retry-After` header and includes `retry_after` (and `limit` when applicable). See ADR-001 and ADR-003. |
 
----
+
+## Site Isolation Policy
+
+- Non-superusers must be site-bound on login; missing binding returns 403 (`site_binding_required`) in JSON and 403 HTML for form login.
+- `/ui/select-site` is superuser-only; non-superusers cannot switch sites via the selector.
+- Alt2 flags and weekview mutations are strictly scoped by `site_id`; writes for another site are rejected.
+- Single-site tenants auto-bind on login when possible; multi-site tenants without binding are denied (no fallback selector).
 
 ## Governance
 All future security and protocol decisions must be captured as an ADR and referenced by ID in relevant docs and PRs (e.g., "See ADR-001"). See the ADR index at `adr/README.md`. For CSRF posture and rollout specifics, see ADR-002.
@@ -192,6 +198,8 @@ Remove `issues: write` unless actually posting issues. For PR comments use `pull
 | No secrets in repo | Validate via secret scanning (GitHub Advanced Security / trufflehog). |
 | Rotation cadence | Quarterly for static tokens / credentials (✅ checklist). |
 | Principle of Least Privilege | Scope tokens to required repo or environment only. |
+
+Never log secrets (passwords/tokens). Seed scripts must mask secrets.
 
 ## Rate Limiting & Abuse Mitigation
 * Fixed window and token bucket strategies supported per limit registry.

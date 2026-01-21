@@ -35,11 +35,8 @@ def test_conditional_get_304_and_refresh_after_mutation(client_admin):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site, "next": "/"},
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
-    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site
 
     r0 = _get(client_admin, "viewer", base)
     assert r0.status_code == 200
@@ -76,11 +73,8 @@ def test_residents_counts_write_and_readback(client_admin):
     site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     # Align session site context with our test site
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site, "next": "/"},
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
-    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site
     etag0 = _get(client_admin, "admin", base).headers.get("ETag")
 
     payload = {
@@ -111,11 +105,8 @@ def test_alt2_flags_write_and_clear(client_admin):
     site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     # Align session site context with our test site
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site, "next": "/"},
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
-    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site
     etag0 = _get(client_admin, "admin", base).headers.get("ETag")
 
     p1 = {"site_id": site, "department_id": dep, "year": 2025, "week": 45, "days": [2, 5]}

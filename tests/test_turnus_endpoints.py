@@ -29,6 +29,9 @@ def _bootstrap_admin(db):
 
 
 def _login(client, email):
+    # Bind session to a test site to satisfy strict site isolation
+    with client.session_transaction() as sess:
+        sess["site_id"] = "test-site"
     r = client.post("/auth/login", json={"email": email, "password": "pw"})
     assert r.status_code == 200
 
