@@ -2102,7 +2102,7 @@ def weekview_registration_save():
 @require_roles(*SAFE_UI_ROLES)
 def weekview_overview_ui():
     # Validate query params
-    site_id = (request.args.get("site_id") or "").strip()
+    req_site_id = (request.args.get("site_id") or "").strip()
     try:
         year = int(request.args.get("year", ""))
         week = int(request.args.get("week", ""))
@@ -2113,15 +2113,43 @@ def weekview_overview_ui():
     if week < 1 or week > 53:
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
 
-    # Resolve site
+    # Determine effective site id using session lock (align with weekview_ui behavior)
+    session_site_id = (session.get("site_id") or "").strip()
+    site_lock = bool(session.get("site_lock"))
+    role = (session.get("role") or "").strip()
+    site_id = session_site_id if (site_lock and session_site_id) else req_site_id
+
+    # If still missing, try active context / single-site binding for tenant
+    if not site_id:
+        try:
+            from .context import get_active_context as _get_ctx
+            ctx = _get_ctx()
+            site_id = (ctx.get("site_id") or "").strip()
+            if not site_id:
+                from .context import get_single_site_id_for_tenant as _one_site
+                tid = session.get("tenant_id")
+                if tid and not session.get("site_id"):
+                    sid = _one_site(tid)
+                    if sid:
+                        session["site_id"] = sid
+                        try:
+                            import uuid as _uuid
+                            session["site_context_version"] = str(_uuid.uuid4())
+                        except Exception:
+                            pass
+                        site_id = sid
+        except Exception:
+            site_id = ""
+
+    # Resolve site and list departments for the effective site
     db = get_session()
     try:
-        row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
-        site_name = row[0] if row else None
-        if not site_name:
-            # For report UI, allow unknown site_id and show empty report
-            site_name = site_id or ""
-        # List departments for site
+        site_name = None
+        if site_id:
+            row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
+            site_name = (row[0] if row else None) or site_id
+        else:
+            site_name = ""
         deps = db.execute(
             text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"),
             {"s": site_id},
