@@ -252,9 +252,9 @@ def main() -> int:
         print(f"  site tenant_id={tenant_id} (created={site_created}, backfilled={site_backfilled})")
     except Exception:
         pass
-    print(f"  tenant admin: email='{ADMIN_EMAIL}', password='{ADMIN_PASSWORD}' (created={admin_created})")
-    print(f"  system admin: email='{SYSADMIN_EMAIL}', password='{SYSADMIN_PASSWORD}' (created={sys_created})")
-    print(f"  weekview staff/cook: email='{STAFF_EMAIL}', password='{STAFF_PASSWORD}' (created={staff_created})")
+    print(f"  tenant admin: email='{ADMIN_EMAIL}', password='<hidden>' (created={admin_created})")
+    print(f"  system admin: email='{SYSADMIN_EMAIL}', password='<hidden>' (created={sys_created})")
+    print(f"  weekview staff/cook: email='{STAFF_EMAIL}', password='<hidden>' (created={staff_created})")
     return 0
 
 

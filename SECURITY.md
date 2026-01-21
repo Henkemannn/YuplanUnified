@@ -199,6 +199,8 @@ Remove `issues: write` unless actually posting issues. For PR comments use `pull
 | Rotation cadence | Quarterly for static tokens / credentials (✅ checklist). |
 | Principle of Least Privilege | Scope tokens to required repo or environment only. |
 
+Never log secrets (passwords/tokens). Seed scripts must mask secrets.
+
 ## Rate Limiting & Abuse Mitigation
 * Fixed window and token bucket strategies supported per limit registry.
 * 429 responses include `Retry-After` for polite backoff.
