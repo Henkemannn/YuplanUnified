@@ -4180,7 +4180,7 @@ def admin_menu_planning_view(year: int, week: int):
     
     # Get Alt2 flags for the week (uses tenant_id for weekview compatibility)
     repo = MenuPlanningRepo()
-    alt2_data = repo.get_alt2_for_week(tid, year, week)
+    alt2_data = repo.get_alt2_for_week(tid, year, week, active_site_id)
     
     # Build week days (Mon-Sun)
     days = []
@@ -4263,7 +4263,7 @@ def admin_menu_planning_edit(year: int, week: int):
     
     # Get Alt2 flags for the week (uses tenant_id for weekview compatibility)
     repo = MenuPlanningRepo()
-    alt2_data = repo.get_alt2_for_week(tid, year, week)
+    alt2_data = repo.get_alt2_for_week(tid, year, week, active_site_id)
     
     # Build week days (Mon-Sun)
     days = []
@@ -4323,6 +4323,9 @@ def admin_menu_planning_save(year: int, week: int):
         return redirect(url_for("ui.admin_menu_planning_index"))
     
     tid = session.get("tenant_id")
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
     
     # Get all departments to validate IDs (across all sites)
     db = get_session()
@@ -4371,7 +4374,7 @@ def admin_menu_planning_save(year: int, week: int):
     # Save to database
     repo = MenuPlanningRepo()
     try:
-        repo.set_alt2_for_week(tid, year, week, alt2_map)
+        repo.set_alt2_for_week(tid, year, week, alt2_map, active_site_id)
         flash(f"Vecka {week}/{year} uppdaterad.", "success")
     except Exception as e:
         flash(f"Kunde inte spara ändringar: {str(e)}", "error")
