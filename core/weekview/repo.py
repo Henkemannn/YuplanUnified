@@ -74,13 +74,13 @@ class WeekviewRepo:
                 text(
                     """
                     CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
-                        tenant_id TEXT NOT NULL,
+                        site_id TEXT NOT NULL,
                         department_id TEXT NOT NULL,
                         year INTEGER NOT NULL,
                         week INTEGER NOT NULL,
                         day_of_week INTEGER NOT NULL,
-                        is_alt2 INTEGER NOT NULL DEFAULT 0,
-                        UNIQUE (tenant_id, department_id, year, week, day_of_week)
+                        enabled INTEGER NOT NULL DEFAULT 0,
+                        UNIQUE (site_id, department_id, year, week, day_of_week)
                     );
                     """
                 )
@@ -90,7 +90,7 @@ class WeekviewRepo:
             db.close()
 
     def get_weekview(
-        self, tenant_id: int | str, year: int, week: int, department_id: Optional[str]
+        self, tenant_id: int | str, year: int, week: int, department_id: Optional[str], site_id: str | None = None
     ) -> dict:
         self._ensure_schema()
         payload = {
@@ -139,17 +139,24 @@ class WeekviewRepo:
             counts = [
                 {"day_of_week": int(r[0]), "meal": str(r[1]), "count": int(r[2])} for r in rows_c
             ]
-            # Alt2 days
+            # Alt2 days (canonical filter by site). Prefer explicit site_id if provided.
+            site_id_val = str(site_id) if site_id else None
+            if not site_id_val:
+                row_site = db.execute(
+                    text("SELECT site_id FROM departments WHERE id=:dep"),
+                    {"dep": department_id},
+                ).fetchone()
+                site_id_val = str(row_site[0]) if row_site and row_site[0] is not None else None
             rows_a = db.execute(
                 text(
                     """
                     SELECT day_of_week
                     FROM weekview_alt2_flags
-                    WHERE tenant_id=:tid AND department_id=:dep AND year=:yy AND week=:ww AND is_alt2=true
+                    WHERE site_id=:site_id AND department_id=:dep AND year=:yy AND week=:ww AND enabled=1
                     ORDER BY day_of_week
                     """
                 ),
-                {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
+                {"site_id": site_id_val, "dep": department_id, "yy": year, "ww": week},
             ).fetchall()
             alt2_days = [int(r[0]) for r in rows_a]
             payload["department_summaries"].append(
@@ -384,6 +391,7 @@ class WeekviewRepo:
         week: int,
         department_id: str,
         days: Sequence[int],
+        site_id: str | None = None,
     ) -> int:
         self._ensure_schema()
         db = get_session()
@@ -401,6 +409,15 @@ class WeekviewRepo:
                 {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
             )
             day_set = set(int(d) for d in days)
+            # Resolve site_id for canonical writes
+            # Prefer provided site_id; otherwise resolve from department (if present)
+            site_id_val = str(site_id) if site_id else None
+            if not site_id_val:
+                row_site = db.execute(
+                    text("SELECT site_id FROM departments WHERE id=:dep"),
+                    {"dep": department_id},
+                ).fetchone()
+                site_id_val = str(row_site[0]) if row_site and row_site[0] is not None else None
             # Upsert true for provided days
             for d in day_set:
                 params = {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week, "dow": d}
@@ -408,25 +425,25 @@ class WeekviewRepo:
                     db.execute(
                         text(
                             """
-                            INSERT INTO weekview_alt2_flags(tenant_id, department_id, year, week, day_of_week, is_alt2)
-                            VALUES(:tid, :dep, :yy, :ww, :dow, 1)
-                            ON CONFLICT(tenant_id, department_id, year, week, day_of_week)
-                            DO UPDATE SET is_alt2=1
+                            INSERT INTO weekview_alt2_flags(site_id, department_id, year, week, day_of_week, enabled)
+                            VALUES(:site_id, :dep, :yy, :ww, :dow, 1)
+                            ON CONFLICT(site_id, department_id, year, week, day_of_week)
+                            DO UPDATE SET enabled=1
                             """
                         ),
-                        params,
+                        {"site_id": site_id_val, **params},
                     )
                 else:
                     db.execute(
                         text(
                             """
-                            INSERT INTO weekview_alt2_flags(tenant_id, department_id, year, week, day_of_week, is_alt2)
-                            VALUES(:tid, :dep, :yy, :ww, :dow, true)
-                            ON CONFLICT (tenant_id, department_id, year, week, day_of_week)
-                            DO UPDATE SET is_alt2=true, updated_at=now()
+                            INSERT INTO weekview_alt2_flags(site_id, department_id, year, week, day_of_week, enabled)
+                            VALUES(:site_id, :dep, :yy, :ww, :dow, true)
+                            ON CONFLICT (site_id, department_id, year, week, day_of_week)
+                            DO UPDATE SET enabled=true, updated_at=now()
                             """
                         ),
-                        params,
+                        {"site_id": site_id_val, **params},
                     )
             # Remove others (set false by deletion)
             if day_set:
@@ -434,11 +451,11 @@ class WeekviewRepo:
                     text(
                         """
                         DELETE FROM weekview_alt2_flags
-                        WHERE tenant_id=:tid AND department_id=:dep AND year=:yy AND week=:ww
+                        WHERE site_id=:site_id AND department_id=:dep AND year=:yy AND week=:ww
                           AND day_of_week NOT IN (%s)
                         """ % ",".join(str(d) for d in sorted(day_set))
                     ),
-                    {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
+                    {"site_id": site_id_val, "dep": department_id, "yy": year, "ww": week},
                 )
             else:
                 # If no days provided, clear all for week
@@ -446,10 +463,10 @@ class WeekviewRepo:
                     text(
                         """
                         DELETE FROM weekview_alt2_flags
-                        WHERE tenant_id=:tid AND department_id=:dep AND year=:yy AND week=:ww
+                        WHERE site_id=:site_id AND department_id=:dep AND year=:yy AND week=:ww
                         """
                     ),
-                    {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
+                    {"site_id": site_id_val, "dep": department_id, "yy": year, "ww": week},
                 )
             if dialect == "sqlite":
                 db.execute(

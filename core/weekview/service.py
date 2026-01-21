@@ -24,10 +24,10 @@ class WeekviewService:
         # Weak ETag format per spec
         return f'W/"weekview:dept:{department_id}:year:{year}:week:{week}:v{version}"'
 
-    def fetch_weekview(self, tenant_id: int | str, year: int, week: int, department_id: str | None) -> tuple[dict, str]:
+    def fetch_weekview(self, tenant_id: int | str, year: int, week: int, department_id: str | None, site_id: str | None = None) -> tuple[dict, str]:
         dep = department_id or "__none__"
         version = 0 if not department_id else self.repo.get_version(tenant_id, year, week, department_id)
-        payload = self.repo.get_weekview(tenant_id, year, week, department_id)
+        payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
         # Enrich with Phase 1 days[] structure for UI (backwards compatible)
         try:
             self._enrich_days(payload, tenant_id, year, week)
@@ -77,6 +77,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         week: int,
         department_id: str | None,
         if_none_match: str | None,
+        site_id: str | None = None,
     ) -> tuple[bool, dict | None, str]:
         """
         Returns (not_modified, payload, etag). If not_modified is True, payload will be None.
@@ -86,7 +87,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         etag = self.build_etag(tenant_id, dep, year, week, version)
         if if_none_match and if_none_match == etag:
             return True, None, etag
-        payload = self.repo.get_weekview(tenant_id, year, week, department_id)
+        payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
         try:
             self._enrich_days(payload, tenant_id, year, week)
         except Exception:
@@ -125,6 +126,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         department_id: str,
         if_match: str,
         days: Sequence[int],
+        site_id: str | None = None,
     ) -> str:
         m = self._ETAG_RE.match(if_match or "")
         if not m:
@@ -138,7 +140,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         current = self.repo.get_version(tenant_id, year, week, department_id)
         if current != v:
             raise EtagMismatchError("etag_mismatch")
-        new_v = self.repo.set_alt2_flags(tenant_id, year, week, department_id, days)
+        new_v = self.repo.set_alt2_flags(tenant_id, year, week, department_id, days, site_id)
         return self.build_etag(tenant_id, department_id, year, week, new_v)
 
     # --- Residents helpers (v1) ---

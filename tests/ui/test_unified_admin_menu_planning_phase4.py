@@ -65,30 +65,33 @@ def seed_alt2_flags(client_admin, seed_departments):
     """Seed Alt2 flags for week 10/2025 using weekview_alt2_flags table."""
     app = client_admin.application
     depts = seed_departments
-    
+    # Read active site_id from session
+    with client_admin.session_transaction() as s:
+        active_site_id = s.get("site_id")
+
     with app.app_context():
         sess = get_session()
-        # Ensure weekview_alt2_flags table exists
+        # Ensure weekview_alt2_flags table exists (canonical schema)
         sess.execute(text("""
             CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
-                tenant_id TEXT NOT NULL,
+                site_id TEXT NOT NULL,
                 department_id TEXT NOT NULL,
                 year INTEGER NOT NULL,
                 week INTEGER NOT NULL,
                 day_of_week INTEGER NOT NULL,
-                is_alt2 INTEGER NOT NULL DEFAULT 0,
-                UNIQUE (tenant_id, department_id, year, week, day_of_week)
+                enabled INTEGER NOT NULL DEFAULT 0,
+                UNIQUE (site_id, department_id, year, week, day_of_week)
             )
         """))
         # dept1: Alt2 on Monday (1) and Friday (5)
         # dept2: Alt2 on Wednesday (3)
         # dept3: No Alt2 (default Alt1)
         sess.execute(text(f"""
-            INSERT INTO weekview_alt2_flags (tenant_id, department_id, year, week, day_of_week, is_alt2)
+            INSERT INTO weekview_alt2_flags (site_id, department_id, year, week, day_of_week, enabled)
             VALUES 
-                ('1', '{depts['dept1']}', 2025, 10, 1, 1),
-                ('1', '{depts['dept1']}', 2025, 10, 5, 1),
-                ('1', '{depts['dept2']}', 2025, 10, 3, 1)
+                ('{active_site_id}', '{depts['dept1']}', 2025, 10, 1, 1),
+                ('{active_site_id}', '{depts['dept1']}', 2025, 10, 5, 1),
+                ('{active_site_id}', '{depts['dept2']}', 2025, 10, 3, 1)
         """))
         sess.commit()
     yield
@@ -249,7 +252,10 @@ def test_edit_post_saves_changes(client_admin, seed_departments):
     # Clear existing Alt2 flags
     with app.app_context():
         sess = get_session()
-        sess.execute(text("DELETE FROM weekview_alt2_flags WHERE tenant_id = '1'"))
+        # Clear flags scoped to active site
+        with client_admin.session_transaction() as s:
+            active_site_id = s.get("site_id")
+        sess.execute(text(f"DELETE FROM weekview_alt2_flags WHERE site_id = '{active_site_id}'"))
         sess.commit()
     
     # Submit form with Alt2 for dept1 on Monday and dept2 on Wednesday
