@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 from typing import Optional, Sequence
+import os
+import logging
+try:
+    from flask import current_app as flask_current_app  # only used if available
+except Exception:  # pragma: no cover
+    flask_current_app = None
 
 from sqlalchemy import text
 
@@ -85,6 +91,62 @@ class WeekviewRepo:
                     """
                 )
             )
+            # Canonicalization/migration guard: dev/test only, or explicit env flag
+            try:
+                # Allow when YUPLAN_ALLOW_SCHEMA_REPAIR truthy, or Flask TESTING/DEBUG
+                allow_env = os.getenv("YUPLAN_ALLOW_SCHEMA_REPAIR", "0").lower() in ("1", "true", "yes")
+                allow_cfg = False
+                try:
+                    if flask_current_app is not None:
+                        cfg = flask_current_app.config  # may raise if no app context
+                        allow_cfg = bool(cfg.get("TESTING") or cfg.get("DEBUG"))
+                except Exception:
+                    allow_cfg = False
+                if allow_env or allow_cfg:
+                    cols_rows = db.execute(text("PRAGMA table_info('weekview_alt2_flags')")).fetchall()
+                    cols = {str(r[1]) for r in cols_rows}
+                    is_canonical = ("site_id" in cols) and ("enabled" in cols) and ("tenant_id" not in cols) and ("is_alt2" not in cols)
+                    if not is_canonical:
+                        logging.warning("weekview_alt2_flags: repairing legacy SQLite schema to canonical (site-scoped)")
+                        # Create canonical temp table
+                        db.execute(
+                            text(
+                                """
+                                CREATE TABLE IF NOT EXISTS weekview_alt2_flags_new (
+                                    site_id TEXT NOT NULL,
+                                    department_id TEXT NOT NULL,
+                                    year INTEGER NOT NULL,
+                                    week INTEGER NOT NULL,
+                                    day_of_week INTEGER NOT NULL,
+                                    enabled INTEGER NOT NULL DEFAULT 0,
+                                    UNIQUE (site_id, department_id, year, week, day_of_week)
+                                );
+                                """
+                            )
+                        )
+                        # Attempt to migrate legacy data using departments.site_id
+                        try:
+                            db.execute(
+                                text(
+                                    """
+                                    INSERT INTO weekview_alt2_flags_new(site_id, department_id, year, week, day_of_week, enabled)
+                                    SELECT d.site_id, w.department_id, w.year, w.week, w.day_of_week,
+                                           CASE WHEN COALESCE(w.is_alt2, 0) = 1 THEN 1 ELSE 0 END
+                                    FROM weekview_alt2_flags w
+                                    LEFT JOIN departments d ON d.id = w.department_id
+                                    WHERE COALESCE(w.is_alt2, 0) = 1 AND d.site_id IS NOT NULL
+                                    """
+                                )
+                            )
+                        except Exception:
+                            # If migration fails, leave new table empty
+                            pass
+                        # Replace legacy table with canonical
+                        db.execute(text("DROP TABLE IF EXISTS weekview_alt2_flags"))
+                        db.execute(text("ALTER TABLE weekview_alt2_flags_new RENAME TO weekview_alt2_flags"))
+            except Exception:
+                # If PRAGMA fails or table not present, continue (canonical CREATE above ensures baseline)
+                pass
             db.commit()
         finally:
             db.close()

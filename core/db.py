@@ -128,6 +128,67 @@ def create_all() -> (
                 except Exception:
                     pass
 
+                # WEEKVIEW ALT2 FLAGS: canonicalize to site-scoped schema
+                try:
+                    # Detect existing table
+                    names = {r[0] for r in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+                    if "weekview_alt2_flags" in names:
+                        wcols = _cols("weekview_alt2_flags")
+                        is_canonical = ("site_id" in wcols) and ("enabled" in wcols) and ("tenant_id" not in wcols) and ("is_alt2" not in wcols)
+                        if not is_canonical:
+                            # Create canonical table with proper UNIQUE constraint
+                            conn.execute(text(
+                                """
+                                CREATE TABLE IF NOT EXISTS weekview_alt2_flags_new (
+                                    site_id TEXT NOT NULL,
+                                    department_id TEXT NOT NULL,
+                                    year INTEGER NOT NULL,
+                                    week INTEGER NOT NULL,
+                                    day_of_week INTEGER NOT NULL,
+                                    enabled INTEGER NOT NULL DEFAULT 0,
+                                    UNIQUE (site_id, department_id, year, week, day_of_week)
+                                );
+                                """
+                            ))
+                            # Try to migrate legacy data if present
+                            # Legacy columns: tenant_id, department_id, year, week, day_of_week, is_alt2
+                            try:
+                                if "department_id" in wcols and "year" in wcols and "week" in wcols and "day_of_week" in wcols:
+                                    # Use departments.site_id to backfill site_id
+                                    conn.execute(text(
+                                        """
+                                        INSERT INTO weekview_alt2_flags_new(site_id, department_id, year, week, day_of_week, enabled)
+                                        SELECT d.site_id, w.department_id, w.year, w.week, w.day_of_week,
+                                               CASE WHEN COALESCE(w.is_alt2, 0) = 1 THEN 1 ELSE 0 END
+                                        FROM weekview_alt2_flags w
+                                        LEFT JOIN departments d ON d.id = w.department_id
+                                        WHERE COALESCE(w.is_alt2, 0) = 1 AND d.site_id IS NOT NULL
+                                        """
+                                    ))
+                            except Exception:
+                                # If migration fails, continue with empty canonical table
+                                pass
+                            # Replace legacy table with canonical
+                            conn.execute(text("DROP TABLE IF EXISTS weekview_alt2_flags"))
+                            conn.execute(text("ALTER TABLE weekview_alt2_flags_new RENAME TO weekview_alt2_flags"))
+                    else:
+                        # No table yet; create canonical one
+                        conn.execute(text(
+                            """
+                            CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
+                                site_id TEXT NOT NULL,
+                                department_id TEXT NOT NULL,
+                                year INTEGER NOT NULL,
+                                week INTEGER NOT NULL,
+                                day_of_week INTEGER NOT NULL,
+                                enabled INTEGER NOT NULL DEFAULT 0,
+                                UNIQUE (site_id, department_id, year, week, day_of_week)
+                            );
+                            """
+                        ))
+                except Exception:
+                    pass
+
                 conn.commit()
     except Exception:
         # Silent: tests that rely on these columns will reveal issues if misaligned
@@ -187,13 +248,13 @@ def create_all() -> (
                 # Weekview Alt2 flags table (legacy/weekview compatibility)
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
-                        tenant_id TEXT NOT NULL,
+                        site_id TEXT NOT NULL,
                         department_id TEXT NOT NULL,
                         year INTEGER NOT NULL,
                         week INTEGER NOT NULL,
                         day_of_week INTEGER NOT NULL,
-                        is_alt2 INTEGER NOT NULL DEFAULT 0,
-                        UNIQUE (tenant_id, department_id, year, week, day_of_week)
+                        enabled INTEGER NOT NULL DEFAULT 0,
+                        UNIQUE (site_id, department_id, year, week, day_of_week)
                     )
                 """))
                 # Weekview items table (for menus)
