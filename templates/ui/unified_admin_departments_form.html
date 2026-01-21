@@ -220,11 +220,11 @@
                     </div>
                 </div>
             </form>
-            <div id="alt2-days" style="margin-top:12px;">
-                <p class="ua-muted">Hämtar...</p>
-            </div>
+            <div id="alt2-days" style="margin-top:12px;"></div>
         </div>
         <footer class="ua-modal-footer">
+            <span id="alt2-status" class="ua-muted" aria-live="polite"></span>
+            <button type="button" id="alt2-save" class="yp-button yp-button-primary">Spara</button>
             <button type="button" class="ua-button ua-button-ghost" data-modal-close>Stäng</button>
         </footer>
     </div>
@@ -236,18 +236,30 @@
         const daysEl = dlg.querySelector('#alt2-days');
         const yearEl = dlg.querySelector('#alt2-year');
         const weekEl = dlg.querySelector('#alt2-week');
+        const saveBtn = dlg.querySelector('#alt2-save');
+        const statusEl = dlg.querySelector('#alt2-status');
         const deptId = '{{ vm.department.id }}';
         const dayNames = {mon:'Mån',tue:'Tis',wed:'Ons',thu:'Tors',fri:'Fre',sat:'Lör',sun:'Sön'};
+        const order = ['mon','tue','wed','thu','fri','sat','sun'];
+        let selected = [];
 
-        function render(days){
-            const all = ['mon','tue','wed','thu','fri','sat','sun'];
-            let html = '<div class="ua-badges">';
-            for (const d of all){
-                const active = days.includes(d);
-                html += `<span class="ua-badge ${active ? 'ua-badge-success' : 'ua-badge-muted'}">${dayNames[d]}</span>`;
+        function render(){
+            let html = '<div class="ua-badges alt2-toggles">';
+            for (const d of order){
+                const active = selected.includes(d);
+                html += `<button type="button" class="ua-badge ${active ? 'ua-badge-success' : 'ua-badge-muted'}" data-day="${d}">${dayNames[d]}</button>`;
             }
             html += '</div>';
             daysEl.innerHTML = html;
+            daysEl.querySelectorAll('button[data-day]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const d = el.getAttribute('data-day');
+                    const i = selected.indexOf(d);
+                    if (i >= 0) selected.splice(i,1); else selected.push(d);
+                    selected.sort((a,b) => order.indexOf(a)-order.indexOf(b));
+                    render();
+                });
+            });
         }
 
         async function load(){
@@ -261,9 +273,31 @@
                     return;
                 }
                 const data = await r.json();
-                render(Array.isArray(data.alt2_days) ? data.alt2_days : []);
+                selected = Array.isArray(data.alt2_days) ? data.alt2_days.slice() : [];
+                render();
             } catch (e){
                 daysEl.innerHTML = '<p class="ua-error">Fel vid hämtning.</p>';
+            }
+        }
+
+        async function save(){
+            statusEl.textContent = '';
+            const y = parseInt(yearEl.value, 10);
+            const w = parseInt(weekEl.value, 10);
+            try {
+                const r = await fetch(`/ui/admin/departments/${deptId}/alt2`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-User-Role': 'admin', 'X-Tenant-Id': '1' },
+                    body: JSON.stringify({ year: y, week: w, alt2_days: selected })
+                });
+                if (!r.ok) { statusEl.textContent = 'Kunde inte spara.'; return; }
+                const data = await r.json();
+                selected = Array.isArray(data.alt2_days) ? data.alt2_days.slice() : [];
+                render();
+                statusEl.textContent = 'Sparat ✔';
+                setTimeout(() => { statusEl.textContent=''; }, 1500);
+            } catch (e) {
+                statusEl.textContent = 'Fel vid sparande.';
             }
         }
 
@@ -271,6 +305,7 @@
         dlg.addEventListener('close', () => {});
         yearEl.addEventListener('change', load);
         weekEl.addEventListener('change', load);
+        if (saveBtn) saveBtn.addEventListener('click', save);
         dlg.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', () => { try { dlg.close(); } catch(_) { dlg.removeAttribute('open'); } }));
     })();
     </script>
