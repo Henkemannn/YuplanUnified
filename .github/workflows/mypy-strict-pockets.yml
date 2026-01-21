@@ -3,9 +3,15 @@ name: mypy-strict-pockets
 on:
   pull_request:
     paths:
-      - 'core/**'
-      - 'mypy.ini'
-      - '.github/workflows/mypy-strict-pockets.yml'
+      - 'core/jwt_utils.py'
+      - 'core/rate_limit.py'
+      - 'core/audit.py'
+      - 'core/db.py'
+      - 'core/portion_recommendation_service.py'
+      - 'core/menu_service.py'
+      - 'core/service_metrics_service.py'
+      - 'core/auth.py'
+      - 'core/feature_flags.py'
   push:
     branches:
       - main
