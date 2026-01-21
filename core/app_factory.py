@@ -493,8 +493,6 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         except Exception:
             pass
         if app.config.get("TESTING"):
-            from flask import session
-
             role = request.headers.get("X-User-Role")
             tid = request.headers.get("X-Tenant-Id")
             uid = request.headers.get("X-User-Id")

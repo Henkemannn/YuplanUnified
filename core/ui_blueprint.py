@@ -3464,8 +3464,6 @@ def admin_departments_edit_form(dept_id: str):
         ).fetchone()
 
         if not dept_row:
-            from flask import flash, redirect, url_for
-
             flash("Avdelning hittades inte för vald site.", "error")
             return redirect(url_for("ui.admin_departments_list"))
 
