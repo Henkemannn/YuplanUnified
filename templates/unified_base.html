@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Unified{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    .gulmarkerad { background-color: #fff3cd; }
+    .flash { padding:8px; margin:8px 0; border-radius:4px; }
+    .flash-success { background:#e6ffed; }
+    .flash-error { background:#fdecea; }
+  </style>
+</head>
+<body>
+  {% block content %}{% endblock %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>
