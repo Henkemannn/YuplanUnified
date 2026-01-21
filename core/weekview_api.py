@@ -69,7 +69,15 @@ def get_weekview() -> Response:
         except Exception:
             return bad_request("invalid_department_id")
     inm = request.headers.get("If-None-Match")
-    not_mod, payload, etag = _service.fetch_weekview_conditional(tid, year, week, department_id, inm)
+    role = (session.get("role") or "").strip()
+    site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
+    site_query = (request.args.get("site_id") or "").strip()
+    # Policy: only superuser may control site via query; others ignore query and use session
+    if role == "superuser" and site_query:
+        site_for_read = site_query
+    else:
+        site_for_read = site_ctx or None
+    not_mod, payload, etag = _service.fetch_weekview_conditional(tid, year, week, department_id, inm, site_for_read)
     if not_mod:
         resp = make_response("")
         resp.status_code = 304
@@ -336,7 +344,9 @@ def patch_weekview_alt2() -> Response:
         if di < 1 or di > 7:
             return bad_request("invalid_day_of_week")
     try:
-        new_etag = _service.update_alt2_flags(tid, year, week, department_id, etag, days)
+        # Prefer explicit body site_id; otherwise use session site_id
+        site_for_write = site_body or site_ctx or None
+        new_etag = _service.update_alt2_flags(tid, year, week, department_id, etag, days, site_for_write)
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
     resp = jsonify({"updated": len(days), "status": "ok"})

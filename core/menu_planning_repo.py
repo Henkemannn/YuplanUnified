@@ -13,63 +13,68 @@ from .db import get_session
 
 class MenuPlanningRepo:
     """Repository for managing Alt2 selections in menu planning."""
-    
+
     def get_alt2_for_week(self, tenant_id: int | str, year: int, week: int, site_id: Optional[str] = None) -> Dict[str, Dict[str, bool]]:
-        """Get Alt2 flags for all departments in a given week.
-        
+        """Get Alt2 flags for all departments in a given week scoped to a site.
+
         Args:
-            tenant_id: Tenant ID
+            tenant_id: Tenant ID (kept for compatibility, not used for filtering)
             year: ISO year
             week: ISO week number (1-53)
-            site_id: Optional site filter (not used in Phase 4, reserved for future)
-        
+            site_id: Optional site filter; when provided, limits departments and flags to the site
+
         Returns:
-            Dictionary mapping department_id -> {date: is_alt2_bool}
-            Example: {
-                "dept-uuid-1": {"2025-11-03": True, "2025-11-05": False, ...},
-                "dept-uuid-2": {"2025-11-03": False, ...}
-            }
+            Dictionary mapping department_id -> {day_of_week_str: is_alt2_bool}
         """
         db = get_session()
         try:
-            # Query all alt2 flags for the week
-            rows = db.execute(
-                text(
-                    """
-                    SELECT department_id, day_of_week, is_alt2
-                    FROM weekview_alt2_flags
-                    WHERE tenant_id = :tid AND year = :year AND week = :week
-                    ORDER BY department_id, day_of_week
-                    """
-                ),
-                {"tid": str(tenant_id), "year": year, "week": week}
-            ).fetchall()
-            
-            # Build result map
+            params = {"year": year, "week": week}
+            if site_id:
+                params["sid"] = site_id
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT department_id, day_of_week, enabled
+                        FROM weekview_alt2_flags
+                        WHERE site_id = :sid AND year = :year AND week = :week
+                        ORDER BY department_id, day_of_week
+                        """
+                    ),
+                    params,
+                ).fetchall()
+            else:
+                # Fallback without site filter (should not be used in canonical flow)
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT department_id, day_of_week, enabled
+                        FROM weekview_alt2_flags
+                        WHERE year = :year AND week = :week
+                        ORDER BY department_id, day_of_week
+                        """
+                    ),
+                    params,
+                ).fetchall()
+
             result: Dict[str, Dict[str, bool]] = {}
             for row in rows:
                 dept_id = str(row[0])
                 day_of_week = int(row[1])
-                is_alt2 = bool(row[2])
-                
+                enabled = bool(int(row[2]))
                 if dept_id not in result:
                     result[dept_id] = {}
-                
-                # Convert day_of_week (1-7) to date string
-                # For now, store by day_of_week key (will convert to date in service layer)
-                result[dept_id][str(day_of_week)] = is_alt2
-            
+                result[dept_id][str(day_of_week)] = enabled
             return result
         finally:
             db.close()
     
     def set_alt2_for_week(
-        self, 
+        self,
         tenant_id: int | str,
         year: int,
         week: int,
         alt2_map: Dict[str, Dict[str, bool]],
-        site_id: Optional[str] = None
+        site_id: Optional[str] = None,
     ) -> None:
         """Set Alt2 flags for departments in a given week.
         
@@ -81,23 +86,23 @@ class MenuPlanningRepo:
                      where day_key can be "1"-"7" (day_of_week) or ISO date string
             site_id: Optional site filter (not used in Phase 4)
         
-        The method performs an upsert operation - it will insert new records or update
-        existing ones based on the (tenant_id, department_id, year, week, day_of_week) key.
+        The method performs an upsert operation using canonical keys:
+        (site_id, department_id, year, week, day_of_week).
         """
         db = get_session()
         try:
-            # Ensure table exists (defensive for tests)
+            # Ensure table exists (defensive for tests) with canonical schema
             db.execute(
                 text(
                     """
                     CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
-                        tenant_id TEXT NOT NULL,
+                        site_id TEXT NOT NULL,
                         department_id TEXT NOT NULL,
                         year INTEGER NOT NULL,
                         week INTEGER NOT NULL,
                         day_of_week INTEGER NOT NULL,
-                        is_alt2 INTEGER NOT NULL DEFAULT 0,
-                        UNIQUE (tenant_id, department_id, year, week, day_of_week)
+                        enabled INTEGER NOT NULL DEFAULT 0,
+                        UNIQUE (site_id, department_id, year, week, day_of_week)
                     )
                     """
                 )
@@ -125,41 +130,40 @@ class MenuPlanningRepo:
                             text(
                                 """
                                 INSERT INTO weekview_alt2_flags 
-                                (tenant_id, department_id, year, week, day_of_week, is_alt2)
-                                VALUES (:tid, :dept, :year, :week, :dow, :alt2)
-                                ON CONFLICT(tenant_id, department_id, year, week, day_of_week)
-                                DO UPDATE SET is_alt2 = excluded.is_alt2
+                                (site_id, department_id, year, week, day_of_week, enabled)
+                                VALUES (:sid, :dept, :year, :week, :dow, :enabled)
+                                ON CONFLICT(site_id, department_id, year, week, day_of_week)
+                                DO UPDATE SET enabled = excluded.enabled
                                 """
                             ),
                             {
-                                "tid": str(tenant_id),
+                                "sid": str(site_id) if site_id else None,
                                 "dept": str(department_id),
                                 "year": year,
                                 "week": week,
                                 "dow": day_of_week,
-                                "alt2": 1 if is_alt2 else 0
-                            }
+                                "enabled": 1 if is_alt2 else 0,
+                            },
                         )
                     else:
-                        # PostgreSQL
                         db.execute(
                             text(
                                 """
                                 INSERT INTO weekview_alt2_flags 
-                                (tenant_id, department_id, year, week, day_of_week, is_alt2)
-                                VALUES (:tid, :dept, :year, :week, :dow, :alt2)
-                                ON CONFLICT(tenant_id, department_id, year, week, day_of_week)
-                                DO UPDATE SET is_alt2 = EXCLUDED.is_alt2
+                                (site_id, department_id, year, week, day_of_week, enabled)
+                                VALUES (:sid, :dept, :year, :week, :dow, :enabled)
+                                ON CONFLICT(site_id, department_id, year, week, day_of_week)
+                                DO UPDATE SET enabled = EXCLUDED.enabled
                                 """
                             ),
                             {
-                                "tid": str(tenant_id),
+                                "sid": str(site_id) if site_id else None,
                                 "dept": str(department_id),
                                 "year": year,
                                 "week": week,
                                 "dow": day_of_week,
-                                "alt2": is_alt2
-                            }
+                                "enabled": 1 if is_alt2 else 0,
+                            },
                         )
             
             db.commit()
@@ -180,10 +184,10 @@ class MenuPlanningRepo:
                 text(
                     """
                     DELETE FROM weekview_alt2_flags
-                    WHERE tenant_id = :tid AND year = :year AND week = :week
+                    WHERE site_id = :sid AND year = :year AND week = :week
                     """
                 ),
-                {"tid": str(tenant_id), "year": year, "week": week}
+                {"sid": str(site_id) if site_id else None, "year": year, "week": week},
             )
             db.commit()
         finally:
