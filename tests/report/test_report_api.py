@@ -79,12 +79,9 @@ def test_report_math_and_clamp_with_weekview_data(client_admin):
     site = str(uuid.uuid4())
     year, week = 2025, 45
     wv_base = f"/api/weekview?year={year}&week={week}&department_id={dep}"
-    # Align session site context for weekview mutations
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site, "next": "/"},
-        headers=_headers("admin"),
-    )
+    # Align session site context for weekview mutations (selector is superuser-only)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site
 
     # Get initial ETag for weekview
     r0 = _get(client_admin, "admin", wv_base)

@@ -119,8 +119,33 @@ class AdminService:
         ns, kind, ident, version = parse_if_match(if_match)
         if version is None or kind != "alt2" or ns != "admin" or ident != f"week:{week}":
             raise ValueError("invalid_if_match")
-        # Concurrency check (collection etag)
-        current_v = self.alt2_repo.collection_version(week)
+        # Concurrency check (collection etag) – site-scoped
+        # Determine single site_id scope from items; reject mixed sites
+        scope_site_id: str | None = None
+        try:
+            from .db import get_session
+            from sqlalchemy import text as _text
+            _db = get_session()
+            try:
+                _sites: set[str] = set()
+                for it in items:
+                    _dept_id = str(it.get("department_id") or "").strip()
+                    if not _dept_id:
+                        raise ValueError("department_id_required")
+                    _row = _db.execute(_text("SELECT site_id FROM departments WHERE id=:id"), {"id": _dept_id}).fetchone()
+                    if not _row:
+                        raise ValueError("department_not_found")
+                    _sites.add(str(_row[0]))
+                if len(_sites) != 1:
+                    raise ValueError("mixed_site_ids")
+                scope_site_id = next(iter(_sites))
+            finally:
+                _db.close()
+        except Exception:
+            scope_site_id = None
+        if not scope_site_id:
+            raise ValueError("site_scope_required")
+        current_v = self.alt2_repo.collection_version(week, scope_site_id)
         if version != current_v:
             raise ConcurrencyError("stale collection version")
         # Infer site_id for each department (first lookup; all departments in seed share one site)
@@ -150,7 +175,7 @@ class AdminService:
             db.close()
         # Upsert flags with real site ids
         updated = self.alt2_repo.bulk_upsert(sanitized)
-        new_coll_version = self.alt2_repo.collection_version(week)
+        new_coll_version = self.alt2_repo.collection_version(week, scope_site_id)
         etag = make_etag("admin", "alt2", f"week:{week}", new_coll_version)
         body = {
             "week": week,
@@ -173,8 +198,8 @@ class AdminService:
             return None
         return make_etag("admin", "dept", dept_id, v)
 
-    def get_alt2_collection_etag(self, week: int) -> str:
-        v = self.alt2_repo.collection_version(week)
+    def get_alt2_collection_etag(self, week: int, site_id: str) -> str:
+        v = self.alt2_repo.collection_version(week, site_id)
         return make_etag("admin", "alt2", f"week:{week}", v)
 
     # --- Department Settings (Phase 1) ---

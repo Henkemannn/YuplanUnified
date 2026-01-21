@@ -45,6 +45,9 @@ def seeded_admin():
 
 
 def login(client, email, password="pw"):
+    # Bind session to a test site to satisfy strict site isolation
+    with client.session_transaction() as sess:
+        sess["site_id"] = "test-site"
     return client.post("/auth/login", json={"email": email, "password": password})
 
 

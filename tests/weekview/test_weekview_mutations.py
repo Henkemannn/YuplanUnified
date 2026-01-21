@@ -47,11 +47,8 @@ def test_happy_path_and_412(client_admin):
     site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     # Align session site context
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site, "next": "/"},
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
-    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site
 
     # Initial GET -> v0
     r0 = _get(client_admin, "admin", base)
@@ -91,11 +88,8 @@ def test_validation_errors(client_admin, meal):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site, "next": "/"},
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
-    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site
     r0 = _get(client_admin, "admin", base)
     etag0 = r0.headers.get("ETag")
     p = {
@@ -114,11 +108,8 @@ def test_batch_semantics_and_idempotence(client_admin):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
-    client_admin.post(
-        "/ui/select-site",
-        data={"site_id": site, "next": "/"},
-        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
-    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site
     etag0 = _get(client_admin, "admin", base).headers.get("ETag")
 
     ops = [

@@ -71,11 +71,13 @@ class TestAdminPhaseDConditionalGET:
         app = _mk_app()
         c = app.test_client()
         headers = {"X-User-Role": "editor", "X-Tenant-Id": "1"}
-        r1 = c.get("/admin/alt2?week=12", headers=headers)
+        # Seed a site for scope
+        s = c.post("/admin/sites", headers={**headers, "X-User-Role": "admin"}, json={"name": "S1"}).get_json()
+        r1 = c.get(f"/admin/alt2?week=12&site={s['id']}", headers=headers)
         assert r1.status_code == 200
         et = r1.headers.get("ETag")
         assert et and et.startswith('W/"admin:alt2:week:12:')
-        r2 = c.get("/admin/alt2?week=12", headers={**headers, "If-None-Match": et})
+        r2 = c.get(f"/admin/alt2?week=12&site={s['id']}", headers={**headers, "If-None-Match": et})
         assert r2.status_code == 304
 
     def test_notes_department_200_then_304(self):

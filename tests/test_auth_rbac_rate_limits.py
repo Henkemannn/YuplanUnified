@@ -61,6 +61,9 @@ def client(app):
 
 
 def login(client, email, password="pw", tenant_id=1):
+    # Seed session site binding to satisfy strict site policy
+    with client.session_transaction() as sess:
+        sess["site_id"] = "test-site"
     res = client.post(
         "/auth/login",
         json={"email": email, "password": password},

@@ -43,6 +43,9 @@ def client(app):
 
 
 def login(client, email: str):
+    # Seed session site binding to satisfy strict site policy for non-superusers
+    with client.session_transaction() as sess:
+        sess["site_id"] = "test-site"
     r = client.post(
         "/auth/login", json={"email": email, "password": "pw"}, headers={"X-Tenant-Id": "1"}
     )

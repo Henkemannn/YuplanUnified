@@ -846,13 +846,36 @@ def update_bulk_alt2():
     items = data.get("items") or []
     if not isinstance(items, list):
         return bad_request("items must be list")
+    # Determine site scope from items (single-site only)
+    from core.db import get_session
+    from sqlalchemy import text as _text
+    scope_site_id = None
+    try:
+        db = get_session()
+        try:
+            sites = set()
+            for it in items:
+                dept_id = str((it or {}).get("department_id") or "").strip()
+                if not dept_id:
+                    return bad_request("department_id_required")
+                row = db.execute(_text("SELECT site_id FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
+                if not row:
+                    return bad_request("department_not_found")
+                sites.add(str(row[0]))
+            if len(sites) != 1:
+                return bad_request("mixed_site_ids")
+            scope_site_id = next(iter(sites))
+        finally:
+            db.close()
+    except Exception:
+        return bad_request("site_scope_required")
     svc = AdminService()
     try:
         body, new_etag = svc.update_alt2_bulk(if_match, week, items)
     except ValueError as ve:
         return bad_request(str(ve))
     except ConcurrencyError:
-        current = AdminService().get_alt2_collection_etag(week)
+        current = AdminService().get_alt2_collection_etag(week, scope_site_id)
         pb = problem(412, "etag_mismatch", "Precondition Failed", "Resource has been modified since last read")
         try:
             body = pb.get_json()
@@ -967,7 +990,7 @@ def get_diet_defaults():
 def get_alt2_week():
     """Get alt2 flags for a week (collection ETag).
 
-    Query: week=<int>
+    Query: week=<int>, site=<site_id>
     ETag: W/"admin:alt2:week:<week>:v<max>"
     """
     maybe = _require_admin_module_enabled()
@@ -979,8 +1002,11 @@ def get_alt2_week():
         return bad_request('week query param required/int')
     if not _validate_week_range(week):
         return bad_request('Week must be between 1 and 53')
+    site_id = (request.args.get('site') or request.args.get('site_id') or '').strip()
+    if not site_id:
+        return bad_request('site query param required')
     svc = AdminService()
-    rows = svc.alt2_repo.list_for_week(week)
+    rows = svc.alt2_repo.list_for_week(week, site_id)
     max_v = max([r.get('version',0) for r in rows], default=0)
     etag = make_collection_etag('admin:alt2', f'week:{week}', max_v)
     simplified = [

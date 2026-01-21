@@ -89,6 +89,9 @@ def seeded(client):
 
 
 def login(client, email):
+    # Seed session site binding to satisfy strict site isolation
+    with client.session_transaction() as sess:
+        sess["site_id"] = "test-site"
     return client.post("/auth/login", json={"email": email, "password": "pw"})
 
 
