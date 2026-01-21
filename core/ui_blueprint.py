@@ -3567,6 +3567,88 @@ def admin_departments_edit_form(dept_id: str):
     return render_template("ui/unified_admin_departments_form.html", vm=vm)
 
 
+@ui_bp.get("/ui/admin/departments/<dept_id>/alt2")
+@require_roles(*ADMIN_ROLES)
+def admin_department_alt2_get(dept_id: str):
+    """Return Alt2 flags for a department for a given ISO week (read-only, JSON).
+
+    Query params: year, week. Defaults to current if missing. Site-scoped via active session site.
+    """
+    from datetime import date as _dt
+    from flask import jsonify, abort
+    from sqlalchemy import text
+    from core.db import get_session
+    from core.menu_planning_repo import MenuPlanningRepo
+
+    # Resolve year/week
+    try:
+        year = int((request.args.get("year") or 0))
+    except ValueError:
+        year = 0
+    try:
+        week = int((request.args.get("week") or 0))
+    except ValueError:
+        week = 0
+
+    if year <= 0 or week <= 0:
+        today = _dt.today()
+        iso = today.isocalendar()
+        year = iso[0]
+        week = iso[1]
+
+    # Basic validation
+    if year < 2000 or year > 2100:
+        return jsonify({"error": "bad_request", "message": "Invalid year"}), 400
+    if week < 1 or week > 53:
+        return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
+
+    # Active site required
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        return jsonify({"error": "site_required", "message": "Select active site"}), 400
+
+    # Verify department belongs to active site
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT site_id FROM departments WHERE id=:id"),
+            {"id": dept_id},
+        ).fetchone()
+    finally:
+        db.close()
+
+    if not row:
+        return jsonify({"error": "not_found"}), 404
+    if str(row[0]) != str(active_site_id):
+        return jsonify({"error": "forbidden"}), 403
+
+    # Fetch Alt2 flags via repo (site-scoped)
+    tid = session.get("tenant_id")
+    repo = MenuPlanningRepo()
+    alt2_map = repo.get_alt2_for_week(tid, year, week, active_site_id)
+    dept_days = alt2_map.get(str(dept_id), {})
+
+    # Collect enabled days as short codes
+    day_short = {1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat", 7: "sun"}
+    enabled_days = []
+    for k, v in dept_days.items():
+        try:
+            dow = int(k)
+        except ValueError:
+            continue
+        if v is True and 1 <= dow <= 7:
+            enabled_days.append(day_short[dow])
+
+    return jsonify({
+        "department_id": str(dept_id),
+        "year": year,
+        "week": week,
+        "alt2_days": sorted(enabled_days),
+    })
+
+
 @ui_bp.post("/ui/admin/departments/<dept_id>/edit")
 @require_roles(*ADMIN_ROLES)
 def admin_departments_update(dept_id: str):

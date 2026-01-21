@@ -94,6 +94,16 @@
                     <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
                 </div>
 
+                {% if vm.mode == 'edit' and vm.department %}
+                <div class="yp-form-field">
+                    <label class="yp-label">🍽️ Menyval (Alt1/Alt2)</label>
+                    <div>
+                        <button type="button" id="openAlt2Modal" class="yp-button yp-button-secondary">Visa veckans Alt2</button>
+                    </div>
+                    <p class="yp-form-help">Läs-läge (Slice 1). Uppdatering kommer i nästa steg.</p>
+                </div>
+                {% endif %}
+
                 <div class="form-actions">
                     <button type="submit" class="yp-button yp-button-primary">
                         {% if vm.mode == 'new' %}
@@ -189,6 +199,81 @@
             <button type="submit" form="residents-variation-form" class="yp-button yp-button-primary">Spara</button>
         </footer>
     </div>
+</dialog>
+
+<dialog id="alt2-modal" class="ua-modal">
+    <div class="ua-modal-inner">
+        <header class="ua-modal-header">
+            <h2>🍽️ Menyval (Alt1/Alt2) – {{ vm.department.name }}</h2>
+            <button type="button" class="ua-modal-close" data-modal-close>&times;</button>
+        </header>
+        <div class="ua-modal-body">
+            <form class="ua-form" onsubmit="return false;">
+                <div class="ua-grid ua-grid-2cols">
+                    <div>
+                        <label class="yp-label" for="alt2-year">År</label>
+                        <input id="alt2-year" class="yp-input" type="number" min="2000" max="2100" value="{{ vm.current_year }}">
+                    </div>
+                    <div>
+                        <label class="yp-label" for="alt2-week">Vecka</label>
+                        <input id="alt2-week" class="yp-input" type="number" min="1" max="53" value="{{ vm.current_week }}">
+                    </div>
+                </div>
+            </form>
+            <div id="alt2-days" style="margin-top:12px;">
+                <p class="ua-muted">Hämtar...</p>
+            </div>
+        </div>
+        <footer class="ua-modal-footer">
+            <button type="button" class="ua-button ua-button-ghost" data-modal-close>Stäng</button>
+        </footer>
+    </div>
+    <script>
+    (function(){
+        const dlg = document.getElementById('alt2-modal');
+        const btn = document.getElementById('openAlt2Modal');
+        if (!dlg || !btn) return;
+        const daysEl = dlg.querySelector('#alt2-days');
+        const yearEl = dlg.querySelector('#alt2-year');
+        const weekEl = dlg.querySelector('#alt2-week');
+        const deptId = '{{ vm.department.id }}';
+        const dayNames = {mon:'Mån',tue:'Tis',wed:'Ons',thu:'Tors',fri:'Fre',sat:'Lör',sun:'Sön'};
+
+        function render(days){
+            const all = ['mon','tue','wed','thu','fri','sat','sun'];
+            let html = '<div class="ua-badges">';
+            for (const d of all){
+                const active = days.includes(d);
+                html += `<span class="ua-badge ${active ? 'ua-badge-success' : 'ua-badge-muted'}">${dayNames[d]}</span>`;
+            }
+            html += '</div>';
+            daysEl.innerHTML = html;
+        }
+
+        async function load(){
+            const y = parseInt(yearEl.value, 10);
+            const w = parseInt(weekEl.value, 10);
+            daysEl.innerHTML = '<p class="ua-muted">Hämtar...</p>';
+            try {
+                const r = await fetch(`/ui/admin/departments/${deptId}/alt2?year=${y}&week=${w}`, { headers: { 'X-User-Role': 'admin', 'X-Tenant-Id': '1' } });
+                if (!r.ok) {
+                    daysEl.innerHTML = '<p class="ua-error">Kunde inte hämta Alt2.</p>';
+                    return;
+                }
+                const data = await r.json();
+                render(Array.isArray(data.alt2_days) ? data.alt2_days : []);
+            } catch (e){
+                daysEl.innerHTML = '<p class="ua-error">Fel vid hämtning.</p>';
+            }
+        }
+
+        btn.addEventListener('click', () => { try { dlg.showModal(); } catch(_) { dlg.setAttribute('open','open'); } load(); });
+        dlg.addEventListener('close', () => {});
+        yearEl.addEventListener('change', load);
+        weekEl.addEventListener('change', load);
+        dlg.querySelectorAll('[data-modal-close]').forEach(el => el.addEventListener('click', () => { try { dlg.close(); } catch(_) { dlg.removeAttribute('open'); } }));
+    })();
+    </script>
 </dialog>
 {% endif %}
 
