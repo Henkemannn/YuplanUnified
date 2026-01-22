@@ -38,6 +38,7 @@ TEST_EXEMPT = PROD_EXEMPT | {
     "/admin/features/toggle",
     "/admin/feature_flags",
     "/diet/",
+    "/ui/admin/menu-import",
 }
 
 # Strict CSRF enforcement paths (prefix match). State-changing methods under these
