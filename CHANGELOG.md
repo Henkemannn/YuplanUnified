@@ -45,8 +45,9 @@
 
 ### Docs
 - README and SECURITY updated with pilot scope, examples, and rollout plan
-- SQLite bootstrap: weekview_alt2_flags is now canonical (site_id + enabled + unique constraint).
-- Legacy dev/test DBs may be auto-repaired in DEBUG/TEST or when YUPLAN_ALLOW_SCHEMA_REPAIR=1; production does not auto-migrate.
+- SQLite bootstrap: canonical weekview_alt2_flags (site_id, enabled, unique).
+- Legacy dev/test auto-repair only in DEBUG/TEST or YUPLAN_ALLOW_SCHEMA_REPAIR=1.
+- Production does not auto-migrate.
 
 ### CI
 - Gate ensuring pilot endpoints emit `application/problem+json` when flag enabled
