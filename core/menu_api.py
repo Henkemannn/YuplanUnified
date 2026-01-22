@@ -22,7 +22,35 @@ def get_week():
         return jsonify({"ok": False, "error": "week/year required"}), 400
     svc = current_app.menu_service  # type: ignore[attr-defined]
     view = svc.get_week_view(tenant_id, week, year)
-    return {"ok": True, "menu": view}
+    # Translate canonical keys to legacy labels expected by API tests
+    def _legacy_day_label(d: str) -> str:
+        m = {
+            "mon": "Mon",
+            "tue": "Tue",
+            "wed": "Wed",
+            "thu": "Thu",
+            "fri": "Fri",
+            "sat": "Sat",
+            "sun": "Sun",
+        }
+        return m.get(d.strip().lower(), d)
+    def _legacy_meal_label(mn: str) -> str:
+        mn2 = mn.strip().lower()
+        if mn2 == "lunch":
+            return "Lunch"
+        if mn2 == "dinner":
+            return "Dinner"
+        return mn
+    days = view.get("days", {})
+    translated_days: dict[str, dict[str, dict[str, dict]] ] = {}
+    for dkey, meals in days.items():
+        out_day = _legacy_day_label(dkey)
+        translated_days[out_day] = {}
+        for mkey, variants in meals.items():
+            out_meal = _legacy_meal_label(mkey)
+            translated_days[out_day][out_meal] = variants
+    translated_view = {**view, "days": translated_days}
+    return {"ok": True, "menu": translated_view}
 
 
 @bp.post("/variant/set")
