@@ -17,9 +17,10 @@
         <div class="ua-card">
             <h3>Ladda upp menyfil</h3>
             <form action="{{ url_for('admin_ui.admin_menu_import_upload') }}" method="POST" enctype="multipart/form-data" class="admin-form">
+            {{ csrf_token_input() | safe }}
             <div class="admin-form-group">
-                <label for="menu_file">Välj fil (.pdf, .docx, .xlsx, .csv)</label>
-                <input type="file" id="menu_file" name="menu_file" accept=".pdf,.docx,.xlsx,.csv" required>
+                <label for="menu_file">Välj fil (.csv eller .docx för import; .pdf tas emot men importeras inte)</label>
+                <input type="file" id="menu_file" name="menu_file" accept=".csv,.docx,.pdf" required>
             </div>
             <div class="admin-form-actions">
                 <button type="submit" class="admin-btn-primary">Ladda upp</button>
