@@ -536,7 +536,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         except Exception:
             # Non-fatal; continue to handlers
             pass
-        # Clear stale site selection if it belongs to a different tenant
+        # Handle stale site selection if it belongs to a different tenant
         try:
             from flask import session as _sess
             t_sess = _sess.get("tenant_id")
@@ -545,6 +545,30 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 from .db import get_site_tenant
                 site_tenant = get_site_tenant(str(s_sess))
                 if site_tenant is not None and int(site_tenant) != int(t_sess):
+                    # Minimal fix: show a clear error for weekview UI instead of silently clearing
+                    if str(request.path).startswith("/ui/weekview"):
+                        try:
+                            msg = f"Site {s_sess} tillhör en annan tenant. Välj en site från din tenant."
+                            html = (
+                                "<!doctype html><html lang='sv'><head><meta charset='utf-8'>"
+                                "<title>Felaktig site</title><meta name='robots' content='noindex'>"
+                                "<style>body{font-family:system-ui;margin:3rem;color:#111}" 
+                                "h1{font-size:1.6rem;margin-bottom:.5rem}p{margin:.25rem 0}</style>"
+                                f"</head><body><h1>Åtkomst nekad</h1><p>{msg}</p></body></html>"
+                            )
+                            resp = Response(html, status=403)
+                            resp.headers["Content-Type"] = "text/html; charset=utf-8"
+                            log.info({
+                                "event": "site_tenant_mismatch_weekview",
+                                "tenant_id_session": t_sess,
+                                "site_id_session": s_sess,
+                                "site_tenant": site_tenant,
+                                "path": request.path,
+                            })
+                            return resp
+                        except Exception:
+                            pass
+                    # Default behavior (non-weekview paths): clear and proceed
                     _sess.pop("site_id", None)
                     g.site_id = None
                     log.info({
