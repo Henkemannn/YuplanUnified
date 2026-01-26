@@ -26,6 +26,18 @@
 
   <!-- Week Navigation -->
   <div class="weekview-nav">
+    <form method="get" action="{{ url_for('ui.weekview_ui') }}" class="week-select">
+      <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+      <input type="hidden" name="department_id" value="{{ vm.department_id }}">
+      <input type="hidden" name="year" value="{{ vm.year }}">
+      <label for="uwWeekSelect" class="weekview-label">År {{ vm.year }}</label>
+      <select id="uwWeekSelect" name="week" class="weekview-select">
+        {% for w in range(1,54) %}
+          <option value="{{ w }}" {% if w == vm.week %}selected{% endif %}>Vecka {{ w }} – {{ vm.year }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="weekview-nav-btn weekview-nav-btn--primary">Gå</button>
+    </form>
     {% set prev_week = (vm.week - 1) if vm.week > 1 else 53 %}
     {% set prev_year = (vm.year if vm.week > 1 else vm.year - 1) %}
     {% set next_week = (vm.week + 1) if vm.week < 53 else 1 %}
@@ -63,6 +75,12 @@
       <div class="department-header">
         <div class="department-header-content">
           <h2 class="department-name">{{ vm.department_name }}</h2>
+          {% if vm.info_text %}
+          <div class="department-info" style="background: rgba(33,150,243,0.08); border-radius: 8px; padding: 10px 12px; color:#29434e; margin-top:8px;">
+            <span class="icon" aria-hidden="true">ℹ️</span>
+            <span class="text">{{ vm.info_text }}</span>
+          </div>
+          {% endif %}
           {% if vm.week_summary %}
           <div class="department-summary">
             <span class="summary-label">Lunch:</span>

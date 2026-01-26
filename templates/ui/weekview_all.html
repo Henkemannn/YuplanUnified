@@ -31,13 +31,35 @@
   .snackbar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #323232; color: #fff; padding: 10px 14px; border-radius: 6px; opacity: 0; pointer-events:none; transition: opacity 150ms ease-in-out; font-size: 14px; }
   .snackbar.show { opacity: 1; }
   .snackbar.error { background: #c62828; }
+  /* Cards & table softening */
+  .weekview-all .ua-card { border-radius: 10px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+  table.weekview th + th, table.weekview td + td { border-left: 1px solid rgba(0,0,0,0.05); }
+  table.weekview tbody tr:nth-child(even) { background: rgba(0,0,0,0.01); }
+  /* Department info-box */
+  .dep-info { background: rgba(33,150,243,0.08); border-radius: 8px; padding: 10px 12px; margin: 8px 0 12px 0; color:#29434e; display:flex; align-items:flex-start; gap:8px; }
+  .dep-info .icon { flex: 0 0 auto; }
+  .dep-info .text { flex: 1 1 auto; max-height: 8rem; overflow: auto; }
+  /* Modal CSS moved to external file for CSP compatibility */
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='weekview_modal.css') }}">
 
 <div class="ua-muted" style="margin:4px 0; font-size:12px;">DEBUG: departments={{ vm.departments|length if vm.departments is defined else 'UNDEF' }}</div>
 
 <section class="ua-section weekview-all">
   <div class="ua-card">
     <div style="display:flex;align-items:center;gap:8px;">
+      <form class="week-select" method="get" action="{{ url_for('ui.weekview_ui') }}" style="display:flex;align-items:center;gap:8px;">
+        <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+        <input type="hidden" name="department_id" value="">
+        <input type="hidden" name="year" value="{{ vm.year }}">
+        <label for="weekSelect" class="ua-muted">År {{ vm.year }}</label>
+        <select id="weekSelect" name="week" class="ua-select">
+          {% for w in range(1,54) %}
+            <option value="{{ w }}" {% if w == vm.week %}selected{% endif %}>Vecka {{ w }} – {{ vm.year }}</option>
+          {% endfor %}
+        </select>
+        <button class="yp-button" type="submit" aria-label="Gå till vald vecka">Gå</button>
+      </form>
       {% set prev_w = vm.week-1 if vm.week>1 else 1 %}
       {% set next_w = vm.week+1 if vm.week<52 else 52 %}
       <a class="yp-button" href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, year=vm.year, week=prev_w) }}" aria-label="Föregående vecka">◀︎</a>
@@ -73,12 +95,24 @@
       <h2>{{ dep.name }}</h2>
       <div class="meta-row">Vecka {{ vm.week }}, {{ vm.year }}</div>
     </div>
+    {% if dep.notes %}
+    <div class="dep-info" aria-label="Avdelningsinfo">
+      <div class="icon">ℹ️</div>
+      <div class="text">{{ dep.notes }}</div>
+    </div>
+    {% endif %}
     <table class="ua-table weekview">
       <thead>
         <tr>
           <th></th>
           {% for dn in day_names %}
-            <th colspan="2">{{ dn }}</th>
+            {% set idx = loop.index0 %}
+            {% set site_has = vm.menu_days_site if vm.menu_days_site is defined else [] %}
+            {% set has_menu = (site_has[idx] if (site_has and site_has|length>idx) else False) %}
+            <th colspan="2">{{ dn }}{% if has_menu %}
+              {% set legacy_days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+              <button class="menu-icon" type="button" aria-label="Visa meny" data-day="{{ legacy_days[idx] }}">🍽️</button>
+            {% endif %}</th>
           {% endfor %}
         </tr>
         <tr>
@@ -128,110 +162,9 @@
 </section>
 {% endfor %}
 
-<script>
-(function(){
-  var snack;
-  function ensureSnack(){
-    if(!snack){
-      snack = document.createElement('div');
-      snack.className = 'snackbar';
-      snack.setAttribute('aria-live','polite');
-      document.body.appendChild(snack);
-    }
-  }
-  function showToast(msg, isError){
-    ensureSnack();
-    snack.textContent = msg;
-    snack.classList.toggle('error', !!isError);
-    snack.classList.add('show');
-    setTimeout(function(){ snack.classList.remove('show'); }, 1000);
-  }
-  function closestDep(el){
-    while(el && el.tagName){
-      if(el.matches('section[data-department-id]')) return el;
-      el = el.parentElement;
-    }
-    return null;
-  }
-  function fetchEtag(deptId, year, week){
-    var url = '{{ url_for('ui.api_weekview_get_etag') }}' + '?department_id=' + encodeURIComponent(deptId) + '&year=' + encodeURIComponent(year) + '&week=' + encodeURIComponent(week);
-    return fetch(url, { headers: { 'Accept': 'application/json' } }).then(function(r){ return r.json(); }).then(function(j){ return j && j.etag; });
-  }
-  function toggleCell(cell){
-    var dep = closestDep(cell);
-    if(!dep) return;
-    var deptId = dep.getAttribute('data-department-id');
-    var etag = dep.getAttribute('data-etag') || '';
-    var meal = cell.getAttribute('data-meal');
-    var weekday = cell.getAttribute('data-weekday');
-    var dietId = cell.getAttribute('data-diet-id');
-    var marked = !cell.classList.contains('marked');
-    var payload = {
-      year: {{ vm.year }},
-      week: {{ vm.week }},
-      department_id: deptId,
-      meal: meal,
-      weekday_abbr: weekday,
-      diet_type_id: dietId,
-      marked: marked
-    };
-    // Optimistic UI
-    if(marked){ cell.classList.add('marked'); } else { cell.classList.remove('marked'); }
-    fetch('{{ url_for('ui.api_weekview_specialdiets_mark') }}', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'If-Match': etag
-      },
-      body: JSON.stringify(payload)
-    }).then(function(res){
-      if(res.status === 200){
-        var newEtag = res.headers.get('ETag');
-        if(newEtag){ dep.setAttribute('data-etag', newEtag); }
-        showToast('Sparat');
-      } else if(res.status === 412){
-        // Retry flow: fetch latest ETag then try once more
-        fetchEtag(deptId, {{ vm.year }}, {{ vm.week }}).then(function(newTag){
-          if(!newTag){ throw new Error('no-etag'); }
-          dep.setAttribute('data-etag', newTag);
-          return fetch('{{ url_for('ui.api_weekview_specialdiets_mark') }}', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'If-Match': newTag
-            },
-            body: JSON.stringify(payload)
-          });
-        }).then(function(r2){
-          if(r2 && r2.status === 200){
-            var nt = r2.headers.get('ETag');
-            if(nt){ dep.setAttribute('data-etag', nt); }
-            showToast('Sparat');
-          } else {
-            // Revert optimistic UI on failure
-            if(marked){ cell.classList.remove('marked'); } else { cell.classList.add('marked'); }
-            showToast('Kunde inte spara – uppdatera sidan', true);
-          }
-        }).catch(function(){
-          if(marked){ cell.classList.remove('marked'); } else { cell.classList.add('marked'); }
-          showToast('Kunde inte spara – uppdatera sidan', true);
-        });
-      } else {
-        // Unknown failure: revert optimistic state
-        if(marked){ cell.classList.remove('marked'); } else { cell.classList.add('marked'); }
-        showToast('Kunde inte spara', true);
-      }
-    }).catch(function(){ /* ignore */ });
-  }
-  document.addEventListener('click', function(ev){
-    var el = ev.target;
-    if(el && el.classList && el.classList.contains('diet-cell')){
-      toggleCell(el);
-    }
-  });
-})();
-</script>
+<script src="{{ url_for('static', filename='weekview_menu_modal.js') }}"></script>
 
+<div id="menuModal" class="menu-modal" role="dialog" aria-modal="true"></div>
 <div class="snackbar" role="status" aria-live="polite" aria-atomic="true">Sparat</div>
 
 {% endblock %}
