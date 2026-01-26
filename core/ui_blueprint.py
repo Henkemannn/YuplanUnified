@@ -883,6 +883,18 @@ def planera_mark_done():
 @require_roles(*SAFE_UI_ROLES)
 def weekview_ui():
     
+    # DEBUG: entry trace
+    try:
+        from flask import current_app as _app
+        _app.logger.debug({
+            "event": "weekview_ui_entry",
+            "site_id": (session.get("site_id") or ""),
+            "year": (request.args.get("year") or ""),
+            "week": (request.args.get("week") or ""),
+            "role": (session.get("role") or ""),
+        })
+    except Exception:
+        pass
     # Validate query params - default to current week if not provided
     req_site_id = (request.args.get("site_id") or "").strip()
     department_id = (request.args.get("department_id") or "").strip()
@@ -998,18 +1010,77 @@ def weekview_ui():
             diet_name_map = {int(t["id"]): str(t["name"]) for t in types}
         except Exception:
             diet_name_map = {}
+        days_with_menu_total = 0
         for d in dept_rows:
             dep_id = str(d.get("id"))
             dep_name_row = str(d.get("name") or "")
             payload, etag = svc.fetch_weekview(tid, year, week, dep_id)
             summaries = payload.get("department_summaries") or []
             days = (summaries[0].get("days") if summaries else []) or []
+            # DEBUG: after enrichment
+            try:
+                from flask import current_app as _app
+                menus_found = 1 if any(((day.get("menu_texts") or {}).get("lunch") or (day.get("menu_texts") or {}).get("dinner")) for day in days) else 0
+                days_with_menu = sum(1 for day in days if ((day.get("menu_texts") or {}).get("lunch") or (day.get("menu_texts") or {}).get("dinner")))
+                days_with_menu_total += days_with_menu
+                _app.logger.debug({
+                    "event": "weekview_ui_post_enrich",
+                    "department_id": dep_id,
+                    "menus_found_count": menus_found,
+                    "days_with_menu": days_with_menu,
+                })
+            except Exception:
+                pass
+            # Fetch optional notes/info for department
+            notes_text = ""
+            try:
+                dbn = get_session()
+                rown = dbn.execute(text("SELECT COALESCE(notes,'') FROM departments WHERE id=:id"), {"id": dep_id}).fetchone()
+                notes_text = str(rown[0] or "") if rown else ""
+            except Exception:
+                notes_text = ""
+            finally:
+                try:
+                    dbn.close()
+                except Exception:
+                    pass
             deps.append({
                 "id": dep_id,
                 "name": dep_name_row,
                 "etag": etag,
                 "days": days,
+                "notes": notes_text,
             })
+        # DEBUG: consolidated summary for site-level view
+        try:
+            from flask import current_app as _app
+            _app.logger.debug({
+                "event": "weekview_ui_summary",
+                "site_id": site_id,
+                "year": year,
+                "week": week,
+                "departments_count": len(deps),
+                "menus_found_count_total": days_with_menu_total,
+            })
+        except Exception:
+            pass
+        # Site-level menu availability per day (use weekly menu regardless of department)
+        menu_days_site = [False]*7
+        try:
+            from flask import current_app as _app
+            ms = getattr(_app, "menu_service", None)
+            if ms is not None and tid is not None:
+                mv = ms.get_week_view(int(tid), week, year)  # canonical keys mon..sun
+                days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
+                order = ["mon","tue","wed","thu","fri","sat","sun"]
+                for i, key in enumerate(order):
+                    d = days_struct.get(key) or {}
+                    l = d.get("lunch") or {}
+                    dn = d.get("dinner") or {}
+                    menu_days_site[i] = bool(l.get("alt1") or l.get("alt2") or l.get("dessert") or dn.get("alt1") or dn.get("alt2"))
+        except Exception:
+            menu_days_site = [False]*7
+
         vm_all = {
             "site_id": site_id,
             "site_name": site_name,
@@ -1019,6 +1090,7 @@ def weekview_ui():
             "current_week": current_week,
             "departments": deps,
             "diet_name_map": diet_name_map,
+            "menu_days_site": menu_days_site,
             # P0 security: suppress site switching for locked admins
             "allow_site_switch": (not site_lock),
             "sites": all_sites if (not site_lock) else [],
@@ -1040,6 +1112,29 @@ def weekview_ui():
     svc = WeekviewService()
     payload, _etag = svc.fetch_weekview(tid, year, week, department_id)
     summaries = payload.get("department_summaries") or []
+    # DEBUG: after enrichment
+    try:
+        from flask import current_app as _app
+        days_dbg = (summaries[0].get("days") if summaries else []) or []
+        menus_found = 1 if any(((day.get("menu_texts") or {}).get("lunch") or (day.get("menu_texts") or {}).get("dinner")) for day in days_dbg) else 0
+        days_with_menu = sum(1 for day in days_dbg if ((day.get("menu_texts") or {}).get("lunch") or (day.get("menu_texts") or {}).get("dinner")))
+        _app.logger.debug({
+            "event": "weekview_ui_post_enrich",
+            "department_id": department_id,
+            "menus_found_count": menus_found,
+            "days_with_menu": days_with_menu,
+        })
+        # Consolidated summary for single-department view
+        _app.logger.debug({
+            "event": "weekview_ui_summary",
+            "site_id": site_id,
+            "year": year,
+            "week": week,
+            "departments_count": 1,
+            "menus_found_count_total": days_with_menu,
+        })
+    except Exception:
+        pass
     if not summaries:
         vm = {
             "site_id": site_id,
@@ -1173,6 +1268,19 @@ def weekview_ui():
             } if has_dinner else None
         }
     }
+    # Optional: include department info text if present
+    try:
+        dbn = get_session()
+        rown = dbn.execute(text("SELECT COALESCE(notes,'') FROM departments WHERE id=:id"), {"id": department_id}).fetchone()
+        if rown and (rown[0] or "").strip():
+            vm["info_text"] = str(rown[0])
+    except Exception:
+        pass
+    finally:
+        try:
+            dbn.close()
+        except Exception:
+            pass
     meal_labels = get_meal_labels_for_site(site_id)
     return render_template("ui/unified_weekview.html", vm=vm, meal_labels=meal_labels)
     # TODO: Expose MenuComponent.component_id in day_vms once model/migration exists.
