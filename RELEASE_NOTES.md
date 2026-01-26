@@ -1,3 +1,12 @@
+### Weekview: smidigare veckonavigering
+
+- Ny veckodropdown med “Gå till vecka”
+- Pilar finns kvar som komplement
+- Fungerar i både site-vy och avdelningsvy
+- Ingen funktionsändring i data/logik
+
+Tagg: weekview-week-dropdown-2026-01-26
+
 ### Ändrat – Weekview-rapport / debiterbar specialkost
 
 - Rapporter (UI, CSV, XLSX) använder nu fältet "debiterbar specialkost" i stället för generisk `special_count`.
