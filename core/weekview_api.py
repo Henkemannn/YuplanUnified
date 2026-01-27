@@ -346,6 +346,19 @@ def patch_weekview_alt2() -> Response:
     try:
         # Prefer explicit body site_id; otherwise use session site_id
         site_for_write = site_body or site_ctx or None
+        try:
+            from flask import current_app as _app
+            _app.logger.debug(
+                "ALT2_PATCH: tid=%s site=%s dept=%s year=%s week=%s days=%s action=set_alt2",
+                tid,
+                site_for_write,
+                department_id,
+                year,
+                week,
+                days,
+            )
+        except Exception:
+            pass
         new_etag = _service.update_alt2_flags(tid, year, week, department_id, etag, days, site_for_write)
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
