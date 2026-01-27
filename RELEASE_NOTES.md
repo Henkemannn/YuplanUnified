@@ -1,3 +1,10 @@
+### Alt2: portal day view sparar site-scope korrekt
+
+- Fixar att Alt2-markering tidigare kunde sparas utan site-scope och därför inte synas
+- Lägger e2e-test för Alt2-flödet i portal/day-view
+
+Tagg: alt2-site-scope-2026-01-27
+
 ### Weekview: smidigare veckonavigering
 
 - Ny veckodropdown med “Gå till vecka”
