@@ -1561,11 +1561,25 @@ def portal_department_day_view(year: int, week: int, department_id: int, day_ind
     tid = session.get("tenant_id")
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    site_id = (request.args.get("site_id") or "").strip() or None
+    # Prefer explicit query param, else fall back to session site context
+    site_id = (request.args.get("site_id") or "").strip() or (session.get("site_id") if "site_id" in session else None)
     if request.method == "POST":
         selected_alt = (request.form.get("selected_alt") or "").strip()
         alt2_selected = (selected_alt == "2")
         from views.portal_department_week import set_department_lunch_choice_alt2
+        try:
+            current_app.logger.debug(
+                "PORTAL_ALT2_CHOICE: tid=%s site=%s dept=%s year=%s week=%s day=%s selected=%s action=portal_alt2_choice",
+                session.get("tenant_id"),
+                site_id,
+                department_id,
+                year,
+                week,
+                day_index,
+                selected_alt,
+            )
+        except Exception:
+            pass
         set_department_lunch_choice_alt2(
             tenant_id=int(tid),
             site_id=site_id or "",
