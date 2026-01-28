@@ -549,6 +549,17 @@ def admin_specialkost_delete(kosttyp_id: int) -> str:  # type: ignore[override]
 def admin_menu_import() -> str:  # type: ignore[override]
     """Display menu import page with file upload form and list of weeks with menu data."""
     tenant_id = 1  # TODO: Extract from session when multi-tenancy enabled
+    try:
+        from flask import session as _sess
+        current_app.logger.info({
+            "event": "admin_menu_import_list",
+            "path": request.path,
+            "user_id": _sess.get("user_id"),
+            "tenant_id": _sess.get("tenant_id"),
+            "site_id": _sess.get("site_id"),
+        })
+    except Exception:
+        pass
     
     # Fetch all unique (year, week) combinations from menus table
     db = get_session()
@@ -581,6 +592,17 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
     import os as _os
     
     tenant_id = 1  # TODO: Extract from session when multi-tenancy enabled
+    try:
+        from flask import session as _sess
+        current_app.logger.info({
+            "event": "admin_menu_import_upload_entry",
+            "path": request.path,
+            "user_id": _sess.get("user_id"),
+            "tenant_id": _sess.get("tenant_id"),
+            "site_id": _sess.get("site_id"),
+        })
+    except Exception:
+        pass
     uploaded_file = request.files.get("menu_file")
     # Debug-only metadata logging: keys, filename, content_type, size, chosen branch
     try:
@@ -651,9 +673,10 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
             rows = parse_menu_csv(uploaded_file.stream)
             import_result = csv_rows_to_import_result(rows)
         elif fname_low.endswith('.docx'):
-            from core.importers.docx_importer import DocxMenuImporter
+            # Use new DOCX-first pipeline: extractor → core parser → importer adapter
+            from core.importers.menu_importer import MenuImporter
             data = uploaded_file.stream.read()
-            import_result = DocxMenuImporter().parse(data, uploaded_file.filename)
+            import_result = MenuImporter().parse(data, uploaded_file.filename, uploaded_file.mimetype)
         elif fname_low.endswith('.pdf'):
             flash(f"Menyfil '{uploaded_file.filename}' mottagen (implementeras senare).", "success")
             return redirect(url_for("admin_ui.admin_menu_import"))
@@ -689,6 +712,19 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
     from core.etag_utils import generate_menu_etag
     
     tenant_id = 1  # TODO: Extract from session
+    try:
+        from flask import session as _sess
+        current_app.logger.info({
+            "event": "admin_menu_import_week_get",
+            "path": request.path,
+            "user_id": _sess.get("user_id"),
+            "tenant_id": _sess.get("tenant_id"),
+            "site_id": _sess.get("site_id"),
+            "year": year,
+            "week": week,
+        })
+    except Exception:
+        pass
     
     menu_service = MenuServiceDB()
     week_view = menu_service.get_week_view(tenant_id, week, year)
@@ -721,6 +757,19 @@ def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[ov
     from core.etag_utils import generate_menu_etag
     
     tenant_id = 1  # TODO: Extract from session
+    try:
+        from flask import session as _sess
+        current_app.logger.info({
+            "event": "admin_menu_import_week_edit_get",
+            "path": request.path,
+            "user_id": _sess.get("user_id"),
+            "tenant_id": _sess.get("tenant_id"),
+            "site_id": _sess.get("site_id"),
+            "year": year,
+            "week": week,
+        })
+    except Exception:
+        pass
     
     menu_service = MenuServiceDB()
     week_view = menu_service.get_week_view(tenant_id, week, year)
@@ -751,6 +800,19 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
     from core.etag_utils import validate_etag
     
     tenant_id = 1  # TODO: Extract from session
+    try:
+        from flask import session as _sess
+        current_app.logger.info({
+            "event": "admin_menu_import_week_save_post",
+            "path": request.path,
+            "user_id": _sess.get("user_id"),
+            "tenant_id": _sess.get("tenant_id"),
+            "site_id": _sess.get("site_id"),
+            "year": year,
+            "week": week,
+        })
+    except Exception:
+        pass
     
     menu_service = MenuServiceDB()
     week_view = menu_service.get_week_view(tenant_id, week, year)
@@ -842,6 +904,19 @@ def admin_menu_import_week_publish(year: int, week: int) -> str:  # type: ignore
     from core.etag_utils import validate_etag
     
     tenant_id = 1  # TODO: Extract from session
+    try:
+        from flask import session as _sess
+        current_app.logger.info({
+            "event": "admin_menu_import_week_publish_post",
+            "path": request.path,
+            "user_id": _sess.get("user_id"),
+            "tenant_id": _sess.get("tenant_id"),
+            "site_id": _sess.get("site_id"),
+            "year": year,
+            "week": week,
+        })
+    except Exception:
+        pass
     
     menu_service = MenuServiceDB()
     week_view = menu_service.get_week_view(tenant_id, week, year)
@@ -884,6 +959,19 @@ def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: igno
     from core.etag_utils import validate_etag
     
     tenant_id = 1  # TODO: Extract from session
+    try:
+        from flask import session as _sess
+        current_app.logger.info({
+            "event": "admin_menu_import_week_unpublish_post",
+            "path": request.path,
+            "user_id": _sess.get("user_id"),
+            "tenant_id": _sess.get("tenant_id"),
+            "site_id": _sess.get("site_id"),
+            "year": year,
+            "week": week,
+        })
+    except Exception:
+        pass
     
     menu_service = MenuServiceDB()
     week_view = menu_service.get_week_view(tenant_id, week, year)

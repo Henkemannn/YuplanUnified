@@ -23,30 +23,30 @@ _FOOTER_TOKENS = [
 _PHONE_RE = re.compile(r"\b0?7\d[\d\s-]{6,}\b")
 
 _DAY_MAP = {
-    # Swedish (full)
-    "måndag": "monday",
-    "tisdag": "tuesday",
-    "onsdag": "wednesday",
-    "torsdag": "thursday",
-    "fredag": "friday",
-    "lördag": "saturday",
-    "söndag": "sunday",
+    # Swedish (full) → canonical short codes used by API/UI
+    "måndag": "mon",
+    "tisdag": "tue",
+    "onsdag": "wed",
+    "torsdag": "thu",
+    "fredag": "fri",
+    "lördag": "sat",
+    "söndag": "sun",
     # Swedish (abbrev)
-    "mån": "monday",
-    "tis": "tuesday",
-    "ons": "wednesday",
-    "tor": "thursday",
-    "fre": "friday",
-    "lör": "saturday",
-    "sön": "sunday",
-    # English
-    "monday": "monday",
-    "tuesday": "tuesday",
-    "wednesday": "wednesday",
-    "thursday": "thursday",
-    "friday": "friday",
-    "saturday": "saturday",
-    "sunday": "sunday",
+    "mån": "mon",
+    "tis": "tue",
+    "ons": "wed",
+    "tor": "thu",
+    "fre": "fri",
+    "lör": "sat",
+    "sön": "sun",
+    # English (full)
+    "monday": "mon",
+    "tuesday": "tue",
+    "wednesday": "wed",
+    "thursday": "thu",
+    "friday": "fri",
+    "saturday": "sat",
+    "sunday": "sun",
 }
 
 
