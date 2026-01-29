@@ -1,0 +1,31 @@
+{% extends "_base.html" %}
+{% block content %}
+<div class="kitchen-dashboard" style="max-width: 1024px; margin: 0 auto; padding: 1rem;">
+  <h1 style="margin-bottom: 1rem;">Kök – Översikt</h1>
+  <div class="card-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem;">
+    <div class="card" style="border: 1px solid #ddd; border-radius: 8px; padding: 1rem; box-shadow: var(--yp-shadow-sm);">
+      <h2 style="margin: 0 0 0.5rem 0;">Veckovy (kök)</h2>
+      <p style="margin: 0 0 0.75rem 0;">Snabb överblick av veckan, grid-läge.</p>
+      <a class="yp-button yp-button-primary" href="/ui/kitchen/week" aria-label="Öppna veckovy">Öppna</a>
+    </div>
+
+    <div class="card" style="border: 1px solid #ddd; border-radius: 8px; padding: 1rem; box-shadow: var(--yp-shadow-sm);">
+      <h2 style="margin: 0 0 0.5rem 0;">Planering</h2>
+      <p style="margin: 0 0 0.75rem 0;">Alt2-planering per dag och avdelning.</p>
+      <a class="yp-button yp-button-secondary" href="/ui/admin/menu-planning" aria-label="Öppna menyplanering">Öppna</a>
+    </div>
+
+    <div class="card" style="border: 1px solid #ddd; border-radius: 8px; padding: 1rem; box-shadow: var(--yp-shadow-sm);">
+      <h2 style="margin: 0 0 0.5rem 0;">Rapport</h2>
+      <p style="margin: 0 0 0.75rem 0;">Veckorapport med täckning och export.</p>
+      <a class="yp-button yp-button-secondary" href="/ui/reports/weekly" aria-label="Öppna rapport">Öppna</a>
+    </div>
+
+    <div class="card" style="border: 1px solid #ddd; border-radius: 8px; padding: 1rem; box-shadow: var(--yp-shadow-sm);">
+      <h2 style="margin: 0 0 0.5rem 0;">Importera meny</h2>
+      <p style="margin: 0 0 0.75rem 0;">CSV/DOCX-import för veckomenyer.</p>
+      <a class="yp-button yp-button-secondary" href="/ui/admin/menu-import" aria-label="Öppna menyimport">Öppna</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

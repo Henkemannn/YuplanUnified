@@ -57,6 +57,9 @@ def test_kitchen_grid_renders_and_icons_present(app_session):
     tid = 1
 
     _ensure_menu_for_week(tid, year, week)
+    # Ensure at least one diet type exists for grid rendering
+    from core.admin_repo import DietTypesRepo
+    DietTypesRepo().create(site_id=site_id, name="Gluten", default_select=False)
 
     rv = client.get(
         f"/ui/kitchen/week?site_id={site_id}&department_id={department_id}&year={year}&week={week}",
@@ -64,11 +67,12 @@ def test_kitchen_grid_renders_and_icons_present(app_session):
     )
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    assert ".veckovy-department-card" in html
-    assert ".veckovy-table" in html
+    # assertions
+    assert "class=\"veckovy-department-card" in html or "class=\"ua-section weekview-all veckovy-department-card" in html
+    assert "class=\"veckovy-table" in html or "class=\"ua-table weekview veckovy-table" in html
     assert "window.VECKOVY_MENU_DATA" in html
     assert "Alt1 Renskav" in html or "Alt2 Falukorv" in html
-    assert "class=\"veckovy-menu-icon" in html or "class=\"veckovy-menu-icon\"" in html
+    assert "veckovy-menu-icon" in html or "class=\"menu-icon veckovy-menu-icon\"" in html
 
 
 def test_enhetsportal_does_not_render_grid(app_session):
@@ -101,6 +105,9 @@ def test_cell_classes_markerad_and_alt2(app_session):
     tid = 1
 
     _ensure_menu_for_week(tid, year, week)
+    # Seed a diet type so the grid has rows
+    from core.admin_repo import DietTypesRepo
+    DietTypesRepo().create(site_id=site_id, name="Gluten", default_select=False)
     monday = _date.fromisocalendar(year, week, 1).isoformat()
 
     # Register lunch for monday to create "markerad"

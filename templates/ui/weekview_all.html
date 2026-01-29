@@ -43,7 +43,6 @@
 </style>
 <link rel="stylesheet" href="{{ url_for('static', filename='weekview_modal.css') }}">
 
-<div class="ua-muted" style="margin:4px 0; font-size:12px;">DEBUG: departments={{ vm.departments|length if vm.departments is defined else 'UNDEF' }}</div>
 
 <section class="ua-section weekview-all">
   <div class="ua-card">
@@ -87,13 +86,23 @@
 </section>
 
 {% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
+{% set day_full_names = ['Måndag','Tisdag','Onsdag','Torsdag','Fredag','Lördag','Söndag'] %}
+
+{% if not vm.departments or vm.departments|length == 0 %}
+<section class="ua-section weekview-all">
+  <div class="ua-card"><p class="ua-muted">Inga avdelningar</p></div>
+</section>
+{% endif %}
 
 {% for dep in vm.departments %}
-<section class="ua-section weekview-all" data-department-id="{{ dep.id }}" data-etag="{{ dep.etag }}">
+<section class="ua-section weekview-all veckovy-department-card" data-department-id="{{ dep.id }}" data-etag="{{ dep.etag }}">
   <div class="ua-card">
     <div class="dep-header">
       <h2>{{ dep.name }}</h2>
       <div class="meta-row">Vecka {{ vm.week }}, {{ vm.year }}</div>
+      {% if vm.mode == 'kitchen' and dep.residents_configured is defined %}
+        <div class="meta-row"><strong>{{ dep.residents_configured }} boende</strong></div>
+      {% endif %}
     </div>
     {% if dep.notes %}
     <div class="dep-info" aria-label="Avdelningsinfo">
@@ -101,17 +110,18 @@
       <div class="text">{{ dep.notes }}</div>
     </div>
     {% endif %}
-    <table class="ua-table weekview">
+    <table class="ua-table weekview veckovy-table">
       <thead>
         <tr>
           <th></th>
           {% for dn in day_names %}
             {% set idx = loop.index0 %}
             {% set site_has = vm.menu_days_site if vm.menu_days_site is defined else [] %}
-            {% set has_menu = (site_has[idx] if (site_has and site_has|length>idx) else False) %}
+            {% set full_dn = day_full_names[idx] %}
+            {% set has_menu = (site_has[idx] if (site_has and site_has|length>idx) else False) or ((vm.menu_data.get(full_dn) or {}).get('alt1') or (vm.menu_data.get(full_dn) or {}).get('alt2') or (vm.menu_data.get(full_dn) or {}).get('dessert') or (vm.menu_data.get(full_dn) or {}).get('kvall')) %}
             <th colspan="2">{{ dn }}{% if has_menu %}
               {% set legacy_days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
-              <button class="menu-icon" type="button" aria-label="Visa meny" data-day="{{ legacy_days[idx] }}">🍽️</button>
+              <button class="menu-icon veckovy-menu-icon" type="button" aria-label="Visa meny" data-day="{{ legacy_days[idx] }}">🍽️</button>
             {% endif %}</th>
           {% endfor %}
         </tr>
@@ -132,11 +142,22 @@
           {% endfor %}
         </tr>
         {% set diet_ids = [] %}
-        {% if dep.days and dep.days|length > 0 %}
-          {% for it in (dep.days[0].diets.lunch if dep.days[0].diets and dep.days[0].diets.lunch else []) %}
-            {% if it.resident_count > 0 %}
-              {% set _ = diet_ids.append(it.diet_type_id) %}
-            {% endif %}
+        {% if vm.mode == 'kitchen' and dep.linked_diet_ids is defined and dep.linked_diet_ids %}
+          {% set diet_ids = dep.linked_diet_ids %}
+        {% elif vm.mode == 'kitchen' and vm.diet_name_map is defined and vm.diet_name_map %}
+          {% set diet_ids = vm.diet_name_map.keys() | list %}
+        {% elif dep.days and dep.days|length > 0 %}
+          {% for day in dep.days %}
+            {% for it in (day.diets.lunch if day.diets and day.diets.lunch else []) %}
+              {% if it.diet_type_id not in diet_ids %}
+                {% set _ = diet_ids.append(it.diet_type_id) %}
+              {% endif %}
+            {% endfor %}
+            {% for it in (day.diets.dinner if day.diets and day.diets.dinner else []) %}
+              {% if it.diet_type_id not in diet_ids %}
+                {% set _ = diet_ids.append(it.diet_type_id) %}
+              {% endif %}
+            {% endfor %}
           {% endfor %}
         {% endif %}
         {% for dtid in diet_ids %}
@@ -144,17 +165,53 @@
             <td>{{ vm.diet_name_map.get(dtid|int, dtid) }}</td>
             {% for i in range(0, dep.days|length) %}
               {% set day = dep.days[i] %}
+              {% set day_index = i+1 %}
               {% set lunch_cell = (day.diets.lunch | selectattr('diet_type_id','equalto', dtid) | list | first) %}
               {% set dinner_cell = (day.diets.dinner | selectattr('diet_type_id','equalto', dtid) | list | first) %}
-              <td class="diet-cell {% if lunch_cell and lunch_cell.marked %}marked{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Lunch" data-diet-id="{{ dtid }}">
-                {{ lunch_cell.resident_count if lunch_cell else 0 }}
+              {% set lunch_done = (dep.marks if dep.marks else []) | selectattr('meal','equalto','lunch_done') | selectattr('day_of_week','equalto', day_index) | selectattr('diet_type','equalto', dtid) | list | length > 0 %}
+              {% set dinner_done = (dep.marks if dep.marks else []) | selectattr('meal','equalto','dinner_done') | selectattr('day_of_week','equalto', day_index) | selectattr('diet_type','equalto', dtid) | list | length > 0 %}
+              {% set lunch_registered = (dep.reg_lunch_days if dep.reg_lunch_days is defined else []) and (day_index in dep.reg_lunch_days) %}
+              {% set full_name = day_full_names[day_index-1] %}
+              {% set has_alt2_menu = (vm.menu_data.get(full_name) or {}).get('alt2') %}
+              <td class="diet-cell {% if lunch_cell and lunch_cell.marked %}marked{% endif %} {% if lunch_registered %}markerad{% endif %} {% if vm.mode == 'kitchen' and (day.alt2_lunch or has_alt2_menu) %}gulmarkerad{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Lunch" data-diet-id="{{ dtid }}">
+                {% if vm.mode == 'kitchen' %}
+                  <button type="button"
+                          class="kostcell kostcell-btn {% if lunch_done %}done-ring{% endif %}"
+                          aria-label="Markera som klar"
+                          data-kosttyp-id="{{ dtid }}"
+                          data-department-id="{{ dep.id }}"
+                          data-week="{{ vm.week }}"
+                          data-day-index="{{ day_index }}"
+                          data-meal="lunch">
+                    <span class="kostcell-count">{{ lunch_cell.resident_count if lunch_cell else 0 }}</span>
+                  </button>
+                {% else %}
+                  {{ lunch_cell.resident_count if lunch_cell else 0 }}
+                {% endif %}
               </td>
-              <td class="diet-cell kvall {% if dinner_cell and dinner_cell.marked %}marked{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Kväll" data-diet-id="{{ dtid }}">
-                {{ dinner_cell.resident_count if dinner_cell else 0 }}
+              {% set dinner_registered = (dep.reg_dinner_days if dep.reg_dinner_days is defined else []) and (day_index in dep.reg_dinner_days) %}
+              <td class="diet-cell kvall {% if dinner_cell and dinner_cell.marked %}marked{% endif %} {% if dinner_registered %}markerad{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Kväll" data-diet-id="{{ dtid }}">
+                {% if vm.mode == 'kitchen' %}
+                  <button type="button"
+                          class="kostcell kostcell-btn {% if dinner_done %}done-ring{% endif %}"
+                          aria-label="Markera som klar"
+                          data-kosttyp-id="{{ dtid }}"
+                          data-department-id="{{ dep.id }}"
+                          data-week="{{ vm.week }}"
+                          data-day-index="{{ day_index }}"
+                          data-meal="dinner">
+                    <span class="kostcell-count">{{ dinner_cell.resident_count if dinner_cell else 0 }}</span>
+                  </button>
+                {% else %}
+                  {{ dinner_cell.resident_count if dinner_cell else 0 }}
+                {% endif %}
               </td>
             {% endfor %}
           </tr>
         {% endfor %}
+        {% if diet_ids|length == 0 %}
+          <tr><td colspan="15"><p class="ua-muted">Inga specialkoster</p></td></tr>
+        {% endif %}
       </tbody>
     </table>
     <p class="ua-muted">Klicka i rutan för att markera/avmarkera specialkost.</p>
@@ -163,6 +220,10 @@
 {% endfor %}
 
 <script src="{{ url_for('static', filename='weekview_menu_modal.js') }}"></script>
+<script>window.VECKOVY_MENU_DATA = {{ (vm.menu_data or {}) | tojson | safe }};</script>
+{% if vm.mode == 'kitchen' %}
+  <script src="{{ url_for('static', filename='js/kitchen_week.js') }}" defer></script>
+{% endif %}
 
 <div id="menuModal" class="menu-modal" role="dialog" aria-modal="true"></div>
 <div class="snackbar" role="status" aria-live="polite" aria-atomic="true">Sparat</div>

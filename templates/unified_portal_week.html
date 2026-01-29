@@ -213,7 +213,17 @@
                   data-day="{{ cell.day_index }}"
                   data-weekday-key="{{ cell.weekday_key }}"
                   data-meal="{{ cell.meal }}">
-                {{ cell.count }}
+                <button type="button"
+                        class="kostcell-btn{% if cell.is_done %} done-ring{% endif %}"
+                        aria-label="Markera som klar"
+                        data-kosttyp-id="{{ cell.kosttyp_id }}"
+                        data-department-id="{{ cell.department_id }}"
+                        data-week="{{ cell.week }}"
+                        data-day-index="{{ cell.day_index }}"
+                        data-meal="{{ cell.meal }}"
+                        style="display:inline-flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;border-radius:50%;border:1px solid #ccc;font-weight:600;background:#fff;cursor:pointer;">
+                  <span class="kostcell-count">{{ cell.count }}</span>
+                </button>
               </td>
               {% endfor %}
             </tr>
@@ -228,6 +238,7 @@
     window.VECKOVY_MENU_DATA = {{ vm.menu_by_day | tojson | safe }};
     window.VECKOVY_TODAY_DAY_INDEX = {{ vm.today_day_index if vm.today_day_index is not none else 'null' }};
   </script>
+  <script src="{{ url_for('static', filename='js/kitchen_week.js') }}" defer></script>
   {% endif %}
 </main>
 
