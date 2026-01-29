@@ -1440,7 +1440,8 @@ def kitchen_veckovy_week():
     session_site_id = (session.get("site_id") or "").strip()
     site_lock = bool(session.get("site_lock"))
     role = (session.get("role") or "").strip()
-    site_id = session_site_id if (site_lock and session_site_id) else req_site_id
+    # Prefer active session site when available; fallback to querystring
+    site_id = session_site_id or req_site_id
     today = _date.today()
     iso_cal = today.isocalendar()
     current_year, current_week = iso_cal[0], iso_cal[1]
