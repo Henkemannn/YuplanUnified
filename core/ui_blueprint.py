@@ -1630,11 +1630,78 @@ def portal_week_legacy_short():
 @ui_bp.get("/ui/kitchen/week")
 @require_roles(*SAFE_UI_ROLES)
 def kitchen_veckovy_week():
-    # Reuse portal_week to build base VM, then enable grid mode
-    resp = portal_week()
-    # When using Flask render_template, we need to rebuild with grid flag; instead, reconstruct minimal VM
-    site_id = (request.args.get("site_id") or "").strip()
-    department_id = (request.args.get("department_id") or "").strip()
+    # Legacy escape hatch: if explicit site+department are provided, use unified grid mode (unchanged)
+    q_site_id = (request.args.get("site_id") or "").strip()
+    q_department_id = (request.args.get("department_id") or "").strip()
+    if not (q_site_id and q_department_id):
+        # Default K3: render kitchen-only weekly grid
+        try:
+            year = int(request.args.get("year") or _date.today().year)
+        except Exception:
+            year = _date.today().year
+        try:
+            week = int(request.args.get("week") or _date.today().isocalendar()[1])
+        except Exception:
+            week = _date.today().isocalendar()[1]
+        from .context import get_active_context as _get_ctx
+        ctx = _get_ctx()
+        site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
+        if not site_id:
+            return redirect(url_for("ui.select_site", next="/ui/kitchen/week"))
+        db = get_session()
+        try:
+            row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+            site_name = str(row_s[0]) if row_s else ""
+            rows = db.execute(text("SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            departments = [{"id": str(r[0]), "name": str(r[1] or ""), "resident_count": int(r[2] or 0)} for r in rows]
+        finally:
+            db.close()
+        svc = WeekviewService()
+        tenant_id = (session.get("tenant_id") or 1)
+        deps_out = []
+        for dep in departments:
+            dep_id = dep["id"]
+            payload, _ = svc.fetch_weekview(tenant_id=tenant_id, year=year, week=week, department_id=dep_id, site_id=site_id)
+            summaries = payload.get("department_summaries") or []
+            s = summaries[0] if summaries else {}
+            days = s.get("days") or []
+            defaults = []
+            try:
+                from core.admin_repo import DietDefaultsRepo, DietTypesRepo
+                defaults = DietDefaultsRepo().list_for_department(dep_id)
+                types = DietTypesRepo().list_all(site_id=site_id)
+                name_by_id = {str(it["id"]): str(it["name"]) for it in types}
+            except Exception:
+                name_by_id = {}
+            default_ids = [str(it.get("diet_type_id")) for it in (defaults or [])]
+            diet_rows = []
+            if default_ids:
+                for dtid in default_ids:
+                    cells = []
+                    for dow in range(1, 8):
+                        day_obj = next((x for x in days if int(x.get("day_of_week")) == dow), None)
+                        diets_l = ((day_obj.get("diets") or {}).get("lunch") if day_obj else []) or []
+                        diets_d = ((day_obj.get("diets") or {}).get("dinner") if day_obj else []) or []
+                        rl = 0; rd = 0; ml = False; md = False
+                        for it in diets_l:
+                            if str(it.get("diet_type_id")) == str(dtid):
+                                rl = int(it.get("resident_count") or 0)
+                                ml = bool(it.get("marked"))
+                                break
+                        for it in diets_d:
+                            if str(it.get("diet_type_id")) == str(dtid):
+                                rd = int(it.get("resident_count") or 0)
+                                md = bool(it.get("marked"))
+                                break
+                        cells.append({"day_index": dow, "meal": "lunch", "count": rl, "is_done": ml, "is_alt2": bool(day_obj.get("alt2_lunch")) if day_obj else False, "diet_type_id": str(dtid)})
+                        cells.append({"day_index": dow, "meal": "dinner", "count": rd, "is_done": md, "is_alt2": False, "diet_type_id": str(dtid)})
+                    diet_rows.append({"diet_type_id": str(dtid), "diet_type_name": name_by_id.get(str(dtid), str(dtid)), "cells": cells})
+            deps_out.append({"id": dep_id, "name": dep["name"], "resident_count": dep["resident_count"], "no_diets": (not default_ids), "diet_rows": diet_rows, "days": days})
+        vm = {"site_id": site_id, "site_name": site_name, "year": year, "week": week, "departments": deps_out}
+        return render_template("ui/kitchen_week_v3.html", vm=vm)
+    # Legacy path rendering remains unchanged below
+    site_id = q_site_id
+    department_id = q_department_id
     year = int(request.args.get("year") or _date.today().year)
     week = int(request.args.get("week") or _date.today().isocalendar()[1])
     # Fetch names
