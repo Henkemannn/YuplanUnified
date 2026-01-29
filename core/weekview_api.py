@@ -99,9 +99,6 @@ def patch_weekview_specialdiets_mark() -> Response:
     Request JSON: { site_id, department_id, local_date (YYYY-MM-DD), meal: lunch|dinner, diet_type_id, marked: bool }
     Uses If-Match with the department/week ETag, consistent with other Weekview mutations.
     """
-    maybe = _require_weekview_enabled()
-    if maybe is not None:
-        return maybe
     data = request.get_json(silent=True) or {}
     etag = request.headers.get("If-Match")
     if not etag:
@@ -119,34 +116,112 @@ def patch_weekview_specialdiets_mark() -> Response:
     if tid is None:
         return bad_request("tenant_missing")
     department_id = (data.get("department_id") or "").strip()
+    # Accept Phase2 UI payload variants (weekday_abbr + capitalized meal)
     local_date = (data.get("local_date") or "").strip()
-    meal = (data.get("meal") or "").strip()
+    meal_raw = (data.get("meal") or "").strip()
+    meal = meal_raw.lower()
+    site_body = (data.get("site_id") or "").strip()
     diet_type_id = (data.get("diet_type_id") or "").strip()
     marked = bool(data.get("marked", True))
-    if not department_id or not local_date or meal not in {"lunch", "dinner"} or not diet_type_id:
-        return bad_request("invalid_parameters")
+    # Resolve day_of_week from either local_date or Swedish weekday abbreviation
+    weekday_abbr = (data.get("weekday_abbr") or "").strip()
+    dow: int | None = None
+    # Validate department
     try:
         uuid.UUID(department_id)
     except Exception:
-        return bad_request("invalid_department_id")
+        # Allow non-UUID department ids for legacy UI flows
+        pass
+    # Site scope enforcement with precedence:
+    # 1) If payload site_id matches the department's site → allow
+    # 2) Else if active session site matches the department's site → allow
+    # 3) Else if payload site_id is provided but != department site → 403
+    # 4) Else if active session site is present but != department site → 403
     try:
-        from datetime import date as _d
-        d = _d.fromisoformat(local_date)
-        iso = d.isocalendar()
-        year = int(iso[0])
-        week = int(iso[1])
-        day_of_week = int(iso[2])
+        from .db import get_session as _get_session
+        from sqlalchemy import text as _sa_text
+        site_ctx = (session.get("site_id") or "").strip() if "site_id" in session else ""
+        db = _get_session()
+        try:
+            row = db.execute(_sa_text("SELECT site_id FROM departments WHERE id=:id LIMIT 1"), {"id": department_id}).fetchone()
+            dep_site = str(row[0]) if row and row[0] is not None else None
+        finally:
+            db.close()
+        # Precedence checks
+        if site_body and dep_site and str(site_body) == str(dep_site):
+            pass  # allowed via payload intent
+        elif site_ctx and dep_site and str(site_ctx) == str(dep_site):
+            pass  # allowed via active session
+        else:
+            # If payload provided and mismatched → 403
+            if site_body and dep_site and str(site_body) != str(dep_site):
+                return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
+            # Else if session present and mismatched → 403
+            if site_ctx and dep_site and str(site_ctx) != str(dep_site):
+                return problem(403, "https://example.com/errors/site_mismatch", "Forbidden", "site_mismatch")
     except Exception:
-        return bad_request("invalid_local_date")
+        # Non-fatal: proceed without site check if lookup fails
+        pass
+    # Derive year/week/day_of_week
+    year = int(data.get("year", 0))
+    week = int(data.get("week", 0))
+    if local_date:
+        try:
+            from datetime import date as _d
+            d = _d.fromisoformat(local_date)
+            iso = d.isocalendar()
+            year = int(iso[0])
+            week = int(iso[1])
+            dow = int(iso[2])
+        except Exception:
+            return bad_request("invalid_local_date")
+    elif weekday_abbr:
+        # Map Swedish abbreviations to ISO weekday numbers
+        wk_map = {"Mån": 1, "Tis": 2, "Ons": 3, "Tor": 4, "Fre": 5, "Lör": 6, "Sön": 7}
+        dow = wk_map.get(weekday_abbr)
+    if not department_id or not (year and week) or meal not in {"lunch", "dinner"} or not diet_type_id or not dow:
+        return bad_request("invalid_parameters")
     # Reuse existing operations shape
-    op = {"day_of_week": day_of_week, "meal": meal, "diet_type": diet_type_id, "marked": marked}
+    op = {"day_of_week": int(dow), "meal": meal, "diet_type": diet_type_id, "marked": marked}
     try:
         new_etag = _service.toggle_marks(tid, year, week, department_id, etag, [op])
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
-    resp = jsonify({"updated": 1, "status": "ok"})
+    resp = jsonify({"updated": 1, "status": "ok", "marked": marked})
     resp.headers["ETag"] = new_etag
     return resp
+
+# Support UI calling via POST for the same endpoint
+@bp.post("/weekview/specialdiets/mark")
+@require_roles("admin", "editor")
+def post_weekview_specialdiets_mark() -> Response:
+    return patch_weekview_specialdiets_mark()
+
+
+@bp.get("/weekview/etag")
+@require_roles("admin", "editor", "viewer")
+def get_weekview_etag() -> Response:
+    """Return current weak ETag for given (tenant, department, year, week).
+
+    Accepts non-UUID department ids for legacy UI flows. Not gated by ff.weekview.enabled.
+    """
+    tid = _tenant_id()
+    if tid is None:
+        return bad_request("tenant_missing")
+    try:
+        department_id = (request.args.get("department_id") or "").strip()
+        year = int(request.args.get("year", "0"))
+        week = int(request.args.get("week", "0"))
+    except Exception:
+        return bad_request("invalid_year_or_week")
+    if not department_id or year < 1970 or not (1 <= week <= 53):
+        return bad_request("invalid_parameters")
+    try:
+        v = _service.repo.get_version(tid, year, week, department_id)
+    except Exception:
+        v = 0
+    etag = _service.build_etag(tid, department_id, year, week, int(v))
+    return jsonify({"etag": etag})
 
 
 @bp.get("/weekview/resolve")

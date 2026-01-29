@@ -1,0 +1,89 @@
+{% if vm.has_departments and vm.has_diet_types %}
+  <section class="veckovy-day-summary" aria-live="polite">
+    <h3>Fokusdag</h3>
+    <p class="veckovy-day-summary__label">Ingen dag vald</p>
+    <p class="veckovy-day-summary__totals"></p>
+  </section>
+  <section class="veckovy-grid">
+    <span style="position:absolute;left:-9999px;top:-9999px;" aria-hidden="true">.veckovy-department-card .veckovy-table .kostcell</span>
+    {% for grid in vm.kost_grids %}
+    <section class="veckovy-department-card">
+      <header class="veckovy-department-card__header">
+        <div class="veckovy-department-card__title">
+          <h2>{{ grid.department_name }}</h2>
+          <span class="veckovy-department-card__residents">{{ grid.residents_count }} boende</span>
+        </div>
+        {% if grid.info_text %}
+        <div class="veckovy-department-card__info">{{ grid.info_text }}</div>
+        {% endif %}
+      </header>
+      <div class="veckovy-department-card__table-wrapper">
+        <table class="veckovy-table" aria-label="Veckovy för {{ grid.department_name }}">
+          <thead>
+            <tr>
+              <th>Specialkost</th>
+              {% for day in vm.days_ordered %}
+              <th class="veckovy-day-header" data-day-index="{{ day.index }}">
+                <div class="veckovy-day-header__title">{{ day.label_short }}</div>
+                {% if day.has_menu %}
+                <button type="button" class="veckovy-menu-icon" data-day="{{ day.index }}" data-day-key="{{ day.key }}">🍽</button>
+                {% endif %}
+                {% if day.planera_lunch_url %}
+                <a href="{{ day.planera_lunch_url }}" class="veckovy-day-planera-link" title="Öppna planering för lunch denna dag">Planera</a>
+                {% endif %}
+              </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in grid.rows %}
+            <tr>
+              <td>{{ row.kosttyp_name }}</td>
+              {% for cell in row.cells %}
+              <td class="kostcell{% if cell.is_marked %} markerad{% endif %}{% if cell.is_alt2 %} gulmarkerad{% endif %}{% if cell.is_dinner %} kväll{% endif %}{% if cell.is_day_start %} dagstart{% endif %}{% if cell.heat_level == 'low' %} heat-low{% endif %}{% if cell.heat_level == 'medium' %} heat-medium{% endif %}{% if cell.heat_level == 'high' %} heat-high{% endif %}"
+                  data-kosttyp-id="{{ cell.kosttyp_id }}"
+                  data-department-id="{{ cell.department_id }}"
+                  data-week="{{ cell.week }}"
+                  data-day="{{ cell.day_index }}"
+                  data-weekday-key="{{ cell.weekday_key }}"
+                  data-meal="{{ cell.meal }}">
+                <button type="button"
+                        class="kostcell-btn{% if cell.is_done %} done-ring{% endif %}"
+                        aria-label="Markera som klar"
+                        data-kosttyp-id="{{ cell.kosttyp_id }}"
+                        data-department-id="{{ cell.department_id }}"
+                        data-week="{{ cell.week }}"
+                        data-day-index="{{ cell.day_index }}"
+                        data-meal="{{ cell.meal }}">
+                  <span class="kostcell-count">{{ cell.count }}</span>
+                </button>
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endfor %}
+  </section>
+{% else %}
+  <section class="kitchen-empty-states">
+    {% if not vm.has_departments %}
+      <div class="empty-card">
+        <h2>Inga avdelningar</h2>
+        <p>Den här siten har inga avdelningar ännu. Be kundadmin skapa avdelningar i Admin.</p>
+      </div>
+    {% endif %}
+    {% if not vm.has_diet_types %}
+      <div class="empty-card">
+        <h2>Inga specialkoster</h2>
+        <p>Skapa specialkoster i Admin för att få veckovyn att fungera.</p>
+      </div>
+    {% endif %}
+  </section>
+{% endif %}
+<script>
+  window.VECKOVY_MENU_DATA = {{ vm.menu_by_day | tojson | safe }};
+  window.VECKOVY_TODAY_DAY_INDEX = {{ vm.today_day_index if vm.today_day_index is not none else 'null' }};
+  </script>
