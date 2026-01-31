@@ -467,7 +467,6 @@
 .dept-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin: 10px 0; background: #fff; }
 .dept-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .dept-title { font-weight: 600; }
-.boende-badge { background: #e2e8f0; color: #0f172a; padding: 0.25rem 0.5rem; border-radius: 999px; font-size: 0.85rem; }
 .dept-empty { color: var(--cook-text-secondary); font-style: italic; }
 
 .grid-table { width: 100%; border-collapse: collapse; table-layout: fixed; }

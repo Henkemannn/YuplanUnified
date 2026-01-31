@@ -24,8 +24,8 @@
         {% set _dn = dep.name or '' %}
         {% set dep_display = _dn if _dn[:4]|lower == 'avd ' else 'Avd ' ~ _dn %}
         <div class="dept-title">{{ dep_display }}</div>
-        <div class="boende-badge">{{ dep.resident_count }} boende</div>
       </div>
+      <!-- {{ dep.resident_count }} boende -->
       {% if dep.info_text %}
         <div class="yp-info-box">{{ dep.info_text }}</div>
       {% endif %}
