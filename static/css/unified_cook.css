@@ -504,3 +504,12 @@
         border: 1px solid #e2e8f0;
     }
 }
+
+/* ============================================================================
+   K3 Week Grid – Done Ring
+   ============================================================================ */
+.kostcell-btn.is-done {
+    outline: 3px solid #2ecc71; /* green ring */
+    outline-offset: -3px;
+    border-radius: 6px;
+}

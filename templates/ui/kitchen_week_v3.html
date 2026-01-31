@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <title>Kök – Veckovy</title>
-  <link rel="stylesheet" href="/static/css/kitchen_week_v3.css" />
+  <!-- Use existing unified cook stylesheet to avoid missing CSS 404 -->
+  <link rel="stylesheet" href="/static/css/unified_cook.css" />
   <style>
     .dept-card { border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin: 10px 0; }
     .dept-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
@@ -11,7 +12,7 @@
     .grid-table th, .grid-table td { border:1px solid #eee; padding:6px; text-align:center; }
     .diet-name { text-align:left; font-weight:600; }
     .kostcell-btn { width:100%; padding:8px 6px; border-radius:4px; border:1px solid #ccc; background:#fafafa; cursor:pointer; }
-    .kostcell-btn.is-done { outline: 2px solid #3b82f6; }
+    /* done ring moved to external stylesheet */
     .kostcell-btn.is-alt2 { background:#fff7c2; }
     .toolbar { display:flex; gap:8px; margin-bottom:12px; }
   </style>
@@ -22,6 +23,10 @@
     <button type="button" id="printBtn">Skriv ut</button>
   </div>
   <div class="meta">År {{ vm.year }} • Vecka {{ vm.week }}</div>
+  <div class="toolbar" style="justify-content:flex-end;">
+    <a href="/ui/kitchen/week?year={{ vm.prev_year }}&week={{ vm.prev_week }}{% if vm.site_id %}&site_id={{ vm.site_id }}{% endif %}" aria-label="Föregående vecka">← Föregående vecka</a>
+    <a href="/ui/kitchen/week?year={{ vm.next_year }}&week={{ vm.next_week }}{% if vm.site_id %}&site_id={{ vm.site_id }}{% endif %}" aria-label="Nästa vecka">Nästa vecka →</a>
+  </div>
   {% for dep in vm.departments %}
     <div class="dept-card" data-department-id="{{ dep.id }}">
       <div class="dept-header">
@@ -53,7 +58,7 @@
                     {% set lunch = row.cells[(dow-1)*2] %}
                     {% set dinner = row.cells[(dow-1)*2+1] %}
                     <div style="display:flex; gap:4px;">
-                      <button class="kostcell-btn {{ 'is-done' if lunch.is_done }} {{ 'is-alt2' if lunch.is_alt2 }}"
+                      <button class="kostcell-btn {{ 'is-done' if lunch.is_done else '' }} {{ 'is-alt2' if lunch.is_alt2 else '' }}"
                         data-department-id="{{ dep.id }}"
                         data-diet-type-id="{{ row.diet_type_id }}"
                         data-year="{{ vm.year }}"
@@ -63,7 +68,7 @@
                         aria-label="Lunch {{ row.diet_type_name }} dag {{ lunch.day_index }}">
                         L {{ lunch.count }}
                       </button>
-                      <button class="kostcell-btn {{ 'is-done' if dinner.is_done }}"
+                      <button class="kostcell-btn {{ 'is-done' if dinner.is_done else '' }}"
                         data-department-id="{{ dep.id }}"
                         data-diet-type-id="{{ row.diet_type_id }}"
                         data-year="{{ vm.year }}"

@@ -12,10 +12,15 @@
     }
   }
   async function getEtag(departmentId, year, week){
-    const url = `/api/weekview/etag?department_id=${encodeURIComponent(departmentId)}&year=${year}&week=${week}`;
+    const qs = new URLSearchParams(window.location.search);
+    const siteId = qs.get('site_id') || (window.VM && window.VM.site_id) || null;
+    const base = `/api/weekview/etag?department_id=${encodeURIComponent(departmentId)}&year=${year}&week=${week}`;
+    const url = siteId ? `${base}&site_id=${encodeURIComponent(siteId)}` : base;
+    console.debug("[K3] GET ETag URL:", url);
     const resp = await fetch(url, { headers: {"X-User-Role":"cook"} });
     if(!resp.ok){ return null; }
     const j = await resp.json();
+    console.debug("[K3] Fetched ETag:", j.etag || null);
     return j.etag || null;
   }
   async function toggleMark(btn){
@@ -26,6 +31,8 @@
     const dayIdx = parseInt(btn.dataset.dayIndex, 10);
     const meal = btn.dataset.meal || "lunch";
     const marked = !btn.classList.contains('is-done');
+    const qs = new URLSearchParams(window.location.search);
+    const siteId = qs.get('site_id') || (window.VM && window.VM.site_id) || null;
     const etag = await getEtag(depId, year, week);
     if(!etag){ return; }
     const payload = {
@@ -35,8 +42,10 @@
       diet_type_id: dtId,
       meal: meal,
       weekday_abbr: abbrFor(dayIdx),
-      marked: marked
+      marked: marked,
+      site_id: siteId
     };
+    console.debug("[K3] If-Match on first POST:", etag);
     const resp = await fetch('/api/weekview/specialdiets/mark',{
       method:'POST',
       headers:{
@@ -51,9 +60,14 @@
       // Reflect server truth deterministically
       window.location.reload();
     } else if(resp.status === 412){
+      try {
+        const txt = await resp.text();
+        console.warn("[K3] 412 from mark POST. Response snippet:", txt?.slice(0,200));
+      } catch(e) { /* ignore */ }
       // ETag mismatch: re-fetch and retry once
       const etag2 = await getEtag(depId, year, week);
       if(!etag2) return;
+      console.debug("[K3] If-Match on retry POST:", etag2);
       const resp2 = await fetch('/api/weekview/specialdiets/mark',{
         method:'POST',
         headers:{
