@@ -63,13 +63,21 @@
             </tr>
           </thead>
           <tbody>
+            <tr class="boende-row">
+              <td class="diet-name">Boende</td>
+              {% for dow in range(1,8) %}
+                {% set d = dep.days[dow-1] %}
+                <td class="kw-cell day-start">{{ d.residents.lunch if d and d.residents else 0 }}</td>
+                <td class="kw-cell">{{ d.residents.dinner if d and d.residents else 0 }}</td>
+              {% endfor %}
+            </tr>
             {% for row in dep.diet_rows %}
-              <tr>
+              <tr class="diet-row">
                 <td class="diet-name">{{ row.diet_type_name }}</td>
                 {% for dow in range(1,8) %}
                   {% set lunch = row.cells[(dow-1)*2] %}
                   {% set dinner = row.cells[(dow-1)*2+1] %}
-                  <td>
+                  <td class="kw-cell day-start {{ 'is-done' if lunch.is_done else '' }} {{ 'is-alt2' if lunch.is_alt2 else '' }}">
                     <button class="kostcell-btn {{ 'is-done' if lunch.is_done else '' }} {{ 'is-alt2' if lunch.is_alt2 else '' }}"
                       data-department-id="{{ dep.id }}"
                       data-diet-type-id="{{ row.diet_type_id }}"
@@ -81,7 +89,7 @@
                       {{ lunch.count }}
                     </button>
                   </td>
-                  <td>
+                  <td class="kw-cell {{ 'is-done' if dinner.is_done else '' }}">
                     <button class="kostcell-btn {{ 'is-done' if dinner.is_done else '' }}"
                       data-department-id="{{ dep.id }}"
                       data-diet-type-id="{{ row.diet_type_id }}"
