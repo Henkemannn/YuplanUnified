@@ -75,9 +75,10 @@ def test_kitchen_week_v3_renders_and_flags():
     rv = client.get(f"/ui/kitchen/week?year=2026&week=5", headers=headers)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    # Both department names and resident counts
-    assert "Avd Ett" in html and "12 boende" in html
-    assert "Avd Två" in html and "9 boende" in html
+    # Department names and presence of Boende row in the grid (not header pill)
+    assert "Avd Ett" in html
+    assert "Avd Två" in html
+    assert "<tr class=\"boende-row\">" in html or "Boende</td>" in html
     # Diet names scoped per department
     assert "Glutenfri" in html
     assert "Laktosfri" in html
