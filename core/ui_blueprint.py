@@ -1772,11 +1772,15 @@ def kitchen_veckovy_week():
                 types_repo = DietTypesRepo()
                 types = types_repo.list_all(site_id=site_id)
                 name_by_id = {str(it["id"]): str(it["name"]) for it in types}
+                allowed_diet_ids = {str(it["id"]) for it in types}
             except Exception:
                 name_by_id = {}
+                allowed_diet_ids = set()
             # Filter to only diets with configured count > 0 for K3
             defaults_pos = [it for it in (defaults or []) if int(it.get("default_count", 0) or 0) > 0]
             default_ids = [str(it.get("diet_type_id")) for it in defaults_pos]
+            # Restrict to diet types explicitly linked to the active site
+            default_ids = [dtid for dtid in default_ids if dtid in allowed_diet_ids]
             diet_rows = []
             if default_ids:
                 for dtid in default_ids:
@@ -1799,23 +1803,8 @@ def kitchen_veckovy_week():
                                 break
                         cells.append({"day_index": dow, "meal": "lunch", "count": rl, "is_done": ml, "is_alt2": bool(day_obj.get("alt2_lunch")) if day_obj else False, "diet_type_id": str(dtid)})
                         cells.append({"day_index": dow, "meal": "dinner", "count": rd, "is_done": md, "is_alt2": False, "diet_type_id": str(dtid)})
-                    # Resolve diet name with robust fallback; skip numeric-only names (likely placeholder)
-                    diet_name = name_by_id.get(str(dtid))
-                    if not diet_name:
-                        try:
-                            # Fallback to direct lookup by id (handles legacy rows with NULL site_id)
-                            rec = types_repo.get_by_id(int(dtid))
-                            diet_name = str(rec.get("name")) if rec and rec.get("name") is not None else None
-                        except Exception:
-                            diet_name = None
-                    diet_name = diet_name or str(dtid)
-                    try:
-                        is_numeric_only = diet_name.strip().isdigit()
-                    except Exception:
-                        is_numeric_only = False
-                    if is_numeric_only:
-                        # Exclude numeric-only names from K3 grid
-                        continue
+                    # Resolve diet name from site-linked types only
+                    diet_name = name_by_id.get(str(dtid), str(dtid))
                     diet_rows.append({"diet_type_id": str(dtid), "diet_type_name": diet_name, "cells": cells})
             deps_out.append({"id": dep_id, "name": dep["name"], "resident_count": dep["resident_count"], "no_diets": (not default_ids), "diet_rows": diet_rows, "days": days})
         # Compute prev/next ISO week rollover using Monday anchor
