@@ -294,6 +294,18 @@
     gap: 0.75rem;
 }
 
+/* Minimal info box for department notes (K3 kitchen week) */
+.yp-info-box {
+    background: #f9fafb;
+    border-left: 4px solid #93c5fd;
+    padding: 0.5rem 0.75rem;
+    color: var(--cook-text-secondary);
+    border-radius: 6px;
+    margin: 0 0 0.5rem 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
 .meal-status {
     display: flex;
     align-items: center;

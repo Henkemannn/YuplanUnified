@@ -33,6 +33,9 @@
         <div><strong>{{ dep.name }}</strong></div>
         <div>{{ dep.resident_count }} boende</div>
       </div>
+      {% if dep.info_text %}
+        <div class="yp-info-box">{{ dep.info_text }}</div>
+      {% endif %}
       {% if dep.no_diets %}
         <div style="color:#666; font-style:italic;">Inga specialkoster kopplade</div>
       {% else %}

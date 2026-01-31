@@ -1743,8 +1743,8 @@ def kitchen_veckovy_week():
                         return redirect(url_for("ui.select_site", next="/ui/kitchen/week"))
             row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
             site_name = str(row_s[0]) if row_s else ""
-            rows = db.execute(text("SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
-            departments = [{"id": str(r[0]), "name": str(r[1] or ""), "resident_count": int(r[2] or 0)} for r in rows]
+            rows = db.execute(text("SELECT id, name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            departments = [{"id": str(r[0]), "name": str(r[1] or ""), "resident_count": int(r[2] or 0), "info_text": (str(r[3] or "").strip())} for r in rows]
         finally:
             db.close()
         svc = WeekviewService()
@@ -1806,7 +1806,9 @@ def kitchen_veckovy_week():
                     # Resolve diet name from site-linked types only
                     diet_name = name_by_id.get(str(dtid), str(dtid))
                     diet_rows.append({"diet_type_id": str(dtid), "diet_type_name": diet_name, "cells": cells})
-            deps_out.append({"id": dep_id, "name": dep["name"], "resident_count": dep["resident_count"], "no_diets": (not default_ids), "diet_rows": diet_rows, "days": days})
+            info_text = dep.get("info_text") or ""
+            info_text = info_text.strip()
+            deps_out.append({"id": dep_id, "name": dep["name"], "resident_count": dep["resident_count"], "info_text": (info_text if info_text else None), "no_diets": (not default_ids), "diet_rows": diet_rows, "days": days})
         # Compute prev/next ISO week rollover using Monday anchor
         try:
             monday = _date.fromisocalendar(year, week, 1)
