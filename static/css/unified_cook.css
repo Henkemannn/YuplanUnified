@@ -456,6 +456,45 @@
 .kd-helper { margin-top: 1rem; color: var(--cook-text-secondary); }
 
 /* ============================================================================
+   Kitchen Planning v1 (Skeleton)
+   ============================================================================ */
+.kp-card {
+    background: var(--cook-card-bg);
+    border-radius: 12px;
+    box-shadow: var(--cook-shadow);
+    padding: 1rem;
+    margin: 0 0 1rem 0;
+}
+.kp-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.kp-day-buttons, .kp-meal-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.kp-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: #f1f5f9;
+    color: var(--cook-text-primary);
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    text-decoration: none;
+}
+.kp-button.is-active {
+    background: #e0f2fe;
+    border-color: #93c5fd;
+}
+@media print {
+    .kp-controls { display: none; }
+}
+
+/* ============================================================================
      Kitchen Week Grid (K3) - Screen
      ============================================================================ */
 
