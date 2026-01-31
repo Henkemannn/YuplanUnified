@@ -56,9 +56,9 @@
       body: JSON.stringify(payload)
     });
     if(resp.status === 200){
+      // Success: toggle UI locally without full reload
       if(marked){ btn.classList.add('is-done'); } else { btn.classList.remove('is-done'); }
-      // Reflect server truth deterministically
-      window.location.reload();
+      return;
     } else if(resp.status === 412){
       try {
         const txt = await resp.text();
@@ -78,7 +78,12 @@
         body: JSON.stringify(payload)
       });
       if(resp2.status === 200){
+        // Retry succeeded: toggle UI locally; no full reload
         if(marked){ btn.classList.add('is-done'); } else { btn.classList.remove('is-done'); }
+        return;
+      } else {
+        // Conflict unresolved: notify and reload to sync fresh data
+        try { alert('Uppdaterades av någon annan – laddar om data'); } catch(_) {}
         window.location.reload();
       }
     }
