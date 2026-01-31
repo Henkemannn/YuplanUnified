@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <title>Kök</title>
+  <link rel="stylesheet" href="/static/css/unified_cook.css" />
+</head>
+<body class="cook-dashboard">
+  <div class="toolbar">
+    <h1 style="flex:1; margin:0;">Kök</h1>
+    <div>
+      {% if vm.site_name %}
+        <span>{{ vm.site_name }}</span>
+      {% endif %}
+      <a href="{{ url_for('ui.select_site') }}?next=/ui/kitchen" aria-label="Byt site">Byt site</a>
+    </div>
+  </div>
+  <div class="meta">Välj modul</div>
+  <main class="kd-container">
+    <section class="kd-cards">
+      <a class="kd-card" href="/ui/kitchen/week?site_id={{ vm.site_id }}" aria-label="Öppna veckovy">
+        <div class="kd-card-title">Veckovy</div>
+        <div class="kd-card-sub">Visa och markera specialkost per dag</div>
+      </a>
+      <div class="kd-card disabled" aria-disabled="true">
+        <div class="kd-card-title">Planering</div>
+        <div class="kd-card-sub">Kommer snart</div>
+      </div>
+      <div class="kd-card disabled" aria-disabled="true">
+        <div class="kd-card-title">Rapport</div>
+        <div class="kd-card-sub">Kommer snart</div>
+      </div>
+    </section>
+    <p class="kd-helper">Klicka på siffran i veckovyn när specialkost har anpassats.</p>
+  </main>
+  <script src="/static/js/kitchen_week_v3.js"></script>
+</body>
+</html>

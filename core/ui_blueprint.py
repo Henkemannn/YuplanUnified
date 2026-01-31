@@ -27,6 +27,7 @@ def api_weekview_specialdiets_mark():
         meal = str(data["meal"]).lower()  # expect "Lunch"/"Kväll" → lower to "lunch"/"dinner"
         weekday_abbr = str(data.get("weekday_abbr") or data.get("weekday") or "")
         desired_state = bool(data.get("marked") if "marked" in data else data.get("desired_state"))
+        site_id_payload = str(data.get("site_id") or "").strip() or None
     except Exception:
         return jsonify({"type": "about:blank", "title": "invalid_payload"}), 400
 
@@ -61,15 +62,85 @@ def api_weekview_specialdiets_mark():
     except Exception:
         pass
     svc = WeekviewService()
-    if_match = request.headers.get("If-Match") or ""
-    try:
-        new_etag = svc.toggle_marks(g.tenant_id or 0, year, week, department_id, if_match, [op])
-        resp = jsonify({"status": "ok", "marked": desired_state})
-        resp.headers["ETag"] = new_etag
-        return resp, 200
-    except Exception:
-        # Return 412 Precondition Failed on ETag mismatch semantics
-        return jsonify({"type": "about:blank", "title": "etag_mismatch"}), 412
+    # Align tenant resolution with the ETag endpoint to avoid scope mismatches
+    tid = getattr(g, "tenant_id", None) or session.get("tenant_id") or 0
+    from .weekview.repo import WeekviewRepo as _WRepo
+    repo = _WRepo()
+    # Compute current version and ETag in a single place (site-scoped if site_id provided)
+    version = repo.get_version(tid, year, week, department_id)
+    current_dept_etag = svc.build_etag(tid, department_id, year, week, version)
+    # Prefer explicit site_id from payload; else fall back to session context
+    site_ctx = site_id_payload or (session.get("site_id") if "site_id" in session else None)
+    current_site_etag = (
+        f"W/\"weekview:site:{site_ctx}:dept:{department_id}:year:{year}:week:{week}:v{version}\""
+        if site_ctx else None
+    )
+    current_etag = current_site_etag or current_dept_etag
+    # Normalize and compare If-Match
+    raw_if_match = request.headers.get("If-Match", "")
+    def _norm_et(et: str) -> str:
+        et = (et or "").strip()
+        et = et.split(",")[0].strip()
+        if et.startswith("W/"):
+            et = et[2:].strip()
+        return et
+    # Accept either site-scoped or dept-scoped ETag in If-Match for compatibility
+    norm_hdr = _norm_et(raw_if_match)
+    ok_match = bool(norm_hdr) and (
+        norm_hdr == _norm_et(current_dept_etag) or (
+            current_site_etag is not None and norm_hdr == _norm_et(current_site_etag)
+        )
+    )
+    if not ok_match:
+        dbg = {
+            "type": "about:blank",
+            "title": "etag_mismatch",
+            "raw_if_match": raw_if_match,
+            "current_etag": current_etag,
+            "norm_if_match": norm_hdr,
+            "norm_current": _norm_et(current_etag),
+        }
+        resp = jsonify(dbg)
+        resp.headers["ETag"] = current_etag
+        return resp, 412
+    # Proceed to toggle marks; use site-scoped flow when site_id is present
+    if site_ctx:
+        try:
+            # Apply operations directly via repo (site-scoped request validated above)
+            new_version = repo.apply_operations(tid, year, week, department_id, [op])
+            new_etag = f"W/\"weekview:site:{site_ctx}:dept:{department_id}:year:{year}:week:{week}:v{new_version}\""
+            resp = jsonify({"status": "ok", "marked": desired_state})
+            resp.headers["ETag"] = new_etag
+            return resp, 200
+        except Exception:
+            return jsonify({"type": "about:blank", "title": "server_error"}), 500
+    else:
+        try:
+            # Dept-scoped: use service-level strong ETag semantics
+            _ = svc.toggle_marks(tid, year, week, department_id, current_dept_etag, [op])
+            new_version = repo.get_version(tid, year, week, department_id)
+            new_etag = svc.build_etag(tid, department_id, year, week, new_version)
+            resp = jsonify({"status": "ok", "marked": desired_state})
+            resp.headers["ETag"] = new_etag
+            return resp, 200
+        except Exception as ex:
+            try:
+                from .weekview.service import EtagMismatchError as _EME
+                if isinstance(ex, _EME):
+                    dbg = {
+                        "type": "about:blank",
+                        "title": "etag_mismatch",
+                        "raw_if_match": raw_if_match,
+                        "current_etag": current_etag,
+                        "norm_if_match": _norm_et(raw_if_match),
+                        "norm_current": _norm_et(current_etag),
+                    }
+                    resp = jsonify(dbg)
+                    resp.headers["ETag"] = current_etag
+                    return resp, 412
+            except Exception:
+                pass
+            return jsonify({"type": "about:blank", "title": "server_error"}), 500
 
 @ui_bp.get("/api/weekview/etag")
 @require_roles("superuser", "admin", "cook", "unit_portal")
@@ -82,8 +153,10 @@ def api_weekview_get_etag():
         department_id = str((request.args.get("department_id") or "").strip())
         year = int(request.args.get("year"))
         week = int(request.args.get("week"))
+        site_id = (request.args.get("site_id") or "").strip() or None
     except Exception:
         return jsonify({"error": "bad_request", "message": "Invalid params"}), 400
+    # Resolve tenant consistently with mark endpoint
     tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
@@ -92,9 +165,18 @@ def api_weekview_get_etag():
     repo = WeekviewRepo()
     svc = _WVS(repo)
     try:
+        # Base version lookup is per tenant+department+year+week
         version = repo.get_version(tid, year, week, department_id)
-        etag = svc.build_etag(tid, department_id, year, week, version)
-        return jsonify({"etag": etag})
+        # Backwards-compat: if no site_id supplied, return dept-scoped ETag
+        if not site_id:
+            etag = svc.build_etag(tid, department_id, year, week, version)
+        else:
+            # Site-scoped ETag: include site in the strong key to match mark validation
+            # Compose using the same fields but with site_id prefix to avoid collisions
+            etag = f"W/\"weekview:site:{site_id}:dept:{department_id}:year:{year}:week:{week}:v{version}\""
+        resp = jsonify({"etag": etag})
+        resp.headers["ETag"] = etag
+        return resp
     except Exception:
         return jsonify({"error": "server_error"}), 500
 @ui_bp.route("/ui/cook/week-overview/<int:year>/<int:week>", methods=["GET"])
@@ -1075,9 +1157,15 @@ def weekview_ui():
                 order = ["mon","tue","wed","thu","fri","sat","sun"]
                 for i, key in enumerate(order):
                     d = days_struct.get(key) or {}
-                    l = d.get("lunch") or {}
-                    dn = d.get("dinner") or {}
-                    menu_days_site[i] = bool(l.get("alt1") or l.get("alt2") or l.get("dessert") or dn.get("alt1") or dn.get("alt2"))
+                    lunch = d.get("lunch") or {}
+                    dinner = d.get("dinner") or {}
+                    menu_days_site[i] = bool(
+                        lunch.get("alt1")
+                        or lunch.get("alt2")
+                        or lunch.get("dessert")
+                        or dinner.get("alt1")
+                        or dinner.get("alt2")
+                    )
         except Exception:
             menu_days_site = [False]*7
 
@@ -1626,15 +1714,154 @@ def portal_week_legacy_short():
     # Legacy path should use the same unified rendering, but without forcing dinner
     return portal_week()
 
+# Kitchen dashboard landing page
+@ui_bp.get("/ui/kitchen")
+@require_roles(*SAFE_UI_ROLES)
+def kitchen_dashboard():
+    # Resolve active site: query param -> context -> session; else redirect
+    q_site_id = (request.args.get("site_id") or "").strip()
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/kitchen"))
+    # Optional site name
+    db = get_session()
+    try:
+        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = str(row_s[0]) if row_s else ""
+    finally:
+        db.close()
+    vm = {"site_id": site_id, "site_name": site_name}
+    return render_template("ui/kitchen_dashboard.html", vm=vm)
+
 # Kitchen-specific Veckovy grid route
 @ui_bp.get("/ui/kitchen/week")
 @require_roles(*SAFE_UI_ROLES)
 def kitchen_veckovy_week():
-    # Reuse portal_week to build base VM, then enable grid mode
-    resp = portal_week()
-    # When using Flask render_template, we need to rebuild with grid flag; instead, reconstruct minimal VM
-    site_id = (request.args.get("site_id") or "").strip()
-    department_id = (request.args.get("department_id") or "").strip()
+    # Legacy escape hatch: if explicit site+department are provided, use unified grid mode (unchanged)
+    q_site_id = (request.args.get("site_id") or "").strip()
+    q_department_id = (request.args.get("department_id") or "").strip()
+    if not (q_site_id and q_department_id):
+        # Default K3: render kitchen-only weekly grid
+        try:
+            year = int(request.args.get("year") or _date.today().year)
+        except Exception:
+            year = _date.today().year
+        try:
+            week = int(request.args.get("week") or _date.today().isocalendar()[1])
+        except Exception:
+            week = _date.today().isocalendar()[1]
+        from .context import get_active_context as _get_ctx
+        ctx = _get_ctx()
+        q_site_id = (request.args.get("site_id") or "").strip()
+        site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
+        if not site_id:
+            return redirect(url_for("ui.select_site", next="/ui/kitchen/week"))
+        db = get_session()
+        try:
+            # If query provided site_id, validate it exists; else fall back to context site
+            if q_site_id:
+                row_check = db.execute(text("SELECT id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+                if not row_check:
+                    # invalid site_id: fall back to context/session
+                    site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
+                    if not site_id:
+                        return redirect(url_for("ui.select_site", next="/ui/kitchen/week"))
+            row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+            site_name = str(row_s[0]) if row_s else ""
+            rows = db.execute(text("SELECT id, name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            departments = [{"id": str(r[0]), "name": str(r[1] or ""), "resident_count": int(r[2] or 0), "info_text": (str(r[3] or "").strip())} for r in rows]
+        finally:
+            db.close()
+        svc = WeekviewService()
+        tenant_id = (session.get("tenant_id") or 1)
+        deps_out = []
+        for dep in departments:
+            dep_id = dep["id"]
+            payload, _ = svc.fetch_weekview(tenant_id=tenant_id, year=year, week=week, department_id=dep_id, site_id=site_id)
+            summaries = payload.get("department_summaries") or []
+            s = summaries[0] if summaries else {}
+            days = s.get("days") or []
+            # Build mark index from persisted state to ensure VM reflects what /mark writes
+            raw_marks = s.get("marks") or []
+            marked_idx = set()
+            try:
+                for m in raw_marks:
+                    if bool(m.get("marked")):
+                        marked_idx.add((int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type"))))
+            except Exception:
+                marked_idx = set()
+            defaults = []
+            try:
+                from core.admin_repo import DietDefaultsRepo, DietTypesRepo
+                defaults = DietDefaultsRepo().list_for_department(dep_id)
+                types_repo = DietTypesRepo()
+                types = types_repo.list_all(site_id=site_id)
+                name_by_id = {str(it["id"]): str(it["name"]) for it in types}
+                allowed_diet_ids = {str(it["id"]) for it in types}
+            except Exception:
+                name_by_id = {}
+                allowed_diet_ids = set()
+            # Filter to only diets with configured count > 0 for K3
+            defaults_pos = [it for it in (defaults or []) if int(it.get("default_count", 0) or 0) > 0]
+            default_ids = [str(it.get("diet_type_id")) for it in defaults_pos]
+            # Restrict to diet types explicitly linked to the active site
+            default_ids = [dtid for dtid in default_ids if dtid in allowed_diet_ids]
+            diet_rows = []
+            if default_ids:
+                for dtid in default_ids:
+                    cells = []
+                    for dow in range(1, 8):
+                        day_obj = next((x for x in days if int(x.get("day_of_week")) == dow), None)
+                        diets_l = ((day_obj.get("diets") or {}).get("lunch") if day_obj else []) or []
+                        diets_d = ((day_obj.get("diets") or {}).get("dinner") if day_obj else []) or []
+                        rl = 0; rd = 0
+                        # is_done derived from persisted marks to avoid any scope mismatch
+                        ml = ((dow, "lunch", str(dtid)) in marked_idx)
+                        md = ((dow, "dinner", str(dtid)) in marked_idx)
+                        for it in diets_l:
+                            if str(it.get("diet_type_id")) == str(dtid):
+                                rl = int(it.get("resident_count") or 0)
+                                break
+                        for it in diets_d:
+                            if str(it.get("diet_type_id")) == str(dtid):
+                                rd = int(it.get("resident_count") or 0)
+                                break
+                        cells.append({"day_index": dow, "meal": "lunch", "count": rl, "is_done": ml, "is_alt2": bool(day_obj.get("alt2_lunch")) if day_obj else False, "diet_type_id": str(dtid)})
+                        cells.append({"day_index": dow, "meal": "dinner", "count": rd, "is_done": md, "is_alt2": False, "diet_type_id": str(dtid)})
+                    # Resolve diet name from site-linked types only
+                    diet_name = name_by_id.get(str(dtid), str(dtid))
+                    diet_rows.append({"diet_type_id": str(dtid), "diet_type_name": diet_name, "cells": cells})
+            info_text = dep.get("info_text") or ""
+            info_text = info_text.strip()
+            deps_out.append({"id": dep_id, "name": dep["name"], "resident_count": dep["resident_count"], "info_text": (info_text if info_text else None), "no_diets": (not default_ids), "diet_rows": diet_rows, "days": days})
+        # Compute prev/next ISO week rollover using Monday anchor
+        try:
+            monday = _date.fromisocalendar(year, week, 1)
+        except Exception:
+            monday = _date.today()
+        prev_date = monday - timedelta(days=7)
+        next_date = monday + timedelta(days=7)
+        prev_iso = prev_date.isocalendar()
+        next_iso = next_date.isocalendar()
+        prev_year, prev_week = prev_iso[0], prev_iso[1]
+        next_year, next_week = next_iso[0], next_iso[1]
+        vm = {
+            "site_id": site_id,
+            "site_name": site_name,
+            "year": year,
+            "week": week,
+            "prev_year": prev_year,
+            "prev_week": prev_week,
+            "next_year": next_year,
+            "next_week": next_week,
+            "departments": deps_out,
+        }
+        return render_template("ui/kitchen_week_v3.html", vm=vm)
+    # Legacy path rendering remains unchanged below
+    site_id = q_site_id
+    department_id = q_department_id
     year = int(request.args.get("year") or _date.today().year)
     week = int(request.args.get("week") or _date.today().isocalendar()[1])
     # Fetch names

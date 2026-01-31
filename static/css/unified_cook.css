@@ -17,6 +17,10 @@
     --cook-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
     --cook-radius: 1rem;
     --cook-gap: 1.5rem;
+    --border-color-strong: #94a3b8;
+    --success-light: #dcfce7;
+    --success-dark: #14532d;
+    --warning-light: #fef3c7;
 }
 
 /* ============================================================================
@@ -294,6 +298,18 @@
     gap: 0.75rem;
 }
 
+/* Minimal info box for department notes (K3 kitchen week) */
+.yp-info-box {
+    background: #f9fafb;
+    border-left: 4px solid #93c5fd;
+    padding: 0.5rem 0.75rem;
+    color: var(--cook-text-secondary);
+    border-radius: 6px;
+    margin: 0 0 0.5rem 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
 .meal-status {
     display: flex;
     align-items: center;
@@ -398,6 +414,175 @@
 }
 
 /* ============================================================================
+   Kitchen Dashboard (Landing)
+   ============================================================================ */
+
+.kd-container {
+    max-width: 1000px;
+    margin: 1rem auto;
+    padding: 0 1rem;
+}
+
+.kd-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.kd-card {
+    background: var(--cook-card-bg);
+    border-radius: 12px;
+    box-shadow: var(--cook-shadow);
+    padding: 1.25rem 1rem;
+    text-decoration: none;
+    color: var(--cook-text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-height: 120px;
+    justify-content: center;
+}
+
+.kd-card:hover { box-shadow: var(--cook-shadow-lg); }
+
+.kd-card.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.kd-card-title { font-size: 1.25rem; font-weight: 700; }
+.kd-card-sub { font-size: 0.95rem; color: var(--cook-text-secondary); }
+
+.kd-helper { margin-top: 1rem; color: var(--cook-text-secondary); }
+
+/* ============================================================================
+     Kitchen Week Grid (K3) - Screen
+     ============================================================================ */
+
+.toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+.toolbar-right { justify-content: flex-end; }
+.page-title { flex: 1; margin: 0; }
+.meta { margin-bottom: 0.5rem; color: var(--cook-text-secondary); }
+
+.dept-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin: 10px 0; background: #fff; }
+.dept-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.dept-title { font-weight: 600; }
+.dept-empty { color: var(--cook-text-secondary); font-style: italic; }
+
+.grid-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.grid-table th, .grid-table td { border: 1px solid #e5e7eb; padding: 8px 6px; text-align: center; }
+.grid-table thead th { background: #f1f5f9; color: #0f172a; font-weight: 600; }
+.grid-subhead th { background: #f8fafc; font-weight: 500; color: #334155; }
+.meal-icon { text-align: center; font-size: 1.05rem; }
+.grid-table tbody tr.diet-row:nth-child(odd) { background: #f9fafb; }
+.grid-table tbody tr.diet-row:nth-child(even) { background: #ffffff; }
+.diet-name { text-align: left; font-weight: 600; min-width: 160px; }
+
+/* Focus/tap resets scoped to grid to prevent rectangular highlights */
+.kw-grid td:focus,
+.kw-grid td:focus-visible,
+.kw-grid td:focus-within {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Sticky first column */
+.grid-table th:first-child, .grid-table td.diet-name {
+    position: sticky;
+    left: 0;
+    background: #fff; /* ensure zebra does not bleed into sticky area */
+    z-index: 2;
+}
+.grid-table th:first-child { z-index: 3; background: #eef2f7; }
+
+.day-start { border-left: 3px solid var(--border-color-strong); }
+.kw-cell { padding: 0; }
+.kw-cell.is-alt2 { background: var(--warning-light); }
+
+.kw-cell .kostcell-btn { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+.kostcell-btn { background: transparent; border: 0; box-shadow: none; padding: 0; min-width: auto; cursor: pointer; color: inherit; position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.kostcell-btn:hover, .kostcell-btn:focus { outline: none; text-decoration: none; }
+.kw-grid .kostcell-btn { -webkit-tap-highlight-color: transparent; }
+.kw-grid .kostcell-btn,
+.kw-grid .kostcell-btn:focus,
+.kw-grid .kostcell-btn:focus-visible,
+.kw-grid .kostcell-btn:active {
+    outline: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+.kostcell-btn,
+.kostcell-btn:focus,
+.kostcell-btn:focus-visible,
+.kostcell-btn.is-done,
+.kostcell-btn.is-done:focus,
+.kostcell-btn.is-done:focus-visible {
+    border: 0;
+    outline: none;
+    box-shadow: none;
+    background: transparent;
+}
+.kostcell-btn.is-done::before {
+    content: "";
+    position: absolute;
+    width: 1.9em;
+    height: 1.9em;
+    border: 2px solid var(--cook-success);
+    border-radius: 50%;
+    box-sizing: border-box;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    opacity: 0.95;
+    pointer-events: none;
+}
+
+/* ============================================================================
+   Print Styles (K3 Kitchen Week)
+   ============================================================================ */
+
+@media print {
+    /* Page setup */
+    @page { margin: 12mm; }
+    body { background: white !important; }
+
+    /* Hide interactive controls and navigation */
+    .toolbar button { display: none !important; }
+    .toolbar a { display: none !important; }
+    .toolbar { margin-bottom: 0.25rem !important; border: none !important; box-shadow: none !important; }
+
+    /* Keep page title and meta visible; adjust spacing */
+    h1 { font-size: 1.4rem; margin: 0 0 0.25rem 0; }
+    .meta { font-size: 0.95rem; color: #000; margin: 0 0 0.5rem 0; }
+
+    /* Department cards: avoid splitting across pages; sequential 1-column layout */
+    .dept-card { break-inside: avoid; page-break-inside: avoid; border: none; box-shadow: none; }
+
+    .dept-header { border-bottom: 1px solid #999; }
+
+    /* Info box prints with subtle styling */
+    .yp-info-box { background: #fff; border-left-color: #60a5fa; color: #333; }
+
+    /* Tables: ensure readable borders and more compact font for packing */
+    .grid-table { width: 100%; font-size: 0.85rem; border-collapse: collapse; }
+    .grid-table th, .grid-table td { border: 1px solid #999 !important; padding: 3px 5px; }
+    .diet-name { font-weight: 600; text-align: left; }
+
+    /* Buttons in cells: render as plain text blocks */
+    .kostcell-btn { 
+        background: none !important; 
+        border: none !important; 
+        box-shadow: none !important; 
+        padding: 0 !important; 
+        margin: 0 !important; 
+        cursor: default !important; 
+        color: #000 !important;
+    }
+    .kostcell-btn.is-done { outline: none !important; }
+    .kostcell-btn.is-alt2 { background: none !important; }
+}
    Responsive Design
    ============================================================================ */
 
@@ -503,4 +688,13 @@
         box-shadow: none;
         border: 1px solid #e2e8f0;
     }
+}
+
+/* ============================================================================
+   K3 Week Grid – Done Ring
+   ============================================================================ */
+.kostcell-btn.is-done {
+    outline: 3px solid #2ecc71; /* green ring */
+    outline-offset: -3px;
+    border-radius: 6px;
 }
