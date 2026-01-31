@@ -410,6 +410,49 @@
 }
 
 /* ============================================================================
+   Print Styles (K3 Kitchen Week)
+   ============================================================================ */
+
+@media print {
+    /* Page setup */
+    body { background: white !important; }
+
+    /* Hide interactive controls and navigation */
+    .toolbar button { display: none !important; }
+    .toolbar a { display: none !important; }
+    .toolbar { margin-bottom: 0.25rem !important; border: none !important; box-shadow: none !important; }
+
+    /* Keep page title and meta visible; adjust spacing */
+    h1 { font-size: 1.4rem; margin: 0 0 0.25rem 0; }
+    .meta { font-size: 0.95rem; color: #000; margin: 0 0 0.5rem 0; }
+
+    /* Department cards: one per page, avoid breaking inside */
+    .dept-card { break-inside: avoid; page-break-inside: avoid; page-break-after: always; border: none; box-shadow: none; }
+    .dept-card:last-child { page-break-after: auto; }
+
+    .dept-header { border-bottom: 1px solid #999; }
+
+    /* Info box prints with subtle styling */
+    .yp-info-box { background: #fff; border-left-color: #60a5fa; color: #333; }
+
+    /* Tables: ensure readable borders and compact font */
+    .grid-table { width: 100%; font-size: 0.9rem; border-collapse: collapse; }
+    .grid-table th, .grid-table td { border: 1px solid #999 !important; padding: 4px 6px; }
+    .diet-name { font-weight: 600; text-align: left; }
+
+    /* Buttons in cells: render as plain text blocks */
+    .kostcell-btn { 
+        background: none !important; 
+        border: none !important; 
+        box-shadow: none !important; 
+        padding: 0 !important; 
+        margin: 0 !important; 
+        cursor: default !important; 
+        color: #000 !important;
+    }
+    .kostcell-btn.is-done { outline: none !important; }
+    .kostcell-btn.is-alt2 { background: none !important; }
+}
    Responsive Design
    ============================================================================ */
 
