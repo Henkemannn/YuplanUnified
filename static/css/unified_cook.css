@@ -17,6 +17,10 @@
     --cook-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
     --cook-radius: 1rem;
     --cook-gap: 1.5rem;
+    --border-color-strong: #94a3b8;
+    --success-light: #dcfce7;
+    --success-dark: #14532d;
+    --warning-light: #fef3c7;
 }
 
 /* ============================================================================
@@ -471,7 +475,8 @@
 .grid-table thead th { background: #f1f5f9; color: #0f172a; font-weight: 600; }
 .grid-subhead th { background: #f8fafc; font-weight: 500; color: #334155; }
 .meal-icon { text-align: center; font-size: 1.05rem; }
-.grid-table tbody tr:nth-child(odd) { background: #f9fafb; }
+.grid-table tbody tr.diet-row:nth-child(odd) { background: #f9fafb; }
+.grid-table tbody tr.diet-row:nth-child(even) { background: #ffffff; }
 .diet-name { text-align: left; font-weight: 600; min-width: 160px; }
 
 /* Sticky first column */
@@ -483,9 +488,28 @@
 }
 .grid-table th:first-child { z-index: 3; background: #eef2f7; }
 
-.kw-cell-buttons { display: flex; gap: 4px; }
-.kostcell-btn { width: 100%; padding: 8px 6px; border-radius: 4px; border: 1px solid #cbd5e1; background: #fafafa; cursor: pointer; }
-.kostcell-btn.is-alt2 { background: #fff7c2; }
+.day-start { border-left: 3px solid var(--border-color-strong); }
+.kw-cell { padding: 0; }
+.kw-cell.is-alt2 { background: var(--warning-light); }
+
+.kw-cell .kostcell-btn { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+.kostcell-btn { background: transparent; border: 0; box-shadow: none; padding: 0; min-width: auto; cursor: pointer; color: inherit; position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.kostcell-btn:hover, .kostcell-btn:focus { outline: none; text-decoration: none; }
+.kostcell-btn.is-done::before {
+    content: "";
+    position: absolute;
+    width: 1.9em;
+    height: 1.9em;
+    border: 2px solid var(--cook-success);
+    border-radius: 50%;
+    box-sizing: border-box;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    opacity: 0.95;
+    pointer-events: none;
+}
 
 /* ============================================================================
    Print Styles (K3 Kitchen Week)

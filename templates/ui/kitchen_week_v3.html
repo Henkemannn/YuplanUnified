@@ -77,8 +77,8 @@
                 {% for dow in range(1,8) %}
                   {% set lunch = row.cells[(dow-1)*2] %}
                   {% set dinner = row.cells[(dow-1)*2+1] %}
-                  <td class="kw-cell day-start {{ 'is-done' if lunch.is_done else '' }} {{ 'is-alt2' if lunch.is_alt2 else '' }}">
-                    <button class="kostcell-btn {{ 'is-done' if lunch.is_done else '' }} {{ 'is-alt2' if lunch.is_alt2 else '' }}"
+                  <td class="kw-cell day-start {{ 'is-alt2' if lunch.is_alt2 else '' }}">
+                    <button class="kostcell-btn {{ 'is-done' if lunch.is_done else '' }}"
                       data-department-id="{{ dep.id }}"
                       data-diet-type-id="{{ row.diet_type_id }}"
                       data-year="{{ vm.year }}"
@@ -89,7 +89,7 @@
                       {{ lunch.count }}
                     </button>
                   </td>
-                  <td class="kw-cell {{ 'is-done' if dinner.is_done else '' }}">
+                  <td class="kw-cell">
                     <button class="kostcell-btn {{ 'is-done' if dinner.is_done else '' }}"
                       data-department-id="{{ dep.id }}"
                       data-diet-type-id="{{ row.diet_type_id }}"
