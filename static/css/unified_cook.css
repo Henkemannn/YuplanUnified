@@ -478,6 +478,13 @@
 .grid-table tbody tr.diet-row:nth-child(even) { background: #ffffff; }
 .diet-name { text-align: left; font-weight: 600; min-width: 160px; }
 
+/* Kill any rectangles from focus-within on cells/wrappers */
+.grid-table td:focus-within,
+.kw-cell:focus-within {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
 /* Sticky first column */
 .grid-table th:first-child, .grid-table td.diet-name {
     position: sticky;
