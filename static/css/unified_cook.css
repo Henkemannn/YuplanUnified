@@ -410,6 +410,48 @@
 }
 
 /* ============================================================================
+   Kitchen Dashboard (Landing)
+   ============================================================================ */
+
+.kd-container {
+    max-width: 1000px;
+    margin: 1rem auto;
+    padding: 0 1rem;
+}
+
+.kd-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.kd-card {
+    background: var(--cook-card-bg);
+    border-radius: 12px;
+    box-shadow: var(--cook-shadow);
+    padding: 1.25rem 1rem;
+    text-decoration: none;
+    color: var(--cook-text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-height: 120px;
+    justify-content: center;
+}
+
+.kd-card:hover { box-shadow: var(--cook-shadow-lg); }
+
+.kd-card.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.kd-card-title { font-size: 1.25rem; font-weight: 700; }
+.kd-card-sub { font-size: 0.95rem; color: var(--cook-text-secondary); }
+
+.kd-helper { margin-top: 1rem; color: var(--cook-text-secondary); }
+
+/* ============================================================================
    Print Styles (K3 Kitchen Week)
    ============================================================================ */
 

@@ -1708,6 +1708,27 @@ def portal_week_legacy_short():
     # Legacy path should use the same unified rendering, but without forcing dinner
     return portal_week()
 
+# Kitchen dashboard landing page
+@ui_bp.get("/ui/kitchen")
+@require_roles(*SAFE_UI_ROLES)
+def kitchen_dashboard():
+    # Resolve active site: query param -> context -> session; else redirect
+    q_site_id = (request.args.get("site_id") or "").strip()
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/kitchen"))
+    # Optional site name
+    db = get_session()
+    try:
+        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = str(row_s[0]) if row_s else ""
+    finally:
+        db.close()
+    vm = {"site_id": site_id, "site_name": site_name}
+    return render_template("ui/kitchen_dashboard.html", vm=vm)
+
 # Kitchen-specific Veckovy grid route
 @ui_bp.get("/ui/kitchen/week")
 @require_roles(*SAFE_UI_ROLES)
