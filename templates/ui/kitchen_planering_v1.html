@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <title>Kök – Planering</title>
+  <link rel="stylesheet" href="/static/css/unified_cook.css">
+</head>
+<body class="cook-dashboard">
+  <div class="cook-content">
+    <h1 class="section-title">Kök – Planering</h1>
+    <p class="empty-text">Välj dag och måltid för att se sammanställning.</p>
+
+    <div class="kp-controls">
+      <div class="kp-card">
+        <div class="kp-toolbar">
+          <div class="kp-day-buttons">
+            {% for label in vm.day_labels %}
+              {% set idx = loop.index0 %}
+              <a href="?site_id={{ vm.site_id }}&year={{ vm.year }}&week={{ vm.week }}&day={{ idx }}&meal={{ vm.selected_meal or '' }}"
+                 class="kp-button {% if vm.selected_day is not none and vm.selected_day == idx %}is-active{% endif %}">{{ label }}</a>
+            {% endfor %}
+          </div>
+          <div class="kp-meal-buttons">
+            <a href="?site_id={{ vm.site_id }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=lunch"
+               class="kp-button {% if vm.selected_meal == 'lunch' %}is-active{% endif %}">🍽️ Lunch</a>
+            <a href="?site_id={{ vm.site_id }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dinner"
+               class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}">🌙 Middag</a>
+            <button class="kp-button" onclick="window.print()">Skriv ut</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="kp-card">
+      {% if vm.selected_day is none or vm.selected_meal is none %}
+        <div class="empty-state">
+          <div class="empty-icon">📝</div>
+          <h2 class="empty-text">Välj dag och måltid</h2>
+          <p class="empty-text">Planeringen visas här när du gjort ett val.</p>
+        </div>
+      {% else %}
+        <div class="planning-result">
+          <p>(Sammanställning kommer i nästa steg)</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

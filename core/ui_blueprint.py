@@ -1735,6 +1735,65 @@ def kitchen_dashboard():
     vm = {"site_id": site_id, "site_name": site_name}
     return render_template("ui/kitchen_dashboard.html", vm=vm)
 
+# Kitchen planning v1 (read-only skeleton)
+@ui_bp.get("/ui/kitchen/planering")
+@require_roles(*SAFE_UI_ROLES)
+def kitchen_planering_v1():
+    # Resolve site similarly to /ui/kitchen/week
+    q_site_id = (request.args.get("site_id") or "").strip()
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/kitchen/planering"))
+
+    # Defaults: current year/week
+    try:
+        year = int(request.args.get("year") or _date.today().year)
+    except Exception:
+        year = _date.today().year
+    try:
+        week = int(request.args.get("week") or _date.today().isocalendar()[1])
+    except Exception:
+        week = _date.today().isocalendar()[1]
+
+    # Optional day (0-6, 0=Mon) and meal (lunch/dinner)
+    day_param = request.args.get("day")
+    meal_param = (request.args.get("meal") or "").strip().lower()
+    selected_day = None
+    try:
+        if day_param is not None:
+            di = int(day_param)
+            if 0 <= di <= 6:
+                selected_day = di
+    except Exception:
+        selected_day = None
+    selected_meal = meal_param if meal_param in ("lunch", "dinner") else None
+
+    # Site name for display
+    db = get_session()
+    try:
+        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = str(row_s[0]) if row_s else ""
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+    day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
+    vm = {
+        "title": "Kök – Planering",
+        "site_id": site_id,
+        "site_name": site_name,
+        "year": year,
+        "week": week,
+        "selected_day": selected_day,
+        "selected_meal": selected_meal,
+        "day_labels": day_labels,
+    }
+    return render_template("ui/kitchen_planering_v1.html", vm=vm)
+
 # Kitchen-specific Veckovy grid route
 @ui_bp.get("/ui/kitchen/week")
 @require_roles(*SAFE_UI_ROLES)
