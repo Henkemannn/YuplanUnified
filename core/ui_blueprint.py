@@ -1773,7 +1773,9 @@ def kitchen_veckovy_week():
                 name_by_id = {str(it["id"]): str(it["name"]) for it in types}
             except Exception:
                 name_by_id = {}
-            default_ids = [str(it.get("diet_type_id")) for it in (defaults or [])]
+            # Filter to only diets with configured count > 0 for K3
+            defaults_pos = [it for it in (defaults or []) if int(it.get("default_count", 0) or 0) > 0]
+            default_ids = [str(it.get("diet_type_id")) for it in defaults_pos]
             diet_rows = []
             if default_ids:
                 for dtid in default_ids:
