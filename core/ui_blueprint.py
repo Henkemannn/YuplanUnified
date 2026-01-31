@@ -1157,9 +1157,15 @@ def weekview_ui():
                 order = ["mon","tue","wed","thu","fri","sat","sun"]
                 for i, key in enumerate(order):
                     d = days_struct.get(key) or {}
-                    l = d.get("lunch") or {}
-                    dn = d.get("dinner") or {}
-                    menu_days_site[i] = bool(l.get("alt1") or l.get("alt2") or l.get("dessert") or dn.get("alt1") or dn.get("alt2"))
+                    lunch = d.get("lunch") or {}
+                    dinner = d.get("dinner") or {}
+                    menu_days_site[i] = bool(
+                        lunch.get("alt1")
+                        or lunch.get("alt2")
+                        or lunch.get("dessert")
+                        or dinner.get("alt1")
+                        or dinner.get("alt2")
+                    )
         except Exception:
             menu_days_site = [False]*7
 
