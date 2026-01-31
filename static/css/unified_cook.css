@@ -478,9 +478,10 @@
 .grid-table tbody tr.diet-row:nth-child(even) { background: #ffffff; }
 .diet-name { text-align: left; font-weight: 600; min-width: 160px; }
 
-/* Kill any rectangles from focus-within on cells/wrappers */
-.grid-table td:focus-within,
-.kw-cell:focus-within {
+/* Focus/tap resets scoped to grid to prevent rectangular highlights */
+.kw-grid td:focus,
+.kw-grid td:focus-visible,
+.kw-grid td:focus-within {
     outline: none !important;
     box-shadow: none !important;
 }
@@ -501,10 +502,16 @@
 .kw-cell .kostcell-btn { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 600; }
 .kostcell-btn { background: transparent; border: 0; box-shadow: none; padding: 0; min-width: auto; cursor: pointer; color: inherit; position: relative; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
 .kostcell-btn:hover, .kostcell-btn:focus { outline: none; text-decoration: none; }
-.dbg-td { outline: 2px solid rgba(255,0,0,.35); outline-offset: -2px; }
-.dbg-wrap { outline: 2px solid rgba(0,0,255,.35); outline-offset: -2px; }
-.dbg-btn { outline: 2px solid rgba(0,128,0,.35); outline-offset: -2px; }
-.kostcell-btn { -webkit-tap-highlight-color: transparent; }
+.kw-grid .kostcell-btn { -webkit-tap-highlight-color: transparent; }
+.kw-grid .kostcell-btn,
+.kw-grid .kostcell-btn:focus,
+.kw-grid .kostcell-btn:focus-visible,
+.kw-grid .kostcell-btn:active {
+    outline: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    background: transparent !important;
+}
 .kostcell-btn,
 .kostcell-btn:focus,
 .kostcell-btn:focus-visible,

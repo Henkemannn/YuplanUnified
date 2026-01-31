@@ -31,7 +31,7 @@
       {% if dep.no_diets %}
         <div class="dept-empty">Inga specialkoster kopplade</div>
       {% else %}
-        <table class="grid-table" aria-label="Specialkostöversikt">
+        <table class="grid-table kw-grid" aria-label="Specialkostöversikt">
           <thead>
             <tr>
               <th>Kosttyp</th>
@@ -76,9 +76,8 @@
                 {% for dow in range(1,8) %}
                   {% set lunch = row.cells[(dow-1)*2] %}
                   {% set dinner = row.cells[(dow-1)*2+1] %}
-                  <td class="kw-cell dbg-td day-start {{ 'is-alt2' if lunch.is_alt2 else '' }}">
-                    <div class="kw-cell-buttons dbg-wrap">
-                      <button class="kostcell-btn dbg-btn {{ 'is-done' if lunch.is_done else '' }}"
+                  <td class="kw-cell day-start {{ 'is-alt2' if lunch.is_alt2 else '' }}">
+                    <button class="kostcell-btn {{ 'is-done' if lunch.is_done else '' }}"
                       data-department-id="{{ dep.id }}"
                       data-diet-type-id="{{ row.diet_type_id }}"
                       data-year="{{ vm.year }}"
@@ -88,11 +87,9 @@
                       aria-label="Lunch {{ row.diet_type_name }} dag {{ lunch.day_index }}">
                       {{ lunch.count }}
                     </button>
-                    </div>
                   </td>
-                    <td class="kw-cell dbg-td">
-                    <div class="kw-cell-buttons dbg-wrap">
-                      <button class="kostcell-btn dbg-btn {{ 'is-done' if dinner.is_done else '' }}"
+                  <td class="kw-cell">
+                    <button class="kostcell-btn {{ 'is-done' if dinner.is_done else '' }}"
                       data-department-id="{{ dep.id }}"
                       data-diet-type-id="{{ row.diet_type_id }}"
                       data-year="{{ vm.year }}"
@@ -102,7 +99,6 @@
                       aria-label="Middag {{ row.diet_type_name }} dag {{ dinner.day_index }}">
                       {{ dinner.count }}
                     </button>
-                    </div>
                   </td>
                 {% endfor %}
               </tr>
