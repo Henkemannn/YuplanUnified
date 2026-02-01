@@ -27,6 +27,6 @@ def test_admin_weekview_has_menu_modal_markup(app_session):
     html = rv.data.decode("utf-8")
     # Modal container exists
     assert '<div id="menuModal"' in html
-    # Script include present
-    assert 'weekview_menu_modal.js' in html
+    # Shared script include present
+    assert 'js/menu_modal.js' in html
     # Icon presence depends on seeded weekly menu; modal container+script are sufficient for M1.1
