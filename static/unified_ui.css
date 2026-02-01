@@ -1001,3 +1001,20 @@ a:hover {
 .menu-modal__pill.alt2 { background: var(--yp-color-warning-light); }
 .menu-modal__text { flex:1; }
 .menu-icon { background: transparent; border: 0; cursor: pointer; font-size: 1rem; }
+
+/* Admin Alt2 modal day toggles */
+.alt2-day {
+    display: inline-block;
+    padding: 6px 10px;
+    margin: 4px 6px 0 0;
+    border: 1px solid var(--yp-color-border);
+    border-radius: var(--yp-radius-full);
+    background: var(--yp-color-bg);
+    color: var(--yp-color-text);
+    font-size: var(--yp-font-size-sm);
+    cursor: pointer;
+}
+.alt2-day.is-alt2-selected {
+    background: #ffe58a;
+    border-color: #f2c200;
+}
