@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>Kök – Planering</title>
   <link rel="stylesheet" href="/static/css/unified_cook.css">
+  <link rel="stylesheet" href="/static/unified_ui.css">
 </head>
 <body class="cook-dashboard">
   <div class="cook-content">
@@ -26,6 +27,18 @@
             <a href="?site_id={{ vm.site_id }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dinner"
                class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}">🌙 Middag</a>
             <button class="kp-button" onclick="window.print()">Skriv ut</button>
+            {% if vm.selected_day is not none %}
+              <button type="button"
+                      class="kp-button js-open-menu-modal"
+                      data-site-id="{{ vm.site_id }}"
+                      data-year="{{ vm.year }}"
+                      data-week="{{ vm.week }}"
+                      data-day-index="{{ vm.selected_day }}"
+                      {% if vm.selected_meal %}data-focus-meal="{{ vm.selected_meal }}"{% endif %}
+              >Visa meny</button>
+            {% else %}
+              <button type="button" class="kp-button js-open-menu-modal" disabled>Visa meny</button>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -45,5 +58,7 @@
       {% endif %}
     </div>
   </div>
+  {% include "ui/_menu_modal.html" %}
+  <script src="/static/js/menu_modal.js"></script>
 </body>
 </html>
