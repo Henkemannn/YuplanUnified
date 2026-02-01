@@ -5,7 +5,6 @@
   function closeDialog(dlg){ try { dlg.close(); } catch(_) { dlg.removeAttribute('open'); } }
 
   document.addEventListener('DOMContentLoaded', function(){
-    console.debug('alt2 init ok');
     const dlg = document.getElementById('alt2Modal');
     if(!dlg) return;
     const bodyEl = $('#alt2ModalBody', dlg) || dlg;
@@ -74,7 +73,6 @@
       const t = ev.target.closest('.js-open-alt2');
       if(!t) return;
       ev.preventDefault();
-      console.debug('alt2 click', t.dataset);
       departmentId = t.getAttribute('data-department-id');
       openDialog(dlg);
       load();
