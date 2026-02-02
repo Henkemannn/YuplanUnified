@@ -1,3 +1,4 @@
+<!-- weekview-template: weekview_all.html -->
 {% extends "ui/unified_admin_base.html" %}
 
 {% block admin_title %}Veckovy – vecka {{ vm.week }}, {{ vm.year }}{% endblock %}
@@ -35,6 +36,7 @@
   .weekview-all .ua-card { border-radius: 10px; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
   table.weekview th + th, table.weekview td + td { border-left: 1px solid rgba(0,0,0,0.05); }
   table.weekview tbody tr:nth-child(even) { background: rgba(0,0,0,0.01); }
+
   /* Department info-box */
   .dep-info { background: rgba(33,150,243,0.08); border-radius: 8px; padding: 10px 12px; margin: 8px 0 12px 0; color:#29434e; display:flex; align-items:flex-start; gap:8px; }
   .dep-info .icon { flex: 0 0 auto; }
@@ -127,7 +129,7 @@
         <tr class="boende-row">
           <td><strong>Boende</strong></td>
           {% for d in dep.days %}
-            <td>{{ (d.residents or {}).lunch or 0 }}</td>
+            <td class="{% if d.alt2_lunch %}is-alt2{% endif %}">{{ (d.residents or {}).lunch or 0 }}</td>
             <td class="kvall">{{ (d.residents or {}).dinner or 0 }}</td>
           {% endfor %}
         </tr>
@@ -146,7 +148,7 @@
               {% set day = dep.days[i] %}
               {% set lunch_cell = (day.diets.lunch | selectattr('diet_type_id','equalto', dtid) | list | first) %}
               {% set dinner_cell = (day.diets.dinner | selectattr('diet_type_id','equalto', dtid) | list | first) %}
-              <td class="diet-cell {% if lunch_cell and lunch_cell.marked %}marked{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Lunch" data-diet-id="{{ dtid }}">
+              <td class="diet-cell {% if lunch_cell and lunch_cell.marked %}marked{% endif %} {% if day.alt2_lunch %}is-alt2{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Lunch" data-diet-id="{{ dtid }}">
                 {{ lunch_cell.resident_count if lunch_cell else 0 }}
               </td>
               <td class="diet-cell kvall {% if dinner_cell and dinner_cell.marked %}marked{% endif %}" data-weekday="{{ day.weekday_name }}" data-meal="Kväll" data-diet-id="{{ dtid }}">
