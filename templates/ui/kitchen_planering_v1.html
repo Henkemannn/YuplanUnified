@@ -70,7 +70,7 @@
     </div>
 
     <div class="kp-card">
-      {% if vm.selected_day is none or vm.selected_meal is none or not vm.summary %}
+      {% if vm.selected_day is none or vm.selected_meal is none %}
         <div class="empty-state">
           <div class="empty-icon">📝</div>
           <h2 class="empty-text">Välj dag och måltid</h2>
@@ -78,52 +78,161 @@
         </div>
       {% else %}
         <div class="planning-result" aria-live="polite">
+          <div class="kp-card" style="margin-bottom:12px;">
+            <h2 style="margin:0 0 6px 0;">Vad planerar vi?</h2>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+              <div>Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else 'Middag' }}</strong></div>
+              {% if vm.selected_meal == 'lunch' %}
+                <div>Alt 1: <strong>—</strong></div>
+                <div>Alt 2: <strong class="is-alt2">—</strong></div>
+              {% else %}
+                <div>Rätt: <strong>—</strong></div>
+              {% endif %}
+            </div>
+          </div>
+          <form method="get" action="" class="kp-card" style="margin-bottom:12px;">
+            <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+            <input type="hidden" name="year" value="{{ vm.year }}">
+            <input type="hidden" name="week" value="{{ vm.week }}">
+            <input type="hidden" name="day" value="{{ vm.selected_day }}">
+            <input type="hidden" name="meal" value="{{ vm.selected_meal }}">
+            <input type="hidden" name="show_results" value="1">
+            <div style="margin-bottom:8px; font-weight:600;">Kryssa specialkoster (anpassning)</div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              {% for opt in vm.diet_options %}
+                <label style="display:flex; align-items:center; gap:6px;">
+                  <input type="checkbox" name="selected_diets" value="{{ opt.diet_type_id }}" {% if opt.diet_type_id in vm.selected_diets %}checked{% endif %}>
+                  <span>{{ opt.diet_type_name }}</span>
+                  <span style="opacity:0.7;">(totalt {{ opt.total_count }})</span>
+                </label>
+              {% endfor %}
+            </div>
+            <div style="margin-top:10px;">
+              <button type="submit" class="kp-button">Visa tillagningslista</button>
+            </div>
+          </form>
+          {% set show_results = (request.args.get('show_results') == '1') %}
+          {% if vm.summary and show_results %}
+          <div class="kp-toggle" style="margin-bottom:12px;">
+            <div style="font-weight:600; margin-bottom:6px;">Arbetsläge:</div>
+            <label style="margin-right:12px;">
+              <input type="radio" name="result_view" value="special" checked> Specialkost
+            </label>
+            <label>
+              <input type="radio" name="result_view" value="normal"> Normalkost
+            </label>
+          </div>
           <div class="summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px;">
             <div class="kp-card" style="text-align:center;">
               <div style="font-size:0.9rem;color:#334155;">Boende totalt</div>
-              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.total_residents }}</div>
+              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.residents_total }}</div>
             </div>
             <div class="kp-card" style="text-align:center;">
-              <div style="font-size:0.9rem;color:#334155;">Specialkost totalt</div>
-              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.total_special }}</div>
+              <div style="font-size:0.9rem;color:#334155;">Special att anpassa</div>
+              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.special_to_adapt_total }}</div>
             </div>
             <div class="kp-card" style="text-align:center;">
-              <div style="font-size:0.9rem;color:#334155;">Normalkost totalt</div>
-              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.total_normal }}</div>
+              <div style="font-size:0.9rem;color:#334155;">Normalkost kvar</div>
+              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.normal_remaining }}</div>
             </div>
           </div>
-
-          <h3>Specialkost per typ</h3>
-          {% if vm.summary.breakdown and vm.summary.breakdown|length > 0 %}
-            <ul>
-              {% for row in vm.summary.breakdown %}
-                <li>{{ row.diet_type_name }}: <strong>{{ row.count }}</strong></li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p class="empty-text">Inga markerade specialkoster för vald måltid.</p>
           {% endif %}
 
-          {% if vm.summary.per_department and vm.summary.per_department|length > 0 %}
-            <details style="margin-top:8px;">
-              <summary>Per avdelning</summary>
-              <table class="grid-table" style="margin-top:8px;">
-                <thead>
-                  <tr><th>Avdelning</th><th>Boende</th><th>Special</th><th>Normal</th></tr>
-                </thead>
+          <div id="view-special" class="result-view" {% if not show_results %}style="display:none;"{% endif %}>
+            {% if vm.adaptation and vm.adaptation|length > 0 %}
+              <h3>Anpassningslista – per avdelning</h3>
+              {% for item in vm.adaptation %}
+                <div class="kp-card" style="margin:8px 0;">
+                  <div style="font-weight:600;">{{ item.diet_type_name }} – {{ item.total_count }} portioner</div>
+                  <details style="margin-top:6px;">
+                    <summary>Visa per avdelning</summary>
+                    <table class="grid-table" style="margin-top:6px;">
+                      <thead><tr><th>Avdelning</th><th>Antal</th></tr></thead>
+                      <tbody>
+                        {% for row in item.per_department %}
+                          <tr><td style="text-align:left;">{{ row.department_name }}</td><td>{{ row.count }}</td></tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </details>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="empty-text">Inga valda specialkoster.</p>
+            {% endif %}
+          </div>
+
+          <div id="view-normal" class="result-view" style="display:none;">
+            <h3>Normalkost – per avdelning</h3>
+            {% if vm.normalkost_rows and vm.normalkost_rows|length > 0 %}
+              {% if vm.selected_meal == 'lunch' %}
+              <table class="grid-table" style="margin-top:6px;">
+                <thead><tr><th>Avdelning</th><th>Alt 1</th><th class="is-alt2">Alt 2</th><th>Total</th></tr></thead>
                 <tbody>
-                  {% for d in vm.summary.per_department %}
+                  {% for r in vm.normalkost_rows %}
                     <tr>
-                      <td style="text-align:left;">{{ d.name }}</td>
-                      <td>{{ d.residents }}</td>
-                      <td>{{ d.special }}</td>
-                      <td>{{ d.normal }}</td>
+                      <td style="text-align:left;">{{ r.department_name }}</td>
+                      <td>{{ r.alt1 }}</td>
+                      <td class="is-alt2">{{ r.alt2 }}</td>
+                      <td>{{ r.total }}</td>
                     </tr>
                   {% endfor %}
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <th>SUM</th>
+                    <th>{{ vm.normalkost_sum.alt1 }}</th>
+                    <th class="is-alt2">{{ vm.normalkost_sum.alt2 }}</th>
+                    <th>{{ vm.normalkost_sum.total }}</th>
+                  </tr>
+                </tfoot>
               </table>
-            </details>
-          {% endif %}
+              {% else %}
+              <table class="grid-table" style="margin-top:6px;">
+                <thead><tr><th>Avdelning</th><th>Normalkost</th><th>Total</th></tr></thead>
+                <tbody>
+                  {% for r in vm.normalkost_rows %}
+                    <tr>
+                      <td style="text-align:left;">{{ r.department_name }}</td>
+                      <td>{{ r.total }}</td>
+                      <td>{{ r.total }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th>SUM</th>
+                    <th>{{ vm.normalkost_sum.total }}</th>
+                    <th>{{ vm.normalkost_sum.total }}</th>
+                  </tr>
+                </tfoot>
+              </table>
+              {% endif %}
+            {% else %}
+              <p class="empty-text">Ingen normalkost att visa.</p>
+            {% endif %}
+          </div>
+
+          <script>
+            (function(){
+              var radios = document.querySelectorAll('input[name="result_view"]');
+              var vSpecial = document.getElementById('view-special');
+              var vNormal = document.getElementById('view-normal');
+              function sync(){
+                var val = 'special';
+                for (var i=0;i<radios.length;i++){ if (radios[i].checked) { val = radios[i].value; break; } }
+                if (val === 'normal') {
+                  vSpecial.style.display = 'none';
+                  vNormal.style.display = '';
+                } else {
+                  vSpecial.style.display = '';
+                  vNormal.style.display = 'none';
+                }
+              }
+              for (var i=0;i<radios.length;i++){ radios[i].addEventListener('change', sync); }
+              sync();
+            })();
+          </script>
         </div>
       {% endif %}
     </div>

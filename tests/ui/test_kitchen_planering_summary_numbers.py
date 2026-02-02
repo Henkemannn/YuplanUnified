@@ -74,6 +74,7 @@ def _seed_minimal(site_id: str, dept_id: str, year: int, week: int, lunch_reside
     repo.apply_operations(tenant_id=1, year=year, week=week, department_id=dept_id, ops=[
         {"day_of_week": 1, "meal": "lunch", "diet_type": str(dt_id), "marked": True}
     ])
+    return dt_id
 
 
 def test_planering_summary_numbers(app_session):
@@ -84,8 +85,8 @@ def test_planering_summary_numbers(app_session):
     today = _date.today()
     year = today.year
     week = today.isocalendar()[1]
-    _seed_minimal(site_id, dept_id, year, week, lunch_residents=10, diet_name="Glutenfri", diet_count=3)
-    rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&year={year}&week={week}&day=0&meal=lunch", headers=HEADERS)
+    dt_id = _seed_minimal(site_id, dept_id, year, week, lunch_residents=10, diet_name="Glutenfri", diet_count=3)
+    rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&year={year}&week={week}&day=0&meal=lunch&selected_diets={dt_id}&show_results=1", headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     # Totals cards must show numbers
@@ -93,6 +94,6 @@ def test_planering_summary_numbers(app_session):
     assert ">3<" in html
     # Normal = 7
     assert ">7<" in html
-    # Breakdown should include diet name and count
+    # Adaptation list should include diet name and per-department total
     assert "Glutenfri" in html
-    assert "3</strong>" in html
+    assert "totalt 3" in html

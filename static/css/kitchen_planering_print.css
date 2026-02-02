@@ -5,6 +5,8 @@
   body { background: white !important; }
   .cook-header, .cook-footer { display: none !important; }
   .kp-controls { display: none !important; }
+  .kp-toggle { display: none !important; }
+  .kp-card form { display: none !important; }
   .empty-text { display: none !important; }
   .kp-card { box-shadow: none !important; border: none !important; }
   .summary-cards .kp-card { border: 1px solid #999 !important; }
