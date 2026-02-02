@@ -111,7 +111,7 @@
             <div class="day-date">{{ day.date }}</div>
             
             <!-- Lunch Section -->
-            <div class="meal-section meal-section--lunch"
+              <div class="meal-section meal-section--lunch {% if day.alt2_lunch %}is-alt2{% endif %}"
                  data-meal-cell
                  data-date="{{ day.date }}"
                  data-meal-type="lunch"
