@@ -29,19 +29,7 @@
       {% if dep.info_text %}
         <div class="yp-info-box">{{ dep.info_text }}</div>
       {% endif %}
-      {% if dep.no_diets %}
-        <div class="dept-empty">Inga specialkoster kopplade</div>
-        <div class="dept-week-menu-icons" aria-label="Veckomeny">
-          <span>Mån <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="0">📖</button></span>
-          <span>Tis <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="1">📖</button></span>
-          <span>Ons <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="2">📖</button></span>
-          <span>Tors <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="3">📖</button></span>
-          <span>Fre <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="4">📖</button></span>
-          <span>Lör <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="5">📖</button></span>
-          <span>Sön <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="6">📖</button></span>
-        </div>
-      {% else %}
-        <table class="grid-table kw-grid" aria-label="Specialkostöversikt">
+      <table class="grid-table kw-grid" aria-label="Specialkostöversikt">
           <thead>
             <tr>
               <th>Kosttyp</th>
@@ -76,7 +64,7 @@
               <td class="diet-name">Boende</td>
               {% for dow in range(1,8) %}
                 {% set d = dep.days[dow-1] %}
-                <td class="kw-cell day-start">{{ d.residents.lunch if d and d.residents else 0 }}</td>
+                <td class="kw-cell day-start {{ 'is-alt2' if d.alt2_lunch else '' }}">{{ d.residents.lunch if d and d.residents else 0 }}</td>
                 <td class="kw-cell">{{ d.residents.dinner if d and d.residents else 0 }}</td>
               {% endfor %}
             </tr>
@@ -115,7 +103,9 @@
             {% endfor %}
           </tbody>
         </table>
-      {% endif %}
+        {% if dep.no_diets %}
+          <div class="dept-empty" aria-live="polite">Inga specialkoster kopplade</div>
+        {% endif %}
     </div>
   {% endfor %}
   {% include "ui/_menu_modal.html" %}
