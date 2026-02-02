@@ -111,10 +111,9 @@
             {% set idx = loop.index0 %}
             {% set site_has = vm.menu_days_site if vm.menu_days_site is defined else [] %}
             {% set has_menu = (site_has[idx] if (site_has and site_has|length>idx) else False) %}
-            <th colspan="2">{{ dn }}{% if has_menu %}
-              {% set legacy_days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
-              <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-day-index="{{ idx }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}">🍽️</button>
-            {% endif %}</th>
+            <th colspan="2">{{ dn }}
+              <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ idx }}">📋</button>
+            </th>
           {% endfor %}
         </tr>
         <tr>
