@@ -1061,13 +1061,16 @@ a:hover {
 }
 .weekview-all .weekview th:first-child,
 .weekview-all .weekview td:first-child {
-    width: clamp(140px, 20%, 220px);
-    min-width: 140px;
-    max-width: 220px;
+    width: clamp(180px, 26%, 300px);
+    min-width: 180px;
+    max-width: 300px;
     text-align: left !important;
     white-space: normal;
     overflow-wrap: anywhere;
     padding-right: 10px;
+}
+.weekview-all .weekview tbody tr:first-child td:first-child {
+    white-space: nowrap;
 }
 .weekview-all .weekview th:not(:first-child),
 .weekview-all .weekview td:not(:first-child) {
