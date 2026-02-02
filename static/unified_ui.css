@@ -1015,6 +1015,23 @@ a:hover {
 .menu-modal__text { flex:1; }
 .menu-icon { background: transparent; border: 0; cursor: pointer; font-size: 1rem; }
 
+/* Site-level Weekview: show green "done" ring on marked diet cells */
+.weekview-all .weekview td.diet-cell.marked {
+    position: relative;
+}
+.weekview-all .weekview td.diet-cell.marked::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 26px;
+    height: 26px;
+    transform: translate(-50%, -50%);
+    border: 2px solid #2e7d32; /* green */
+    border-radius: 999px;
+    pointer-events: none;
+}
+
 /* Admin Alt2 modal day toggles */
 .alt2-day {
     display: inline-block;
