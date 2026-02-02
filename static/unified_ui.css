@@ -1015,6 +1015,14 @@ a:hover {
 .menu-modal__text { flex:1; }
 .menu-icon { background: transparent; border: 0; cursor: pointer; font-size: 1rem; }
 
+/* Weekview meal icons in header */
+.weekview-all .weekview .meal-icon {
+    display: inline-block;
+    font-size: 1rem;
+    line-height: 1;
+    vertical-align: middle;
+}
+
 /* Site-level Weekview: show green "done" ring on marked diet cells */
 .weekview-all .weekview td.diet-cell {
     text-align: center;

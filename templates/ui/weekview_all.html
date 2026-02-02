@@ -119,8 +119,8 @@
         <tr>
           <th></th>
           {% for dn in day_names %}
-            <th>Lunch</th>
-            <th>Kväll</th>
+            <th aria-label="Lunch"><span class="meal-icon" aria-hidden="true">🍽️</span><span class="yp-sr-only">Lunch</span></th>
+            <th aria-label="Kväll"><span class="meal-icon" aria-hidden="true">🌙</span><span class="yp-sr-only">Kväll</span></th>
           {% endfor %}
         </tr>
       </thead>
