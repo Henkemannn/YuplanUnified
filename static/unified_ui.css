@@ -398,6 +398,19 @@ a:hover {
 }
 
 .yp-table th,
+/* ============================================================================
+     WEEKVIEW (Site-Level) - Scoped Alt2 Highlight
+     ============================================================================ */
+
+/*
+    Highlight lunch cells in the site-level weekview when Alt2 is enabled.
+    Scope: only affects tables within the site-level weekview sections.
+*/
+.weekview-all .weekview td.is-alt2 {
+        background: var(--yp-warning-bg-soft, rgba(255,193,7,0.16));
+        border: 1px solid var(--yp-warning-border, rgba(255,193,7,0.40));
+}
+
 .yp-table td {
     padding: 0.75rem 1rem;
     text-align: left;
