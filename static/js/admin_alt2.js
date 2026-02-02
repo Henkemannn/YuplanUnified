@@ -3,6 +3,12 @@
   function $all(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
   function openDialog(dlg){ try { dlg.showModal(); } catch(_) { dlg.setAttribute('open','open'); } }
   function closeDialog(dlg){ try { dlg.close(); } catch(_) { dlg.removeAttribute('open'); } }
+  function getCookie(name){
+    try {
+      var m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+      return m ? decodeURIComponent(m[2]) : null;
+    } catch(_) { return null; }
+  }
 
   document.addEventListener('DOMContentLoaded', function(){
     const dlg = document.getElementById('alt2Modal');
@@ -50,9 +56,14 @@
       const y = parseInt(yearEl && yearEl.value || (new Date()).getFullYear(), 10);
       const w = parseInt(weekEl && weekEl.value || 1, 10);
       try{
+        const csrf = getCookie('csrf_token');
         const r = await fetch(`/ui/admin/departments/${departmentId}/alt2`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+            'X-Requested-With': 'XMLHttpRequest',
+          },
           body: JSON.stringify({ year: y, week: w, alt2_days: selected })
         , credentials: 'same-origin' });
         if(!r.ok){ if(statusEl) statusEl.textContent = 'Kunde inte spara.'; return; }
