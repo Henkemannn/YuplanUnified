@@ -246,6 +246,12 @@
   min-height: 44px; /* WCAG touch target */
 }
 
+/* Alt2 highlight (parity with kitchen/week) */
+.meal-section.is-alt2 {
+  background: var(--wv-color-alt2-bg);
+  border-color: var(--wv-color-alt2-border);
+}
+
 .meal-section:last-child {
   margin-bottom: 0;
 }
