@@ -1306,6 +1306,17 @@ def weekview_ui():
         except Exception:
             lunch_diets = []
 
+        # Filter out legacy/sentinel diet labels in weekview UI
+        try:
+            def _is_legacy_label(name: str) -> bool:
+                s = (name or "").strip()
+                return s == "1" or s.lower() == "legacy 1"
+
+            lunch_diets = [x for x in lunch_diets if not _is_legacy_label(x.get("diet_name", ""))]
+        except Exception:
+            # If anything goes wrong, keep the unfiltered list to avoid breaking the page
+            pass
+
         day_vm = {
             "date": date_str,
             "weekday_name": d.get("weekday_name"),
