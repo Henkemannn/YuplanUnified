@@ -5,15 +5,40 @@
   <title>Kök – Planering</title>
   <link rel="stylesheet" href="/static/css/unified_cook.css">
   <link rel="stylesheet" href="/static/unified_ui.css">
+  <link rel="stylesheet" href="/static/css/kitchen_planering_print.css">
 </head>
 <body class="cook-dashboard">
   <div class="cook-content">
     <h1 class="section-title">Kök – Planering</h1>
-    <p class="empty-text">Välj dag och måltid för att se sammanställning.</p>
+    <p class="empty-text">Välj vecka, dag och måltid för att se sammanställning.</p>
 
     <div class="kp-controls">
       <div class="kp-card">
         <div class="kp-toolbar">
+          <div class="kp-week-picker" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <a class="kp-button" aria-label="Föregående vecka"
+               href="?site_id={{ vm.site_id }}&year={{ vm.prev_year }}&week={{ vm.prev_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">⟵ Föregående</a>
+            <form method="get" action="" style="display:flex;gap:6px;align-items:center;">
+              <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+              <input type="hidden" name="day" value="{{ vm.selected_day if vm.selected_day is not none else '' }}">
+              <input type="hidden" name="meal" value="{{ vm.selected_meal or '' }}">
+              <label for="week-select">Vecka</label>
+              <select id="week-select" name="week">
+                {% for w in vm.week_options %}
+                  <option value="{{ w }}" {% if vm.week == w %}selected{% endif %}>{{ w }}</option>
+                {% endfor %}
+              </select>
+              <label for="year-select">År</label>
+              <select id="year-select" name="year">
+                {% for y in vm.year_options %}
+                  <option value="{{ y }}" {% if vm.year == y %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="kp-button">Välj</button>
+            </form>
+            <a class="kp-button" aria-label="Nästa vecka"
+               href="?site_id={{ vm.site_id }}&year={{ vm.next_year }}&week={{ vm.next_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">Nästa ⟶</a>
+          </div>
           <div class="kp-day-buttons">
             {% for label in vm.day_labels %}
               {% set idx = loop.index0 %}
@@ -45,15 +70,60 @@
     </div>
 
     <div class="kp-card">
-      {% if vm.selected_day is none or vm.selected_meal is none %}
+      {% if vm.selected_day is none or vm.selected_meal is none or not vm.summary %}
         <div class="empty-state">
           <div class="empty-icon">📝</div>
           <h2 class="empty-text">Välj dag och måltid</h2>
           <p class="empty-text">Planeringen visas här när du gjort ett val.</p>
         </div>
       {% else %}
-        <div class="planning-result">
-          <p>(Sammanställning kommer i nästa steg)</p>
+        <div class="planning-result" aria-live="polite">
+          <div class="summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px;">
+            <div class="kp-card" style="text-align:center;">
+              <div style="font-size:0.9rem;color:#334155;">Boende totalt</div>
+              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.total_residents }}</div>
+            </div>
+            <div class="kp-card" style="text-align:center;">
+              <div style="font-size:0.9rem;color:#334155;">Specialkost totalt</div>
+              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.total_special }}</div>
+            </div>
+            <div class="kp-card" style="text-align:center;">
+              <div style="font-size:0.9rem;color:#334155;">Normalkost totalt</div>
+              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.total_normal }}</div>
+            </div>
+          </div>
+
+          <h3>Specialkost per typ</h3>
+          {% if vm.summary.breakdown and vm.summary.breakdown|length > 0 %}
+            <ul>
+              {% for row in vm.summary.breakdown %}
+                <li>{{ row.diet_type_name }}: <strong>{{ row.count }}</strong></li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="empty-text">Inga markerade specialkoster för vald måltid.</p>
+          {% endif %}
+
+          {% if vm.summary.per_department and vm.summary.per_department|length > 0 %}
+            <details style="margin-top:8px;">
+              <summary>Per avdelning</summary>
+              <table class="grid-table" style="margin-top:8px;">
+                <thead>
+                  <tr><th>Avdelning</th><th>Boende</th><th>Special</th><th>Normal</th></tr>
+                </thead>
+                <tbody>
+                  {% for d in vm.summary.per_department %}
+                    <tr>
+                      <td style="text-align:left;">{{ d.name }}</td>
+                      <td>{{ d.residents }}</td>
+                      <td>{{ d.special }}</td>
+                      <td>{{ d.normal }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </details>
+          {% endif %}
         </div>
       {% endif %}
     </div>

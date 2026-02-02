@@ -1746,7 +1746,7 @@ def kitchen_dashboard():
     vm = {"site_id": site_id, "site_name": site_name}
     return render_template("ui/kitchen_dashboard.html", vm=vm)
 
-# Kitchen planning v1 (read-only skeleton)
+# Kitchen planning v1 (read-only summary + print + week picker)
 @ui_bp.get("/ui/kitchen/planering")
 @require_roles(*SAFE_UI_ROLES)
 def kitchen_planering_v1():
@@ -1792,6 +1792,111 @@ def kitchen_planering_v1():
         except Exception:
             pass
 
+    # Prev/next ISO week rollover using Monday anchor
+    try:
+        monday = _date.fromisocalendar(year, week, 1)
+    except Exception:
+        monday = _date.today()
+    prev_date = monday - timedelta(days=7)
+    next_date = monday + timedelta(days=7)
+    p_iso = prev_date.isocalendar(); n_iso = next_date.isocalendar()
+    prev_year, prev_week = int(p_iso[0]), int(p_iso[1])
+    next_year, next_week = int(n_iso[0]), int(n_iso[1])
+
+    # Week/year options (simple ranges)
+    week_options = list(range(1, 54))
+    year_now = _date.today().year
+    year_options = list(range(year_now - 1, year_now + 2))
+
+    # Build summary only when both day and meal are selected
+    summary = None
+    per_department = []
+    breakdown = {}
+    diet_name_by_id = {}
+    if selected_day is not None and selected_meal is not None:
+        # Load departments for site
+        db = get_session()
+        try:
+            rows = db.execute(
+                text(
+                    "SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments WHERE site_id=:s ORDER BY name"
+                ),
+                {"s": site_id},
+            ).fetchall()
+            departments = [{"id": str(r[0]), "name": str(r[1] or ""), "resident_count": int(r[2] or 0)} for r in rows]
+        finally:
+            db.close()
+
+        # Preload diet type names scoped to site
+        try:
+            from .admin_repo import DietTypesRepo as _TypesRepo
+            types = _TypesRepo().list_all(site_id=site_id)
+            diet_name_by_id = {str(it["id"]): str(it["name"]) for it in types}
+        except Exception:
+            diet_name_by_id = {}
+
+        svc = WeekviewService()
+        tenant_id = (session.get("tenant_id") or 1)
+        iso_dow = int(selected_day) + 1  # 1=Mon..7=Sun
+        total_residents = 0
+        total_special = 0
+
+        # Optional always_mark map per department
+        always_mark_by_dep: dict[str, set[str]] = {}
+        try:
+            from .admin_repo import DietDefaultsRepo as _DefRepo
+            for dep in departments:
+                try:
+                    items = _DefRepo().list_for_department(dep["id"])
+                    always_mark_by_dep[dep["id"]] = {str(it["diet_type_id"]) for it in items if bool(it.get("always_mark"))}
+                except Exception:
+                    always_mark_by_dep[dep["id"]] = set()
+        except Exception:
+            always_mark_by_dep = {d["id"]: set() for d in departments}
+
+        for dep in departments:
+            payload, _ = svc.fetch_weekview(tenant_id=tenant_id, year=year, week=week, department_id=dep["id"], site_id=site_id)
+            summaries = payload.get("department_summaries") or []
+            s = summaries[0] if summaries else {}
+            days = s.get("days") or []
+            day_obj = next((x for x in days if int(x.get("day_of_week")) == iso_dow), None)
+            if not day_obj:
+                continue
+            # Residents
+            res = int((day_obj.get("residents") or {}).get(selected_meal, 0) or 0)
+            total_residents += res
+
+            # Diets for selected meal: count only marked or always_mark
+            diets = ((day_obj.get("diets") or {}).get(selected_meal) or [])
+            always_set = always_mark_by_dep.get(dep["id"], set())
+            dep_special = 0
+            for it in diets:
+                dtid = str(it.get("diet_type_id"))
+                cnt = int(it.get("resident_count") or 0)
+                is_marked = bool(it.get("marked")) or (dtid in always_set)
+                if is_marked:
+                    dep_special += cnt
+                    breakdown[dtid] = breakdown.get(dtid, 0) + cnt
+            total_special += dep_special
+            per_department.append({
+                "id": dep["id"],
+                "name": dep["name"],
+                "residents": res,
+                "special": dep_special,
+                "normal": max(res - dep_special, 0),
+            })
+
+        summary = {
+            "total_residents": total_residents,
+            "total_special": total_special,
+            "total_normal": max(total_residents - total_special, 0),
+            "breakdown": [
+                {"diet_type_id": k, "diet_type_name": diet_name_by_id.get(k, k), "count": v}
+                for k, v in sorted(breakdown.items(), key=lambda kv: (-(kv[1]), kv[0]))
+            ],
+            "per_department": per_department,
+        }
+
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
     vm = {
         "title": "Kök – Planering",
@@ -1799,9 +1904,16 @@ def kitchen_planering_v1():
         "site_name": site_name,
         "year": year,
         "week": week,
+        "prev_year": prev_year,
+        "prev_week": prev_week,
+        "next_year": next_year,
+        "next_week": next_week,
+        "week_options": week_options,
+        "year_options": year_options,
         "selected_day": selected_day,
         "selected_meal": selected_meal,
         "day_labels": day_labels,
+        "summary": summary,
     }
     return render_template("ui/kitchen_planering_v1.html", vm=vm)
 
