@@ -1055,21 +1055,19 @@ a:hover {
 .weekview-all .weekview td {
     padding: 6px 6px !important; /* slightly reduced for iPad readability */
 }
-.weekview-all .weekview td {
+.weekview-all .weekview td:not(:first-child) {
     text-align: center !important;
     white-space: nowrap;
 }
 .weekview-all .weekview th:first-child,
 .weekview-all .weekview td:first-child {
-    width: 1%;
-    text-align: left !important;
-    white-space: nowrap;
-    padding-right: 12px;
-}
-.weekview-all .weekview td:first-child {
+    width: clamp(140px, 20%, 220px);
+    min-width: 140px;
     max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    text-align: left !important;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    padding-right: 10px;
 }
 .weekview-all .weekview th:not(:first-child),
 .weekview-all .weekview td:not(:first-child) {
