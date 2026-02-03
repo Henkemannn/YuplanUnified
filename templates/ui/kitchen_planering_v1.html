@@ -83,10 +83,10 @@
             <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
               <div>Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else 'Middag' }}</strong></div>
               {% if vm.selected_meal == 'lunch' %}
-                <div>Alt 1: <strong>—</strong></div>
-                <div>Alt 2: <strong class="is-alt2">—</strong></div>
+                <div>Alt 1: <strong id="kp-lunch-alt1">{{ vm.header_menu.alt1 or '—' }}</strong></div>
+                <div>Alt 2: <strong id="kp-lunch-alt2" class="is-alt2">{{ vm.header_menu.alt2 or '—' }}</strong></div>
               {% else %}
-                <div>Rätt: <strong>—</strong></div>
+                <div>Rätt: <strong id="kp-dinner-main">{{ vm.header_menu.dinner or '—' }}</strong></div>
               {% endif %}
             </div>
           </div>
@@ -231,6 +231,43 @@
               }
               for (var i=0;i<radios.length;i++){ radios[i].addEventListener('change', sync); }
               sync();
+            })();
+          </script>
+          <script>
+            // Progressive enhancement: fetch menu names and populate header (client-side)
+            (function(){
+              try{
+                var dayIndex = {{ vm.selected_day }};
+                var meal = '{{ vm.selected_meal }}';
+                var year = {{ vm.year }};
+                var week = {{ vm.week }};
+                var dayKeys = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+                if (typeof dayIndex !== 'number' || dayIndex < 0 || dayIndex > 6) return;
+                var dayKey = dayKeys[dayIndex];
+                fetch('/menu/week?year='+encodeURIComponent(year)+'&week='+encodeURIComponent(week), { headers: { 'Accept': 'application/json' }})
+                  .then(function(res){ if(!res.ok) throw new Error('bad status '+res.status); return res.json(); })
+                  .then(function(data){
+                    var root = (data && data.days) || (data && data.menu && data.menu.days) || {};
+                    var day = root[dayKey] || root[dayKey.toLowerCase()] || {};
+                    var lunch = day['Lunch'] || day['lunch'] || {};
+                    var dinner = day['Dinner'] || day['dinner'] || {};
+                    function valName(v){ if(!v) return ''; if(typeof v==='string') return v; return v.name || v.dish_name || ''; }
+                    if (meal === 'lunch'){
+                      var a1 = valName(lunch.alt1);
+                      var a2 = valName(lunch.alt2);
+                      if (a1){ var el1 = document.getElementById('kp-lunch-alt1'); if (el1) el1.textContent = a1; }
+                      if (a2){ var el2 = document.getElementById('kp-lunch-alt2'); if (el2) el2.textContent = a2; }
+                    } else if (meal === 'dinner'){
+                      var main = dinner.main || dinner.alt1 || dinner.alt2;
+                      var name = valName(main);
+                      if (!name){
+                        try{ for (var k in dinner){ if (!dinner.hasOwnProperty(k)) continue; var cand = valName(dinner[k]); if (cand){ name = cand; break; } } }catch(e){}
+                      }
+                      if (name){ var el = document.getElementById('kp-dinner-main'); if (el) el.textContent = name; }
+                    }
+                  })
+                  .catch(function(){ /* non-fatal */ });
+              }catch(e){ /* ignore */ }
             })();
           </script>
         </div>
