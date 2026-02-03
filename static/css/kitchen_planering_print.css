@@ -1,0 +1,17 @@
+/* Kitchen Planering v1 - Print Styles (A4) */
+@page { size: A4 portrait; margin: 12mm; }
+
+@media print {
+  body { background: white !important; }
+  .cook-header, .cook-footer { display: none !important; }
+  .kp-controls { display: none !important; }
+  .kp-toggle { display: none !important; }
+  .kp-card form { display: none !important; }
+  .empty-text { display: none !important; }
+  .kp-card { box-shadow: none !important; border: none !important; }
+  .summary-cards .kp-card { border: 1px solid #999 !important; }
+  h1.section-title { font-size: 1.4rem; margin: 0 0 6px 0; }
+  h3 { margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table th, table td { border: 1px solid #999; padding: 3px 5px; }
+}

@@ -1746,7 +1746,7 @@ def kitchen_dashboard():
     vm = {"site_id": site_id, "site_name": site_name}
     return render_template("ui/kitchen_dashboard.html", vm=vm)
 
-# Kitchen planning v1 (read-only skeleton)
+# Kitchen planning v1 (read-only summary + print + week picker)
 @ui_bp.get("/ui/kitchen/planering")
 @require_roles(*SAFE_UI_ROLES)
 def kitchen_planering_v1():
@@ -1792,6 +1792,160 @@ def kitchen_planering_v1():
         except Exception:
             pass
 
+    # Prev/next ISO week rollover using Monday anchor
+    try:
+        monday = _date.fromisocalendar(year, week, 1)
+    except Exception:
+        monday = _date.today()
+    prev_date = monday - timedelta(days=7)
+    next_date = monday + timedelta(days=7)
+    p_iso = prev_date.isocalendar(); n_iso = next_date.isocalendar()
+    prev_year, prev_week = int(p_iso[0]), int(p_iso[1])
+    next_year, next_week = int(n_iso[0]), int(n_iso[1])
+
+    # Week/year options (simple ranges)
+    week_options = list(range(1, 54))
+    year_now = _date.today().year
+    year_options = list(range(year_now - 1, year_now + 2))
+
+    # Build adaptation checklist and summary via PlaneraService when day+meal are selected
+    summary = None
+    diet_options = []
+    adaptation = []
+    selected_diet_ids = []
+    special_to_adapt_total = 0
+    residents_total_for_meal = 0
+    normalkost_rows = []
+    normalkost_sum = {"alt1": 0, "alt2": 0, "total": 0}
+    if selected_day is not None and selected_meal is not None:
+        # Departments for site
+        db = get_session()
+        try:
+            rows = db.execute(
+                text("SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments WHERE site_id=:s ORDER BY name"),
+                {"s": site_id},
+            ).fetchall()
+            departments = [{"id": str(r[0]), "name": str(r[1] or ""), "resident_count": int(r[2] or 0)} for r in rows]
+        finally:
+            db.close()
+
+        # Diet type names scoped to site
+        try:
+            from .admin_repo import DietTypesRepo as _TypesRepo
+            types = _TypesRepo().list_all(site_id=site_id)
+            diet_name_by_id = {str(it["id"]): str(it["name"]) for it in types}
+            name_to_id = {str(it["name"]): str(it["id"]) for it in types}
+        except Exception:
+            diet_name_by_id = {}
+            name_to_id = {}
+
+        # Union defaults across departments (count>0) for checklist
+        from .admin_repo import DietDefaultsRepo as _DefRepo
+        per_dept_defaults: dict[str, dict[str, int]] = {}
+        totals_by_diet: dict[str, int] = {}
+        for dep in departments:
+            items = []
+            try:
+                items = _DefRepo().list_for_department(dep["id"]) or []
+            except Exception:
+                items = []
+            m: dict[str, int] = {}
+            for it in items:
+                dtid = str(it.get("diet_type_id"))
+                cnt = int(it.get("default_count") or 0)
+                if cnt > 0:
+                    m[dtid] = m.get(dtid, 0) + cnt
+                    totals_by_diet[dtid] = totals_by_diet.get(dtid, 0) + cnt
+            per_dept_defaults[dep["id"]] = m
+        diet_options = [
+            {
+                "diet_type_id": dtid,
+                "diet_type_name": diet_name_by_id.get(dtid, dtid),
+                "total_count": totals_by_diet.get(dtid, 0),
+            }
+            for dtid in sorted(totals_by_diet.keys(), key=lambda k: (-(totals_by_diet[k]), diet_name_by_id.get(k, k)))
+        ]
+
+        # Compute residents total via PlaneraService for chosen date/meal
+        vm_day = None
+        try:
+            iso_dow = int(selected_day) + 1
+            from datetime import date as _d
+            d = _d.fromisocalendar(year, week, iso_dow)
+            from .planera_service import PlaneraService
+            svc = PlaneraService()
+            dep_pairs = [(it["id"], it["name"]) for it in departments]
+            vm_day = svc.compute_day(int(session.get("tenant_id") or 1), site_id, d.isoformat(), dep_pairs)
+            residents_total_for_meal = int((vm_day.get("totals") or {}).get(selected_meal, {}).get("residents_total", 0) or 0)
+        except Exception:
+            residents_total_for_meal = sum(int(dep.get("resident_count", 0)) for dep in departments)
+
+        # Selected diets: accept ids or names from query
+        raw_selected = request.args.getlist("selected_diets")
+        selected_diet_ids = []
+        for val in raw_selected:
+            v = str(val).strip()
+            if v in totals_by_diet:
+                selected_diet_ids.append(v)
+            elif v in name_to_id and name_to_id[v] in totals_by_diet:
+                selected_diet_ids.append(name_to_id[v])
+        # Build adaptation entries
+        special_to_adapt_total = 0
+        for dtid in selected_diet_ids:
+            total = int(totals_by_diet.get(dtid, 0) or 0)
+            special_to_adapt_total += total
+            per_dept = []
+            for dep in departments:
+                cnt = int((per_dept_defaults.get(dep["id"], {}) or {}).get(dtid, 0) or 0)
+                if cnt > 0:
+                    per_dept.append({"department_id": dep["id"], "department_name": dep["name"], "count": cnt})
+            adaptation.append({
+                "diet_type_id": dtid,
+                "diet_type_name": diet_name_by_id.get(dtid, dtid),
+                "total_count": total,
+                "per_department": per_dept,
+            })
+
+        # Build normalkost rows per department using existing day payload + selected diets
+        try:
+            if vm_day:
+                dep_payloads = {str(d.get("department_id")): d for d in (vm_day.get("departments") or [])}
+                for dep in departments:
+                    did = str(dep["id"])
+                    dvm = dep_payloads.get(did) or {}
+                    meals = dvm.get("meals", {}) if isinstance(dvm, dict) else {}
+                    m = meals.get(selected_meal, {}) if isinstance(meals, dict) else {}
+                    residents = int(m.get("residents_total") or 0)
+                    # Sum selected specials for this department from defaults
+                    sel_sum = 0
+                    for dtid in selected_diet_ids:
+                        sel_sum += int((per_dept_defaults.get(did, {}) or {}).get(dtid, 0) or 0)
+                    normal = residents - sel_sum
+                    if normal < 0:
+                        normal = 0
+                    alt_choice = str(m.get("alt_choice") or "")
+                    is_alt2 = (alt_choice == "Alt2")
+                    alt2_cnt = normal if is_alt2 else 0
+                    alt1_cnt = 0 if is_alt2 else normal
+                    normalkost_rows.append({
+                        "department_id": did,
+                        "department_name": dep["name"],
+                        "alt1": alt1_cnt,
+                        "alt2": alt2_cnt,
+                        "total": normal,
+                    })
+                    normalkost_sum["alt1"] += alt1_cnt
+                    normalkost_sum["alt2"] += alt2_cnt
+                    normalkost_sum["total"] += normal
+        except Exception:
+            pass
+
+        summary = {
+            "residents_total": residents_total_for_meal,
+            "special_to_adapt_total": special_to_adapt_total,
+            "normal_remaining": max(residents_total_for_meal - special_to_adapt_total, 0),
+        }
+
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
     vm = {
         "title": "Kök – Planering",
@@ -1799,9 +1953,21 @@ def kitchen_planering_v1():
         "site_name": site_name,
         "year": year,
         "week": week,
+        "prev_year": prev_year,
+        "prev_week": prev_week,
+        "next_year": next_year,
+        "next_week": next_week,
+        "week_options": week_options,
+        "year_options": year_options,
         "selected_day": selected_day,
         "selected_meal": selected_meal,
         "day_labels": day_labels,
+        "summary": summary,
+        "diet_options": diet_options,
+        "selected_diets": selected_diet_ids,
+        "adaptation": adaptation,
+        "normalkost_rows": normalkost_rows,
+        "normalkost_sum": normalkost_sum,
     }
     return render_template("ui/kitchen_planering_v1.html", vm=vm)
 
