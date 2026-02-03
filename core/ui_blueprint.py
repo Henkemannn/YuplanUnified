@@ -1817,6 +1817,7 @@ def kitchen_planering_v1():
     residents_total_for_meal = 0
     normalkost_rows = []
     normalkost_sum = {"alt1": 0, "alt2": 0, "total": 0}
+    header_menu: dict[str, str | None] = {"alt1": None, "alt2": None, "dessert": None, "dinner": None}
     if selected_day is not None and selected_meal is not None:
         # Departments for site
         db = get_session()
@@ -1946,6 +1947,53 @@ def kitchen_planering_v1():
             "normal_remaining": max(residents_total_for_meal - special_to_adapt_total, 0),
         }
 
+        # P0-D5: Resolve menu names for header display without modal (minimal server-side assist)
+        try:
+            from flask import current_app as _app
+            ms = getattr(_app, "menu_service", None)
+            tid = session.get("tenant_id")
+            if ms is not None and tid is not None:
+                mv = ms.get_week_view(int(tid), week, year)
+                days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
+                # Map 0..6 -> Mon..Sun
+                keys = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+                day_key = keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
+                if day_key and day_key in days_struct:
+                    meals_obj = days_struct.get(day_key) or {}
+                    lunch_obj = meals_obj.get("Lunch") or meals_obj.get("lunch") or {}
+                    dinner_obj = meals_obj.get("Dinner") or meals_obj.get("dinner") or {}
+                    def _valname(v):
+                        if v is None:
+                            return None
+                        if isinstance(v, str):
+                            return v
+                        try:
+                            return v.get("dish_name") or v.get("name")
+                        except Exception:
+                            return None
+                    # Lunch variants
+                    header_menu["alt1"] = _valname(lunch_obj.get("alt1"))
+                    header_menu["alt2"] = _valname(lunch_obj.get("alt2"))
+                    header_menu["dessert"] = _valname(lunch_obj.get("dessert"))
+                    # Dinner: prefer explicit main/alt1/alt2 order
+                    dn = None
+                    for cand in ("main", "alt1", "alt2"):
+                        if dinner_obj.get(cand) is not None:
+                            dn = _valname(dinner_obj.get(cand))
+                            break
+                    # If variants stored under other keys, pick first
+                    if dn is None:
+                        try:
+                            for _k, _v in (dinner_obj.items() if isinstance(dinner_obj, dict) else []):
+                                dn = _valname(_v)
+                                if dn:
+                                    break
+                        except Exception:
+                            pass
+                    header_menu["dinner"] = dn
+        except Exception:
+            pass
+
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
     vm = {
         "title": "Kök – Planering",
@@ -1968,6 +2016,7 @@ def kitchen_planering_v1():
         "adaptation": adaptation,
         "normalkost_rows": normalkost_rows,
         "normalkost_sum": normalkost_sum,
+        "header_menu": header_menu,
     }
     return render_template("ui/kitchen_planering_v1.html", vm=vm)
 
