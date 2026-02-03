@@ -1,3 +1,7 @@
+# Local database probes and inventory scripts (keep untracked)
+tools/db_inventory.py
+tools/db_link_diets.py
+tools/db_probe_weekview.py
 # Legacy Rigplan reference (keep locally, ignore in repo)
 Rigplan1.0/
 Rigplan1.0.zip
