@@ -21,6 +21,7 @@ def test_toggle_exists_on_selected_state(app_session):
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert 'name="mode"' in html
-    assert 'value="special"' in html and 'value="normal"' in html
+    assert 'value="special"' in html
+    assert 'value="normal"' in html
     assert "Specialkost (anpassningar)" in html
     assert "Normalkost (Alt 1 / Alt 2)" in html

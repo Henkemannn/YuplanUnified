@@ -8,9 +8,11 @@ def _seed_basics():
     from core.db import get_session
     conn = get_session()
     try:
-        site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
-        if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
+        # Robust insert: avoid collisions on unique name or id
+        conn.execute(
+            text("INSERT OR IGNORE INTO sites (id, name) VALUES (:id, :name)"),
+            {"id": "00000000-0000-0000-0000-000000000000", "name": "Test Site"},
+        )
         conn.commit()
     finally:
         conn.close()
@@ -39,15 +41,15 @@ def test_planering_v1_selected_state(app_session):
     ver = drepo.get_version(dep["id"]) or 0
     drepo.upsert_department_diet_defaults(dep["id"], ver, [{"diet_type_id": str(dt_id), "default_count": 3}])
 
-    # First request: selected day+meal should render checklist UI
+    # First request: selected day+meal should render checklist UI immediately (wizard step 3)
     rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch", headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    assert "Visa tillagningslista" in html
+    assert "Tillagningslista" in html
     assert "name=\"selected_diets\"" in html or "name=\"selected_diets\"" in html
 
-    # Second request: with a selected diet and show_results, adaptation list should render
-    rv2 = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch&selected_diets={dt_id}&show_results=1", headers=HEADERS)
+    # Second request: with a selected diet, adaptation list should render
+    rv2 = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch&selected_diets={dt_id}", headers=HEADERS)
     assert rv2.status_code == 200
     html2 = rv2.data.decode("utf-8")
     assert "Anpassningslista" in html2

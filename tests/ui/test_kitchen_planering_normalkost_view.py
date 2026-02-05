@@ -59,7 +59,10 @@ def test_normalkost_view_table_and_totals(app_session):
     _seed_alt2_flag(site_id, depB["id"], year, week, 1)
 
     # Request selected diets to compute normals
-    rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch&selected_diets={dt_id}", headers=HEADERS)
+    rv = client.get(
+        f"/ui/kitchen/planering?site_id={site_id}&mode=normal&day=0&meal=lunch&selected_diets={dt_id}&show_results=1",
+        headers=HEADERS,
+    )
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
 

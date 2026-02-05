@@ -7,9 +7,11 @@ def _seed_basics():
     from core.db import get_session
     conn = get_session()
     try:
-        site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
-        if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
+        # Robust insert: avoid collisions on unique name or id
+        conn.execute(
+            text("INSERT OR IGNORE INTO sites (id, name) VALUES (:id, :name)"),
+            {"id": "00000000-0000-0000-0000-000000000000", "name": "Test Site"},
+        )
         conn.commit()
     finally:
         conn.close()
