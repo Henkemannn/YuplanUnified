@@ -517,6 +517,9 @@
 .grid-table tbody tr.diet-row:nth-child(even) { background: #ffffff; }
 .diet-name { text-align: left; font-weight: 600; min-width: 160px; }
 
+/* Alt2 highlight for grid-table (Planering & Kitchen views) */
+.grid-table td.is-alt2, .grid-table th.is-alt2 { background: var(--warning-light); }
+
 /* Focus/tap resets scoped to grid to prevent rectangular highlights */
 .kw-grid td:focus,
 .kw-grid td:focus-visible,

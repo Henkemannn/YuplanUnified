@@ -10,16 +10,29 @@
 <body class="cook-dashboard">
   <div class="cook-content">
     <h1 class="section-title">Kök – Planering</h1>
-    <p class="empty-text">Välj vecka, dag och måltid för att se sammanställning.</p>
+    {% set _req_mode = request.args.get('mode') %}
+    {% set cur_mode = _req_mode if _req_mode in ['special','normal'] else 'special' %}
 
+    <!-- Steg 1: Mode -->
+    <div class="kp-card" style="margin-bottom:12px;">
+      <h2 style="margin:0 0 6px 0;">Steg 1 – Vad ska du planera?</h2>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+        <label><input type="radio" name="mode" value="special" {% if cur_mode == 'special' %}checked{% endif %} onchange="window.kpSetMode && window.kpSetMode('special')"> Specialkost (anpassningar)</label>
+        <label><input type="radio" name="mode" value="normal" {% if cur_mode == 'normal' %}checked{% endif %} onchange="window.kpSetMode && window.kpSetMode('normal')"> Normalkost (Alt 1 / Alt 2)</label>
+      </div>
+    </div>
+
+    <!-- Steg 2: Vecka/Dag/Måltid -->
     <div class="kp-controls">
       <div class="kp-card">
         <div class="kp-toolbar">
+          <h2 style="margin:0 0 6px 0;">Steg 2 – Välj vecka, dag och måltid</h2>
           <div class="kp-week-picker" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <a class="kp-button" aria-label="Föregående vecka"
-               href="?site_id={{ vm.site_id }}&year={{ vm.prev_year }}&week={{ vm.prev_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">⟵ Föregående</a>
+               href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.prev_year }}&week={{ vm.prev_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">⟵ Föregående</a>
             <form method="get" action="" style="display:flex;gap:6px;align-items:center;">
               <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+              <input type="hidden" name="mode" value="{{ cur_mode }}">
               <input type="hidden" name="day" value="{{ vm.selected_day if vm.selected_day is not none else '' }}">
               <input type="hidden" name="meal" value="{{ vm.selected_meal or '' }}">
               <label for="week-select">Vecka</label>
@@ -37,20 +50,22 @@
               <button type="submit" class="kp-button">Välj</button>
             </form>
             <a class="kp-button" aria-label="Nästa vecka"
-               href="?site_id={{ vm.site_id }}&year={{ vm.next_year }}&week={{ vm.next_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">Nästa ⟶</a>
+               href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.next_year }}&week={{ vm.next_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">Nästa ⟶</a>
           </div>
           <div class="kp-day-buttons">
             {% for label in vm.day_labels %}
               {% set idx = loop.index0 %}
-              <a href="?site_id={{ vm.site_id }}&year={{ vm.year }}&week={{ vm.week }}&day={{ idx }}&meal={{ vm.selected_meal or '' }}"
+              <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ idx }}&meal={{ vm.selected_meal or '' }}"
                  class="kp-button {% if vm.selected_day is not none and vm.selected_day == idx %}is-active{% endif %}">{{ label }}</a>
             {% endfor %}
           </div>
           <div class="kp-meal-buttons">
-            <a href="?site_id={{ vm.site_id }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=lunch"
+            <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=lunch"
                class="kp-button {% if vm.selected_meal == 'lunch' %}is-active{% endif %}">🍽️ Lunch</a>
-            <a href="?site_id={{ vm.site_id }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dinner"
-               class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}">🌙 Middag</a>
+            <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dinner"
+              class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}">🌙 Kvällsmat</a>
+            <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dessert"
+               class="kp-button {% if vm.selected_meal == 'dessert' %}is-active{% endif %}">🍮 Dessert</a>
             <button class="kp-button" onclick="window.print()">Skriv ut</button>
             {% if vm.selected_day is not none %}
               <button type="button"
@@ -81,200 +96,263 @@
           <div class="kp-card" style="margin-bottom:12px;">
             <h2 style="margin:0 0 6px 0;">Vad planerar vi?</h2>
             <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
-              <div>Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else 'Middag' }}</strong></div>
+              <div>Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
               {% if vm.selected_meal == 'lunch' %}
                 <div>Alt 1: <strong id="kp-lunch-alt1">{{ vm.header_menu.alt1 or '—' }}</strong></div>
                 <div>Alt 2: <strong id="kp-lunch-alt2" class="is-alt2">{{ vm.header_menu.alt2 or '—' }}</strong></div>
+              {% elif vm.selected_meal == 'dinner' %}
+                <div>Kvällsmat: <strong id="kp-dinner-main">{{ vm.header_menu.dinner or '—' }}</strong></div>
               {% else %}
-                <div>Rätt: <strong id="kp-dinner-main">{{ vm.header_menu.dinner or '—' }}</strong></div>
+                <div>Dessert: <strong id="kp-dessert-main">{{ vm.header_menu.dessert or '—' }}</strong></div>
               {% endif %}
             </div>
           </div>
-          <form method="get" action="" class="kp-card" style="margin-bottom:12px;">
-            <input type="hidden" name="site_id" value="{{ vm.site_id }}">
-            <input type="hidden" name="year" value="{{ vm.year }}">
-            <input type="hidden" name="week" value="{{ vm.week }}">
-            <input type="hidden" name="day" value="{{ vm.selected_day }}">
-            <input type="hidden" name="meal" value="{{ vm.selected_meal }}">
-            <input type="hidden" name="show_results" value="1">
-            <div style="margin-bottom:8px; font-weight:600;">Kryssa specialkoster (anpassning)</div>
-            <div style="display:flex; gap:10px; flex-wrap:wrap;">
-              {% for opt in vm.diet_options %}
-                <label style="display:flex; align-items:center; gap:6px;">
-                  <input type="checkbox" name="selected_diets" value="{{ opt.diet_type_id }}" {% if opt.diet_type_id in vm.selected_diets %}checked{% endif %}>
-                  <span>{{ opt.diet_type_name }}</span>
-                  <span style="opacity:0.7;">(totalt {{ opt.total_count }})</span>
-                </label>
-              {% endfor %}
-            </div>
-            <div style="margin-top:10px;">
-              <button type="submit" class="kp-button">Visa tillagningslista</button>
-            </div>
-          </form>
-          {% set show_results = (request.args.get('show_results') == '1') %}
-          {% if vm.summary and show_results %}
-          <div class="kp-toggle" style="margin-bottom:12px;">
-            <div style="font-weight:600; margin-bottom:6px;">Arbetsläge:</div>
-            <label style="margin-right:12px;">
-              <input type="radio" name="result_view" value="special" checked> Specialkost
-            </label>
-            <label>
-              <input type="radio" name="result_view" value="normal"> Normalkost
-            </label>
-          </div>
-          <div class="summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px;">
-            <div class="kp-card" style="text-align:center;">
-              <div style="font-size:0.9rem;color:#334155;">Boende totalt</div>
-              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.residents_total }}</div>
-            </div>
-            <div class="kp-card" style="text-align:center;">
-              <div style="font-size:0.9rem;color:#334155;">Special att anpassa</div>
-              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.special_to_adapt_total }}</div>
-            </div>
-            <div class="kp-card" style="text-align:center;">
-              <div style="font-size:0.9rem;color:#334155;">Normalkost kvar</div>
-              <div style="font-size:2rem;font-weight:700;">{{ vm.summary.normal_remaining }}</div>
-            </div>
-          </div>
-          {% endif %}
+          <!-- Steg 3: Input beroende på läge -->
+                {% if cur_mode == 'special' %}
+                <form method="get" action="" class="kp-card" style="margin-bottom:12px;">
+                  <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+                  <input type="hidden" name="mode" value="{{ cur_mode }}">
+                  <input type="hidden" name="year" value="{{ vm.year }}">
+                  <input type="hidden" name="week" value="{{ vm.week }}">
+                  <input type="hidden" name="day" value="{{ vm.selected_day }}">
+                  <input type="hidden" name="meal" value="{{ vm.selected_meal }}">
+                  <input type="hidden" name="show_results" value="1">
+                  <div style="margin-bottom:8px; font-weight:600;">Vilka specialkoster behöver anpassas för den här rätten?</div>
+                  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    {% for opt in vm.diet_options %}
+                      <label style="display:flex; align-items:center; gap:6px;">
+                        <input type="checkbox" name="selected_diets" value="{{ opt.diet_type_id }}" {% if opt.diet_type_id in vm.selected_diets %}checked{% endif %}>
+                        <span>{{ opt.diet_type_name }}</span>
+                        <span style="opacity:0.7;">(totalt {{ opt.total_count }})</span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                  <div style="margin-top:10px;">
+                    <button type="submit" class="kp-button">Visa tillagningslista</button>
+                  </div>
+                </form>
+                {% else %}
+                <form method="get" action="" class="kp-card" style="margin-bottom:12px;">
+                  <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+                  <input type="hidden" name="mode" value="{{ cur_mode }}">
+                  <input type="hidden" name="year" value="{{ vm.year }}">
+                  <input type="hidden" name="week" value="{{ vm.week }}">
+                  <input type="hidden" name="day" value="{{ vm.selected_day }}">
+                  <input type="hidden" name="meal" value="{{ vm.selected_meal }}">
+                  <input type="hidden" name="show_results" value="1">
+                  {% if vm.selected_meal == 'lunch' %}
+                    <div style="margin-bottom:6px; font-weight:600;">Vilka kan INTE äta Alt 1?</div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+                      {% for opt in vm.diet_options %}
+                        <label style="display:flex; align-items:center; gap:6px;">
+                          <input type="checkbox" name="selected_diets" value="{{ opt.diet_type_id }}" {% if opt.diet_type_id in vm.selected_diets %}checked{% endif %}>
+                          <span>{{ opt.diet_type_name }}</span>
+                          <span style="opacity:0.7;">(totalt {{ opt.total_count }})</span>
+                        </label>
+                      {% endfor %}
+                    </div>
+                    <div style="margin-bottom:6px; font-weight:600;">Vilka kan INTE äta Alt 2?</div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                      {% for opt in vm.diet_options %}
+                        <label style="display:flex; align-items:center; gap:6px;">
+                          <input type="checkbox" name="selected_diets" value="{{ opt.diet_type_id }}" {% if opt.diet_type_id in vm.selected_diets %}checked{% endif %}>
+                          <span>{{ opt.diet_type_name }}</span>
+                          <span style="opacity:0.7;">(totalt {{ opt.total_count }})</span>
+                        </label>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <div style="margin-bottom:8px; font-weight:600;">Vilka kan INTE äta rätten?</div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                      {% for opt in vm.diet_options %}
+                        <label style="display:flex; align-items:center; gap:6px;">
+                          <input type="checkbox" name="selected_diets" value="{{ opt.diet_type_id }}" {% if opt.diet_type_id in vm.selected_diets %}checked{% endif %}>
+                          <span>{{ opt.diet_type_name }}</span>
+                          <span style="opacity:0.7;">(totalt {{ opt.total_count }})</span>
+                        </label>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  <div style="margin-top:10px;">
+                    <button type="submit" class="kp-button">Visa tillagningslista</button>
+                  </div>
+                </form>
+                {% endif %}
 
-          <div id="view-special" class="result-view" {% if not show_results %}style="display:none;"{% endif %}>
-            {% if vm.adaptation and vm.adaptation|length > 0 %}
-              <h3>Anpassningslista – per avdelning</h3>
-              {% for item in vm.adaptation %}
-                <div class="kp-card" style="margin:8px 0;">
-                  <div style="font-weight:600;">{{ item.diet_type_name }} – {{ item.total_count }} portioner</div>
-                  <details style="margin-top:6px;">
-                    <summary>Visa per avdelning</summary>
-                    <table class="grid-table" style="margin-top:6px;">
-                      <thead><tr><th>Avdelning</th><th>Antal</th></tr></thead>
-                      <tbody>
-                        {% for row in item.per_department %}
-                          <tr><td style="text-align:left;">{{ row.department_name }}</td><td>{{ row.count }}</td></tr>
-                        {% endfor %}
-                      </tbody>
-                    </table>
-                  </details>
-                </div>
-              {% endfor %}
-            {% else %}
-              <p class="empty-text">Inga valda specialkoster.</p>
-            {% endif %}
-          </div>
+                {% set show_results = (request.args.get('show_results') == '1') %}
+                {% if show_results and cur_mode == 'special' %}
+                  {% if vm.adaptation and vm.adaptation|length > 0 %}
+                    <h3>Tillagningslista – Specialkost <span class="yp-sr-only">(Anpassningslista)</span></h3>
+                    <div class="kp-card" style="margin:8px 0;">
+                      <div style="color:#334155; margin-bottom:4px;">Vecka <strong>{{ vm.week }}</strong> · Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong> · Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
+                      <div>Rätt: <strong>
+                        {% if vm.selected_meal == 'lunch' %}
+                          {{ vm.header_menu.alt1 or vm.header_menu.alt2 or '—' }}
+                        {% elif vm.selected_meal == 'dinner' %}
+                          {{ vm.header_menu.dinner or '—' }}
+                        {% else %}
+                          {{ vm.header_menu.dessert or '—' }}
+                        {% endif %}
+                      </strong></div>
+                    </div>
 
-          <div id="view-normal" class="result-view" style="display:none;">
-            <h3>Normalkost – per avdelning</h3>
-            {% if vm.normalkost_rows and vm.normalkost_rows|length > 0 %}
-              {% if vm.selected_meal == 'lunch' %}
-              <table class="grid-table" style="margin-top:6px;">
-                <thead><tr><th>Avdelning</th><th>Alt 1</th><th class="is-alt2">Alt 2</th><th>Total</th></tr></thead>
-                <tbody>
-                  {% for r in vm.normalkost_rows %}
-                    <tr>
-                      <td style="text-align:left;">{{ r.department_name }}</td>
-                      <td>{{ r.alt1 }}</td>
-                      <td class="is-alt2">{{ r.alt2 }}</td>
-                      <td>{{ r.total }}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <th>SUM</th>
-                    <th>{{ vm.normalkost_sum.alt1 }}</th>
-                    <th class="is-alt2">{{ vm.normalkost_sum.alt2 }}</th>
-                    <th>{{ vm.normalkost_sum.total }}</th>
-                  </tr>
-                </tfoot>
-              </table>
-              {% else %}
-              <table class="grid-table" style="margin-top:6px;">
-                <thead><tr><th>Avdelning</th><th>Normalkost</th><th>Total</th></tr></thead>
-                <tbody>
-                  {% for r in vm.normalkost_rows %}
-                    <tr>
-                      <td style="text-align:left;">{{ r.department_name }}</td>
-                      <td>{{ r.total }}</td>
-                      <td>{{ r.total }}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <th>SUM</th>
-                    <th>{{ vm.normalkost_sum.total }}</th>
-                    <th>{{ vm.normalkost_sum.total }}</th>
-                  </tr>
-                </tfoot>
-              </table>
-              {% endif %}
-            {% else %}
-              <p class="empty-text">Ingen normalkost att visa.</p>
-            {% endif %}
-          </div>
+                    <!-- Primär vy: per specialkost -->
+                    {% for item in vm.adaptation %}
+                      <div class="kp-card" style="margin:8px 0;">
+                        <div style="font-weight:600; margin-bottom:6px;">{{ item.diet_type_name }} – totalt {{ item.total_count }}</div>
+                        {% if item.per_department and item.per_department|length > 0 %}
+                          <ul style="margin:0; padding-left:18px;">
+                            {% for row in item.per_department %}
+                              <li>{{ row.department_name }}: {{ row.count }}</li>
+                            {% endfor %}
+                          </ul>
+                        {% else %}
+                          <div class="empty-text">Inget att anpassa.</div>
+                        {% endif %}
+                      </div>
+                    {% endfor %}
 
-          <script>
-            (function(){
-              var radios = document.querySelectorAll('input[name="result_view"]');
-              var vSpecial = document.getElementById('view-special');
-              var vNormal = document.getElementById('view-normal');
-              function sync(){
-                var val = 'special';
-                for (var i=0;i<radios.length;i++){ if (radios[i].checked) { val = radios[i].value; break; } }
-                if (val === 'normal') {
-                  vSpecial.style.display = 'none';
-                  vNormal.style.display = '';
-                } else {
-                  vSpecial.style.display = '';
-                  vNormal.style.display = 'none';
-                }
-              }
-              for (var i=0;i<radios.length;i++){ radios[i].addEventListener('change', sync); }
-              sync();
-            })();
-          </script>
-          <script>
-            // Progressive enhancement: fetch menu names and populate header (client-side)
-            (function(){
-              try{
-                var dayIndex = {{ vm.selected_day }};
-                var meal = '{{ vm.selected_meal }}';
-                var year = {{ vm.year }};
-                var week = {{ vm.week }};
-                var dayKeys = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-                if (typeof dayIndex !== 'number' || dayIndex < 0 || dayIndex > 6) return;
-                var dayKey = dayKeys[dayIndex];
-                fetch('/menu/week?year='+encodeURIComponent(year)+'&week='+encodeURIComponent(week), { headers: { 'Accept': 'application/json' }})
-                  .then(function(res){ if(!res.ok) throw new Error('bad status '+res.status); return res.json(); })
-                  .then(function(data){
-                    var root = (data && data.days) || (data && data.menu && data.menu.days) || {};
-                    var day = root[dayKey] || root[dayKey.toLowerCase()] || {};
-                    var lunch = day['Lunch'] || day['lunch'] || {};
-                    var dinner = day['Dinner'] || day['dinner'] || {};
-                    function valName(v){ if(!v) return ''; if(typeof v==='string') return v; return v.name || v.dish_name || ''; }
-                    if (meal === 'lunch'){
-                      var a1 = valName(lunch.alt1);
-                      var a2 = valName(lunch.alt2);
-                      if (a1){ var el1 = document.getElementById('kp-lunch-alt1'); if (el1) el1.textContent = a1; }
-                      if (a2){ var el2 = document.getElementById('kp-lunch-alt2'); if (el2) el2.textContent = a2; }
-                    } else if (meal === 'dinner'){
-                      var main = dinner.main || dinner.alt1 || dinner.alt2;
-                      var name = valName(main);
-                      if (!name){
-                        try{ for (var k in dinner){ if (!dinner.hasOwnProperty(k)) continue; var cand = valName(dinner[k]); if (cand){ name = cand; break; } } }catch(e){}
-                      }
-                      if (name){ var el = document.getElementById('kp-dinner-main'); if (el) el.textContent = name; }
-                    }
-                  })
-                  .catch(function(){ /* non-fatal */ });
-              }catch(e){ /* ignore */ }
-            })();
-          </script>
+                    <!-- Sekundär vy: knapp för sammanställning per avdelning -->
+                    <div class="kp-card" style="margin:8px 0;">
+                      <button type="button" class="kp-button js-open-dept-summary">Visa sammanställning per avdelning</button>
+                    </div>
+                  {% else %}
+                    <p class="empty-text">Inga valda specialkoster.</p>
+                  {% endif %}
+                {% endif %}
+                {% if show_results and cur_mode == 'normal' %}
+                  <h3>Normalkost – resultat</h3>
+                  {% if vm.normalkost_rows and vm.normalkost_rows|length > 0 %}
+                    {% if vm.selected_meal == 'lunch' %}
+                      <table class="grid-table" style="margin-top:6px;">
+                        <thead><tr><th>Avdelning</th><th>Alt 1</th><th class="is-alt2">Alt 2</th></tr></thead>
+                        <tbody>
+                          {% for r in vm.normalkost_rows %}
+                            <tr>
+                              <td style="text-align:left;">{{ r.department_name }}</td>
+                              <td>{{ r.alt1 }}</td>
+                              <td class="is-alt2">{{ r.alt2 }}</td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <th>TOTALT</th>
+                            <th>{{ vm.normalkost_sum.alt1 }}</th>
+                            <th class="is-alt2">{{ vm.normalkost_sum.alt2 }}</th>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    {% else %}
+                      <table class="grid-table" style="margin-top:6px;">
+                        <thead><tr><th>Avdelning</th><th>Mängd</th></tr></thead>
+                        <tbody>
+                          {% for r in vm.normalkost_rows %}
+                            <tr>
+                              <td style="text-align:left;">{{ r.department_name }}</td>
+                              <td>{{ r.total }}</td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <th>TOTALT</th>
+                            <th>{{ vm.normalkost_sum.total }}</th>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    {% endif %}
+                  {% else %}
+                    <p class="empty-text">Ingen normalkost att visa.</p>
+                  {% endif %}
+                {% endif %}
         </div>
       {% endif %}
     </div>
   </div>
   {% include "ui/_menu_modal.html" %}
   <script src="/static/js/menu_modal.js"></script>
+  <script>
+    // Persist mode via query param while preserving existing filters (site/week/day/meal/show_results/selected_diets)
+    window.kpSetMode = function(nextMode){
+      try {
+        var url = new URL(window.location.href);
+        var params = url.searchParams;
+        params.set('mode', nextMode);
+        // Preserve multi-value selected_diets and other existing params automatically via URLSearchParams
+        url.search = params.toString();
+        window.location.assign(url.toString());
+      } catch (e) {
+        // Fallback: simple redirect with current path + mode
+        var qs = window.location.search;
+        if(qs.indexOf('mode=') >= 0){
+          qs = qs.replace(/mode=([^&]*)/, 'mode=' + encodeURIComponent(nextMode));
+        } else {
+          qs = (qs ? qs + '&' : '?') + 'mode=' + encodeURIComponent(nextMode);
+        }
+        window.location.assign(window.location.pathname + qs);
+      }
+    };
+  </script>
+  <!-- Modal: Sammanställning per avdelning (printbar) -->
+  {% if vm.adaptation and vm.adaptation|length > 0 %}
+  {% set ns = namespace(depts=[]) %}
+  {% for item in vm.adaptation %}
+    {% for row in item.per_department %}
+      {% if row.department_name not in ns.depts %}
+        {% set _ = ns.depts.append(row.department_name) %}
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+  <div id="dept-summary-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div style="background:#fff;max-width:720px;width:92%;max-height:85vh;overflow:auto;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.25);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+        <h3 style="margin:0;">Sammanställning per avdelning</h3>
+        <button type="button" class="kp-button" id="close-dept-summary" aria-label="Stäng">Stäng</button>
+      </div>
+      <div style="padding:12px 16px;">
+        <div style="color:#334155; margin-bottom:8px;">Vecka <strong>{{ vm.week }}</strong> · Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong> · Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
+        <table class="grid-table" style="margin-top:6px;">
+          <thead><tr><th style="text-align:left;">Avdelning</th><th style="text-align:left;">Specialkost</th></tr></thead>
+          <tbody>
+            {% for dep_name in ns.depts %}
+              {% set line = namespace(txt="") %}
+              {% for item in vm.adaptation %}
+                {% for row in item.per_department %}
+                  {% if row.department_name == dep_name %}
+                    {% if line.txt %}{% set line.txt = line.txt + ", " %}{% endif %}
+                    {% set line.txt = line.txt + item.diet_type_name + " " + (row.count|string) %}
+                  {% endif %}
+                {% endfor %}
+              {% endfor %}
+              <tr>
+                <td style="text-align:left;">{{ dep_name }}</td>
+                <td style="text-align:left;">{{ line.txt or '—' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var btn = document.querySelector('.js-open-dept-summary');
+      var modal = document.getElementById('dept-summary-modal');
+      var closeBtn = document.getElementById('close-dept-summary');
+      if(btn && modal){
+        btn.addEventListener('click', function(){ modal.style.display = 'flex'; });
+      }
+      if(closeBtn && modal){
+        closeBtn.addEventListener('click', function(){ modal.style.display = 'none'; });
+      }
+      // Close on backdrop click
+      if(modal){
+        modal.addEventListener('click', function(ev){ if(ev.target === modal){ modal.style.display = 'none'; } });
+      }
+      // Print helper inside modal (Ctrl+P works since it's same DOM)
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>

@@ -1947,21 +1947,35 @@ def kitchen_planering_v1():
             "normal_remaining": max(residents_total_for_meal - special_to_adapt_total, 0),
         }
 
-        # P0-D5: Resolve menu names for header display without modal (minimal server-side assist)
+        # P0-D5/C: Resolve menu names for header display, scoped by site via a site department
+        # Prefer WeekviewService enrichment for a department within the active site; fallback to tenant-level menu service
         try:
-            from flask import current_app as _app
-            ms = getattr(_app, "menu_service", None)
             tid = session.get("tenant_id")
-            if ms is not None and tid is not None:
-                mv = ms.get_week_view(int(tid), week, year)
-                days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
-                # Map 0..6 -> Mon..Sun
-                keys = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
-                day_key = keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
-                if day_key and day_key in days_struct:
-                    meals_obj = days_struct.get(day_key) or {}
-                    lunch_obj = meals_obj.get("Lunch") or meals_obj.get("lunch") or {}
-                    dinner_obj = meals_obj.get("Dinner") or meals_obj.get("dinner") or {}
+            # Use first department in this site to scope menu texts, if available
+            dep_for_site = None
+            try:
+                dep_for_site = int(departments[0]["id"]) if departments else None
+            except Exception:
+                dep_for_site = None
+            if tid is not None and dep_for_site is not None:
+                from .weekview_service import WeekviewService as _WVS
+                svc_wv = _WVS()
+                payload, _etag = svc_wv.fetch_weekview(int(tid), year, week, dep_for_site)
+                summaries = payload.get("department_summaries") or []
+                days_list = (summaries[0].get("days") if summaries else []) or []
+                # Resolve ISO date for selected day
+                iso_dow = int(selected_day) + 1
+                from datetime import date as _d
+                sel_date = _d.fromisocalendar(year, week, iso_dow).isoformat()
+                target = None
+                for dd in days_list:
+                    if str(dd.get("date")) == sel_date:
+                        target = dd
+                        break
+                if target:
+                    mt = (target.get("menu_texts") or {}) if isinstance(target, dict) else {}
+                    lunch_obj = mt.get("lunch") or {}
+                    dinner_obj = mt.get("dinner") or {}
                     def _valname(v):
                         if v is None:
                             return None
@@ -1971,17 +1985,14 @@ def kitchen_planering_v1():
                             return v.get("dish_name") or v.get("name")
                         except Exception:
                             return None
-                    # Lunch variants
                     header_menu["alt1"] = _valname(lunch_obj.get("alt1"))
                     header_menu["alt2"] = _valname(lunch_obj.get("alt2"))
                     header_menu["dessert"] = _valname(lunch_obj.get("dessert"))
-                    # Dinner: prefer explicit main/alt1/alt2 order
                     dn = None
                     for cand in ("main", "alt1", "alt2"):
                         if dinner_obj.get(cand) is not None:
                             dn = _valname(dinner_obj.get(cand))
                             break
-                    # If variants stored under other keys, pick first
                     if dn is None:
                         try:
                             for _k, _v in (dinner_obj.items() if isinstance(dinner_obj, dict) else []):
@@ -1991,6 +2002,45 @@ def kitchen_planering_v1():
                         except Exception:
                             pass
                     header_menu["dinner"] = dn
+            # Fallback to tenant-wide MenuService if WeekviewService path not available
+            if not any(header_menu.values()):
+                from flask import current_app as _app
+                ms = getattr(_app, "menu_service", None)
+                if ms is not None and tid is not None:
+                    mv = ms.get_week_view(int(tid), week, year)
+                    days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
+                    keys = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+                    day_key = keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
+                    if day_key and day_key in days_struct:
+                        meals_obj = days_struct.get(day_key) or {}
+                        lunch_obj = meals_obj.get("Lunch") or meals_obj.get("lunch") or {}
+                        dinner_obj = meals_obj.get("Dinner") or meals_obj.get("dinner") or {}
+                        def _valname2(v):
+                            if v is None:
+                                return None
+                            if isinstance(v, str):
+                                return v
+                            try:
+                                return v.get("dish_name") or v.get("name")
+                            except Exception:
+                                return None
+                        header_menu["alt1"] = header_menu["alt1"] or _valname2(lunch_obj.get("alt1"))
+                        header_menu["alt2"] = header_menu["alt2"] or _valname2(lunch_obj.get("alt2"))
+                        header_menu["dessert"] = header_menu["dessert"] or _valname2(lunch_obj.get("dessert"))
+                        dn = None
+                        for cand in ("main", "alt1", "alt2"):
+                            if dinner_obj.get(cand) is not None:
+                                dn = _valname2(dinner_obj.get(cand))
+                                break
+                        if dn is None:
+                            try:
+                                for _k, _v in (dinner_obj.items() if isinstance(dinner_obj, dict) else []):
+                                    dn = _valname2(_v)
+                                    if dn:
+                                        break
+                            except Exception:
+                                pass
+                        header_menu["dinner"] = header_menu["dinner"] or dn
         except Exception:
             pass
 
