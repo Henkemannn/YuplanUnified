@@ -21,9 +21,8 @@
         <input type="hidden" name="week" value="{{ vm.week }}">
         <input type="hidden" name="day" value="{{ vm.selected_day if vm.selected_day is not none else '' }}">
         <input type="hidden" name="meal" value="{{ vm.selected_meal or '' }}">
-        <label><input type="radio" name="mode" value="special" {% if cur_mode == 'special' %}checked{% endif %}> Specialkost (anpassningar)</label>
-        <label><input type="radio" name="mode" value="normal" {% if cur_mode == 'normal' %}checked{% endif %}> Normalkost (Alt 1 / Alt 2)</label>
-        <button type="submit" class="kp-button">Välj läge</button>
+        <label><input type="radio" name="mode" value="special" {% if cur_mode == 'special' %}checked{% endif %} onchange="this.form.submit()"> Specialkost (anpassningar)</label>
+        <label><input type="radio" name="mode" value="normal" {% if cur_mode == 'normal' %}checked{% endif %} onchange="this.form.submit()"> Normalkost (Alt 1 / Alt 2)</label>
       </form>
     </div>
 
@@ -203,9 +202,21 @@
                 {% endif %}
                 {% if show_results and cur_mode == 'special' %}
                   {% if vm.adaptation and vm.adaptation|length > 0 %}
-                    <h3>Specialkost – resultat</h3>
+                    <h3>Tillagningslista – Specialkost</h3>
                     <div class="kp-card" style="margin:8px 0;">
-                      <div style="font-weight:600; margin-bottom:6px;">Totalt per specialkosttyp</div>
+                      <div style="color:#334155; margin-bottom:6px;">
+                        Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong>
+                        {% if vm.selected_meal == 'lunch' %}
+                          — Rätt: <strong>{{ vm.header_menu.alt1 or vm.header_menu.alt2 or '—' }}</strong>
+                        {% elif vm.selected_meal == 'dinner' %}
+                          — Rätt: <strong>{{ vm.header_menu.dinner or '—' }}</strong>
+                        {% else %}
+                          — Rätt: <strong>{{ vm.header_menu.dessert or '—' }}</strong>
+                        {% endif %}
+                      </div>
+                    </div>
+                    <div class="kp-card" style="margin:8px 0;">
+                      <div style="font-weight:600; margin-bottom:6px;">Totalt att anpassa</div>
                       <ul>
                         {% for item in vm.adaptation %}
                           <li>{{ item.diet_type_name }} – totalt {{ item.total_count }}</li>
@@ -213,7 +224,7 @@
                       </ul>
                     </div>
                     <div class="kp-card" style="margin:8px 0;">
-                      <div style="font-weight:600; margin-bottom:6px;">Anpassningslista – per avdelning</div>
+                      <div style="font-weight:600; margin-bottom:6px;">Skicka till per avdelning (Anpassningslista)</div>
                       {% for item in vm.adaptation %}
                         <div style="margin-top:6px;">
                           <div style="font-weight:600;">{{ item.diet_type_name }}</div>
@@ -222,7 +233,7 @@
                             <tbody>
                               {% for row in item.per_department %}
                                 <tr>
-                                  <td style="text-align:left;">{{ row.department_name }}{% if vm.selected_meal=='lunch' and row.alt_choice %} ({{ row.alt_choice }}){% endif %}</td>
+                                  <td style="text-align:left;">{{ row.department_name }}</td>
                                   <td>{{ row.count }}</td>
                                 </tr>
                               {% endfor %}
