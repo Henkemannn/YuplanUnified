@@ -183,64 +183,42 @@
                 </form>
                 {% endif %}
 
-                {% set show_results = (request.args.get('show_results') == '1') or (vm.selected_diets and (vm.selected_diets|length > 0)) %}
-                {% if vm.summary and show_results %}
-                <div class="summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px;">
-                  <div class="kp-card" style="text-align:center;">
-                    <div style="font-size:0.9rem;color:#334155;">Boende totalt</div>
-                    <div style="font-size:2rem;font-weight:700;">{{ vm.summary.residents_total }}</div>
-                  </div>
-                  <div class="kp-card" style="text-align:center;">
-                    <div style="font-size:0.9rem;color:#334155;">Special att anpassa</div>
-                    <div style="font-size:2rem;font-weight:700;">{{ vm.summary.special_to_adapt_total }}</div>
-                  </div>
-                  <div class="kp-card" style="text-align:center;">
-                    <div style="font-size:0.9rem;color:#334155;">Normalkost kvar</div>
-                    <div style="font-size:2rem;font-weight:700;">{{ vm.summary.normal_remaining }}</div>
-                  </div>
-                </div>
-                {% endif %}
+                {% set show_results = (request.args.get('show_results') == '1') %}
                 {% if show_results and cur_mode == 'special' %}
                   {% if vm.adaptation and vm.adaptation|length > 0 %}
-                    <h3>Tillagningslista – Specialkost</h3>
+                    <h3>Tillagningslista – Specialkost <span class="yp-sr-only">(Anpassningslista)</span></h3>
                     <div class="kp-card" style="margin:8px 0;">
-                      <div style="color:#334155; margin-bottom:6px;">
-                        Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong>
+                      <div style="color:#334155; margin-bottom:4px;">Vecka <strong>{{ vm.week }}</strong> · Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong> · Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
+                      <div>Rätt: <strong>
                         {% if vm.selected_meal == 'lunch' %}
-                          — Rätt: <strong>{{ vm.header_menu.alt1 or vm.header_menu.alt2 or '—' }}</strong>
+                          {{ vm.header_menu.alt1 or vm.header_menu.alt2 or '—' }}
                         {% elif vm.selected_meal == 'dinner' %}
-                          — Rätt: <strong>{{ vm.header_menu.dinner or '—' }}</strong>
+                          {{ vm.header_menu.dinner or '—' }}
                         {% else %}
-                          — Rätt: <strong>{{ vm.header_menu.dessert or '—' }}</strong>
+                          {{ vm.header_menu.dessert or '—' }}
+                        {% endif %}
+                      </strong></div>
+                    </div>
+
+                    <!-- Primär vy: per specialkost -->
+                    {% for item in vm.adaptation %}
+                      <div class="kp-card" style="margin:8px 0;">
+                        <div style="font-weight:600; margin-bottom:6px;">{{ item.diet_type_name }} – totalt {{ item.total_count }}</div>
+                        {% if item.per_department and item.per_department|length > 0 %}
+                          <ul style="margin:0; padding-left:18px;">
+                            {% for row in item.per_department %}
+                              <li>{{ row.department_name }}: {{ row.count }}</li>
+                            {% endfor %}
+                          </ul>
+                        {% else %}
+                          <div class="empty-text">Inget att anpassa.</div>
                         {% endif %}
                       </div>
-                    </div>
+                    {% endfor %}
+
+                    <!-- Sekundär vy: knapp för sammanställning per avdelning -->
                     <div class="kp-card" style="margin:8px 0;">
-                      <div style="font-weight:600; margin-bottom:6px;">Totalt att anpassa</div>
-                      <ul>
-                        {% for item in vm.adaptation %}
-                          <li>{{ item.diet_type_name }} – totalt {{ item.total_count }}</li>
-                        {% endfor %}
-                      </ul>
-                    </div>
-                    <div class="kp-card" style="margin:8px 0;">
-                      <div style="font-weight:600; margin-bottom:6px;">Skicka till per avdelning (Anpassningslista)</div>
-                      {% for item in vm.adaptation %}
-                        <div style="margin-top:6px;">
-                          <div style="font-weight:600;">{{ item.diet_type_name }}</div>
-                          <table class="grid-table" style="margin-top:6px;">
-                            <thead><tr><th>Avdelning</th><th>Antal</th></tr></thead>
-                            <tbody>
-                              {% for row in item.per_department %}
-                                <tr>
-                                  <td style="text-align:left;">{{ row.department_name }}</td>
-                                  <td>{{ row.count }}</td>
-                                </tr>
-                              {% endfor %}
-                            </tbody>
-                          </table>
-                        </div>
-                      {% endfor %}
+                      <button type="button" class="kp-button js-open-dept-summary">Visa sammanställning per avdelning</button>
                     </div>
                   {% else %}
                     <p class="empty-text">Inga valda specialkoster.</p>
@@ -298,5 +276,59 @@
   </div>
   {% include "ui/_menu_modal.html" %}
   <script src="/static/js/menu_modal.js"></script>
+  <!-- Modal: Sammanställning per avdelning (printbar) -->
+  {% if vm.adaptation and vm.adaptation|length > 0 %}
+  {% set ns = namespace(depts=[]) %}
+  {% for item in vm.adaptation %}
+    {% for row in item.per_department %}
+      {% if row.department_name not in ns.depts %}
+        {% set _ = ns.depts.append(row.department_name) %}
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+  <div id="dept-summary-modal" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:none;align-items:center;justify-content:center;z-index:2000;">
+    <div style="background:#fff;max-width:720px;width:92%;max-height:85vh;overflow:auto;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.25);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+        <h3 style="margin:0;">Sammanställning per avdelning</h3>
+        <button type="button" class="kp-button" id="close-dept-summary" aria-label="Stäng">Stäng</button>
+      </div>
+      <div style="padding:12px 16px;">
+        <div style="color:#334155; margin-bottom:8px;">Vecka <strong>{{ vm.week }}</strong> · Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong> · Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
+        {% for dep_name in ns.depts %}
+          <div class="kp-card" style="margin:8px 0;">
+            <div style="font-weight:600; margin-bottom:6px;">{{ dep_name }}</div>
+            <ul style="margin:0; padding-left:18px;">
+              {% for item in vm.adaptation %}
+                {% for row in item.per_department %}
+                  {% if row.department_name == dep_name %}
+                    <li>{{ item.diet_type_name }}: {{ row.count }}</li>
+                  {% endif %}
+                {% endfor %}
+              {% endfor %}
+            </ul>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <script>
+    (function(){
+      var btn = document.querySelector('.js-open-dept-summary');
+      var modal = document.getElementById('dept-summary-modal');
+      var closeBtn = document.getElementById('close-dept-summary');
+      if(btn && modal){
+        btn.addEventListener('click', function(){ modal.style.display = 'flex'; });
+      }
+      if(closeBtn && modal){
+        closeBtn.addEventListener('click', function(){ modal.style.display = 'none'; });
+      }
+      // Close on backdrop click
+      if(modal){
+        modal.addEventListener('click', function(ev){ if(ev.target === modal){ modal.style.display = 'none'; } });
+      }
+      // Print helper inside modal (Ctrl+P works since it's same DOM)
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>
