@@ -10,20 +10,16 @@
 <body class="cook-dashboard">
   <div class="cook-content">
     <h1 class="section-title">Kök – Planering</h1>
-    {% set cur_mode = vm.mode or request.args.get('mode') or 'special' %}
+    {% set _req_mode = request.args.get('mode') %}
+    {% set cur_mode = _req_mode if _req_mode in ['special','normal'] else 'special' %}
 
     <!-- Steg 1: Mode -->
     <div class="kp-card" style="margin-bottom:12px;">
       <h2 style="margin:0 0 6px 0;">Steg 1 – Vad ska du planera?</h2>
-      <form method="get" action="" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-        <input type="hidden" name="site_id" value="{{ vm.site_id }}">
-        <input type="hidden" name="year" value="{{ vm.year }}">
-        <input type="hidden" name="week" value="{{ vm.week }}">
-        <input type="hidden" name="day" value="{{ vm.selected_day if vm.selected_day is not none else '' }}">
-        <input type="hidden" name="meal" value="{{ vm.selected_meal or '' }}">
-        <label><input type="radio" name="mode" value="special" {% if cur_mode == 'special' %}checked{% endif %} onchange="this.form.submit()"> Specialkost (anpassningar)</label>
-        <label><input type="radio" name="mode" value="normal" {% if cur_mode == 'normal' %}checked{% endif %} onchange="this.form.submit()"> Normalkost (Alt 1 / Alt 2)</label>
-      </form>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+        <label><input type="radio" name="mode" value="special" {% if cur_mode == 'special' %}checked{% endif %} onchange="window.kpSetMode && window.kpSetMode('special')"> Specialkost (anpassningar)</label>
+        <label><input type="radio" name="mode" value="normal" {% if cur_mode == 'normal' %}checked{% endif %} onchange="window.kpSetMode && window.kpSetMode('normal')"> Normalkost (Alt 1 / Alt 2)</label>
+      </div>
     </div>
 
     <!-- Steg 2: Vecka/Dag/Måltid -->
@@ -67,7 +63,7 @@
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=lunch"
                class="kp-button {% if vm.selected_meal == 'lunch' %}is-active{% endif %}">🍽️ Lunch</a>
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dinner"
-               class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}">🌙 Middag</a>
+              class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}">🌙 Kvällsmat</a>
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dessert"
                class="kp-button {% if vm.selected_meal == 'dessert' %}is-active{% endif %}">🍮 Dessert</a>
             <button class="kp-button" onclick="window.print()">Skriv ut</button>
@@ -276,6 +272,28 @@
   </div>
   {% include "ui/_menu_modal.html" %}
   <script src="/static/js/menu_modal.js"></script>
+  <script>
+    // Persist mode via query param while preserving existing filters (site/week/day/meal/show_results/selected_diets)
+    window.kpSetMode = function(nextMode){
+      try {
+        var url = new URL(window.location.href);
+        var params = url.searchParams;
+        params.set('mode', nextMode);
+        // Preserve multi-value selected_diets and other existing params automatically via URLSearchParams
+        url.search = params.toString();
+        window.location.assign(url.toString());
+      } catch (e) {
+        // Fallback: simple redirect with current path + mode
+        var qs = window.location.search;
+        if(qs.indexOf('mode=') >= 0){
+          qs = qs.replace(/mode=([^&]*)/, 'mode=' + encodeURIComponent(nextMode));
+        } else {
+          qs = (qs ? qs + '&' : '?') + 'mode=' + encodeURIComponent(nextMode);
+        }
+        window.location.assign(window.location.pathname + qs);
+      }
+    };
+  </script>
   <!-- Modal: Sammanställning per avdelning (printbar) -->
   {% if vm.adaptation and vm.adaptation|length > 0 %}
   {% set ns = namespace(depts=[]) %}
@@ -294,20 +312,26 @@
       </div>
       <div style="padding:12px 16px;">
         <div style="color:#334155; margin-bottom:8px;">Vecka <strong>{{ vm.week }}</strong> · Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong> · Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
-        {% for dep_name in ns.depts %}
-          <div class="kp-card" style="margin:8px 0;">
-            <div style="font-weight:600; margin-bottom:6px;">{{ dep_name }}</div>
-            <ul style="margin:0; padding-left:18px;">
+        <table class="grid-table" style="margin-top:6px;">
+          <thead><tr><th style="text-align:left;">Avdelning</th><th style="text-align:left;">Specialkost</th></tr></thead>
+          <tbody>
+            {% for dep_name in ns.depts %}
+              {% set line = namespace(txt="") %}
               {% for item in vm.adaptation %}
                 {% for row in item.per_department %}
                   {% if row.department_name == dep_name %}
-                    <li>{{ item.diet_type_name }}: {{ row.count }}</li>
+                    {% if line.txt %}{% set line.txt = line.txt + ", " %}{% endif %}
+                    {% set line.txt = line.txt + item.diet_type_name + " " + (row.count|string) %}
                   {% endif %}
                 {% endfor %}
               {% endfor %}
-            </ul>
-          </div>
-        {% endfor %}
+              <tr>
+                <td style="text-align:left;">{{ dep_name }}</td>
+                <td style="text-align:left;">{{ line.txt or '—' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
