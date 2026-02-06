@@ -1000,9 +1000,28 @@ a:hover {
 /* ============================================================================
    Shared Menu Modal Component (Admin/Portal/Kitchen)
    ============================================================================ */
-.menu-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: none; align-items: center; justify-content: center; z-index: 1000; }
-.menu-modal.is-open { display: flex; }
-.menu-modal__content { background: var(--yp-color-bg-elevated); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); width: 90%; max-width: 560px; overflow: hidden; }
+#menuModal[hidden] { display: none; }
+#menuModal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.35);
+}
+.menu-modal.is-open { }
+.menu-modal__content {
+    position: relative;
+    margin: 5vh auto;
+    max-width: 720px;
+    width: calc(100% - 2rem);
+    max-height: 90vh;
+    overflow: auto;
+    background: var(--yp-color-bg-elevated);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
 .menu-modal__header { display:flex; align-items:center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--yp-color-border); }
 .menu-modal__header-title { font-weight: 600; }
 .menu-modal__close { background: transparent; border: 0; font-size: 18px; cursor: pointer; }
