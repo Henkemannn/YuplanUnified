@@ -60,12 +60,53 @@
     document.body.classList.remove('menu-modal-open');
   }
 
-  function renderDay(menuJson, dayKey){ try{ var days=(menuJson&&menuJson.days)||((menuJson&&menuJson.menu&&menuJson.menu.days)||{}); var found=findDayObject(days, dayKey); var day=found.obj||{}; var lunch=day['Lunch']||day['lunch']||{}; var dinner=day['Dinner']||day['dinner']||{}; function section(title,obj,prefer){ if(!obj||Object.keys(obj).length===0) return ''; var best=dedupeItems(obj,prefer); var order=['alt1','alt2','dessert','main']; var parts=[]; order.forEach(function(c){ var it=best[c]; if(!it) return; var lbl=it.label; var name=valueName(it.val); var pillClass='menu-modal__pill'+(c==='alt2'?' alt2':''); parts.push('<div class="menu-modal__row"><span class="'+pillClass+'">'+escapeHtml(lbl)+'</span><span class="menu-modal__text">'+escapeHtml(name)+'</span></div>'); }); if(parts.length===0) return ''; return '<h4 class="menu-modal__section-title">'+title+'</h4>'+parts.join(''); }
+  function renderDay(menuJson, dayKey){
+    try{
+      var days=(menuJson&&menuJson.days)||((menuJson&&menuJson.menu&&menuJson.menu.days)||{});
+      var found=findDayObject(days, dayKey);
+      var day=found.obj||{};
+      var lunch=day['Lunch']||day['lunch']||{};
+      var dinner=day['Dinner']||day['dinner']||{};
+
+      // Use shared helper for lunch Alt1/Alt2 text selection
+      var titles = (window.MenuUtils && typeof window.MenuUtils.pickTitles==='function')
+        ? window.MenuUtils.pickTitles(menuJson, dayKey, 'lunch')
+        : { alt1Text: valueName(lunch.alt1||lunch.main||''), alt2Text: valueName(lunch.alt2||''), source: {} };
+
+      var lunchParts = [];
+      if(titles.alt1Text && titles.alt1Text.trim().length){
+        lunchParts.push('<div class="menu-modal__row"><span class="menu-modal__pill">Alt1</span><span class="menu-modal__text">'+escapeHtml(titles.alt1Text)+'</span></div>');
+      }
+      if((titles.alt2Text||'').trim().length){
+        lunchParts.push('<div class="menu-modal__row"><span class="menu-modal__pill alt2">Alt2</span><span class="menu-modal__text">'+escapeHtml(titles.alt2Text)+'</span></div>');
+      } else {
+        // still show Alt2 pill with dash for clarity
+        lunchParts.push('<div class="menu-modal__row"><span class="menu-modal__pill alt2">Alt2</span><span class="menu-modal__text">—</span></div>');
+      }
+      // Include dessert row if present under Lunch section per prior UI
+      var dessertName = valueName((lunch&&lunch.dessert) || (lunch&&lunch.Dessert) || '');
+      if(dessertName){
+        lunchParts.push('<div class="menu-modal__row"><span class="menu-modal__pill">Dessert</span><span class="menu-modal__text">'+escapeHtml(dessertName)+'</span></div>');
+      }
+      var lunchHtml = lunchParts.length ? ('<h4 class="menu-modal__section-title">Lunch</h4>' + lunchParts.join('')) : '<div>Ingen lunch registrerad</div>';
+
+      // Dinner: keep existing best-effort but prefer main
+      var best=dedupeItems(dinner,['Main','Dinner','Kväll','main','dinner','kvall','kväll','Alt1','alt1','Alt2','alt2']);
+      var name='';
+      if(best.main){ name=valueName(best.main.val); }
+      else if(best.alt1){ name=valueName(best.alt1.val); }
+      else if(best.alt2){ name=valueName(best.alt2.val); }
+      else { var anyKey=Object.keys(best)[0]; if(anyKey){ name=valueName(best[anyKey].val); } }
+      var dinnerHtml = name ? ('<div class="menu-modal__row"><span class="menu-modal__pill">Kvällsmat</span><span class="menu-modal__text">'+escapeHtml(name)+'</span></div>') : '';
+
       var html='<div class="menu-modal__inner">'
         + '<div class="menu-modal__day">'+escapeHtml(dayLabelSwe(found.key||dayKey))+'</div>'
-        + (section('Lunch', lunch, ['Alt1','Alt2','Dessert','alt1','alt2','dessert']) || '<div>Ingen lunch registrerad</div>')
-        + (function(){ var best=dedupeItems(dinner,['Main','Dinner','Kväll','main','dinner','kvall','kväll','Alt1','alt1','Alt2','alt2']); var name=''; if(best.main){ name=valueName(best.main.val); } else if(best.alt1){ name=valueName(best.alt1.val); } else if(best.alt2){ name=valueName(best.alt2.val); } else { var anyKey=Object.keys(best)[0]; if(anyKey){ name=valueName(best[anyKey].val); } } return name ? ('<div class="menu-modal__row"><span class="menu-modal__pill">Kvällsmat</span><span class="menu-modal__text">'+escapeHtml(name)+'</span></div>') : ''; })()
-        + '</div>'; return html; }catch(e){ return '<div>Kunde inte läsa meny</div>'; } }
+        + lunchHtml
+        + dinnerHtml
+        + '</div>';
+      return html;
+    }catch(e){ return '<div>Kunde inte läsa meny</div>'; }
+  }
 
   function openMenuModal(opts){ opts=opts||{}; var year=opts.year, week=opts.week; var di=opts.dayIndex; var dayKey=opts.dayKey || dayKeyFromIndex(di); fetchWeekMenu(year, week).then(function(menu){ showModal(renderDay(menu, dayKey)); }).catch(function(){ showModal('<div>Kunde inte läsa meny</div>'); }); }
   window.openMenuModal=openMenuModal;

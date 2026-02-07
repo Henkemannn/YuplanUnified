@@ -164,7 +164,8 @@
 {% endfor %}
 
 {% include "ui/_menu_modal.html" %}
-<script src="{{ url_for('static', filename='js/menu_modal.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/menu_utils.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/menu_modal.js') }}"></script>
 
 <div class="snackbar" role="status" aria-live="polite" aria-atomic="true">Sparat</div>
 

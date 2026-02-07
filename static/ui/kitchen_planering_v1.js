@@ -2,6 +2,9 @@
   function qs(sel){ return document.querySelector(sel); }
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
 
+  // In-memory UI-only state for normal-mode diet toggles
+  var cannotEat = { 1: new Set(), 2: new Set() };
+
   // Mode change: radios without inline handlers
   function kpSetMode(mode){
     try {
@@ -35,15 +38,49 @@
     for(var i=0;i<candidates.length;i++){
       var val = getDeep(obj, candidates[i]);
       if(typeof val === 'string' && val.trim().length > 0){ return val; }
+      if(val && typeof val === 'object'){
+        var name = val.dish_name || val.name;
+        if(typeof name === 'string' && name.trim().length > 0){ return name; }
+      }
     }
     return undefined;
   }
 
+  function pickWithSource(obj, candidates){
+    for(var i=0;i<candidates.length;i++){
+      var key = candidates[i];
+      var val = getDeep(obj, key);
+      if(typeof val === 'string' && val.trim().length > 0){ return { value: val, source: key }; }
+      if(val && typeof val === 'object'){
+        var name = val.dish_name || val.name;
+        if(typeof name === 'string' && name.trim().length > 0){ return { value: name, source: key }; }
+      }
+    }
+    return { value: undefined, source: undefined };
+  }
+
+  function normalizeSourceKey(key){
+    if(!key) return key;
+    var k = String(key);
+    if(/^(Lunch|lunch)\.main$/.test(k)) return 'Lunch.main';
+    if(/^(Lunch|lunch)\.alt1$/.test(k)) return 'Lunch.alt1';
+    if(/^(Lunch|lunch)\.alt2$/.test(k)) return 'Lunch.alt2';
+    if(/^(Lunch|lunch)\.dish_name$/.test(k)) return 'Lunch.dish_name';
+    if(/^(Lunch|lunch)\.name$/.test(k)) return 'Lunch.name';
+    if(/^(Dinner|dinner)\.main$/.test(k)) return 'Dinner.main';
+    if(/^(Dinner|dinner)\.name$/.test(k)) return 'Dinner.name';
+    if(/^(Dessert|dessert)\.main$/.test(k)) return 'Dessert.main';
+    if(/^(Dessert|dessert)\.name$/.test(k)) return 'Dessert.name';
+    return k;
+  }
+
   function resolveDay(data, dayIndex){
     var dayNames = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-    var dayKey = dayNames[dayIndex];
+    var idx = dayIndex;
+    if(idx >= 1 && idx <= 7){ idx = idx - 1; }
+    var dayKey = dayNames[idx];
     var days = (data && data.menu && data.menu.days) || data.days;
-    var objByKey = (data && data.menu) || data;
+    var objByKey = (data && data.menu && data.menu.days) || data.days || (data && data.menu) || data;
     var variants = [dayKey, dayKey.toLowerCase(), dayKey.toUpperCase(), dayKey.charAt(0).toUpperCase()+dayKey.slice(1)];
     if(objByKey && !Array.isArray(objByKey)){
       for(var i=0;i<variants.length;i++){
@@ -51,9 +88,16 @@
         var short = variants[i].slice(0,3);
         if(objByKey[short]) return objByKey[short];
       }
+      if(objByKey['Mon'] && idx === 0) return objByKey['Mon'];
+      if(objByKey['Tue'] && idx === 1) return objByKey['Tue'];
+      if(objByKey['Wed'] && idx === 2) return objByKey['Wed'];
+      if(objByKey['Thu'] && idx === 3) return objByKey['Thu'];
+      if(objByKey['Fri'] && idx === 4) return objByKey['Fri'];
+      if(objByKey['Sat'] && idx === 5) return objByKey['Sat'];
+      if(objByKey['Sun'] && idx === 6) return objByKey['Sun'];
     }
     if(Array.isArray(days)){
-      if(days[dayIndex]) return days[dayIndex];
+      if(days[idx]) return days[idx];
       for(var j=0;j<days.length;j++){
         var d = days[j];
         var name = d && (d.name || d.day || d.Day || d.title);
@@ -66,52 +110,139 @@
     return null;
   }
 
+  function setPlaneringTitle(value){
+    var el = qs('#kp-planering-title');
+    if(el){ el.textContent = value || '—'; }
+  }
+
+  function setInputValue(input, value, pristine){
+    if(!input) return;
+    input.value = value;
+    if(pristine){
+      input.classList.add('is-pristine');
+    } else {
+      input.classList.remove('is-pristine');
+    }
+  }
+
+  function buildSuggestionText(mode, meal, dishes, fallback){
+    // For normal lunch, prefer a neutral contextual suggestion (no Alt1|Alt2 combined)
+    if(mode === 'normal' && meal === 'lunch'){
+      return null; // caller will compute a neutral suggestion
+    }
+    if(meal === 'lunch') return dishes.alt1 || dishes.alt2 || fallback;
+    if(meal === 'dinner') return dishes.dinner || fallback;
+    return dishes.dessert || fallback;
+  }
+
   function initMenuAndTitle(){
     var ctx = qs('#kp-context');
     if(!ctx) return;
-    var year = ctx.getAttribute('data-year');
-    var week = ctx.getAttribute('data-week');
+    var qsParams = new URLSearchParams(window.location.search);
+    var siteId = qsParams.get('site_id') || (ctx && ctx.getAttribute('data-site-id')) || '';
+    var mode = (qsParams.get('mode') || 'special').toLowerCase();
+    var year = qsParams.get('year') || '';
+    var week = qsParams.get('week') || '';
     var dayIndex = parseInt(ctx.getAttribute('data-day-index'), 10);
     var meal = ctx.getAttribute('data-meal');
     if(isNaN(dayIndex) || meal == null) return;
 
-    fetch('/menu/week?year=' + encodeURIComponent(year) + '&week=' + encodeURIComponent(week), {
-      headers: { 'Accept': 'application/json' }
+    if(!siteId){
+      console.warn('Missing site_id in planering URL');
+      var fb = '—';
+      var el1 = qs('#kp-lunch-alt1');
+      var el2 = qs('#kp-lunch-alt2');
+      var ed = qs('#kp-dinner-main');
+      var es = qs('#kp-dessert-main');
+      if(el1) el1.textContent = fb;
+      if(el2) el2.textContent = fb;
+      if(ed) ed.textContent = fb;
+      if(es) es.textContent = fb;
+      setPlaneringTitle(fb);
+      setInputValue(qs('#whatToCook'), fb, true);
+      return;
+    }
+
+    var url = '/menu/week?site_id=' + encodeURIComponent(siteId)
+      + '&year=' + encodeURIComponent(year)
+      + '&week=' + encodeURIComponent(week);
+    // Using shared menu utils; no instrumentation
+
+    fetch(url, {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin'
     })
-    .then(function(r){ return r.json(); })
+    .then(function(r){
+      if(!r.ok){
+        var errClone = r.clone();
+        return errClone.text().then(function(t){
+          console.warn('menu/week failed', r.status, r.headers.get('content-type'), (t || '').slice(0, 200));
+          return null;
+        });
+      }
+      var clone = r.clone();
+      return r.json().catch(function(){
+        return clone.text().then(function(t){
+          console.warn('menu/week invalid json', r.status, r.headers.get('content-type'), (t || '').slice(0, 200));
+          return null;
+        });
+      });
+    })
     .then(function(data){
-      var dayEntry = resolveDay(data, dayIndex);
-      if(!dayEntry) return;
-      var fallback = 'Ingen maträtt hittades för valt tillfälle';
-      var suggestion = null;
+      var fallback = '—';
+      // instrumentation removed
+      if(!data){
+        setPlaneringTitle(fallback);
+        setInputValue(qs('#whatToCook'), fallback, true);
+        return;
+      }
+      // Use shared helper to resolve titles
+      var titles = (window.MenuUtils && typeof window.MenuUtils.pickTitles==='function')
+        ? window.MenuUtils.pickTitles(data, dayIndex, meal)
+        : { alt1Text: '', alt2Text: '', source: {} };
+      var suggestionText = null;
+      var alt1 = titles.alt1Text || '';
+      var alt2 = titles.alt2Text || '';
       if(meal === 'lunch'){
-        var alt1 = pick(dayEntry, ['Lunch.Alt1','lunch.alt1','Lunch.alt1','alt1','Alt1','Lunch.Main']);
-        var alt2 = pick(dayEntry, ['Lunch.Alt2','lunch.alt2','Lunch.alt2','alt2','Alt2']);
         var el1 = qs('#kp-lunch-alt1');
         var el2 = qs('#kp-lunch-alt2');
         if(el1) el1.textContent = alt1 || fallback;
         if(el2) el2.textContent = alt2 || fallback;
-        suggestion = alt1 || alt2 || fallback;
+        if(mode === 'normal'){
+          var a1 = qs('.alt-dish-input[data-alt="1"]');
+          var a2 = qs('.alt-dish-input[data-alt="2"]');
+          if(a1) setInputValue(a1, alt1 || '', true);
+          if(a2) setInputValue(a2, alt2 || '', true);
+        }
       } else if(meal === 'dinner'){
-        var dinner = pick(dayEntry, ['Dinner.Main','Dinner.Alt1','dinner.main','dinner.alt1','Dinner','dinner','Main','Alt1']);
         var ed = qs('#kp-dinner-main');
-        if(ed) ed.textContent = dinner || fallback;
-        suggestion = dinner || fallback;
+        if(ed) ed.textContent = alt1 || fallback;
       } else {
-        var dessert = pick(dayEntry, ['Dessert.Main','Dessert','dessert.main','dessert','Main']);
         var es = qs('#kp-dessert-main');
-        if(es) es.textContent = dessert || fallback;
-        suggestion = dessert || fallback;
+        if(es) es.textContent = alt1 || fallback;
       }
-      var titleEl = qs('#kp-special-title');
-      if(titleEl && suggestion){ titleEl.textContent = suggestion; }
-      var input = qs('#kp-what-to-cook');
-      if(input && suggestion){
-        input.value = suggestion;
-        input.classList.add('is-pristine');
+      // Compute neutral suggestion for normal lunch (e.g., "Lunch – Tor vecka 9")
+      if(mode === 'normal' && meal === 'lunch'){
+        var dayAbbr = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
+        var mealLabel = 'Lunch';
+        var di = dayIndex;
+        suggestionText = mealLabel + ' – ' + (dayAbbr[di] || '') + ' vecka ' + (week || '');
+      } else {
+        suggestionText = buildSuggestionText(mode, meal, { alt1: alt1, alt2: alt2, dinner: null, dessert: null }, fallback);
+      }
+      setPlaneringTitle(suggestionText);
+      var input = qs('#whatToCook');
+      if(input){
+        setInputValue(input, suggestionText, true);
         function onEdit(){
+          var val = input.value.trim();
+          if(val.length === 0){
+            setInputValue(input, suggestionText, true);
+            setPlaneringTitle(suggestionText);
+            return;
+          }
           input.classList.remove('is-pristine');
-          if(titleEl){ titleEl.textContent = input.value || suggestion; }
+          setPlaneringTitle(input.value);
         }
         input.addEventListener('input', onEdit);
         input.addEventListener('change', onEdit);
@@ -131,9 +262,9 @@
     var btn = qs('.js-open-dept-summary');
     var modal = qs('#dept-summary-modal');
     var closeBtn = qs('#close-dept-summary');
-    if(btn && modal){ btn.addEventListener('click', function(){ modal.style.display = 'flex'; }); }
-    if(closeBtn && modal){ closeBtn.addEventListener('click', function(){ modal.style.display = 'none'; }); }
-    if(modal){ modal.addEventListener('click', function(ev){ if(ev.target === modal){ modal.style.display = 'none'; } }); }
+    if(btn && modal){ btn.addEventListener('click', function(){ modal.classList.add('is-open'); document.body.classList.add('kp-dept-summary-open'); }); }
+    if(closeBtn && modal){ closeBtn.addEventListener('click', function(){ modal.classList.remove('is-open'); document.body.classList.remove('kp-dept-summary-open'); }); }
+    if(modal){ modal.addEventListener('click', function(ev){ if(ev.target === modal){ modal.classList.remove('is-open'); document.body.classList.remove('kp-dept-summary-open'); } }); }
   }
 
   function init(){
@@ -141,6 +272,22 @@
     initMenuAndTitle();
     initPrintButton();
     initDeptSummaryModal();
+    // Event delegation for diet-chip toggling (normal mode UI only)
+    document.addEventListener('click', function(e){
+      var btn = e.target && e.target.closest && e.target.closest('.diet-chip');
+      if(!btn) return;
+      var alt = Number(btn.getAttribute('data-alt'));
+      var dietId = btn.getAttribute('data-diet-id');
+      if(!alt || !dietId) return;
+      var set = cannotEat[alt] || (cannotEat[alt] = new Set());
+      if(set.has(dietId)){
+        set.delete(dietId);
+        btn.classList.remove('active');
+      } else {
+        set.add(dietId);
+        btn.classList.add('active');
+      }
+    });
   }
 
   if(document.readyState === 'loading'){
