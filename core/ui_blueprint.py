@@ -1985,7 +1985,7 @@ def kitchen_planering_v1():
                             return v.get("dish_name") or v.get("name")
                         except Exception:
                             return None
-                    header_menu["alt1"] = _valname(lunch_obj.get("alt1"))
+                    header_menu["alt1"] = _valname(lunch_obj.get("main")) or _valname(lunch_obj.get("alt1"))
                     header_menu["alt2"] = _valname(lunch_obj.get("alt2"))
                     header_menu["dessert"] = _valname(lunch_obj.get("dessert"))
                     dn = None
@@ -2011,8 +2011,14 @@ def kitchen_planering_v1():
                     days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
                     keys = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
                     day_key = keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
-                    if day_key and day_key in days_struct:
-                        meals_obj = days_struct.get(day_key) or {}
+                    meals_obj = {}
+                    if day_key:
+                        # Resolve case-insensitive keys (e.g., 'sat' vs 'Sat')
+                        lower_map = {str(k).strip().lower(): k for k in days_struct.keys()}
+                        canon_keys = ["mon","tue","wed","thu","fri","sat","sun"]
+                        canon = canon_keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
+                        hit = lower_map.get(canon) if canon else None
+                        meals_obj = days_struct.get(hit) or days_struct.get(day_key) or {}
                         lunch_obj = meals_obj.get("Lunch") or meals_obj.get("lunch") or {}
                         dinner_obj = meals_obj.get("Dinner") or meals_obj.get("dinner") or {}
                         def _valname2(v):
@@ -2024,7 +2030,7 @@ def kitchen_planering_v1():
                                 return v.get("dish_name") or v.get("name")
                             except Exception:
                                 return None
-                        header_menu["alt1"] = header_menu["alt1"] or _valname2(lunch_obj.get("alt1"))
+                        header_menu["alt1"] = header_menu["alt1"] or _valname2(lunch_obj.get("main")) or _valname2(lunch_obj.get("alt1"))
                         header_menu["alt2"] = header_menu["alt2"] or _valname2(lunch_obj.get("alt2"))
                         header_menu["dessert"] = header_menu["dessert"] or _valname2(lunch_obj.get("dessert"))
                         dn = None
