@@ -156,7 +156,7 @@
                       <div class="diet-chips" role="group" aria-label="Specialkoster – Alt 1">
                         {% for opt in vm.diet_options %}
                           <button type="button"
-                                  class="diet-chip"
+                                  class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
                                   data-alt="1"
                                   data-diet-id="{{ opt.diet_type_id }}">{{ opt.diet_type_name }}</button>
                         {% endfor %}
@@ -171,7 +171,7 @@
                       <div class="diet-chips" role="group" aria-label="Specialkoster – Alt 2">
                         {% for opt in vm.diet_options %}
                           <button type="button"
-                                  class="diet-chip"
+                                  class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('2') or [])) %}active{% endif %}"
                                   data-alt="2"
                                   data-diet-id="{{ opt.diet_type_id }}">{{ opt.diet_type_name }}</button>
                         {% endfor %}

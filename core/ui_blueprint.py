@@ -1818,6 +1818,7 @@ def kitchen_planering_v1():
     normalkost_rows = []
     normalkost_sum = {"alt1": 0, "alt2": 0, "total": 0}
     header_menu: dict[str, str | None] = {"alt1": None, "alt2": None, "dessert": None, "dinner": None}
+    normal_exclusions: dict[str, list[str]] = {"1": [], "2": []}
     if selected_day is not None and selected_meal is not None:
         # Departments for site
         db = get_session()
@@ -2050,6 +2051,49 @@ def kitchen_planering_v1():
         except Exception:
             pass
 
+        # Load persistent normal-mode exclusions for active day/meal (SQLite-safe schema ensure)
+        try:
+            dbx = get_session()
+            try:
+                dialect = dbx.bind.dialect.name if dbx.bind is not None else ""
+                if dialect == "sqlite":
+                    dbx.execute(text(
+                        """
+                        CREATE TABLE IF NOT EXISTS normal_exclusions (
+                          tenant_id TEXT NOT NULL,
+                          site_id TEXT NOT NULL,
+                          year INTEGER NOT NULL,
+                          week INTEGER NOT NULL,
+                          day_index INTEGER NOT NULL,
+                          meal TEXT NOT NULL,
+                          alt TEXT NOT NULL,
+                          diet_type_id TEXT NOT NULL,
+                          UNIQUE (tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id)
+                        );
+                        """
+                    ))
+                    dbx.commit()
+                rows_ex = dbx.execute(text(
+                    """
+                    SELECT alt, diet_type_id FROM normal_exclusions
+                    WHERE tenant_id=:tid AND site_id=:s AND year=:y AND week=:w AND day_index=:d AND meal=:m
+                    ORDER BY alt, diet_type_id
+                    """
+                ), {"tid": str(session.get("tenant_id") or 1), "s": site_id, "y": year, "w": week, "d": int(selected_day), "m": str(selected_meal)}).fetchall()
+                ex_by_alt: dict[str, list[str]] = {"1": [], "2": []}
+                for r in rows_ex:
+                    a = str(r[0]); dt = str(r[1])
+                    if a in ex_by_alt:
+                        ex_by_alt[a].append(dt)
+                normal_exclusions = ex_by_alt
+            finally:
+                try:
+                    dbx.close()
+                except Exception:
+                    pass
+        except Exception:
+            normal_exclusions = {"1": [], "2": []}
+
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
     vm = {
         "title": "Kök – Planering",
@@ -2073,6 +2117,7 @@ def kitchen_planering_v1():
         "normalkost_rows": normalkost_rows,
         "normalkost_sum": normalkost_sum,
         "header_menu": header_menu,
+        "normal_exclusions": normal_exclusions,
     }
     return render_template("ui/kitchen_planering_v1.html", vm=vm)
 

@@ -272,6 +272,14 @@
     initMenuAndTitle();
     initPrintButton();
     initDeptSummaryModal();
+    // Initialize cannotEat sets based on server-rendered state
+    qsa('.diet-chip.active').forEach(function(btn){
+      var alt = Number(btn.getAttribute('data-alt'));
+      var dietId = btn.getAttribute('data-diet-id');
+      if(!alt || !dietId) return;
+      var set = cannotEat[alt] || (cannotEat[alt] = new Set());
+      set.add(dietId);
+    });
     // Event delegation for diet-chip toggling (normal mode UI only)
     document.addEventListener('click', function(e){
       var btn = e.target && e.target.closest && e.target.closest('.diet-chip');
@@ -280,13 +288,68 @@
       var dietId = btn.getAttribute('data-diet-id');
       if(!alt || !dietId) return;
       var set = cannotEat[alt] || (cannotEat[alt] = new Set());
-      if(set.has(dietId)){
-        set.delete(dietId);
+      var wasActive = btn.classList.contains('active');
+      // Optimistic UI toggle
+      if(wasActive){
         btn.classList.remove('active');
+        set.delete(dietId);
       } else {
-        set.add(dietId);
         btn.classList.add('active');
+        set.add(dietId);
       }
+      // Build payload from context
+      var ctx = qs('#kp-context');
+      if(!ctx){ return; }
+      var qsParams = new URLSearchParams(window.location.search);
+      var siteId = qsParams.get('site_id') || (ctx && ctx.getAttribute('data-site-id')) || '';
+      var year = parseInt(qsParams.get('year') || ctx.getAttribute('data-year') || '0', 10);
+      var week = parseInt(qsParams.get('week') || ctx.getAttribute('data-week') || '0', 10);
+      var dayIndex = parseInt(ctx.getAttribute('data-day-index'), 10);
+      var meal = ctx.getAttribute('data-meal');
+      var payload = {
+        site_id: siteId,
+        year: year,
+        week: week,
+        day_index: dayIndex,
+        meal: meal,
+        alt: String(alt),
+        diet_type_id: dietId
+      };
+      fetch('/api/kitchen/planering/normal_exclusions/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      })
+      .then(function(r){
+        if(!r.ok){
+          throw new Error('toggle_failed:' + r.status);
+        }
+        return r.json().catch(function(){ return { excluded: btn.classList.contains('active') }; });
+      })
+      .then(function(resp){
+        var shouldActive = !!resp && !!resp.excluded;
+        var isActive = btn.classList.contains('active');
+        if(shouldActive !== isActive){
+          if(shouldActive){
+            btn.classList.add('active');
+            set.add(dietId);
+          } else {
+            btn.classList.remove('active');
+            set.delete(dietId);
+          }
+        }
+      })
+      .catch(function(){
+        // Revert to previous state on error
+        if(wasActive){
+          btn.classList.add('active');
+          set.add(dietId);
+        } else {
+          btn.classList.remove('active');
+          set.delete(dietId);
+        }
+      });
     });
   }
 
