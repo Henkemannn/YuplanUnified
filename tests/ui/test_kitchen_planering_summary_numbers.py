@@ -94,6 +94,6 @@ def test_planering_summary_numbers(app_session):
     assert ">3<" in html
     # Normal = 7
     assert ">7<" in html
-    # Adaptation list should include diet name and per-department total
+    # Special summary table should include diet name and counts
+    assert "Specialkost – sammanställning" in html
     assert "Glutenfri" in html
-    assert "totalt 3" in html

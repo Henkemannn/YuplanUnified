@@ -80,7 +80,8 @@ def test_planering_v1_selected_state(app_session):
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert "Tillagningslista" in html
-    assert "name=\"selected_diets\"" in html or "name=\"selected_diets\"" in html
+    assert "js-special-chip" in html
+    assert "data-diet-id" in html
 
     # Second request: with a selected diet, adaptation list should render
     rv2 = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch&selected_diets={dt_id}", headers=HEADERS)

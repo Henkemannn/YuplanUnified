@@ -44,6 +44,6 @@ def test_options_union_render(app_session):
     rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch", headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    # Expect union totals in options (Laktos=3+2+4=9, Glutenfri=1+0+2=3)
-    assert "Laktos" in html and "totalt 9" in html
-    assert "Glutenfri" in html and "totalt 3" in html
+    # Expect union totals in chips (Laktos=3+2+4=9, Glutenfri=1+0+2=3)
+    assert "Laktos" in html and "(9)" in html
+    assert "Glutenfri" in html and "(3)" in html
