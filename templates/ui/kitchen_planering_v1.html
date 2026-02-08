@@ -215,6 +215,57 @@
           {% endif %}
 
           {% if cur_mode == 'special' %}
+            <div class="kp-card kp-mb-12">
+              <h2 class="kp-h2-tight">Specialkost – översikt</h2>
+              {% if vm.special_summary %}
+                <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap" aria-live="polite">
+                  <div>Totalt special: <strong id="kp-special-total">{{ vm.special_summary.special_total }}</strong></div>
+                  <div>Klart (markerat): <strong id="kp-special-done">{{ vm.special_summary.done_total }}</strong></div>
+                  <div>Återstår: <strong id="kp-special-remaining">{{ vm.special_summary.remaining_total }}</strong></div>
+                </div>
+              {% else %}
+                <p class="empty-text">Ingen sammanställning tillgänglig.</p>
+              {% endif %}
+            </div>
+
+            {% if vm.special_summary and vm.special_summary.totals and vm.special_summary.totals|length > 0 %}
+              <div class="kp-card kp-mb-12">
+                <h3>Specialkost – sammanställning</h3>
+                <table class="grid-table kp-mt-6">
+                  <thead><tr><th>Kosttyp</th><th>Totalt</th><th>Klart</th></tr></thead>
+                  <tbody>
+                    {% for it in vm.special_summary.totals %}
+                      <tr>
+                        <td class="kp-text-left">{{ it.diet_type_name }}</td>
+                        <td>{{ it.count }}</td>
+                        <td>{{ it.done }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+
+            {% if vm.special_summary and vm.special_summary.per_department and vm.special_summary.per_department|length > 0 %}
+              <div class="kp-card kp-mb-12">
+                <h3>Per avdelning</h3>
+                {% for dep in vm.special_summary.per_department %}
+                  <div class="kp-card kp-my-6">
+                    <div class="kp-heading kp-mb-6">{{ dep.department_name }}</div>
+                    {% if dep['items'] and dep['items']|length > 0 %}
+                      <ul class="kp-list">
+                        {% for row in dep['items'] %}
+                          <li>{{ row.diet_type_name }}: {{ row.count }}{% if row.done %} <span class="kp-badge kp-badge-ok">klart</span>{% endif %}</li>
+                        {% endfor %}
+                      </ul>
+                    {% else %}
+                      <div class="empty-text">Inget att anpassa.</div>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+
             <h3>Tillagningslista – Specialkost <span class="yp-sr-only">(Anpassningslista)</span></h3>
             <div class="kp-card kp-my-8">
               <div class="kp-muted-line">Vecka <strong>{{ vm.week }}</strong> · Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong> · Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>

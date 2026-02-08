@@ -1810,6 +1810,7 @@ def kitchen_planering_v1():
 
     # Build adaptation checklist and summary via PlaneraService when day+meal are selected
     summary = None
+    special_summary: dict | None = None
     diet_options = []
     adaptation = []
     selected_diet_ids = []
@@ -1956,6 +1957,73 @@ def kitchen_planering_v1():
             "special_to_adapt_total": special_to_adapt_total,
             "normal_remaining": max(residents_total_for_meal - special_to_adapt_total, 0),
         }
+
+        # Server-side Specialkost sammanställning (parity with kitchen/week)
+        try:
+            tid = int(session.get("tenant_id") or 1)
+            svc_wv = WeekviewService()
+            iso_dow = int(selected_day) + 1
+            totals_by_diet: dict[str, int] = {}
+            done_by_diet: dict[str, int] = {}
+            per_dep: list[dict] = []
+            for dep in departments:
+                dep_id = str(dep["id"])
+                payload, _etag = svc_wv.fetch_weekview(tid, year, week, dep_id)
+                days_list = (payload.get("department_summaries") or [])
+                day_obj = None
+                try:
+                    dd = days_list[0].get("days") or []
+                    for d in dd:
+                        if int(d.get("day_of_week")) == iso_dow:
+                            day_obj = d
+                            break
+                except Exception:
+                    day_obj = None
+                dep_items: list[dict] = []
+                if day_obj:
+                    diets_obj = (day_obj.get("diets") or {}).get(selected_meal, [])
+                    for di in diets_obj or []:
+                        dtid = str(di.get("diet_type_id"))
+                        cnt = int(di.get("resident_count") or 0)
+                        if cnt <= 0:
+                            continue
+                        marked = bool(di.get("marked"))
+                        totals_by_diet[dtid] = totals_by_diet.get(dtid, 0) + cnt
+                        if marked:
+                            done_by_diet[dtid] = done_by_diet.get(dtid, 0) + cnt
+                        dep_items.append({
+                            "diet_type_id": dtid,
+                            "diet_type_name": diet_name_by_id.get(dtid, dtid),
+                            "count": cnt,
+                            "done": marked,
+                        })
+                if dep_items:
+                    per_dep.append({
+                        "department_id": dep_id,
+                        "department_name": dep["name"],
+                        "items": dep_items,
+                    })
+            # Build totals list sorted by total desc, then name
+            totals_list = [
+                {
+                    "diet_type_id": dtid,
+                    "diet_type_name": diet_name_by_id.get(dtid, dtid),
+                    "count": int(totals_by_diet.get(dtid, 0) or 0),
+                    "done": int(done_by_diet.get(dtid, 0) or 0),
+                }
+                for dtid in sorted(totals_by_diet.keys(), key=lambda k: (-(totals_by_diet[k]), diet_name_by_id.get(k, k)))
+            ]
+            special_total = sum(int(it["count"]) for it in totals_list)
+            done_total = sum(int(it["done"]) for it in totals_list)
+            special_summary = {
+                "totals": totals_list,
+                "per_department": per_dep,
+                "special_total": special_total,
+                "done_total": done_total,
+                "remaining_total": max(special_total - done_total, 0),
+            }
+        except Exception:
+            special_summary = None
 
         # P0-D5/C: Resolve menu names for header display, scoped by site via a site department
         # Prefer WeekviewService enrichment for a department within the active site; fallback to tenant-level menu service
@@ -2120,6 +2188,7 @@ def kitchen_planering_v1():
         "selected_meal": selected_meal,
         "day_labels": day_labels,
         "summary": summary,
+        "special_summary": special_summary,
         "diet_options": diet_options,
         "selected_diets": selected_diet_ids,
         "adaptation": adaptation,
