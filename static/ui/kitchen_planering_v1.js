@@ -34,6 +34,11 @@
   // Alt group department IDs and per-department diet counts
   var altGroups = { alt1_dept_ids: [], alt2_dept_ids: [] };
   var dietCountsByDept = {};
+   // Specialkost selection state
+   var selectedSpecialDietIds = new Set();
+   var specialSummary = { totals: [], per_department: [] };
+   var specialById = {};
+   var specialPerDept = [];
 
   function clamp(n, min, max){
     n = Number(n||0);
@@ -49,6 +54,19 @@
     var raw = ctx.getAttribute('data-selected-diets') || '[]';
     try { return JSON.parse(raw); } catch(e){ return []; }
   }
+
+   function parseSpecialSummary(){
+     var ctx = qs('#kp-context');
+     if(!ctx) return { totals: [], per_department: [] };
+     var raw = ctx.getAttribute('data-special-summary') || '{}';
+     try {
+       var parsed = JSON.parse(raw);
+       if(parsed && typeof parsed === 'object'){
+         return parsed;
+       }
+     } catch(e){ /* ignore */ }
+     return { totals: [], per_department: [] };
+   }
 
   function getBaselines(){
     var a1El = qs('[data-baseline="alt1"]') || qs('#kp-base-alt1');
@@ -119,6 +137,154 @@
     if(warn){ warn.style.display = overflow ? 'block' : 'none'; }
   }
 
+   function renderSpecialOverview(){
+     var ctx = qs('#kp-context');
+     if(!ctx) return;
+     var totalEl = qs('#kp-special-total');
+     var doneEl = qs('#kp-special-done');
+     var remEl = qs('#kp-special-remaining');
+     if(!totalEl || !doneEl || !remEl) return;
+     var hasSelection = selectedSpecialDietIds.size > 0;
+     if(!hasSelection){
+       totalEl.textContent = String(ctx.getAttribute('data-special-total') || '0');
+       doneEl.textContent = String(ctx.getAttribute('data-special-done') || '0');
+       remEl.textContent = String(ctx.getAttribute('data-special-remaining') || '0');
+       return;
+     }
+     var t = 0;
+     var d = 0;
+     selectedSpecialDietIds.forEach(function(id){
+       var item = specialById[String(id)];
+       if(item){
+         t += item.total;
+         d += item.done;
+       }
+     });
+     var r = Math.max(t - d, 0);
+     totalEl.textContent = String(t);
+     doneEl.textContent = String(d);
+     remEl.textContent = String(r);
+   }
+
+   function renderSpecialSelectedList(){
+     var list = qs('#kp-special-selected-list');
+     var empty = qs('#kp-special-selected-empty');
+     var countEl = qs('#kp-special-selected-count');
+     var totalEl = qs('#kp-special-selected-total');
+     if(!list || !empty) return;
+     list.innerHTML = '';
+     var selected = Array.from(selectedSpecialDietIds);
+     if(countEl) countEl.textContent = String(selected.length);
+     var totalCount = 0;
+     var groups = [];
+     for(var i=0;i<specialPerDept.length;i++){
+       var dep = specialPerDept[i];
+       var items = [];
+       for(var j=0;j<dep.items.length;j++){
+         var row = dep.items[j];
+         if(selectedSpecialDietIds.has(String(row.diet_type_id))){
+           items.push(row);
+           totalCount += row.count;
+         }
+       }
+       if(items.length){
+         groups.push({ name: dep.department_name, items: items });
+       }
+     }
+     if(totalEl) totalEl.textContent = String(totalCount);
+     if(groups.length === 0){
+       empty.style.display = 'block';
+       return;
+     }
+     empty.style.display = 'none';
+     for(var g=0; g<groups.length; g++){
+       var group = groups[g];
+       var wrap = document.createElement('div');
+       wrap.className = 'kp-special-group';
+       var title = document.createElement('div');
+       title.className = 'kp-special-group-title';
+       title.textContent = group.name;
+       wrap.appendChild(title);
+       var grid = document.createElement('div');
+       grid.className = 'kp-chip-grid';
+       for(var k=0; k<group.items.length; k++){
+         var item = group.items[k];
+         var chip = document.createElement('span');
+         chip.className = 'kp-chip kp-chip--mini is-active';
+         chip.textContent = item.diet_type_name + ' ' + item.count;
+         grid.appendChild(chip);
+       }
+       wrap.appendChild(grid);
+       list.appendChild(wrap);
+     }
+   }
+
+   function initSpecialChips(){
+     var ctx = qs('#kp-context');
+     if(!ctx) return;
+     var chips = qsa('.js-special-chip');
+     if(!chips.length) return;
+     // Build special summary maps
+     specialSummary = parseSpecialSummary();
+     specialById = {};
+     specialPerDept = [];
+     try {
+       var totals = specialSummary.totals || [];
+       for(var i=0;i<totals.length;i++){
+         var it = totals[i];
+         var id = String(it.diet_type_id);
+         specialById[id] = {
+           total: parseInt(it.count || 0, 10) || 0,
+           done: parseInt(it.done || 0, 10) || 0,
+           name: String(it.diet_type_name || id)
+         };
+       }
+       var per = specialSummary.per_department || [];
+       for(var d=0; d<per.length; d++){
+         var dep = per[d];
+         var items = [];
+         var depItems = dep.items || dep['items'] || [];
+         for(var j=0; j<depItems.length; j++){
+           var row = depItems[j];
+           items.push({
+             diet_type_id: String(row.diet_type_id),
+             diet_type_name: String(row.diet_type_name || row.diet_type_id),
+             count: parseInt(row.count || 0, 10) || 0,
+             done: !!row.done
+           });
+         }
+         specialPerDept.push({
+           department_name: String(dep.department_name || ''),
+           items: items
+         });
+       }
+     } catch(e){ /* ignore */ }
+
+     var initialSelected = parseSelectedDiets();
+     selectedSpecialDietIds = new Set((initialSelected || []).map(String));
+     chips.forEach(function(btn){
+       var id = String(btn.getAttribute('data-diet-id') || '');
+       var isActive = selectedSpecialDietIds.has(id);
+       if(isActive){ btn.classList.add('is-active'); }
+       btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+       btn.addEventListener('click', function(){
+         if(selectedSpecialDietIds.has(id)){
+           selectedSpecialDietIds.delete(id);
+           btn.classList.remove('is-active');
+           btn.setAttribute('aria-pressed', 'false');
+         } else {
+           selectedSpecialDietIds.add(id);
+           btn.classList.add('is-active');
+           btn.setAttribute('aria-pressed', 'true');
+         }
+         renderSpecialOverview();
+         renderSpecialSelectedList();
+       });
+     });
+     renderSpecialOverview();
+     renderSpecialSelectedList();
+   }
+
   // Mode change: radios without inline handlers
   function kpSetMode(mode){
     try {
@@ -145,6 +311,7 @@
         if(cur == null) return undefined;
         cur = cur[parts[i]];
       }
+      initSpecialChips();
       return cur;
     } catch(e){ return undefined; }
   }

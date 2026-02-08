@@ -259,6 +259,93 @@
 }
 
 /* ============================================================================
+     Kitchen Planering – Specialkost chips + accordion
+     ============================================================================ */
+.kp-chip-grid{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 8px;
+}
+.kp-chip{
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 14px;
+    display:inline-flex;
+    align-items:center;
+    gap: 6px;
+    cursor: pointer;
+}
+.kp-chip.is-active{
+    background: #dbeafe;
+    border-color: #60a5fa;
+    box-shadow: 0 2px 8px rgba(59,130,246,.15);
+}
+.kp-chip[disabled]{
+    opacity: .45;
+    cursor: not-allowed;
+}
+.kp-chip-title{ font-weight: 600; }
+.kp-chip-meta{ opacity: .75; }
+.kp-chip-badge{
+    font-size: 12px;
+    opacity: .8;
+}
+.kp-chip.kp-chip--mini{
+    font-size: 13px;
+    padding: 6px 10px;
+}
+
+.kp-special-overview{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 12px 18px;
+}
+
+.kp-card-table{
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.kp-accordion-list{
+    display:flex;
+    flex-direction:column;
+    gap: 10px;
+}
+.kp-accordion{
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #fff;
+    padding: 6px 10px 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.04);
+}
+.kp-accordion-summary{
+    cursor: pointer;
+    font-weight: 600;
+    padding: 6px 2px;
+}
+.kp-accordion[open] .kp-accordion-summary{
+    color: var(--cook-text-primary);
+}
+
+.kp-special-selected-summary{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 12px 18px;
+    margin-bottom: 8px;
+}
+.kp-special-selected-list{
+    display:flex;
+    flex-direction:column;
+    gap: 10px;
+}
+.kp-special-group-title{
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+/* ============================================================================
      Kitchen Planering – Alt banners (summary)
      ============================================================================ */
 .alt-banners{

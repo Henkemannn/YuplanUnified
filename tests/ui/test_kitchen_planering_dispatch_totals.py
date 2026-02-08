@@ -33,7 +33,8 @@ def test_dispatch_totals_selected_diet(app_session):
     assert ">33<" in html or ">33</div>" in html
     assert ">9<" in html
     assert ">24<" in html
-    # Adaptation list includes per-department rows
-    assert "Avd A" in html and ">3<" in html
-    assert "Avd B" in html and ">2<" in html
-    assert "Avd C" in html and ">4<" in html
+    # Per-department summary should include department rows
+    assert "Per avdelning" in html
+    assert "Avd A" in html
+    assert "Avd B" in html
+    assert "Avd C" in html
