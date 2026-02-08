@@ -414,6 +414,19 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             except Exception:
                 return ""
 
+        def csrf_meta_token() -> str:  # pragma: no cover - template helper
+            """Return session synchronizer token for meta header (differs from cookie).
+
+            Always ensures a per-session token exists via generate_token(); does not
+            prefer the cookie. This helps double-submit: header uses session token,
+            cookie carries csrf_token.
+            """
+            try:
+                from .csrf import generate_token
+                return generate_token()
+            except Exception:
+                return ""
+
         def csrf_token_input() -> str:  # pragma: no cover - template helper
             tok = csrf_token()
             if not tok:
@@ -464,6 +477,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             "tenant_name": tenant_name,
             "feature_enabled": feature_enabled,
             "csrf_token": csrf_token(),
+            "csrf_meta_token": csrf_meta_token,
             "csrf_token_input": csrf_token_input,
             "current_site_name": current_site_name,
             # Staging demo banner: enabled only when env flag is truthy

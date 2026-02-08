@@ -2,6 +2,8 @@
 <html lang="sv">
 <head>
   <meta charset="utf-8">
+  <meta name="csrf-token" content="{{ csrf_meta_token() }}">
+  <!-- dev: csrf meta length={{ csrf_meta_token()|length }}; cookie differs from header by design -->
   <title>Kök – Planering</title>
   <link rel="stylesheet" href="/static/css/unified_cook.css">
   <link rel="stylesheet" href="/static/unified_ui.css">
@@ -95,7 +97,7 @@
           <p class="empty-text">Planeringen visas här när du gjort ett val.</p>
         </div>
       {% else %}
-        <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-meal="{{ vm.selected_meal }}">
+        <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-meal="{{ vm.selected_meal }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}'>
           <div class="kp-card kp-mb-12">
             <h2 class="kp-h2-tight">Vad planerar vi?</h2>
             <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap">
@@ -135,9 +137,10 @@
               <div class="kp-heading kp-mb-8">Vilka specialkoster behöver anpassas för den här rätten?</div>
               <div class="kp-flex kp-gap-10 kp-flex-wrap">
                 {% for opt in vm.diet_options %}
+                  {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
                   <label class="kp-check-label">
-                    <input type="checkbox" name="selected_diets" value="{{ opt.diet_type_id }}" {% if opt.diet_type_id in vm.selected_diets %}checked{% endif %}>
-                    <span>{{ opt.diet_type_name }}</span>
+                    <input type="checkbox" name="selected_diets" value="{{ opt.diet_type_id }}" {% if opt.diet_type_id in vm.selected_diets %}checked{% endif %} {% if is_unknown %}disabled aria-disabled="true"{% endif %}>
+                    <span>{% if is_unknown %}Okänd kosttyp (#{{ opt.diet_type_id }}){% else %}{{ opt.diet_type_name }}{% endif %}</span>
                     <span class="kp-muted-count">(totalt {{ opt.total_count }})</span>
                   </label>
                 {% endfor %}
@@ -155,10 +158,12 @@
                       <span>Kan INTE äta:</span>
                       <div class="diet-chips" role="group" aria-label="Specialkoster – Alt 1">
                         {% for opt in vm.diet_options %}
+                          {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
                           <button type="button"
                                   class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
                                   data-alt="1"
-                                  data-diet-id="{{ opt.diet_type_id }}">{{ opt.diet_type_name }}</button>
+                                  data-diet-id="{{ opt.diet_type_id }}"
+                                  data-total-count="{{ opt.total_count }}" {% if is_unknown %}disabled aria-disabled="true"{% endif %}>{% if is_unknown %}Okänd kosttyp (#{{ opt.diet_type_id }}){% else %}{{ opt.diet_type_name }}{% endif %}</button>
                         {% endfor %}
                       </div>
                     </div>
@@ -170,15 +175,26 @@
                       <span>Kan INTE äta:</span>
                       <div class="diet-chips" role="group" aria-label="Specialkoster – Alt 2">
                         {% for opt in vm.diet_options %}
+                          {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
                           <button type="button"
                                   class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('2') or [])) %}active{% endif %}"
                                   data-alt="2"
-                                  data-diet-id="{{ opt.diet_type_id }}">{{ opt.diet_type_name }}</button>
+                                  data-diet-id="{{ opt.diet_type_id }}"
+                                  data-total-count="{{ opt.total_count }}" {% if is_unknown %}disabled aria-disabled="true"{% endif %}>{% if is_unknown %}Okänd kosttyp (#{{ opt.diet_type_id }}){% else %}{{ opt.diet_type_name }}{% endif %}</button>
                         {% endfor %}
                       </div>
                     </div>
                   </div>
                 </section>
+                <div class="kp-card kp-mt-10">
+                  <h3 class="kp-h2-tight">Resultat</h3>
+                  <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap" aria-live="polite">
+                    <div>Alt 1: <strong id="kp-total-alt1">—</strong></div>
+                    <div class="is-alt2">Alt 2: <strong id="kp-total-alt2">—</strong></div>
+                    <div>Totalt: <strong id="kp-total-sum">—</strong></div>
+                  </div>
+                  <div id="kp-exclusions-warning" class="kp-warning" style="display:none;">⚠️ Specialkost överstiger boendeantal – kontrollera överlapp eller felkoppling.</div>
+                </div>
               </div>
             {% else %}
               <div class="kp-card kp-mb-12">
@@ -262,9 +278,15 @@
                   </tbody>
                   <tfoot>
                     <tr>
-                      <th>TOTALT</th>
-                      <th>{{ vm.normalkost_sum.alt1 }}</th>
-                      <th class="is-alt2">{{ vm.normalkost_sum.alt2 }}</th>
+                      <th>TOTALT <span id="kp-base-total" class="yp-sr-only">{{ vm.normalkost_sum.total }}</span></th>
+                      <th>
+                        <span class="yp-sr-only" id="kp-base-alt1">{{ vm.normalkost_sum.alt1 }}</span>
+                        <span data-result-normal="alt1">{{ vm.normalkost_sum.alt1 }}</span>
+                      </th>
+                      <th class="is-alt2">
+                        <span class="yp-sr-only" id="kp-base-alt2">{{ vm.normalkost_sum.alt2 }}</span>
+                        <span data-result-normal="alt2">{{ vm.normalkost_sum.alt2 }}</span>
+                      </th>
                     </tr>
                   </tfoot>
                 </table>

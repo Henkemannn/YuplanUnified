@@ -1817,6 +1817,9 @@ def kitchen_planering_v1():
     residents_total_for_meal = 0
     normalkost_rows = []
     normalkost_sum = {"alt1": 0, "alt2": 0, "total": 0}
+    alt1_dept_ids: list[str] = []
+    alt2_dept_ids: list[str] = []
+    per_dept_defaults: dict[str, dict[str, int]] = {}
     header_menu: dict[str, str | None] = {"alt1": None, "alt2": None, "dessert": None, "dinner": None}
     normal_exclusions: dict[str, list[str]] = {"1": [], "2": []}
     if selected_day is not None and selected_meal is not None:
@@ -1843,7 +1846,6 @@ def kitchen_planering_v1():
 
         # Union defaults across departments (count>0) for checklist
         from .admin_repo import DietDefaultsRepo as _DefRepo
-        per_dept_defaults: dict[str, dict[str, int]] = {}
         totals_by_diet: dict[str, int] = {}
         for dep in departments:
             items = []
@@ -1929,6 +1931,13 @@ def kitchen_planering_v1():
                     is_alt2 = (alt_choice == "Alt2")
                     alt2_cnt = normal if is_alt2 else 0
                     alt1_cnt = 0 if is_alt2 else normal
+                    try:
+                        if is_alt2:
+                            alt2_dept_ids.append(did)
+                        else:
+                            alt1_dept_ids.append(did)
+                    except Exception:
+                        pass
                     normalkost_rows.append({
                         "department_id": did,
                         "department_name": dep["name"],
@@ -2118,6 +2127,9 @@ def kitchen_planering_v1():
         "normalkost_sum": normalkost_sum,
         "header_menu": header_menu,
         "normal_exclusions": normal_exclusions,
+        # Alt group mapping and per-department diet counts (used by client to scope exclusions correctly)
+        "alt_groups": {"alt1_dept_ids": alt1_dept_ids, "alt2_dept_ids": alt2_dept_ids},
+        "diet_counts_by_dept": per_dept_defaults,
     }
     return render_template("ui/kitchen_planering_v1.html", vm=vm)
 

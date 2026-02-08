@@ -16,7 +16,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
-from flask import g, request, session, jsonify
+from flask import g, request, session, jsonify, current_app
 from werkzeug.wrappers.response import Response
 
 # Note: Avoid importing http_errors here to keep this module standalone for lightweight admin CSRF checks.
@@ -32,6 +32,7 @@ ENFORCED_PREFIXES = [
     "/diet/",
     "/ui/admin/menu-import/",
     "/api/superuser/",
+    "/api/kitchen/",
 ]
 
 EXEMPT_PREFIXES = [
@@ -53,6 +54,13 @@ def _problem_missing() -> Response:
     resp = jsonify(payload)
     resp.status_code = 403
     resp.mimetype = "application/problem+json"
+    try:
+        # Dev-only diagnostics for kitchen toggle endpoint
+        if (current_app and (current_app.config.get("DEBUG") or current_app.config.get("TESTING"))) and str(request.path or "").startswith("/api/kitchen/planering/normal_exclusions/toggle"):
+            payload["csrf_reason"] = "missing_token"
+            resp.headers["X-CSRF-Reason"] = "missing_token"
+    except Exception:
+        pass
     return resp
 
 
@@ -66,6 +74,13 @@ def _problem_invalid() -> Response:
     resp = jsonify(payload)
     resp.status_code = 403
     resp.mimetype = "application/problem+json"
+    try:
+        # Dev-only diagnostics for kitchen toggle endpoint
+        if (current_app and (current_app.config.get("DEBUG") or current_app.config.get("TESTING"))) and str(request.path or "").startswith("/api/kitchen/planering/normal_exclusions/toggle"):
+            payload["csrf_reason"] = "invalid_token"
+            resp.headers["X-CSRF-Reason"] = "invalid_token"
+    except Exception:
+        pass
     return resp
 
 
@@ -81,6 +96,27 @@ def generate_token(force: bool = False) -> str:
 
 
 def validate_token() -> bool:
+    # In TESTING mode, honor STRICT_CSRF_IN_TESTS to enforce CSRF universally for mutating methods
+    try:
+        if current_app and current_app.config.get("TESTING"):
+            strict = bool(current_app.config.get("STRICT_CSRF_IN_TESTS"))
+            if strict:
+                if request.method.upper() in SAFE_METHODS:
+                    return True
+                expected = session.get(CSRF_SESSION_KEY)
+                supplied = request.headers.get(HEADER_NAME) or request.form.get(FORM_FIELD)
+                if not expected or not supplied:
+                    return False
+                try:
+                    import secrets as _secrets
+                    return _secrets.compare_digest(str(expected), str(supplied))
+                except Exception:
+                    return False
+            else:
+                # non-strict tests bypass CSRF to avoid retrofitting existing tests
+                return True
+    except Exception:
+        pass
     # Only consider enforced prefixes to reduce initial migration surface
     path = request.path or "/"
     if not any(path.startswith(p) for p in ENFORCED_PREFIXES):

@@ -66,6 +66,9 @@ def create_diet_type() -> DietTypeCreateResponse | ErrorResponse:
         from flask import jsonify as _json
 
         return _json({"ok": False, "error": "bad_request", "message": "missing name"}), 400  # type: ignore[return-value]
+    # Hard guard: disallow purely numeric names
+    if name.isdigit():
+        return unprocessable_entity([{"field": "name", "msg": "must_not_be_numeric"}])  # type: ignore[return-value]
     svc: DietService = current_app.diet_service  # type: ignore[attr-defined]
     new_id = svc.create_diet_type(tenant_id, name, default_select)
     return cast(DietTypeCreateResponse, {"ok": True, "diet_type_id": new_id})
@@ -86,6 +89,9 @@ def update_diet_type(diet_type_id: int) -> GenericOk | ErrorResponse:
     if not tenant_id:
         return bad_request("no_tenant_context")  # type: ignore[return-value]
     svc: DietService = current_app.diet_service  # type: ignore[attr-defined]
+    # Validate name if provided
+    if isinstance(name, str) and name.strip().isdigit():
+        return unprocessable_entity([{"field": "name", "msg": "must_not_be_numeric"}])  # type: ignore[return-value]
     ok = svc.update_diet_type(tenant_id, diet_type_id, name=name, default_select=default_select)
     if not ok:
         return not_found("diet_type_not_found")  # type: ignore[return-value]

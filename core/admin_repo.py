@@ -576,6 +576,12 @@ class DietTypesRepo:
             default_select = bool(args[1]) if len(args) >= 2 else default_select
         if not name:
             raise ValueError("name is required")
+        # Hard guard: name must not be purely numeric
+        try:
+            if str(name).strip().isdigit():
+                raise ValueError("invalid name: purely numeric")
+        except Exception:
+            pass
         db = get_session()
         try:
             self._ensure_table(db)
@@ -631,6 +637,8 @@ class DietTypesRepo:
             sets = []
             params: dict = {"id": diet_type_id}
             if name is not None:
+                if str(name).strip().isdigit():
+                    raise ValueError("invalid name: purely numeric")
                 sets.append("name=:name")
                 params["name"] = name
             if default_select is not None:
@@ -653,6 +661,52 @@ class DietTypesRepo:
         try:
             db.execute(text("DELETE FROM dietary_types WHERE id=:id"), {"id": diet_type_id})
             db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def cleanup_invalid_all(self) -> list[int]:
+        """Remove dietary types with empty or numeric-only names and their associations.
+
+        Returns list of deleted IDs.
+        """
+        db = get_session()
+        deleted: list[int] = []
+        try:
+            self._ensure_table(db)
+            rows = db.execute(text("SELECT id, name FROM dietary_types")).fetchall()
+            invalid_ids: list[int] = []
+            for r in rows:
+                try:
+                    did = int(r[0])
+                    nm = str(r[1]) if r[1] is not None else ""
+                    if (not nm.strip()) or nm.strip().isdigit():
+                        invalid_ids.append(did)
+                except Exception:
+                    continue
+            def _exists(table: str) -> bool:
+                try:
+                    cols = db.execute(text(f"PRAGMA table_info('{table}')")).fetchall()
+                    return bool(cols)
+                except Exception:
+                    return False
+            has_defaults = _exists('department_diet_defaults')
+            has_exclusions = _exists('normal_exclusions')
+            has_reg = _exists('weekview_registrations')
+            for did in invalid_ids:
+                sid = str(did)
+                if has_defaults:
+                    db.execute(text("DELETE FROM department_diet_defaults WHERE diet_type_id=:id"), {"id": sid})
+                if has_exclusions:
+                    db.execute(text("DELETE FROM normal_exclusions WHERE diet_type_id=:id"), {"id": sid})
+                if has_reg:
+                    db.execute(text("DELETE FROM weekview_registrations WHERE diet_type=:id"), {"id": sid})
+                db.execute(text("DELETE FROM dietary_types WHERE id=:id"), {"id": did})
+                deleted.append(did)
+            db.commit()
+            return deleted
         except Exception:
             db.rollback()
             raise

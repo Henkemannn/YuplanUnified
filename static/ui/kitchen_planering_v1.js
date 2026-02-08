@@ -2,8 +2,122 @@
   function qs(sel){ return document.querySelector(sel); }
   function qsa(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
 
+  // CSRF helpers: read from meta[name="csrf-token"] or cookie "csrf_token"
+  function getCookie(name){
+    try {
+      var m = document.cookie.match(new RegExp('(^|; )' + name + '=([^;]*)'));
+      return m ? decodeURIComponent(m[2]) : '';
+    } catch(e){ return ''; }
+  }
+  function getCsrfToken(){
+    var token = '';
+    try {
+      var meta = document.querySelector('meta[name="csrf-token"]');
+      var metaTok = meta && meta.getAttribute('content');
+      if(metaTok && String(metaTok).trim().length > 0){
+        token = String(metaTok).trim();
+      } else {
+        console.warn('[csrf] missing meta token');
+      }
+    } catch(e){
+      console.warn('[csrf] meta read error');
+    }
+    if(!token){
+      var cookieTok = getCookie('csrf_token');
+      if(cookieTok){ token = cookieTok; }
+    }
+    return token;
+  }
+
   // In-memory UI-only state for normal-mode diet toggles
   var cannotEat = { 1: new Set(), 2: new Set() };
+  // Alt group department IDs and per-department diet counts
+  var altGroups = { alt1_dept_ids: [], alt2_dept_ids: [] };
+  var dietCountsByDept = {};
+
+  function clamp(n, min, max){
+    n = Number(n||0);
+    if(isNaN(n)) n = 0;
+    if(n < min) return min;
+    if(n > max) return max;
+    return n;
+  }
+
+  function parseSelectedDiets(){
+    var ctx = qs('#kp-context');
+    if(!ctx) return [];
+    var raw = ctx.getAttribute('data-selected-diets') || '[]';
+    try { return JSON.parse(raw); } catch(e){ return []; }
+  }
+
+  function getBaselines(){
+    var a1El = qs('[data-baseline="alt1"]') || qs('#kp-base-alt1');
+    var a2El = qs('[data-baseline="alt2"]') || qs('#kp-base-alt2');
+    var totEl = qs('#kp-base-total');
+    var baseAlt1 = parseInt((a1El && a1El.textContent) || '0', 10);
+    var baseAlt2 = parseInt((a2El && a2El.textContent) || '0', 10);
+    var baseTotal = parseInt((totEl && totEl.textContent) || '0', 10);
+    if(isNaN(baseAlt1)) baseAlt1 = 0;
+    if(isNaN(baseAlt2)) baseAlt2 = 0;
+    if(isNaN(baseTotal)) baseTotal = 0;
+    return { baseAlt1: baseAlt1, baseAlt2: baseAlt2, baseTotal: baseTotal };
+  }
+
+  function sumExcluded(alt){
+    try {
+      var ctx = qs('#kp-context');
+      if(!ctx) return 0;
+      var selected = parseSelectedDiets();
+      var isSelected = function(id){ return selected.indexOf(String(id)) !== -1; };
+      var deptIds = alt === 2 ? (altGroups.alt2_dept_ids || []) : (altGroups.alt1_dept_ids || []);
+      var diets = Array.from((cannotEat[alt] || new Set()));
+      var s = 0;
+      for(var d=0; d<diets.length; d++){
+        var dietId = String(diets[d]);
+        if(isSelected(dietId)) continue; // adapted specials are excluded from normal
+        for(var j=0; j<deptIds.length; j++){
+          var deptId = String(deptIds[j]);
+          var m = dietCountsByDept && dietCountsByDept[deptId];
+          var c = m && m[dietId];
+          var cnt = parseInt(c || '0', 10);
+          if(!isNaN(cnt)) s += cnt;
+        }
+      }
+      return s;
+    } catch(e){ return 0; }
+  }
+
+  function renderAllTotals(){
+    var ctx = qs('#kp-context');
+    if(!ctx) return;
+    var meal = ctx.getAttribute('data-meal');
+    var modeParam = (new URLSearchParams(window.location.search).get('mode')||'').toLowerCase();
+    var mode = modeParam || 'special';
+    if(mode !== 'normal' || meal !== 'lunch') return; // only lunch normal mode has Alt 1/2
+    var bases = getBaselines();
+    var baseAlt1 = bases.baseAlt1, baseAlt2 = bases.baseAlt2, baseTotal = bases.baseTotal;
+    var ex1 = sumExcluded(1);
+    var ex2 = sumExcluded(2);
+    var overflow = (ex1 > baseAlt1) || (ex2 > baseAlt2);
+    var excluded1 = Math.min(baseAlt1, ex1);
+    var excluded2 = Math.min(baseAlt2, ex2);
+    var alt1 = clamp(baseAlt1 - excluded1, 0, baseTotal);
+    var alt2 = clamp(baseAlt2 - excluded2, 0, baseTotal);
+    var total = baseTotal; // keep consistent with table baseline
+    var elA1 = qs('#kp-total-alt1');
+    var elA2 = qs('#kp-total-alt2');
+    var elSum = qs('#kp-total-sum');
+    if(elA1) elA1.textContent = String(alt1);
+    if(elA2) elA2.textContent = String(alt2);
+    if(elSum) elSum.textContent = String(total);
+    // Update bottom result table spans
+    var resA1 = qs('[data-result-normal="alt1"]');
+    var resA2 = qs('[data-result-normal="alt2"]');
+    if(resA1) resA1.textContent = String(alt1);
+    if(resA2) resA2.textContent = String(alt2);
+    var warn = qs('#kp-exclusions-warning');
+    if(warn){ warn.style.display = overflow ? 'block' : 'none'; }
+  }
 
   // Mode change: radios without inline handlers
   function kpSetMode(mode){
@@ -272,6 +386,18 @@
     initMenuAndTitle();
     initPrintButton();
     initDeptSummaryModal();
+    // Parse CSP-safe data attributes for alt groups and per-department diet counts
+    var ctxData = qs('#kp-context');
+    if(ctxData){
+      try {
+        var ag = ctxData.getAttribute('data-alt-groups');
+        if(ag){ altGroups = JSON.parse(ag); }
+      } catch(e){ altGroups = { alt1_dept_ids: [], alt2_dept_ids: [] }; }
+      try {
+        var dc = ctxData.getAttribute('data-diet-counts-by-dept');
+        if(dc){ dietCountsByDept = JSON.parse(dc); }
+      } catch(e){ dietCountsByDept = {}; }
+    }
     // Initialize cannotEat sets based on server-rendered state
     qsa('.diet-chip.active').forEach(function(btn){
       var alt = Number(btn.getAttribute('data-alt'));
@@ -280,6 +406,8 @@
       var set = cannotEat[alt] || (cannotEat[alt] = new Set());
       set.add(dietId);
     });
+    // Initial totals
+    renderAllTotals();
     // Event delegation for diet-chip toggling (normal mode UI only)
     document.addEventListener('click', function(e){
       var btn = e.target && e.target.closest && e.target.closest('.diet-chip');
@@ -297,6 +425,8 @@
         btn.classList.add('active');
         set.add(dietId);
       }
+      // Recalc after optimistic change
+      renderAllTotals();
       // Build payload from context
       var ctx = qs('#kp-context');
       if(!ctx){ return; }
@@ -315,9 +445,14 @@
         alt: String(alt),
         diet_type_id: dietId
       };
+      var csrf = getCsrfToken();
+      var hdrs = { 'Content-Type': 'application/json' };
+      // Always send CSRF headers; backend will validate value
+      hdrs['X-CSRFToken'] = csrf;
+      hdrs['X-CSRF-Token'] = csrf;
       fetch('/api/kitchen/planering/normal_exclusions/toggle', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        headers: hdrs,
         credentials: 'same-origin',
         body: JSON.stringify(payload)
       })
@@ -339,6 +474,8 @@
             set.delete(dietId);
           }
         }
+        // Recalc in case server reconciled differently
+        renderAllTotals();
       })
       .catch(function(){
         // Revert to previous state on error
@@ -349,6 +486,7 @@
           btn.classList.remove('active');
           set.delete(dietId);
         }
+        renderAllTotals();
       });
     });
   }

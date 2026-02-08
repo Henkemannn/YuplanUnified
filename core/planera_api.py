@@ -7,6 +7,7 @@ from typing import Any
 from flask import Blueprint, jsonify, request, session, make_response, current_app, g
 
 from .auth import require_roles
+from .csrf import csrf_protect
 from .http_errors import bad_request, not_found
 from .db import get_session
 
@@ -321,13 +322,34 @@ def get_planera_week_csv():  # CSV export for week aggregation
 
 
 @bp.post("/kitchen/planering/normal_exclusions/toggle")
-@require_roles("admin", "editor", "viewer")
+@require_roles("superuser", "admin", "cook")
+@csrf_protect
 def toggle_normal_exclusion():
     """Toggle a normal-mode exclusion chip for a specific day/meal/alt.
 
     Body JSON: {site_id, year, week, day_index, meal, alt, diet_type_id}
     Returns: {excluded: bool}
     """
+    # Enforce CSRF when cross-origin is detected (double-submit policy)
+    try:
+        origin = request.headers.get("Origin")
+        host = (request.host_url or "").rstrip("/")
+        if origin and host and origin.rstrip("/") != host:
+            import secrets as _secrets
+            expected = session.get("CSRF_TOKEN")
+            supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
+            if not expected or not supplied or not _secrets.compare_digest(str(expected), str(supplied)):
+                resp = jsonify({
+                    "type": "https://example.com/problems/csrf_invalid",
+                    "title": "Forbidden",
+                    "status": 403,
+                    "detail": "csrf_invalid",
+                })
+                resp.status_code = 403
+                resp.mimetype = "application/problem+json"
+                return resp
+    except Exception:
+        pass
     tid = _tenant_id()
     if tid is None:
         return bad_request("tenant_missing")
