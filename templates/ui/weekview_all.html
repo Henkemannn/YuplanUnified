@@ -112,7 +112,7 @@
             {% set site_has = vm.menu_days_site if vm.menu_days_site is defined else [] %}
             {% set has_menu = (site_has[idx] if (site_has and site_has|length>idx) else False) %}
             <th colspan="2">{{ dn }}
-              <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ idx }}">📋</button>
+              <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ idx }}">📋</button>
             </th>
           {% endfor %}
         </tr>
@@ -164,7 +164,8 @@
 {% endfor %}
 
 {% include "ui/_menu_modal.html" %}
-<script src="{{ url_for('static', filename='js/menu_modal.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/menu_utils.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/menu_modal.js') }}"></script>
 
 <div class="snackbar" role="status" aria-live="polite" aria-atomic="true">Sparat</div>
 

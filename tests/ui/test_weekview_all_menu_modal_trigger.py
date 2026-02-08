@@ -32,7 +32,8 @@ def test_weekview_all_has_menu_modal_trigger(app_session):
     assert '<div id="menuModal"' in html
     # Shared script include present
     assert 'js/menu_modal.js' in html
-    # Trigger markup present (matches kitchen trigger class)
-    assert 'class="menu-icon js-open-menu-modal"' in html
+    # Trigger markup present
+    assert 'data-action="open-menu-modal"' in html
+    assert 'class="menu-icon"' in html
     # Dataset keys present
     assert 'data-day-index="' in html and 'data-year="' in html and 'data-week="' in html

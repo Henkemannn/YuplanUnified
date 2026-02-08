@@ -33,13 +33,13 @@
           <thead>
             <tr>
               <th>Kosttyp</th>
-                <th colspan="2">Mån <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="0">📖</button></th>
-                <th colspan="2">Tis <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="1">📖</button></th>
-                <th colspan="2">Ons <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="2">📖</button></th>
-                <th colspan="2">Tors <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="3">📖</button></th>
-                <th colspan="2">Fre <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="4">📖</button></th>
-                <th colspan="2">Lör <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="5">📖</button></th>
-                <th colspan="2">Sön <button class="menu-icon js-open-menu-modal" type="button" aria-label="Visa meny" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="6">📖</button></th>
+                <th colspan="2">Mån <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="0">📖</button></th>
+                <th colspan="2">Tis <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="1">📖</button></th>
+                <th colspan="2">Ons <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="2">📖</button></th>
+                <th colspan="2">Tors <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="3">📖</button></th>
+                <th colspan="2">Fre <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="4">📖</button></th>
+                <th colspan="2">Lör <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="5">📖</button></th>
+                <th colspan="2">Sön <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="6">📖</button></th>
             </tr>
             <tr class="grid-subhead">
               <th></th>
@@ -109,6 +109,7 @@
     </div>
   {% endfor %}
   {% include "ui/_menu_modal.html" %}
+  <script src="/static/js/menu_utils.js"></script>
   <script src="/static/js/menu_modal.js"></script>
   <script src="/static/js/kitchen_week_v3.js"></script>
 </body>

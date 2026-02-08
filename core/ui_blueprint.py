@@ -1817,7 +1817,11 @@ def kitchen_planering_v1():
     residents_total_for_meal = 0
     normalkost_rows = []
     normalkost_sum = {"alt1": 0, "alt2": 0, "total": 0}
+    alt1_dept_ids: list[str] = []
+    alt2_dept_ids: list[str] = []
+    per_dept_defaults: dict[str, dict[str, int]] = {}
     header_menu: dict[str, str | None] = {"alt1": None, "alt2": None, "dessert": None, "dinner": None}
+    normal_exclusions: dict[str, list[str]] = {"1": [], "2": []}
     if selected_day is not None and selected_meal is not None:
         # Departments for site
         db = get_session()
@@ -1842,7 +1846,6 @@ def kitchen_planering_v1():
 
         # Union defaults across departments (count>0) for checklist
         from .admin_repo import DietDefaultsRepo as _DefRepo
-        per_dept_defaults: dict[str, dict[str, int]] = {}
         totals_by_diet: dict[str, int] = {}
         for dep in departments:
             items = []
@@ -1928,6 +1931,13 @@ def kitchen_planering_v1():
                     is_alt2 = (alt_choice == "Alt2")
                     alt2_cnt = normal if is_alt2 else 0
                     alt1_cnt = 0 if is_alt2 else normal
+                    try:
+                        if is_alt2:
+                            alt2_dept_ids.append(did)
+                        else:
+                            alt1_dept_ids.append(did)
+                    except Exception:
+                        pass
                     normalkost_rows.append({
                         "department_id": did,
                         "department_name": dep["name"],
@@ -1947,21 +1957,35 @@ def kitchen_planering_v1():
             "normal_remaining": max(residents_total_for_meal - special_to_adapt_total, 0),
         }
 
-        # P0-D5: Resolve menu names for header display without modal (minimal server-side assist)
+        # P0-D5/C: Resolve menu names for header display, scoped by site via a site department
+        # Prefer WeekviewService enrichment for a department within the active site; fallback to tenant-level menu service
         try:
-            from flask import current_app as _app
-            ms = getattr(_app, "menu_service", None)
             tid = session.get("tenant_id")
-            if ms is not None and tid is not None:
-                mv = ms.get_week_view(int(tid), week, year)
-                days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
-                # Map 0..6 -> Mon..Sun
-                keys = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
-                day_key = keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
-                if day_key and day_key in days_struct:
-                    meals_obj = days_struct.get(day_key) or {}
-                    lunch_obj = meals_obj.get("Lunch") or meals_obj.get("lunch") or {}
-                    dinner_obj = meals_obj.get("Dinner") or meals_obj.get("dinner") or {}
+            # Use first department in this site to scope menu texts, if available
+            dep_for_site = None
+            try:
+                dep_for_site = int(departments[0]["id"]) if departments else None
+            except Exception:
+                dep_for_site = None
+            if tid is not None and dep_for_site is not None:
+                from .weekview_service import WeekviewService as _WVS
+                svc_wv = _WVS()
+                payload, _etag = svc_wv.fetch_weekview(int(tid), year, week, dep_for_site)
+                summaries = payload.get("department_summaries") or []
+                days_list = (summaries[0].get("days") if summaries else []) or []
+                # Resolve ISO date for selected day
+                iso_dow = int(selected_day) + 1
+                from datetime import date as _d
+                sel_date = _d.fromisocalendar(year, week, iso_dow).isoformat()
+                target = None
+                for dd in days_list:
+                    if str(dd.get("date")) == sel_date:
+                        target = dd
+                        break
+                if target:
+                    mt = (target.get("menu_texts") or {}) if isinstance(target, dict) else {}
+                    lunch_obj = mt.get("lunch") or {}
+                    dinner_obj = mt.get("dinner") or {}
                     def _valname(v):
                         if v is None:
                             return None
@@ -1971,17 +1995,14 @@ def kitchen_planering_v1():
                             return v.get("dish_name") or v.get("name")
                         except Exception:
                             return None
-                    # Lunch variants
-                    header_menu["alt1"] = _valname(lunch_obj.get("alt1"))
+                    header_menu["alt1"] = _valname(lunch_obj.get("main")) or _valname(lunch_obj.get("alt1"))
                     header_menu["alt2"] = _valname(lunch_obj.get("alt2"))
                     header_menu["dessert"] = _valname(lunch_obj.get("dessert"))
-                    # Dinner: prefer explicit main/alt1/alt2 order
                     dn = None
                     for cand in ("main", "alt1", "alt2"):
                         if dinner_obj.get(cand) is not None:
                             dn = _valname(dinner_obj.get(cand))
                             break
-                    # If variants stored under other keys, pick first
                     if dn is None:
                         try:
                             for _k, _v in (dinner_obj.items() if isinstance(dinner_obj, dict) else []):
@@ -1991,8 +2012,96 @@ def kitchen_planering_v1():
                         except Exception:
                             pass
                     header_menu["dinner"] = dn
+            # Fallback to tenant-wide MenuService if WeekviewService path not available
+            if not any(header_menu.values()):
+                from flask import current_app as _app
+                ms = getattr(_app, "menu_service", None)
+                if ms is not None and tid is not None:
+                    mv = ms.get_week_view(int(tid), week, year)
+                    days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
+                    keys = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+                    day_key = keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
+                    meals_obj = {}
+                    if day_key:
+                        # Resolve case-insensitive keys (e.g., 'sat' vs 'Sat')
+                        lower_map = {str(k).strip().lower(): k for k in days_struct.keys()}
+                        canon_keys = ["mon","tue","wed","thu","fri","sat","sun"]
+                        canon = canon_keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
+                        hit = lower_map.get(canon) if canon else None
+                        meals_obj = days_struct.get(hit) or days_struct.get(day_key) or {}
+                        lunch_obj = meals_obj.get("Lunch") or meals_obj.get("lunch") or {}
+                        dinner_obj = meals_obj.get("Dinner") or meals_obj.get("dinner") or {}
+                        def _valname2(v):
+                            if v is None:
+                                return None
+                            if isinstance(v, str):
+                                return v
+                            try:
+                                return v.get("dish_name") or v.get("name")
+                            except Exception:
+                                return None
+                        header_menu["alt1"] = header_menu["alt1"] or _valname2(lunch_obj.get("main")) or _valname2(lunch_obj.get("alt1"))
+                        header_menu["alt2"] = header_menu["alt2"] or _valname2(lunch_obj.get("alt2"))
+                        header_menu["dessert"] = header_menu["dessert"] or _valname2(lunch_obj.get("dessert"))
+                        dn = None
+                        for cand in ("main", "alt1", "alt2"):
+                            if dinner_obj.get(cand) is not None:
+                                dn = _valname2(dinner_obj.get(cand))
+                                break
+                        if dn is None:
+                            try:
+                                for _k, _v in (dinner_obj.items() if isinstance(dinner_obj, dict) else []):
+                                    dn = _valname2(_v)
+                                    if dn:
+                                        break
+                            except Exception:
+                                pass
+                        header_menu["dinner"] = header_menu["dinner"] or dn
         except Exception:
             pass
+
+        # Load persistent normal-mode exclusions for active day/meal (SQLite-safe schema ensure)
+        try:
+            dbx = get_session()
+            try:
+                dialect = dbx.bind.dialect.name if dbx.bind is not None else ""
+                if dialect == "sqlite":
+                    dbx.execute(text(
+                        """
+                        CREATE TABLE IF NOT EXISTS normal_exclusions (
+                          tenant_id TEXT NOT NULL,
+                          site_id TEXT NOT NULL,
+                          year INTEGER NOT NULL,
+                          week INTEGER NOT NULL,
+                          day_index INTEGER NOT NULL,
+                          meal TEXT NOT NULL,
+                          alt TEXT NOT NULL,
+                          diet_type_id TEXT NOT NULL,
+                          UNIQUE (tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id)
+                        );
+                        """
+                    ))
+                    dbx.commit()
+                rows_ex = dbx.execute(text(
+                    """
+                    SELECT alt, diet_type_id FROM normal_exclusions
+                    WHERE tenant_id=:tid AND site_id=:s AND year=:y AND week=:w AND day_index=:d AND meal=:m
+                    ORDER BY alt, diet_type_id
+                    """
+                ), {"tid": str(session.get("tenant_id") or 1), "s": site_id, "y": year, "w": week, "d": int(selected_day), "m": str(selected_meal)}).fetchall()
+                ex_by_alt: dict[str, list[str]] = {"1": [], "2": []}
+                for r in rows_ex:
+                    a = str(r[0]); dt = str(r[1])
+                    if a in ex_by_alt:
+                        ex_by_alt[a].append(dt)
+                normal_exclusions = ex_by_alt
+            finally:
+                try:
+                    dbx.close()
+                except Exception:
+                    pass
+        except Exception:
+            normal_exclusions = {"1": [], "2": []}
 
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
     vm = {
@@ -2017,6 +2126,10 @@ def kitchen_planering_v1():
         "normalkost_rows": normalkost_rows,
         "normalkost_sum": normalkost_sum,
         "header_menu": header_menu,
+        "normal_exclusions": normal_exclusions,
+        # Alt group mapping and per-department diet counts (used by client to scope exclusions correctly)
+        "alt_groups": {"alt1_dept_ids": alt1_dept_ids, "alt2_dept_ids": alt2_dept_ids},
+        "diet_counts_by_dept": per_dept_defaults,
     }
     return render_template("ui/kitchen_planering_v1.html", vm=vm)
 

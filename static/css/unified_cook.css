@@ -9,6 +9,7 @@
     --cook-warning: #f59e0b;
     --cook-danger: #dc2626;
     --cook-muted: #6b7280;
+    --muted-text: var(--cook-text-secondary);
     --cook-bg: #f8fafc;
     --cook-card-bg: #ffffff;
     --cook-text-primary: #1e293b;
@@ -199,6 +200,99 @@
     font-size: 2.5rem;
 }
 
+/* ============================================================================
+     Kitchen Planering – Menu Alternatives (Normal Mode)
+     ============================================================================ */
+.menu-alternatives{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+}
+@media (max-width: 900px){
+    .menu-alternatives{ grid-template-columns: 1fr; }
+}
+
+.menu-alt{
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 14px 14px 16px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.05);
+}
+
+.menu-alt h3{
+    margin: 0 0 8px;
+    font-size: 18px;
+}
+
+.menu-alt.alt2{
+    border-left: 6px solid #ffe08a; /* gul markering */
+}
+
+.alt-dish-input{
+    width:100%;
+    font-size:16px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+}
+.alt-dish-input:focus{ outline: none; border-color:#9ca3af; }
+
+.cannot-eat{ margin-top: 12px; }
+.diet-chips{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+.diet-chip{
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 14px;
+}
+.diet-chip.active{
+    background: #d1fae5;   /* mild grön */
+    border-color: #34d399;
+}
+
+/* ============================================================================
+     Kitchen Planering – Alt banners (summary)
+     ============================================================================ */
+.alt-banners{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:8px;
+}
+.alt-banner{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:14px;
+    border:1px solid #e5e7eb;
+    background:#f9fafb;
+    max-width:100%;
+}
+.alt-banner .label{ font-weight:700; }
+.alt-banner .dish{
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width: 520px;
+}
+@media (max-width: 900px){
+    .alt-banner .dish{ max-width: 70vw; }
+}
+.alt-banner.alt2{
+    border-color:#ffe08a;
+    background:#fff3bf;
+}
+
 .meal-name {
     font-size: 1.5rem;
     font-weight: 600;
@@ -239,6 +333,157 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+}
+
+/* ============================================================================
+   Menu Modal (shared)
+   ============================================================================ */
+
+#menuModal {
+    display: none;
+}
+
+#menuModal.is-open {
+    display: block;
+}
+
+body.menu-modal-open {
+    overflow: hidden;
+}
+
+#menuModal .menu-modal__backdrop,
+#menuModal .js-menu-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+}
+
+/* ============================================================================
+   Planering utilities (CSP-safe)
+   ============================================================================ */
+
+.kp-h2-tight {
+    margin: 0 0 6px 0;
+}
+
+.kp-flex {
+    display: flex;
+}
+
+.kp-flex-wrap {
+    flex-wrap: wrap;
+}
+
+.kp-align-center {
+    align-items: center;
+}
+
+.kp-gap-16 {
+    gap: 16px;
+}
+
+.kp-gap-10 {
+    gap: 10px;
+}
+
+.kp-gap-8 {
+    gap: 8px;
+}
+
+.kp-gap-6 {
+    gap: 6px;
+}
+
+.kp-form-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.kp-mb-12 {
+    margin-bottom: 12px;
+}
+
+.kp-mb-10 {
+    margin-bottom: 10px;
+}
+
+.kp-mb-8 {
+    margin-bottom: 8px;
+}
+
+.kp-mb-6 {
+    margin-bottom: 6px;
+}
+
+.kp-my-8 {
+    margin: 8px 0;
+}
+
+.kp-mt-6 {
+    margin-top: 6px;
+}
+
+.kp-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.kp-input-wide {
+    width: 100%;
+    max-width: 520px;
+}
+
+.kp-heading {
+    font-weight: 600;
+}
+
+.kp-check-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.kp-muted-count {
+    opacity: 0.7;
+}
+
+.kp-muted-line {
+    color: #334155;
+    margin-bottom: 4px;
+}
+
+.kp-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.kp-text-left {
+    text-align: left;
+}
+
+.is-pristine {
+    color: var(--muted-text);
+}
+
+.alt2-text {
+    background: #fff3bf;
+    padding: 0 0.25rem;
+    border-radius: 3px;
+}
+
+/* Dept summary modal (if present) */
+#dept-summary-modal {
+    display: none;
+}
+
+#dept-summary-modal.is-open {
+    display: flex;
+}
+
+body.kp-dept-summary-open {
+    overflow: hidden;
 }
 
 /* ============================================================================
@@ -516,6 +761,9 @@
 .grid-table tbody tr.diet-row:nth-child(odd) { background: #f9fafb; }
 .grid-table tbody tr.diet-row:nth-child(even) { background: #ffffff; }
 .diet-name { text-align: left; font-weight: 600; min-width: 160px; }
+
+/* Alt2 highlight for grid-table (Planering & Kitchen views) */
+.grid-table td.is-alt2, .grid-table th.is-alt2 { background: var(--warning-light); }
 
 /* Focus/tap resets scoped to grid to prevent rectangular highlights */
 .kw-grid td:focus,

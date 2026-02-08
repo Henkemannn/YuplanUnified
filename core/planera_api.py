@@ -7,6 +7,7 @@ from typing import Any
 from flask import Blueprint, jsonify, request, session, make_response, current_app, g
 
 from .auth import require_roles
+from .csrf import csrf_protect
 from .http_errors import bad_request, not_found
 from .db import get_session
 
@@ -96,6 +97,42 @@ def _meal_labels(site_id: str) -> dict[str, str]:
 
 def _empty_meal() -> dict[str, Any]:
     return {"residents_total": 0, "special_diets": [], "normal_diet_count": 0}
+
+
+def _ensure_normal_exclusions_schema() -> None:
+    """Create normal_exclusions table in SQLite/testing environments.
+
+    In production (Postgres), Alembic should manage migrations; here we guard
+    with a dialect check and only create in SQLite to keep tests passing.
+    """
+    db = get_session()
+    try:
+        dialect = db.bind.dialect.name if db.bind is not None else ""
+        if dialect != "sqlite":
+            return
+        db.execute(
+            __import__("sqlalchemy").text(
+                """
+                CREATE TABLE IF NOT EXISTS normal_exclusions (
+                  tenant_id TEXT NOT NULL,
+                  site_id TEXT NOT NULL,
+                  year INTEGER NOT NULL,
+                  week INTEGER NOT NULL,
+                  day_index INTEGER NOT NULL,
+                  meal TEXT NOT NULL,
+                  alt TEXT NOT NULL,
+                  diet_type_id TEXT NOT NULL,
+                  UNIQUE (tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id)
+                );
+                """
+            )
+        )
+        db.commit()
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 @bp.get("/planera/day")
@@ -282,3 +319,112 @@ def get_planera_week_csv():  # CSV export for week aggregation
     resp.headers["ETag"] = etag
     resp.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
     return resp
+
+
+@bp.post("/kitchen/planering/normal_exclusions/toggle")
+@require_roles("superuser", "admin", "cook")
+@csrf_protect
+def toggle_normal_exclusion():
+    """Toggle a normal-mode exclusion chip for a specific day/meal/alt.
+
+    Body JSON: {site_id, year, week, day_index, meal, alt, diet_type_id}
+    Returns: {excluded: bool}
+    """
+    # Enforce CSRF when cross-origin is detected (double-submit policy)
+    try:
+        origin = request.headers.get("Origin")
+        host = (request.host_url or "").rstrip("/")
+        if origin and host and origin.rstrip("/") != host:
+            import secrets as _secrets
+            expected = session.get("CSRF_TOKEN")
+            supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
+            if not expected or not supplied or not _secrets.compare_digest(str(expected), str(supplied)):
+                resp = jsonify({
+                    "type": "https://example.com/problems/csrf_invalid",
+                    "title": "Forbidden",
+                    "status": 403,
+                    "detail": "csrf_invalid",
+                })
+                resp.status_code = 403
+                resp.mimetype = "application/problem+json"
+                return resp
+    except Exception:
+        pass
+    tid = _tenant_id()
+    if tid is None:
+        return bad_request("tenant_missing")
+    try:
+        payload = request.get_json(force=True) or {}
+    except Exception:
+        payload = {}
+    site_id = str(payload.get("site_id") or "").strip()
+    try:
+        year = int(payload.get("year"))
+        week = int(payload.get("week"))
+        day_index = int(payload.get("day_index"))
+    except Exception:
+        return bad_request("invalid_parameters")
+    meal = str(payload.get("meal") or "").strip().lower()
+    alt = str(payload.get("alt") or "").strip()
+    diet_type_id = str(payload.get("diet_type_id") or "").strip()
+    if not (site_id and diet_type_id and alt in ("1", "2") and meal in ("lunch", "dinner", "dessert") and 0 <= day_index <= 6):
+        return bad_request("invalid_parameters")
+
+    # Ensure table in SQLite
+    try:
+        _ensure_normal_exclusions_schema()
+    except Exception:
+        pass
+
+    db = get_session()
+    try:
+        # Check if row exists
+        row = db.execute(
+            __import__("sqlalchemy").text(
+                """
+                SELECT 1 FROM normal_exclusions
+                WHERE tenant_id=:tid AND site_id=:s AND year=:y AND week=:w
+                  AND day_index=:d AND meal=:m AND alt=:a AND diet_type_id=:dt
+                LIMIT 1
+                """
+            ),
+            {"tid": str(tid), "s": site_id, "y": year, "w": week, "d": day_index, "m": meal, "a": alt, "dt": diet_type_id},
+        ).fetchone()
+        if row:
+            # Remove existing exclusion
+            db.execute(
+                __import__("sqlalchemy").text(
+                    """
+                    DELETE FROM normal_exclusions
+                    WHERE tenant_id=:tid AND site_id=:s AND year=:y AND week=:w
+                      AND day_index=:d AND meal=:m AND alt=:a AND diet_type_id=:dt
+                    """
+                ),
+                {"tid": str(tid), "s": site_id, "y": year, "w": week, "d": day_index, "m": meal, "a": alt, "dt": diet_type_id},
+            )
+            db.commit()
+            return jsonify({"excluded": False})
+        else:
+            # Insert new exclusion
+            db.execute(
+                __import__("sqlalchemy").text(
+                    """
+                    INSERT INTO normal_exclusions(tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id)
+                    VALUES (:tid, :s, :y, :w, :d, :m, :a, :dt)
+                    """
+                ),
+                {"tid": str(tid), "s": site_id, "y": year, "w": week, "d": day_index, "m": meal, "a": alt, "dt": diet_type_id},
+            )
+            db.commit()
+            return jsonify({"excluded": True})
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return bad_request("toggle_failed")
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass

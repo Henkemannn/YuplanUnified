@@ -27,4 +27,5 @@ def test_kitchen_week_has_shared_menu_modal(app_session):
     html = rv.data.decode("utf-8")
     assert 'id="menuModal"' in html
     assert 'js/menu_modal.js' in html
-    assert 'class="menu-icon js-open-menu-modal"' in html
+    assert 'data-action="open-menu-modal"' in html
+    assert 'class="menu-icon"' in html
