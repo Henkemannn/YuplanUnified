@@ -34,11 +34,11 @@
   // Alt group department IDs and per-department diet counts
   var altGroups = { alt1_dept_ids: [], alt2_dept_ids: [] };
   var dietCountsByDept = {};
-   // Specialkost selection state
-   var selectedSpecialDietIds = new Set();
-   var specialSummary = { totals: [], per_department: [] };
-   var specialById = {};
-   var specialPerDept = [];
+  // Specialkost selection state
+  var selectedSpecialDietIds = new Set();
+  var specialSummary = { totals: [], per_department: [] };
+  var specialById = {};
+  var specialPerDept = [];
 
   function clamp(n, min, max){
     n = Number(n||0);
@@ -55,18 +55,18 @@
     try { return JSON.parse(raw); } catch(e){ return []; }
   }
 
-   function parseSpecialSummary(){
-     var ctx = qs('#kp-context');
-     if(!ctx) return { totals: [], per_department: [] };
-     var raw = ctx.getAttribute('data-special-summary') || '{}';
-     try {
-       var parsed = JSON.parse(raw);
-       if(parsed && typeof parsed === 'object'){
-         return parsed;
-       }
-     } catch(e){ /* ignore */ }
-     return { totals: [], per_department: [] };
-   }
+  function parseSpecialSummary(){
+    var ctx = qs('#kp-context');
+    if(!ctx) return { totals: [], per_department: [] };
+    var raw = ctx.getAttribute('data-special-summary') || '{}';
+    try {
+      var parsed = JSON.parse(raw);
+      if(parsed && typeof parsed === 'object'){
+        return parsed;
+      }
+    } catch(e){ /* ignore */ }
+    return { totals: [], per_department: [] };
+  }
 
   function getBaselines(){
     var a1El = qs('[data-baseline="alt1"]') || qs('#kp-base-alt1');
@@ -137,153 +137,187 @@
     if(warn){ warn.style.display = overflow ? 'block' : 'none'; }
   }
 
-   function renderSpecialOverview(){
-     var ctx = qs('#kp-context');
-     if(!ctx) return;
-     var totalEl = qs('#kp-special-total');
-     var doneEl = qs('#kp-special-done');
-     var remEl = qs('#kp-special-remaining');
-     if(!totalEl || !doneEl || !remEl) return;
-     var hasSelection = selectedSpecialDietIds.size > 0;
-     if(!hasSelection){
-       totalEl.textContent = String(ctx.getAttribute('data-special-total') || '0');
-       doneEl.textContent = String(ctx.getAttribute('data-special-done') || '0');
-       remEl.textContent = String(ctx.getAttribute('data-special-remaining') || '0');
-       return;
-     }
-     var t = 0;
-     var d = 0;
-     selectedSpecialDietIds.forEach(function(id){
-       var item = specialById[String(id)];
-       if(item){
-         t += item.total;
-         d += item.done;
-       }
-     });
-     var r = Math.max(t - d, 0);
-     totalEl.textContent = String(t);
-     doneEl.textContent = String(d);
-     remEl.textContent = String(r);
-   }
+  function renderSpecialSelectedList(){
+    var list = qs('#kp-special-selected-list');
+    var empty = qs('#kp-special-selected-empty');
+    var countEl = qs('#kp-special-selected-count');
+    var totalEl = qs('#kp-special-selected-total');
+    if(!list || !empty) return;
+    list.innerHTML = '';
+    var selected = Array.from(selectedSpecialDietIds);
+    if(countEl) countEl.textContent = String(selected.length);
+    var totalCount = 0;
+    var groups = [];
+    for(var i=0;i<specialPerDept.length;i++){
+      var dep = specialPerDept[i];
+      var items = [];
+      for(var j=0;j<dep.items.length;j++){
+        var row = dep.items[j];
+        if(selectedSpecialDietIds.has(String(row.diet_type_id))){
+          items.push(row);
+          totalCount += row.count;
+        }
+      }
+      if(items.length){
+        groups.push({ name: dep.department_name, items: items });
+      }
+    }
+    if(totalEl) totalEl.textContent = String(totalCount);
+    if(groups.length === 0){
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    for(var g=0; g<groups.length; g++){
+      var group = groups[g];
+      var wrap = document.createElement('div');
+      wrap.className = 'kp-special-group';
+      var title = document.createElement('div');
+      title.className = 'kp-special-group-title';
+      title.textContent = group.name;
+      wrap.appendChild(title);
+      var grid = document.createElement('div');
+      grid.className = 'kp-chip-grid';
+      for(var k=0; k<group.items.length; k++){
+        var item = group.items[k];
+        var chip = document.createElement('span');
+        chip.className = 'diet-chip active is-mini';
+        var label = document.createElement('span');
+        label.className = 'kp-chip-label';
+        label.textContent = item.diet_type_name;
+        var badge = document.createElement('span');
+        badge.className = 'kp-chip-badge';
+        badge.textContent = String(item.count);
+        chip.appendChild(label);
+        chip.appendChild(badge);
+        grid.appendChild(chip);
+      }
+      wrap.appendChild(grid);
+      list.appendChild(wrap);
+    }
+  }
 
-   function renderSpecialSelectedList(){
-     var list = qs('#kp-special-selected-list');
-     var empty = qs('#kp-special-selected-empty');
-     var countEl = qs('#kp-special-selected-count');
-     var totalEl = qs('#kp-special-selected-total');
-     if(!list || !empty) return;
-     list.innerHTML = '';
-     var selected = Array.from(selectedSpecialDietIds);
-     if(countEl) countEl.textContent = String(selected.length);
-     var totalCount = 0;
-     var groups = [];
-     for(var i=0;i<specialPerDept.length;i++){
-       var dep = specialPerDept[i];
-       var items = [];
-       for(var j=0;j<dep.items.length;j++){
-         var row = dep.items[j];
-         if(selectedSpecialDietIds.has(String(row.diet_type_id))){
-           items.push(row);
-           totalCount += row.count;
-         }
-       }
-       if(items.length){
-         groups.push({ name: dep.department_name, items: items });
-       }
-     }
-     if(totalEl) totalEl.textContent = String(totalCount);
-     if(groups.length === 0){
-       empty.style.display = 'block';
-       return;
-     }
-     empty.style.display = 'none';
-     for(var g=0; g<groups.length; g++){
-       var group = groups[g];
-       var wrap = document.createElement('div');
-       wrap.className = 'kp-special-group';
-       var title = document.createElement('div');
-       title.className = 'kp-special-group-title';
-       title.textContent = group.name;
-       wrap.appendChild(title);
-       var grid = document.createElement('div');
-       grid.className = 'kp-chip-grid';
-       for(var k=0; k<group.items.length; k++){
-         var item = group.items[k];
-         var chip = document.createElement('span');
-         chip.className = 'kp-chip kp-chip--mini is-active';
-         chip.textContent = item.diet_type_name + ' ' + item.count;
-         grid.appendChild(chip);
-       }
-       wrap.appendChild(grid);
-       list.appendChild(wrap);
-     }
-   }
+  function initSpecialChips(){
+    var ctx = qs('#kp-context');
+    if(!ctx) return;
+    var chips = qsa('.js-special-chip');
+    if(!chips.length) return;
+    // Build special summary maps
+    specialSummary = parseSpecialSummary();
+    specialById = {};
+    specialPerDept = [];
+    try {
+      var totals = specialSummary.totals || [];
+      for(var i=0;i<totals.length;i++){
+        var it = totals[i];
+        var id = String(it.diet_type_id);
+        specialById[id] = {
+          total: parseInt(it.count || 0, 10) || 0,
+          done: parseInt(it.done || 0, 10) || 0,
+          name: String(it.diet_type_name || id)
+        };
+      }
+      var per = specialSummary.per_department || [];
+      for(var d=0; d<per.length; d++){
+        var dep = per[d];
+        var items = [];
+        var depItems = dep.items || dep['items'] || [];
+        for(var j=0; j<depItems.length; j++){
+          var row = depItems[j];
+          items.push({
+            diet_type_id: String(row.diet_type_id),
+            diet_type_name: String(row.diet_type_name || row.diet_type_id),
+            count: parseInt(row.count || 0, 10) || 0,
+            done: !!row.done
+          });
+        }
+        specialPerDept.push({
+          department_name: String(dep.department_name || ''),
+          items: items
+        });
+      }
+    } catch(e){ /* ignore */ }
 
-   function initSpecialChips(){
-     var ctx = qs('#kp-context');
-     if(!ctx) return;
-     var chips = qsa('.js-special-chip');
-     if(!chips.length) return;
-     // Build special summary maps
-     specialSummary = parseSpecialSummary();
-     specialById = {};
-     specialPerDept = [];
-     try {
-       var totals = specialSummary.totals || [];
-       for(var i=0;i<totals.length;i++){
-         var it = totals[i];
-         var id = String(it.diet_type_id);
-         specialById[id] = {
-           total: parseInt(it.count || 0, 10) || 0,
-           done: parseInt(it.done || 0, 10) || 0,
-           name: String(it.diet_type_name || id)
-         };
-       }
-       var per = specialSummary.per_department || [];
-       for(var d=0; d<per.length; d++){
-         var dep = per[d];
-         var items = [];
-         var depItems = dep.items || dep['items'] || [];
-         for(var j=0; j<depItems.length; j++){
-           var row = depItems[j];
-           items.push({
-             diet_type_id: String(row.diet_type_id),
-             diet_type_name: String(row.diet_type_name || row.diet_type_id),
-             count: parseInt(row.count || 0, 10) || 0,
-             done: !!row.done
-           });
-         }
-         specialPerDept.push({
-           department_name: String(dep.department_name || ''),
-           items: items
-         });
-       }
-     } catch(e){ /* ignore */ }
+    var initialSelected = parseSelectedDiets();
+    selectedSpecialDietIds = new Set((initialSelected || []).map(String));
+    chips.forEach(function(btn){
+      var id = String(btn.getAttribute('data-diet-id') || '');
+      var isActive = selectedSpecialDietIds.has(id);
+      if(isActive){ btn.classList.add('active'); }
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      btn.addEventListener('click', function(){
+        if(selectedSpecialDietIds.has(id)){
+          selectedSpecialDietIds.delete(id);
+          btn.classList.remove('active');
+          btn.setAttribute('aria-pressed', 'false');
+        } else {
+          selectedSpecialDietIds.add(id);
+          btn.classList.add('active');
+          btn.setAttribute('aria-pressed', 'true');
+        }
+        renderSpecialSelectedList();
+      });
+    });
+    renderSpecialSelectedList();
+  }
 
-     var initialSelected = parseSelectedDiets();
-     selectedSpecialDietIds = new Set((initialSelected || []).map(String));
-     chips.forEach(function(btn){
-       var id = String(btn.getAttribute('data-diet-id') || '');
-       var isActive = selectedSpecialDietIds.has(id);
-       if(isActive){ btn.classList.add('is-active'); }
-       btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-       btn.addEventListener('click', function(){
-         if(selectedSpecialDietIds.has(id)){
-           selectedSpecialDietIds.delete(id);
-           btn.classList.remove('is-active');
-           btn.setAttribute('aria-pressed', 'false');
-         } else {
-           selectedSpecialDietIds.add(id);
-           btn.classList.add('is-active');
-           btn.setAttribute('aria-pressed', 'true');
-         }
-         renderSpecialOverview();
-         renderSpecialSelectedList();
-       });
-     });
-     renderSpecialOverview();
-     renderSpecialSelectedList();
-   }
+  function showToast(message){
+    var toast = qs('#kp-toast');
+    if(!toast) return;
+    toast.textContent = message;
+    toast.classList.add('is-visible');
+    window.setTimeout(function(){ toast.classList.remove('is-visible'); }, 3000);
+  }
+
+  function initBulkMarkButtons(){
+    var markBtn = qs('.js-bulk-mark');
+    var clearBtn = qs('.js-bulk-clear');
+    if(!markBtn && !clearBtn) return;
+    function runBulk(url, successMsg, errorMsg){
+      var ctx = qs('#kp-context');
+      if(!ctx) return;
+      var qsParams = new URLSearchParams(window.location.search);
+      var payload = {
+        site_id: qsParams.get('site_id') || ctx.getAttribute('data-site-id') || '',
+        year: parseInt(qsParams.get('year') || ctx.getAttribute('data-year') || '0', 10),
+        week: parseInt(qsParams.get('week') || ctx.getAttribute('data-week') || '0', 10),
+        day_index: parseInt(ctx.getAttribute('data-day-index') || '0', 10),
+        meal: ctx.getAttribute('data-meal')
+      };
+      if(selectedSpecialDietIds.size > 0){
+        payload.diet_type_ids = Array.from(selectedSpecialDietIds);
+      }
+      var csrf = getCsrfToken();
+      var hdrs = { 'Content-Type': 'application/json' };
+      hdrs['X-CSRF-Token'] = csrf;
+      fetch(url, {
+        method: 'POST',
+        headers: hdrs,
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      })
+      .then(function(r){
+        if(!r.ok){ throw new Error('bulk_failed:' + r.status); }
+        return r.json();
+      })
+      .then(function(){
+        showToast(successMsg);
+      })
+      .catch(function(){
+        showToast(errorMsg);
+      });
+    }
+    if(markBtn){
+      markBtn.addEventListener('click', function(){
+        runBulk('/api/planering/mark_produced_special', 'Markerat i veckovyn ✅', 'Kunde inte markera i veckovyn');
+      });
+    }
+    if(clearBtn){
+      clearBtn.addEventListener('click', function(){
+        runBulk('/api/planering/clear_produced_special', 'Rensat i veckovyn ✅', 'Kunde inte rensa i veckovyn');
+      });
+    }
+  }
 
   // Mode change: radios without inline handlers
   function kpSetMode(mode){
@@ -311,7 +345,6 @@
         if(cur == null) return undefined;
         cur = cur[parts[i]];
       }
-      initSpecialChips();
       return cur;
     } catch(e){ return undefined; }
   }
@@ -575,6 +608,9 @@
     });
     // Initial totals
     renderAllTotals();
+    // Initialize special chips and bulk-mark buttons once on load
+    initSpecialChips();
+    initBulkMarkButtons();
     // Event delegation for diet-chip toggling (normal mode UI only)
     document.addEventListener('click', function(e){
       var btn = e.target && e.target.closest && e.target.closest('.diet-chip');

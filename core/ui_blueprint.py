@@ -114,33 +114,68 @@ def api_weekview_specialdiets_mark():
             return resp, 200
         except Exception:
             return jsonify({"type": "about:blank", "title": "server_error"}), 500
-    else:
+
+# Planering bulk mark: set produced for all departments' special diets with count>0
+@ui_bp.post("/api/planering/mark_produced_special")
+@require_roles("superuser", "admin")
+def api_planering_mark_produced_special():
+    data = request.get_json(force=True) or {}
+    try:
+        site_id = str((data.get("site_id") or "").strip())
+        year = int(data.get("year"))
+        week = int(data.get("week"))
+        day_index = int(data.get("day_index"))
+        meal = str((data.get("meal") or "").strip().lower())
+        if meal not in ("lunch", "dinner"):
+            raise ValueError("bad_meal")
+    except Exception:
+        return jsonify({"error": "bad_request"}), 400
+    tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
+    if not tid:
+        return jsonify({"error": "missing_tenant"}), 400
+    # Resolve all departments for site
+    db = get_session()
+    try:
+        deps = db.execute(text("SELECT id FROM departments WHERE site_id=:s"), {"s": site_id}).fetchall()
+        dep_ids = [str(r[0]) for r in deps]
+    finally:
+        db.close()
+    if not dep_ids:
+        return jsonify({"error": "no_departments_for_site"}), 400
+    # Build operations per department: mark all diet types with defaults>0
+    from .admin_repo import DietDefaultsRepo
+    from .weekview.repo import WeekviewRepo
+    wrepo = WeekviewRepo()
+    day_of_week = int(day_index) + 1
+    total_ops = 0
+    for dep_id in dep_ids:
+        defaults = []
         try:
-            # Dept-scoped: use service-level strong ETag semantics
-            _ = svc.toggle_marks(tid, year, week, department_id, current_dept_etag, [op])
-            new_version = repo.get_version(tid, year, week, department_id)
-            new_etag = svc.build_etag(tid, department_id, year, week, new_version)
-            resp = jsonify({"status": "ok", "marked": desired_state})
-            resp.headers["ETag"] = new_etag
-            return resp, 200
-        except Exception as ex:
+            defaults = DietDefaultsRepo().list_for_department(dep_id) or []
+        except Exception:
+            defaults = []
+        ops = []
+        for it in defaults:
             try:
-                from .weekview.service import EtagMismatchError as _EME
-                if isinstance(ex, _EME):
-                    dbg = {
-                        "type": "about:blank",
-                        "title": "etag_mismatch",
-                        "raw_if_match": raw_if_match,
-                        "current_etag": current_etag,
-                        "norm_if_match": _norm_et(raw_if_match),
-                        "norm_current": _norm_et(current_etag),
-                    }
-                    resp = jsonify(dbg)
-                    resp.headers["ETag"] = current_etag
-                    return resp, 412
+                cnt = int(it.get("default_count") or 0)
+                dtid = str(it.get("diet_type_id"))
             except Exception:
-                pass
-            return jsonify({"type": "about:blank", "title": "server_error"}), 500
+                cnt, dtid = 0, None
+            if cnt > 0 and dtid:
+                ops.append({
+                    "day_of_week": day_of_week,
+                    "meal": meal,
+                    "diet_type": dtid,
+                    "marked": True,
+                })
+        if ops:
+            total_ops += len(ops)
+            try:
+                # Direct repo write; idempotent on SQLite via upsert
+                wrepo.apply_operations(tid, year, week, dep_id, ops)
+            except Exception:
+                return jsonify({"error": "server_error"}), 500
+    return jsonify({"ok": True, "marked_count": total_ops}), 200
 
 @ui_bp.get("/api/weekview/etag")
 @require_roles("superuser", "admin", "cook", "unit_portal")

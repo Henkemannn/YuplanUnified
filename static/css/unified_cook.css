@@ -252,10 +252,28 @@
     border-radius: 999px;
     padding: 8px 12px;
     font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 .diet-chip.active{
     background: #d1fae5;   /* mild grön */
     border-color: #34d399;
+}
+.diet-chip.is-mini{
+    font-size: 13px;
+    padding: 6px 10px;
+}
+.diet-chip .kp-chip-label{
+    font-weight: 600;
+}
+.diet-chip .kp-chip-badge{
+    font-size: 12px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    color: #374151;
 }
 
 /* ============================================================================
@@ -266,41 +284,62 @@
     flex-wrap:wrap;
     gap: 8px;
 }
-.kp-chip{
-    border: 1px solid #d1d5db;
-    background: #f9fafb;
-    border-radius: 999px;
-    padding: 8px 12px;
-    font-size: 14px;
-    display:inline-flex;
-    align-items:center;
-    gap: 6px;
-    cursor: pointer;
+
+.kp-bulk-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 8px;
+    margin-top: 10px;
 }
-.kp-chip.is-active{
-    background: #dbeafe;
-    border-color: #60a5fa;
-    box-shadow: 0 2px 8px rgba(59,130,246,.15);
+.kp-button-primary{
+    background: #1d4ed8;
+    color: #fff;
+    border-color: #1d4ed8;
 }
-.kp-chip[disabled]{
-    opacity: .45;
+.kp-button-secondary{
+    background: #f3f4f6;
+    color: #111827;
+    border-color: #d1d5db;
+}
+.kp-button-primary[disabled],
+.kp-button-secondary[disabled]{
+    opacity: .5;
     cursor: not-allowed;
-}
-.kp-chip-title{ font-weight: 600; }
-.kp-chip-meta{ opacity: .75; }
-.kp-chip-badge{
-    font-size: 12px;
-    opacity: .8;
-}
-.kp-chip.kp-chip--mini{
-    font-size: 13px;
-    padding: 6px 10px;
 }
 
 .kp-special-overview{
     display:flex;
     flex-wrap:wrap;
     gap: 12px 18px;
+}
+
+.kp-summary-details{
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    background: #fff;
+    padding: 8px 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.04);
+}
+.kp-summary-toggle{
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.kp-toast{
+    position: sticky;
+    bottom: 16px;
+    align-self: flex-start;
+    background: #ecfdf3;
+    border: 1px solid #86efac;
+    color: #14532d;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 14px;
+    display: none;
+    margin-top: 10px;
+}
+.kp-toast.is-visible{
+    display: inline-flex;
 }
 
 .kp-card-table{

@@ -428,3 +428,165 @@ def toggle_normal_exclusion():
             db.close()
         except Exception:
             pass
+
+
+@bp.post("/planering/mark_produced_special")
+@require_roles("superuser", "admin", "cook")
+@csrf_protect
+def mark_produced_special():
+    """Bulk mark special diets as produced in weekview.
+
+    Body JSON: {site_id, year, week, day_index, meal, diet_type_ids?: [..]}
+    Returns: {ok:true, marked:{total:N}}
+    """
+    tid = _tenant_id()
+    if tid is None:
+        return bad_request("tenant_missing")
+    try:
+        payload = request.get_json(force=True) or {}
+    except Exception:
+        payload = {}
+    site_id = str(payload.get("site_id") or "").strip()
+    try:
+        year = int(payload.get("year"))
+        week = int(payload.get("week"))
+        day_index = int(payload.get("day_index"))
+    except Exception:
+        return bad_request("invalid_parameters")
+    meal = str(payload.get("meal") or "").strip().lower()
+    diet_ids = payload.get("diet_type_ids")
+    if not isinstance(diet_ids, list):
+        diet_ids = []
+    diet_filter = {str(d) for d in diet_ids if str(d).strip()}
+    if not (site_id and 0 <= day_index <= 6 and meal in ("lunch", "dinner", "dessert")):
+        return bad_request("invalid_parameters")
+
+    ok = _validate_site_and_department(site_id, None)
+    if not ok:
+        return not_found("site_or_department_not_found")
+    _site_name, deps = ok
+
+    from .weekview.service import WeekviewService
+    from .weekview.repo import WeekviewRepo
+    svc = WeekviewService()
+    repo = WeekviewRepo()
+    dow = int(day_index) + 1
+    total_marked = 0
+
+    for dep in deps:
+        dep_id = str(dep.get("department_id"))
+        payload_wv, _etag = svc.fetch_weekview(tid, year, week, dep_id, site_id=site_id)
+        try:
+            summaries = payload_wv.get("department_summaries") or []
+            days = (summaries[0].get("days") if summaries else []) or []
+        except Exception:
+            days = []
+        day_obj = None
+        for d in days:
+            try:
+                if int(d.get("day_of_week")) == dow:
+                    day_obj = d
+                    break
+            except Exception:
+                continue
+        if not day_obj:
+            continue
+        diets = ((day_obj.get("diets") or {}).get(meal)) or []
+        ops = []
+        for it in diets:
+            try:
+                dtid = str(it.get("diet_type_id"))
+                cnt = int(it.get("resident_count") or 0)
+            except Exception:
+                continue
+            if cnt <= 0:
+                continue
+            if diet_filter and dtid not in diet_filter:
+                continue
+            ops.append({"day_of_week": dow, "meal": meal, "diet_type": dtid, "marked": True})
+        if ops:
+            repo.apply_operations(tid, year, week, dep_id, ops)
+            total_marked += len(ops)
+
+    return jsonify({"ok": True, "marked": {"total": total_marked}})
+
+
+@bp.post("/planering/clear_produced_special")
+@require_roles("superuser", "admin", "cook")
+@csrf_protect
+def clear_produced_special():
+    """Bulk clear special diet marks in weekview.
+
+    Body JSON: {site_id, year, week, day_index, meal, diet_type_ids?: [..]}
+    Returns: {ok:true, cleared:{total:N}}
+    """
+    tid = _tenant_id()
+    if tid is None:
+        return bad_request("tenant_missing")
+    try:
+        payload = request.get_json(force=True) or {}
+    except Exception:
+        payload = {}
+    site_id = str(payload.get("site_id") or "").strip()
+    try:
+        year = int(payload.get("year"))
+        week = int(payload.get("week"))
+        day_index = int(payload.get("day_index"))
+    except Exception:
+        return bad_request("invalid_parameters")
+    meal = str(payload.get("meal") or "").strip().lower()
+    diet_ids = payload.get("diet_type_ids")
+    if not isinstance(diet_ids, list):
+        diet_ids = []
+    diet_filter = {str(d) for d in diet_ids if str(d).strip()}
+    if not (site_id and 0 <= day_index <= 6 and meal in ("lunch", "dinner", "dessert")):
+        return bad_request("invalid_parameters")
+
+    ok = _validate_site_and_department(site_id, None)
+    if not ok:
+        return not_found("site_or_department_not_found")
+    _site_name, deps = ok
+
+    from .weekview.service import WeekviewService
+    from .weekview.repo import WeekviewRepo
+    svc = WeekviewService()
+    repo = WeekviewRepo()
+    dow = int(day_index) + 1
+    total_cleared = 0
+
+    for dep in deps:
+        dep_id = str(dep.get("department_id"))
+        payload_wv, _etag = svc.fetch_weekview(tid, year, week, dep_id, site_id=site_id)
+        try:
+            summaries = payload_wv.get("department_summaries") or []
+            days = (summaries[0].get("days") if summaries else []) or []
+        except Exception:
+            days = []
+        day_obj = None
+        for d in days:
+            try:
+                if int(d.get("day_of_week")) == dow:
+                    day_obj = d
+                    break
+            except Exception:
+                continue
+        if not day_obj:
+            continue
+        diets = ((day_obj.get("diets") or {}).get(meal)) or []
+        ops = []
+        for it in diets:
+            try:
+                dtid = str(it.get("diet_type_id"))
+                cnt = int(it.get("resident_count") or 0)
+            except Exception:
+                continue
+            if cnt <= 0:
+                continue
+            if diet_filter and dtid not in diet_filter:
+                continue
+            ops.append({"day_of_week": dow, "meal": meal, "diet_type": dtid, "marked": False})
+        if ops:
+            repo.apply_operations(tid, year, week, dep_id, ops)
+            total_cleared += len(ops)
+
+    return jsonify({"ok": True, "cleared": {"total": total_cleared}})

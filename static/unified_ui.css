@@ -208,6 +208,21 @@ a:hover {
     text-decoration: none;
     white-space: nowrap;
 }
+.kp-workcards { display: grid; gap: var(--yp-gap); grid-template-columns: 1fr; }
+@media (min-width: 900px) {
+    .kp-workcards { grid-template-columns: 1fr 1fr; }
+}
+.kp-workcard { background: var(--yp-color-bg); border: 1px solid var(--yp-color-border); border-radius: var(--yp-radius-lg); box-shadow: var(--yp-shadow-md); padding: var(--yp-gap); }
+.kp-workcard-header h3 { margin-bottom: var(--yp-gap-sm); }
+.kp-menu-line { color: var(--yp-color-text-muted); font-size: var(--yp-font-size-sm); }
+.kp-workcard-body { display: grid; gap: var(--yp-gap); grid-template-columns: 1fr; }
+@media (min-width: 900px) {
+    .kp-workcard-body { grid-template-columns: 1fr 1fr; }
+}
+.kp-chiprow { display: flex; flex-wrap: wrap; gap: var(--yp-gap-sm); }
+.kp-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 9999px; background: var(--yp-color-secondary-light); color: var(--yp-color-text); }
+.kp-chip-label { font-weight: var(--yp-font-weight-medium); }
+.kp-chip-badge { min-width: 24px; height: 24px; padding: 0 8px; border-radius: 9999px; background: var(--yp-color-primary-light); color: var(--yp-color-primary); display: inline-flex; align-items: center; justify-content: center; font-weight: var(--yp-font-weight-bold); }
 
 .yp-btn:focus {
     outline: 2px solid var(--yp-color-primary);

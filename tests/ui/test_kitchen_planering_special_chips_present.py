@@ -31,6 +31,7 @@ def _seed_minimal(site_id: str, dept_id: str):
         db.close()
     types_repo = DietTypesRepo()
     dt_id = types_repo.create(site_id=site_id, name="Glutenfri", default_select=False)
+    dt_numeric = types_repo.create(site_id=site_id, name="1", default_select=False)
     db = get_session()
     try:
         db.execute(text(
@@ -46,19 +47,29 @@ def _seed_minimal(site_id: str, dept_id: str):
         db.execute(text(
             "INSERT OR REPLACE INTO department_diet_defaults(department_id, diet_type_id, default_count)\n             VALUES(:d, :t, 3)"
         ), {"d": dept_id, "t": str(dt_id)})
+        db.execute(text(
+            "INSERT OR REPLACE INTO department_diet_defaults(department_id, diet_type_id, default_count)\n             VALUES(:d, :t, 1)"
+        ), {"d": dept_id, "t": str(dt_numeric)})
         db.commit()
     finally:
         db.close()
-    return dt_id
+    return dt_id, dt_numeric
 
 
 def test_special_chips_present(app_session):
     client = app_session.test_client()
     site_id = "site-plan-chips"
     dept_id = "dept-plan-chips"
-    _seed_minimal(site_id, dept_id)
+    _dt_id, dt_numeric = _seed_minimal(site_id, dept_id)
     rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch&mode=special", headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
+    assert "diet-chip" in html
     assert "js-special-chip" in html
     assert "data-diet-id" in html
+    assert "kp-chip-badge" in html
+    assert "kp-chip-meta" not in html
+    assert "Klart" not in html
+    assert "Återstår" not in html
+    assert f"Okänd kosttyp (#{dt_numeric})" in html
+    assert "Markera producerat i veckovyn" in html

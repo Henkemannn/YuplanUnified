@@ -6,10 +6,12 @@
   .cook-header, .cook-footer { display: none !important; }
   .kp-controls { display: none !important; }
   .kp-toggle { display: none !important; }
-  .kp-card form { display: none !important; }
-  .empty-text { display: none !important; }
+  .kp-card form, .kp-toolbar, .kp-day-buttons, .kp-meal-buttons, .empty-state { display: none !important; }
   .kp-card { box-shadow: none !important; border: none !important; }
   .summary-cards .kp-card { border: 1px solid #999 !important; }
+  /* Print only the workcards */
+  .kp-workcards { display: block !important; }
+  .planning-result, .summary-cards, .grid-table { display: none !important; }
   h1.section-title { font-size: 1.4rem; margin: 0 0 6px 0; }
   h3 { margin-top: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }

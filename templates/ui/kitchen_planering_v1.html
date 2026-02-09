@@ -133,22 +133,32 @@
                 <div class="kp-chip-grid" data-mode="special" role="group" aria-label="Specialkoster att anpassa">
                   {% for item in vm.special_summary.totals %}
                     {% if item.count > 0 %}
+                      {% set raw_name = (item.diet_type_name|string) %}
+                      {% set is_numeric = raw_name.isdigit() %}
+                      {% set display_name = (('Okänd kosttyp (#' ~ item.diet_type_id ~ ')') if (is_numeric or (not item.diet_type_name)) else item.diet_type_name) %}
                       <button type="button"
-                              class="kp-chip js-special-chip {% if item.diet_type_id in (vm.selected_diets or []) %}is-active{% endif %}"
+                              class="diet-chip js-special-chip {% if item.diet_type_id in (vm.selected_diets or []) %}active{% endif %}"
                               data-diet-id="{{ item.diet_type_id }}"
                               data-total="{{ item.count }}"
                               data-done="{{ item.done }}"
-                              data-name="{{ item.diet_type_name }}"
+                              data-name="{{ display_name }}"
                               aria-pressed="{% if item.diet_type_id in (vm.selected_diets or []) %}true{% else %}false{% endif %}">
-                        <span class="kp-chip-title">{{ item.diet_type_name }}</span>
-                        <span class="kp-chip-meta">({{ item.count }})</span>
-                        <span class="kp-chip-badge">Klart {{ item.done }}/{{ item.count }}</span>
+                        <span class="kp-chip-label">{{ display_name }}</span>
+                        <span class="kp-chip-badge">{{ item.count }}</span>
                       </button>
                     {% endif %}
                   {% endfor %}
                 </div>
+                {% set has_specials = (vm.special_summary.totals | selectattr('count','gt',0) | list | length > 0) %}
+                <div class="kp-bulk-actions">
+                  <button type="button" class="kp-button kp-button-primary js-bulk-mark" {% if not has_specials %}disabled{% endif %}>Markera producerat i veckovyn</button>
+                  <button type="button" class="kp-button kp-button-secondary js-bulk-clear" {% if not has_specials %}disabled{% endif %}>Rensa markeringar i veckovyn</button>
+                </div>
               {% else %}
                 <p class="empty-text">Inga specialkoster för vald dag.</p>
+                <div class="kp-bulk-actions">
+                  <button type="button" class="kp-button kp-button-primary js-bulk-mark" disabled>Markera producerat i veckovyn</button>
+                </div>
               {% endif %}
             </div>
           {% else %}
@@ -220,64 +230,54 @@
           {% endif %}
 
           {% if cur_mode == 'special' %}
-            <div class="kp-card kp-mb-12">
-              <h2 class="kp-h2-tight">Specialkost – översikt</h2>
-              {% if vm.special_summary %}
-                <div class="kp-special-overview" aria-live="polite">
-                  <div>Totalt special: <strong id="kp-special-total">{{ vm.special_summary.special_total }}</strong></div>
-                  <div>Klart (markerat): <strong id="kp-special-done">{{ vm.special_summary.done_total }}</strong></div>
-                  <div>Återstår: <strong id="kp-special-remaining">{{ vm.special_summary.remaining_total }}</strong></div>
-                </div>
-              {% else %}
-                <p class="empty-text">Ingen sammanställning tillgänglig.</p>
-              {% endif %}
-            </div>
-
             {% if vm.special_summary and vm.special_summary.totals and vm.special_summary.totals|length > 0 %}
-              <div class="kp-card kp-mb-12">
-                <h3>Specialkost – sammanställning</h3>
-                <table class="grid-table kp-mt-6 kp-card-table">
-                  <thead><tr><th>Kosttyp</th><th>Totalt</th><th>Klart</th></tr></thead>
-                  <tbody>
-                    {% for it in vm.special_summary.totals %}
-                      <tr>
-                        <td class="kp-text-left">{{ it.diet_type_name }}</td>
-                        <td>{{ it.count }}</td>
-                        <td>{{ it.done }}</td>
-                      </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
+              <details class="kp-summary-details">
+                <summary class="kp-summary-toggle">Visa sammanställning</summary>
+                <div class="kp-card kp-mb-12">
+                  <h3>Specialkost – sammanställning</h3>
+                  <table class="grid-table kp-mt-6 kp-card-table">
+                    <thead><tr><th>Kosttyp</th><th>Totalt</th></tr></thead>
+                    <tbody>
+                      {% for it in vm.special_summary.totals %}
+                        <tr>
+                          <td class="kp-text-left">{{ it.diet_type_name }}</td>
+                          <td>{{ it.count }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
             {% endif %}
 
             {% if vm.special_summary and vm.special_summary.per_department and vm.special_summary.per_department|length > 0 %}
-              <div class="kp-card kp-mb-12">
-                <h3>Per avdelning</h3>
-                <div class="kp-accordion-list">
-                  {% for dep in vm.special_summary.per_department %}
-                    <details class="kp-accordion">
-                      <summary class="kp-accordion-summary">{{ dep.department_name }}</summary>
-                      {% if dep['items'] and dep['items']|length > 0 %}
-                        <table class="grid-table kp-mt-6 kp-card-table">
-                          <thead><tr><th>Kosttyp</th><th>Totalt</th><th>Klart</th></tr></thead>
-                          <tbody>
-                            {% for row in dep['items'] %}
-                              <tr>
-                                <td class="kp-text-left">{{ row.diet_type_name }}</td>
-                                <td>{{ row.count }}</td>
-                                <td>{% if row.done %}{{ row.count }}{% else %}0{% endif %}</td>
-                              </tr>
-                            {% endfor %}
-                          </tbody>
-                        </table>
-                      {% else %}
-                        <div class="empty-text">Inget att anpassa.</div>
-                      {% endif %}
-                    </details>
-                  {% endfor %}
+              <details class="kp-summary-details">
+                <summary class="kp-summary-toggle">Visa per avdelning</summary>
+                <div class="kp-card kp-mb-12">
+                  <div class="kp-accordion-list">
+                    {% for dep in vm.special_summary.per_department %}
+                      <details class="kp-accordion">
+                        <summary class="kp-accordion-summary">{{ dep.department_name }}</summary>
+                        {% if dep['items'] and dep['items']|length > 0 %}
+                          <table class="grid-table kp-mt-6 kp-card-table">
+                            <thead><tr><th>Kosttyp</th><th>Totalt</th></tr></thead>
+                            <tbody>
+                              {% for row in dep['items'] %}
+                                <tr>
+                                  <td class="kp-text-left">{{ row.diet_type_name }}</td>
+                                  <td>{{ row.count }}</td>
+                                </tr>
+                              {% endfor %}
+                            </tbody>
+                          </table>
+                        {% else %}
+                          <div class="empty-text">Inget att anpassa.</div>
+                        {% endif %}
+                      </details>
+                    {% endfor %}
+                  </div>
                 </div>
-              </div>
+              </details>
             {% endif %}
 
             <h3>Tillagningslista – Specialkost <span class="yp-sr-only">(Anpassningslista)</span></h3>
@@ -301,6 +301,7 @@
               <div id="kp-special-selected-empty" class="empty-text">Välj specialkoster ovan för att bygga tillagningslistan.</div>
               <div id="kp-special-selected-list" class="kp-special-selected-list"></div>
             </div>
+            <div id="kp-toast" class="kp-toast" role="status" aria-live="polite"></div>
           {% endif %}
 
           {% if cur_mode == 'normal' %}
@@ -368,6 +369,55 @@
               <p class="empty-text">Inga data för normalkost.</p>
             {% endif %}
           {% endif %}
+        </div>
+        <!-- Arbetskort: sammanfattad tillagningslista -->
+        <div class="kp-workcards">
+          <div class="kp-workcard">
+            <div class="kp-workcard-header">
+              <h3>Tillagningslista – {{ vm.day_labels[vm.selected_day] }} {{ 'Lunch' if vm.selected_meal=='lunch' else 'Kvällsmat' }} (v{{ vm.week }})</h3>
+              <div class="kp-menu-line">Meny: <span>
+                {% if vm.selected_meal == 'lunch' %}
+                  {{ vm.header_menu.alt1 or vm.header_menu.alt2 or 'Ingen meny publicerad' }}
+                {% elif vm.selected_meal == 'dinner' %}
+                  {{ vm.header_menu.dinner or 'Ingen meny publicerad' }}
+                {% else %}
+                  {{ vm.header_menu.dessert or 'Ingen meny publicerad' }}
+                {% endif %}
+              </span></div>
+              <button class="kp-button js-print" style="margin-top:8px;">Skriv ut</button>
+            </div>
+            <div class="kp-workcard-body">
+              <div class="kp-workcol">
+                <h4>Normalkost</h4>
+                {% if vm.selected_meal == 'lunch' %}
+                  <div class="kp-chiprow">
+                    <span class="kp-chip"><span class="kp-chip-label">Alt 1</span><span class="kp-chip-badge">{{ vm.normalkost_sum.alt1 }}</span></span>
+                    <span class="kp-chip"><span class="kp-chip-label">Alt 2</span><span class="kp-chip-badge">{{ vm.normalkost_sum.alt2 }}</span></span>
+                    <span class="kp-chip"><span class="kp-chip-label">Menyval</span><span class="kp-chip-badge">{{ vm.normalkost_sum.alt1 + vm.normalkost_sum.alt2 }}</span></span>
+                  </div>
+                {% else %}
+                  <div class="kp-chiprow">
+                    <span class="kp-chip"><span class="kp-chip-label">Totalt</span><span class="kp-chip-badge">{{ vm.normalkost_sum.total }}</span></span>
+                  </div>
+                {% endif %}
+              </div>
+              <div class="kp-workcol">
+                <h4>Specialkost</h4>
+                {% if vm.adaptation and vm.adaptation|length > 0 %}
+                  <div class="kp-chiprow">
+                    {% for item in vm.adaptation %}
+                      <span class="kp-chip"><span class="kp-chip-label">{{ item.diet_type_name }}</span><span class="kp-chip-badge">{{ item.total_count }}</span></span>
+                    {% endfor %}
+                  </div>
+                  <div style="margin-top:10px;">
+                    <button type="button" class="kp-button js-bulk-mark" {% if not vm.adaptation or vm.adaptation|length == 0 %}disabled{% endif %}>Markera producerat i veckovyn</button>
+                  </div>
+                {% else %}
+                  <p class="empty-text">Inga valda specialkoster.</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
         </div>
       {% endif %}
     </div>
