@@ -42,6 +42,7 @@
 
 ### Changed
 - Non-pilot 403 legacy envelopes now include `required_role` consistently
+- Report export ETag now aggregates versions across departments to ensure any department update invalidates cached exports.
 
 ### Docs
 - README and SECURITY updated with pilot scope, examples, and rollout plan
