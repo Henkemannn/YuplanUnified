@@ -89,11 +89,8 @@ def test_planering_summary_numbers(app_session):
     rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&year={year}&week={week}&day=0&meal=lunch&selected_diets={dt_id}&show_results=1", headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    # Totals cards must show numbers
-    assert ">10<" in html or ">10</div>" in html
-    assert ">3<" in html
-    # Normal = 7
-    assert ">7<" in html
-    # Special summary table should include diet name and counts
-    assert "Specialkost – sammanställning" in html
+    # Worklist should include the selected diet and department rows
+    assert "Specialkost – arbetslista" in html
     assert "Glutenfri" in html
+    assert "Avd 1" in html
+    assert ">3<" in html

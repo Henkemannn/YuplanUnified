@@ -33,8 +33,6 @@ def test_dispatch_totals_selected_diet(app_session):
     assert ">33<" in html or ">33</div>" in html
     assert ">9<" in html
     assert ">24<" in html
-    # Per-department summary should include department rows
-    assert "Visa per avdelning" in html
-    assert "Avd A" in html
-    assert "Avd B" in html
-    assert "Avd C" in html
+    # Worklist actions should be present
+    assert "Specialkost – arbetslista" in html
+    assert "Sammanfatta per boende" in html

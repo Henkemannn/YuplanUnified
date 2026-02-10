@@ -52,11 +52,6 @@ def test_unknown_diet_fallback_and_disabled(app_session):
     )
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    # Fallback label should appear and button should be disabled
-    assert f"Okänd kosttyp (#{dt_id})" in html
-    assert f"data-diet-id=\"{dt_id}\"" in html
-    # Disabled attribute present on chip
-    idx = html.find(f"data-diet-id=\"{dt_id}\"")
-    assert idx != -1
-    snippet = html[max(0, idx-120):idx+200]
-    assert "disabled" in snippet
+    # Invalid diets should not render at all
+    assert f"Okänd kosttyp (#{dt_id})" not in html
+    assert f"data-diet-id=\"{dt_id}\"" not in html

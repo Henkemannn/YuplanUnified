@@ -9,11 +9,11 @@
   <link rel="stylesheet" href="/static/unified_ui.css">
   <link rel="stylesheet" href="/static/css/kitchen_planering_print.css">
 </head>
-<body class="cook-dashboard">
+{% set _req_mode = request.args.get('mode') %}
+{% set cur_mode = _req_mode if _req_mode in ['special','normal'] else 'special' %}
+<body class="cook-dashboard" data-print-mode="{{ 'normal' if cur_mode == 'normal' else 'special' }}">
   <div class="cook-content">
     <h1 class="section-title">Kök – Planering</h1>
-    {% set _req_mode = request.args.get('mode') %}
-    {% set cur_mode = _req_mode if _req_mode in ['special','normal'] else 'special' %}
     {% set show_results = (request.args.get('show_results') == '1') %}
 
     <!-- Steg 1: Mode -->
@@ -69,7 +69,7 @@
               class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}">🌙 Kvällsmat</a>
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dessert"
                class="kp-button {% if vm.selected_meal == 'dessert' %}is-active{% endif %}">🍮 Dessert</a>
-            <button class="kp-button js-print">Skriv ut</button>
+            <button class="kp-button js-print">🖨 Skriv ut</button>
             {% if vm.selected_day is not none %}
               <button type="button"
                       class="yp-button"
@@ -79,9 +79,9 @@
                       data-week="{{ vm.week }}"
                       data-day-index="{{ vm.selected_day }}"
                       {% if vm.selected_meal %}data-focus-meal="{{ vm.selected_meal }}"{% endif %}
-              >Visa meny</button>
+              >📋 Visa meny</button>
             {% else %}
-              <button type="button" class="yp-button" data-action="open-menu-modal" disabled>Visa meny</button>
+              <button type="button" class="yp-button" data-action="open-menu-modal" disabled>📋 Visa meny</button>
             {% endif %}
           </div>
         </div>
@@ -97,32 +97,57 @@
           <p class="empty-text">Planeringen visas här när du gjort ett val.</p>
         </div>
       {% else %}
-        <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-meal="{{ vm.selected_meal }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}">
+        <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}'>
           <div class="kp-card kp-mb-12">
             <h2 class="kp-h2-tight">Vad planerar vi?</h2>
             <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap">
               <div>Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
             </div>
-            {% if vm.selected_meal == 'lunch' %}
-            <div class="alt-banners">
-              <span class="alt-banner alt1">
-                <span class="label">Alt 1:</span>
-                <span class="dish"><strong id="kp-lunch-alt1">{{ vm.header_menu.alt1 or '—' }}</strong></span>
-              </span>
-              <span class="alt-banner alt2">
-                <span class="label">Alt 2:</span>
-                <span class="dish"><strong id="kp-lunch-alt2" class="is-alt2 alt2-text">{{ vm.header_menu.alt2 or '—' }}</strong></span>
-              </span>
-            </div>
-            {% elif vm.selected_meal == 'dinner' %}
-              <div>Kvällsmat: <strong id="kp-dinner-main">{{ vm.header_menu.dinner or '—' }}</strong></div>
+            {% if cur_mode == 'special' %}
+              {% if vm.selected_meal == 'lunch' %}
+                <div class="kp-what-grid">
+                  <div class="kp-what-row">
+                    <label for="kp-what-alt1">Lunch – Alt 1</label>
+                    <input id="kp-what-alt1" type="text" class="yp-input kp-what-input" placeholder="Alt 1" value="{{ vm.header_menu.alt1 or '' }}">
+                  </div>
+                  <div class="kp-what-row is-alt2">
+                    <label for="kp-what-alt2">Lunch – Alt 2</label>
+                    <input id="kp-what-alt2" type="text" class="yp-input kp-what-input is-alt2" placeholder="Alt 2" value="{{ vm.header_menu.alt2 or '' }}">
+                  </div>
+                </div>
+              {% elif vm.selected_meal == 'dinner' %}
+                <div class="kp-what-grid">
+                  <div class="kp-what-row">
+                    <label for="kp-what-dinner">Kvällsmat</label>
+                    <input id="kp-what-dinner" type="text" class="yp-input kp-what-input" placeholder="Kvällsmat" value="{{ vm.header_menu.dinner or '' }}">
+                  </div>
+                </div>
+              {% else %}
+                <div class="kp-what-grid">
+                  <div class="kp-what-row">
+                    <label for="kp-what-dessert">Dessert</label>
+                    <input id="kp-what-dessert" type="text" class="yp-input kp-what-input" placeholder="Dessert" value="{{ vm.header_menu.dessert or '' }}">
+                  </div>
+                </div>
+              {% endif %}
             {% else %}
-              <div>Dessert: <strong id="kp-dessert-main">{{ vm.header_menu.dessert or '—' }}</strong></div>
+              {% if vm.selected_meal == 'lunch' %}
+              <div class="alt-banners">
+                <span class="alt-banner alt1">
+                  <span class="label">Alt 1:</span>
+                  <span class="dish"><strong id="kp-lunch-alt1">{{ vm.header_menu.alt1 or '—' }}</strong></span>
+                </span>
+                <span class="alt-banner alt2">
+                  <span class="label">Alt 2:</span>
+                  <span class="dish"><strong id="kp-lunch-alt2" class="is-alt2 alt2-text">{{ vm.header_menu.alt2 or '—' }}</strong></span>
+                </span>
+              </div>
+              {% elif vm.selected_meal == 'dinner' %}
+                <div>Kvällsmat: <strong id="kp-dinner-main">{{ vm.header_menu.dinner or '—' }}</strong></div>
+              {% else %}
+                <div>Dessert: <strong id="kp-dessert-main">{{ vm.header_menu.dessert or '—' }}</strong></div>
+              {% endif %}
             {% endif %}
-            <div class="kp-mb-10">
-              <label for="whatToCook">Vad ska vi laga?</label>
-              <input id="whatToCook" type="text" class="yp-input is-pristine" placeholder="t.ex. kall örtsås">
-            </div>
           </div>
 
           <!-- Formulär steg 3 enligt läge -->
@@ -132,33 +157,21 @@
               {% if vm.special_summary and vm.special_summary.totals and vm.special_summary.totals|length > 0 %}
                 <div class="kp-chip-grid" data-mode="special" role="group" aria-label="Specialkoster att anpassa">
                   {% for item in vm.special_summary.totals %}
-                    {% if item.count > 0 %}
-                      {% set raw_name = (item.diet_type_name|string) %}
-                      {% set is_numeric = raw_name.isdigit() %}
-                      {% set display_name = (('Okänd kosttyp (#' ~ item.diet_type_id ~ ')') if (is_numeric or (not item.diet_type_name)) else item.diet_type_name) %}
+                    {% if item.count > 0 and item.diet_type_name and (not (item.diet_type_name|string).isdigit()) %}
                       <button type="button"
                               class="diet-chip js-special-chip {% if item.diet_type_id in (vm.selected_diets or []) %}active{% endif %}"
                               data-diet-id="{{ item.diet_type_id }}"
                               data-total="{{ item.count }}"
                               data-done="{{ item.done }}"
-                              data-name="{{ display_name }}"
+                              data-name="{{ item.diet_type_name }}"
                               aria-pressed="{% if item.diet_type_id in (vm.selected_diets or []) %}true{% else %}false{% endif %}">
-                        <span class="kp-chip-label">{{ display_name }}</span>
-                        <span class="kp-chip-badge">{{ item.count }}</span>
+                        <span class="kp-chip-label">{{ item.diet_type_name }}</span>
                       </button>
                     {% endif %}
                   {% endfor %}
                 </div>
-                {% set has_specials = (vm.special_summary.totals | selectattr('count','gt',0) | list | length > 0) %}
-                <div class="kp-bulk-actions">
-                  <button type="button" class="kp-button kp-button-primary js-bulk-mark" {% if not has_specials %}disabled{% endif %}>Markera producerat i veckovyn</button>
-                  <button type="button" class="kp-button kp-button-secondary js-bulk-clear" {% if not has_specials %}disabled{% endif %}>Rensa markeringar i veckovyn</button>
-                </div>
               {% else %}
                 <p class="empty-text">Inga specialkoster för vald dag.</p>
-                <div class="kp-bulk-actions">
-                  <button type="button" class="kp-button kp-button-primary js-bulk-mark" disabled>Markera producerat i veckovyn</button>
-                </div>
               {% endif %}
             </div>
           {% else %}
@@ -174,11 +187,13 @@
                       <div class="diet-chips" role="group" aria-label="Specialkoster – Alt 1">
                         {% for opt in vm.diet_options %}
                           {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
-                          <button type="button"
-                                  class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
-                                  data-alt="1"
-                                  data-diet-id="{{ opt.diet_type_id }}"
-                                  data-total-count="{{ opt.total_count }}" {% if is_unknown %}disabled aria-disabled="true"{% endif %}>{% if is_unknown %}Okänd kosttyp (#{{ opt.diet_type_id }}){% else %}{{ opt.diet_type_name }}{% endif %}</button>
+                          {% if not is_unknown %}
+                            <button type="button"
+                                    class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
+                                    data-alt="1"
+                                    data-diet-id="{{ opt.diet_type_id }}"
+                                    data-total-count="{{ opt.total_count }}">{{ opt.diet_type_name }}</button>
+                          {% endif %}
                         {% endfor %}
                       </div>
                     </div>
@@ -191,11 +206,13 @@
                       <div class="diet-chips" role="group" aria-label="Specialkoster – Alt 2">
                         {% for opt in vm.diet_options %}
                           {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
-                          <button type="button"
-                                  class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('2') or [])) %}active{% endif %}"
-                                  data-alt="2"
-                                  data-diet-id="{{ opt.diet_type_id }}"
-                                  data-total-count="{{ opt.total_count }}" {% if is_unknown %}disabled aria-disabled="true"{% endif %}>{% if is_unknown %}Okänd kosttyp (#{{ opt.diet_type_id }}){% else %}{{ opt.diet_type_name }}{% endif %}</button>
+                          {% if not is_unknown %}
+                            <button type="button"
+                                    class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('2') or [])) %}active{% endif %}"
+                                    data-alt="2"
+                                    data-diet-id="{{ opt.diet_type_id }}"
+                                    data-total-count="{{ opt.total_count }}">{{ opt.diet_type_name }}</button>
+                          {% endif %}
                         {% endfor %}
                       </div>
                     </div>
@@ -230,78 +247,49 @@
           {% endif %}
 
           {% if cur_mode == 'special' %}
-            {% if vm.special_summary and vm.special_summary.totals and vm.special_summary.totals|length > 0 %}
-              <details class="kp-summary-details">
-                <summary class="kp-summary-toggle">Visa sammanställning</summary>
-                <div class="kp-card kp-mb-12">
-                  <h3>Specialkost – sammanställning</h3>
-                  <table class="grid-table kp-mt-6 kp-card-table">
-                    <thead><tr><th>Kosttyp</th><th>Totalt</th></tr></thead>
-                    <tbody>
-                      {% for it in vm.special_summary.totals %}
-                        <tr>
-                          <td class="kp-text-left">{{ it.diet_type_name }}</td>
-                          <td>{{ it.count }}</td>
-                        </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+            <div class="kp-card kp-mb-12">
+              <div class="kp-worklist-header">
+                <h3>Specialkost – arbetslista</h3>
+                <div class="kp-worklist-actions">
+                  <button type="button" class="kp-button js-open-dept-summary">Sammanfatta per boende</button>
+                  {% set has_specials = (vm.special_summary and vm.special_summary.totals and (vm.special_summary.totals | selectattr('count','gt',0) | list | length > 0)) %}
+                  <button type="button" class="kp-button kp-button-primary js-bulk-mark" {% if not has_specials %}disabled{% endif %}>Markera som gjorda i veckolistan</button>
                 </div>
-              </details>
-            {% endif %}
-
-            {% if vm.special_summary and vm.special_summary.per_department and vm.special_summary.per_department|length > 0 %}
-              <details class="kp-summary-details">
-                <summary class="kp-summary-toggle">Visa per avdelning</summary>
-                <div class="kp-card kp-mb-12">
-                  <div class="kp-accordion-list">
-                    {% for dep in vm.special_summary.per_department %}
-                      <details class="kp-accordion">
-                        <summary class="kp-accordion-summary">{{ dep.department_name }}</summary>
-                        {% if dep['items'] and dep['items']|length > 0 %}
-                          <table class="grid-table kp-mt-6 kp-card-table">
-                            <thead><tr><th>Kosttyp</th><th>Totalt</th></tr></thead>
-                            <tbody>
-                              {% for row in dep['items'] %}
-                                <tr>
-                                  <td class="kp-text-left">{{ row.diet_type_name }}</td>
-                                  <td>{{ row.count }}</td>
-                                </tr>
-                              {% endfor %}
-                            </tbody>
-                          </table>
-                        {% else %}
-                          <div class="empty-text">Inget att anpassa.</div>
-                        {% endif %}
-                      </details>
-                    {% endfor %}
-                  </div>
-                </div>
-              </details>
-            {% endif %}
-
-            <h3>Tillagningslista – Specialkost <span class="yp-sr-only">(Anpassningslista)</span></h3>
-            <div class="kp-card kp-my-8">
-              <div class="kp-muted-line">Vecka <strong>{{ vm.week }}</strong> · Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong> · Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
-              <div>Rätt: <strong id="kp-planering-title">
-                {% if vm.selected_meal == 'lunch' %}
-                  {{ vm.header_menu.alt1 or vm.header_menu.alt2 or '—' }}
-                {% elif vm.selected_meal == 'dinner' %}
-                  {{ vm.header_menu.dinner or '—' }}
-                {% else %}
-                  {{ vm.header_menu.dessert or '—' }}
-                {% endif %}
-              </strong></div>
-            </div>
-            <div class="kp-card kp-mb-12" id="kp-special-selected">
-              <div class="kp-special-selected-summary" aria-live="polite">
-                <div>Valda specialkoster: <strong id="kp-special-selected-count">0</strong></div>
-                <div>Totalt: <strong id="kp-special-selected-total">0</strong></div>
               </div>
-              <div id="kp-special-selected-empty" class="empty-text">Välj specialkoster ovan för att bygga tillagningslistan.</div>
-              <div id="kp-special-selected-list" class="kp-special-selected-list"></div>
+              <div id="kp-special-selected-empty" class="empty-text">Välj specialkoster ovan för att bygga arbetslistan.</div>
+              <div id="kp-special-worklist" class="kp-special-worklist" aria-live="polite">
+                {% if vm.selected_diets and vm.special_summary and vm.special_summary.per_department %}
+                  {% for diet_id in vm.selected_diets %}
+                    {% set diet_label = diet_id %}
+                    {% set diet_total = 0 %}
+                    {% for t in vm.special_summary.totals %}
+                      {% if t.diet_type_id == diet_id %}
+                        {% set diet_label = t.diet_type_name %}
+                        {% set diet_total = t.count %}
+                      {% endif %}
+                    {% endfor %}
+                    <div class="kp-worklist-group" data-diet-id="{{ diet_id }}">
+                      <div class="kp-worklist-title">{{ diet_label }} <span class="kp-worklist-total">{{ diet_total }}</span></div>
+                      <div class="kp-worklist-rows">
+                        {% for dep in vm.special_summary.per_department %}
+                          {% for row in dep['items'] %}
+                            {% if row.diet_type_id == diet_id %}
+                              {% set is_alt2 = (vm.selected_meal == 'lunch' and (dep.department_id in (vm.alt_groups.alt2_dept_ids or []))) %}
+                              <div class="kp-worklist-row {% if is_alt2 %}is-alt2-row{% endif %}">
+                                <span class="kp-row-name">{{ dep.department_name }}</span>
+                                <span class="kp-row-count">{{ row.count }}</span>
+                                {% if is_alt2 %}<span class="kp-row-alt2">Alt 2</span>{% endif %}
+                              </div>
+                            {% endif %}
+                          {% endfor %}
+                        {% endfor %}
+                      </div>
+                    </div>
+                  {% endfor %}
+                {% endif %}
+              </div>
+              <div id="kp-toast" class="kp-toast" role="status" aria-live="polite"></div>
             </div>
-            <div id="kp-toast" class="kp-toast" role="status" aria-live="polite"></div>
           {% endif %}
 
           {% if cur_mode == 'normal' %}
@@ -370,55 +358,6 @@
             {% endif %}
           {% endif %}
         </div>
-        <!-- Arbetskort: sammanfattad tillagningslista -->
-        <div class="kp-workcards">
-          <div class="kp-workcard">
-            <div class="kp-workcard-header">
-              <h3>Tillagningslista – {{ vm.day_labels[vm.selected_day] }} {{ 'Lunch' if vm.selected_meal=='lunch' else 'Kvällsmat' }} (v{{ vm.week }})</h3>
-              <div class="kp-menu-line">Meny: <span>
-                {% if vm.selected_meal == 'lunch' %}
-                  {{ vm.header_menu.alt1 or vm.header_menu.alt2 or 'Ingen meny publicerad' }}
-                {% elif vm.selected_meal == 'dinner' %}
-                  {{ vm.header_menu.dinner or 'Ingen meny publicerad' }}
-                {% else %}
-                  {{ vm.header_menu.dessert or 'Ingen meny publicerad' }}
-                {% endif %}
-              </span></div>
-              <button class="kp-button js-print" style="margin-top:8px;">Skriv ut</button>
-            </div>
-            <div class="kp-workcard-body">
-              <div class="kp-workcol">
-                <h4>Normalkost</h4>
-                {% if vm.selected_meal == 'lunch' %}
-                  <div class="kp-chiprow">
-                    <span class="kp-chip"><span class="kp-chip-label">Alt 1</span><span class="kp-chip-badge">{{ vm.normalkost_sum.alt1 }}</span></span>
-                    <span class="kp-chip"><span class="kp-chip-label">Alt 2</span><span class="kp-chip-badge">{{ vm.normalkost_sum.alt2 }}</span></span>
-                    <span class="kp-chip"><span class="kp-chip-label">Menyval</span><span class="kp-chip-badge">{{ vm.normalkost_sum.alt1 + vm.normalkost_sum.alt2 }}</span></span>
-                  </div>
-                {% else %}
-                  <div class="kp-chiprow">
-                    <span class="kp-chip"><span class="kp-chip-label">Totalt</span><span class="kp-chip-badge">{{ vm.normalkost_sum.total }}</span></span>
-                  </div>
-                {% endif %}
-              </div>
-              <div class="kp-workcol">
-                <h4>Specialkost</h4>
-                {% if vm.adaptation and vm.adaptation|length > 0 %}
-                  <div class="kp-chiprow">
-                    {% for item in vm.adaptation %}
-                      <span class="kp-chip"><span class="kp-chip-label">{{ item.diet_type_name }}</span><span class="kp-chip-badge">{{ item.total_count }}</span></span>
-                    {% endfor %}
-                  </div>
-                  <div style="margin-top:10px;">
-                    <button type="button" class="kp-button js-bulk-mark" {% if not vm.adaptation or vm.adaptation|length == 0 %}disabled{% endif %}>Markera producerat i veckovyn</button>
-                  </div>
-                {% else %}
-                  <p class="empty-text">Inga valda specialkoster.</p>
-                {% endif %}
-              </div>
-            </div>
-          </div>
-        </div>
       {% endif %}
     </div>
 
@@ -426,9 +365,84 @@
 
   {% include "ui/_menu_modal.html" %}
 
+  <div id="dept-summary-modal" class="kp-modal" aria-hidden="true">
+    <div class="kp-modal-card" role="dialog" aria-modal="true" aria-labelledby="dept-summary-title">
+      <div class="kp-modal-header">
+        <h3 id="dept-summary-title">Sammanfattning per boende</h3>
+        <div class="kp-modal-actions">
+          <button type="button" class="kp-button js-print-modal">🖨 Skriv ut</button>
+          <button type="button" class="kp-button" id="close-dept-summary">Stäng</button>
+        </div>
+      </div>
+      <div class="kp-modal-print-header" id="kp-modal-print-header"></div>
+      <div class="kp-modal-body" id="dept-summary-body">
+        <div class="empty-text">Välj specialkoster för att se sammanfattning.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Footer scripts (defer for CSP compliance) -->
   <script src="/static/js/menu_utils.js" defer></script>
   <script src="/static/js/menu_modal.js" defer></script>
   <script src="/static/ui/kitchen_planering_v1.js" defer></script>
+  <div id="yp-print-root" class="kp-print" aria-hidden="true">
+    {% if vm.print_preview_mode %}
+      <div class="kp-print-sheet">
+        <div class="kp-print-header">
+          <div class="kp-print-title">Tillagningslista</div>
+          <div class="kp-print-chip-row">
+            <span class="kp-print-chip">Vecka {{ vm.week }}</span>
+            <span class="kp-print-chip">{{ vm.day_labels[vm.selected_day] }}</span>
+            <span class="kp-print-chip">{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</span>
+          </div>
+        </div>
+        {% if vm.print_preview_mode in ['full','normal'] %}
+          <div class="kp-print-section-title">Normalkost</div>
+          <div class="kp-print-grid">
+            <div class="kp-print-col">
+              <div class="kp-print-col-title">Alt 1 — Totalt 1</div>
+              <div class="kp-print-dish">Kycklinggryta</div>
+              <div class="kp-print-list">
+                <div class="kp-print-row nk-row kp-zebra"><span class="kp-dept-name">Avd 1</span><span class="count">1</span></div>
+              </div>
+            </div>
+            <div class="kp-print-col">
+              <div class="kp-print-col-title">Alt 2 — Totalt 0</div>
+              <div class="kp-print-dish">Alt 2: Ej planerad</div>
+              <div class="kp-print-list">
+                <div class="kp-print-row nk-row is-alt2 kp-zebra"><span class="kp-dept-name">Avd 1</span><span class="count">0</span></div>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+        {% if vm.print_preview_mode in ['full','special'] %}
+          <div class="kp-print-section-title">Specialkost</div>
+          <div class="kp-print-plan">
+            <div class="kp-print-plan-list">
+              <div class="kp-print-plan-pill">Alt1: Kycklinggryta</div>
+              {% if vm.selected_meal == 'lunch' %}
+                <div class="kp-print-plan-pill">Alt2: Ej planerad</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="kp-print-special-title">Vald specialkost</div>
+          <div class="kp-print-special-group sk-card">
+            <div class="kp-print-special-name">Glutenfri — Totalt 2</div>
+            <div class="kp-print-list">
+              <div class="kp-print-row sk-row is-alt2 kp-zebra"><span class="kp-dept-name">Avd 1</span><span class="kp-altpill">Alt2</span><span class="count">2</span></div>
+            </div>
+          </div>
+        {% endif %}
+        {% if vm.print_preview_mode == 'modal' %}
+          <div class="kp-print-special-title">Sammanfattning per boende</div>
+          <div class="kp-print-list">
+            <div class="kp-print-row sk-row"><span class="kp-dept-name">Avd 1</span><span class="kp-altpill">Alt1</span><span class="count">2</span></div>
+          </div>
+        {% endif %}
+      </div>
+    {% elif vm.selected_meal == 'lunch' and vm.alt_groups and (vm.alt_groups.alt2_dept_ids or []) %}
+      <div class="kp-print-seed is-alt2"></div>
+    {% endif %}
+  </div>
 </body>
 </html>

@@ -79,13 +79,14 @@ def test_planering_v1_selected_state(app_session):
     rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch", headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    assert "Tillagningslista" in html
+    assert "Specialkost – arbetslista" in html
     assert "js-special-chip" in html
     assert "data-diet-id" in html
+    assert "Välj specialkoster ovan för att bygga arbetslistan." in html
 
     # Second request: with a selected diet, adaptation list should render
     rv2 = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch&selected_diets={dt_id}", headers=HEADERS)
     assert rv2.status_code == 200
     html2 = rv2.data.decode("utf-8")
-    assert "Anpassningslista" in html2
+    assert "Specialkost – arbetslista" in html2
     assert "Avd 1" in html2

@@ -74,10 +74,9 @@ def test_special_summary_totals_and_done(app_session):
     rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&year={year}&week={week}&day=0&meal=lunch&mode=special&show_results=1", headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    # Totals table must include the diet name and counts
-    assert "Specialkost – sammanställning" in html
+    # Chips and worklist header must render
+    assert "Specialkost – arbetslista" in html
     assert "Laktosfri" in html
-    assert ">4<" in html  # total count
     # No progress wording in planering view
     assert "Klart" not in html
     assert "Återstår" not in html

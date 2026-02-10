@@ -45,6 +45,7 @@ def test_bulk_mark_produced_updates_weekview(app_session):
         "week": week,
         "day_index": 0,
         "meal": "lunch",
+        "selected_diet_type_ids": seeded["diet_ids"],
     }
     rv = client.post("/api/planering/mark_produced_special", json=payload, headers=HEADERS)
     assert rv.status_code == 200
