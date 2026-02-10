@@ -101,11 +101,14 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         for k, v in config_override.items():  # also allow direct Flask config keys
             if k.isupper():
                 app.config[k] = v
+    # Tests should use isolated sqlite memory DB unless explicitly overridden.
+    if (config_override and config_override.get("TESTING")) and not os.getenv("DATABASE_URL"):
+        cfg.database_url = "sqlite:///:memory:"
     # Resolve stable absolute dev DB path when DATABASE_URL not provided
     try:
         if not os.getenv("DATABASE_URL"):
             # Default from Config is sqlite:///dev.db; replace with absolute instance path
-            if str(cfg.database_url).startswith("sqlite:///"):
+            if str(cfg.database_url).startswith("sqlite:///") and str(cfg.database_url) != "sqlite:///:memory:":
                 os.makedirs(app.instance_path, exist_ok=True)
                 abs_db = os.path.join(app.instance_path, "dev.db")
                 cfg.database_url = f"sqlite:///{abs_db}"
@@ -119,7 +122,10 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     # ProblemDetails is canonical now (ADR-003). No problem-only flag propagation.
 
     # --- DB setup ---
-    init_engine(cfg.database_url)
+    if app.config.get("TESTING"):
+        init_engine(cfg.database_url, force=True)
+    else:
+        init_engine(cfg.database_url)
     try:
         # Always emit a single startup line with DB location and git info
         db_url = str(cfg.database_url)

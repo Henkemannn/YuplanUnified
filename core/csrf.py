@@ -112,7 +112,8 @@ def validate_token() -> bool:
                     return _secrets.compare_digest(str(expected), str(supplied))
                 except Exception:
                     return False
-            else:
+            # If strict CSRF flag is enabled, do not bypass in tests.
+            if not current_app.config.get("YUPLAN_STRICT_CSRF"):
                 # non-strict tests bypass CSRF to avoid retrofitting existing tests
                 return True
     except Exception:

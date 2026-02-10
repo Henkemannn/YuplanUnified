@@ -83,6 +83,8 @@ def api_weekview_specialdiets_mark():
         et = et.split(",")[0].strip()
         if et.startswith("W/"):
             et = et[2:].strip()
+        if len(et) >= 2 and et[0] == '"' and et[-1] == '"':
+            et = et[1:-1]
         return et
     # Accept either site-scoped or dept-scoped ETag in If-Match for compatibility
     norm_hdr = _norm_et(raw_if_match)
@@ -114,6 +116,13 @@ def api_weekview_specialdiets_mark():
             return resp, 200
         except Exception:
             return jsonify({"type": "about:blank", "title": "server_error"}), 500
+    try:
+        new_etag = svc.toggle_marks(tid, year, week, department_id, current_dept_etag, [op])
+        resp = jsonify({"status": "ok", "marked": desired_state})
+        resp.headers["ETag"] = new_etag
+        return resp, 200
+    except Exception:
+        return jsonify({"type": "about:blank", "title": "server_error"}), 500
 
 # Planering bulk mark: set produced for all departments' special diets with count>0
 @ui_bp.post("/api/planering/mark_produced_special")
@@ -130,6 +139,12 @@ def api_planering_mark_produced_special():
             raise ValueError("bad_meal")
     except Exception:
         return jsonify({"error": "bad_request"}), 400
+    diet_ids = data.get("selected_diet_type_ids") or data.get("diet_type_ids") or []
+    if not isinstance(diet_ids, list):
+        diet_ids = []
+    diet_filter = {str(d).strip() for d in diet_ids if str(d).strip()}
+    if not diet_filter:
+        return jsonify({"error": "missing_diet_ids"}), 400
     tid = getattr(g, "tenant_id", None) or session.get("tenant_id")
     if not tid:
         return jsonify({"error": "missing_tenant"}), 400
@@ -142,36 +157,45 @@ def api_planering_mark_produced_special():
         db.close()
     if not dep_ids:
         return jsonify({"error": "no_departments_for_site"}), 400
-    # Build operations per department: mark all diet types with defaults>0
-    from .admin_repo import DietDefaultsRepo
+    from .weekview.service import WeekviewService
     from .weekview.repo import WeekviewRepo
+    svc = WeekviewService()
     wrepo = WeekviewRepo()
     day_of_week = int(day_index) + 1
     total_ops = 0
     for dep_id in dep_ids:
-        defaults = []
+        payload_wv, _etag = svc.fetch_weekview(tid, year, week, dep_id, site_id=site_id)
         try:
-            defaults = DietDefaultsRepo().list_for_department(dep_id) or []
+            summaries = payload_wv.get("department_summaries") or []
+            days = (summaries[0].get("days") if summaries else []) or []
         except Exception:
-            defaults = []
-        ops = []
-        for it in defaults:
+            days = []
+        day_obj = None
+        for d in days:
             try:
-                cnt = int(it.get("default_count") or 0)
-                dtid = str(it.get("diet_type_id"))
+                if int(d.get("day_of_week")) == day_of_week:
+                    day_obj = d
+                    break
             except Exception:
-                cnt, dtid = 0, None
-            if cnt > 0 and dtid:
-                ops.append({
-                    "day_of_week": day_of_week,
-                    "meal": meal,
-                    "diet_type": dtid,
-                    "marked": True,
-                })
+                continue
+        if not day_obj:
+            continue
+        diets = ((day_obj.get("diets") or {}).get(meal)) or []
+        ops = []
+        for it in diets:
+            try:
+                dtid = str(it.get("diet_type_id"))
+                cnt = int(it.get("resident_count") or 0)
+            except Exception:
+                continue
+            if cnt <= 0:
+                continue
+            if dtid not in diet_filter:
+                continue
+            ops.append({"day_of_week": day_of_week, "meal": meal, "diet_type": dtid, "marked": True})
         if ops:
             total_ops += len(ops)
             try:
-                # Direct repo write; idempotent on SQLite via upsert
                 wrepo.apply_operations(tid, year, week, dep_id, ops)
             except Exception:
                 return jsonify({"error": "server_error"}), 500
@@ -1880,6 +1904,14 @@ def kitchen_planering_v1():
             diet_name_by_id = {}
             name_to_id = {}
 
+        def _is_valid_diet_name(name: str | None) -> bool:
+            if not name:
+                return False
+            name_str = str(name).strip()
+            if not name_str:
+                return False
+            return not name_str.isdigit()
+
         # Union defaults across departments (count>0) for checklist
         from .admin_repo import DietDefaultsRepo as _DefRepo
         totals_by_diet: dict[str, int] = {}
@@ -1893,7 +1925,7 @@ def kitchen_planering_v1():
             for it in items:
                 dtid = str(it.get("diet_type_id"))
                 cnt = int(it.get("default_count") or 0)
-                if cnt > 0:
+                if cnt > 0 and _is_valid_diet_name(diet_name_by_id.get(dtid)):
                     m[dtid] = m.get(dtid, 0) + cnt
                     totals_by_diet[dtid] = totals_by_diet.get(dtid, 0) + cnt
             per_dept_defaults[dep["id"]] = m
@@ -2021,6 +2053,8 @@ def kitchen_planering_v1():
                         dtid = str(di.get("diet_type_id"))
                         cnt = int(di.get("resident_count") or 0)
                         if cnt <= 0:
+                            continue
+                        if not _is_valid_diet_name(diet_name_by_id.get(dtid)):
                             continue
                         marked = bool(di.get("marked"))
                         totals_by_diet[dtid] = totals_by_diet.get(dtid, 0) + cnt
@@ -2207,6 +2241,15 @@ def kitchen_planering_v1():
             normal_exclusions = {"1": [], "2": []}
 
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
+    print_preview_mode = None
+    try:
+        from flask import current_app
+        if current_app.config.get("TESTING"):
+            pm = (request.args.get("print_mode") or "").strip().lower()
+            if pm in ("full", "normal", "special", "modal"):
+                print_preview_mode = pm
+    except Exception:
+        print_preview_mode = None
     vm = {
         "title": "Kök – Planering",
         "site_id": site_id,
@@ -2234,6 +2277,7 @@ def kitchen_planering_v1():
         # Alt group mapping and per-department diet counts (used by client to scope exclusions correctly)
         "alt_groups": {"alt1_dept_ids": alt1_dept_ids, "alt2_dept_ids": alt2_dept_ids},
         "diet_counts_by_dept": per_dept_defaults,
+        "print_preview_mode": print_preview_mode,
     }
     return render_template("ui/kitchen_planering_v1.html", vm=vm)
 

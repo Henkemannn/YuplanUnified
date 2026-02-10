@@ -142,8 +142,9 @@ class ReportRepo:
     def get_versions(
         self, tenant_id: int | str, year: int, week: int, department_id: Optional[str] = None
     ) -> Tuple[Dict[str, int], int, int]:
-        """Return mapping dept->version and (vmax, n).
-        vmax and n are computed across filtered departments (or all departments when department_id is None).
+        """Return mapping dept->version and (vmax, vsum).
+
+        vmax and vsum are computed across filtered departments (or all departments when department_id is None).
         """
         self._ensure_schema()
         db = get_session()
@@ -166,10 +167,10 @@ class ReportRepo:
             mapping = {str(r[0]): int(r[1]) for r in rows}
             if mapping:
                 vmax = max(mapping.values())
-                n = len(mapping)
+                vsum = sum(mapping.values())
             else:
-                vmax, n = 0, 0
-            return mapping, vmax, n
+                vmax, vsum = 0, 0
+            return mapping, vmax, vsum
         finally:
             db.close()
 

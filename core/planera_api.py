@@ -454,7 +454,7 @@ def mark_produced_special():
     except Exception:
         return bad_request("invalid_parameters")
     meal = str(payload.get("meal") or "").strip().lower()
-    diet_ids = payload.get("diet_type_ids")
+    diet_ids = payload.get("selected_diet_type_ids") or payload.get("diet_type_ids")
     if not isinstance(diet_ids, list):
         diet_ids = []
     diet_filter = {str(d) for d in diet_ids if str(d).strip()}

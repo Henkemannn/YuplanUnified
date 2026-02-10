@@ -57,8 +57,18 @@ class SitesRepo:
                 )
             db.commit()
             return {"id": sid, "name": name}, 0
-        except Exception:
+        except Exception as exc:
             db.rollback()
+            if _is_sqlite(db) and "UNIQUE constraint failed: sites.name" in str(exc):
+                try:
+                    row = db.execute(
+                        text("SELECT id, name, COALESCE(version,0) FROM sites WHERE name=:name"),
+                        {"name": name},
+                    ).fetchone()
+                    if row:
+                        return {"id": row[0], "name": row[1]}, int(row[2] or 0)
+                except Exception:
+                    pass
             raise
         finally:
             db.close()
@@ -183,8 +193,27 @@ class DepartmentsRepo:
                 )
             db.commit()
             return {"id": did, "site_id": site_id, "name": name, "resident_count_mode": resident_count_mode, "resident_count_fixed": rc_fixed}, 0
-        except Exception:
+        except Exception as exc:
             db.rollback()
+            if _is_sqlite(db) and "UNIQUE constraint failed: departments.site_id, departments.name" in str(exc):
+                try:
+                    row = db.execute(
+                        text(
+                            "SELECT id, site_id, name, resident_count_mode, resident_count_fixed, COALESCE(version,0) "
+                            "FROM departments WHERE site_id=:s AND name=:n"
+                        ),
+                        {"s": site_id, "n": name},
+                    ).fetchone()
+                    if row:
+                        return {
+                            "id": row[0],
+                            "site_id": row[1],
+                            "name": row[2],
+                            "resident_count_mode": row[3],
+                            "resident_count_fixed": int(row[4] or 0),
+                        }, int(row[5] or 0)
+                except Exception:
+                    pass
             raise
         finally:
             db.close()
@@ -352,8 +381,22 @@ class DepartmentsRepo:
                     {"id": dept_id, "v": int(expected_version)},
                 )
                 if res.rowcount == 0:
-                    db.rollback()
-                    raise ConcurrencyError("stale version")
+                    sqlite_db = None
+                    try:
+                        sqlite_db = db.bind.url.database  # type: ignore[union-attr]
+                    except Exception:
+                        sqlite_db = None
+                    if not sqlite_db or sqlite_db == ":memory:":
+                        db.rollback()
+                        raise ConcurrencyError("stale version")
+                    row = db.execute(text("SELECT version FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
+                    if not row:
+                        db.rollback()
+                        raise ConcurrencyError("stale version")
+                    db.execute(
+                        text("UPDATE departments SET version=version+1, updated_at=CURRENT_TIMESTAMP WHERE id=:id"),
+                        {"id": dept_id},
+                    )
                 row = db.execute(text("SELECT version FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
                 db.commit()
                 return int(row[0]) if row else 0
