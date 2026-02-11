@@ -3336,6 +3336,24 @@ def reports_weekly():
 # ----------------------------------------------------------------------------
 # Admin – Weekly Diets Report (Module 3 MVP)
 # ----------------------------------------------------------------------------
+def calculate_report_data(tenant_id, site_id, year, week, department_id):
+    db = get_session()
+    try:
+        deps_rows = db.execute(
+            text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"),
+            {"s": site_id},
+        ).fetchall()
+        all_deps = [(str(r[0]), str(r[1] or "")) for r in deps_rows]
+    finally:
+        db.close()
+
+    dep_id = str(department_id or "ALL")
+    target_deps = all_deps if dep_id == "ALL" else [d for d in all_deps if d[0] == dep_id]
+
+    from .weekview_report_service import compute_weekview_report
+    return compute_weekview_report(tenant_id, year, week, target_deps)
+
+
 @ui_bp.get("/ui/admin/report/week")
 @require_roles(*ADMIN_ROLES)
 def admin_report_week():
@@ -3366,49 +3384,54 @@ def admin_report_week():
         all_deps = [{"id": str(r[0]), "name": str(r[1] or "")} for r in deps_rows]
     finally:
         db.close()
-    target_deps = all_deps if (not department_id or department_id == "ALL") else [d for d in all_deps if d["id"] == department_id]
-
-    svc = WeekviewService()
-
-    def _count_specials(day: dict, meal_key: str) -> int:
-        diets = day.get("diets", {}).get(meal_key, []) or []
-        total = 0
-        for it in diets:
-            if not bool(it.get("marked")):
-                continue
-            name = str(it.get("diet_name", "")).lower()
-            dtid = str(it.get("diet_type_id", "")).lower()
-            if name in ("normal", "normalkost") or dtid in ("normal", "normalkost"):
-                continue
-            cnt = int(it.get("resident_count", 0) or 0)
-            total += cnt
-        return total
+    report_deps = calculate_report_data(tenant_id, site_id, year, week, department_id)
 
     vm_deps = []
-    for dep in target_deps:
-        dep_id = dep["id"]
-        payload, _etag = svc.fetch_weekview(tenant_id, year, week, dep_id)
-        summaries = payload.get("department_summaries") or []
-        days = []
-        if summaries:
-            summ = next((s for s in summaries if str(s.get("department_id")) == dep_id), summaries[0])
-            days = summ.get("days") or []
+    for dep in report_deps:
+        dep_id = str(dep.get("department_id"))
+        dep_name = str(dep.get("department_name") or "")
         rows = []
-        for day in days:
-            dow = int(day.get("day_of_week") or 0)
+        for day in (dep.get("days") or []):
             wl = str(day.get("weekday_name") or "")
-            rl = int(day.get("residents", {}).get("lunch", 0) or 0)
-            rd = int(day.get("residents", {}).get("dinner", 0) or 0)
-            spl = _count_specials(day, "lunch")
-            spd = _count_specials(day, "dinner")
+            rl = int(day.get("lunch_residents") or 0)
+            rd = int(day.get("dinner_residents") or 0)
+            spl = int(day.get("lunch_debiterbar") or 0)
+            spd = int(day.get("dinner_debiterbar") or 0)
             nol = max(0, rl - spl)
             nod = max(0, rd - spd)
-            rows.append({"weekday_index": dow, "weekday_label": wl, "residents_lunch": rl, "residents_dinner": rd, "special_lunch": spl, "normal_lunch": nol, "special_dinner": spd, "normal_dinner": nod})
-        sl = sum(r["special_lunch"] for r in rows)
-        nl = sum(r["normal_lunch"] for r in rows)
-        sd = sum(r["special_dinner"] for r in rows)
-        nd = sum(r["normal_dinner"] for r in rows)
-        vm_deps.append({"id": dep_id, "name": dep["name"], "rows": rows, "week_summary": {"special_lunch_total": sl, "normal_lunch_total": nl, "special_dinner_total": sd, "normal_dinner_total": nd}})
+            rows.append(
+                {
+                    "weekday_label": wl,
+                    "special_lunch": spl,
+                    "normal_lunch": nol,
+                    "special_dinner": spd,
+                    "normal_dinner": nod,
+                }
+            )
+
+        meals = dep.get("meals", {}) or {}
+        lunch = meals.get("lunch") or {}
+        dinner = meals.get("dinner") or {}
+        lunch_res = int(lunch.get("residents_total") or 0)
+        lunch_deb = int(lunch.get("debiterbar_specialkost_count") or 0)
+        dinner_res = int(dinner.get("residents_total") or 0)
+        dinner_deb = int(dinner.get("debiterbar_specialkost_count") or 0)
+        lunch_norm = max(0, lunch_res - lunch_deb)
+        dinner_norm = max(0, dinner_res - dinner_deb)
+
+        vm_deps.append(
+            {
+                "id": dep_id,
+                "name": dep_name,
+                "rows": rows,
+                "week_summary": {
+                    "special_lunch_total": lunch_deb,
+                    "normal_lunch_total": lunch_norm,
+                    "special_dinner_total": dinner_deb,
+                    "normal_dinner_total": dinner_norm,
+                },
+            }
+        )
 
     # Compute navigation weeks similar to coverage view
     jan4 = _d(year, 1, 4)
@@ -3464,11 +3487,10 @@ def reports_weekly_csv():
     finally:
         db.close()
 
-    from .weekview_report_service import compute_weekview_report
     tid = session.get("tenant_id")
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    dept_vms = compute_weekview_report(tid, year, week, departments)
+    dept_vms = calculate_report_data(tid, site_id, year, week, "ALL")
 
     # Build CSV
     import io, csv
@@ -3484,7 +3506,7 @@ def reports_weekly_csv():
             meal = meals.get(meal_key) or {}
             residents_total = int(meal.get("residents_total") or 0)
             deb_count = int(meal.get("debiterbar_specialkost_count") or 0)
-            normal_count = int(meal.get("normal_diet_count") or max(0, residents_total - deb_count))
+            normal_count = max(0, residents_total - deb_count)
             writer.writerow([site_name, dep_name, year, week, meal_key, residents_total, deb_count, normal_count])
 
     csv_data = output.getvalue()
@@ -3543,11 +3565,10 @@ def reports_weekly_xlsx():
     finally:
         db.close()
 
-    from .weekview_report_service import compute_weekview_report
     tid = session.get("tenant_id")
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    dept_vms = compute_weekview_report(tid, year, week, departments)
+    dept_vms = calculate_report_data(tid, site_id, year, week, "ALL")
 
     # Build XLSX workbook in memory
     from io import BytesIO
@@ -3568,7 +3589,7 @@ def reports_weekly_xlsx():
             meal = meals.get(meal_key) or {}
             residents_total = int(meal.get("residents_total") or 0)
             deb_count = int(meal.get("debiterbar_specialkost_count") or 0)
-            normal_count = int(meal.get("normal_diet_count") or max(0, residents_total - deb_count))
+            normal_count = max(0, residents_total - deb_count)
             ws.append([site_name, dep_name, year, week, meal_key, residents_total, deb_count, normal_count])
 
     buf = BytesIO()
