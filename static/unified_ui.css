@@ -186,23 +186,25 @@ a:hover {
 .meal-icon {
     font-size: 18px;
     line-height: 1;
-    display: inline-block;
-    vertical-align: -2px;
 }
 
 .meal-icon--sm {
     font-size: 16px;
-    vertical-align: -2px;
 }
 
 .meal-icon--md {
     font-size: 18px;
-    vertical-align: -2px;
 }
 
 .meal-icon--lg {
     font-size: 20px;
-    vertical-align: -3px;
+}
+
+.kw-grid th.meal-icon {
+    font-size: inherit;
+    line-height: 1;
+    vertical-align: baseline;
+    display: table-cell;
 }
 
 /* ============================================================================
