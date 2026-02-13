@@ -94,7 +94,7 @@
         aria-label="Lunch {{ day.weekday_name }} {{ day.date }}{{ ', Registrerad' if day.registered.lunch else '' }}{{ ', Alt 2' if day.alt2_lunch else '' }}"
         data-day="{{ day.date }}" data-day-key="{{ day.date }}" data-meal="lunch" data-can-choose-lunch="{{ 'true' if day.can_choose_lunch else 'false' }}">
         <div class="meal-block__header">
-          <span class="meal-icon" aria-hidden="true">🍽</span>
+          <span class="meal-icon" aria-hidden="true">🍽️</span>
           <span class="meal-label">LUNCH</span>
           <span class="meal-badges">
             {% if day.can_choose_lunch %}
@@ -192,7 +192,7 @@
               <th class="veckovy-day-header" data-day-index="{{ day.index }}">
                 <div class="veckovy-day-header__title">{{ day.label_short }}</div>
                 {% if day.has_menu %}
-                <button type="button" class="veckovy-menu-icon" data-day="{{ day.index }}" data-day-key="{{ day.key }}">🍽</button>
+                <button type="button" class="veckovy-menu-icon" data-day="{{ day.index }}" data-day-key="{{ day.key }}">🍽️</button>
                 {% endif %}
                 {% if day.planera_lunch_url %}
                 <a href="{{ day.planera_lunch_url }}" class="veckovy-day-planera-link" title="Öppna planering för lunch denna dag">Planera</a>

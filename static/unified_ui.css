@@ -183,6 +183,28 @@ a:hover {
     font-weight: var(--yp-font-weight-medium);
 }
 
+.meal-icon {
+    font-size: 18px;
+    line-height: 1;
+    display: inline-block;
+    vertical-align: -2px;
+}
+
+.meal-icon--sm {
+    font-size: 16px;
+    vertical-align: -2px;
+}
+
+.meal-icon--md {
+    font-size: 18px;
+    vertical-align: -2px;
+}
+
+.meal-icon--lg {
+    font-size: 20px;
+    vertical-align: -3px;
+}
+
 /* ============================================================================
    BUTTONS
    ============================================================================ */
@@ -224,9 +246,96 @@ a:hover {
 .kp-chip-label { font-weight: var(--yp-font-weight-medium); }
 .kp-chip-badge { min-width: 24px; height: 24px; padding: 0 8px; border-radius: 9999px; background: var(--yp-color-primary-light); color: var(--yp-color-primary); display: inline-flex; align-items: center; justify-content: center; font-weight: var(--yp-font-weight-bold); }
 
+/* ============================================================================
+   REPORT WEEKLY - ICON SIZE CLAMP (SCOPED)
+   ============================================================================ */
+
+
 .yp-btn:focus {
     outline: 2px solid var(--yp-color-primary);
     outline-offset: 2px;
+}
+
+/* ============================================================================
+   REPORT WEEKLY - SCOPED CARD LAYOUT
+   ============================================================================ */
+
+.report-weekly .card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.report-weekly .card + .card {
+    margin-top: 16px;
+}
+
+.report-weekly .card-header {
+    padding: 16px 18px;
+    border-bottom: 1px solid #eef2f7;
+    font-weight: 700;
+}
+
+.report-weekly .card-body {
+    padding: 16px 18px;
+}
+
+.report-weekly .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.report-weekly .summary-box {
+    border: 1px solid #eef2f7;
+    border-radius: 12px;
+    padding: 14px 16px;
+    background: #fbfdff;
+}
+
+.report-weekly .pill {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.report-weekly .pill--special {
+    background: #fdecec;
+    color: #991b1b;
+}
+
+.report-weekly .pill--normal {
+    background: #eaf7ea;
+    color: #14532d;
+}
+
+.report-weekly details {
+    margin-top: 10px;
+}
+
+.report-weekly table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.report-weekly thead th {
+    background: #f3f7ff;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 12px;
+    text-align: left;
+}
+
+.report-weekly tbody td {
+    border-bottom: 1px solid #eef2f7;
+    padding: 10px 12px;
+}
+
+.report-weekly tbody tr:nth-child(even) {
+    background: #fafafa;
 }
 
 .yp-btn:disabled {

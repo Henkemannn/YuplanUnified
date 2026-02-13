@@ -3,31 +3,36 @@
 {% block title %}Yuplan Unified{% endblock %}
 
 {% block admin_main %}
-<section class="ua-section">
-  <div class="ua-card admin-header">
-    <div class="header-flex">
+<div class="report-weekly">
+<section class="ua-section report-wrap">
+  <div class="ua-card report-header-card">
+    <div class="report-header">
       <div>
         {% if vm.departments %}
-          <h1>Statistik/Rapport</h1>
+          <h1 data-testid="report-title">Statistik / Rapport</h1>
           <p class="subtitle">Visar antal specialkost och normalkost per lunch och kvällsmat under vald vecka.</p>
         {% elif vm.coverage_data %}
-          <h1>Veckorapport – Registrering</h1>
-          <p class="subtitle">Vecka {{ vm.week }}, {{ vm.year }}</p>
+          <h1 data-testid="coverage-title">Veckorapport – Registrering</h1>
+          <p class="subtitle" data-testid="coverage-week">Vecka {{ vm.week }}, {{ vm.year }}</p>
         {% else %}
           <h1>Veckorapport</h1>
         {% endif %}
+        <div class="report-meta">
+          <span>Site: {{ current_site_name or vm.site_name or '—' }}</span>
+          {% if vm.selected_year and vm.selected_week %}
+            <span data-testid="report-week">År/Vecka: {{ vm.selected_year }} / {{ vm.selected_week }}</span>
+          {% endif %}
+        </div>
       </div>
       <div class="header-actions">
         <a href="{{ url_for('ui.admin_menu_planning_index') }}" class="yp-button yp-button-secondary">← Tillbaka till admin</a>
       </div>
     </div>
-  </div>
 
-  {% if vm.departments %}
-    <div class="ua-card card">
-      <div class="card-body">
-        <form method="GET" action="/ui/admin/report/week" class="filter-bar" aria-label="Välj vecka och avdelning">
-          <div class="filter-grid">
+    {% if vm.departments %}
+      <div class="ua-card report-filter-card">
+        <form method="GET" action="/ui/admin/report/week" class="report-filter" aria-label="Välj vecka och avdelning">
+          <div class="report-filter-grid">
             <div class="filter-item">
               <label for="year-input">År</label>
               <input id="year-input" name="year" type="number" min="2000" max="2100" value="{{ vm.selected_year }}" />
@@ -54,80 +59,123 @@
             </div>
             <div class="filter-actions">
               <button class="yp-button" type="submit">Visa</button>
-              <a class="yp-button yp-button-secondary" href="/ui/admin/report/week?year={{ vm.current_year }}&week={{ vm.current_week }}&department_id={{ vm.selected_department_id }}">Denna vecka</a>
-              <a class="yp-button" href="/ui/admin/report/week?year={{ vm.prev_year }}&week={{ vm.prev_week }}&department_id={{ vm.selected_department_id }}">Föregående vecka</a>
-              <a class="yp-button" href="/ui/admin/report/week?year={{ vm.next_year }}&week={{ vm.next_week }}&department_id={{ vm.selected_department_id }}">Nästa vecka</a>
             </div>
+          </div>
+          <div class="report-week-selector" aria-label="Veckonavigering">
+            <button class="yp-button yp-button-secondary" type="submit" formaction="/ui/admin/report/week?year={{ vm.prev_year }}&week={{ vm.prev_week }}&department_id={{ vm.selected_department_id }}" aria-label="Föregående vecka">&lt;</button>
+            <div class="report-week-label">Vecka {{ vm.selected_week }} &middot; År {{ vm.selected_year }}</div>
+            <button class="yp-button yp-button-secondary" type="submit" formaction="/ui/admin/report/week?year={{ vm.next_year }}&week={{ vm.next_week }}&department_id={{ vm.selected_department_id }}" aria-label="Nästa vecka">&gt;</button>
+          </div>
+          <div class="report-export">
+            <a class="yp-button yp-button-secondary" href="{{ url_for('ui.reports_weekly_csv', site_id=session.get('site_id') or '', year=vm.selected_year, week=vm.selected_week) }}">CSV</a>
+            <a class="yp-button yp-button-secondary" href="{{ url_for('ui.reports_weekly_xlsx', site_id=session.get('site_id') or '', year=vm.selected_year, week=vm.selected_week) }}">Excel</a>
           </div>
         </form>
-        <div class="table-responsive">
-          <div class="diets-labels">
-            <span class="ua-label">Boende Lunch</span>
-            <span class="ua-label">Boende Kväll</span>
-          </div>
-          <table class="yp-table report-table diets-report">
-            <thead>
-              <tr>
-                <th class="th-dept">Avdelning</th>
-                <th class="th-day">Veckodag</th>
-                <th class="th-count">Lunch – Special</th>
-                <th class="th-count">Lunch – Normal</th>
-                <th class="th-count">Kväll – Special</th>
-                <th class="th-count">Kväll – Normal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for dep in vm.departments %}
-                {% for row in dep.rows %}
-                  <tr>
-                    <td class="dept-cell">{{ dep.name }}</td>
-                    <td class="day-cell">{{ row.weekday_label }}</td>
-                    <td class="count-cell special">{{ row.special_lunch }}</td>
-                    <td class="count-cell normal">{{ row.normal_lunch }}</td>
-                    <td class="count-cell special">{{ row.special_dinner }}</td>
-                    <td class="count-cell normal">{{ row.normal_dinner }}</td>
-                  </tr>
-                {% endfor %}
-                <tr class="ua-sum-row diets-summary">
-                  <td class="dept-cell">{{ dep.name }} (SUMMA)</td>
-                  <td></td>
-                  <td class="count-cell special">{{ dep.week_summary.special_lunch_total }}</td>
-                  <td class="count-cell normal">{{ dep.week_summary.normal_lunch_total }}</td>
-                  <td class="count-cell special">{{ dep.week_summary.special_dinner_total }}</td>
-                  <td class="count-cell normal">{{ dep.week_summary.normal_dinner_total }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          <div class="legend-box diets-legend" aria-label="Förklaring av färgkodning">
-            <h3 class="legend-title">Förklaring</h3>
-            <div class="legend-items">
-              <span class="legend-item">
-                <span class="legend-swatch legend-swatch-special" aria-hidden="true"></span>
-                <span class="legend-label">Specialkost (markerade)</span>
-              </span>
-              <span class="legend-item">
-                <span class="legend-swatch legend-swatch-normal" aria-hidden="true"></span>
-                <span class="legend-label">Normalkost (boende − special)</span>
-              </span>
-            </div>
-          </div>
-        </div>
       </div>
+    {% endif %}
+  </div>
+
+  {% if vm.departments %}
+    <div class="report-cards">
+      {% for dep in vm.departments %}
+        <article class="report-card card" data-testid="report-card" data-department="{{ dep.name }}">
+          <div class="report-card-header card-header">
+            <h2 class="report-dept-name">{{ dep.name }}</h2>
+            {% if dep.boende is defined %}
+              <div class="report-dept-boende">{{ dep.boende }} boende</div>
+            {% endif %}
+          </div>
+          <div class="report-card-body card-body">
+            <div class="report-summary summary-grid">
+            <div class="report-meal summary-box">
+              <div class="report-meal-label">
+                <span class="meal-icon meal-icon--lunch" aria-hidden="true">🍽️</span>
+                <span>Lunch</span>
+              </div>
+              <div class="report-meal-values">
+                <span class="report-pill report-pill-special pill pill--special" data-testid="lunch-special-total" data-value="{{ dep.week_summary.special_lunch_total }}">Special {{ dep.week_summary.special_lunch_total }}</span>
+                <span class="report-pill report-pill-normal pill pill--normal" data-testid="lunch-normal-total" data-value="{{ dep.week_summary.normal_lunch_total }}">Normal {{ dep.week_summary.normal_lunch_total }}</span>
+              </div>
+            </div>
+            <div class="report-meal summary-box">
+              <div class="report-meal-label">
+                <span class="meal-icon meal-icon--dinner" aria-hidden="true">🌙</span>
+                <span>Kväll</span>
+              </div>
+              <div class="report-meal-values">
+                <span class="report-pill report-pill-special pill pill--special" data-testid="dinner-special-total" data-value="{{ dep.week_summary.special_dinner_total }}">Special {{ dep.week_summary.special_dinner_total }}</span>
+                <span class="report-pill report-pill-normal pill pill--normal" data-testid="dinner-normal-total" data-value="{{ dep.week_summary.normal_dinner_total }}">Normal {{ dep.week_summary.normal_dinner_total }}</span>
+              </div>
+            </div>
+            </div>
+            <details class="report-details">
+              <summary>
+                <span class="report-details-icon" aria-hidden="true">v</span>
+                <span>Visa detaljer per dag</span>
+              </summary>
+              <div class="report-details-body">
+                <table class="report-day-table">
+                  <thead>
+                    <tr>
+                      <th>Dag</th>
+                      <th>
+                        <span class="meal-icon meal-icon--lunch" aria-hidden="true">🍽️</span>
+                        Special
+                      </th>
+                      <th>
+                        <span class="meal-icon meal-icon--lunch" aria-hidden="true">🍽️</span>
+                        Normal
+                      </th>
+                      <th>
+                        <span class="meal-icon meal-icon--dinner" aria-hidden="true">🌙</span>
+                        Special
+                      </th>
+                      <th>
+                        <span class="meal-icon meal-icon--dinner" aria-hidden="true">🌙</span>
+                        Normal
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% set weekday_map = {
+                      'Mon': 'Mån',
+                      'Tue': 'Tis',
+                      'Wed': 'Ons',
+                      'Thu': 'Tor',
+                      'Fri': 'Fre',
+                      'Sat': 'Lör',
+                      'Sun': 'Sön'
+                    } %}
+                    {% for row in dep.rows %}
+                      <tr>
+                        <td class="day-cell">{{ weekday_map.get(row.weekday_label, row.weekday_label) }}</td>
+                        <td class="count-cell special">{{ row.special_lunch }}</td>
+                        <td class="count-cell normal">{{ row.normal_lunch }}</td>
+                        <td class="count-cell special">{{ row.special_dinner }}</td>
+                        <td class="count-cell normal">{{ row.normal_dinner }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+        </article>
+      {% endfor %}
     </div>
   {% elif vm.coverage_data %}
-    <div class="week-navigation">
-      <a class="yp-button" href="/ui/reports/weekly?year={{ vm.prev_year }}&week={{ vm.prev_week }}">Föregående vecka</a>
-      <a class="yp-button yp-button-secondary" href="/ui/reports/weekly?year={{ vm.current_year }}&week={{ vm.current_week }}">Denna vecka</a>
-      <a class="yp-button" href="/ui/reports/weekly?year={{ vm.next_year }}&week={{ vm.next_week }}">Nästa vecka</a>
-    </div>
+    <form class="report-week-selector" data-testid="coverage-nav" method="GET" action="/ui/reports/weekly" aria-label="Veckonavigering">
+      <button class="yp-button yp-button-secondary" data-testid="coverage-nav-prev" type="submit" formaction="/ui/reports/weekly?year={{ vm.prev_year }}&week={{ vm.prev_week }}" aria-label="Föregående vecka">&lt;</button>
+      <div class="report-week-label">Vecka {{ vm.week }} &middot; År {{ vm.year }}</div>
+      <button class="yp-button yp-button-secondary" data-testid="coverage-nav-next" type="submit" formaction="/ui/reports/weekly?year={{ vm.next_year }}&week={{ vm.next_week }}" aria-label="Nästa vecka">&gt;</button>
+    </form>
     <div class="ua-card card">
       <div class="card-body">
         <div class="table-responsive">
-          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Lunch</span>
-          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Kväll</span>
-          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Totalt</span>
-          <table class="yp-table report-table">
+          <span aria-hidden="true" class="report-visually-hidden">Lunch</span>
+          <span aria-hidden="true" class="report-visually-hidden">Kväll</span>
+          <span aria-hidden="true" class="report-visually-hidden">Totalt</span>
+          <table class="yp-table report-table" data-testid="coverage-table">
             <thead>
               <tr>
                 <th class="dept-col">AVDELNING</th>
@@ -138,19 +186,19 @@
             </thead>
             <tbody>
               {% for item in vm.coverage_data %}
-                <tr>
+                <tr data-testid="coverage-row" data-department="{{ item.department_name }}">
                   <td class="dept-name">{{ item.department_name }}</td>
                   <td class="count-cell">
-                    <span class="count-badge">{{ item.lunch_registered }} / {{ item.lunch_expected }}</span>
+                    <span class="count-badge" data-testid="coverage-lunch" data-registered="{{ item.lunch_registered }}" data-expected="{{ item.lunch_expected }}">{{ item.lunch_registered }} / {{ item.lunch_expected }}</span>
                     <span class="count-detail">Registrerade / Förväntade</span>
                   </td>
                   <td class="count-cell">
-                    <span class="count-badge">{{ item.dinner_registered }} / {{ item.dinner_expected }}</span>
+                    <span class="count-badge" data-testid="coverage-dinner" data-registered="{{ item.dinner_registered }}" data-expected="{{ item.dinner_expected }}">{{ item.dinner_registered }} / {{ item.dinner_expected }}</span>
                     <span class="count-detail">Registrerade / Förväntade</span>
                   </td>
                   <td class="percent-cell">
                     {% set cls = 'coverage-high' if item.coverage_percent >= 90 else ('coverage-medium' if item.coverage_percent >= 60 else 'coverage-low') %}
-                    <span class="percent-badge {{ cls }}">{{ item.coverage_percent }}%</span>
+                    <span class="percent-badge {{ cls }}" data-testid="coverage-percent" data-value="{{ item.coverage_percent }}">{{ item.coverage_percent }}%</span>
                   </td>
                 </tr>
               {% endfor %}
@@ -162,31 +210,9 @@
   {% endif %}
   
   {% if not vm.departments and not vm.coverage_data %}
-    <p class="help-text">Ingen data tillgänglig för vald vy.</p>
+    <p class="help-text" data-testid="report-empty">Ingen data tillgänglig för vald vy.</p>
   {% endif %}
 
-  <style>
-    .filter-bar { margin-bottom: var(--yp-gap-lg); }
-    .filter-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--yp-gap-md); align-items: end; }
-    .filter-item label { display: block; font-size: 0.9em; color: var(--yp-color-text-muted); margin-bottom: 0.25rem; }
-    .filter-actions { display: flex; gap: var(--yp-gap-sm); justify-content: flex-end; align-items: center; }
-    .diets-report { font-size: 1.05rem; }
-    .diets-report th.th-dept { width: 24%; }
-    .diets-report th.th-day { width: 16%; }
-    .diets-report th.th-count { width: 15%; text-align: center; }
-    .diets-report td.dept-cell { font-weight: var(--yp-font-weight-medium); }
-    .diets-report td.day-cell { color: var(--yp-color-text); }
-    .diets-report td.count-cell { text-align: center; }
-    .diets-report td.count-cell.special { color: #8B1A1A; font-weight: var(--yp-font-weight-semibold); }
-    .diets-report td.count-cell.normal { color: #0B3D0B; font-weight: var(--yp-font-weight-medium); }
-    .diets-summary td { font-weight: var(--yp-font-weight-semibold); }
-    .diets-summary { background-color: var(--yp-color-bg-alt); border-top: 2px solid var(--yp-color-border); }
-    .legend-box { margin-top: var(--yp-gap-xl); padding: var(--yp-gap-lg); background-color: var(--yp-color-bg-alt); border-radius: var(--yp-radius); }
-    .legend-title { font-size: 0.95em; margin-bottom: 0.5rem; }
-    .legend-swatch { display: inline-block; width: 1rem; height: 1rem; border-radius: var(--yp-radius-sm); border: 1px solid var(--yp-color-border); }
-    .legend-swatch-special { background-color: #F7E6E6; border-color: #D88; }
-    .legend-swatch-normal { background-color: #E6F3E6; border-color: #8D8; }
-    .legend-label { color: var(--yp-color-text); }
-  </style>
 </section>
+</div>
 {% endblock %}

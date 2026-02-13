@@ -93,7 +93,7 @@
                 data-dessert="{{ menu.dessert or '' }}"
                 data-kvallsmat="{{ menu.dinner or '' }}"
                 aria-label="Visa meny för {{ day.weekday_name }}"
-              >🍽</button>
+              >🍽️</button>
             </td>
             <td
               class="portal-alt-cell portal-alt1-cell {% if choice.selected_alt == 'Alt1' %}portal-alt-selected{% endif %}"
@@ -140,7 +140,7 @@
             </td>
             <td class="portal-diets-cell">
               {% if day.has_diets %}
-                <span class="yuplan-diet-pill" aria-label="Specialkost registrerad">🍽 Specialkost</span>
+                <span class="yuplan-diet-pill" aria-label="Specialkost registrerad">🍽️ Specialkost</span>
                 {% if diets.lunch or diets.dinner %}
                 {% if diets.lunch %}
                   <div><strong>Lunch:</strong>
