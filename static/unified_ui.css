@@ -188,6 +188,11 @@ a:hover {
     line-height: 1;
 }
 
+.meal-icon--inline {
+    display: inline-block;
+    vertical-align: -2px;
+}
+
 .meal-icon--sm {
     font-size: 16px;
 }
@@ -200,12 +205,6 @@ a:hover {
     font-size: 20px;
 }
 
-.kw-grid th.meal-icon {
-    font-size: inherit;
-    line-height: 1;
-    vertical-align: baseline;
-    display: table-cell;
-}
 
 /* ============================================================================
    BUTTONS

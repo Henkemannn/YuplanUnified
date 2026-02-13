@@ -64,9 +64,9 @@
           </div>
           <div class="kp-meal-buttons">
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=lunch"
-               class="kp-button {% if vm.selected_meal == 'lunch' %}is-active{% endif %}">🍽️ Lunch</a>
+              class="kp-button {% if vm.selected_meal == 'lunch' %}is-active{% endif %}"><span class="meal-icon meal-icon--lunch meal-icon--inline" aria-hidden="true">🍽️</span> Lunch</a>
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dinner"
-              class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}">🌙 Kvällsmat</a>
+              class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}"><span class="meal-icon meal-icon--dinner meal-icon--inline" aria-hidden="true">🌙</span> Kvällsmat</a>
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dessert"
                class="kp-button {% if vm.selected_meal == 'dessert' %}is-active{% endif %}">🍮 Dessert</a>
             <button class="kp-button js-print">🖨 Skriv ut</button>
