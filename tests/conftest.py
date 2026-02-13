@@ -78,7 +78,7 @@ def csrf_headers(client):
     return {"X-CSRF-Token": token}
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def app_session(tmp_path_factory):
     create_app, create_all, Tenant = _lazy_imports()
     db_file = tmp_path_factory.mktemp("db") / "test_app.db"

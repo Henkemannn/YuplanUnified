@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import date as _date
 
 from flask.testing import FlaskClient
@@ -17,7 +18,7 @@ def _login_headers(role: str = "admin"):
 
 def seed_basic():
     srepo = SitesRepo()
-    site, _ = srepo.create_site("TestSite")
+    site, _ = srepo.create_site(f"TestSite-{uuid.uuid4()}")
     drepo = DepartmentsRepo()
     dep, _ = drepo.create_department(site_id=site["id"], name="Avd A", resident_count_mode="fixed", resident_count_fixed=10)
     trepo = DietTypesRepo()
@@ -26,25 +27,27 @@ def seed_basic():
     return site, dep, dt_id
 
 
-def test_etag_stale_then_retry_with_fresh_etag():
+def test_etag_stale_then_retry_with_fresh_etag(tmp_path):
     os.environ["STRICT_CSRF_IN_TESTS"] = "0"
-    app = create_app({"TESTING": True})
+    db_file = tmp_path / "test_etag.db"
+    app = create_app({"TESTING": True, "database_url": f"sqlite:///{db_file}", "FORCE_DB_REINIT": True})
+    from core.db import create_all
+    with app.app_context():
+        create_all()
     client: FlaskClient = app.test_client()
-    site, dep, dt_id = seed_basic()
+    with app.app_context():
+        site, dep, dt_id = seed_basic()
     # Align session site context for mutations
-    client.post(
-        "/ui/select-site",
-        data={"site_id": site["id"], "next": "/"},
-        headers=_login_headers(),
-    )
+    with client.session_transaction() as sess:
+        sess["site_id"] = site["id"]
 
     iso = _date.today().isocalendar()
     year, week = iso[0], iso[1]
 
     svc = WeekviewService()
     repo = WeekviewRepo()
-    _ = repo.get_version(tenant_id=1, year=year, week=week, department_id=dep["id"])  # seed version=0
-    etag_v0 = svc.build_etag(tenant_id=1, department_id=dep["id"], year=year, week=week, version=0)
+    version = repo.get_version(tenant_id=1, year=year, week=week, department_id=dep["id"])  # seed version
+    etag_v0 = svc.build_etag(tenant_id=1, department_id=dep["id"], year=year, week=week, version=version)
 
     payload = {
         "year": year,
