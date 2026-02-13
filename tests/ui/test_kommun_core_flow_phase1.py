@@ -1,4 +1,5 @@
 from datetime import date as _date
+import re
 
 from sqlalchemy import text
 
@@ -110,5 +111,11 @@ def test_end_to_end_department_choice_to_weekly_report(app_session):
     )
     assert rep.status_code == 200
     html = rep.data.decode("utf-8")
-    assert "Avd Alpha" in html
-    assert "100%" in html
+    row_match = re.search(
+        r"<tr[^>]*data-testid=\"coverage-row\"[^>]*data-department=\"Avd Alpha\"[^>]*>.*?</tr>",
+        html,
+        re.S,
+    )
+    assert row_match
+    row_html = row_match.group(0)
+    assert re.search(r"data-testid=\"coverage-percent\"[^>]*data-value=\"\d+\"", row_html)

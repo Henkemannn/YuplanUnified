@@ -6,6 +6,11 @@ import pytest
 ETAG_RE = re.compile(r'^W/"weekview:dept:[0-9a-f-]+:year:\d{4}:week:\d{1,2}:v\d+"$')
 
 
+def _set_session_site(client, site_id: str) -> None:
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+
 def _get(client, role, path):
     return client.get(path, headers={"X-User-Role": role, "X-Tenant-Id": "1"})
 
@@ -30,6 +35,7 @@ def enable_weekview(client_admin):
 @pytest.mark.usefixtures("enable_weekview")
 def test_rbac_and_preconditions(client_admin):
     dep = str(uuid.uuid4())
+    _set_session_site(client_admin, str(uuid.uuid4()))
     # viewer forbidden
     r = _patch(client_admin, "viewer", "/api/weekview", json={})
     assert r.status_code == 403
@@ -47,8 +53,7 @@ def test_happy_path_and_412(client_admin):
     site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
     # Align session site context
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site
+    _set_session_site(client_admin, site)
 
     # Initial GET -> v0
     r0 = _get(client_admin, "admin", base)
@@ -88,8 +93,7 @@ def test_validation_errors(client_admin, meal):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site
+    _set_session_site(client_admin, site)
     r0 = _get(client_admin, "admin", base)
     etag0 = r0.headers.get("ETag")
     p = {
@@ -108,8 +112,7 @@ def test_batch_semantics_and_idempotence(client_admin):
     dep = str(uuid.uuid4())
     site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site
+    _set_session_site(client_admin, site)
     etag0 = _get(client_admin, "admin", base).headers.get("ETag")
 
     ops = [

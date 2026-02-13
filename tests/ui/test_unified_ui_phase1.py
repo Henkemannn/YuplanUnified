@@ -137,7 +137,7 @@ def test_reports_page_renders_without_errors(client_admin, seed_site_and_departm
     html = resp.data.decode("utf-8")
     
     # Check basic structure is intact
-    assert 'Veckorapport' in html or 'Report' in html
+    assert 'data-testid="coverage-title"' in html or 'data-testid="report-empty"' in html
 
 @pytest.mark.usefixtures("enable_weekview")
 def test_weekview_renders_without_errors(client_admin):
@@ -298,4 +298,4 @@ def test_reports_still_work(client_admin, seed_site_and_departments_for_ui):
     
     # Reports page should render
     html = resp.data.decode("utf-8")
-    assert 'Veckorapport' in html or 'Report' in html
+    assert 'data-testid="coverage-title"' in html or 'data-testid="report-empty"' in html

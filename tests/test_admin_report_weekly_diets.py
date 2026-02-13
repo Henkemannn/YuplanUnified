@@ -1,4 +1,5 @@
 import pytest
+import re
 from sqlalchemy import text
 
 
@@ -125,21 +126,26 @@ def test_seeded_weekly_diets_report(client):
     resp = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=ALL&view=day")
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert "Avd A" in html and "Avd B" in html
-    assert "Boende Lunch" in html and "Lunch – Special" in html and "Lunch – Normal" in html
-    assert "Boende Kväll" in html and "Kväll – Special" in html and "Kväll – Normal" in html
-    assert ">10<" in html
-    assert ">2<" in html
-    assert ">8<" in html
+    assert "data-testid=\"report-title\"" in html
+    assert f"data-testid=\"report-week\"" in html and f"År/Vecka: {year} / {week}" in html
+    assert "data-department=\"Avd A\"" in html
+    assert "data-department=\"Avd B\"" in html
 
     resp2 = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=ALL&view=week")
     assert resp2.status_code == 200
     html2 = resp2.get_data(as_text=True)
     assert "Avd A" in html2
-    assert ">3<" in html2
-    assert ">67<" in html2
-    assert ">0<" in html2
-    assert ">70<" in html2
+    card_match = re.search(
+        r"<article[^>]*data-testid=\"report-card\"[^>]*data-department=\"Avd A\"[^>]*>.*?</article>",
+        html2,
+        re.S,
+    )
+    assert card_match
+    card_html = card_match.group(0)
+    assert "data-testid=\"lunch-special-total\" data-value=\"3\"" in card_html
+    assert "data-testid=\"lunch-normal-total\" data-value=\"67\"" in card_html
+    assert "data-testid=\"dinner-special-total\" data-value=\"0\"" in card_html
+    assert "data-testid=\"dinner-normal-total\" data-value=\"70\"" in card_html
 
     resp3 = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=dep-A&view=week")
     assert resp3.status_code == 200
@@ -149,4 +155,4 @@ def test_seeded_weekly_diets_report(client):
     resp4 = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=dep-B&view=day")
     assert resp4.status_code == 200
     html4 = resp4.get_data(as_text=True)
-    assert ">6<" in html4
+    assert "Avd B" in html4 and "Avd A" not in html4

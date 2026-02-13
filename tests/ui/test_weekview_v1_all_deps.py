@@ -67,8 +67,8 @@ def test_toggle_flow_marks_persist_and_report_shows_special():
     svc = WeekviewService()
     repo = WeekviewRepo()
     # Ensure version row exists
-    _ = repo.get_version(tenant_id=1, year=year, week=week, department_id=depA["id"])  # seeds 0
-    etag = svc.build_etag(tenant_id=1, department_id=depA["id"], year=year, week=week, version=0)
+    version = repo.get_version(tenant_id=1, year=year, week=week, department_id=depA["id"])  # seeds when missing
+    etag = svc.build_etag(tenant_id=1, department_id=depA["id"], year=year, week=week, version=version)
 
     # Toggle Monday lunch mark for depA
     payload = {

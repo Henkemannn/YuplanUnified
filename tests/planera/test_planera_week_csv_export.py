@@ -12,11 +12,13 @@ def test_planera_week_csv_export_and_304(client_admin):
     year, week = 2025, 50
 
     from core.db import create_all, get_session
+    from core.weekview.repo import WeekviewRepo
     from sqlalchemy import text
     import os
     with app.app_context():
         os.environ["YP_ENABLE_SQLITE_BOOTSTRAP"] = "1"
         create_all()
+        WeekviewRepo().get_version(tenant_id=1, year=year, week=week, department_id=dep_id)
         db = get_session()
         try:
             # Seed site + department
@@ -25,13 +27,23 @@ def test_planera_week_csv_export_and_304(client_admin):
             # Seed diet defaults (will appear as potential diets, though not special unless marked)
             db.execute(text("CREATE TABLE IF NOT EXISTS department_diet_defaults(department_id TEXT, diet_type_id TEXT, default_count INTEGER, PRIMARY KEY(department_id,diet_type_id))"))
             db.execute(text("INSERT INTO department_diet_defaults(department_id,diet_type_id,default_count) VALUES(:d,'Gluten',2)"), {"d": dep_id})
-            # Mark Gluten diet for Monday lunch (day_of_week=1)
-            db.execute(text("INSERT INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES(:tid,:dep,:yy,:ww,1,'lunch','Gluten',1)"), {"tid": 1, "dep": dep_id, "yy": year, "ww": week})
-            # Residents count for Monday lunch
-            db.execute(text("INSERT INTO weekview_residents_count(tenant_id,department_id,year,week,day_of_week,meal,count) VALUES(:tid,:dep,:yy,:ww,1,'lunch',10)"), {"tid": 1, "dep": dep_id, "yy": year, "ww": week})
             db.commit()
         finally:
             db.close()
+        WeekviewRepo().apply_operations(
+            tenant_id=1,
+            year=year,
+            week=week,
+            department_id=dep_id,
+            ops=[{"day_of_week": 1, "meal": "lunch", "diet_type": "Gluten", "marked": True}],
+        )
+        WeekviewRepo().set_residents_counts(
+            tenant_id=1,
+            year=year,
+            week=week,
+            department_id=dep_id,
+            items=[{"day_of_week": 1, "meal": "lunch", "count": 10}],
+        )
         reg = getattr(app, "feature_registry", None)
         if reg:
             if not reg.has("ff.planera.enabled"):

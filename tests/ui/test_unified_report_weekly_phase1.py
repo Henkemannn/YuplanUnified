@@ -13,6 +13,7 @@ Total: 14 tests
 """
 import os
 import pytest
+import re
 from datetime import date, timedelta
 from core.db import get_session, create_all
 from sqlalchemy import text
@@ -229,13 +230,10 @@ def test_reports_weekly_renders_basic_structure(client_admin, seed_site_and_depa
     resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    
-    assert "Veckorapport – Registrering" in html
-    assert "Vecka" in html
-    assert "Avdelning" in html
-    assert "Lunch" in html
-    assert "Kväll" in html
-    assert "Totalt" in html
+
+    assert "data-testid=\"coverage-title\"" in html
+    assert "data-testid=\"coverage-week\"" in html
+    assert "data-testid=\"coverage-table\"" in html
 
 
 def test_reports_weekly_calculates_coverage_correctly(client_admin, seed_registrations):
@@ -243,17 +241,16 @@ def test_reports_weekly_calculates_coverage_correctly(client_admin, seed_registr
     resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h("admin"))
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    
-    # Verify table headers are present
-    assert "Registreringsöversikt" in html or "Avdelning" in html
-    
-    # Verify department names appear (basic structure)
+
+    # Verify data-testid hooks are present
+    assert "data-testid=\"coverage-table\"" in html
+
+    # Verify department rows appear using data attributes
     # Note: Due to test database isolation issues, we check for presence
     # rather than exact coverage numbers
-    if "Avd Alpha" in html:
-        assert "Avd Beta" in html
-        # If departments are shown, check for percentage indicators
-        assert "%" in html
+    if "data-department=\"Avd Alpha\"" in html:
+        assert "data-department=\"Avd Beta\"" in html
+        assert "data-testid=\"coverage-percent\"" in html
 
 
 def test_reports_weekly_zero_coverage(client_admin, seed_week_menus):
@@ -261,9 +258,9 @@ def test_reports_weekly_zero_coverage(client_admin, seed_week_menus):
     resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h("admin"))
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    
+
     # Both departments have menus but no registrations
-    assert "0%" in html or "0/9" in html or "0/14" in html
+    assert re.search(r"data-testid=\"coverage-percent\"[^>]*data-value=\"0(\\.0+)?\"", html)
 
 
 def test_reports_weekly_partial_coverage(client_admin, seed_site_and_departments, seed_week_menus):
@@ -291,10 +288,11 @@ def test_reports_weekly_partial_coverage(client_admin, seed_site_and_departments
     resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h("admin"))
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    
+
     # Just verify the report renders with some coverage data
     # Note: Due to test database isolation, we check for structure rather than exact values
-    assert "Registreringsöversikt" in html or "Avdelning" in html
+    assert "data-testid=\"coverage-table\"" in html
+    assert "data-testid=\"coverage-row\"" in html
 
 
 # ============================================================================
@@ -306,9 +304,9 @@ def test_reports_weekly_no_departments(client_admin):
     resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    
+
     # Should show empty state or handle gracefully
-    assert "Veckorapport" in html
+    assert "data-testid=\"report-empty\"" in html or "data-testid=\"coverage-title\"" in html
 
 
 def test_reports_weekly_no_menus(client_admin, seed_site_and_departments):
@@ -316,10 +314,17 @@ def test_reports_weekly_no_menus(client_admin, seed_site_and_departments):
     resp = client_admin.get("/ui/reports/weekly?year=2025&week=20", headers=_h("admin"))
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    
+
     # Departments exist but no menus → expected=0, registered=0, percent=0%
-    assert "Avd Alpha" in html
-    assert "0/0" in html or "0%" in html
+    row_match = re.search(
+        r"<tr[^>]*data-testid=\"coverage-row\"[^>]*data-department=\"Avd Alpha\"[^>]*>.*?</tr>",
+        html,
+        re.S,
+    )
+    assert row_match
+    row_html = row_match.group(0)
+    assert "data-testid=\"coverage-lunch\" data-registered=\"0\" data-expected=\"0\"" in row_html
+    assert "data-testid=\"coverage-dinner\" data-registered=\"0\" data-expected=\"0\"" in row_html
 
 
 # ============================================================================
@@ -336,9 +341,12 @@ def test_reports_weekly_defaults_to_current_week(client_admin, seed_site_and_dep
     today = date.today()
     iso_cal = today.isocalendar()
     current_year, current_week = iso_cal[0], iso_cal[1]
-    
-    assert f"Vecka {current_week}" in html
-    assert str(current_year) in html
+
+    week_match = re.search(
+        rf"data-testid=\"coverage-week\"[^>]*>Vecka {current_week}, {current_year}<",
+        html,
+    )
+    assert week_match
 
 
 def test_reports_weekly_navigation_links(client_admin, seed_site_and_departments):
@@ -348,10 +356,10 @@ def test_reports_weekly_navigation_links(client_admin, seed_site_and_departments
     html = resp.data.decode("utf-8")
     
     # Should have prev/next/current week links
-    assert "Föregående vecka" in html
-    assert "Denna vecka" in html
-    assert "Nästa vecka" in html
-    
+    assert "data-testid=\"coverage-nav-prev\"" in html
+    assert "data-testid=\"coverage-nav-next\"" in html
+    assert "report-week-label" in html
+
     # Links should have year/week params
     assert "year=" in html
     assert "week=" in html

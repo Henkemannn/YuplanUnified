@@ -29,8 +29,8 @@ def test_weekview_header_icons(app_session):
     assert rv.status_code == 200
     html = rv.data.decode('utf-8')
     # Assert icons are present in header row with aria-hidden
-    assert '<span class="meal-icon" aria-hidden="true">🍽️</span>' in html
-    assert '<span class="meal-icon" aria-hidden="true">🌙</span>' in html
+    assert 'class="meal-icon' in html
+    assert '<svg' in html
     # Screen-reader text present
     assert '<span class="yp-sr-only">Lunch</span>' in html
     assert '<span class="yp-sr-only">Kväll</span>' in html

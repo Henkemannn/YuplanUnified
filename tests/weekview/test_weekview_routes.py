@@ -5,6 +5,11 @@ import uuid
 ETAG_RE = re.compile(r'^W/"weekview:dept:.*:year:\d{4}:week:\d{1,2}:v\d+"$')
 
 
+def _set_session_site(client, site_id: str) -> None:
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+
 def _enable_flag(app, name: str, enabled: bool):
     reg = getattr(app, "feature_registry")
     # Ensure exists
@@ -24,6 +29,7 @@ def test_feature_flag_off_returns_404(client_admin):
     )
 
     headers = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+    _set_session_site(client_admin, str(uuid.uuid4()))
 
     r = client_admin.get("/api/weekview?year=2025&week=44", headers=headers)
     assert r.status_code == 404
@@ -46,6 +52,8 @@ def test_weekview_get_and_resolve_etag_and_rbac(client_admin):
     )
 
     dep_id = str(uuid.uuid4())
+    site_id = str(uuid.uuid4())
+    _set_session_site(client_admin, site_id)
     base_headers = {"X-Tenant-Id": "1"}
 
     for role in ("admin", "editor", "viewer"):
@@ -76,6 +84,7 @@ def test_weekview_patch_rbac_and_if_match(client_admin):
     )
 
     base_headers = {"X-Tenant-Id": "1"}
+    _set_session_site(client_admin, str(uuid.uuid4()))
 
     # viewer forbidden
     r = client_admin.patch("/api/weekview", headers={**base_headers, "X-User-Role": "viewer"})
@@ -131,6 +140,7 @@ def test_feature_flag_off_all_404(client_admin):
     )
     assert resp.status_code == 200
     # Ensure disabled now yields 404
+    _set_session_site(client_admin, str(uuid.uuid4()))
     for path in [
         "/api/weekview?year=2025&week=45",
         "/api/weekview/resolve?site=s1&department_id=00000000-0000-0000-0000-000000000000&date=2025-11-03",
@@ -142,6 +152,7 @@ def test_feature_flag_off_all_404(client_admin):
 @pytest.mark.usefixtures("enable_weekview")
 def test_weekview_rbac_and_etag(client_admin):
     base = "/api/weekview?year=2025&week=45&department_id=00000000-0000-0000-0000-000000000000"
+    _set_session_site(client_admin, str(uuid.uuid4()))
 
     # GET allowed for admin/editor/viewer
     for role in ["admin", "editor", "viewer"]:

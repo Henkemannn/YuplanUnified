@@ -130,20 +130,23 @@ def test_alt2_flags_write_and_clear(client_admin):
 @pytest.mark.parametrize("meal", ["breakfast", "snack"])  # invalid meals
 def test_validation_errors_new_endpoints(client_admin, meal):
     dep = str(uuid.uuid4())
+    site = str(uuid.uuid4())
     base = f"/api/weekview?year=2025&week=45&department_id={dep}"
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site
     etag0 = _get(client_admin, "admin", base).headers.get("ETag")
 
     # residents: invalid meal
-    p_bad_meal = {"department_id": dep, "year": 2025, "week": 45, "items": [{"day_of_week": 1, "meal": meal, "count": 1}]}
+    p_bad_meal = {"site_id": site, "department_id": dep, "year": 2025, "week": 45, "items": [{"day_of_week": 1, "meal": meal, "count": 1}]}
     r1 = _patch(client_admin, "admin", "/api/weekview/residents", json=p_bad_meal, extra_headers={"If-Match": etag0})
     assert r1.status_code == 400
 
     # residents: negative count
-    p_bad_cnt = {"department_id": dep, "year": 2025, "week": 45, "items": [{"day_of_week": 1, "meal": "lunch", "count": -1}]}
+    p_bad_cnt = {"site_id": site, "department_id": dep, "year": 2025, "week": 45, "items": [{"day_of_week": 1, "meal": "lunch", "count": -1}]}
     r2 = _patch(client_admin, "admin", "/api/weekview/residents", json=p_bad_cnt, extra_headers={"If-Match": etag0})
     assert r2.status_code == 400
 
     # alt2: out of range day
-    p_bad_day = {"department_id": dep, "year": 2025, "week": 45, "days": [0, 8]}
+    p_bad_day = {"site_id": site, "department_id": dep, "year": 2025, "week": 45, "days": [0, 8]}
     r3 = _patch(client_admin, "admin", "/api/weekview/alt2", json=p_bad_day, extra_headers={"If-Match": etag0})
     assert r3.status_code == 400

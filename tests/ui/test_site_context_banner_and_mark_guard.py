@@ -88,6 +88,9 @@ def test_A_query_param_site_id_does_not_switch_site_and_shows_banner(app_session
 
     # Switch to Site A and open admin; ensure topbar contains Site A
     client.get(f"/ui/systemadmin/switch-site/{site_a}", follow_redirects=True)
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = ta
+        sess["site_id"] = site_a
     page = client.get(f"/ui/admin?site_id={site_b}", follow_redirects=True)
     assert page.status_code == 200
     body = page.data
@@ -108,6 +111,9 @@ def test_B_mark_done_wrong_site_returns_403_and_no_write(app_session, client: Fl
 
     # Switch to Site A and create a department
     client.get(f"/ui/systemadmin/switch-site/{site_a}", follow_redirects=True)
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = ta
+        sess["site_id"] = site_a
     _create_department(client, "Avd Mark A")
 
     # Lookup department id
@@ -137,6 +143,8 @@ def test_B_mark_done_wrong_site_returns_403_and_no_write(app_session, client: Fl
 
     # Verify no DB write for Site B
     with app_session.app_context():
+        from core.meal_registration_repo import MealRegistrationRepo
+        MealRegistrationRepo().ensure_table_exists()
         db = get_session()
         try:
             rows = db.execute(text("SELECT COUNT(*) FROM meal_registrations WHERE site_id=:s"), {"s": site_b}).fetchone()

@@ -58,8 +58,8 @@ def test_reports_weekly_uses_yp_table(client_admin: FlaskClient):
     
     if response.status_code == 200:
         html = response.data.decode('utf-8')
-        # If page loaded, should use yp components
-        assert 'yp-' in html or 'report' in html.lower()
+        # If page loaded, should expose coverage table hook or empty-state
+        assert 'data-testid="coverage-table"' in html or 'data-testid="report-empty"' in html
 
 
 def test_menu_planning_view_uses_yp_table(client_admin: FlaskClient):
@@ -225,8 +225,8 @@ def test_reports_weekly_uses_yp_button(client_admin: FlaskClient):
     
     if response.status_code == 200:
         html = response.data.decode('utf-8')
-        # If page loaded, should use yp components
-        assert 'yp-' in html or 'report' in html.lower()
+        # If page loaded, should expose coverage title hook or empty-state
+        assert 'data-testid="coverage-title"' in html or 'data-testid="report-empty"' in html
 
 
 def test_menu_planning_uses_yp_button(client_admin: FlaskClient):
@@ -276,8 +276,8 @@ def test_reports_weekly_uses_yp_badge_for_coverage(client_admin: FlaskClient):
     assert response.status_code == 200
     html = response.data.decode('utf-8')
     
-    # Should use yp components
-    assert 'yp-' in html
+    # Should expose coverage percent hook or empty-state
+    assert 'data-testid="coverage-percent"' in html or 'data-testid="report-empty"' in html
 
 
 def test_menu_planning_uses_yp_badge_for_alt2(client_admin: FlaskClient):

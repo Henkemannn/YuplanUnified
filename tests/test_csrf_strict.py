@@ -5,13 +5,13 @@ import pytest
 # These tests assume env flag enabled; we simulate by overriding app config during test.
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def strict_app(app_session):
     app_session.config.update({"YUPLAN_STRICT_CSRF": True})
     return app_session
 
 
-@pytest.fixture(autouse=True, scope="module")
+@pytest.fixture(autouse=True, scope="function")
 def _reset_flag_after_module(strict_app):
     yield
     strict_app.config.update({"YUPLAN_STRICT_CSRF": False})

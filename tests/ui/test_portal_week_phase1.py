@@ -9,6 +9,11 @@ def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1"}
 
 
+def _set_session_site(client, site_id: str) -> None:
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+
 def _seed_base(app, site_id: str, dep_id: str, year: int, week: int):
     from core.db import create_all, get_session
     from sqlalchemy import text
@@ -44,6 +49,7 @@ def test_portal_rbac_allowed_roles(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 45
     _seed_base(app, site_id, dep_id, year, week)
+    _set_session_site(client_admin, site_id)
 
     for role in ["admin", "cook", "unit_portal", "superuser"]:
         r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h(role))
@@ -55,6 +61,7 @@ def test_portal_rbac_viewer_forbidden(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 45
     _seed_base(app, site_id, dep_id, year, week)
+    _set_session_site(client_admin, site_id)
     r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("viewer"))
     assert r.status_code == 403
 
@@ -64,6 +71,7 @@ def test_portal_basic_content(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 46
     _seed_base(app, site_id, dep_id, year, week)
+    _set_session_site(client_admin, site_id)
     r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
     html = r.get_data(as_text=True)
     assert "Avdelningsportalen" in html
@@ -77,6 +85,7 @@ def test_portal_alt2_badge_visible(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 47
     _seed_base(app, site_id, dep_id, year, week)
+    _set_session_site(client_admin, site_id)
     # Set alt2 flag for Monday
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
     etag0 = r0.headers.get("ETag"); assert ETAG_RE.match(etag0)
@@ -92,6 +101,7 @@ def test_portal_registration_badge(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 48
     _seed_base(app, site_id, dep_id, year, week)
+    _set_session_site(client_admin, site_id)
     # Upsert registration for Monday lunch
     from core.meal_registration_repo import MealRegistrationRepo
     repo = MealRegistrationRepo(); repo.ensure_table_exists()
@@ -111,8 +121,7 @@ def test_portal_diets_render(client_admin):
     # Use residents PATCH to set lunch counts (not directly diets, but ensures counts visible)
     # Align session site context
     # Set session site context directly (selector is superuser-only)
-    with client_admin.session_transaction() as sess:
-        sess["site_id"] = site_id
+    _set_session_site(client_admin, site_id)
     r0 = client_admin.get(f"/api/weekview?year={year}&week={week}&department_id={dep_id}", headers=_h("admin"))
     etag0 = r0.headers.get("ETag")
     r_res = client_admin.patch("/api/weekview/residents", json={"tenant_id":1, "site_id": site_id, "department_id":dep_id,"year":year,"week":week,"items":[{"day_of_week":1,"meal":"lunch","count":18}]}, headers={**_h("admin"), "If-Match": etag0})
@@ -127,6 +136,7 @@ def test_portal_regression_other_views_ok(client_admin):
     _enable_weekview(client_admin)
     site_id = str(uuid.uuid4()); dep_id = str(uuid.uuid4()); year, week = 2025, 50
     _seed_base(app, site_id, dep_id, year, week)
+    _set_session_site(client_admin, site_id)
     r_portal = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
     assert r_portal.status_code == 200
     r_weekview = client_admin.get(f"/ui/weekview?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
@@ -155,6 +165,7 @@ def test_portal_week_renders_days_even_without_menu(client_admin):
         finally:
             db.close()
     # Hit legacy route (should render unified template with synthetic days fallback)
+    _set_session_site(client_admin, site_id)
     r = client_admin.get(f"/portal/week?site_id={site_id}&department_id={dep_id}&year={year}&week={week}", headers=_h("admin"))
     assert r.status_code == 200
     html = r.get_data(as_text=True)

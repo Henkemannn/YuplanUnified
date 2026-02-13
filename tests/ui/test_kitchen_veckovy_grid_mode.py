@@ -6,6 +6,14 @@ from sqlalchemy import text
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
+def _set_session(client, site_id: str) -> None:
+    with client.session_transaction() as sess:
+        sess["role"] = "admin"
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["site_id"] = site_id
+
+
 def _seed_basics():
     from core.db import get_session
     conn = get_session()
@@ -57,6 +65,7 @@ def test_kitchen_grid_renders_and_icons_present(app_session):
     tid = 1
 
     _ensure_menu_for_week(tid, year, week)
+    _set_session(client, site_id)
 
     rv = client.get(
         f"/ui/kitchen/week?site_id={site_id}&department_id={department_id}&year={year}&week={week}",
@@ -78,6 +87,7 @@ def test_enhetsportal_does_not_render_grid(app_session):
     department_id = "00000000-0000-0000-0000-000000000001"
     year = 2025
     week = 49
+    _set_session(client, site_id)
 
     # Normal unified portal weekly view should not include grid elements
     rv = client.get(
@@ -101,7 +111,12 @@ def test_cell_classes_markerad_and_alt2(app_session):
     tid = 1
 
     _ensure_menu_for_week(tid, year, week)
+    _set_session(client, site_id)
     monday = _date.fromisocalendar(year, week, 1).isoformat()
+
+    from core.meal_registration_repo import MealRegistrationRepo
+    with app_session.app_context():
+        MealRegistrationRepo().ensure_table_exists()
 
     # Register lunch for monday to create "markerad"
     client.post(

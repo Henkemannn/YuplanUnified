@@ -5,6 +5,14 @@ from sqlalchemy import text
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
+def _set_session(client, site_id: str) -> None:
+    with client.session_transaction() as sess:
+        sess["role"] = "admin"
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["site_id"] = site_id
+
+
 def _seed_site_and_department():
     from core.db import get_session
     conn = get_session()
@@ -53,6 +61,11 @@ def test_portal_department_week_choice_happy_path(app_session):
     tid = 1
 
     _ensure_menu_for_week(tid, year, week)
+    _set_session(client, site_id)
+
+    from core.meal_registration_repo import MealRegistrationRepo
+    with app_session.app_context():
+        MealRegistrationRepo().ensure_table_exists()
 
     # Initial GET: portal week should render lunch block (menu exists)
     r0 = client.get(
@@ -103,6 +116,11 @@ def test_portal_department_week_choice_persists(app_session):
     tid = 1
 
     _ensure_menu_for_week(tid, year, week)
+    _set_session(client, site_id)
+
+    from core.meal_registration_repo import MealRegistrationRepo
+    with app_session.app_context():
+        MealRegistrationRepo().ensure_table_exists()
     monday = _date.fromisocalendar(year, week, 1).isoformat()
     client.post(
         "/ui/weekview/registration",

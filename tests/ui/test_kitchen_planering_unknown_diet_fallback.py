@@ -22,10 +22,31 @@ def _seed_unknown_diet(site_id: str) -> int:
         # Detect if tenant_id is NOT NULL
         cols = db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()
         notnull = {str(r[1]): int(r[3] or 0) for r in cols}
-        if notnull.get('tenant_id', 0):
-            db.execute(text("INSERT INTO dietary_types(tenant_id, site_id, name, default_select) VALUES(:t, :s, :n, 0)"), {"t": 1, "s": site_id, "n": ""})
+        has_site_id = "site_id" in notnull
+        if notnull.get("tenant_id", 0):
+            if has_site_id:
+                db.execute(
+                    text(
+                        "INSERT INTO dietary_types(tenant_id, site_id, name, default_select) VALUES(:t, :s, :n, 0)"
+                    ),
+                    {"t": 1, "s": site_id, "n": ""},
+                )
+            else:
+                db.execute(
+                    text("INSERT INTO dietary_types(tenant_id, name, default_select) VALUES(:t, :n, 0)"),
+                    {"t": 1, "n": ""},
+                )
         else:
-            db.execute(text("INSERT INTO dietary_types(site_id, name, default_select) VALUES(:s, :n, 0)"), {"s": site_id, "n": ""})
+            if has_site_id:
+                db.execute(
+                    text("INSERT INTO dietary_types(site_id, name, default_select) VALUES(:s, :n, 0)"),
+                    {"s": site_id, "n": ""},
+                )
+            else:
+                db.execute(
+                    text("INSERT INTO dietary_types(name, default_select) VALUES(:n, 0)"),
+                    {"n": ""},
+                )
         row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
         db.commit()
         return int(row[0]) if row else 0
