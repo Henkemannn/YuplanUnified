@@ -39,7 +39,7 @@ jobs:
           ruff check . --output-format=github || (echo "Ruff found issues" && exit 1)
       - name: Mypy Type Check
         run: |
-            mypy .
+          mypy .
 
   openapi-validate:
     runs-on: ubuntu-latest
