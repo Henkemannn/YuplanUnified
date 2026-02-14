@@ -119,7 +119,23 @@ def auth_doctor() -> int:
     return 0
 
 
-def auth_reset(email: str, role: str) -> int:
+def _write_temp_password(path: str, temp_password: str) -> None:
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(temp_password)
+        handle.write("\n")
+    if os.name != "nt":
+        try:
+            os.chmod(path, 0o600)
+        except Exception:
+            pass
+
+
+def _confirm_print_password() -> bool:
+    prompt = "This will print a password to your terminal. Type PRINT to continue: "
+    return input(prompt) == "PRINT"
+
+
+def auth_reset(email: str, role: str, out_path: str | None, print_password: bool) -> int:
     role = role.strip().lower()
     if role not in {"superuser", "admin", "cook"}:
         print("ERROR: role must be one of: superuser, admin, cook")
@@ -168,9 +184,22 @@ def auth_reset(email: str, role: str) -> int:
 
             db.commit()
             print(f"User ready: {normalized} (role={role})")
-            print("\nOne-time temporary credential:")
-            print(temp_password)
-            print("\nPlease log in and change it immediately.")
+            print("A temporary password was generated but is NOT printed for security.")
+            print("Use --out <path> to write it to a local file (0600).")
+
+            if out_path:
+                _write_temp_password(out_path, temp_password)
+                print(f"Wrote temporary password to: {out_path}")
+                if os.name == "nt":
+                    print("Note: delete the file after use.")
+
+            if print_password:
+                if not _confirm_print_password():
+                    print("Aborted.")
+                    return 3
+                print("\nOne-time temporary credential:")
+                print(temp_password)
+                print("\nPlease log in and change it immediately.")
             return 0
         finally:
             db.close()
@@ -237,9 +266,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("auth-doctor", help="Diagnose auth DB state")
 
-    reset = sub.add_parser("auth-reset", help="Create or reset a user and print a temp password")
+    reset = sub.add_parser("auth-reset", help="Create or reset a user with a temporary password")
     reset.add_argument("--email", required=True, help="User email")
     reset.add_argument("--role", default="superuser", help="superuser|admin|cook")
+    reset.add_argument("--out", help="Write the temporary password to a file")
+    reset.add_argument(
+        "--print-password",
+        action="store_true",
+        help="Print the temporary password after interactive confirmation",
+    )
 
     sub.add_parser("auth-ensure-superuser", help="Ensure SUPERUSER_EMAIL/PASSWORD exists in DB")
     return parser
@@ -252,7 +287,7 @@ def main() -> int:
     if args.command == "auth-doctor":
         return auth_doctor()
     if args.command == "auth-reset":
-        return auth_reset(args.email, args.role)
+        return auth_reset(args.email, args.role, args.out, args.print_password)
     if args.command == "auth-ensure-superuser":
         return auth_ensure_superuser()
 

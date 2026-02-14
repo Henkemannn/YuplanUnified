@@ -20,15 +20,22 @@ python run.py auth-reset --email you@example.com --role superuser
 ```
 
 Notes:
-- A temporary password is printed once. Copy it immediately.
+- A temporary password is generated but not printed by default.
 - Roles allowed: superuser, admin, cook
 
-Example output:
+Recommended flow:
 
-```text
-User ready: you@example.com (role=superuser)
-TEMP_PASSWORD: <printed once>
-WARNING: copy now - shown only here.
+```bash
+python run.py auth-reset --email you@example.com --role superuser --out ./.tmp_admin_pw.txt
+```
+
+Then:
+- Open the file, log in, change the password, and delete the file.
+
+If you must print to the terminal:
+
+```bash
+python run.py auth-reset --email you@example.com --role superuser --print-password
 ```
 
 ## Ensure superuser from env
