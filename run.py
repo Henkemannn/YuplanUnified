@@ -168,8 +168,9 @@ def auth_reset(email: str, role: str) -> int:
 
             db.commit()
             print(f"User ready: {normalized} (role={role})")
-            print(f"TEMP_PASSWORD: {temp_password}")
-            print("WARNING: copy now - shown only here.")
+            print("\nOne-time temporary credential:")
+            print(temp_password)
+            print("\nPlease log in and change it immediately.")
             return 0
         finally:
             db.close()
