@@ -16,26 +16,27 @@ This prints:
 ## Create/reset a user
 
 ```bash
-python run.py auth-reset --email you@example.com --role superuser
+python run.py auth-reset --email you@example.com --role superuser --password-env YP_RESET_PW
 ```
 
 Notes:
-- A temporary password is generated but not printed by default.
 - Roles allowed: superuser, admin, cook
+- Avoid putting passwords directly in command history; prefer --password-env.
 
-Recommended flow:
+PowerShell example:
 
-```bash
-python run.py auth-reset --email you@example.com --role superuser --out ./.tmp_admin_pw.txt
+```powershell
+$env:YP_RESET_PW="SomeStrongPw!123"
+python run.py auth-reset --email you@x --role superuser --password-env YP_RESET_PW
+Remove-Item Env:\YP_RESET_PW
 ```
 
-Then:
-- Open the file, log in, change the password, and delete the file.
-
-If you must print to the terminal:
+Bash example:
 
 ```bash
-python run.py auth-reset --email you@example.com --role superuser --print-password
+export YP_RESET_PW='SomeStrongPw!123'
+python run.py auth-reset --email you@x --role superuser --password-env YP_RESET_PW
+unset YP_RESET_PW
 ```
 
 ## Ensure superuser from env

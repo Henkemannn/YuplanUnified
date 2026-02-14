@@ -119,27 +119,21 @@ def auth_doctor() -> int:
     return 0
 
 
-def _write_temp_password(path: str, temp_password: str) -> None:
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(temp_password)
-        handle.write("\n")
-    if os.name != "nt":
-        try:
-            os.chmod(path, 0o600)
-        except Exception:
-            pass
-
-
-def _confirm_print_password() -> bool:
-    prompt = "This will print a password to your terminal. Type PRINT to continue: "
-    return input(prompt) == "PRINT"
-
-
-def auth_reset(email: str, role: str, out_path: str | None, print_password: bool) -> int:
+def auth_reset(email: str, role: str, password: str | None, password_env: str | None) -> int:
     role = role.strip().lower()
     if role not in {"superuser", "admin", "cook"}:
         print("ERROR: role must be one of: superuser, admin, cook")
         return 2
+
+    if bool(password) == bool(password_env):
+        print("ERROR: provide exactly one of --password or --password-env")
+        return 2
+
+    if password_env:
+        password = os.environ.get(password_env) or ""
+        if not password:
+            print("ERROR: password environment variable is missing or empty")
+            return 2
 
     app = create_app()
     with app.app_context():
@@ -154,8 +148,7 @@ def auth_reset(email: str, role: str, out_path: str | None, print_password: bool
 
             tenant = _ensure_tenant(db)
             normalized = email.strip().lower()
-            temp_password = _generate_temp_password()
-            pw_hash = generate_password_hash(temp_password)
+            pw_hash = generate_password_hash(password)
 
             user = db.query(User).filter(User.email == normalized).first()
             if not user:
@@ -184,22 +177,7 @@ def auth_reset(email: str, role: str, out_path: str | None, print_password: bool
 
             db.commit()
             print(f"User ready: {normalized} (role={role})")
-            print("A temporary password was generated but is NOT printed for security.")
-            print("Use --out <path> to write it to a local file (0600).")
-
-            if out_path:
-                _write_temp_password(out_path, temp_password)
-                print(f"Wrote temporary password to: {out_path}")
-                if os.name == "nt":
-                    print("Note: delete the file after use.")
-
-            if print_password:
-                if not _confirm_print_password():
-                    print("Aborted.")
-                    return 3
-                print("\nOne-time temporary credential:")
-                print(temp_password)
-                print("\nPlease log in and change it immediately.")
+            print("Password updated.")
             return 0
         finally:
             db.close()
@@ -266,15 +244,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("auth-doctor", help="Diagnose auth DB state")
 
-    reset = sub.add_parser("auth-reset", help="Create or reset a user with a temporary password")
+    reset = sub.add_parser("auth-reset", help="Create or reset a user with a specified password")
     reset.add_argument("--email", required=True, help="User email")
     reset.add_argument("--role", default="superuser", help="superuser|admin|cook")
-    reset.add_argument("--out", help="Write the temporary password to a file")
-    reset.add_argument(
-        "--print-password",
-        action="store_true",
-        help="Print the temporary password after interactive confirmation",
-    )
+    reset.add_argument("--password", help="Explicit password to set")
+    reset.add_argument("--password-env", help="Environment variable containing the password")
 
     sub.add_parser("auth-ensure-superuser", help="Ensure SUPERUSER_EMAIL/PASSWORD exists in DB")
     return parser
@@ -287,7 +261,7 @@ def main() -> int:
     if args.command == "auth-doctor":
         return auth_doctor()
     if args.command == "auth-reset":
-        return auth_reset(args.email, args.role, args.out, args.print_password)
+        return auth_reset(args.email, args.role, args.password, args.password_env)
     if args.command == "auth-ensure-superuser":
         return auth_ensure_superuser()
 
