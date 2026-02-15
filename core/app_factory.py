@@ -1593,7 +1593,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                                         "ok": {
                                             "value": {
                                                 "items": [
-                                                    {"id": "u1", "email": "a@ex", "role": "admin"}
+                                                    {"id": "u1", "email": "a@example.com", "role": "admin"}
                                                 ],
                                                 "total": 1
                                             }
@@ -1675,7 +1675,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                             "content": {
                                 "application/json": {
                                     "schema": {"$ref": "#/components/schemas/UserWithRole"},
-                                    "examples": {"ok": {"value": {"id": "u1", "email": "a2@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}
+                                    "examples": {"ok": {"value": {"id": "u1", "email": "a2@example.com", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}
                                 }
                             }
                         },
@@ -1721,7 +1721,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                                 "application/json": {
                                     "schema": {"$ref": "#/components/schemas/UserWithRole"},
                                     "examples": {
-                                        "ok": {"value": {"id": "u1", "email": "a2@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}
+                                        "ok": {"value": {"id": "u1", "email": "a2@example.com", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}
                                     }
                                 }
                             }
@@ -1887,7 +1887,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                                         "ok": {
                                             "value": {
                                                 "items": [
-                                                    {"id": "u1", "email": "a@ex", "role": "editor"}
+                                                    {"id": "u1", "email": "a@example.com", "role": "editor"}
                                                 ],
                                                 "total": 1
                                             }
@@ -1922,7 +1922,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                         }
                     },
                     "responses": {
-                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}, "examples": {"ok": {"value": {"id": "u1", "email": "a@ex", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}}}},
+                        "200": {"description": "OK", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UserWithRole"}, "examples": {"ok": {"value": {"id": "u1", "email": "a@example.com", "role": "editor", "updated_at": "2025-01-01T12:00:00+00:00"}}}}}},
                         "404": {"description": "Not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"userMissing": {"value": {"ok": False, "error": "not_found", "message": "user not found"}}}}}},
                         "422": {"description": "Validation error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "examples": {"invalidRole": {"value": {"ok": False, "error": "invalid", "message": "validation_error", "invalid_params": [{"name":"role","reason":"invalid_enum","allowed":["admin","editor","viewer"]}]}}}}}}
                     }

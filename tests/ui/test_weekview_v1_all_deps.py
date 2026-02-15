@@ -54,11 +54,9 @@ def test_toggle_flow_marks_persist_and_report_shows_special():
     client: FlaskClient = app.test_client()
     site, depA, depB, dt_id = setup_data()
     # Align session site context
-    client.post(
-        "/ui/select-site",
-        data={"site_id": site["id"], "next": "/"},
-        headers=_login_headers(),
-    )
+    with client.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+        sess["tenant_id"] = 1
 
     iso = _date.today().isocalendar()
     year, week = iso[0], iso[1]
@@ -67,8 +65,8 @@ def test_toggle_flow_marks_persist_and_report_shows_special():
     svc = WeekviewService()
     repo = WeekviewRepo()
     # Ensure version row exists
-    _ = repo.get_version(tenant_id=1, year=year, week=week, department_id=depA["id"])  # seeds 0
-    etag = svc.build_etag(tenant_id=1, department_id=depA["id"], year=year, week=week, version=0)
+    version = repo.get_version(tenant_id=1, year=year, week=week, department_id=depA["id"])
+    etag = svc.build_etag(tenant_id=1, department_id=depA["id"], year=year, week=week, version=version)
 
     # Toggle Monday lunch mark for depA
     payload = {

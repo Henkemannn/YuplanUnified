@@ -1253,7 +1253,7 @@ def weekview_ui():
         return render_template("ui/weekview_all.html", vm=vm_all, meal_labels=meal_labels)
 
     # Fetch enriched weekview payload via service (no extra SQL here)
-    tid = session.get("tenant_id")
+    tid = session.get("tenant_id") or getattr(g, "tenant_id", None)
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
     svc = WeekviewService()
@@ -1506,7 +1506,7 @@ def portal_week():
     finally:
         db.close()
 
-    tid = session.get("tenant_id")
+    tid = session.get("tenant_id") or getattr(g, "tenant_id", None)
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
 
@@ -1692,7 +1692,7 @@ def portal_week_unified_path(year: int, week: int, department_id: int):
     Always returns 200 if session has a tenant; builds VM via view service.
     Query may include optional site_id to assist registrations lookup.
     """
-    tid = session.get("tenant_id")
+    tid = session.get("tenant_id") or getattr(g, "tenant_id", None)
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
     site_id = (request.args.get("site_id") or "").strip() or None
@@ -2938,7 +2938,7 @@ def weekview_registration_save():
     NOTE: Persists to `meal_registrations` (site, department, date, meal_type, registered).
     NOTE: Read by both portal_week and weekview_ui; ReportService uses same table for coverage.
     """
-    tid = session.get("tenant_id")
+    tid = session.get("tenant_id") or getattr(g, "tenant_id", None)
     if not tid:
         flash("Ingen tenant-kontext", "error")
         return redirect("/workspace")
@@ -2972,6 +2972,7 @@ def weekview_registration_save():
     # Save registration
     try:
         reg_repo = MealRegistrationRepo()
+        reg_repo.ensure_table_exists()
         reg_repo.upsert_registration(
             tenant_id=tid,
             site_id=site_id,
@@ -3362,8 +3363,16 @@ def admin_report_week():
 
     db = get_session()
     try:
-        deps_rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+        row_site = db.execute(text("SELECT name FROM sites WHERE id=:s"), {"s": site_id}).fetchone()
+        site_name = row_site[0] if row_site else None
+        deps_rows = db.execute(
+            text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"),
+            {"s": site_id},
+        ).fetchall()
         all_deps = [{"id": str(r[0]), "name": str(r[1] or "")} for r in deps_rows]
+        departments_options = [{"id": "ALL", "name": "Alla avdelningar"}] + [
+            {"id": str(r[0]), "name": (str(r[1]) if r[1] else str(r[0]))} for r in deps_rows
+        ]
     finally:
         db.close()
     target_deps = all_deps if (not department_id or department_id == "ALL") else [d for d in all_deps if d["id"] == department_id]
@@ -3425,8 +3434,10 @@ def admin_report_week():
         "selected_week": week,
         "selected_department_id": department_id or "ALL",
         "view_mode": ("day" if view_mode.startswith("day") else "week"),
+        "site_id": site_id,
+        "site_name": site_name,
         "departments": vm_deps,
-        "departments_options": [{"id":"ALL","name":"Alla avdelningar"}] + all_deps,
+        "departments_options": departments_options,
         "prev_year": prev_year,
         "prev_week": prev_week,
         "next_year": next_year,

@@ -26,6 +26,7 @@
         setupModalHandlers();
         setupSiteContextWarning();
         setupSiteContextVersionSync();
+        setupReportWeeklyAutosubmit();
         
         // Check mobile on load
         if (window.innerWidth <= 768) {
@@ -276,6 +277,48 @@
             });
         } catch (e) {
             // no-op
+        }
+    }
+
+    // ========================================================================
+    // Report Weekly Autosubmit (CSP-safe)
+    // ========================================================================
+
+    function setupReportWeeklyAutosubmit() {
+        const root = document.querySelector('.report-weekly');
+        if (!root) return;
+        const form = root.querySelector('form.filter-bar');
+        if (!form) return;
+        const status = form.querySelector('.filter-status');
+        let submitting = false;
+
+        const submit = () => {
+            if (submitting) return;
+            submitting = true;
+            if (status) status.classList.add('is-visible');
+            if (form.requestSubmit) {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        };
+
+        form.addEventListener('submit', () => {
+            if (status) status.classList.add('is-visible');
+        });
+
+        form.querySelectorAll('[data-autosubmit="1"]').forEach(el => {
+            el.addEventListener('change', submit);
+        });
+
+        const year = form.querySelector('#year-input');
+        if (year) {
+            year.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submit();
+                }
+            });
         }
     }
     
