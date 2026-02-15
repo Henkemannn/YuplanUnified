@@ -180,9 +180,9 @@
         document.querySelectorAll('.yp-btn, a, button, input, select').forEach(el => {
             const rect = el.getBoundingClientRect();
             if (rect.height < minSize || rect.width < minSize) {
-                el.style.minHeight = `${minSize}px`;
+                el.classList.add('yp-touch-target');
                 if (el.matches('button, .yp-btn')) {
-                    el.style.minWidth = `${minSize}px`;
+                    el.classList.add('yp-touch-target-button');
                 }
             }
         });
@@ -220,65 +220,15 @@
         document.addEventListener('click', (e) => {
             const btn = e.target.closest('.yp-btn, button');
             if (!btn || btn.hasAttribute('data-no-ripple')) return;
-            
-            createRipple(btn, e);
+            btn.classList.add('yp-ripple-host');
+            btn.classList.remove('yp-ripple-active');
+            void btn.offsetWidth;
+            btn.classList.add('yp-ripple-active');
+            setTimeout(() => {
+                btn.classList.remove('yp-ripple-active');
+            }, 450);
         });
     }
-    
-    /**
-     * Create and animate ripple effect
-     */
-    function createRipple(button, event) {
-        const ripple = document.createElement('span');
-        const rect = button.getBoundingClientRect();
-        
-        const diameter = Math.max(rect.width, rect.height);
-        const radius = diameter / 2;
-        
-        ripple.style.width = ripple.style.height = `${diameter}px`;
-        ripple.style.left = `${event.clientX - rect.left - radius}px`;
-        ripple.style.top = `${event.clientY - rect.top - radius}px`;
-        ripple.classList.add('yp-ripple');
-        
-        const existingRipple = button.querySelector('.yp-ripple');
-        if (existingRipple) {
-            existingRipple.remove();
-        }
-        
-        // Ensure button has position context
-        if (getComputedStyle(button).position === 'static') {
-            button.style.position = 'relative';
-        }
-        button.style.overflow = 'hidden';
-        
-        button.appendChild(ripple);
-        
-        // Remove ripple after animation
-        setTimeout(() => {
-            ripple.remove();
-        }, 600);
-    }
-    
-    // Add ripple CSS dynamically
-    const rippleStyle = document.createElement('style');
-    rippleStyle.textContent = `
-        .yp-ripple {
-            position: absolute;
-            border-radius: 50%;
-            background-color: rgba(255, 255, 255, 0.6);
-            transform: scale(0);
-            animation: yp-ripple-animation 0.6s ease-out;
-            pointer-events: none;
-        }
-        
-        @keyframes yp-ripple-animation {
-            to {
-                transform: scale(4);
-                opacity: 0;
-            }
-        }
-    `;
-    document.head.appendChild(rippleStyle);
     
     // ========================================================================
     // ACCESSIBILITY ENHANCEMENTS
