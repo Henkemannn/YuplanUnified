@@ -1,0 +1,333 @@
+/* Yuplan App Shell Prototype (scoped) */
+
+.app-shell {
+  --yp-color-primary: #2563eb;
+  --yp-color-primary-hover: #1d4ed8;
+  --yp-color-primary-light: #dbeafe;
+  --yp-color-secondary-light: #f1f5f9;
+  --yp-color-bg: #ffffff;
+  --yp-color-bg-alt: #f8fafc;
+  --yp-color-bg-elevated: #ffffff;
+  --yp-color-text: #0f172a;
+  --yp-color-text-muted: #64748b;
+  --yp-color-border: #e2e8f0;
+  --yp-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --yp-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --yp-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --yp-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --yp-radius-sm: 0.25rem;
+  --yp-radius: 0.5rem;
+  --yp-radius-lg: 0.75rem;
+  --yp-radius-full: 9999px;
+  --yp-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", Arial, sans-serif;
+  --yp-font-size-sm: 0.875rem;
+  --yp-font-size-base: 1rem;
+  --yp-font-size-lg: 1.125rem;
+  --yp-font-size-xl: 1.25rem;
+  --yp-font-size-2xl: 1.5rem;
+  --yp-font-size-3xl: 1.875rem;
+
+  --bg: var(--yp-color-bg-alt);
+  --surface: var(--yp-color-bg-elevated);
+  --surface-2: var(--yp-color-secondary-light);
+  --border-subtle: var(--yp-color-border);
+  --text: var(--yp-color-text);
+  --muted: var(--yp-color-text-muted);
+  --accent: var(--yp-color-primary);
+  --accent-soft: var(--yp-color-primary-light);
+  --r-sm: var(--yp-radius-sm);
+  --r-md: var(--yp-radius);
+  --r-lg: var(--yp-radius-lg);
+  --sh-1: var(--yp-shadow);
+  --sh-2: var(--yp-shadow-md);
+  --topbar-height: 60px;
+  --sidebar-width: 240px;
+
+  font-family: var(--yp-font-family);
+  color: var(--text);
+  background: var(--bg);
+  min-height: 100vh;
+  margin: -8px;
+  padding: 8px;
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.app-shell.is-ready {
+  opacity: 1;
+  transform: none;
+  transition: opacity 280ms ease, transform 280ms ease;
+}
+
+.app-shell *,
+.app-shell *::before,
+.app-shell *::after {
+  box-sizing: border-box;
+}
+
+.app-shell a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-shell__topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--topbar-height);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: var(--sh-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 20;
+}
+
+.app-shell__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-shell__logo {
+  width: 32px;
+  height: 32px;
+  display: block;
+}
+
+.app-shell__brand-text {
+  font-size: var(--yp-font-size-lg);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.app-shell__topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-shell__env-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.app-shell__user-pill {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: var(--r-lg);
+  font-size: var(--yp-font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.app-shell__user-pill:hover {
+  background: var(--surface-2);
+  border-color: var(--accent-soft);
+}
+
+.app-shell__body {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  gap: 24px;
+  padding: calc(var(--topbar-height) + 24px) 24px 32px;
+}
+
+.app-shell__sidebar {
+  position: sticky;
+  top: calc(var(--topbar-height) + 24px);
+  align-self: start;
+}
+
+.app-shell__nav {
+  display: grid;
+  gap: 6px;
+}
+
+.app-shell__nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 18px;
+  border-radius: var(--r-lg);
+  color: var(--muted);
+  font-size: var(--yp-font-size-base);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.app-shell__nav-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.app-shell__nav-item--active {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.app-shell__nav-item--active::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 4px;
+  height: 20px;
+  transform: translateY(-50%);
+  border-radius: var(--r-sm);
+  background: var(--accent);
+}
+
+.app-shell__main {
+  display: grid;
+  gap: 24px;
+}
+
+.app-shell__page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-shell__title {
+  margin: 0 0 6px;
+  font-size: var(--yp-font-size-3xl);
+  font-weight: 700;
+}
+
+.app-shell__subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--yp-font-size-lg);
+  max-width: 520px;
+  line-height: 1.5;
+}
+
+.app-shell__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.app-shell__card {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  padding: 20px;
+  box-shadow: var(--sh-1);
+  min-height: 150px;
+  display: grid;
+  gap: 12px;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.app-shell__card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sh-2);
+  border-color: var(--accent-soft);
+}
+
+.app-shell__card-title {
+  margin: 0;
+  font-size: var(--yp-font-size-xl);
+  font-weight: 600;
+}
+
+.app-shell__card-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--yp-font-size-base);
+  line-height: 1.6;
+}
+
+.app-shell__card-meta {
+  font-size: var(--yp-font-size-sm);
+  color: var(--muted);
+}
+
+.app-shell__card--coming {
+  background: var(--surface-2);
+  border-style: dashed;
+}
+
+.app-shell__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  width: fit-content;
+}
+
+@media (max-width: 1024px) {
+  .app-shell {
+    --sidebar-width: 200px;
+  }
+
+  .app-shell__title {
+    font-size: var(--yp-font-size-2xl);
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    --topbar-height: 72px;
+  }
+
+  .app-shell__body {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell__sidebar {
+    position: static;
+  }
+
+  .app-shell__nav {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .app-shell__nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .app-shell__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell__topbar {
+    padding: 0 16px;
+  }
+
+  .app-shell__brand-text {
+    font-size: var(--yp-font-size-base);
+  }
+
+  .app-shell__title {
+    font-size: var(--yp-font-size-xl);
+  }
+}
