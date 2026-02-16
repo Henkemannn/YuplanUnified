@@ -16,20 +16,35 @@
       </div>
       <div class="app-shell__topbar-actions">
         <span class="app-shell__env-badge app-shell__env-badge--local">LOCAL</span>
-        <button class="app-shell__user-pill" type="button">superuser</button>
+        <button class="app-shell__theme-toggle" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle>
+          <span data-theme-icon>🌙</span>
+        </button>
+        <div class="app-shell__user-menu" data-user-menu>
+          <button class="app-shell__user-pill" type="button" aria-haspopup="menu" aria-expanded="false" data-user-menu-trigger>
+            superuser
+          </button>
+          <div class="app-shell__user-dropdown" role="menu" aria-label="Användarmeny">
+            <a class="app-shell__user-item" role="menuitem" href="#">Användarinfo</a>
+            <a class="app-shell__user-item" role="menuitem" href="#">Support</a>
+            <a class="app-shell__user-item" role="menuitem" href="#">Logga ut</a>
+          </div>
+        </div>
       </div>
     </header>
 
     <div class="app-shell__body">
       <aside class="app-shell__sidebar" aria-label="Huvudnavigering">
-        <nav class="app-shell__nav">
-          <a class="app-shell__nav-item app-shell__nav-item--active" href="#">Översikt</a>
-          <a class="app-shell__nav-item" href="#">Avdelningar</a>
-          <a class="app-shell__nav-item" href="#">Meny &amp; registrering</a>
-          <a class="app-shell__nav-item" href="#">Specialkost</a>
-          <a class="app-shell__nav-item" href="#">Statistik/Rapport</a>
-          <a class="app-shell__nav-item" href="#">Veckovy</a>
-        </nav>
+        <div class="app-shell__sidebar-panel">
+          <nav class="app-shell__nav">
+            <a class="app-shell__nav-item app-shell__nav-item--active" href="#">Översikt</a>
+            <a class="app-shell__nav-item" href="#">Avdelningar</a>
+            <a class="app-shell__nav-item" href="#">Meny &amp; registrering</a>
+            <a class="app-shell__nav-item" href="#">Specialkost</a>
+            <a class="app-shell__nav-item" href="#">Statistik/Rapport</a>
+            <a class="app-shell__nav-item" href="#">Veckovy</a>
+          </nav>
+          <div class="app-shell__sidebar-footer">Yuplan</div>
+        </div>
       </aside>
 
       <main class="app-shell__main">

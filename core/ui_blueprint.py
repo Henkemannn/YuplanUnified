@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g
+import os
+
+from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g, abort
 from sqlalchemy import text
 
 from .auth import require_roles
@@ -14,6 +16,15 @@ from datetime import timedelta
 import uuid
 
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
+
+
+@ui_bp.get("/ui/_proto/app-shell")
+@require_roles("superuser")
+def ui_proto_app_shell():
+    env = (os.getenv("DEPLOY_ENV") or os.getenv("APP_ENV") or "local").lower()
+    if env not in ("local", "staging"):
+        abort(404)
+    return render_template("ui/_proto/app_shell_preview.html")
 # Weekview special diets mark toggle API (ETag-safe), aligned with report marks
 @ui_bp.route("/api/weekview/specialdiets/mark", methods=["POST"])
 @require_roles("cook", "admin", "superuser")
