@@ -566,7 +566,32 @@ def admin_menu_import() -> str:  # type: ignore[override]
     finally:
         db.close()
     
-    vm = {"weeks": weeks}
+    import datetime as _dt
+
+    iso = _dt.date.today().isocalendar()
+    current_year = int(iso[0])
+    current_week = int(iso[1])
+    weeks_sorted = sorted(weeks, key=lambda w: (w["year"], w["week"]), reverse=True)
+    active_weeks = [w for w in weeks_sorted if (w["year"], w["week"]) >= (current_year, current_week)]
+    archive_weeks = [w for w in weeks_sorted if (w["year"], w["week"]) < (current_year, current_week)]
+    archive_years = []
+    archive_index = {}
+    for w in archive_weeks:
+        year = w["year"]
+        entry = archive_index.get(year)
+        if not entry:
+            entry = {"year": year, "weeks": []}
+            archive_index[year] = entry
+            archive_years.append(entry)
+        entry["weeks"].append(w)
+
+    vm = {
+        "weeks": weeks_sorted,
+        "active_weeks": active_weeks,
+        "archive_years": archive_years,
+        "current_year": current_year,
+        "current_week": current_week,
+    }
     return render_template("admin_menu_import.html", vm=vm)
 
 

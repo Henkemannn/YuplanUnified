@@ -106,6 +106,8 @@ def test_week_list_shows_imported_weeks(app_session, client_admin, csv_file_cont
     assert "2025" in html
     assert "49" in html
     assert "50" in html
+    assert "Aktiva menyer" in html
+    assert "Arkiv (tidigare veckor)" in html
 
 
 def test_week_detail_shows_imported_dishes(app_session, client_admin, csv_file_content):
