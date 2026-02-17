@@ -1,0 +1,299 @@
+.kitchen-week {
+  --kw-alt2-bg: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+  --kw-border: var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kitchen-week .toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.kitchen-week .toolbar-right {
+  justify-content: flex-end;
+}
+
+.kitchen-week .toolbar a {
+  text-decoration: none;
+}
+
+.kitchen-week .dept-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.kitchen-week .dept-title {
+  font-weight: 600;
+}
+
+.kitchen-week .dept-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.kitchen-week .yp-info-box {
+  background: var(--surface-2);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.kitchen-week .grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: var(--surface);
+}
+
+.kitchen-week .grid-table th,
+.kitchen-week .grid-table td {
+  border: 1px solid var(--kw-border);
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.kitchen-week .grid-table thead th {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.kitchen-week .grid-subhead th {
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.kitchen-week .meal-icon {
+  text-align: center;
+  font-size: 1.05rem;
+}
+
+.kitchen-week .grid-table tbody tr.diet-row:nth-child(odd) {
+  background: color-mix(in srgb, var(--surface-2) 65%, transparent);
+}
+
+.kitchen-week .grid-table tbody tr.diet-row:nth-child(even) {
+  background: var(--surface);
+}
+
+.kitchen-week .diet-name {
+  text-align: left;
+  font-weight: 600;
+  min-width: 160px;
+}
+
+.kitchen-week .grid-table td.is-alt2,
+.kitchen-week .grid-table th.is-alt2,
+.kitchen-week .kw-cell.is-alt2 {
+  background: var(--kw-alt2-bg);
+}
+
+.kitchen-week .kw-grid td:focus,
+.kitchen-week .kw-grid td:focus-visible,
+.kitchen-week .kw-grid td:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.kitchen-week .grid-table th:first-child,
+.kitchen-week .grid-table td.diet-name {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 2;
+}
+
+.kitchen-week .grid-table th:first-child {
+  z-index: 3;
+  background: var(--surface-2);
+}
+
+.kitchen-week .day-start {
+  border-left: 3px solid var(--kw-border);
+}
+
+.kitchen-week .kw-cell {
+  padding: 0;
+}
+
+.kitchen-week .kw-cell .kostcell-btn {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.kitchen-week .kostcell-btn {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  min-width: auto;
+  cursor: pointer;
+  color: inherit;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.kitchen-week .kostcell-btn:hover,
+.kitchen-week .kostcell-btn:focus {
+  outline: none;
+  text-decoration: none;
+}
+
+.kitchen-week .kostcell-btn.is-done::before {
+  content: "";
+  position: absolute;
+  width: 1.9em;
+  height: 1.9em;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  box-sizing: border-box;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.kitchen-week .menu-icon {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.kitchen-week #menuModal {
+  display: none;
+}
+
+.kitchen-week #menuModal.is-open {
+  display: block;
+}
+
+.kitchen-week #menuModal .menu-modal__backdrop,
+.kitchen-week #menuModal .js-menu-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.kitchen-week .menu-modal__content {
+  position: fixed;
+  inset: auto 50% 50% auto;
+  transform: translate(50%, -50%);
+  min-width: min(480px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--kw-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+}
+
+.kitchen-week .menu-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--kw-border);
+}
+
+.kitchen-week .menu-modal__header-title {
+  font-weight: 600;
+}
+
+.kitchen-week .menu-modal__close {
+  background: transparent;
+  border: 0;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.kitchen-week .menu-modal__body {
+  padding: 12px;
+}
+
+.kitchen-week .menu-modal__day {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.kitchen-week .menu-modal__section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 8px 0;
+}
+
+.kitchen-week .menu-modal__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.kitchen-week .menu-modal__pill {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  font-size: 0.85rem;
+}
+
+.kitchen-week .menu-modal__pill.alt2 {
+  background: var(--kw-alt2-bg);
+}
+
+.kitchen-week .menu-modal__text {
+  flex: 1;
+}
+
+@media print {
+  .kitchen-week .toolbar button,
+  .kitchen-week .toolbar a {
+    display: none !important;
+  }
+
+  .kitchen-week .dept-header {
+    border-bottom: 1px solid #999;
+  }
+
+  .kitchen-week .grid-table {
+    width: 100%;
+    font-size: 0.85rem;
+    border-collapse: collapse;
+  }
+
+  .kitchen-week .grid-table th,
+  .kitchen-week .grid-table td {
+    border: 1px solid #999 !important;
+    padding: 3px 5px;
+  }
+
+  .kitchen-week .kostcell-btn {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    cursor: default !important;
+    color: #000 !important;
+  }
+}
