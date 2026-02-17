@@ -2,6 +2,10 @@
 
 {% block page_title %}Avdelningar – Yuplan{% endblock %}
 
+{% block head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+{% endblock %}
+
 {% block content %}
     <div class="app-page admin-departments">
         <section class="app-shell__page-header">
@@ -37,54 +41,43 @@
 
         <section class="app-shell__grid">
             <article class="app-shell__card">
-                <h2 class="app-shell__card-title">Skapa avdelning</h2>
-                <p class="app-shell__card-text">Lägg till en ny avdelning och börja planera.</p>
-                <a class="app-shell__user-pill" href="{{ url_for('ui.admin_departments_new_form') }}">Lägg till avdelning</a>
-            </article>
-
-            <article class="app-shell__card">
                 <h2 class="app-shell__card-title">Avdelningar</h2>
+                <p class="app-shell__card-text">Tryck på en avdelning för detaljer.</p>
                 {% if vm.departments and vm.departments|length > 0 %}
-                    <table class="yp-table">
-                        <thead>
-                            <tr>
-                                <th>Namn</th>
-                                <th>Site</th>
-                                <th>Antal boende</th>
-                                <th>Åtgärder</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for dept in vm.departments %}
-                            <tr>
-                                <td>
-                                    <a href="{{ url_for('ui.admin_department_detail', department_id=dept.id) }}">{{ dept.name }}</a>
-                                    {% if dept.notes %}
-                                        <div class="ua-dept-notes">ℹ {{ dept.notes }}</div>
-                                    {% endif %}
-                                </td>
-                                <td>{{ dept.site_name }}</td>
-                                <td>
+                    <div class="app-shell__list">
+                        {% for dept in vm.departments %}
+                        <div class="app-shell__list-item">
+                            <div class="app-shell__list-main">
+                                <a class="app-shell__list-title" href="{{ url_for('ui.admin_department_detail', department_id=dept.id) }}">{{ dept.name }}</a>
+                                <div class="app-shell__list-meta">
+                                    {{ dept.site_name }} •
                                     {% if dept.has_variation %}
-                                        Varierat
+                                        Varierat boendeantal
                                     {% else %}
-                                        {{ dept.resident_count_fixed }}
+                                        {{ dept.resident_count_fixed }} boende
                                     {% endif %}
-                                </td>
-                                <td>
-                                    <a class="app-shell__user-pill" href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}">Redigera</a>
-                                    <form method="POST" action="{{ url_for('ui.admin_departments_delete', dept_id=dept.id) }}" data-confirm="Är du säker på att du vill ta bort avdelningen {{ dept.name }}?">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                        <button type="submit" class="app-shell__user-pill">Ta bort</button>
-                                    </form>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                </div>
+                                {% if dept.notes %}
+                                    <div class="app-shell__list-note">ℹ {{ dept.notes }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="app-shell__list-actions">
+                                <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}">Redigera</a>
+                                <form method="POST" action="{{ url_for('ui.admin_departments_delete', dept_id=dept.id) }}" data-confirm="Är du säker på att du vill ta bort avdelningen {{ dept.name }}?">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <button type="submit" class="app-shell__btn app-shell__btn--ghost-danger">Ta bort</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
                 {% else %}
-                    <p class="app-shell__card-text">Inga avdelningar hittades.</p>
-                    <a class="app-shell__user-pill" href="{{ url_for('ui.admin_departments_new_form') }}">Lägg till avdelning</a>
+                    <div class="admin-departments__empty">
+                        <div class="admin-departments__empty-icon">📋</div>
+                        <h3 class="admin-departments__empty-title">Inga avdelningar ännu</h3>
+                        <p class="app-shell__card-text">Skapa din första avdelning för att komma igång.</p>
+                        <a class="app-shell__btn app-shell__btn--primary" href="{{ url_for('ui.admin_departments_new_form') }}">Lägg till avdelning</a>
+                    </div>
                 {% endif %}
             </article>
         </section>

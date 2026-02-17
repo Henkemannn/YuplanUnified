@@ -1,0 +1,103 @@
+.admin-departments .app-shell__list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-departments .app-shell__list-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(16, 24, 40, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.admin-departments .app-shell__list-main {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-departments .app-shell__list-title {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.admin-departments .app-shell__list-title:hover {
+  text-decoration: underline;
+}
+
+.admin-departments .app-shell__list-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.admin-departments .app-shell__list-note {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.admin-departments .app-shell__list-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-departments .app-shell__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  text-decoration: none;
+  background: transparent;
+  color: var(--text);
+}
+
+.admin-departments .app-shell__btn--ghost {
+  border-color: rgba(16, 24, 40, 0.2);
+}
+
+.admin-departments .app-shell__btn--ghost-danger {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #b91c1c;
+}
+
+.admin-departments .app-shell__btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.admin-departments__empty {
+  display: grid;
+  gap: 10px;
+  padding: 18px 0 6px;
+  text-align: center;
+}
+
+.admin-departments__empty-icon {
+  font-size: 2rem;
+}
+
+.admin-departments__empty-title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 720px) {
+  .admin-departments .app-shell__list-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-departments .app-shell__list-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

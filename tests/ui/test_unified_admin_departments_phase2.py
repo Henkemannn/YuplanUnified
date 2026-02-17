@@ -55,6 +55,7 @@ def test_departments_list_happy_path_admin(client_admin):
     assert "app-shell__page-header" in html
     assert "app-shell__grid" in html
     assert "app-shell__card" in html
+    assert "app-shell__list-item" in html
 
 
 def test_departments_list_permissions_superuser_allowed(client_superuser):
