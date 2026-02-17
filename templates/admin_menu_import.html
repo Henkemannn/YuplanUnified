@@ -35,22 +35,28 @@
 
                 <div id="upload">
                     <h3 class="app-shell__card-title">Ladda upp menyfil</h3>
-                    <form action="{{ url_for('admin_ui.admin_menu_import_upload') }}" method="POST" enctype="multipart/form-data" class="yp-form">
-                        {{ csrf_token_input() | safe }}
-                        <div class="yp-form-field">
-                            <label for="menu_file" class="yp-label">Välj fil</label>
-                            <input type="file" id="menu_file" name="menu_file" class="yp-input" accept=".csv,.docx,.pdf" required>
-                            <details class="app-shell__details">
-                                <summary>ℹ︎ Filformat för import</summary>
-                                <div class="app-shell__details-body">
-                                    Stöd för .csv och .docx. PDF tas emot men importeras inte.
+                    <div class="admin-menu-import__upload-grid">
+                        <form action="{{ url_for('admin_ui.admin_menu_import_upload') }}" method="POST" enctype="multipart/form-data" class="yp-form">
+                            {{ csrf_token_input() | safe }}
+                            <div class="yp-form-field">
+                                <label for="menu_file" class="yp-label">Välj fil</label>
+                                <div class="admin-menu-import__file-drop">
+                                    <input type="file" id="menu_file" name="menu_file" class="yp-input" accept=".csv,.docx" required>
                                 </div>
-                            </details>
-                        </div>
-                        <div class="form-actions">
-                            <button type="submit" class="app-shell__btn app-shell__btn--ghost">Ladda upp</button>
-                        </div>
-                    </form>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="app-shell__btn app-shell__btn--ghost">Importera</button>
+                            </div>
+                        </form>
+                        <aside class="admin-menu-import__info">
+                            <h4 class="admin-menu-import__info-title">Tips</h4>
+                            <ul class="admin-menu-import__info-list">
+                                <li>CSV eller DOCX fungerar.</li>
+                                <li>En fil kan täcka flera veckor.</li>
+                                <li>Granska veckorna efter import.</li>
+                            </ul>
+                        </aside>
+                    </div>
                 </div>
 
                 <div>
