@@ -1,60 +1,78 @@
-.admin-departments .app-shell__list {
+.admin-departments .app-shell__list,
+.admin-list .app-shell__list {
   display: grid;
   gap: 12px;
 }
 
-.admin-departments .app-shell__list-item {
+.admin-departments .app-shell__list-item,
+.admin-list .app-shell__list-item {
   position: relative;
   display: flex;
   justify-content: space-between;
   gap: 16px;
   padding: 14px 16px;
   border: 1px solid rgba(16, 24, 40, 0.08);
+  border-left: 3px solid transparent;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.7);
-  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: background 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
-.admin-departments .app-shell__list-item:hover {
-  background: rgba(15, 23, 42, 0.04);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+.admin-departments .app-shell__list-item:hover,
+.admin-list .app-shell__list-item:hover {
+  background: rgba(15, 23, 42, 0.03);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05);
+  border-left-color: var(--accent);
 }
 
-.admin-departments .app-shell__list-link {
+.admin-departments .app-shell__list-item:focus-within,
+.admin-list .app-shell__list-item:focus-within {
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.admin-departments .app-shell__list-link,
+.admin-list .app-shell__list-link {
   position: absolute;
   inset: 0;
   z-index: 1;
   border-radius: inherit;
 }
 
-.admin-departments .app-shell__list-main {
+.admin-departments .app-shell__list-main,
+.admin-list .app-shell__list-main {
   position: relative;
   z-index: 2;
   display: grid;
   gap: 6px;
 }
 
-.admin-departments .app-shell__list-title {
+.admin-departments .app-shell__list-title,
+.admin-list .app-shell__list-title {
   color: var(--text);
   font-weight: 600;
   text-decoration: none;
 }
 
-.admin-departments .app-shell__list-title:hover {
+.admin-departments .app-shell__list-title:hover,
+.admin-list .app-shell__list-title:hover {
   text-decoration: underline;
 }
 
-.admin-departments .app-shell__list-meta {
+.admin-departments .app-shell__list-meta,
+.admin-list .app-shell__list-meta {
   color: var(--muted);
   font-size: 0.9rem;
 }
 
-.admin-departments .app-shell__list-note {
+.admin-departments .app-shell__list-note,
+.admin-list .app-shell__list-note {
   color: var(--muted);
   font-size: 0.85rem;
 }
 
-.admin-departments .app-shell__list-actions {
+.admin-departments .app-shell__list-actions,
+.admin-list .app-shell__list-actions {
   position: relative;
   z-index: 2;
   display: flex;
@@ -62,7 +80,8 @@
   gap: 8px;
 }
 
-.admin-departments .app-shell__btn {
+.admin-departments .app-shell__btn,
+.admin-list .app-shell__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -77,25 +96,36 @@
   color: var(--text);
 }
 
-.admin-departments .app-shell__btn--ghost {
+.admin-departments .app-shell__btn--ghost,
+.admin-list .app-shell__btn--ghost {
   border-color: rgba(16, 24, 40, 0.2);
 }
 
-.admin-departments .app-shell__btn--ghost-danger {
+.admin-departments .app-shell__btn--ghost:hover,
+.admin-list .app-shell__btn--ghost:hover {
+  border-color: rgba(37, 99, 235, 0.6);
+  color: var(--accent);
+}
+
+.admin-departments .app-shell__btn--ghost-danger,
+.admin-list .app-shell__btn--ghost-danger {
   border-color: transparent;
   color: #b91c1c;
 }
 
-.admin-departments .app-shell__btn--ghost-danger:hover {
+.admin-departments .app-shell__btn--ghost-danger:hover,
+.admin-list .app-shell__btn--ghost-danger:hover {
   background: rgba(239, 68, 68, 0.08);
 }
 
-.admin-departments .app-shell__btn--primary {
+.admin-departments .app-shell__btn--primary,
+.admin-list .app-shell__btn--primary {
   background: var(--accent);
   color: #fff;
 }
 
-.admin-departments .app-shell__icon-btn {
+.admin-departments .app-shell__icon-btn,
+.admin-list .app-shell__icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -105,14 +135,24 @@
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
+  color: #64748b;
 }
 
-.admin-departments .app-shell__icon-btn--danger {
+.admin-departments .app-shell__icon-btn--danger,
+.admin-list .app-shell__icon-btn--danger {
+  color: #64748b;
+}
+
+.admin-departments .app-shell__icon-btn--danger:hover,
+.admin-list .app-shell__icon-btn--danger:hover {
   color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
 }
 
-.admin-departments .app-shell__icon-btn--danger:hover {
-  background: rgba(239, 68, 68, 0.08);
+.admin-departments .app-shell__icon-btn--danger:focus-visible,
+.admin-list .app-shell__icon-btn--danger:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.6);
+  outline-offset: 2px;
 }
 
 .admin-departments__empty {
