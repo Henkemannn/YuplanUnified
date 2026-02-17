@@ -3,7 +3,7 @@
 {% block page_title %}Kök – Menyöversikt{% endblock %}
 
 {% block content %}
-  <div class="app-page">
+  <div class="app-page kitchen-menu">
     <section class="app-shell__page-header">
       <div>
         <h1 class="app-shell__title">Menyöversikt</h1>
@@ -30,7 +30,7 @@
       </section>
     {% endif %}
 
-    <section class="app-shell__grid">
+    <section class="app-shell__grid kitchen-menu__grid">
       {% for day in vm.menu_days %}
         <article class="app-shell__card app-card">
           <h2 class="app-shell__card-title">{{ day.label }}</h2>

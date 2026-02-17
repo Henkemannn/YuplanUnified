@@ -785,15 +785,21 @@
     print-color-adjust: exact !important;
   }
 
+  @page {
+    margin: 10mm;
+  }
+
   html,
   body {
+    width: 100% !important;
     background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   .app-shell,
   .app-shell__body,
   .app-shell__main,
-  .app-shell__content,
   .app-card,
   .app-shell__card {
     background: #fff !important;
@@ -817,15 +823,18 @@
     background: #fff !important;
   }
 
-  .app-shell__main,
-  .app-shell__body {
+  .app-shell,
+  .app-shell__body,
+  .app-shell__main {
+    width: 100% !important;
+    max-width: none !important;
     padding: 0 !important;
     margin: 0 !important;
   }
 
+  .app-shell__body,
   .app-shell__main {
-    width: 100% !important;
-    max-width: none !important;
+    display: block !important;
   }
 
   .app-shell__main > * {
@@ -847,5 +856,17 @@
   .print-header {
     display: block !important;
     margin-bottom: 1rem;
+  }
+
+  .kitchen-menu__grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10mm !important;
+    align-items: start !important;
+  }
+
+  .kitchen-menu__grid > * {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 }
