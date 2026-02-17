@@ -230,12 +230,11 @@ def test_reports_weekly_renders_basic_structure(client_admin, seed_site_and_depa
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
-    assert "Veckorapport – Registrering" in html
-    assert "Vecka" in html
-    assert "Avdelning" in html
-    assert "Lunch" in html
-    assert "Kväll" in html
-    assert "Totalt" in html
+    assert "Veckorapport" in html
+    assert "app-shell__page-header" in html
+    assert "Filter" in html
+    assert "Sammanställning" in html
+    assert "Täckning:" not in html
 
 
 def test_reports_weekly_calculates_coverage_correctly(client_admin, seed_registrations):
@@ -244,16 +243,10 @@ def test_reports_weekly_calculates_coverage_correctly(client_admin, seed_registr
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
-    # Verify table headers are present
-    assert "Registreringsöversikt" in html or "Avdelning" in html
-    
-    # Verify department names appear (basic structure)
-    # Note: Due to test database isolation issues, we check for presence
-    # rather than exact coverage numbers
+    assert "Sammanställning" in html
     if "Avd Alpha" in html:
         assert "Avd Beta" in html
-        # If departments are shown, check for percentage indicators
-        assert "%" in html
+        assert "%" not in html
 
 
 def test_reports_weekly_zero_coverage(client_admin, seed_week_menus):
@@ -263,7 +256,7 @@ def test_reports_weekly_zero_coverage(client_admin, seed_week_menus):
     html = resp.data.decode("utf-8")
     
     # Both departments have menus but no registrations
-    assert "0%" in html or "0/9" in html or "0/14" in html
+    assert "Ingen data för vald vecka" in html or "Lunch: 0 /" in html or "Kväll: 0 /" in html
 
 
 def test_reports_weekly_partial_coverage(client_admin, seed_site_and_departments, seed_week_menus):
@@ -294,7 +287,7 @@ def test_reports_weekly_partial_coverage(client_admin, seed_site_and_departments
     
     # Just verify the report renders with some coverage data
     # Note: Due to test database isolation, we check for structure rather than exact values
-    assert "Registreringsöversikt" in html or "Avdelning" in html
+    assert "Sammanställning" in html
 
 
 # ============================================================================
@@ -309,6 +302,7 @@ def test_reports_weekly_no_departments(client_admin):
     
     # Should show empty state or handle gracefully
     assert "Veckorapport" in html
+    assert "Ingen data" in html or "Sammanställning" in html
 
 
 def test_reports_weekly_no_menus(client_admin, seed_site_and_departments):
@@ -319,7 +313,7 @@ def test_reports_weekly_no_menus(client_admin, seed_site_and_departments):
     
     # Departments exist but no menus → expected=0, registered=0, percent=0%
     assert "Avd Alpha" in html
-    assert "0/0" in html or "0%" in html
+    assert "0 / 0" in html or "0%" in html or "Ingen data" in html
 
 
 # ============================================================================
@@ -347,14 +341,9 @@ def test_reports_weekly_navigation_links(client_admin, seed_site_and_departments
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
-    # Should have prev/next/current week links
-    assert "Föregående vecka" in html
-    assert "Denna vecka" in html
-    assert "Nästa vecka" in html
-    
-    # Links should have year/week params
-    assert "year=" in html
-    assert "week=" in html
+    assert "Föregående vecka" not in html
+    assert "Denna vecka" not in html
+    assert "Nästa vecka" not in html
 
 
 # ============================================================================

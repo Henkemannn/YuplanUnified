@@ -125,28 +125,29 @@ def test_seeded_weekly_diets_report(client):
     resp = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=ALL&view=day")
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
+    assert "Veckorapport" in html
+    assert "Filter" in html
+    assert "Sammanställning" in html
     assert "Avd A" in html and "Avd B" in html
-    assert "Boende Lunch" in html and "Lunch – Special" in html and "Lunch – Normal" in html
-    assert "Boende Kväll" in html and "Kväll – Special" in html and "Kväll – Normal" in html
-    assert ">10<" in html
-    assert ">2<" in html
-    assert ">8<" in html
+    assert "Lunch: 70 / 70" in html
+    assert "Kväll: 70 / 70" in html
+    assert "Lunch: 54 / 54" in html
+    assert "Kväll: 48 / 48" in html
 
     resp2 = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=ALL&view=week")
     assert resp2.status_code == 200
     html2 = resp2.get_data(as_text=True)
     assert "Avd A" in html2
-    assert ">3<" in html2
-    assert ">67<" in html2
-    assert ">0<" in html2
-    assert ">70<" in html2
+    assert "Täckning:" not in html2
 
     resp3 = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=dep-A&view=week")
     assert resp3.status_code == 200
     html3 = resp3.get_data(as_text=True)
-    assert "Avd A" in html3 and "Avd B" not in html3
+    assert "Avd A" in html3
+    assert "Lunch: 54 / 54" not in html3
 
     resp4 = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=dep-B&view=day")
     assert resp4.status_code == 200
     html4 = resp4.get_data(as_text=True)
-    assert ">6<" in html4
+    assert "Avd B" in html4
+    assert "Lunch: 54 / 54" in html4

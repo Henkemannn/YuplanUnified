@@ -1,231 +1,126 @@
-{% extends "ui/unified_admin_base.html" %}
+{% extends "ui/_layout/app_shell_base.html" %}
 
-{% block title %}Yuplan Unified{% endblock %}
+{% block page_title %}Veckorapport – Yuplan{% endblock %}
 
-{% block admin_main %}
-<section class="ua-section">
-  <div class="report-weekly" data-testid="report-weekly">
-    <header class="report-header">
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+{% endblock %}
+
+{% block content %}
+  <div class="app-page admin-report-week admin-list" data-testid="report-weekly">
+    <section class="app-shell__page-header">
       <div>
-        {% if vm.departments %}
-          <h1>Statistik / Rapport</h1>
-          <p class="report-help">Visar antal specialkost och normalkost per lunch och kvällsmat under vald vecka.</p>
-        {% elif vm.coverage_data %}
-          <h1>Veckorapport – Registrering</h1>
-          <p class="report-help">Vecka {{ vm.week }}, {{ vm.year }}</p>
-        {% else %}
-          <h1>Veckorapport</h1>
+        <h1 class="app-shell__title">Veckorapport</h1>
+        {% set display_week = vm.selected_week or vm.week %}
+        {% set display_year = vm.selected_year or vm.year %}
+        {% set selected_label = "Alla avdelningar" %}
+        {% if vm.selected_department_id is defined and vm.selected_department_id and vm.selected_department_id != 'ALL' %}
+          {% for opt in (vm.departments_options if vm.departments_options is defined else []) %}
+            {% if opt.id == vm.selected_department_id %}
+              {% set selected_label = opt.name %}
+            {% endif %}
+          {% endfor %}
         {% endif %}
-        {% set site_label = vm.site_name or (vm.site_id and "(vald site)") or "Okänd site" %}
-        <p class="report-meta">Site: {{ site_label }} · År/Vecka: {{ vm.selected_year or vm.year }}/{{ vm.selected_week or vm.week }}</p>
+        {% if display_week and display_year %}
+          {% if vm.site_name %}
+            <p class="app-shell__subtitle">Vecka {{ display_week }}, {{ display_year }} · {{ vm.site_name }}</p>
+          {% else %}
+            <p class="app-shell__subtitle">Vecka {{ display_week }}, {{ display_year }}</p>
+          {% endif %}
+          <p class="app-shell__card-text">Visar: Vecka {{ display_week }}, {{ display_year }} · {{ selected_label }}</p>
+        {% elif vm.site_name %}
+          <p class="app-shell__subtitle">{{ vm.site_name }}</p>
+        {% endif %}
       </div>
-      <div class="header-actions">
-        <a href="{{ url_for('ui.admin_menu_planning_index') }}" class="yp-button yp-button-secondary">← Tillbaka till admin</a>
-      </div>
-    </header>
+    </section>
 
-    {% set ns = namespace(selected_label="Alla avdelningar") %}
-    <div class="report-filter-card">
-      <form method="GET" action="/ui/admin/report/week" class="filter-bar" aria-label="Välj vecka och avdelning">
-        <div class="filter-grid">
-          <div class="filter-item filter-item--year">
-            <label for="year-input">År</label>
-            <input id="year-input" name="year" type="number" min="2000" max="2100" value="{{ vm.selected_year }}" data-autosubmit="year-enter" />
-          </div>
-          <div class="filter-item filter-item--week">
-            <label for="week-select">Vecka</label>
-            <div class="week-control" role="group" aria-label="Välj vecka">
-              <a class="week-stepper__btn" href="/ui/admin/report/week?year={{ vm.prev_year }}&week={{ vm.prev_week }}&department_id={{ vm.selected_department_id }}" aria-label="Föregående vecka">−</a>
-              <select id="week-select" name="week" data-autosubmit="1">
+    <section class="app-shell__grid report-weekly__grid">
+      <article class="app-shell__card report-weekly__filter-card">
+        <h2 class="app-shell__card-title">Filter</h2>
+        <form method="GET" action="{{ request.path }}" class="yp-form" aria-label="Välj vecka och avdelning">
+          {% if vm.view_mode is defined %}
+            <input type="hidden" name="view" value="{{ vm.view_mode }}">
+          {% endif %}
+          {% if vm.site_id is defined %}
+            <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+          {% endif %}
+          <div class="admin-report-week__filter-grid">
+            <div class="yp-form-field">
+              <label for="year-input" class="yp-label">År</label>
+              <input id="year-input" name="year" type="number" min="2000" max="2100" value="{{ display_year }}" class="yp-input" />
+            </div>
+            <div class="yp-form-field">
+              <label for="week-select" class="yp-label">Vecka</label>
+              <select id="week-select" name="week" class="yp-input">
                 {% for w in range(1, 54) %}
-                  <option value="{{ w }}" {% if w == vm.selected_week or w|string == vm.selected_week %}selected{% endif %}>v. {{ w }}</option>
+                  <option value="{{ w }}" {% if w == display_week or w|string == display_week %}selected{% endif %}>{{ w }}</option>
                 {% endfor %}
               </select>
-              <a class="week-stepper__btn" href="/ui/admin/report/week?year={{ vm.next_year }}&week={{ vm.next_week }}&department_id={{ vm.selected_department_id }}" aria-label="Nästa vecka">+</a>
             </div>
-          </div>
-          <div class="filter-item filter-item--department">
-            <label for="department-select">Avdelning</label>
-            <select id="department-select" name="department_id" data-autosubmit="1">
-              <option value="ALL" {% if vm.selected_department_id == 'ALL' %}selected{% endif %}>Alla avdelningar</option>
-
-              {% if vm.selected_department_id != 'ALL' %}
-                {# visa bara vald avdelning #}
-                {% for opt in vm.departments_options %}
-                  {% if opt.id == vm.selected_department_id %}
-                    <option value="{{ opt.id }}" selected>{{ opt.name }}</option>
-                  {% endif %}
-                {% endfor %}
-              {% else %}
-                {# visa alla #}
-                {% for opt in vm.departments_options %}
+            <div class="yp-form-field">
+              <label for="department-select" class="yp-label">Avdelning</label>
+              <select id="department-select" name="department_id" class="yp-input">
+                {% set options = vm.departments_options if vm.departments_options is defined else [] %}
+                <option value="ALL" {% if vm.selected_department_id == 'ALL' %}selected{% endif %}>Alla avdelningar</option>
+                {% for opt in options %}
                   {% if opt.id != 'ALL' %}
-                    <option value="{{ opt.id }}">{{ opt.name }}</option>
+                    <option value="{{ opt.id }}" {% if opt.id == vm.selected_department_id %}selected{% endif %}>{{ opt.name }}</option>
                   {% endif %}
                 {% endfor %}
-              {% endif %}
-            </select>
+              </select>
+            </div>
           </div>
-        </div>
-        <div class="filter-selected">
-          <span class="filter-selected__label">Visar:</span>
-          <span class="pill pill--neutral">{{ ns.selected_label }}</span>
-          <span class="filter-status" aria-live="polite" role="status">Laddar...</span>
-        </div>
-      </form>
-    </div>
+          <div class="admin-report-week__actions">
+            <button type="submit" class="app-shell__btn app-shell__btn--primary">Uppdatera</button>
+          </div>
+        </form>
+      </article>
 
-    {% if vm.departments %}
-      <span class="report-sr-only">Boende Lunch</span>
-      <span class="report-sr-only">Boende Kväll</span>
-      <span class="report-sr-only">Lunch – Special</span>
-      <span class="report-sr-only">Lunch – Normal</span>
-      <span class="report-sr-only">Kväll – Special</span>
-      <span class="report-sr-only">Kväll – Normal</span>
-      {% set day_map = {"Mon": "Mån", "Tue": "Tis", "Wed": "Ons", "Thu": "Tor", "Fri": "Fre", "Sat": "Lör", "Sun": "Sön", "Monday": "Mån", "Tuesday": "Tis", "Wednesday": "Ons", "Thursday": "Tor", "Friday": "Fre", "Saturday": "Lör", "Sunday": "Sön"} %}
-      {% for dep in vm.departments %}
-        <section class="report-card" data-testid="report-dept-card">
-          <header class="report-card__header">
-            <h2 class="report-card__title">{{ dep.name }}</h2>
-            <div class="report-summary">
-              <div class="report-summary__block">
-                <span class="meal-icon meal-icon--inline" aria-hidden="true">🍽️</span>
-                <span class="report-summary__label">Lunch</span>
-                <span class="pill pill--special">Special {{ dep.week_summary.special_lunch_total }}</span>
-                <span class="pill pill--normal">Normal {{ dep.week_summary.normal_lunch_total }}</span>
+      <article class="app-shell__card report-weekly__results-card">
+        <div class="admin-report-week__summary">
+          <h2 class="app-shell__card-title">Sammanställning</h2>
+          {% set has_coverage = vm.coverage_data is defined and vm.coverage_data %}
+          {% set has_departments = vm.departments is defined and vm.departments %}
+        </div>
+
+        {% if has_coverage %}
+          <div class="app-shell__list">
+            {% for item in vm.coverage_data %}
+              <div class="app-shell__list-item">
+                <div class="app-shell__list-main">
+                  <span class="app-shell__list-title">{{ item.department_name }}</span>
+                </div>
+                <div class="admin-report-week__chips">
+                  <span class="admin-report-week__chip">🍽️ Lunch: {{ item.lunch_registered }} / {{ item.lunch_expected }}</span>
+                  <span class="admin-report-week__chip">🌙 Kväll: {{ item.dinner_registered }} / {{ item.dinner_expected }}</span>
+                </div>
               </div>
-              <div class="report-summary__block">
-                <span class="meal-icon meal-icon--inline" aria-hidden="true">🌙</span>
-                <span class="report-summary__label">Kväll</span>
-                <span class="pill pill--special">Special {{ dep.week_summary.special_dinner_total }}</span>
-                <span class="pill pill--normal">Normal {{ dep.week_summary.normal_dinner_total }}</span>
+            {% endfor %}
+          </div>
+        {% elif has_departments %}
+          <div class="app-shell__list">
+            {% for dep in vm.departments %}
+              {% set lunch_total = (dep.week_summary.special_lunch_total or 0) + (dep.week_summary.normal_lunch_total or 0) %}
+              {% set dinner_total = (dep.week_summary.special_dinner_total or 0) + (dep.week_summary.normal_dinner_total or 0) %}
+              <div class="app-shell__list-item">
+                <div class="app-shell__list-main">
+                  <span class="app-shell__list-title">{{ dep.name }}</span>
+                </div>
+                <div class="admin-report-week__chips">
+                  <span class="admin-report-week__chip">🍽️ Lunch: {{ lunch_total }} / {{ lunch_total }}</span>
+                  <span class="admin-report-week__chip">🌙 Kväll: {{ dinner_total }} / {{ dinner_total }}</span>
+                </div>
               </div>
-            </div>
-          </header>
-
-          <details class="report-details" data-testid="report-dept-accordion">
-            <summary class="report-details__summary">Visa detaljer per dag</summary>
-            <div class="report-table-wrap">
-              <table class="report-table">
-                <thead>
-                  <tr>
-                    <th>Dag</th>
-                    <th><span class="meal-icon" aria-hidden="true">🍽️</span> Special</th>
-                    <th><span class="meal-icon" aria-hidden="true">🍽️</span> Normal</th>
-                    <th><span class="meal-icon" aria-hidden="true">🌙</span> Special</th>
-                    <th><span class="meal-icon" aria-hidden="true">🌙</span> Normal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for row in dep.rows %}
-                    {% set day_label = day_map.get(row.weekday_label, row.weekday_label) %}
-                    <tr data-testid="report-row">
-                      <td>{{ day_label }}</td>
-                      <td>{{ row.special_lunch }}</td>
-                      <td>{{ row.normal_lunch }}</td>
-                      <td>{{ row.special_dinner }}</td>
-                      <td>{{ row.normal_dinner }}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-                <tfoot>
-                  <tr class="report-sum-row" data-testid="report-row">
-                    <td>SUMMA</td>
-                    <td>{{ dep.week_summary.special_lunch_total }}</td>
-                    <td>{{ dep.week_summary.normal_lunch_total }}</td>
-                    <td>{{ dep.week_summary.special_dinner_total }}</td>
-                    <td>{{ dep.week_summary.normal_dinner_total }}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </details>
-        </section>
-      {% endfor %}
-    {% elif vm.coverage_data %}
-    <div class="week-navigation">
-      <a class="yp-button" href="/ui/reports/weekly?year={{ vm.prev_year }}&week={{ vm.prev_week }}">Föregående vecka</a>
-      <a class="yp-button yp-button-secondary" href="/ui/reports/weekly?year={{ vm.current_year }}&week={{ vm.current_week }}">Denna vecka</a>
-      <a class="yp-button" href="/ui/reports/weekly?year={{ vm.next_year }}&week={{ vm.next_week }}">Nästa vecka</a>
-    </div>
-    <div class="ua-card card">
-      <div class="card-body">
-        {% set ns = namespace(max=0, full=false) %}
-        {% for item in vm.coverage_data %}
-          {% set expected_total = (item.lunch_expected or 0) + (item.dinner_expected or 0) %}
-          {% set registered_total = (item.lunch_registered or 0) + (item.dinner_registered or 0) %}
-          {% set calc_pct = (registered_total * 100 / expected_total) if expected_total else 0 %}
-          {% set pct_raw = item.coverage_percent if item.coverage_percent is not none else calc_pct %}
-          {% set pct = pct_raw if pct_raw is number else pct_raw|float %}
-          {% if pct_raw is string and "100" in pct_raw %}
-            {% set ns.full = true %}
-          {% endif %}
-          {% if expected_total and registered_total == expected_total %}
-            {% set ns.full = true %}
-          {% endif %}
-          {% if pct >= 100 %}
-            {% set ns.full = true %}
-          {% endif %}
-          {% if pct > ns.max %}
-            {% set ns.max = pct %}
-          {% endif %}
-        {% endfor %}
-        {% set summary_pct = 100 if ns.full else ns.max %}
-        <div class="report-coverage-summary">Täckt: {{ "%.0f"|format(summary_pct) }}%</div>
-        <div class="table-responsive">
-          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Lunch</span>
-          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Kväll</span>
-          <span aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;">Totalt</span>
-          <table class="yp-table report-table">
-            <thead>
-              <tr>
-                <th class="dept-col">AVDELNING</th>
-                <th class="count-col">LUNCH</th>
-                <th class="count-col">KVÄLL</th>
-                <th class="percent-col">TÄCKNING</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for item in vm.coverage_data %}
-                <tr>
-                  <td class="dept-name">{{ item.department_name }}</td>
-                  <td class="count-cell">
-                    <span class="count-badge">{{ item.lunch_registered }} / {{ item.lunch_expected }}</span>
-                    <span class="count-detail">Registrerade / Förväntade</span>
-                  </td>
-                  <td class="count-cell">
-                    <span class="count-badge">{{ item.dinner_registered }} / {{ item.dinner_expected }}</span>
-                    <span class="count-detail">Registrerade / Förväntade</span>
-                  </td>
-                  <td class="percent-cell">
-                    {% set expected_total = (item.lunch_expected or 0) + (item.dinner_expected or 0) %}
-                    {% set registered_total = (item.lunch_registered or 0) + (item.dinner_registered or 0) %}
-                    {% set calc_pct = (registered_total * 100 / expected_total) if expected_total else 0 %}
-                    {% set pct_raw = item.coverage_percent if item.coverage_percent is not none else calc_pct %}
-                    {% set pct = pct_raw if pct_raw is number else pct_raw|float %}
-                    {% set cls = 'coverage-high' if pct >= 90 else ('coverage-medium' if pct >= 60 else 'coverage-low') %}
-                    {% if pct_raw is string %}
-                      {% set pct_text = pct_raw if '%' in pct_raw else (pct_raw ~ '%') %}
-                    {% else %}
-                      {% set pct_text = "%.0f"|format(pct) ~ '%' %}
-                    {% endif %}
-                    <span class="percent-badge {{ cls }}">{{ pct_text }}</span>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  {% endif %}
-
-    {% if not vm.departments and not vm.coverage_data %}
-      <div class="report-empty-card">
-        <h3>Ingen data för vecka {{ vm.selected_week or vm.week }}</h3>
-        <p>Kontrollera vald vecka och site.</p>
-      </div>
-    {% endif %}
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="admin-departments__empty">
+            <div class="admin-departments__empty-icon">📊</div>
+            <h3 class="admin-departments__empty-title">Ingen data för vald vecka</h3>
+            <p class="app-shell__card-text">Justera vecka eller avdelning och försök igen.</p>
+          </div>
+        {% endif %}
+      </article>
+    </section>
   </div>
-</section>
 {% endblock %}

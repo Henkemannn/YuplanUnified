@@ -58,8 +58,8 @@ def test_reports_weekly_uses_yp_table(client_admin: FlaskClient):
     
     if response.status_code == 200:
         html = response.data.decode('utf-8')
-        # If page loaded, should use yp components
-        assert 'yp-' in html or 'report' in html.lower()
+        assert 'Veckorapport' in html
+        assert 'Sammanställning' in html
 
 
 def test_menu_planning_view_uses_yp_table(client_admin: FlaskClient):
@@ -225,8 +225,8 @@ def test_reports_weekly_uses_yp_button(client_admin: FlaskClient):
     
     if response.status_code == 200:
         html = response.data.decode('utf-8')
-        # If page loaded, should use yp components
-        assert 'yp-' in html or 'report' in html.lower()
+        assert 'Uppdatera' in html
+        assert 'Veckorapport' in html
 
 
 def test_menu_planning_uses_yp_button(client_admin: FlaskClient):
@@ -276,8 +276,7 @@ def test_reports_weekly_uses_yp_badge_for_coverage(client_admin: FlaskClient):
     assert response.status_code == 200
     html = response.data.decode('utf-8')
     
-    # Should use yp components
-    assert 'yp-' in html
+    assert 'Täckning:' not in html
 
 
 def test_menu_planning_uses_yp_badge_for_alt2(client_admin: FlaskClient):
