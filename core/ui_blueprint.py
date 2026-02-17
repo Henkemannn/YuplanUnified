@@ -494,6 +494,14 @@ def systemadmin_dashboard():
     vm = {"user_name": user_name, "tenants": tenants_vm, "nav_context": "systemadmin"}
     return render_template("systemadmin_dashboard.html", vm=vm)
 
+
+@ui_bp.get("/ui/systemadmin/coming-soon")
+@require_roles("superuser")
+def systemadmin_coming_soon():
+    feature = (request.args.get("feature") or "").strip() or "funktion"
+    vm = {"feature": feature, "nav_context": "systemadmin"}
+    return render_template("ui/systemadmin/coming_soon.html", vm=vm)
+
 # Note: Sites listing for a tenant is provided by existing admin routes.
 
 

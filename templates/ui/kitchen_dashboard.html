@@ -1,38 +1,36 @@
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-  <meta charset="utf-8" />
-  <title>Kök</title>
-  <link rel="stylesheet" href="/static/css/unified_cook.css" />
-</head>
-<body class="cook-dashboard">
-  <div class="toolbar">
-    <h1 style="flex:1; margin:0;">Kök</h1>
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Kök{% endblock %}
+
+{% block content %}
+  <section class="app-shell__page-header">
+    <div>
+      <h1 class="app-shell__title">Kök</h1>
+      <p class="app-shell__subtitle">Välj modul för veckovy, planering och rapport.</p>
+    </div>
     <div>
       {% if vm.site_name %}
-        <span>{{ vm.site_name }}</span>
+        <span class="app-shell__env-badge">{{ vm.site_name }}</span>
       {% endif %}
-      <a href="{{ url_for('ui.select_site') }}?next=/ui/kitchen" aria-label="Byt site">Byt site</a>
+      <a class="app-shell__user-pill" href="{{ url_for('ui.select_site', next='/ui/kitchen') }}">Byt site</a>
     </div>
-  </div>
-  <div class="meta">Välj modul</div>
-  <main class="kd-container">
-    <section class="kd-cards">
-      <a class="kd-card" href="/ui/kitchen/week?site_id={{ vm.site_id }}" aria-label="Öppna veckovy">
-        <div class="kd-card-title">Veckovy</div>
-        <div class="kd-card-sub">Visa och markera specialkost per dag</div>
-      </a>
-      <div class="kd-card disabled" aria-disabled="true">
-        <div class="kd-card-title">Planering</div>
-        <div class="kd-card-sub">Kommer snart</div>
-      </div>
-      <div class="kd-card disabled" aria-disabled="true">
-        <div class="kd-card-title">Rapport</div>
-        <div class="kd-card-sub">Kommer snart</div>
-      </div>
-    </section>
-    <p class="kd-helper">Klicka på siffran i veckovyn när specialkost har anpassats.</p>
-  </main>
-  <script src="/static/js/kitchen_week_v3.js"></script>
-</body>
-</html>
+  </section>
+
+  <section class="app-shell__grid">
+    <a class="app-shell__card" href="{{ url_for('ui.kitchen_veckovy_week', site_id=vm.site_id) }}" aria-label="Öppna veckovy">
+      <h2 class="app-shell__card-title">Veckovy</h2>
+      <p class="app-shell__card-text">Visa och markera specialkost per dag.</p>
+      <div class="app-shell__card-meta">Klicka på siffran när specialkost har anpassats.</div>
+    </a>
+    <div class="app-shell__card" aria-disabled="true">
+      <h2 class="app-shell__card-title">Planering</h2>
+      <p class="app-shell__card-text">Kommer snart.</p>
+      <span class="app-shell__badge">Kommer snart</span>
+    </div>
+    <div class="app-shell__card" aria-disabled="true">
+      <h2 class="app-shell__card-title">Rapport</h2>
+      <p class="app-shell__card-text">Kommer snart.</p>
+      <span class="app-shell__badge">Kommer snart</span>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Systemadmin{% endblock %}
+
+{% block content %}
+  <section class="app-shell__page-header">
+    <div>
+      <h1 class="app-shell__title">Kommer snart</h1>
+      <p class="app-shell__subtitle">{{ vm.feature }}</p>
+    </div>
+  </section>
+
+  <section class="app-shell__grid">
+    <article class="app-shell__card">
+      <h2 class="app-shell__card-title">Kommer snart</h2>
+      <p class="app-shell__card-text">Den här ytan är under uppbyggnad.</p>
+      <a class="app-shell__user-pill" href="{{ url_for('ui.systemadmin_dashboard') }}">Tillbaka till Systemadmin</a>
+    </article>
+  </section>
+{% endblock %}

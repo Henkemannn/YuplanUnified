@@ -62,13 +62,14 @@
           {% if nav_context == 'systemadmin' %}
             {% set sa_overview_url = url_for('ui.systemadmin_dashboard') %}
             {% set sa_customers_url = url_for('admin_ui.systemadmin_customers') %}
-            {% set sa_users_url = url_for('ui.admin_users_list') %}
-            {% set sa_settings_url = url_for('ui.admin_system_page') %}
-            {% set sa_logs_url = url_for('ui.admin_dashboard') %}
+            {% set sa_sites_url = url_for('ui.systemadmin_coming_soon', feature='sites') %}
+            {% set sa_users_url = url_for('ui.systemadmin_coming_soon', feature='users') %}
+            {% set sa_settings_url = url_for('ui.systemadmin_coming_soon', feature='settings') %}
+            {% set sa_logs_url = url_for('ui.systemadmin_coming_soon', feature='logs') %}
             <nav class="app-shell__nav">
               <a class="app-shell__nav-item {% if current_path.startswith(sa_overview_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_overview_url }}">Översikt</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_customers_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_customers_url }}">Kunder</a>
-              <a class="app-shell__nav-item" href="{{ sa_customers_url }}">Sites</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_sites_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_sites_url }}">Sites</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_users_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_users_url }}">Users</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_settings_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_settings_url }}">Inställningar</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_logs_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_logs_url }}">Loggar</a>
