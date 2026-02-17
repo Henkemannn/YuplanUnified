@@ -99,6 +99,7 @@ def test_kitchen_week_v3_renders_and_flags():
     # Print-friendly header + no-print button
     assert "print-header" in html
     assert "id=\"printBtn\"" in html and "no-print" in html
+    assert re.search(r"class=\"no-print\"[^>]*>\s*<h1 class=\"app-shell__title\">Kök – Veckovy<", html)
     # Ensure legacy CSS does not leak into app shell
     assert "unified_ui.css" not in html
     assert "unified_cook.css" not in html
