@@ -213,4 +213,14 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   initWeekPicker();
+
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    const btn = target instanceof Element ? target.closest('[data-action="print"]') : null;
+    if (!btn) {
+      return;
+    }
+    event.preventDefault();
+    window.print();
+  });
 });

@@ -100,7 +100,5 @@
         try { btn.blur(); } catch(e) { /* ignore */ }
       }
     });
-    const p = document.getElementById('printBtn');
-    if(p){ p.addEventListener('click', function(){ window.print(); }); }
   });
 })();

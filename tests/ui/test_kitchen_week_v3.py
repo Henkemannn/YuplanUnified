@@ -96,9 +96,9 @@ def test_kitchen_week_v3_renders_and_flags():
     # Menu modal container + JS include for fetch/inject
     assert 'id="menuModal"' in html
     assert "js/menu_modal.js" in html
-    # Print-friendly header + no-print button
+    # Print-friendly header + print action
     assert "print-header" in html
-    assert "id=\"printBtn\"" in html and "no-print" in html
+    assert "data-action=\"print\"" in html
     assert re.search(r"class=\"no-print\"[^>]*>\s*<h1 class=\"app-shell__title\">Kök – Veckovy<", html)
     # Ensure legacy CSS does not leak into app shell
     assert "unified_ui.css" not in html

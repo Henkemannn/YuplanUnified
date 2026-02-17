@@ -22,7 +22,7 @@
         {% set week = vm.week %}
         {% set site_id = vm.site_id %}
         {% include "ui/_components/week_picker.html" %}
-        <button type="button" id="printBtn" class="app-shell__user-pill no-print">Skriv ut</button>
+        <button type="button" class="yp-iconbtn no-print" data-action="print" aria-label="Skriv ut">🖨️</button>
       </div>
     </section>
     <div class="app-shell__card-meta no-print">År {{ vm.year }} • Vecka {{ vm.week }}</div>
