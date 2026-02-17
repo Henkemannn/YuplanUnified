@@ -95,6 +95,26 @@
   color: #fff;
 }
 
+.admin-departments .app-shell__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+}
+
+.admin-departments .app-shell__icon-btn--danger {
+  color: #b91c1c;
+}
+
+.admin-departments .app-shell__icon-btn--danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
 .admin-departments__empty {
   display: grid;
   gap: 10px;

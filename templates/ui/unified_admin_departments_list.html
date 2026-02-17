@@ -61,7 +61,7 @@
                                 <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}">Redigera</a>
                                 <form method="POST" action="{{ url_for('ui.admin_departments_delete', dept_id=dept.id) }}" data-confirm="Är du säker på att du vill ta bort avdelningen {{ dept.name }}?">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <button type="submit" class="app-shell__btn app-shell__btn--ghost-danger">Ta bort</button>
+                                    <button type="submit" class="app-shell__icon-btn app-shell__icon-btn--danger" aria-label="Ta bort avdelning {{ dept.name }}" title="Ta bort">🗑️</button>
                                 </form>
                             </div>
                         </div>
