@@ -1,346 +1,92 @@
-{% extends "ui/unified_admin_base.html" %}
+{% extends "ui/_layout/app_shell_base.html" %}
 
-{% block page_title %}Avdelningar{% endblock %}
+{% block page_title %}Avdelningar – Yuplan{% endblock %}
 
-{% block admin_main %}
+{% block content %}
+    <div class="app-page admin-departments">
+        <section class="app-shell__page-header">
+            <div>
+                <h1 class="app-shell__title">Avdelningar</h1>
+                <p class="app-shell__subtitle">
+                    {% if vm.site_name %}
+                        {{ vm.site_name }}
+                    {% else %}
+                        Hantera avdelningar för din enhet.
+                    {% endif %}
+                </p>
+            </div>
+            <div class="app-shell__page-actions">
+                <a class="app-shell__user-pill" href="{{ url_for('ui.admin_departments_new_form') }}">➕ Skapa avdelning</a>
+            </div>
+        </section>
 
-<section class="ua-section">
-<div class="ua-card departments-container">
-    
-    <div class="departments-header">
-        <div class="header-content">
-            <h1 class="departments-heading">Avdelningar</h1>
-            <span style="display:none">Inga avdelningar hittades</span>
-            {% if vm.site_name %}
-            <p class="departments-subtitle">{{ vm.site_name }}</p>
+        <div class="app-shell__card-meta">
+            {% if vm.site_name %}Site: {{ vm.site_name }}{% endif %}
+            {% if vm.current_week %} • Vecka {{ vm.current_week }}{% endif %}
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="ua-flashes">
+                    {% for category, message in messages %}
+                        <div class="ua-flash ua-flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
             {% endif %}
-        </div>
-        {% if vm.departments|length == 0 %}
-        <div class="empty-banner">Inga avdelningar hittades</div>
-        {% endif %}
-        <div class="header-actions">
-            <a href="{{ url_for('ui.admin_departments_new_form') }}" class="yp-button yp-button-primary">
-                <span class="btn-icon">➕</span>
-                Lägg till avdelning
-            </a>
-        </div>
+        {% endwith %}
+
+        <section class="app-shell__grid">
+            <article class="app-shell__card">
+                <h2 class="app-shell__card-title">Skapa avdelning</h2>
+                <p class="app-shell__card-text">Lägg till en ny avdelning och börja planera.</p>
+                <a class="app-shell__user-pill" href="{{ url_for('ui.admin_departments_new_form') }}">Lägg till avdelning</a>
+            </article>
+
+            <article class="app-shell__card">
+                <h2 class="app-shell__card-title">Avdelningar</h2>
+                {% if vm.departments and vm.departments|length > 0 %}
+                    <table class="yp-table">
+                        <thead>
+                            <tr>
+                                <th>Namn</th>
+                                <th>Site</th>
+                                <th>Antal boende</th>
+                                <th>Åtgärder</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for dept in vm.departments %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('ui.admin_department_detail', department_id=dept.id) }}">{{ dept.name }}</a>
+                                    {% if dept.notes %}
+                                        <div class="ua-dept-notes">ℹ {{ dept.notes }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>{{ dept.site_name }}</td>
+                                <td>
+                                    {% if dept.has_variation %}
+                                        Varierat
+                                    {% else %}
+                                        {{ dept.resident_count_fixed }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a class="app-shell__user-pill" href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}">Redigera</a>
+                                    <form method="POST" action="{{ url_for('ui.admin_departments_delete', dept_id=dept.id) }}" data-confirm="Är du säker på att du vill ta bort avdelningen {{ dept.name }}?">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <button type="submit" class="app-shell__user-pill">Ta bort</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="app-shell__card-text">Inga avdelningar hittades.</p>
+                    <a class="app-shell__user-pill" href="{{ url_for('ui.admin_departments_new_form') }}">Lägg till avdelning</a>
+                {% endif %}
+            </article>
+        </section>
     </div>
-    
-    {% if vm.departments and vm.departments|length > 0 %}
-    <div class="departments-table-wrapper">
-        <table class="yp-table departments-table">
-            <thead>
-                <tr>
-                    <th>NAMN</th>
-                    <th>SITE</th>
-                    <th>ANTAL BOENDE</th>
-                    <th class="actions-column">ÅTGÄRDER</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for dept in vm.departments %}
-                <tr>
-                                        <td class="dept-name">
-                                                <a href="{{ url_for('ui.admin_department_detail', department_id=dept.id) }}" class="dept-link">{{ dept.name }}</a>
-                                                {% if dept.notes %}
-                                                    <div class="ua-dept-notes">ℹ {{ dept.notes }}</div>
-                                                {% endif %}
-                                        </td>
-                    <td class="dept-site">{{ dept.site_name }}</td>
-                                        <td class="dept-residents">
-                                            {% if dept.has_variation %}
-                                                <span class="ua-residents-variant">
-                                                    <span class="res-icon">👥</span>
-                                                    <span class="res-value">Varierat</span>
-                                                    <button class="ua-info-icon ua-variation-info" type="button" onclick="openReadonlyModal('{{ dept.id }}')" title="Visa schema">(i)</button>
-                                                </span>
-                                            {% else %}
-                                                <span class="res-icon">👥</span>
-                                                <span class="res-value">{{ dept.resident_count_fixed }}</span>
-                                            {% endif %}
-                                        </td>
-                    <td class="dept-actions">
-                        <a href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}" 
-                           class="yp-button yp-button-secondary btn-action"
-                           title="Redigera">
-                            ✏️ Redigera
-                        </a>
-                        <form method="POST" 
-                              action="{{ url_for('ui.admin_departments_delete', dept_id=dept.id) }}"
-                              style="display: inline;"
-                              onsubmit="return confirm('Är du säker på att du vill ta bort avdelningen {{ dept.name }}?');">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                            <button type="submit" class="yp-button yp-button-danger btn-action" title="Ta bort">
-                                🗑️ Ta bort
-                            </button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="empty-state">
-        <div class="empty-icon">📋</div>
-        <h3 class="empty-title">Inga avdelningar hittades</h3>
-        <p class="empty-description">
-            Skapa din första avdelning för att komma igång.
-        </p>
-        <a href="{{ url_for('ui.admin_departments_new_form') }}" class="yp-button yp-button-primary">
-            <span class="btn-icon">➕</span>
-            Lägg till avdelning
-        </a>
-    </div>
-    {% endif %}
-    
-</div>
-
-<!-- Read-only variation modal template -->
-<dialog id="deptVariationReadonlyModal">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <h3>Varierat boendeantal</h3>
-        <button onclick="closeReadonlyModal()">Stäng</button>
-    </div>
-    <p class="ua-muted">Mån–Sön × Lunch/Kväll (read-only)</p>
-    <table class="ua-table" id="deptVariationReadonlyTable">
-        <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
-    </table>
-</dialog>
-<script>
-function openReadonlyModal(deptId){
-    // Fetch selected week from header (current week)
-    const week = {{ vm.current_week }};
-    // Build table by calling lightweight endpoint reusing detail HTML table via fetch
-    // Fallback: render empty structure, tests only assert modal exists and no save button
-    const dlg = document.getElementById('deptVariationReadonlyModal');
-    const tbl = document.getElementById('deptVariationReadonlyTable');
-    tbl.querySelectorAll('tr:not(:first-child)').forEach(r=>r.remove());
-    const dayNames = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'];
-    for(let i=0;i<7;i++){
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${dayNames[i]}</td><td>-</td><td>-</td>`;
-        tbl.appendChild(tr);
-    }
-    dlg.showModal();
-}
-function closeReadonlyModal(){ document.getElementById('deptVariationReadonlyModal').close(); }
-</script>
-
-<style>
-.departments-container {
-    max-width: 1000px;
-    margin: 0 auto;
-}
-
-.departments-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: var(--spacing-xl);
-    gap: var(--spacing-lg);
-}
-
-.header-content {
-    flex: 1;
-}
-
-.departments-heading {
-    margin: 0 0 var(--spacing-xs) 0;
-    font-size: var(--font-size-xxl);
-    font-weight: 700;
-    color: var(--admin-text-primary);
-}
-
-.departments-subtitle {
-    margin: 0;
-    font-size: var(--font-size-lg);
-    color: var(--admin-text-secondary);
-}
-
-.header-actions {
-    flex-shrink: 0;
-}
-
-.btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-radius: var(--radius-md);
-    font-weight: 600;
-    text-decoration: none;
-    transition: all var(--transition-fast);
-    border: none;
-    cursor: pointer;
-    font-size: var(--font-size-base);
-}
-
-.btn-primary {
-    background-color: var(--admin-accent);
-    color: white;
-}
-
-.btn-primary:hover {
-    background-color: var(--admin-accent-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
-}
-
-.btn-icon {
-    font-size: var(--font-size-lg);
-    font-weight: bold;
-}
-
-.departments-table-wrapper {
-    background-color: var(--admin-bg-card);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 2px 4px var(--admin-shadow);
-    overflow: hidden;
-}
-
-.departments-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.departments-table thead {
-    background-color: var(--admin-bg-page);
-}
-
-.departments-table th {
-    padding: var(--spacing-md) var(--spacing-lg);
-    text-align: left;
-    font-weight: 600;
-    color: var(--admin-text-secondary);
-    font-size: var(--font-size-sm);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.departments-table tbody tr {
-    border-top: 1px solid var(--admin-border);
-    transition: background-color var(--transition-fast);
-}
-
-.departments-table tbody tr:hover {
-    background-color: rgba(52, 152, 219, 0.05);
-}
-
-.departments-table td {
-    padding: var(--spacing-lg);
-}
-
-.dept-name {
-    font-weight: 600;
-    color: var(--admin-text-primary);
-}
-.ua-dept-notes { margin-top: 2px; font-size: 0.75rem; opacity: 0.8; }
-.dept-link { text-decoration: none; color: var(--admin-text-primary); }
-.dept-link:hover { text-decoration: underline; }
-
-
-.dept-residents {
-    color: var(--admin-text-secondary);
-}
-
-.actions-column {
-    width: 250px;
-    text-align: right;
-}
-
-.dept-actions {
-    display: flex;
-    gap: var(--spacing-sm);
-    justify-content: flex-end;
-}
-
-.btn-action {
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    text-decoration: none;
-    transition: all var(--transition-fast);
-    border: 1px solid;
-    cursor: pointer;
-    background: none;
-}
-
-.btn-edit {
-    color: var(--admin-accent);
-    border-color: var(--admin-accent);
-}
-
-.btn-edit:hover {
-    background-color: var(--admin-accent);
-    color: white;
-}
-
-.btn-delete {
-    color: #e74c3c;
-    border-color: #e74c3c;
-}
-
-.btn-delete:hover {
-    background-color: #e74c3c;
-    color: white;
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-xxl) var(--spacing-xl);
-    background-color: var(--admin-bg-card);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 2px 4px var(--admin-shadow);
-}
-
-.empty-icon {
-    font-size: 4rem;
-    margin-bottom: var(--spacing-lg);
-    opacity: 0.3;
-}
-
-.empty-title {
-    margin: 0 0 var(--spacing-sm) 0;
-    font-size: var(--font-size-xl);
-    font-weight: 600;
-    color: var(--admin-text-primary);
-}
-
-.empty-description {
-    margin: 0 0 var(--spacing-xl) 0;
-    color: var(--admin-text-secondary);
-}
-
-@media (max-width: 768px) {
-    .departments-header {
-        flex-direction: column;
-    }
-    
-    .header-actions {
-        width: 100%;
-    }
-    
-    .btn {
-        width: 100%;
-        justify-content: center;
-    }
-    
-    .departments-table-wrapper {
-        overflow-x: auto;
-    }
-    
-    .dept-actions {
-        flex-direction: column;
-    }
-    
-    .btn-action {
-        width: 100%;
-    }
-}
-</style>
-
-</div>
-</section>
 {% endblock %}
