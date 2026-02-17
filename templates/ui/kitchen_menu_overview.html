@@ -1,0 +1,47 @@
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Kök – Menyöversikt{% endblock %}
+
+{% block content %}
+  <div class="app-page">
+    <section class="app-shell__page-header">
+      <div>
+        <h1 class="app-shell__title">Menyöversikt</h1>
+        <p class="app-shell__subtitle">Veckans meny för lunch och middag.</p>
+      </div>
+      <form method="get" action="{{ url_for('ui.kitchen_menu_overview') }}">
+        <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+        <label for="menu-week">Välj vecka</label>
+        <select id="menu-week" name="week">
+          {% for opt in vm.week_options %}
+            {% set opt_value = opt.year ~ '-' ~ opt.week %}
+            {% set current_value = vm.year ~ '-' ~ vm.week %}
+            <option value="{{ opt_value }}" {% if opt_value == current_value %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+        <button class="app-shell__user-pill" type="submit">Visa</button>
+      </form>
+    </section>
+
+    <div class="app-shell__card-meta">År {{ vm.year }} • Vecka {{ vm.week }}</div>
+
+    {% if not vm.has_menu %}
+      <section class="app-shell__grid">
+        <article class="app-shell__card">
+          <h2 class="app-shell__card-title">Ingen meny ännu</h2>
+          <p class="app-shell__card-text">Det finns ingen publicerad meny för den här veckan.</p>
+        </article>
+      </section>
+    {% endif %}
+
+    <section class="app-shell__grid">
+      {% for day in vm.menu_days %}
+        <article class="app-shell__card app-card">
+          <h2 class="app-shell__card-title">{{ day.label }}</h2>
+          <p class="app-shell__card-text"><strong>Lunch:</strong> {{ day.lunch }}</p>
+          <p class="app-shell__card-text"><strong>Middag:</strong> {{ day.dinner }}</p>
+        </article>
+      {% endfor %}
+    </section>
+  </div>
+{% endblock %}

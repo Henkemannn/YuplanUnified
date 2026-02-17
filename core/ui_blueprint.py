@@ -1824,6 +1824,131 @@ def kitchen_dashboard():
     vm = {"site_id": site_id, "site_name": site_name}
     return render_template("ui/kitchen_dashboard.html", vm=vm)
 
+
+@ui_bp.get("/ui/kitchen/menu")
+@require_roles(*SAFE_UI_ROLES)
+def kitchen_menu_overview():
+    q_site_id = (request.args.get("site_id") or "").strip()
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/kitchen/menu"))
+    week_token = (request.args.get("week") or "").strip()
+    if "-" in week_token:
+        try:
+            year_part, week_part = week_token.split("-", 1)
+            year = int(year_part)
+            week = int(week_part)
+        except Exception:
+            year = _date.today().year
+            week = _date.today().isocalendar()[1]
+    else:
+        try:
+            year = int(request.args.get("year") or _date.today().year)
+        except Exception:
+            year = _date.today().year
+        try:
+            week = int(week_token or _date.today().isocalendar()[1])
+        except Exception:
+            week = _date.today().isocalendar()[1]
+    db = get_session()
+    try:
+        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = str(row_s[0]) if row_s else ""
+    finally:
+        db.close()
+    tenant_id = int(session.get("tenant_id") or 1)
+    from .menu_service import MenuServiceDB
+    menu_service = MenuServiceDB()
+    try:
+        week_view = menu_service.get_week_view(tenant_id, week, year)
+    except Exception:
+        week_view = {"days": {}}
+    days_raw = (week_view or {}).get("days") or {}
+    day_map: dict[str, dict] = {}
+    for k, v in (days_raw or {}).items():
+        day_map[str(k).strip().lower()] = v
+
+    day_keys = [
+        ("mon", "Måndag"),
+        ("tue", "Tisdag"),
+        ("wed", "Onsdag"),
+        ("thu", "Torsdag"),
+        ("fri", "Fredag"),
+        ("sat", "Lördag"),
+        ("sun", "Söndag"),
+    ]
+    day_aliases = {
+        "mon": ["mon", "monday", "mån", "måndag"],
+        "tue": ["tue", "tuesday", "tis", "tisdag"],
+        "wed": ["wed", "wednesday", "ons", "onsdag"],
+        "thu": ["thu", "thursday", "tor", "torsdag"],
+        "fri": ["fri", "friday", "fre", "fredag"],
+        "sat": ["sat", "saturday", "lör", "lördag"],
+        "sun": ["sun", "sunday", "sön", "söndag"],
+    }
+
+    def _pick_name(val) -> str:
+        if not val:
+            return ""
+        if isinstance(val, dict):
+            return str(val.get("dish_name") or val.get("name") or "")
+        return str(val)
+
+    def _meal_text(day: dict, meal_key: str) -> str:
+        if not day:
+            return ""
+        meal = day.get(meal_key) or day.get(meal_key.capitalize()) or {}
+        if not isinstance(meal, dict):
+            return _pick_name(meal)
+        keys = ["alt1", "main", "alt2", "dessert"] if meal_key == "lunch" else ["main", "dinner", "alt1", "alt2"]
+        for key in keys:
+            name = _pick_name(meal.get(key) or meal.get(key.capitalize()))
+            if name:
+                return name
+        return ""
+
+    menu_days = []
+    has_menu = False
+    for key, label in day_keys:
+        day_val = {}
+        for alias in day_aliases.get(key, [key]):
+            day_val = day_map.get(alias) or {}
+            if day_val:
+                break
+        lunch_text = _meal_text(day_val, "lunch")
+        dinner_text = _meal_text(day_val, "dinner")
+        if lunch_text or dinner_text:
+            has_menu = True
+        menu_days.append({
+            "label": label,
+            "lunch": lunch_text or "—",
+            "dinner": dinner_text or "—",
+        })
+
+    week_options = []
+    today = _date.today()
+    for i in range(0, 6):
+        wk_date = today + timedelta(weeks=i)
+        iso = wk_date.isocalendar()
+        week_options.append({
+            "year": iso[0],
+            "week": iso[1],
+            "label": f"v{iso[1]} {iso[0]}",
+        })
+
+    vm = {
+        "site_id": site_id,
+        "site_name": site_name,
+        "year": year,
+        "week": week,
+        "week_options": week_options,
+        "menu_days": menu_days,
+        "has_menu": has_menu,
+    }
+    return render_template("ui/kitchen_menu_overview.html", vm=vm)
+
 # Kitchen planning v1 (read-only summary + print + week picker)
 @ui_bp.get("/ui/kitchen/planering")
 @require_roles(*SAFE_UI_ROLES)
@@ -2348,6 +2473,21 @@ def kitchen_veckovy_week():
             summaries = payload.get("department_summaries") or []
             s = summaries[0] if summaries else {}
             days = s.get("days") or []
+            alt2_days = set()
+            try:
+                from core.admin_repo import Alt2Repo
+                alt2_rows = Alt2Repo().list_for_department_week(dep_id, week)
+                alt2_days = {int(r.get("weekday")) for r in alt2_rows if bool(r.get("enabled"))}
+            except Exception:
+                alt2_days = set()
+            try:
+                for d in days:
+                    if not d.get("alt2_lunch"):
+                        dow_val = int(d.get("day_of_week") or 0)
+                        if dow_val in alt2_days:
+                            d["alt2_lunch"] = True
+            except Exception:
+                pass
             # Build mark index from persisted state to ensure VM reflects what /mark writes
             raw_marks = s.get("marks") or []
             marked_idx = set()
@@ -2393,7 +2533,14 @@ def kitchen_veckovy_week():
                             if str(it.get("diet_type_id")) == str(dtid):
                                 rd = int(it.get("resident_count") or 0)
                                 break
-                        cells.append({"day_index": dow, "meal": "lunch", "count": rl, "is_done": ml, "is_alt2": bool(day_obj.get("alt2_lunch")) if day_obj else False, "diet_type_id": str(dtid)})
+                        is_alt2 = False
+                        try:
+                            is_alt2 = bool(day_obj.get("alt2_lunch")) if day_obj else False
+                            if not is_alt2 and dow in alt2_days:
+                                is_alt2 = True
+                        except Exception:
+                            is_alt2 = False
+                        cells.append({"day_index": dow, "meal": "lunch", "count": rl, "is_done": ml, "is_alt2": is_alt2, "diet_type_id": str(dtid)})
                         cells.append({"day_index": dow, "meal": "dinner", "count": rd, "is_done": md, "is_alt2": False, "diet_type_id": str(dtid)})
                     # Resolve diet name from site-linked types only
                     diet_name = name_by_id.get(str(dtid), str(dtid))

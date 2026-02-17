@@ -22,15 +22,15 @@
       <p class="app-shell__card-text">Visa och markera specialkost per dag.</p>
       <div class="app-shell__card-meta">Klicka på siffran när specialkost har anpassats.</div>
     </a>
-    <div class="app-shell__card" aria-disabled="true">
-      <h2 class="app-shell__card-title">Planering</h2>
-      <p class="app-shell__card-text">Kommer snart.</p>
-      <span class="app-shell__badge">Kommer snart</span>
-    </div>
-    <div class="app-shell__card" aria-disabled="true">
-      <h2 class="app-shell__card-title">Rapport</h2>
-      <p class="app-shell__card-text">Kommer snart.</p>
-      <span class="app-shell__badge">Kommer snart</span>
-    </div>
+    <a class="app-shell__card" href="{{ url_for('ui.kitchen_planering_v1', site_id=vm.site_id) }}" aria-label="Öppna planering">
+      <h2 class="app-shell__card-title">Planera</h2>
+      <p class="app-shell__card-text">Sammanställning och utskrift för veckan.</p>
+      <div class="app-shell__card-meta">Öppna planeringsöversikten.</div>
+    </a>
+    <a class="app-shell__card" href="{{ url_for('ui.kitchen_menu_overview', site_id=vm.site_id) }}" aria-label="Öppna menyöversikt">
+      <h2 class="app-shell__card-title">Menyöversikt</h2>
+      <p class="app-shell__card-text">Veckans meny, lunch och middag.</p>
+      <div class="app-shell__card-meta">Läs-only översikt av menyn.</div>
+    </a>
   </section>
 {% endblock %}

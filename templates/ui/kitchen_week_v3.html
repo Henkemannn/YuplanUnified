@@ -1,35 +1,42 @@
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-  <meta charset="utf-8" />
-  <title>Kök – Veckovy</title>
-  <!-- Use existing unified cook stylesheet to avoid missing CSS 404 -->
-  <link rel="stylesheet" href="/static/css/unified_cook.css" />
-  <link rel="stylesheet" href="/static/unified_ui.css" />
-  <!-- UI uses class 'is-alt2' to indicate lunch Alt2 availability -->
-</head>
-<body>
-  <div class="toolbar">
-    <h1 class="page-title">Kök – Veckovy</h1>
-    <button type="button" id="printBtn">Skriv ut</button>
-  </div>
-  <p class="kw-helper">Klicka på siffran när specialkost har anpassats.</p>
-  <div class="meta">År {{ vm.year }} • Vecka {{ vm.week }}</div>
-  <div class="toolbar toolbar-right">
-    <a href="/ui/kitchen/week?year={{ vm.prev_year }}&week={{ vm.prev_week }}{% if vm.site_id %}&site_id={{ vm.site_id }}{% endif %}" aria-label="Föregående vecka">← Föregående vecka</a>
-    <a href="/ui/kitchen/week?year={{ vm.next_year }}&week={{ vm.next_week }}{% if vm.site_id %}&site_id={{ vm.site_id }}{% endif %}" aria-label="Nästa vecka">Nästa vecka →</a>
-  </div>
-  {% for dep in vm.departments %}
-    <div class="dept-card" data-department-id="{{ dep.id }}">
-      <div class="dept-header">
-        {% set _dn = dep.name or '' %}
-        {% set dep_display = _dn if _dn[:4]|lower == 'avd ' else 'Avd ' ~ _dn %}
-        <div class="dept-title">{{ dep_display }}</div>
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Kök – Veckovy{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/unified_cook.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}" />
+  <script src="{{ url_for('static', filename='js/menu_utils.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/menu_modal.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/kitchen_week_v3.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
+  <div class="app-page">
+    <section class="app-shell__page-header">
+      <div>
+        <h1 class="app-shell__title">Kök – Veckovy</h1>
+        <p class="app-shell__subtitle">Klicka på siffran när specialkost har anpassats.</p>
       </div>
-      {% if dep.info_text %}
-        <div class="yp-info-box">{{ dep.info_text }}</div>
-      {% endif %}
-      <table class="grid-table kw-grid" aria-label="Specialkostöversikt">
+      <div>
+        <button type="button" id="printBtn" class="app-shell__user-pill">Skriv ut</button>
+      </div>
+    </section>
+    <div class="app-shell__card-meta">År {{ vm.year }} • Vecka {{ vm.week }}</div>
+    <div class="toolbar toolbar-right">
+      <a href="/ui/kitchen/week?year={{ vm.prev_year }}&week={{ vm.prev_week }}{% if vm.site_id %}&site_id={{ vm.site_id }}{% endif %}" aria-label="Föregående vecka">← Föregående vecka</a>
+      <a href="/ui/kitchen/week?year={{ vm.next_year }}&week={{ vm.next_week }}{% if vm.site_id %}&site_id={{ vm.site_id }}{% endif %}" aria-label="Nästa vecka">Nästa vecka →</a>
+    </div>
+    {% for dep in vm.departments %}
+      <section class="app-shell__card app-card" data-department-id="{{ dep.id }}">
+        <div class="dept-header">
+          {% set _dn = dep.name or '' %}
+          {% set dep_display = _dn if _dn[:4]|lower == 'avd ' else 'Avd ' ~ _dn %}
+          <div class="dept-title">{{ dep_display }}</div>
+        </div>
+        {% if dep.info_text %}
+          <div class="yp-info-box">{{ dep.info_text }}</div>
+        {% endif %}
+        <table class="grid-table kw-grid" aria-label="Specialkostöversikt">
           <thead>
             <tr>
               <th>Kosttyp</th>
@@ -106,11 +113,8 @@
         {% if dep.no_diets %}
           <div class="dept-empty" aria-live="polite">Inga specialkoster kopplade</div>
         {% endif %}
-    </div>
-  {% endfor %}
-  {% include "ui/_menu_modal.html" %}
-  <script src="/static/js/menu_utils.js"></script>
-  <script src="/static/js/menu_modal.js"></script>
-  <script src="/static/js/kitchen_week_v3.js"></script>
-</body>
-</html>
+      </section>
+    {% endfor %}
+    {% include "ui/_menu_modal.html" %}
+  </div>
+{% endblock %}
