@@ -687,6 +687,10 @@
   outline-offset: 2px;
 }
 
+.print-header {
+  display: none;
+}
+
 
 @media (max-width: 1024px) {
   .app-shell {
@@ -761,11 +765,20 @@
     background: #fff !important;
   }
 
-  .app-shell__content,
   .app-shell__main,
   .app-shell__body {
     padding: 0 !important;
     margin: 0 !important;
+  }
+
+  .app-shell__main {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .app-shell__main > * {
+    width: 100% !important;
+    max-width: none !important;
   }
 
   .app-card {
@@ -780,6 +793,7 @@
   }
 
   .print-header {
+    display: block !important;
     margin-bottom: 1rem;
   }
 }

@@ -190,20 +190,36 @@
     display: none !important;
   }
 
+  .kitchen-week .app-card {
+    width: 100% !important;
+    padding: 10px 12px !important;
+    margin: 0 0 12px !important;
+  }
+
   .kitchen-week .dept-header {
     border-bottom: 1px solid #999;
   }
 
   .kitchen-week .grid-table {
-    width: 100%;
-    font-size: 0.85rem;
-    border-collapse: collapse;
+    width: 100% !important;
+    font-size: 11px !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
   }
 
   .kitchen-week .grid-table th,
   .kitchen-week .grid-table td {
     border: 1px solid #999 !important;
-    padding: 3px 5px;
+    padding: 4px 6px !important;
+    font-size: 11px !important;
+  }
+
+  .kitchen-week .grid-table th {
+    white-space: nowrap !important;
+  }
+
+  .kitchen-week .diet-name {
+    min-width: 120px !important;
   }
 
   .kitchen-week .kostcell-btn {

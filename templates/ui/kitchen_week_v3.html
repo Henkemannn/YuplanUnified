@@ -14,7 +14,7 @@
     <section class="app-shell__page-header">
       <div>
         <h1 class="app-shell__title">Kök – Veckovy</h1>
-        <p class="app-shell__subtitle">Klicka på siffran när specialkost har anpassats.</p>
+        <p class="app-shell__subtitle no-print">Klicka på siffran när specialkost har anpassats.</p>
       </div>
       <div class="app-shell__page-actions no-print">
         {% set base_path = url_for('ui.kitchen_veckovy_week') %}
@@ -25,7 +25,7 @@
         <button type="button" id="printBtn" class="app-shell__user-pill no-print">Skriv ut</button>
       </div>
     </section>
-    <div class="app-shell__card-meta">År {{ vm.year }} • Vecka {{ vm.week }}</div>
+    <div class="app-shell__card-meta no-print">År {{ vm.year }} • Vecka {{ vm.week }}</div>
     <div class="print-header">
       <h1>Kök – Veckovy</h1>
       <p>År {{ vm.year }} • Vecka {{ vm.week }}</p>
