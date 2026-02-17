@@ -22,33 +22,25 @@ def _h(role):
 # ============================================================================
 
 def test_unified_ui_css_loaded_on_admin(client_admin):
-    """Admin pages should load unified_ui.css."""
+    """Admin dashboard should load app shell CSS."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
-    # Check unified_ui.css is loaded
-    assert 'unified_ui.css' in html
-    
-    # Check it's loaded before module-specific CSS
-    ui_css_index = html.find('unified_ui.css')
-    admin_css_index = html.find('unified_admin.css')
-    assert ui_css_index < admin_css_index, "unified_ui.css should load before unified_admin.css"
+    # Check app shell CSS is loaded
+    assert 'css/app_shell.css' in html
+    assert 'unified_admin.css' not in html
 
 
 def test_unified_ui_js_loaded_on_admin(client_admin):
-    """Admin pages should load unified_ui.js."""
+    """Admin dashboard should load app shell JS."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
-    # Check unified_ui.js is loaded
-    assert 'unified_ui.js' in html
-    
-    # Check it's loaded before module-specific JS
-    ui_js_index = html.find('unified_ui.js')
-    admin_js_index = html.find('unified_admin.js')
-    assert ui_js_index < admin_js_index, "unified_ui.js should load before unified_admin.js"
+    # Check app shell JS is loaded
+    assert 'js/app_shell.js' in html
+    assert 'unified_admin.js' not in html
 
 
 @pytest.fixture
@@ -91,8 +83,8 @@ def test_unified_ui_css_loaded_on_reports(client_admin, seed_site_and_department
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     
-    # Check unified_ui.css is loaded
-    assert 'unified_ui.css' in html
+    # Check admin base CSS is loaded
+    assert 'unified_admin.css' in html
 
 
 # ============================================================================

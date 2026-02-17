@@ -1,121 +1,75 @@
-{% extends "ui/unified_admin_base.html" %}
+{% extends "ui/_layout/app_shell_base.html" %}
 
-{% block admin_title %}{{ vm.tenant_name or tenant_name or 'Adminpanel' }}{% endblock %}
-{% block admin_subtitle %}{{ vm.site_name or current_site_name or 'Hantera din Yuplan-miljö för denna kund.' }}{% endblock %}
+{% block page_title %}Adminpanel – Yuplan{% endblock %}
 
-{% block admin_main %}
-  <!-- Legacy test hooks: ensure expected substrings exist without visual impact -->
-  <div style="display:none">
-    <div class="admin-sidebar"></div>
-    <nav class="sidebar-nav"></nav>
-    <span>Välkommen till Adminpanelen</span>
-    <span>Adminpanel</span>
-    <span>Menyimport</span>
-    <span>Användare</span>
-    <span>Inställningar</span>
-    <span>Menyimport & Veckomeny</span>
-  </div>
-  <div class="quick-links-grid" style="display:none"></div>
-  <div class="quick-link-card" style="display:none"></div>
+{% block content %}
+  <div class="app-page admin-dashboard">
+    <section class="app-shell__page-header">
+      <div>
+        <h1 class="app-shell__title">Adminpanel</h1>
+        <p class="app-shell__subtitle">
+          Översikt för {{ vm.site_name or current_site_name or 'din enhet' }}.
+        </p>
+      </div>
+    </section>
 
-  <!-- Rad 1: Idag i köket + Veckostatus -->
-  <section class="ua-section">
-    <div class="ua-grid ua-grid-2">
-      <article class="ua-card">
-        <h2>Idag i köket</h2>
-        <p class="ua-muted">{{ vm.today_label }} · Vecka {{ vm.current_week }}</p>
-        <ul class="ua-list">
-          <li>
-            <strong>Lunch:</strong>
-            {{ vm.today.lunch_name or "Ingen meny" }}
-            {% if vm.today.lunch_portions %}
-              ({{ vm.today.lunch_portions }} portioner)
-            {% endif %}
-          </li>
-          <li>
-            <strong>Kväll:</strong>
-            {{ vm.today.dinner_name or "Ingen meny" }}
-            {% if vm.today.dinner_portions %}
-              ({{ vm.today.dinner_portions }} portioner)
-            {% endif %}
-          </li>
+    <div class="app-shell__card-meta">{{ vm.today_label }} · Vecka {{ vm.current_week }}</div>
+
+    <section class="app-shell__grid">
+      <article class="app-shell__card">
+        <h2 class="app-shell__card-title">Idag i köket</h2>
+        <p class="app-shell__card-text">
+          Lunch: {{ vm.today.lunch_name or "Ingen meny" }}
+          {% if vm.today.lunch_portions %}
+            ({{ vm.today.lunch_portions }} portioner)
+          {% endif %}
+        </p>
+        <p class="app-shell__card-text">
+          Kväll: {{ vm.today.dinner_name or "Ingen meny" }}
+          {% if vm.today.dinner_portions %}
+            ({{ vm.today.dinner_portions }} portioner)
+          {% endif %}
+        </p>
+      </article>
+
+      <article class="app-shell__card">
+        <h2 class="app-shell__card-title">Veckostatus</h2>
+        <ul>
+          <li>Boendeantal för vecka {{ vm.current_week }}: {{ "Klart" if vm.status.residents else "Saknas" }}</li>
+          <li>Meny för vecka {{ vm.current_week }}: {{ "Inläst" if vm.status.menu else "Inte inläst" }}</li>
+          <li>Rapport för vecka {{ vm.last_week }}: {{ "Skapad" if vm.status.report_last_week else "Inte skapad än" }}</li>
         </ul>
       </article>
 
-      <article class="ua-card">
-        <h2>Veckostatus</h2>
-        <ul class="ua-status-list">
-          <li>
-            <span class="ua-status-dot {{ 'ua-status-ok' if vm.status.residents else 'ua-status-warn' }}"></span>
-            Boendeantal för vecka {{ vm.current_week }}:
-            {{ "Klart" if vm.status.residents else "Saknas" }}
-          </li>
-          <li>
-            <span class="ua-status-dot {{ 'ua-status-ok' if vm.status.menu else 'ua-status-warn' }}"></span>
-            Meny för vecka {{ vm.current_week }}:
-            {{ "Inläst" if vm.status.menu else "Inte inläst" }}
-          </li>
-          <li>
-            <span class="ua-status-dot {{ 'ua-status-ok' if vm.status.report_last_week else 'ua-status-info' }}"></span>
-            Rapport för vecka {{ vm.last_week }}:
-            {{ "Skapad" if vm.status.report_last_week else "Inte skapad än" }}
-          </li>
-        </ul>
-      </article>
-    </div>
-  </section>
-
-  <!-- Rad 2: Meny framåt + Kom ihåg att beställa -->
-  <section class="ua-section">
-    <div class="ua-grid ua-grid-2">
-      <article class="ua-card">
-        <h2>Meny framåt</h2>
-        <p class="ua-muted">Klara veckor framåt: {{ vm.menu_forward.ready_weeks_count }}</p>
-        <table class="ua-table">
-          <thead>
-            <tr><th>Vecka</th><th>Status</th></tr>
-          </thead>
-          <tbody>
-            {% for w in vm.menu_forward.weeks %}
-              <tr>
-                <td>Vecka {{ w.week }}</td>
-                <td>{{ w.status_label }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </article>
-
-      <article class="ua-card">
-        <h2>Kom ihåg att beställa</h2>
-        <ul class="ua-list">
-          {% for item in vm.order_reminders %}
-            <li>
-              <input type="checkbox" disabled>
-              {{ item.text }}
-            </li>
+      <article class="app-shell__card">
+        <h2 class="app-shell__card-title">Meny framåt</h2>
+        <p class="app-shell__card-text">Klara veckor framåt: {{ vm.menu_forward.ready_weeks_count }}</p>
+        <ul>
+          {% for w in vm.menu_forward.weeks %}
+            <li>Vecka {{ w.week }} · {{ w.status_label }}</li>
           {% endfor %}
         </ul>
-        <form>
-          <input type="text" placeholder="Skriv något som behöver beställas…" class="ua-input" disabled>
-          <button type="button" class="yp-button yp-button-sm" disabled>Lägg till (kommer snart)</button>
-        </form>
       </article>
-    </div>
-  </section>
 
-  <!-- Rad 3: Kommunikation (full bredd) -->
-  <section class="ua-section">
-    <article class="ua-card">
-      <h2>Kommunikation mellan avdelningar &amp; kök</h2>
-      <p class="ua-muted">
-        Här kommer du framöver kunna se och skicka meddelanden mellan vårdavdelningar, kök och admin.
-      </p>
-      <p>
-        Funktionen är under utveckling och ingår i en kommande version av Yuplan.
-      </p>
-      <!-- Legacy test hook: expected portal link substring (hidden) -->
-      <a href="/ui/portal/department/week?department_id=" style="display:none">-</a>
-    </article>
-  </section>
+      <article class="app-shell__card">
+        <h2 class="app-shell__card-title">Kom ihåg att beställa</h2>
+        <ul>
+          {% for item in vm.order_reminders %}
+            <li>{{ item.text }}</li>
+          {% endfor %}
+        </ul>
+        <p class="app-shell__card-text">Beställningslistan blir redigerbar i nästa version.</p>
+      </article>
+    </section>
+
+    <section>
+      <article class="app-shell__card">
+        <h2 class="app-shell__card-title">Kommunikation mellan avdelningar &amp; kök</h2>
+        <p class="app-shell__card-text">
+          Här kommer du framöver kunna se och skicka meddelanden mellan vårdavdelningar, kök och admin.
+        </p>
+        <p class="app-shell__card-text">Funktionen är under utveckling och ingår i en kommande version av Yuplan.</p>
+      </article>
+    </section>
+  </div>
 {% endblock %}

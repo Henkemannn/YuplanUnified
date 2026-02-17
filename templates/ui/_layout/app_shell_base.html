@@ -1,9 +1,10 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="sv">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block page_title %}Yuplan{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-proposal.svg') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
   {% block head_extra %}{% endblock %}
   <script src="{{ url_for('static', filename='js/app_shell.js') }}" defer></script>
@@ -65,6 +66,9 @@
           {% if not nav_context and current_path.startswith('/ui/kitchen') %}
             {% set nav_context = 'kitchen' %}
           {% endif %}
+          {% if not nav_context and current_path.startswith('/ui/admin') %}
+            {% set nav_context = 'admin' %}
+          {% endif %}
           {% if nav_context == 'systemadmin' %}
             {% set sa_overview_url = url_for('ui.systemadmin_dashboard') %}
             {% set sa_customers_url = url_for('admin_ui.systemadmin_customers') %}
@@ -79,6 +83,15 @@
               <a class="app-shell__nav-item {% if current_path.startswith(sa_users_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_users_url }}">Users</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_settings_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_settings_url }}">Inställningar</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_logs_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_logs_url }}">Loggar</a>
+            </nav>
+          {% elif nav_context == 'admin' %}
+            <nav class="app-shell__nav">
+              <a class="app-shell__nav-item {% if current_path == '/ui/admin' %}app-shell__nav-item--active{% endif %}" href="/ui/admin">Översikt</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/weekview') %}app-shell__nav-item--active{% endif %}" href="{{ url_for('ui.weekview_ui') }}">Veckovy</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/departments') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/departments">Avdelningar</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/menu-import') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/menu-import">Menyimport</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/specialkost">Specialkost</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/report/week') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/report/week">Rapport / Statistik</a>
             </nav>
           {% elif nav_context == 'kitchen' %}
             {% set kitchen_home_url = url_for('ui.kitchen_dashboard') %}
