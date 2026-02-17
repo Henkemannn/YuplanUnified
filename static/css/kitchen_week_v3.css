@@ -214,6 +214,11 @@
     font-size: 12.5px !important;
   }
 
+  .kitchen-week .grid-table thead th,
+  .kitchen-week .grid-subhead th {
+    background: #fff !important;
+  }
+
   .kitchen-week .grid-table th {
     white-space: nowrap !important;
   }
@@ -233,6 +238,11 @@
   }
 
   .kitchen-week .kostcell-btn.is-done {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .kitchen-week .kostcell-btn.is-done::before {
     border: 2px solid currentColor !important;
   }
 }

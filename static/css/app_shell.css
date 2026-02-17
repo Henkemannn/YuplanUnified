@@ -759,6 +759,27 @@
     print-color-adjust: exact !important;
   }
 
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .app-shell,
+  .app-shell__body,
+  .app-shell__main,
+  .app-shell__content,
+  .app-card,
+  .app-shell__card {
+    background: #fff !important;
+  }
+
+  .is-selected,
+  .is-active,
+  .kw-cell.is-selected,
+  .kw-cell.is-active {
+    background: transparent !important;
+  }
+
   .app-shell__sidebar,
   .app-shell__topbar,
   .yp-weekpicker,
