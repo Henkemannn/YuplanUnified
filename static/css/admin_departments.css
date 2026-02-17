@@ -183,3 +183,28 @@
     flex-wrap: wrap;
   }
 }
+
+.admin-list .app-shell__details {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.admin-list .app-shell__details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--muted);
+  list-style: none;
+}
+
+.admin-list .app-shell__details summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-list .app-shell__details-body {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
