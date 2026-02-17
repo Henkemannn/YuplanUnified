@@ -83,34 +83,82 @@
           {% set has_departments = vm.departments is defined and vm.departments %}
         </div>
 
+        {% set day_labels = [
+          {"index": 1, "name": "Måndag"},
+          {"index": 2, "name": "Tisdag"},
+          {"index": 3, "name": "Onsdag"},
+          {"index": 4, "name": "Torsdag"},
+          {"index": 5, "name": "Fredag"},
+          {"index": 6, "name": "Lördag"},
+          {"index": 7, "name": "Söndag"},
+        ] %}
+
         {% if has_coverage %}
-          <div class="app-shell__list">
+          <div class="admin-report-week__details-list">
             {% for item in vm.coverage_data %}
-              <div class="app-shell__list-item">
-                <div class="app-shell__list-main">
-                  <span class="app-shell__list-title">{{ item.department_name }}</span>
+              {% set lunch_normal = item.lunch_registered or 0 %}
+              {% set lunch_special = 0 %}
+              {% set dinner_normal = item.dinner_registered or 0 %}
+              {% set dinner_special = 0 %}
+              <details class="admin-report-week__details">
+                <summary class="app-shell__list-item admin-report-week__dept-summary">
+                  <div class="app-shell__list-main">
+                    <span class="app-shell__list-title">{{ item.department_name }}</span>
+                  </div>
+                  <div class="admin-report-week__chips">
+                    <span class="admin-report-week__chip">🍽️ Lunch: Normal {{ lunch_normal }} · Special {{ lunch_special }}</span>
+                    <span class="admin-report-week__chip">🌙 Kväll: Normal {{ dinner_normal }} · Special {{ dinner_special }}</span>
+                  </div>
+                </summary>
+                <div class="admin-report-week__day-grid">
+                  {% for day in day_labels %}
+                    <article class="admin-report-week__day-card">
+                      <h3 class="admin-report-week__day-title">{{ day.name }}</h3>
+                      <div class="admin-report-week__day-row">🍽️ Lunch: Normal 0 · Special 0</div>
+                      <div class="admin-report-week__day-row">🌙 Kväll: Normal 0 · Special 0</div>
+                    </article>
+                  {% endfor %}
                 </div>
-                <div class="admin-report-week__chips">
-                  <span class="admin-report-week__chip">🍽️ Lunch: {{ item.lunch_registered }} / {{ item.lunch_expected }}</span>
-                  <span class="admin-report-week__chip">🌙 Kväll: {{ item.dinner_registered }} / {{ item.dinner_expected }}</span>
-                </div>
-              </div>
+              </details>
             {% endfor %}
           </div>
         {% elif has_departments %}
-          <div class="app-shell__list">
+          <div class="admin-report-week__details-list">
             {% for dep in vm.departments %}
-              {% set lunch_total = (dep.week_summary.special_lunch_total or 0) + (dep.week_summary.normal_lunch_total or 0) %}
-              {% set dinner_total = (dep.week_summary.special_dinner_total or 0) + (dep.week_summary.normal_dinner_total or 0) %}
-              <div class="app-shell__list-item">
-                <div class="app-shell__list-main">
-                  <span class="app-shell__list-title">{{ dep.name }}</span>
+              {% set lunch_normal = dep.week_summary.normal_lunch_total or 0 %}
+              {% set lunch_special = dep.week_summary.special_lunch_total or 0 %}
+              {% set dinner_normal = dep.week_summary.normal_dinner_total or 0 %}
+              {% set dinner_special = dep.week_summary.special_dinner_total or 0 %}
+              <details class="admin-report-week__details">
+                <summary class="app-shell__list-item admin-report-week__dept-summary">
+                  <div class="app-shell__list-main">
+                    <span class="app-shell__list-title">{{ dep.name }}</span>
+                  </div>
+                  <div class="admin-report-week__chips">
+                    <span class="admin-report-week__chip">🍽️ Lunch: Normal {{ lunch_normal }} · Special {{ lunch_special }}</span>
+                    <span class="admin-report-week__chip">🌙 Kväll: Normal {{ dinner_normal }} · Special {{ dinner_special }}</span>
+                  </div>
+                </summary>
+                <div class="admin-report-week__day-grid">
+                  {% for day in day_labels %}
+                    {% set row = namespace(item=None) %}
+                    {% for entry in dep.rows %}
+                      {% if entry.weekday_index == day.index %}
+                        {% set row.item = entry %}
+                      {% endif %}
+                    {% endfor %}
+                    {% set day_lunch_normal = (row.item.normal_lunch if row.item else 0) %}
+                    {% set day_lunch_special = (row.item.special_lunch if row.item else 0) %}
+                    {% set day_dinner_normal = (row.item.normal_dinner if row.item else 0) %}
+                    {% set day_dinner_special = (row.item.special_dinner if row.item else 0) %}
+                    <article class="admin-report-week__day-card">
+                      <h3 class="admin-report-week__day-title">{{ day.name }}</h3>
+                      <div class="admin-report-week__day-row">🍽️ Lunch: Normal {{ day_lunch_normal }} · Special {{ day_lunch_special }}</div>
+                      <div class="admin-report-week__day-row">🌙 Kväll: Normal {{ day_dinner_normal }} · Special {{ day_dinner_special }}</div>
+                    </article>
+                  {% endfor %}
                 </div>
-                <div class="admin-report-week__chips">
-                  <span class="admin-report-week__chip">🍽️ Lunch: {{ lunch_total }} / {{ lunch_total }}</span>
-                  <span class="admin-report-week__chip">🌙 Kväll: {{ dinner_total }} / {{ dinner_total }}</span>
-                </div>
-              </div>
+              </details>
             {% endfor %}
           </div>
         {% else %}

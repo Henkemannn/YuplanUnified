@@ -307,12 +307,69 @@
   font-weight: 600;
 }
 
+.admin-report-week__details-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-report-week__details {
+  border-radius: 16px;
+  background: transparent;
+}
+
+.admin-report-week__details summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.admin-report-week__details summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-report-week__dept-summary .app-shell__list-title:hover {
+  text-decoration: none;
+}
+
+.admin-report-week__details[open] .admin-report-week__dept-summary {
+  border-left-color: var(--accent);
+}
+
+.admin-report-week__day-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 12px 4px 4px;
+}
+
+.admin-report-week__day-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--surface);
+  display: grid;
+  gap: 6px;
+}
+
+.admin-report-week__day-title {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.admin-report-week__day-row {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 @media (max-width: 960px) {
   .admin-report-week__filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .report-weekly__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-report-week__day-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

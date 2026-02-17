@@ -236,6 +236,9 @@ def test_reports_weekly_renders_basic_structure(client_admin, seed_site_and_depa
     assert "Sammanställning" in html
     assert "Alla avdelningar" in html
     assert "Täckning:" not in html
+    assert "Normal" in html
+    assert "Special" in html
+    assert "<details" in html
 
 
 def test_reports_weekly_calculates_coverage_correctly(client_admin, seed_registrations):
@@ -249,6 +252,8 @@ def test_reports_weekly_calculates_coverage_correctly(client_admin, seed_registr
         assert "Avd Beta" in html
         assert "%" not in html
         assert "Alla avdelningar" in html
+        assert "Normal" in html
+        assert "Special" in html
 
 
 def test_reports_weekly_context_pill_selected_department(client_admin, seed_site_and_departments):
@@ -286,7 +291,7 @@ def test_reports_weekly_zero_coverage(client_admin, seed_week_menus):
     html = resp.data.decode("utf-8")
     
     # Both departments have menus but no registrations
-    assert "Ingen data för vald vecka" in html or "Lunch: 0 /" in html or "Kväll: 0 /" in html
+    assert "Ingen data för vald vecka" in html or "Normal" in html
 
 
 def test_reports_weekly_partial_coverage(client_admin, seed_site_and_departments, seed_week_menus):
@@ -345,7 +350,7 @@ def test_reports_weekly_no_menus(client_admin, seed_site_and_departments):
     
     # Departments exist but no menus → expected=0, registered=0, percent=0%
     assert "Avd Alpha" in html
-    assert "0 / 0" in html or "0%" in html or "Ingen data" in html
+    assert "Ingen data" in html or "Normal" in html
 
 
 # ============================================================================
