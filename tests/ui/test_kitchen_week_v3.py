@@ -86,6 +86,8 @@ def test_kitchen_week_v3_renders_and_flags():
     assert "class=\"kostcell-btn" in html and "data-department-id" in html and "data-diet-type-id" in html
     # Alt2 flag appears at least once (Monday lunch for dep1)
     assert "is-alt2" in html
+    # JS wiring include for done-mark toggle
+    assert "kitchen_week_v3.js" in html
     # Ensure legacy CSS does not leak into app shell
     assert "unified_ui.css" not in html
     assert "unified_cook.css" not in html
