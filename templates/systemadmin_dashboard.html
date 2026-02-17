@@ -1,73 +1,28 @@
-{% extends "_base.html" %}
-{% set hide_global_nav = True %}
-{% block title %}SystemAdmin Dashboard{% endblock %}
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}SystemAdmin Dashboard{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/systemadmin.css') }}">
+  <script src="{{ url_for('static', filename='js/systemadmin.js') }}" defer></script>
 {% endblock %}
+
 {% block content %}
-<main class="sa-root sa-theme-dark">
-  
-  <!-- SIDEBAR -->
-  <aside class="sa-sidebar">                                                                                  
-    <div class="sa-sidebar-header">
-      <img class="sa-logo-mark" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" width="32" height="32">
-      <div class="sa-logo-sub">Yuplan Örnnästet</div>
-    </div>
-
-    <nav class="sa-nav">
-      <a class="sa-nav-item sa-active" href="{{ url_for('admin_ui.systemadmin_dashboard') }}">
-        <span class="sa-icon">📊</span> Översikt
-      </a>
-      <a class="sa-nav-item" href="{{ url_for('admin_ui.systemadmin_customers') }}">
-        <span class="sa-icon">🏢</span> Kunder
-      </a>
-      <a class="sa-nav-item" href="#">
-        <span class="sa-icon">👥</span> Användare
-      </a>
-      <a class="sa-nav-item" href="#">
-        <span class="sa-icon">🧩</span> Moduler
-      </a>
-      <a class="sa-nav-item" href="#">
-        <span class="sa-icon">📑</span> Kontrakt
-      </a>
-      <a class="sa-nav-item" href="#">
-        <span class="sa-icon">📉</span> Loggar & Health
-      </a>
-      <a class="sa-nav-item" href="#">
-        <span class="sa-icon">⚙️</span> Inställningar
-      </a>
-    </nav>
-
-    <div class="sa-sidebar-footer">
-      <span>v1.0 · Dev</span>
-    </div>
-  </aside>
-
-  <!-- MAIN PANEL -->
-  <section class="sa-main">
-
-    <!-- HEADER -->
-    <header class="sa-header" data-user-name="{{ vm.user_name }}">
+  <div class="sa-root app-page">
+    <header class="app-page__header sa-header" data-user-name="{{ vm.user_name }}">
       <div>
         <h1 id="sa-greeting">God morgon, {{ vm.user_name }} 👋</h1>
-        <p class="sa-subtitle">SystemAdmin – Kommandobrygga</p>
+        <p class="app-page__subtitle">SystemAdmin – Kommandobrygga</p>
         <p id="sa-submessage" class="sa-submessage"></p>
       </div>
 
-      <div class="sa-header-actions">
-        <a href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}" class="sa-btn sa-btn-primary">➕ Skapa kund</a>
-        <div class="sa-clock">
-          <span id="sa-clock-time">--:--</span>
-          <span id="sa-clock-date">--</span>
-        </div>
-        <button id="sa-theme-toggle" class="sa-theme-toggle-btn">🌙/☀️</button>
+      <div class="app-page__actions">
+        <a href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}" class="app-shell__user-pill">➕ Skapa kund</a>
       </div>
     </header>
 
-    <!-- GRID (ROW 1) -->
-    <section class="sa-grid">
-      
-      <article class="sa-card sa-card-wide">
+    <section class="app-grid">
+      <article class="app-card app-shell__card app-card--wide">
         <h2>Kunder</h2>
         <p class="sa-card-sub">Aktiva kunder på din plattform</p>
 
@@ -77,36 +32,37 @@
             <h3>{{ t.name }}</h3>
             <p class="sa-meta">Sites: {{ t.site_count }}</p>
             <div class="sa-actions">
-              <a class="sa-btn sa-btn-small" href="{{ url_for('admin_ui.systemadmin_customer_sites', tenant_id=t.id) }}">Visa sites</a>
+              <a class="app-shell__user-pill" href="{{ url_for('admin_ui.systemadmin_customer_sites', tenant_id=t.id) }}">Visa sites</a>
             </div>
           </div>
           {% endfor %}
         </div>
       </article>
 
-      <!-- Placeholder cards for future modules -->
-      <article class="sa-card">
+      <article class="app-card app-shell__card">
+        <h2>Snabbåtgärder</h2>
+        <div class="app-stack">
+          <a class="app-shell__user-pill" href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}">Skapa kund</a>
+          <a class="app-shell__user-pill" href="{{ url_for('admin_ui.systemadmin_customers') }}">Visa kunder</a>
+        </div>
+      </article>
+
+      <article class="app-card app-shell__card">
         <h2>Systemstatus</h2>
         <p class="sa-card-sub">Moduler & drift</p>
 
         <ul class="sa-status-list">
-          <li><span>Weekview</span><span class="sa-pill sa-pill-on">Aktiv</span></li>
-          <li><span>Rapport</span><span class="sa-pill sa-pill-on">Aktiv</span></li>
-          <li><span>Portal</span><span class="sa-pill sa-pill-on">Aktiv</span></li>
+          <li><span>Weekview</span><span>Aktiv</span></li>
+          <li><span>Rapport</span><span>Aktiv</span></li>
+          <li><span>Portal</span><span>Aktiv</span></li>
         </ul>
       </article>
 
-      <article class="sa-card">
-        <h2>Aktivitet</h2>
+      <article class="app-card app-shell__card">
+        <h2>Senaste</h2>
         <p class="sa-card-sub">Senaste händelser</p>
         <p class="sa-placeholder">Kommer i v2.0</p>
       </article>
-
     </section>
-  </section>
-
-</main>
-{% endblock %}
-{% block scripts %}
-<script src="{{ url_for('static', filename='js/systemadmin.js') }}"></script>
+  </div>
 {% endblock %}

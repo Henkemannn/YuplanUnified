@@ -1,12 +1,13 @@
-{% extends "_base.html" %}
-{% set hide_global_nav = True %}
-{% block title %}Logga in{% endblock %}
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+{% extends "ui/_layout/auth_base.html" %}
+
+{% block page_title %}Logga in{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
 {% endblock %}
+
 {% block content %}
-<main class="login-root">
-  <section class="login-card">
+  <div class="login-content">
     <div class="login-logo-wrapper">
       <img src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" class="login-logo-spin">
     </div>
@@ -24,8 +25,10 @@
         <label for="password">Lösenord</label>
         <input type="password" id="password" name="password" required autocomplete="current-password">
       </div>
-      <button type="submit" class="btn btn-primary login-submit">Logga in</button>
+      <div class="login-actions">
+        <button type="submit" class="login-submit">Logga in</button>
+        <a class="login-forgot" href="{{ url_for('auth.forgot_password') }}">Glömt lösenord?</a>
+      </div>
     </form>
-  </section>
-  </main>
+  </div>
 {% endblock %}

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block page_title %}Yuplan{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
+  {% block head_extra %}{% endblock %}
+  <script src="{{ url_for('static', filename='js/app_shell.js') }}" defer></script>
+</head>
+<body>
+  <div class="app-shell app-shell--full" aria-label="Yuplan premium app shell">
+    {% set env_raw = (config.get('DEPLOY_ENV') or config.get('APP_ENV') or 'local') %}
+    {% set env_lower = env_raw | lower %}
+    {% if env_lower in ('prod', 'production') %}
+      {% set env_label = 'PROD' %}
+    {% elif env_lower == 'staging' %}
+      {% set env_label = 'STAGING' %}
+    {% else %}
+      {% set env_label = 'LOCAL' %}
+    {% endif %}
+    {% set user_display = session.get('full_name') or session.get('user_email') or session.get('username') or 'Inloggad' %}
+    {% set user_role = session.get('role') %}
+    {% if user_role %}
+      {% set user_label = user_display ~ ' (' ~ user_role ~ ')' %}
+    {% else %}
+      {% set user_label = user_display %}
+    {% endif %}
+    <header class="app-shell__topbar">
+      <div class="app-shell__brand">
+        <img class="app-shell__logo" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" />
+        <span class="app-shell__brand-text">Yuplan</span>
+      </div>
+      <div class="app-shell__topbar-actions">
+        {% if current_site_name %}
+          <span class="app-shell__env-badge">{{ current_site_name }}</span>
+        {% elif tenant_name %}
+          <span class="app-shell__env-badge">{{ tenant_name }}</span>
+        {% endif %}
+        <span class="app-shell__env-badge">{{ env_label }}</span>
+        <button class="app-shell__theme-toggle" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle>
+          <span data-theme-icon>🌙</span>
+        </button>
+        <div class="app-shell__user-menu" data-user-menu>
+          <button class="app-shell__user-pill" type="button" aria-haspopup="menu" aria-expanded="false" data-user-menu-trigger>
+            {{ user_label }}
+          </button>
+          <div class="app-shell__user-dropdown" role="menu" aria-label="Användarmeny">
+            <a class="app-shell__user-item" role="menuitem" href="#">Användarinfo</a>
+            <a class="app-shell__user-item" role="menuitem" href="#">Support</a>
+            <a class="app-shell__user-item" role="menuitem" href="#">Logga ut</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="app-shell__body">
+      <aside class="app-shell__sidebar" aria-label="Huvudnavigering">
+        <div class="app-shell__sidebar-panel">
+          {% set current_path = request.path or '' %}
+          {% set nav_context = nav_context if nav_context is defined else (vm.nav_context if vm is defined and vm.nav_context is defined else '') %}
+          {% if nav_context == 'systemadmin' %}
+            {% set sa_overview_url = url_for('ui.systemadmin_dashboard') %}
+            {% set sa_customers_url = url_for('admin_ui.systemadmin_customers') %}
+            {% set sa_users_url = url_for('ui.admin_users_list') %}
+            {% set sa_settings_url = url_for('ui.admin_system_page') %}
+            {% set sa_logs_url = url_for('ui.admin_dashboard') %}
+            <nav class="app-shell__nav">
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_overview_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_overview_url }}">Översikt</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_customers_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_customers_url }}">Kunder</a>
+              <a class="app-shell__nav-item" href="{{ sa_customers_url }}">Sites</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_users_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_users_url }}">Users</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_settings_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_settings_url }}">Inställningar</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_logs_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_logs_url }}">Loggar</a>
+            </nav>
+          {% else %}
+            {% set weekview_url = url_for('ui.weekview_ui') %}
+            {% set planera_url = url_for('ui.planera_week_ui') %}
+            {% set report_url = url_for('ui.reports_weekly') %}
+            {% set admin_url = url_for('ui.admin_dashboard') %}
+            {% set specialkost_url = url_for('ui.admin_specialkost_list') %}
+            {% set portal_url = url_for('ui.portal_weeks_unified') %}
+            <nav class="app-shell__nav">
+              <a class="app-shell__nav-item {% if current_path.startswith(weekview_url) %}app-shell__nav-item--active{% endif %}" href="{{ weekview_url }}">Veckovy</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/planera') %}app-shell__nav-item--active{% endif %}" href="{{ planera_url }}">Planera</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/reports') %}app-shell__nav-item--active{% endif %}" href="{{ report_url }}">Rapport</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="{{ specialkost_url }}">Specialkost</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin') and not current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="{{ admin_url }}">Admin</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/portal/week') %}app-shell__nav-item--active{% endif %}" href="{{ portal_url }}">Avdelningsportal</a>
+            </nav>
+          {% endif %}
+          <div class="app-shell__sidebar-footer">Yuplan</div>
+        </div>
+      </aside>
+
+      <main class="app-shell__main">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+</body>
+</html>

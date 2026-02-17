@@ -369,6 +369,11 @@ def login_get():  # pragma: no cover
     return render_template("login.html", vm=vm, error_message=None)
 
 
+@bp.get("/forgot")
+def forgot_password():  # pragma: no cover
+    return render_template("auth_forgot.html")
+
+
 @bp.post("/logout")
 def logout():
     if os.getenv("STAGING_SIMPLE_AUTH", "0") in ("1", "true", "yes"):

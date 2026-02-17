@@ -491,7 +491,7 @@ def systemadmin_dashboard():
         tenants_vm = []
     finally:
         db.close()
-    vm = {"user_name": user_name, "tenants": tenants_vm}
+    vm = {"user_name": user_name, "tenants": tenants_vm, "nav_context": "systemadmin"}
     return render_template("systemadmin_dashboard.html", vm=vm)
 
 # Note: Sites listing for a tenant is provided by existing admin routes.
