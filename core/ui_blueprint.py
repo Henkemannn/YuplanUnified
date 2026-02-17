@@ -2878,7 +2878,7 @@ def admin_specialkost_list():
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_list")))
     items = repo.list_all(site_id=site_id)
     vm = {"diet_types": items, "user_role": role, "site_id": site_id}
-    return render_template("ui/unified_admin_specialkost_list.html", vm=vm)
+    return render_template("ui/unified_admin_specialkost_list.html", vm=vm, nav_context="admin")
 
 
 @ui_bp.get("/ui/admin/specialkost/new")
@@ -2977,7 +2977,7 @@ def admin_menu_import_list():
             weeks = [{"year": int(r[0]), "week": int(r[1])} for r in rows]
         finally:
             db.close()
-        return render_template("admin_menu_import.html", vm={"weeks": weeks})
+        return render_template("admin_menu_import.html", vm={"weeks": weeks}, nav_context="admin")
 
 
 @ui_bp.post("/ui/admin/menu-import/upload")
@@ -3512,7 +3512,7 @@ def reports_weekly():
         vm["all_departments_names"] = [str(r[0]) for r in all_dept_rows]
     finally:
         db2.close()
-    return render_template("ui/unified_report_weekly.html", vm=vm)
+    return render_template("ui/unified_report_weekly.html", vm=vm, nav_context="admin")
 
 # ----------------------------------------------------------------------------
 # Admin – Weekly Diets Report (Module 3 MVP)
@@ -4351,7 +4351,7 @@ def admin_dashboard():
         ],
     }
     
-    return render_template("ui/unified_admin_dashboard.html", vm=vm)
+    return render_template("ui/unified_admin_dashboard.html", vm=vm, nav_context="admin")
 
 
 # ============================================================================
@@ -4470,7 +4470,7 @@ def admin_departments_list():
         "site_name": site_name,
     }
     
-    return render_template("ui/unified_admin_departments_list.html", vm=vm)
+    return render_template("ui/unified_admin_departments_list.html", vm=vm, nav_context="admin")
 
 
 @ui_bp.get("/ui/admin/departments/new")

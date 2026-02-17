@@ -24,7 +24,7 @@ def test_admin_dashboard_happy_path_admin(client_admin):
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     assert "Adminpanel" in html
-    assert "Välkommen till Adminpanelen" in html
+    assert "Översikt" in html
 
 
 def test_admin_dashboard_happy_path_superuser(client_superuser):
@@ -78,42 +78,35 @@ def test_admin_dashboard_sidebar_present(client_admin):
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    assert 'class="admin-sidebar"' in html
-    assert 'class="sidebar-nav"' in html
-    assert "Översikt" in html  # Dashboard link
-    assert "Menyimport" in html
+    assert 'class="app-shell__sidebar"' in html
+    assert 'class="app-shell__nav"' in html
+    assert "Översikt" in html
+    assert "Veckovy" in html
     assert "Avdelningar" in html
-    assert "Användare" in html
-    assert "Rapporter" in html
-    assert "Inställningar" in html
-    assert "Tillbaka till Veckovy" in html
+    assert "Menyimport" in html
+    assert "Specialkost" in html
+    assert "Rapport / Statistik" in html
 
 
 def test_admin_dashboard_quick_links_present(client_admin):
-    """Test all 6 quick link cards are present."""
+    """Test dashboard quick links are present."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    assert 'class="quick-links-grid"' in html
-    assert 'class="quick-link-card"' in html
-    
-    # Check all 6 cards
-    assert "Menyimport & Veckomeny" in html
     assert "Avdelningar" in html
-    assert "Användare" in html
-    assert "Rapporter" in html
-    assert "Inställningar" in html
-    assert "Tillbaka till Veckovy" in html
+    assert "Menyimport" in html
+    assert "Specialkost" in html
+    assert "Rapport" in html
 
 
-def test_admin_dashboard_flash_area_present(client_admin):
-    """Test flash message area exists."""
+def test_admin_dashboard_layout_structure(client_admin):
+    """Test app shell layout structure exists."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    # Flash container should be in the template structure
-    assert 'class="content-header"' in html
-    assert 'class="page-content"' in html
+    assert 'class="app-shell__page-header"' in html
+    assert 'class="app-shell__grid"' in html
+    assert 'class="app-shell__card"' in html
 
 
 def test_admin_dashboard_current_week_displayed(client_admin):
@@ -133,19 +126,21 @@ def test_admin_dashboard_current_week_displayed(client_admin):
 # ============================================================================
 
 def test_admin_dashboard_css_loaded(client_admin):
-    """Test unified_admin.css is linked."""
+    """Test app shell CSS is linked."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    assert 'unified_admin.css' in html
+    assert 'css/app_shell.css' in html
+    assert 'unified_admin.css' not in html
 
 
 def test_admin_dashboard_js_loaded(client_admin):
-    """Test unified_admin.js is linked."""
+    """Test app shell JS is linked."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    assert 'unified_admin.js' in html
+    assert 'js/app_shell.js' in html
+    assert 'unified_admin.js' not in html
 
 
 # ============================================================================
@@ -267,6 +262,6 @@ def test_weekview_link_in_admin_sidebar(client_admin):
     html = resp.data.decode("utf-8")
     
     # Should have weekview link in sidebar
-    assert "Tillbaka till Veckovy" in html
+    assert "Veckovy" in html
     assert "/ui/weekview" in html
 
