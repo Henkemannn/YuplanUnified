@@ -103,6 +103,7 @@ def test_kitchen_week_v3_renders_and_flags():
     css_text = Path("static/css/kitchen_week_v3.css").read_text(encoding="utf-8")
     assert "pointer-events: auto" in css_text
     assert not re.search(r"\.kostcell-btn\s*\{[^}]*pointer-events:\s*none", css_text)
+    assert "var(--yp-alt2-bg)" in css_text
     # Only Veckovy should be active in kitchen nav on weekview
     assert html.count("app-shell__nav-item--active") == 1
     assert re.search(r"app-shell__nav-item--active[^>]*>\s*Veckovy\s*<", html)

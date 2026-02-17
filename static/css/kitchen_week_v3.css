@@ -1,6 +1,5 @@
 .kitchen-week {
-  --yp-accent-warn: var(--yp-color-warning-light, color-mix(in srgb, var(--accent) 25%, var(--surface-2)));
-  --kw-alt2-bg: var(--yp-accent-warn);
+  --kw-alt2-bg: var(--yp-alt2-bg);
   --kw-border: var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -97,6 +96,7 @@
 .kitchen-week .grid-table th.is-alt2,
 .kitchen-week .kw-cell.is-alt2 {
   background: var(--kw-alt2-bg);
+  color: var(--yp-alt2-fg);
 }
 
 .kitchen-week .kw-grid td:focus,
@@ -183,52 +183,6 @@
 }
 
 
-.kitchen-week .menu-modal__close {
-  background: transparent;
-  border: 0;
-  font-size: 18px;
-  cursor: pointer;
-  color: var(--text);
-}
-
-.kitchen-week .menu-modal__body {
-  padding: 12px;
-}
-
-.kitchen-week .menu-modal__day {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.kitchen-week .menu-modal__section-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 8px 0;
-}
-
-.kitchen-week .menu-modal__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-.kitchen-week .menu-modal__pill {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--accent-soft);
-  font-size: 0.85rem;
-}
-
-.kitchen-week .menu-modal__pill.alt2 {
-  background: var(--kw-alt2-bg);
-}
-
-.kitchen-week .menu-modal__text {
-  flex: 1;
-}
 
 @media print {
   .kitchen-week .toolbar button,

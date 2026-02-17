@@ -36,7 +36,7 @@
           <p class="app-shell__card-text"><strong>Lunch:</strong></p>
           <p class="app-shell__card-text">Alt 1: {{ day.lunch_alt1 or '—' }}</p>
           {% if day.lunch_alt2 %}
-            <p class="app-shell__card-text">Alt 2: {{ day.lunch_alt2 }}</p>
+            <p class="app-shell__card-text"><span class="yp-pill yp-pill--alt2">Alt 2</span> {{ day.lunch_alt2 }}</p>
           {% endif %}
           <p class="app-shell__card-text">Dessert: {{ day.dessert or '—' }}</p>
           <p class="app-shell__card-text"><strong>Kvällsmat:</strong> {{ day.dinner or '—' }}</p>

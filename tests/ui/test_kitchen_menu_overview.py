@@ -57,5 +57,6 @@ def test_kitchen_menu_overview_renders():
     assert "Kvällsmat" in html
     assert "Dessert" in html
     assert "Alt 2" in html
+    assert "yp-pill--alt2" in html
     assert re.search(r"app-shell__nav-item[^>]*>\s*Menyöversikt\s*<", html)
     assert 'app-shell__nav-item">Admin<' not in html
