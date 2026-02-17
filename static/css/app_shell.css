@@ -368,6 +368,14 @@
   gap: 16px;
 }
 
+.app-shell__page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .app-shell__title {
   margin: 0 0 6px;
   font-size: var(--yp-font-size-3xl);
@@ -500,6 +508,62 @@
   border-radius: var(--r-sm);
   width: fit-content;
 }
+
+
+.yp-weekpicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  border: 1px solid var(--border-subtle);
+}
+
+.yp-weekpicker__btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.yp-weekpicker__btn:hover {
+  background: var(--surface-2);
+  border-color: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.yp-weekpicker__btn:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
+.yp-weekpicker__select {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--r-md);
+  padding: 6px 10px;
+  font-size: var(--yp-font-size-sm);
+  font-weight: 600;
+  min-width: 120px;
+  cursor: pointer;
+}
+
+.yp-weekpicker__select:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
 
 @media (max-width: 1024px) {
   .app-shell {

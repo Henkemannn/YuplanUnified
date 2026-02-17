@@ -9,18 +9,13 @@
         <h1 class="app-shell__title">Menyöversikt</h1>
         <p class="app-shell__subtitle">Veckans meny för lunch och middag.</p>
       </div>
-      <form method="get" action="{{ url_for('ui.kitchen_menu_overview') }}">
-        <input type="hidden" name="site_id" value="{{ vm.site_id }}">
-        <label for="menu-week">Välj vecka</label>
-        <select id="menu-week" name="week">
-          {% for opt in vm.week_options %}
-            {% set opt_value = opt.year ~ '-' ~ opt.week %}
-            {% set current_value = vm.year ~ '-' ~ vm.week %}
-            <option value="{{ opt_value }}" {% if opt_value == current_value %}selected{% endif %}>{{ opt.label }}</option>
-          {% endfor %}
-        </select>
-        <button class="app-shell__user-pill" type="submit">Visa</button>
-      </form>
+      <div class="app-shell__page-actions">
+        {% set base_path = url_for('ui.kitchen_menu_overview') %}
+        {% set year = vm.year %}
+        {% set week = vm.week %}
+        {% set site_id = vm.site_id %}
+        {% include "ui/_components/week_picker.html" %}
+      </div>
     </section>
 
     <div class="app-shell__card-meta">År {{ vm.year }} • Vecka {{ vm.week }}</div>
@@ -38,8 +33,13 @@
       {% for day in vm.menu_days %}
         <article class="app-shell__card app-card">
           <h2 class="app-shell__card-title">{{ day.label }}</h2>
-          <p class="app-shell__card-text"><strong>Lunch:</strong> {{ day.lunch }}</p>
-          <p class="app-shell__card-text"><strong>Middag:</strong> {{ day.dinner }}</p>
+          <p class="app-shell__card-text"><strong>Lunch:</strong></p>
+          <p class="app-shell__card-text">Alt 1: {{ day.lunch_alt1 or '—' }}</p>
+          {% if day.lunch_alt2 %}
+            <p class="app-shell__card-text">Alt 2: {{ day.lunch_alt2 }}</p>
+          {% endif %}
+          <p class="app-shell__card-text">Dessert: {{ day.dessert or '—' }}</p>
+          <p class="app-shell__card-text"><strong>Kvällsmat:</strong> {{ day.dinner or '—' }}</p>
         </article>
       {% endfor %}
     </section>
