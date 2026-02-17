@@ -7,29 +7,27 @@
 {% endblock %}
 
 {% block content %}
+  {% set options = vm.departments_options if vm.departments_options is defined else [] %}
   <div class="app-page admin-report-week admin-list" data-testid="report-weekly">
     <section class="app-shell__page-header">
       <div>
         <h1 class="app-shell__title">Veckorapport</h1>
         {% set display_week = vm.selected_week or vm.week %}
         {% set display_year = vm.selected_year or vm.year %}
-        {% set selected_label = "Alla avdelningar" %}
-        {% if vm.selected_department_id is defined and vm.selected_department_id and vm.selected_department_id != 'ALL' %}
-          {% for opt in (vm.departments_options if vm.departments_options is defined else []) %}
-            {% if opt.id == vm.selected_department_id %}
-              {% set selected_label = opt.name %}
+        {% set dept_label = "Alla avdelningar" %}
+        {% set selected_dept = (vm.selected_department_id if vm.selected_department_id is defined else "") | string %}
+        {% if selected_dept != "" %}
+          {% for opt in options %}
+            {% set opt_id = opt.id|string %}
+            {% if opt_id == selected_dept or opt_id.endswith(selected_dept) or selected_dept.endswith(opt_id) %}
+              {% set dept_label = opt.name %}
             {% endif %}
           {% endfor %}
         {% endif %}
-        {% if display_week and display_year %}
-          {% if vm.site_name %}
-            <p class="app-shell__subtitle">Vecka {{ display_week }}, {{ display_year }} · {{ vm.site_name }}</p>
-          {% else %}
-            <p class="app-shell__subtitle">Vecka {{ display_week }}, {{ display_year }}</p>
-          {% endif %}
-          <p class="app-shell__card-text">Visar: Vecka {{ display_week }}, {{ display_year }} · {{ selected_label }}</p>
-        {% elif vm.site_name %}
+        {% if vm.site_name %}
           <p class="app-shell__subtitle">{{ vm.site_name }}</p>
+        {% elif display_week and display_year %}
+          <p class="app-shell__subtitle">Vecka {{ display_week }}, {{ display_year }}</p>
         {% endif %}
       </div>
     </section>
@@ -60,11 +58,10 @@
             <div class="yp-form-field">
               <label for="department-select" class="yp-label">Avdelning</label>
               <select id="department-select" name="department_id" class="yp-input">
-                {% set options = vm.departments_options if vm.departments_options is defined else [] %}
-                <option value="ALL" {% if vm.selected_department_id == 'ALL' %}selected{% endif %}>Alla avdelningar</option>
+                <option value="ALL" {% if (vm.selected_department_id|string) == 'ALL' %}selected{% endif %}>Alla avdelningar</option>
                 {% for opt in options %}
                   {% if opt.id != 'ALL' %}
-                    <option value="{{ opt.id }}" {% if opt.id == vm.selected_department_id %}selected{% endif %}>{{ opt.name }}</option>
+                    <option value="{{ opt.id }}" {% if opt.id|string == vm.selected_department_id|string %}selected{% endif %}>{{ opt.name }}</option>
                   {% endif %}
                 {% endfor %}
               </select>
@@ -79,6 +76,9 @@
       <article class="app-shell__card report-weekly__results-card">
         <div class="admin-report-week__summary">
           <h2 class="app-shell__card-title">Sammanställning</h2>
+          {% if display_week and display_year %}
+            <span class="admin-report-week__context">Vecka {{ display_week }}, {{ display_year }} · {{ dept_label }}</span>
+          {% endif %}
           {% set has_coverage = vm.coverage_data is defined and vm.coverage_data %}
           {% set has_departments = vm.departments is defined and vm.departments %}
         </div>

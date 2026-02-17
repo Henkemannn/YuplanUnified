@@ -37,8 +37,11 @@
   --bg: var(--yp-color-bg-alt);
   --surface: var(--yp-color-bg-elevated);
   --surface-2: var(--yp-color-secondary-light);
+  --surface-elevated: var(--yp-color-bg-elevated);
+  --chip-bg: var(--yp-color-secondary-light);
   --main-bg: var(--yp-color-bg-alt);
   --border-subtle: var(--yp-color-border);
+  --border: var(--yp-color-border);
   --text: var(--yp-color-text);
   --muted: var(--yp-color-text-muted);
   --accent: var(--yp-color-primary);
@@ -70,8 +73,11 @@
   --bg: #0f172a;
   --surface: #111b2e;
   --surface-2: #16233a;
+  --surface-elevated: #121f35;
+  --chip-bg: #1a2840;
   --main-bg: #101b2f;
   --border-subtle: #26344a;
+  --border: #2a3b56;
   --text: #e2e8f0;
   --muted: #9aa6bf;
   --yp-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.35);

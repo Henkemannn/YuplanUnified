@@ -234,6 +234,7 @@ def test_reports_weekly_renders_basic_structure(client_admin, seed_site_and_depa
     assert "app-shell__page-header" in html
     assert "Filter" in html
     assert "Sammanställning" in html
+    assert "Alla avdelningar" in html
     assert "Täckning:" not in html
 
 
@@ -247,6 +248,35 @@ def test_reports_weekly_calculates_coverage_correctly(client_admin, seed_registr
     if "Avd Alpha" in html:
         assert "Avd Beta" in html
         assert "%" not in html
+        assert "Alla avdelningar" in html
+
+
+def test_reports_weekly_context_pill_selected_department(client_admin, seed_site_and_departments):
+    """Context pill should show the selected department display name."""
+    dept_id = seed_site_and_departments["dept1"]
+    resp = client_admin.get(
+        f"/ui/reports/weekly?year=2025&week=10&department_id={dept_id}",
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    assert "Avd Alpha" in html
+    assert "admin-report-week__context" in html
+    assert "Vecka 10, 2025" in html
+
+
+def test_reports_weekly_context_pill_mixed_id_formats(client_admin, seed_site_and_departments):
+    """Context pill should resolve label when selected id is a suffix/prefix."""
+    dept_id = seed_site_and_departments["dept1"]
+    selected_id = dept_id[-6:]
+    resp = client_admin.get(
+        f"/ui/reports/weekly?year=2025&week=10&department_id={selected_id}",
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    assert "Avd Alpha" in html
+    assert "admin-report-week__context" in html
 
 
 def test_reports_weekly_zero_coverage(client_admin, seed_week_menus):
@@ -288,6 +318,8 @@ def test_reports_weekly_partial_coverage(client_admin, seed_site_and_departments
     # Just verify the report renders with some coverage data
     # Note: Due to test database isolation, we check for structure rather than exact values
     assert "Sammanställning" in html
+
+
 
 
 # ============================================================================

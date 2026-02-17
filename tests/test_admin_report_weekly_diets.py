@@ -128,6 +128,7 @@ def test_seeded_weekly_diets_report(client):
     assert "Veckorapport" in html
     assert "Filter" in html
     assert "Sammanställning" in html
+    assert "Alla avdelningar" in html
     assert "Avd A" in html and "Avd B" in html
     assert "Lunch: 70 / 70" in html
     assert "Kväll: 70 / 70" in html
@@ -143,6 +144,9 @@ def test_seeded_weekly_diets_report(client):
     resp3 = client.get(f"/ui/admin/report/week?year={year}&week={week}&department_id=dep-A&view=week")
     assert resp3.status_code == 200
     html3 = resp3.get_data(as_text=True)
+    assert "Avd A" in html3
+    assert "admin-report-week__context" in html3
+    assert "Vecka 10, 2025" in html3
     assert "Avd A" in html3
     assert "Lunch: 54 / 54" not in html3
 
