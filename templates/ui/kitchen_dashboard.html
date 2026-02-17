@@ -8,12 +8,6 @@
       <h1 class="app-shell__title">Kök</h1>
       <p class="app-shell__subtitle">Välj modul för veckovy, planering och rapport.</p>
     </div>
-    <div>
-      {% if vm.site_name %}
-        <span class="app-shell__env-badge">{{ vm.site_name }}</span>
-      {% endif %}
-      <a class="app-shell__user-pill" href="{{ url_for('ui.select_site', next='/ui/kitchen') }}">Byt site</a>
-    </div>
   </section>
 
   <section class="app-shell__grid">
