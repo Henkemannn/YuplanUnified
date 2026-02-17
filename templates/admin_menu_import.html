@@ -39,13 +39,12 @@
                         <form action="{{ url_for('admin_ui.admin_menu_import_upload') }}" method="POST" enctype="multipart/form-data" class="yp-form">
                             {{ csrf_token_input() | safe }}
                             <div class="yp-form-field">
-                                <label for="menu_file" class="yp-label">Välj fil</label>
                                 <div class="admin-menu-import__file-drop">
-                                    <input type="file" id="menu_file" name="menu_file" class="yp-input" accept=".csv,.docx" required>
+                                    <input type="file" id="menu_file" name="menu_file" class="yp-input" accept=".csv,.docx" aria-label="Välj menufil (CSV eller DOCX)" required>
                                 </div>
                             </div>
                             <div class="form-actions">
-                                <button type="submit" class="app-shell__btn app-shell__btn--ghost">Importera</button>
+                                <button type="submit" class="app-shell__btn app-shell__btn--ghost">Importera meny</button>
                             </div>
                         </form>
                         <aside class="admin-menu-import__info">

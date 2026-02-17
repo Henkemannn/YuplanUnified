@@ -217,10 +217,10 @@
 }
 
 .admin-menu-import__file-drop {
-  padding: 12px;
-  border: 1px dashed rgba(16, 24, 40, 0.2);
+  padding: 14px;
+  border: 1px solid rgba(16, 24, 40, 0.12);
   border-radius: 14px;
-  background: rgba(248, 250, 252, 0.8);
+  background: rgba(248, 250, 252, 0.95);
 }
 
 .admin-menu-import__info {
