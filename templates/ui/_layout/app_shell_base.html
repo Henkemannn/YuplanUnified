@@ -62,6 +62,9 @@
         <div class="app-shell__sidebar-panel">
           {% set current_path = request.path or '' %}
           {% set nav_context = nav_context if nav_context is defined else (vm.nav_context if vm is defined and vm.nav_context is defined else '') %}
+          {% if not nav_context and current_path.startswith('/ui/kitchen') %}
+            {% set nav_context = 'kitchen' %}
+          {% endif %}
           {% if nav_context == 'systemadmin' %}
             {% set sa_overview_url = url_for('ui.systemadmin_dashboard') %}
             {% set sa_customers_url = url_for('admin_ui.systemadmin_customers') %}
@@ -76,6 +79,17 @@
               <a class="app-shell__nav-item {% if current_path.startswith(sa_users_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_users_url }}">Users</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_settings_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_settings_url }}">Inställningar</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_logs_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_logs_url }}">Loggar</a>
+            </nav>
+          {% elif nav_context == 'kitchen' %}
+            {% set kitchen_home_url = url_for('ui.kitchen_dashboard') %}
+            {% set kitchen_week_url = url_for('ui.kitchen_veckovy_week') %}
+            {% set kitchen_plan_url = url_for('ui.kitchen_planering_v1') %}
+            {% set kitchen_menu_url = url_for('ui.kitchen_menu_overview') %}
+            <nav class="app-shell__nav">
+              <a class="app-shell__nav-item {% if current_path == '/ui/kitchen' %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_home_url }}">Översikt</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/kitchen/week') %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_week_url }}">Veckovy</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/kitchen/planering') %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_plan_url }}">Planera</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/kitchen/menu') %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_menu_url }}">Menyöversikt</a>
             </nav>
           {% else %}
             {% set weekview_url = url_for('ui.weekview_ui') %}

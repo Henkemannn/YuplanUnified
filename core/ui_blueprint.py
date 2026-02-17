@@ -1821,7 +1821,7 @@ def kitchen_dashboard():
         site_name = str(row_s[0]) if row_s else ""
     finally:
         db.close()
-    vm = {"site_id": site_id, "site_name": site_name, "allow_site_switch": False}
+    vm = {"site_id": site_id, "site_name": site_name, "allow_site_switch": False, "nav_context": "kitchen"}
     return render_template("ui/kitchen_dashboard.html", vm=vm)
 
 
@@ -1896,13 +1896,15 @@ def kitchen_menu_overview():
             return str(val.get("dish_name") or val.get("name") or "")
         return str(val)
 
-    def _meal_text(day: dict, meal_key: str) -> str:
+    def _meal_obj(day: dict, meal_key: str) -> dict:
         if not day:
-            return ""
+            return {}
         meal = day.get(meal_key) or day.get(meal_key.capitalize()) or {}
-        if not isinstance(meal, dict):
-            return _pick_name(meal)
-        keys = ["alt1", "main", "alt2", "dessert"] if meal_key == "lunch" else ["main", "dinner", "alt1", "alt2"]
+        if isinstance(meal, dict):
+            return meal
+        return {"main": meal}
+
+    def _variant_text(meal: dict, keys: list[str]) -> str:
         for key in keys:
             name = _pick_name(meal.get(key) or meal.get(key.capitalize()))
             if name:
@@ -1917,14 +1919,20 @@ def kitchen_menu_overview():
             day_val = day_map.get(alias) or {}
             if day_val:
                 break
-        lunch_text = _meal_text(day_val, "lunch")
-        dinner_text = _meal_text(day_val, "dinner")
-        if lunch_text or dinner_text:
+        lunch_meal = _meal_obj(day_val, "lunch")
+        dinner_meal = _meal_obj(day_val, "dinner")
+        lunch_alt1 = _variant_text(lunch_meal, ["main", "alt1"])
+        lunch_alt2 = _variant_text(lunch_meal, ["alt2"])
+        dessert_text = _variant_text(lunch_meal, ["dessert"])
+        dinner_text = _variant_text(dinner_meal, ["main", "dinner", "alt1", "alt2"])
+        if lunch_alt1 or lunch_alt2 or dessert_text or dinner_text:
             has_menu = True
         menu_days.append({
             "label": label,
-            "lunch": lunch_text or "—",
-            "dinner": dinner_text or "—",
+            "lunch_alt1": lunch_alt1,
+            "lunch_alt2": lunch_alt2,
+            "dessert": dessert_text,
+            "dinner": dinner_text,
         })
 
     week_options = []
@@ -1946,6 +1954,8 @@ def kitchen_menu_overview():
         "week_options": week_options,
         "menu_days": menu_days,
         "has_menu": has_menu,
+        "allow_site_switch": False,
+        "nav_context": "kitchen",
     }
     return render_template("ui/kitchen_menu_overview.html", vm=vm)
 
@@ -2422,6 +2432,8 @@ def kitchen_planering_v1():
         "alt_groups": {"alt1_dept_ids": alt1_dept_ids, "alt2_dept_ids": alt2_dept_ids},
         "diet_counts_by_dept": per_dept_defaults,
         "print_preview_mode": print_preview_mode,
+        "allow_site_switch": False,
+        "nav_context": "kitchen",
     }
     return render_template("ui/kitchen_planering_v1.html", vm=vm)
 
@@ -2570,6 +2582,7 @@ def kitchen_veckovy_week():
             "next_week": next_week,
             "departments": deps_out,
             "allow_site_switch": False,
+            "nav_context": "kitchen",
         }
         return render_template("ui/kitchen_week_v3.html", vm=vm)
     # Legacy path rendering remains unchanged below
