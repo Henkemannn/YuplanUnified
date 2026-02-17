@@ -1,5 +1,6 @@
 .kitchen-week {
-  --kw-alt2-bg: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
+  --yp-accent-warn: var(--yp-color-warning-light, color-mix(in srgb, var(--accent) 25%, var(--surface-2)));
+  --kw-alt2-bg: var(--yp-accent-warn);
   --kw-border: var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -142,6 +143,7 @@
   padding: 0;
   min-width: auto;
   cursor: pointer;
+  pointer-events: auto;
   color: inherit;
   position: relative;
   display: flex;
@@ -180,43 +182,6 @@
   font-size: 1rem;
 }
 
-.kitchen-week #menuModal {
-  display: none;
-}
-
-.kitchen-week #menuModal.is-open {
-  display: block;
-}
-
-.kitchen-week #menuModal .menu-modal__backdrop,
-.kitchen-week #menuModal .js-menu-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-}
-
-.kitchen-week .menu-modal__content {
-  position: fixed;
-  inset: auto 50% 50% auto;
-  transform: translate(50%, -50%);
-  min-width: min(480px, 92vw);
-  background: var(--surface);
-  border: 1px solid var(--kw-border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh-2);
-}
-
-.kitchen-week .menu-modal__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--kw-border);
-}
-
-.kitchen-week .menu-modal__header-title {
-  font-weight: 600;
-}
 
 .kitchen-week .menu-modal__close {
   background: transparent;

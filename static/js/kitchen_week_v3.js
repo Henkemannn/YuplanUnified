@@ -45,6 +45,7 @@
       marked: marked,
       site_id: siteId
     };
+    console.log("POST mark", payload);
     console.debug("[K3] If-Match on first POST:", etag);
     const resp = await fetch('/api/weekview/specialdiets/mark',{
       method:'POST',
@@ -89,15 +90,17 @@
     }
   }
   document.addEventListener('DOMContentLoaded', function(){
-    document.querySelectorAll('.kostcell-btn').forEach(function(btn){
-      btn.addEventListener('click', async function(ev){
-        try {
-          await toggleMark(btn);
-        } finally {
-          // Remove focus to avoid any residual browser focus outline
-          try { btn.blur(); } catch(e) { /* ignore */ }
-        }
-      });
+    console.log("kitchen_week_v3.js loaded");
+    document.addEventListener('click', async function(ev){
+      const btn = ev.target && ev.target.closest ? ev.target.closest('.kostcell-btn') : null;
+      if(!btn){ return; }
+      ev.preventDefault();
+      try {
+        await toggleMark(btn);
+      } finally {
+        // Remove focus to avoid any residual browser focus outline
+        try { btn.blur(); } catch(e) { /* ignore */ }
+      }
     });
     const p = document.getElementById('printBtn');
     if(p){ p.addEventListener('click', function(){ window.print(); }); }

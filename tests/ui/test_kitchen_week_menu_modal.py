@@ -29,3 +29,4 @@ def test_kitchen_week_has_shared_menu_modal(app_session):
     assert 'js/menu_modal.js' in html
     assert 'data-action="open-menu-modal"' in html
     assert 'class="menu-icon"' in html
+    assert 'js-menu-modal-close' in html

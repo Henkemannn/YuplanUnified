@@ -1,6 +1,8 @@
 from flask.testing import FlaskClient
 from sqlalchemy import text
 from datetime import date as _date
+from pathlib import Path
+import re
 
 from core.app_factory import create_app
 from core.db import get_session
@@ -84,13 +86,26 @@ def test_kitchen_week_v3_renders_and_flags():
     assert "Laktosfri" in html
     # Buttons contain dataset attributes
     assert "class=\"kostcell-btn" in html and "data-department-id" in html and "data-diet-type-id" in html
+    # Buttons should not render disabled in the markup
+    assert not re.search(r"kostcell-btn[^>]*\sdisabled", html)
     # Alt2 flag appears at least once (Monday lunch for dep1)
     assert "is-alt2" in html
     # JS wiring include for done-mark toggle
     assert "kitchen_week_v3.js" in html
+    assert "src=\"/static/js/kitchen_week_v3.js\"" in html
+    # Menu modal container + JS include for fetch/inject
+    assert 'id="menuModal"' in html
+    assert "js/menu_modal.js" in html
     # Ensure legacy CSS does not leak into app shell
     assert "unified_ui.css" not in html
     assert "unified_cook.css" not in html
+    # Ensure CSS allows pointer events on kostcell buttons
+    css_text = Path("static/css/kitchen_week_v3.css").read_text(encoding="utf-8")
+    assert "pointer-events: auto" in css_text
+    assert not re.search(r"\.kostcell-btn\s*\{[^}]*pointer-events:\s*none", css_text)
+    # Only Veckovy should be active in kitchen nav on weekview
+    assert html.count("app-shell__nav-item--active") == 1
+    assert re.search(r"app-shell__nav-item--active[^>]*>\s*Veckovy\s*<", html)
 
 
 def test_kitchen_week_v3_mark_toggle():
