@@ -220,5 +220,6 @@ def test_upload_success_shows_summary(app_session, client_admin, csv_file_conten
     assert response.status_code == 200
     html = response.data.decode('utf-8')
     
-    # Should show success message with summary
-    assert "importerad" in html.lower() or "skapade" in html.lower()
+    # Should show friendly success banner
+    assert "Import klar" in html
+    assert "veckor importerades/uppdaterades" in html

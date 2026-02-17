@@ -585,6 +585,13 @@ def admin_menu_import() -> str:  # type: ignore[override]
             archive_years.append(entry)
         entry["weeks"].append(w)
 
+    import_summary = None
+    try:
+        from flask import session as _sess
+        import_summary = _sess.pop("import_summary", None)
+    except Exception:
+        import_summary = None
+
     vm = {
         "weeks": weeks_sorted,
         "active_weeks": active_weeks,
@@ -592,6 +599,8 @@ def admin_menu_import() -> str:  # type: ignore[override]
         "current_year": current_year,
         "current_week": current_week,
     }
+    if import_summary:
+        vm["import_summary"] = import_summary
     return render_template("admin_menu_import.html", vm=vm)
 
 
@@ -692,12 +701,15 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
         updated_total = sum(int(w.get("updated", 0)) for w in weeks)
         skipped_total = sum(int(w.get("skipped", 0)) for w in weeks)
         weeks_imported = len(weeks)
-        flash(
-            f"Menyn importerad: {created_total} skapade, "
-            f"{updated_total} uppdaterade, "
-            f"{skipped_total} hoppade över ({weeks_imported} veckor).",
-            "success",
-        )
+        try:
+            _sess["import_summary"] = {
+                "weeks": weeks_imported,
+                "created": created_total,
+                "updated": updated_total,
+                "skipped": skipped_total,
+            }
+        except Exception:
+            flash("Import klar.", "success")
         return redirect(url_for("admin_ui.admin_menu_import"))
     except MenuCSVParseError as e:
         flash(f"Ogiltigt menyformat: {e}", "danger")

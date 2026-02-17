@@ -58,6 +58,27 @@
                     </div>
                 </div>
 
+                {% if vm.import_summary %}
+                    <div class="app-shell__notice app-shell__notice--success">
+                        <div class="app-shell__notice-icon" aria-hidden="true">✓</div>
+                        <div>
+                            <p class="app-shell__notice-title">Import klar.</p>
+                            <p class="app-shell__notice-text">
+                                {{ vm.import_summary.weeks }} veckor importerades/uppdaterades.
+                                {% if vm.import_summary.skipped and vm.import_summary.skipped > 0 %}
+                                    {{ vm.import_summary.skipped }} fanns redan och hoppades över.
+                                {% endif %}
+                            </p>
+                            <details class="app-shell__details app-shell__notice-details">
+                                <summary>Visa detaljer</summary>
+                                <div class="app-shell__details-body">
+                                    Skapade: {{ vm.import_summary.created }} · Uppdaterade: {{ vm.import_summary.updated }} · Hoppade över: {{ vm.import_summary.skipped }}
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                {% endif %}
+
                 <div>
                     <h3 class="app-shell__card-title">Importerade menyer</h3>
                     {% if vm.weeks %}
