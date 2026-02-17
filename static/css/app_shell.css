@@ -748,3 +748,38 @@
     font-size: var(--yp-font-size-xl);
   }
 }
+
+@media print {
+  .app-shell__sidebar,
+  .app-shell__topbar,
+  .yp-weekpicker,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  .app-shell__content,
+  .app-shell__main,
+  .app-shell__body {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .app-card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+  }
+
+  .kitchen-week .dept-card,
+  .kitchen-week .app-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-header {
+    margin-bottom: 1rem;
+  }
+}
