@@ -5,7 +5,8 @@ Tests navigation shell, dashboard, permissions, and static assets.
 
 import pytest
 import uuid
-from datetime import date as _date
+from datetime import date as _date, timedelta
+from sqlalchemy import text
 
 
 def _h(role):
@@ -25,6 +26,93 @@ def test_admin_dashboard_happy_path_admin(client_admin):
     html = resp.data.decode("utf-8")
     assert "Adminpanel" in html
     assert "Översikt" in html
+    assert "Menyval – kommande 4 veckor" in html
+    assert "Bockade rader visas i 2 dagar och rensas sedan automatiskt." in html
+    assert "Spara" not in html
+
+
+def test_admin_dashboard_menu_choice_status_missing_week(client_admin):
+    app = client_admin.application
+    from core.db import get_session
+    from core.week_key import build_week_key
+
+    site_id = "site-menu"
+    base = _date.today()
+    week_keys = []
+    menu_weeks = []
+    for i in range(4):
+        dt = base + timedelta(weeks=i)
+        year, week, _ = dt.isocalendar()
+        menu_weeks.append((int(year), int(week)))
+        week_keys.append(build_week_key(int(year), int(week)))
+
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER)"))
+            db.execute(text("CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT, name TEXT, resident_count_mode TEXT, resident_count_fixed INTEGER, version INTEGER)"))
+            db.execute(
+                text("INSERT OR REPLACE INTO sites(id,name,version) VALUES(:id,:name,0)"),
+                {"id": site_id, "name": "TestSite"},
+            )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO departments(id,site_id,name,resident_count_mode,resident_count_fixed,version) "
+                    "VALUES('dep-a',:sid,'Avd A','fixed',0,0)"
+                ),
+                {"sid": site_id},
+            )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO departments(id,site_id,name,resident_count_mode,resident_count_fixed,version) "
+                    "VALUES('dep-b',:sid,'Avd B','fixed',0,0)"
+                ),
+                {"sid": site_id},
+            )
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS menus(id INTEGER PRIMARY KEY, tenant_id INTEGER, week INTEGER, year INTEGER, status TEXT, updated_at TEXT)"
+                )
+            )
+            for year, week in menu_weeks:
+                db.execute(
+                    text("INSERT OR REPLACE INTO menus(id, tenant_id, year, week, status) VALUES(:id, 1, :y, :w, 'published')"),
+                    {"id": int(f"{year}{week:02d}"), "y": year, "w": week},
+                )
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS menu_choice_completion(site_id TEXT NOT NULL, department_id TEXT NOT NULL, week_key TEXT NOT NULL, completed_at TEXT, UNIQUE(site_id, department_id, week_key))"
+                )
+            )
+            for wk in week_keys:
+                db.execute(
+                    text(
+                        "INSERT OR REPLACE INTO menu_choice_completion(site_id, department_id, week_key, completed_at) "
+                        "VALUES(:sid, 'dep-a', :wk, '2026-01-01T00:00:00Z')"
+                    ),
+                    {"sid": site_id, "wk": wk},
+                )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO menu_choice_completion(site_id, department_id, week_key, completed_at) "
+                    "VALUES(:sid, 'dep-b', :wk, NULL)"
+                ),
+                {"sid": site_id, "wk": week_keys[0]},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+
+    resp = client_admin.get("/ui/admin", headers=_h("admin"))
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    assert "Menyval – kommande 4 veckor" in html
+    assert "Avd B" in html
+    assert week_keys[0] in html
 
 
 def test_admin_dashboard_happy_path_superuser(client_superuser):

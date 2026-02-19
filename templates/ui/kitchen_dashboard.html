@@ -2,6 +2,10 @@
 
 {% block page_title %}Kök{% endblock %}
 
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+{% endblock %}
+
 {% block content %}
   <section class="app-shell__page-header">
     <div>
@@ -26,5 +30,6 @@
       <p class="app-shell__card-text">Veckans meny, lunch och middag.</p>
       <div class="app-shell__card-meta">Läs-only översikt av menyn.</div>
     </a>
+    {% include "ui/_partials/remember_to_order_card.html" %}
   </section>
 {% endblock %}

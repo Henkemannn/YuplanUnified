@@ -1821,7 +1821,33 @@ def kitchen_dashboard():
         site_name = str(row_s[0]) if row_s else ""
     finally:
         db.close()
-    vm = {"site_id": site_id, "site_name": site_name, "allow_site_switch": False, "nav_context": "kitchen"}
+    remember_items = []
+    remember_week_key = None
+    try:
+        from .remember_to_order_repo import RememberToOrderRepo
+        from .week_key import week_key_from_date
+        remember_week_key = week_key_from_date(_date.today())
+        remember_items = RememberToOrderRepo().list_visible(site_id, remember_week_key)
+    except Exception:
+        remember_items = []
+    vm = {
+        "site_id": site_id,
+        "site_name": site_name,
+        "allow_site_switch": False,
+        "nav_context": "kitchen",
+        "remember_to_order": [
+            {
+                "id": it.id,
+                "text": it.text,
+                "created_at": it.created_at,
+                "created_by_role": it.created_by_role,
+                "checked_at": it.checked_at,
+            }
+            for it in remember_items
+        ],
+        "remember_to_order_week_key": remember_week_key,
+        "remember_to_order_can_check": False,
+    }
     return render_template("ui/kitchen_dashboard.html", vm=vm)
 
 
@@ -3684,6 +3710,71 @@ def reports_weekly_csv():
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = f"attachment; filename=veckorapport_v{week}_{year}.csv"
     return resp
+
+
+@ui_bp.get("/ui/api/remember-to-order")
+@require_roles(*SAFE_UI_ROLES)
+def remember_to_order_list_api():
+    site_id = (request.args.get("site_id") or "").strip()
+    week_key = (request.args.get("week_key") or "").strip()
+    if not site_id or not week_key:
+        return jsonify({"error": "bad_request", "message": "Missing site_id/week_key"}), 400
+    from .remember_to_order_repo import RememberToOrderRepo
+    repo = RememberToOrderRepo()
+    items = repo.list_visible(site_id, week_key)
+    payload = [
+        {
+            "id": it.id,
+            "text": it.text,
+            "created_at": it.created_at.isoformat() if it.created_at else None,
+            "created_by_user_id": it.created_by_user_id,
+            "created_by_role": it.created_by_role,
+            "checked_at": it.checked_at.isoformat() if it.checked_at else None,
+            "checked_by_user_id": it.checked_by_user_id,
+        }
+        for it in items
+    ]
+    return jsonify({"items": payload}), 200
+
+
+@ui_bp.post("/ui/api/remember-to-order/add")
+@require_roles(*SAFE_UI_ROLES)
+def remember_to_order_add_api():
+    data = request.get_json(silent=True) or {}
+    if not data:
+        data = request.form or {}
+    site_id = str((data.get("site_id") or "").strip())
+    week_key = str((data.get("week_key") or "").strip())
+    text_val = str((data.get("text") or "").strip())
+    if not site_id or not week_key or not text_val:
+        return jsonify({"error": "bad_request", "message": "Missing site_id/week_key/text"}), 400
+    user_id = session.get("user_id")
+    role = (session.get("role") or "").strip().lower()
+    from .remember_to_order_repo import RememberToOrderRepo
+    repo = RememberToOrderRepo()
+    item = repo.add(site_id, week_key, text_val, int(user_id) if user_id else None, role or "cook")
+    return jsonify({"ok": True, "id": item.id}), 200
+
+
+@ui_bp.post("/ui/api/remember-to-order/check")
+@require_roles(*ADMIN_ROLES)
+def remember_to_order_check_api():
+    data = request.get_json(silent=True) or {}
+    if not data:
+        data = request.form or {}
+    try:
+        item_id = int(data.get("id"))
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Missing id"}), 400
+    checked_raw = data.get("checked")
+    checked = str(checked_raw).lower() in ("1", "true", "yes", "on")
+    user_id = session.get("user_id")
+    from .remember_to_order_repo import RememberToOrderRepo
+    repo = RememberToOrderRepo()
+    updated = repo.set_checked(item_id, checked, int(user_id) if user_id else None)
+    if not updated:
+        return jsonify({"error": "not_found"}), 404
+    return jsonify({"ok": True}), 200
 # Cook Dashboard (Phase 5) – Unified cook view
 @ui_bp.get("/ui/cook/dashboard")
 @require_roles("cook", "admin", "superuser")
@@ -4297,12 +4388,50 @@ def admin_dashboard():
     except Exception:
         today_label = today.strftime("%Y-%m-%d")
 
+    menu_choice_status = {
+        "required_weeks": [],
+        "departments": [],
+        "needs_action_count": 0,
+        "total_departments": 0,
+    }
+    if active_site_id:
+        try:
+            from .menu_choice_status import get_required_weeks, get_department_completion_status
+            from .week_key import week_key_from_date
+            from_week_key = week_key_from_date(today)
+            required_weeks = get_required_weeks(active_site_id, from_week_key, n=4)
+            dept_statuses = get_department_completion_status(active_site_id, required_weeks)
+            menu_choice_status = {
+                "required_weeks": required_weeks,
+                "departments": dept_statuses,
+                "needs_action_count": sum(1 for d in dept_statuses if d.get("status") == "needs_action"),
+                "total_departments": len(dept_statuses),
+            }
+        except Exception:
+            menu_choice_status = {
+                "required_weeks": [],
+                "departments": [],
+                "needs_action_count": 0,
+                "total_departments": 0,
+            }
+
     # Last week number (ISO)
     try:
         last_week_dt = today - timedelta(weeks=1)
         last_week = int(last_week_dt.isocalendar()[1])
     except Exception:
         last_week = max(1, current_week - 1)
+
+    remember_items = []
+    remember_week_key = None
+    if active_site_id:
+        try:
+            from .remember_to_order_repo import RememberToOrderRepo
+            from .week_key import week_key_from_date
+            remember_week_key = week_key_from_date(today)
+            remember_items = RememberToOrderRepo().list_visible(active_site_id, remember_week_key)
+        except Exception:
+            remember_items = []
 
     # Menu forward dummy weeks
     try:
@@ -4316,6 +4445,7 @@ def admin_dashboard():
     vm = {
         "tenant_name": tenant_name,
         "site_name": site_name,
+        "site_id": active_site_id,
         "current_year": current_year,
         "current_week": current_week,
         "user_role": role,
@@ -4345,10 +4475,19 @@ def admin_dashboard():
                 {"week": w4, "status_label": "⛔ Ingen meny"},
             ],
         },
-        "order_reminders": [
-            {"text": "Beställ mer timbalbas"},
-            {"text": "Kaffefilter vecka 15"},
+        "menu_choice_status": menu_choice_status,
+        "remember_to_order": [
+            {
+                "id": it.id,
+                "text": it.text,
+                "created_at": it.created_at,
+                "created_by_role": it.created_by_role,
+                "checked_at": it.checked_at,
+            }
+            for it in remember_items
         ],
+        "remember_to_order_week_key": remember_week_key,
+        "remember_to_order_can_check": bool(role in ADMIN_ROLES),
     }
     
     return render_template("ui/unified_admin_dashboard.html", vm=vm, nav_context="admin")

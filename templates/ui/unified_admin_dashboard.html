@@ -2,6 +2,10 @@
 
 {% block page_title %}Adminpanel – Yuplan{% endblock %}
 
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+{% endblock %}
+
 {% block content %}
   <div class="app-page admin-dashboard">
     <section class="app-shell__page-header">
@@ -51,15 +55,35 @@
         </ul>
       </article>
 
-      <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Kom ihåg att beställa</h2>
-        <ul>
-          {% for item in vm.order_reminders %}
-            <li>{{ item.text }}</li>
-          {% endfor %}
-        </ul>
-        <p class="app-shell__card-text">Beställningslistan blir redigerbar i nästa version.</p>
+      <article class="app-shell__card admin-dashboard__status-card">
+        <h2 class="app-shell__card-title">Menyval – kommande 4 veckor</h2>
+        <p class="app-shell__card-text admin-dashboard__status-summary">
+          {{ vm.menu_choice_status.needs_action_count }} avdelningar ligger inte i fas
+        </p>
+        {% if vm.menu_choice_status.needs_action_count > 0 %}
+          <details class="app-shell__details admin-dashboard__status-details">
+            <summary>Visa avdelningar och saknade veckor</summary>
+            <div class="app-shell__details-body">
+              <ul class="admin-dashboard__status-list">
+                {% for dep in vm.menu_choice_status.departments if dep.status == "needs_action" %}
+                  <li class="admin-dashboard__status-item">
+                    <span class="admin-dashboard__status-dept">{{ dep.department_name }}</span>
+                    <span class="admin-dashboard__status-weeks">
+                      {% for wk in dep.missing_week_keys %}
+                        <span class="admin-dashboard__status-week">{{ wk }}</span>
+                      {% endfor %}
+                    </span>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </details>
+        {% else %}
+          <p class="app-shell__card-text admin-dashboard__status-ok">Alla avdelningar är i fas.</p>
+        {% endif %}
       </article>
+
+      {% include "ui/_partials/remember_to_order_card.html" %}
     </section>
 
     <section>

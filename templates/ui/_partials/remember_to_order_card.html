@@ -1,0 +1,71 @@
+<article class="app-shell__card remember-to-order" data-testid="remember-to-order-card">
+  <h2 class="app-shell__card-title">Kom ihåg att beställa</h2>
+  {% set items = vm.remember_to_order or [] %}
+  {% set can_check = vm.remember_to_order_can_check %}
+  {% if items %}
+    <div class="remember-to-order__list" role="list">
+      {% for item in items %}
+        {% set is_checked = item.checked_at %}
+        {% set added_by = item.created_by_role %}
+        {% set date_label = (item.created_at.strftime("%Y-%m-%d") if item.created_at else "") %}
+        <div class="remember-to-order__item {% if is_checked %}remember-to-order__item--checked{% endif %}" role="listitem">
+          <div class="remember-to-order__row">
+            <div class="remember-to-order__left">
+              <input
+                class="remember-to-order__checkbox"
+                type="checkbox"
+                data-testid="remember-to-order-checkbox"
+                data-item-id="{{ item.id }}"
+                {% if is_checked %}checked{% endif %}
+                {% if not can_check %}disabled{% endif %}
+              />
+            </div>
+            <div class="remember-to-order__center">
+              <div class="remember-to-order__text">{{ item.text }}</div>
+              <div class="remember-to-order__meta">
+                Tillagd av {% if added_by in ["admin", "superuser"] %}Admin{% else %}Kök{% endif %}{% if date_label %} • {{ date_label }}{% endif %}
+              </div>
+            </div>
+            {% if is_checked %}
+              <div class="remember-to-order__right">
+                <div class="remember-to-order__status">Beställt</div>
+                <div class="remember-to-order__status-sub">försvinner om 2 dagar</div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="app-shell__card-text remember-to-order__empty">Inga rader inlagda.</p>
+  {% endif %}
+
+  <form
+    id="rto-add-form"
+    class="remember-to-order__add-form"
+    data-testid="remember-to-order-add-form"
+    method="post"
+    action="#"
+    data-site-id="{{ vm.site_id }}"
+    data-week-key="{{ vm.remember_to_order_week_key }}"
+  >
+    <input type="hidden" name="site_id" value="{{ vm.site_id }}" />
+    <input type="hidden" name="week_key" value="{{ vm.remember_to_order_week_key }}" />
+    <label class="remember-to-order__label" for="remember-to-order-text">Lägg till rad</label>
+    <div class="remember-to-order__add-row">
+      <input
+        id="remember-to-order-text"
+        class="remember-to-order__input"
+        name="text"
+        type="text"
+        placeholder="Ex: Beställ mer timbalbas"
+        data-site-id="{{ vm.site_id }}"
+        data-week-key="{{ vm.remember_to_order_week_key }}"
+        required
+      />
+      <button class="app-shell__btn app-shell__btn--primary" type="submit">Lägg till</button>
+    </div>
+  </form>
+
+  <p class="remember-to-order__help">Bockade rader visas i 2 dagar och rensas sedan automatiskt.</p>
+</article>
