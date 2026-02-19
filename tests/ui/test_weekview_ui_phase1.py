@@ -101,10 +101,13 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
     assert "data-testid=\"weekview-grid\"" in html
     assert "data-testid=\"day-menu-icon\"" in html
     assert "Veckovy" in html
-    assert "app-shell__nav-item--active" in html
+    assert "app-shell__nav-item app-shell__nav-item--active\" href=\"/ui/weekview\">Veckovy" in html
     assert "Rapport / Statistik" in html
     assert "Specialkost" in html
     assert "Menyimport" in html
+    assert "Avdelningar" in html
+    assert "Planera" not in html
+    assert "Avdelningsportal" not in html
     assert "DEBUG:" not in html
     assert "Aktiv site:" not in html
     # Header
@@ -160,10 +163,13 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
     assert "data-testid=\"weekview-grid\"" in html
     assert "data-testid=\"day-menu-icon\"" in html
     assert "Veckovy" in html
-    assert "app-shell__nav-item--active" in html
+    assert "app-shell__nav-item app-shell__nav-item--active\" href=\"/ui/weekview\">Veckovy" in html
     assert "Rapport / Statistik" in html
     assert "Specialkost" in html
     assert "Menyimport" in html
+    assert "Avdelningar" in html
+    assert "Planera" not in html
+    assert "Avdelningsportal" not in html
     assert "DEBUG:" not in html
     assert "Aktiv site:" not in html
     assert "Vecka" in html and "Avd 2" in html and "Varberg" in html
