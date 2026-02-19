@@ -1,16 +1,27 @@
-{% extends "base.html" %}
-{% block title %}Yuplan Unified{% endblock %}
+{% extends "ui/_layout/app_shell_base.html" %}
+{% block page_title %}Veckovy – Yuplan{% endblock %}
 
-{% block head %}
+{% block head_extra %}
   <!-- Unified Design System -->
   <link rel="stylesheet" href="/static/unified_ui.css">
-  
   <link rel="stylesheet" href="/static/css/unified_weekview.css">
+  <style>
+    .weekview--readonly .diet-pill,
+    .weekview--readonly [data-meal-cell],
+    .weekview--readonly .meal-action-link {
+      pointer-events: none;
+    }
+    .weekview--readonly .meal-action-link {
+      display: none;
+    }
+  </style>
 {% endblock %}
 
 {% block content %}
+{% set is_readonly = session.role in ['admin', 'superuser'] %}
 
-<div class="weekview-container">
+<div class="app-page weekview-page">
+  <div class="weekview-container{% if is_readonly %} weekview--readonly{% endif %}" data-weekview-readonly="{{ 'true' if is_readonly else 'false' }}">
   <!-- Page Header -->
   <div class="weekview-header">
     <h1 class="weekview-title">Veckovy</h1>
@@ -104,32 +115,49 @@
       </div>
       
       <!-- Week Grid -->
-      <div class="week-grid" data-etag="{{ vm.etag }}">
+      <div class="week-grid" data-etag="{{ vm.etag }}" data-testid="weekview-grid">
         {% for day in vm.days %}
+          {% set day_index = loop.index0 %}
           <div class="day-cell">
-            <div class="day-header">{{ day.weekday_name }}</div>
+            <div class="day-header">
+              {{ day.weekday_name }}
+              <button
+                class="menu-icon"
+                type="button"
+                aria-label="Visa meny"
+                data-action="open-menu-modal"
+                data-day-index="{{ day_index }}"
+                data-year="{{ vm.year }}"
+                data-week="{{ vm.week }}"
+                data-testid="day-menu-icon"
+              >📋</button>
+            </div>
             <div class="day-date">{{ day.date }}</div>
             
             <!-- Lunch Section -->
-              <div class="meal-section meal-section--lunch {% if day.alt2_lunch %}is-alt2{% endif %}"
-                 data-meal-cell
-                 data-date="{{ day.date }}"
-                 data-meal-type="lunch"
-                 data-registered="{{ 'true' if day.lunch_registered else 'false' }}"
-                 tabindex="0"
-                 role="button"
-                 aria-label="Lunch {{ day.weekday_name }} {{ day.date }}: {{ day.lunch_alt1 or 'Ingen meny' }}{% if day.lunch_registered %}, Registrerad{% else %}, Ej registrerad{% endif %}">
+                <div class="meal-section meal-section--lunch {% if day.alt2_lunch %}is-alt2{% endif %}"
+                  {% if not is_readonly %}
+                  data-meal-cell
+                  data-date="{{ day.date }}"
+                  data-meal-type="lunch"
+                  data-registered="{{ 'true' if day.lunch_registered else 'false' }}"
+                  tabindex="0"
+                  role="button"
+                  aria-label="Lunch {{ day.weekday_name }} {{ day.date }}: {{ day.lunch_alt1 or 'Ingen meny' }}{% if day.lunch_registered %}, Registrerad{% else %}, Ej registrerad{% endif %}"
+                  {% endif %}>
               
               <div class="meal-header">
                 <div class="meal-label">
                   <span class="meal-icon">🍴</span>
                   <span>LUNCH</span>
                 </div>
-                <a
-                  class="meal-action-link"
-                  href="/ui/register/meal?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&date={{ day.date }}&meal=lunch"
-                  title="Öppna registreringsvy (lunch)"
-                >Registrera</a>
+                {% if not is_readonly %}
+                  <a
+                    class="meal-action-link"
+                    href="/ui/register/meal?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&date={{ day.date }}&meal=lunch"
+                    title="Öppna registreringsvy (lunch)"
+                  >Registrera</a>
+                {% endif %}
                 
                 <!-- Premium Registration Badge -->
                 {% if day.lunch_registered %}
@@ -169,14 +197,20 @@
               {% if day.lunch_diets and day.lunch_diets|length > 0 %}
                 <div class="diet-pills" aria-label="Specialkost (lunch)">
                   {% for d in day.lunch_diets %}
+                    {% set diet_label = d.diet_name %}
+                    {% if not diet_label or (diet_label is string and diet_label.isdigit()) %}
+                      {% set diet_label = "Okänd kost" %}
+                    {% endif %}
                     <span
                       class="diet-pill{% if d.marked %} diet-marked{% endif %}"
+                      {% if not is_readonly %}
                       role="button"
                       tabindex="0"
                       data-diet-type-id="{{ d.diet_type_id }}"
                       data-meal="lunch"
                       data-marked="{{ 'true' if d.marked else 'false' }}"
-                    >{{ d.diet_name }} [{{ d.resident_count }}]</span>
+                      {% endif %}
+                    >{{ diet_label }} [{{ d.resident_count }}]</span>
                   {% endfor %}
                 </div>
               {% endif %}
@@ -194,25 +228,29 @@
             
             <!-- Dinner Section (if applicable) -->
             {% if vm.has_dinner %}
-              <div class="meal-section meal-section--dinner"
-                   data-meal-cell
-                   data-date="{{ day.date }}"
-                   data-meal-type="dinner"
-                   data-registered="{{ 'true' if day.dinner_registered else 'false' }}"
-                   tabindex="0"
-                   role="button"
-                   aria-label="Kväll {{ day.weekday_name }} {{ day.date }}: {{ day.dinner_alt1 or 'Ingen meny' }}{% if day.dinner_registered %}, Registrerad{% else %}, Ej registrerad{% endif %}">
+                  <div class="meal-section meal-section--dinner"
+                    {% if not is_readonly %}
+                    data-meal-cell
+                    data-date="{{ day.date }}"
+                    data-meal-type="dinner"
+                    data-registered="{{ 'true' if day.dinner_registered else 'false' }}"
+                    tabindex="0"
+                    role="button"
+                    aria-label="Kväll {{ day.weekday_name }} {{ day.date }}: {{ day.dinner_alt1 or 'Ingen meny' }}{% if day.dinner_registered %}, Registrerad{% else %}, Ej registrerad{% endif %}"
+                    {% endif %}>
                 
                 <div class="meal-header">
                   <div class="meal-label">
                     <span class="meal-icon">🌙</span>
                     <span>KVÄLL</span>
                   </div>
-                  <a
-                    class="meal-action-link"
-                    href="/ui/register/meal?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&date={{ day.date }}&meal=dinner"
-                    title="Öppna registreringsvy (kväll)"
-                  >Registrera</a>
+                  {% if not is_readonly %}
+                    <a
+                      class="meal-action-link"
+                      href="/ui/register/meal?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&date={{ day.date }}&meal=dinner"
+                      title="Öppna registreringsvy (kväll)"
+                    >Registrera</a>
+                  {% endif %}
                   
                   <!-- Premium Registration Badge -->
                   {% if day.dinner_registered %}
@@ -285,9 +323,11 @@
       Ingen meny för denna vecka ännu.
     </div>
   {% endif %}
+  </div>
 </div>
 
 <!-- Phase 2: Registration Modal -->
+{% if not is_readonly %}
 <div id="registrationModal" class="modal-overlay">
   <div class="modal-content">
     <div class="modal-header">
@@ -322,6 +362,11 @@
     </form>
   </div>
 </div>
+{% endif %}
+
+{% include "ui/_menu_modal.html" %}
+<script defer src="{{ url_for('static', filename='js/menu_utils.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/menu_modal.js') }}"></script>
 
 <!-- Unified UI JS -->
 <script src="{{ url_for('static', filename='unified_ui.js') }}"></script>

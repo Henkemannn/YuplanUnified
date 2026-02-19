@@ -11,7 +11,7 @@
   <script src="{{ url_for('static', filename='js/remember_to_order.js') }}" defer></script>
 </head>
 <body>
-  <div class="app-shell app-shell--full" aria-label="Yuplan premium app shell">
+  <div class="app-shell app-shell--full" aria-label="Yuplan premium app shell" data-testid="app-shell">
     {% set env_raw = (config.get('DEPLOY_ENV') or config.get('APP_ENV') or 'local') %}
     {% set env_lower = env_raw | lower %}
     {% if env_lower in ('prod', 'production') %}

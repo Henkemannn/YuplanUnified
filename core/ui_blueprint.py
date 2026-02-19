@@ -1056,8 +1056,8 @@ def weekview_ui():
     except Exception:
         pass
     # Validate query params - default to current week if not provided
-    req_site_id = (request.args.get("site_id") or "").strip()
-    department_id = (request.args.get("department_id") or "").strip()
+    req_site_id = (request.args.get("site_id") or "").strip() or None
+    department_id = (request.args.get("department_id") or "").strip() or None
     # Enforce site-lock for bound admins: ignore querystring site_id
     session_site_id = (session.get("site_id") or "").strip()
     site_lock = bool(session.get("site_lock"))
@@ -1078,7 +1078,7 @@ def weekview_ui():
         else:
             # No year/week provided - redirect to current week with all params
             from flask import redirect, url_for
-            return redirect(url_for('ui.weekview_ui', site_id=site_id, department_id=department_id, 
+            return redirect(url_for('ui.weekview_ui', site_id=site_id or "", department_id=department_id or "", 
                                    year=current_year, week=current_week))
     except Exception:
         return jsonify({"error": "bad_request", "message": "Invalid year/week"}), 400
@@ -1086,6 +1086,22 @@ def weekview_ui():
         return jsonify({"error": "bad_request", "message": "Invalid year"}), 400
     if week < 1 or week > 53:
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
+
+    if not site_id:
+        from .context import get_active_context as _get_ctx
+        ctx = _get_ctx()
+        resolved_site_id = (ctx.get("site_id") or "").strip() or None
+        if resolved_site_id:
+            from flask import redirect, url_for
+            return redirect(
+                url_for(
+                    "ui.weekview_ui",
+                    site_id=resolved_site_id,
+                    department_id=department_id or "",
+                    year=year,
+                    week=week,
+                )
+            )
 
     # Resolve names (sites/departments) using effective site_id
     db = get_session()
@@ -1108,7 +1124,7 @@ def weekview_ui():
         db.close()
 
     # If department_id is empty: show all departments for the site (Yuplan 3.5-style)
-    if not (department_id and department_id.strip()):
+    if not department_id:
         # Resolve site_id strictly from active context; if missing → redirect to selector
         if not site_id:
             # If site-locked, rely on session; otherwise try active context
@@ -1269,7 +1285,7 @@ def weekview_ui():
         except Exception:
             pass
         meal_labels = get_meal_labels_for_site(site_id)
-        return render_template("ui/weekview_all.html", vm=vm_all, meal_labels=meal_labels)
+        return render_template("ui/weekview_all.html", vm=vm_all, meal_labels=meal_labels, nav_context="admin")
 
     # Fetch enriched weekview payload via service (no extra SQL here)
     tid = session.get("tenant_id") or getattr(g, "tenant_id", None)
@@ -1314,7 +1330,7 @@ def weekview_ui():
             "current_year": current_year,
             "current_week": current_week,
         }
-        return render_template("ui/unified_weekview.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id))
+        return render_template("ui/unified_weekview.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id), nav_context="admin")
     days = summaries[0].get("days") or []
 
     # Fetch meal registrations for this week (Phase 2)
@@ -1459,7 +1475,7 @@ def weekview_ui():
         except Exception:
             pass
     meal_labels = get_meal_labels_for_site(site_id)
-    return render_template("ui/unified_weekview.html", vm=vm, meal_labels=meal_labels)
+    return render_template("ui/unified_weekview.html", vm=vm, meal_labels=meal_labels, nav_context="admin")
     # TODO: Expose MenuComponent.component_id in day_vms once model/migration exists.
 
 

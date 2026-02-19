@@ -97,6 +97,16 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
     )
     assert r_ui.status_code == 200
     html = r_ui.get_data(as_text=True)
+    assert "data-testid=\"app-shell\"" in html
+    assert "data-testid=\"weekview-grid\"" in html
+    assert "data-testid=\"day-menu-icon\"" in html
+    assert "Veckovy" in html
+    assert "app-shell__nav-item--active" in html
+    assert "Rapport / Statistik" in html
+    assert "Specialkost" in html
+    assert "Menyimport" in html
+    assert "DEBUG:" not in html
+    assert "Aktiv site:" not in html
     # Header
     assert f"Vecka {week} – Avd 1, Varberg" in html
     # Menu
@@ -146,6 +156,46 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
     )
     assert r_ui.status_code == 200
     html = r_ui.get_data(as_text=True)
+    assert "data-testid=\"app-shell\"" in html
+    assert "data-testid=\"weekview-grid\"" in html
+    assert "data-testid=\"day-menu-icon\"" in html
+    assert "Veckovy" in html
+    assert "app-shell__nav-item--active" in html
+    assert "Rapport / Statistik" in html
+    assert "Specialkost" in html
+    assert "Menyimport" in html
+    assert "DEBUG:" not in html
+    assert "Aktiv site:" not in html
     assert "Vecka" in html and "Avd 2" in html and "Varberg" in html
     # Dinner columns hidden when no dinner data
     assert "Kvällsmat Alt 1" not in html and "Kvällsmat Alt 2" not in html
+
+
+@pytest.mark.usefixtures("enable_weekview")
+def test_weekview_ui_empty_params_redirects_without_500(client_admin):
+    site_id = str(uuid.uuid4())
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+
+    resp = client_admin.get(
+        "/ui/weekview?site_id=&department_id=&year=2026&week=8",
+        headers=_h("admin"),
+        follow_redirects=False,
+    )
+    assert resp.status_code in (200, 302)
+
+
+@pytest.mark.usefixtures("enable_weekview")
+def test_weekview_ui_empty_department_id_does_not_500(client_admin):
+    site_id = "accept-site-A"
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+
+    resp = client_admin.get(
+        f"/ui/weekview?site_id={site_id}&department_id=&year=2026&week=8",
+        headers=_h("admin"),
+        follow_redirects=False,
+    )
+    assert resp.status_code in (200, 302)
