@@ -181,4 +181,78 @@ def get_department_completion_status(site_id: str | None, week_keys: Iterable[st
         db.close()
 
 
-__all__ = ["get_published_weeks", "get_required_weeks", "get_department_completion_status"]
+def get_menu_choice_overview(site_id: str | None, from_week_key: str | None, n: int = 4) -> dict:
+    required_weeks = get_required_weeks(site_id, from_week_key, n=n)
+    normalized = [normalize_week_key(wk) for wk in required_weeks]
+    if not site_id or not normalized:
+        return {"out_of_sync_count": 0, "department_gaps": []}
+
+    db = get_session()
+    try:
+        _ensure_departments_schema(db)
+        _ensure_menu_choice_completion_schema(db)
+        dep_rows = db.execute(
+            text("SELECT id, name FROM departments WHERE site_id=:sid ORDER BY name"),
+            {"sid": site_id},
+        ).fetchall()
+        departments = [(str(r[0]), str(r[1] or "")) for r in dep_rows]
+
+        completed_map: dict[str, set[str]] = {dep_id: set() for dep_id, _ in departments}
+        started_map: dict[str, set[str]] = {dep_id: set() for dep_id, _ in departments}
+        if normalized:
+            placeholders = ",".join([":wk" + str(i) for i in range(len(normalized))])
+            params = {"sid": site_id}
+            params.update({"wk" + str(i): wk for i, wk in enumerate(normalized)})
+            rows = db.execute(
+                text(
+                    "SELECT department_id, week_key, completed_at "
+                    "FROM menu_choice_completion "
+                    f"WHERE site_id=:sid AND week_key IN ({placeholders})"
+                ),
+                params,
+            ).fetchall()
+            for r in rows:
+                dep_id = str(r[0])
+                wk = normalize_week_key(str(r[1]))
+                completed_at = r[2]
+                if completed_at:
+                    completed_map.setdefault(dep_id, set()).add(wk)
+                else:
+                    started_map.setdefault(dep_id, set()).add(wk)
+
+        department_gaps = []
+        for dep_id, dep_name in departments:
+            completed_weeks = completed_map.get(dep_id, set())
+            started_weeks = started_map.get(dep_id, set())
+            seen_weeks = completed_weeks | started_weeks
+            if not seen_weeks:
+                department_gaps.append(
+                    {
+                        "name": dep_name,
+                        "missing_weeks": [],
+                        "status_text": "ej påbörjad",
+                    }
+                )
+                continue
+            if len(completed_weeks) < len(normalized):
+                missing = [wk for wk in normalized if wk not in completed_weeks]
+                week_numbers = [parse_week_key(wk)[1] for wk in missing]
+                department_gaps.append(
+                    {
+                        "name": dep_name,
+                        "missing_weeks": week_numbers,
+                        "status_text": "påbörjad",
+                    }
+                )
+
+        return {"out_of_sync_count": len(department_gaps), "department_gaps": department_gaps}
+    finally:
+        db.close()
+
+
+__all__ = [
+    "get_published_weeks",
+    "get_required_weeks",
+    "get_department_completion_status",
+    "get_menu_choice_overview",
+]

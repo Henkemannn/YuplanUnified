@@ -17,83 +17,50 @@
       </div>
     </section>
 
-    <div class="app-shell__card-meta">{{ vm.today_label }} · Vecka {{ vm.current_week }}</div>
-
     <section class="app-shell__grid">
-      <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Idag i köket</h2>
-        <p class="app-shell__card-text">
-          Lunch: {{ vm.today.lunch_name or "Ingen meny" }}
-          {% if vm.today.lunch_portions %}
-            ({{ vm.today.lunch_portions }} portioner)
+      <article class="app-shell__card" data-testid="dashboard-today-card">
+        <h2 class="app-shell__card-title">Idag</h2>
+        <p class="app-shell__card-text">{{ vm.today_card.weekday_sv }} {{ vm.today_card.date_long_sv }}</p>
+        <p class="app-shell__card-text">Vecka {{ vm.today_card.week_number }}</p>
+        {% if vm.today_card.has_published_menu_today %}
+          <p class="app-shell__card-text"><strong>Dagens meny</strong></p>
+          {% if vm.today_card.lunch_title %}
+            <p class="app-shell__card-text">Lunch: {{ vm.today_card.lunch_title }}</p>
           {% endif %}
-        </p>
-        <p class="app-shell__card-text">
-          Kväll: {{ vm.today.dinner_name or "Ingen meny" }}
-          {% if vm.today.dinner_portions %}
-            ({{ vm.today.dinner_portions }} portioner)
+          {% if vm.today_card.dinner_title %}
+            <p class="app-shell__card-text">Kväll: {{ vm.today_card.dinner_title }}</p>
           {% endif %}
-        </p>
+        {% else %}
+          <p class="app-shell__card-text">⚠ Ingen publicerad meny för idag</p>
+        {% endif %}
       </article>
 
-      <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Veckostatus</h2>
-        <ul>
-          <li>Boendeantal för vecka {{ vm.current_week }}: {{ "Klart" if vm.status.residents else "Saknas" }}</li>
-          <li>Meny för vecka {{ vm.current_week }}: {{ "Inläst" if vm.status.menu else "Inte inläst" }}</li>
-          <li>Rapport för vecka {{ vm.last_week }}: {{ "Skapad" if vm.status.report_last_week else "Inte skapad än" }}</li>
-        </ul>
-      </article>
-
-      <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Meny framåt</h2>
-        <p class="app-shell__card-text">Klara veckor framåt: {{ vm.menu_forward.ready_weeks_count }}</p>
-        <ul>
-          {% for w in vm.menu_forward.weeks %}
-            <li>Vecka {{ w.week }} · {{ w.status_label }}</li>
-          {% endfor %}
-        </ul>
-      </article>
-
-      <article class="app-shell__card admin-dashboard__status-card">
+      <article class="app-shell__card admin-dashboard__status-card" data-testid="dashboard-menuval-card">
         <h2 class="app-shell__card-title">Menyval – kommande 4 veckor</h2>
         <p class="app-shell__card-text admin-dashboard__status-summary">
-          {{ vm.menu_choice_status.needs_action_count }} avdelningar ligger inte i fas
+          {{ vm.menu_choice.out_of_sync_count }} avdelningar ligger inte i fas
         </p>
-        {% if vm.menu_choice_status.needs_action_count > 0 %}
+        {% if vm.menu_choice.out_of_sync_count > 0 %}
           <details class="app-shell__details admin-dashboard__status-details">
             <summary>Visa avdelningar och saknade veckor</summary>
             <div class="app-shell__details-body">
-              <ul class="admin-dashboard__status-list">
-                {% for dep in vm.menu_choice_status.departments if dep.status == "needs_action" %}
-                  <li class="admin-dashboard__status-item">
-                    <span class="admin-dashboard__status-dept">{{ dep.department_name }}</span>
-                    <span class="admin-dashboard__status-weeks">
-                      {% for wk in dep.missing_week_keys %}
-                        <span class="admin-dashboard__status-week">{{ wk }}</span>
-                      {% endfor %}
-                    </span>
-                  </li>
-                {% endfor %}
-              </ul>
+              {% for dep in vm.menu_choice.department_gaps %}
+                <p class="app-shell__card-text">
+                  {% if dep.missing_weeks %}
+                    {{ dep.name }} – saknar v.{{ dep.missing_weeks | join(", v.") }}
+                  {% elif dep.status_text == "påbörjad" %}
+                    {{ dep.name }} – påbörjad
+                  {% else %}
+                    {{ dep.name }} – {{ dep.status_text }}
+                  {% endif %}
+                </p>
+              {% endfor %}
             </div>
           </details>
-        {% else %}
-          <p class="app-shell__card-text admin-dashboard__status-ok">Alla avdelningar är i fas.</p>
         {% endif %}
       </article>
 
       {% include "ui/_partials/remember_to_order_card.html" %}
-    </section>
-
-    <section>
-      <article class="app-shell__card">
-        <h2 class="app-shell__card-title">Kommunikation mellan avdelningar &amp; kök</h2>
-        <p class="app-shell__card-text">
-          Här kommer du framöver kunna se och skicka meddelanden mellan vårdavdelningar, kök och admin.
-        </p>
-        <p class="app-shell__card-text">Funktionen är under utveckling och ingår i en kommande version av Yuplan.</p>
-      </article>
     </section>
   </div>
 {% endblock %}

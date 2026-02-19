@@ -4384,35 +4384,77 @@ def admin_dashboard():
     try:
         WEEKDAY_SE = {1: "Måndag", 2: "Tisdag", 3: "Onsdag", 4: "Torsdag", 5: "Fredag", 6: "Lördag", 7: "Söndag"}
         MONTH_SE = {1: "januari", 2: "februari", 3: "mars", 4: "april", 5: "maj", 6: "juni", 7: "juli", 8: "augusti", 9: "september", 10: "oktober", 11: "november", 12: "december"}
-        today_label = f"{WEEKDAY_SE.get(today.isoweekday(), '')} {today.day} {MONTH_SE.get(today.month, '')}"
+        weekday_sv = WEEKDAY_SE.get(today.isoweekday(), "")
+        month_sv = MONTH_SE.get(today.month, "")
+        today_label = f"{weekday_sv} {today.day} {month_sv}"
+        date_long_sv = f"{today.day} {month_sv} {today.year}"
     except Exception:
-        today_label = today.strftime("%Y-%m-%d")
+        weekday_sv = ""
+        date_long_sv = today.strftime("%Y-%m-%d")
+        today_label = date_long_sv
 
-    menu_choice_status = {
-        "required_weeks": [],
-        "departments": [],
-        "needs_action_count": 0,
-        "total_departments": 0,
+    def _pick_dish_title(meal_obj):
+        if not isinstance(meal_obj, dict):
+            return None
+        for key in ("alt1", "standard", "main", "alt2", "dessert"):
+            value = meal_obj.get(key)
+            if isinstance(value, dict):
+                name = value.get("dish_name")
+                if name:
+                    return str(name)
+            elif isinstance(value, str) and value:
+                return value
+        for value in meal_obj.values():
+            if isinstance(value, dict):
+                name = value.get("dish_name")
+                if name:
+                    return str(name)
+            elif isinstance(value, str) and value:
+                return value
+        return None
+
+    def _build_today_card():
+        lunch_title = None
+        dinner_title = None
+        has_published_menu_today = False
+        try:
+            if tid is not None:
+                from .menu_service import MenuServiceDB
+                svc = MenuServiceDB()
+                week_view = svc.get_week_view(int(tid), current_week, current_year)
+                if (week_view or {}).get("menu_status") == "published":
+                    day_key = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][today.isoweekday() - 1]
+                    day_obj = (week_view.get("days") or {}).get(day_key, {})
+                    lunch_title = _pick_dish_title(day_obj.get("lunch"))
+                    dinner_title = _pick_dish_title(day_obj.get("dinner"))
+                    has_published_menu_today = bool(lunch_title or dinner_title)
+        except Exception:
+            pass
+        return {
+            "weekday_sv": weekday_sv,
+            "date_long_sv": date_long_sv,
+            "week_number": current_week,
+            "lunch_title": lunch_title,
+            "dinner_title": dinner_title,
+            "has_published_menu_today": has_published_menu_today,
+        }
+
+    today_card = _build_today_card()
+
+    menu_choice = {
+        "out_of_sync_count": 0,
+        "department_gaps": [],
     }
     if active_site_id:
         try:
-            from .menu_choice_status import get_required_weeks, get_department_completion_status
+            from .menu_choice_status import get_menu_choice_overview
             from .week_key import week_key_from_date
             from_week_key = week_key_from_date(today)
-            required_weeks = get_required_weeks(active_site_id, from_week_key, n=4)
-            dept_statuses = get_department_completion_status(active_site_id, required_weeks)
-            menu_choice_status = {
-                "required_weeks": required_weeks,
-                "departments": dept_statuses,
-                "needs_action_count": sum(1 for d in dept_statuses if d.get("status") == "needs_action"),
-                "total_departments": len(dept_statuses),
-            }
+            menu_choice = get_menu_choice_overview(active_site_id, from_week_key, n=4)
         except Exception:
-            menu_choice_status = {
-                "required_weeks": [],
-                "departments": [],
-                "needs_action_count": 0,
-                "total_departments": 0,
+            menu_choice = {
+                "out_of_sync_count": 0,
+                "department_gaps": [],
             }
 
     # Last week number (ISO)
@@ -4454,6 +4496,7 @@ def admin_dashboard():
         "department_count": len(departments),
         # Dashboard v1 fields
         "today_label": today_label,
+        "today_card": today_card,
         "today": {
             "lunch_name": None,
             "lunch_portions": None,
@@ -4475,7 +4518,7 @@ def admin_dashboard():
                 {"week": w4, "status_label": "⛔ Ingen meny"},
             ],
         },
-        "menu_choice_status": menu_choice_status,
+        "menu_choice": menu_choice,
         "remember_to_order": [
             {
                 "id": it.id,

@@ -26,8 +26,14 @@ def test_admin_dashboard_happy_path_admin(client_admin):
     html = resp.data.decode("utf-8")
     assert "Adminpanel" in html
     assert "Översikt" in html
+    assert "Idag" in html
+    assert "data-testid=\"dashboard-today-card\"" in html
     assert "Menyval – kommande 4 veckor" in html
+    assert "Kom ihåg att beställa" in html
     assert "Bockade rader visas i 2 dagar och rensas sedan automatiskt." in html
+    assert "Veckostatus" not in html
+    assert "Meny framåt" not in html
+    assert "Kommunikation mellan avdelningar" not in html
     assert "Spara" not in html
 
 
@@ -111,8 +117,9 @@ def test_admin_dashboard_menu_choice_status_missing_week(client_admin):
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     assert "Menyval – kommande 4 veckor" in html
-    assert "Avd B" in html
-    assert week_keys[0] in html
+    assert "1 avdelningar ligger inte i fas" in html
+    assert "Visa avdelningar och saknade veckor" in html
+    assert "avdelningar ligger inte i fas" in html
 
 
 def test_admin_dashboard_happy_path_superuser(client_superuser):
