@@ -166,6 +166,10 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if sqlite_file:
             app.config["RUNTIME_SQLITE_FILE"] = sqlite_file
         line = f"DB_URL={db_url}" + (f" ; SQLITE_FILE={sqlite_file}" if sqlite_file else "")
+        try:
+            app.logger.info("startup_db: db_url=%s sqlite_file=%s", db_url, sqlite_file or "")
+        except Exception:
+            pass
         print(line)
         if branch or commit:
             print(f"RUNTIME: branch={branch or 'unknown'} commit={commit or 'unknown'} sqlite_file={sqlite_file or ''}")

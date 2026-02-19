@@ -517,6 +517,11 @@ def ensure_bootstrap_superuser():
     )
 
     try:
+        current_app.logger.info("bootstrap_superuser: start auto_create=%s", auto_create)
+    except Exception:
+        pass
+
+    try:
         db = get_session()
     except Exception:
         # DB session factory not initialized yet
@@ -527,7 +532,10 @@ def ensure_bootstrap_superuser():
         if auto_create:
             try:
                 from .db import create_all as _create_all  # local import to avoid cycles
-
+                try:
+                    current_app.logger.warning("bootstrap_superuser: create_all requested")
+                except Exception:
+                    pass
                 _create_all()
             except Exception:
                 # Non-fatal; continue and let the next step decide
@@ -595,6 +603,10 @@ def ensure_dev_superuser_henrik():
     if not seed_enabled:
         return
     try:
+        current_app.logger.info("dev_superuser_henrik: seed enabled")
+    except Exception:
+        pass
+    try:
         db = get_session()
     except Exception:
         return
@@ -603,7 +615,10 @@ def ensure_dev_superuser_henrik():
         try:
             if _os.getenv("DEV_CREATE_ALL", "0").lower() in ("1", "true", "yes"):
                 from .db import create_all as _create_all
-
+                try:
+                    current_app.logger.warning("dev_superuser_henrik: create_all requested")
+                except Exception:
+                    pass
                 _create_all()
         except Exception:
             pass

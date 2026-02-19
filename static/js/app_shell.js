@@ -150,6 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       const basePath = picker.getAttribute("data-base-path") || "";
       const siteId = picker.getAttribute("data-site-id");
+      const departmentId = picker.getAttribute("data-department-id");
       const baseYear = parseInt(picker.getAttribute("data-year") || "0", 10);
       const baseWeek = parseInt(picker.getAttribute("data-week") || "0", 10);
       if (!baseYear || !baseWeek || !basePath) {
@@ -163,6 +164,9 @@ document.addEventListener("DOMContentLoaded", () => {
         params.set("week", String(week));
         if (siteId) {
           params.set("site_id", siteId);
+        }
+        if (departmentId) {
+          params.set("department_id", departmentId);
         }
         window.location = `${basePath}?${params.toString()}`;
       };

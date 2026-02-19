@@ -49,6 +49,7 @@
     if(!modal||!modalBody) return;
     modalBody.innerHTML=html;
     modal.hidden=false;
+    modal.setAttribute('aria-hidden', 'false');
     modal.classList.add('is-open');
     document.body.classList.add('menu-modal-open');
   }
@@ -56,6 +57,7 @@
     ensureRefs();
     if(!modal) return;
     modal.hidden=true;
+    modal.setAttribute('aria-hidden', 'true');
     modal.classList.remove('is-open');
     document.body.classList.remove('menu-modal-open');
   }
@@ -112,6 +114,19 @@
   window.openMenuModal=openMenuModal;
 
   document.addEventListener('keydown', function(ev){ if(ev.key==='Escape'){ hideModal(); }});
+  document.addEventListener('DOMContentLoaded', function(){
+    ensureRefs();
+    if(!modal) return;
+    modal.classList.remove('is-open');
+    modal.hidden=true;
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('menu-modal-open');
+  });
+  document.addEventListener('contextmenu', function(ev){
+    if(document.body.classList.contains('menu-modal-open')){
+      ev.preventDefault();
+    }
+  });
   var OPEN_SELECTORS=[
     '[data-action="open-menu-modal"]',
     '#openMenuModal',

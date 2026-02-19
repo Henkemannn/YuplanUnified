@@ -5,6 +5,7 @@
   data-year="{{ year }}"
   data-week="{{ week }}"
   {% if site_id %}data-site-id="{{ site_id }}"{% endif %}
+  {% if department_id %}data-department-id="{{ department_id }}"{% endif %}
 >
   <button type="button" class="yp-weekpicker__btn" data-weekpicker-prev aria-label="Föregående vecka">&lsaquo;</button>
   <select class="yp-weekpicker__select" data-weekpicker-select aria-label="Vecka">

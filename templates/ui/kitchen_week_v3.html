@@ -40,80 +40,8 @@
         {% if dep.info_text %}
           <div class="yp-info-box">{{ dep.info_text }}</div>
         {% endif %}
-        <table class="grid-table kw-grid" aria-label="Specialkostöversikt">
-          <thead>
-            <tr>
-              <th>Kosttyp</th>
-                <th colspan="2">Mån <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="0">📖</button></th>
-                <th colspan="2">Tis <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="1">📖</button></th>
-                <th colspan="2">Ons <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="2">📖</button></th>
-                <th colspan="2">Tors <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="3">📖</button></th>
-                <th colspan="2">Fre <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="4">📖</button></th>
-                <th colspan="2">Lör <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="5">📖</button></th>
-                <th colspan="2">Sön <button class="menu-icon" type="button" aria-label="Visa meny" data-action="open-menu-modal" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="6">📖</button></th>
-            </tr>
-            <tr class="grid-subhead">
-              <th></th>
-              <th class="meal-icon" aria-label="Lunch">🍽️</th>
-              <th class="meal-icon" aria-label="Middag">🌙</th>
-              <th class="meal-icon" aria-label="Lunch">🍽️</th>
-              <th class="meal-icon" aria-label="Middag">🌙</th>
-              <th class="meal-icon" aria-label="Lunch">🍽️</th>
-              <th class="meal-icon" aria-label="Middag">🌙</th>
-              <th class="meal-icon" aria-label="Lunch">🍽️</th>
-              <th class="meal-icon" aria-label="Middag">🌙</th>
-              <th class="meal-icon" aria-label="Lunch">🍽️</th>
-              <th class="meal-icon" aria-label="Middag">🌙</th>
-              <th class="meal-icon" aria-label="Lunch">🍽️</th>
-              <th class="meal-icon" aria-label="Middag">🌙</th>
-              <th class="meal-icon" aria-label="Lunch">🍽️</th>
-              <th class="meal-icon" aria-label="Middag">🌙</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr class="boende-row">
-              <td class="diet-name">Boende</td>
-              {% for dow in range(1,8) %}
-                {% set d = dep.days[dow-1] %}
-                <td class="kw-cell day-start {{ 'is-alt2' if d.alt2_lunch else '' }}">{{ d.residents.lunch if d and d.residents else 0 }}</td>
-                <td class="kw-cell">{{ d.residents.dinner if d and d.residents else 0 }}</td>
-              {% endfor %}
-            </tr>
-            {% for row in dep.diet_rows %}
-              <tr class="diet-row">
-                <td class="diet-name">{{ row.diet_type_name }}</td>
-                {% for dow in range(1,8) %}
-                  {% set lunch = row.cells[(dow-1)*2] %}
-                  {% set dinner = row.cells[(dow-1)*2+1] %}
-                  <td class="kw-cell day-start {{ 'is-alt2' if lunch.is_alt2 else '' }}">
-                    <button class="kostcell-btn {{ 'is-done' if lunch.is_done else '' }}"
-                      data-department-id="{{ dep.id }}"
-                      data-diet-type-id="{{ row.diet_type_id }}"
-                      data-year="{{ vm.year }}"
-                      data-week="{{ vm.week }}"
-                      data-day-index="{{ lunch.day_index }}"
-                      data-meal="lunch"
-                      aria-label="Lunch {{ row.diet_type_name }} dag {{ lunch.day_index }}">
-                      {{ lunch.count }}
-                    </button>
-                  </td>
-                  <td class="kw-cell">
-                    <button class="kostcell-btn {{ 'is-done' if dinner.is_done else '' }}"
-                      data-department-id="{{ dep.id }}"
-                      data-diet-type-id="{{ row.diet_type_id }}"
-                      data-year="{{ vm.year }}"
-                      data-week="{{ vm.week }}"
-                      data-day-index="{{ dinner.day_index }}"
-                      data-meal="dinner"
-                      aria-label="Middag {{ row.diet_type_name }} dag {{ dinner.day_index }}">
-                      {{ dinner.count }}
-                    </button>
-                  </td>
-                {% endfor %}
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        {% set interactive = true %}
+        {% include "ui/_partials/week_grid.html" %}
         {% if dep.no_diets %}
           <div class="dept-empty" aria-live="polite">Inga specialkoster kopplade</div>
         {% endif %}

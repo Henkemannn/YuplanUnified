@@ -9,6 +9,7 @@ from .auth import require_roles
 from .db import get_session
 from .models import Note, Task, User
 from .weekview.service import WeekviewService
+from .weekview_vm import build_weekview_vm
 # use string roles consistently elsewhere; avoid Role import
 from .meal_registration_repo import MealRegistrationRepo
 from datetime import date as _date
@@ -713,6 +714,13 @@ def admin_department_detail_get(department_id: str):
     lunch_eff = int((ov.get("residents_lunch") if ov else None) or resident_count_fixed or 0)
     dinner_eff = int((ov.get("residents_dinner") if ov else None) or resident_count_fixed or 0)
 
+    try:
+        from .weekview.repo import WeekviewRepo
+        svc = WeekviewService()
+        version = WeekviewRepo().get_version(tid, year, week, department_id)
+        _etag = svc.build_etag(tid, department_id, year, week, version)
+    except Exception:
+        _etag = ""
     vm = {
         "department": {
             "id": department_id,
@@ -1179,121 +1187,37 @@ def weekview_ui():
         # tenant_id not needed here for diet types; ensure site_id exists
         if not site_id:
             return jsonify({"error": "bad_request", "message": "Missing site"}), 400
-        svc = WeekviewService()
-        # Diet type names map for display
-        try:
-            types = DietTypesRepo().list_all(site_id=site_id)
-            diet_name_map = {int(t["id"]): str(t["name"]) for t in types}
-        except Exception:
-            diet_name_map = {}
-        days_with_menu_total = 0
-        for d in dept_rows:
-            dep_id = str(d.get("id"))
-            dep_name_row = str(d.get("name") or "")
-            payload, etag = svc.fetch_weekview(tid, year, week, dep_id)
-            summaries = payload.get("department_summaries") or []
-            days = (summaries[0].get("days") if summaries else []) or []
-            # DEBUG: after enrichment
-            try:
-                from flask import current_app as _app
-                menus_found = 1 if any(((day.get("menu_texts") or {}).get("lunch") or (day.get("menu_texts") or {}).get("dinner")) for day in days) else 0
-                days_with_menu = sum(1 for day in days if ((day.get("menu_texts") or {}).get("lunch") or (day.get("menu_texts") or {}).get("dinner")))
-                days_with_menu_total += days_with_menu
-                _app.logger.debug({
-                    "event": "weekview_ui_post_enrich",
-                    "department_id": dep_id,
-                    "menus_found_count": menus_found,
-                    "days_with_menu": days_with_menu,
-                })
-            except Exception:
-                pass
-            # Fetch optional notes/info for department
-            notes_text = ""
-            try:
-                dbn = get_session()
-                rown = dbn.execute(text("SELECT COALESCE(notes,'') FROM departments WHERE id=:id"), {"id": dep_id}).fetchone()
-                notes_text = str(rown[0] or "") if rown else ""
-            except Exception:
-                notes_text = ""
-            finally:
-                try:
-                    dbn.close()
-                except Exception:
-                    pass
-            deps.append({
-                "id": dep_id,
-                "name": dep_name_row,
-                "etag": etag,
-                "days": days,
-                "notes": notes_text,
-            })
-        # DEBUG: consolidated summary for site-level view
-        try:
-            from flask import current_app as _app
-            _app.logger.debug({
-                "event": "weekview_ui_summary",
-                "site_id": site_id,
-                "year": year,
-                "week": week,
-                "departments_count": len(deps),
-                "menus_found_count_total": days_with_menu_total,
-            })
-        except Exception:
-            pass
-        # Site-level menu availability per day (use weekly menu regardless of department)
-        menu_days_site = [False]*7
-        try:
-            from flask import current_app as _app
-            ms = getattr(_app, "menu_service", None)
-            if ms is not None and tid is not None:
-                mv = ms.get_week_view(int(tid), week, year)  # canonical keys mon..sun
-                days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
-                order = ["mon","tue","wed","thu","fri","sat","sun"]
-                for i, key in enumerate(order):
-                    d = days_struct.get(key) or {}
-                    lunch = d.get("lunch") or {}
-                    dinner = d.get("dinner") or {}
-                    menu_days_site[i] = bool(
-                        lunch.get("alt1")
-                        or lunch.get("alt2")
-                        or lunch.get("dessert")
-                        or dinner.get("alt1")
-                        or dinner.get("alt2")
-                    )
-        except Exception:
-            menu_days_site = [False]*7
-
-        vm_all = {
-            "site_id": site_id,
-            "site_name": site_name,
-            "year": year,
-            "week": week,
-            "current_year": current_year,
-            "current_week": current_week,
-            "departments": deps,
-            "diet_name_map": diet_name_map,
-            "menu_days_site": menu_days_site,
-            # P0 security: suppress site switching for locked admins
-            "allow_site_switch": (not site_lock),
-            "sites": all_sites if (not site_lock) else [],
-            "active_site": site_id,
-        }
+        vm_all = build_weekview_vm(site_id=site_id, year=year, week=week, tenant_id=tid)
+        vm_all.update(
+            {
+                "current_year": current_year,
+                "current_week": current_week,
+                "allow_site_switch": (not site_lock),
+                "sites": all_sites if (not site_lock) else [],
+                "active_site": site_id,
+            }
+        )
         try:
             from flask import current_app
-            current_app.logger.info("weekview template=weekview_all.html deps=%s", len(deps))
-            print(f"WEEKVIEW_RENDER: template=weekview_all.html deps={len(deps)}")
+            current_app.logger.info("weekview template=weekview_all.html deps=%s", len(vm_all.get("departments") or []))
+            print(f"WEEKVIEW_RENDER: template=weekview_all.html deps={len(vm_all.get('departments') or [])}")
         except Exception:
             pass
         meal_labels = get_meal_labels_for_site(site_id)
-        return render_template("ui/weekview_all.html", vm=vm_all, meal_labels=meal_labels, nav_context="admin")
+        return render_template("ui/unified_weekview_all.html", vm=vm_all, meal_labels=meal_labels, nav_context="admin")
 
     # Fetch enriched weekview payload via service (no extra SQL here)
     tid = session.get("tenant_id") or getattr(g, "tenant_id", None)
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    svc = WeekviewService()
-    payload, _etag = svc.fetch_weekview(tid, year, week, department_id)
-    summaries = payload.get("department_summaries") or []
+    vm_all = build_weekview_vm(site_id=site_id, year=year, week=week, tenant_id=tid)
+    dep_vm = None
+    try:
+        dep_vm = next((d for d in (vm_all.get("departments") or []) if d.get("id") == department_id), None)
+    except Exception:
+        dep_vm = None
+    days = (dep_vm.get("days") if dep_vm else []) or []
+    summaries = [{"days": days}] if days else []
     # DEBUG: after enrichment
     try:
         from flask import current_app as _app
@@ -1344,6 +1268,8 @@ def weekview_ui():
     # Index by (date, meal_type) for quick lookup
     reg_map = {(r["date"], r["meal_type"]): r["registered"] for r in registrations}
 
+    diet_rows = (dep_vm or {}).get("diet_rows") or []
+
     # Build DayVM list (Phase 2 - with registration data, Phase 4 - with summaries)
     day_vms = []
     has_dinner = False
@@ -1385,31 +1311,29 @@ def weekview_ui():
         week_dinner_registered += (1 if dinner_registered else 0)
         
         # Build diets list for lunch from enriched payload (Phase 2b)
-        diets_obj = d.get("diets", {}) or {}
         lunch_diets = []
         try:
-            for it in diets_obj.get("lunch") or []:
-                lunch_diets.append(
-                    {
-                        "diet_type_id": str(it.get("diet_type_id")),
-                        "diet_name": str(it.get("diet_name")),
-                        "resident_count": int(it.get("resident_count") or 0),
-                        "marked": bool(it.get("marked")),
-                    }
-                )
+            dow_val = int(d.get("day_of_week") or 0)
+            if 1 <= dow_val <= 7:
+                for row in diet_rows:
+                    cells = row.get("cells") or []
+                    idx = (dow_val - 1) * 2
+                    if idx < 0 or idx >= len(cells):
+                        continue
+                    cell = cells[idx]
+                    count = int(cell.get("count") or 0)
+                    if count <= 0:
+                        continue
+                    lunch_diets.append(
+                        {
+                            "diet_type_id": str(row.get("diet_type_id") or ""),
+                            "diet_name": str(row.get("diet_type_name") or ""),
+                            "resident_count": count,
+                            "marked": bool(cell.get("is_done")),
+                        }
+                    )
         except Exception:
             lunch_diets = []
-
-        # Filter out legacy/sentinel diet labels in weekview UI
-        try:
-            def _is_legacy_label(name: str) -> bool:
-                s = (name or "").strip()
-                return s == "1" or s.lower() == "legacy 1"
-
-            lunch_diets = [x for x in lunch_diets if not _is_legacy_label(x.get("diet_name", ""))]
-        except Exception:
-            # If anything goes wrong, keep the unfiltered list to avoid breaking the page
-            pass
 
         day_vm = {
             "date": date_str,
@@ -1436,6 +1360,13 @@ def weekview_ui():
             has_dinner = True
         day_vms.append(day_vm)
 
+    try:
+        from .weekview.repo import WeekviewRepo
+        svc = WeekviewService()
+        version = WeekviewRepo().get_version(tid, year, week, department_id)
+        _etag = svc.build_etag(tid, department_id, year, week, version)
+    except Exception:
+        _etag = ""
     force_flag = request.path.startswith("/ui/portal/week")
     vm = {
         "site_id": site_id,
@@ -1461,6 +1392,8 @@ def weekview_ui():
             } if has_dinner else None
         }
     }
+    if dep_vm:
+        vm["department"] = dep_vm
     # Optional: include department info text if present
     try:
         dbn = get_session()
