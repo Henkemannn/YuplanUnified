@@ -127,11 +127,27 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     else:
         init_engine(cfg.database_url)
     try:
-        # Always emit a single startup line with DB location and git info
+        # Emit a single startup line with DB location and git info (dev only)
         db_url = str(cfg.database_url)
         sqlite_file = None
         if db_url.startswith("sqlite:///"):
             sqlite_file = os.path.abspath(db_url.replace("sqlite:///", "", 1))
+        testing_flag = bool(app.config.get("TESTING"))
+        env_flask = os.getenv("FLASK_ENV") or ""
+        env_app = os.getenv("APP_ENV") or ""
+        env_deploy = os.getenv("DEPLOY_ENV") or ""
+        env_lower = (env_flask or env_app or env_deploy or "").lower()
+        emit_startup_log = (env_lower == "development") and (not testing_flag)
+        sqlite_exists = False
+        sqlite_size = 0
+        if sqlite_file:
+            try:
+                sqlite_exists = os.path.exists(sqlite_file)
+                if sqlite_exists:
+                    sqlite_size = os.path.getsize(sqlite_file)
+            except Exception:
+                sqlite_exists = False
+                sqlite_size = 0
         # Try to resolve git branch and short commit
         branch = None
         commit = None
@@ -166,11 +182,29 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if sqlite_file:
             app.config["RUNTIME_SQLITE_FILE"] = sqlite_file
         line = f"DB_URL={db_url}" + (f" ; SQLITE_FILE={sqlite_file}" if sqlite_file else "")
-        try:
-            app.logger.info("startup_db: db_url=%s sqlite_file=%s", db_url, sqlite_file or "")
-        except Exception:
-            pass
-        print(line)
+        if emit_startup_log:
+            try:
+                app.logger.info("startup_db: db_url=%s sqlite_file=%s", db_url, sqlite_file or "")
+                app.logger.info(
+                    "startup_env: testing=%s flask_env=%s app_env=%s deploy_env=%s",
+                    testing_flag,
+                    env_flask,
+                    env_app,
+                    env_deploy,
+                )
+                if sqlite_file:
+                    app.logger.info(
+                        "startup_sqlite: path=%s exists=%s size_bytes=%s",
+                        sqlite_file,
+                        sqlite_exists,
+                        sqlite_size,
+                    )
+            except Exception:
+                pass
+            print(line)
+            print(f"STARTUP_ENV: testing={testing_flag} FLASK_ENV={env_flask} APP_ENV={env_app} DEPLOY_ENV={env_deploy}")
+            if sqlite_file:
+                print(f"STARTUP_SQLITE: path={sqlite_file} exists={sqlite_exists} size_bytes={sqlite_size}")
         if branch or commit:
             print(f"RUNTIME: branch={branch or 'unknown'} commit={commit or 'unknown'} sqlite_file={sqlite_file or ''}")
     except Exception:
