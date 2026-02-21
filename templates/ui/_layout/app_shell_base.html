@@ -6,9 +6,14 @@
   <title>{% block page_title %}Yuplan{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-proposal.svg') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
+  {% block unified_ui_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/unified_ui.css') }}" />
+  {% endblock %}
+  <meta name="current-site-id" content="{{ session.get('site_id') or '' }}">
   {% block head_extra %}{% endblock %}
   <script src="{{ url_for('static', filename='js/app_shell.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/remember_to_order.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/unified_ui.js') }}" defer></script>
 </head>
 <body>
   <div class="app-shell app-shell--full" aria-label="Yuplan premium app shell" data-testid="app-shell">
@@ -36,6 +41,7 @@
         <span class="app-shell__brand-text">Yuplan</span>
       </div>
       <div class="app-shell__topbar-actions">
+        <span class="app-shell__env-badge">Kund: {{ tenant_name or '—' }} • Arbetsplats: {{ current_site_name or '—' }}</span>
         {% if current_site_name %}
           <span class="app-shell__env-badge">{{ current_site_name }}</span>
         {% endif %}
@@ -58,6 +64,13 @@
         </div>
       </div>
     </header>
+
+    {% if g and g.site_context_banner %}
+      <div id="site-context-banner" class="ua-flash ua-flash-warning" role="alert" style="margin: 8px 16px;">
+        Du har bytt arbetsplats i en annan flik. Ladda om för att se aktuell arbetsplats.
+        <button type="button" class="ua-btn ua-btn-small" style="margin-left: 12px;" onclick="location.reload()">Ladda om</button>
+      </div>
+    {% endif %}
 
     <div class="app-shell__body">
       <aside class="app-shell__sidebar" aria-label="Huvudnavigering">
@@ -93,6 +106,7 @@
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/menu-import') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/menu-import">Menyimport</a>
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/specialkost">Specialkost</a>
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/report/week') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/report/week">Rapport / Statistik</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin') and not current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="/ui/admin">Admin</a>
             </nav>
           {% elif nav_context == 'kitchen' %}
             {% set kitchen_home_url = url_for('ui.kitchen_dashboard') %}
@@ -130,5 +144,6 @@
       </main>
     </div>
   </div>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

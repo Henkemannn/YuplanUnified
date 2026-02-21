@@ -1,62 +1,340 @@
 {% extends "ui/_layout/app_shell_base.html" %}
-{% block page_title %}Veckovy – Yuplan{% endblock %}
+{% block page_title %}Yuplan Unified{% endblock %}
 
 {% block head_extra %}
-  <link rel="stylesheet" href="/static/unified_ui.css">
   <link rel="stylesheet" href="/static/css/kitchen_week_v3.css">
   <link rel="stylesheet" href="/static/css/unified_weekview.css">
-  <style>
-    .weekview--readonly .kostcell-btn {
-      pointer-events: none;
-    }
-    .weekview--readonly .kostcell-btn[disabled] {
-      opacity: 1;
-    }
-  </style>
 {% endblock %}
 
 {% block content %}
 {% set is_readonly = session.role in ['admin', 'superuser'] %}
+{% if csrf_token is defined %}
+  {% if csrf_token is string %}
+    {% set csrf_value = csrf_token %}
+  {% else %}
+    {% set csrf_value = csrf_token() %}
+  {% endif %}
+{% else %}
+  {% set csrf_value = '' %}
+{% endif %}
 
 <div class="ui-weekview">
-<div class="app-page kitchen-week">
-  <section class="app-shell__page-header">
-    <div class="no-print">
-      <h1 class="app-shell__title">Veckovy</h1>
-      <p class="app-shell__subtitle">{{ vm.department_name }}, {{ vm.site_name }}</p>
-    </div>
-    <div class="app-shell__page-actions no-print">
-      {% set base_path = url_for('ui.weekview_ui') %}
-      {% set year = vm.year %}
-      {% set week = vm.week %}
-      {% set site_id = vm.site_id %}
-      {% set department_id = vm.department_id %}
-      {% include "ui/_components/week_picker.html" %}
-    </div>
-  </section>
-  <div class="app-shell__card-meta no-print">År {{ vm.year }} • Vecka {{ vm.week }}</div>
-
-  <div class="weekview-container{% if is_readonly %} weekview--readonly{% endif %}" data-weekview-readonly="{{ 'true' if is_readonly else 'false' }}">
-    {% if vm.department %}
-      <section class="app-shell__card app-card" data-department-id="{{ vm.department.id }}">
-        <div class="dept-header">
-          {% set _dn = vm.department.name or '' %}
-          {% set dep_display = _dn if _dn[:4]|lower == 'avd ' else 'Avd ' ~ _dn %}
-          <div class="dept-title">{{ dep_display }}</div>
+  <div class="app-page kitchen-week">
+    <section class="app-shell__page-header weekview-header">
+      <div class="no-print">
+        <h1 class="app-shell__title weekview-title">Veckovy</h1>
+        <p class="app-shell__subtitle weekview-subtitle">{{ vm.department_name }}, {{ vm.site_name }}</p>
+        <div class="app-shell__card-meta">Vecka {{ vm.week }}, {{ vm.year }}</div>
+      </div>
+      <div class="app-shell__page-actions no-print">
+        <div class="weekview-nav">
+          <a class="weekview-nav-btn weekview-nav-btn--secondary" data-nav="prev-week" href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, department_id=vm.department_id, year=vm.prev_year, week=vm.prev_week) }}">Föregående vecka</a>
+          <a class="weekview-nav-btn weekview-nav-btn--primary" href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, department_id=vm.department_id, year=vm.current_year, week=vm.current_week) }}">Denna vecka</a>
+          <a class="weekview-nav-btn weekview-nav-btn--secondary" data-nav="next-week" href="{{ url_for('ui.weekview_ui', site_id=vm.site_id, department_id=vm.department_id, year=vm.next_year, week=vm.next_week) }}">Nästa vecka</a>
         </div>
-        {% if vm.department.info_text %}
-          <div class="yp-info-box">{{ vm.department.info_text }}</div>
-        {% endif %}
-        {% set dep = vm.department %}
-        {% set interactive = false %}
-        {% include "ui/_partials/week_grid.html" %}
-      </section>
-    {% endif %}
-  </div>
+      </div>
+    </section>
 
-  {% include "ui/_menu_modal.html" %}
+    <div class="weekview-container{% if is_readonly %} weekview--readonly{% endif %}" data-weekview-readonly="{{ 'true' if is_readonly else 'false' }}">
+      {% if vm.department %}
+        <section class="yp-card department-card" data-department-id="{{ vm.department.id }}">
+          <div class="department-header">
+            <div class="department-header-content">
+              {% set _dn = vm.department.name or '' %}
+              {% set dep_display = _dn if _dn[:4]|lower == 'avd ' else 'Avd ' ~ _dn %}
+              <h2 class="department-name">{{ dep_display }}</h2>
+              <div class="department-summary">
+                <span class="summary-label">Lunch</span>
+                <span class="summary-count">
+                  <span class="summary-registered">{{ vm.week_summary.lunch.registered }}</span>
+                  <span class="summary-separator">/</span>
+                  <span class="summary-total">{{ vm.week_summary.lunch.total }}</span>
+                </span>
+                {% if vm.week_summary.dinner %}
+                  <span class="summary-divider">•</span>
+                  <span class="summary-label">Middag</span>
+                  <span class="summary-count">
+                    <span class="summary-registered">{{ vm.week_summary.dinner.registered }}</span>
+                    <span class="summary-separator">/</span>
+                    <span class="summary-total">{{ vm.week_summary.dinner.total }}</span>
+                  </span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          {% if vm.department.info_text %}
+            <div class="yp-info-box">{{ vm.department.info_text }}</div>
+          {% endif %}
+
+          {% set ns = namespace(has_menu=false) %}
+          {% for day in vm.days %}
+            {% if day.lunch_alt1 or day.lunch_alt2 or day.lunch_dessert or day.dinner_alt1 or day.dinner_alt2 %}
+              {% set ns.has_menu = true %}
+            {% endif %}
+          {% endfor %}
+          {% if not ns.has_menu %}
+            <div class="no-menu-message">Ingen meny för denna vecka ännu</div>
+          {% endif %}
+
+          <div class="week-grid" data-etag="{{ vm.etag or '' }}" data-testid="weekview-grid">
+            {% for day in vm.days %}
+              {% set lunch_is_alt2 = day.alt2_lunch or day.lunch_alt2 %}
+              <div class="day-cell">
+                <div class="day-header">{{ day.weekday_name }}</div>
+                <span class="day-menu-icon" data-testid="day-menu-icon" aria-hidden="true">🍽️</span>
+                <div class="day-date">{{ day.date }}</div>
+
+                {% set lunch_has_menu = day.lunch_alt1 or day.lunch_alt2 or day.lunch_dessert %}
+                <div class="meal-section meal-section--lunch{% if lunch_is_alt2 %} is-alt2{% endif %}{% if day.lunch_registered or lunch_has_menu %} is-done{% endif %}" data-meal-cell data-date="{{ day.date }}" data-meal-type="lunch" data-registered="{{ 'true' if day.lunch_registered else 'false' }}" role="button" tabindex="0" aria-label="Lunch {{ day.weekday_name }} {{ day.date }} {{ 'registrerad' if day.lunch_registered else 'ej registrerad' }}">
+                  <div class="meal-header">
+                    <div class="meal-label"><span class="meal-icon">🍴</span> LUNCH</div>
+                    {% if day.lunch_registered %}
+                      <span class="yp-badge registration-badge">✓ Registrerad</span>
+                    {% else %}
+                      <span class="yp-badge yp-badge-muted registration-badge">Ej registrerad</span>
+                    {% endif %}
+                  </div>
+                  {% if lunch_is_alt2 %}
+                    <span class="yp-badge alt2-badge">ALT 2</span>
+                  {% endif %}
+                  {% if day.lunch_alt1 %}
+                    <div class="meal-text">{{ day.lunch_alt1 }}</div>
+                  {% else %}
+                    <div class="meal-text meal-text--empty">Ingen meny</div>
+                  {% endif %}
+                  {% if day.lunch_alt2 %}
+                    <div class="meal-text meal-text--alt2">ALT 2: {{ day.lunch_alt2 }}</div>
+                  {% endif %}
+                  {% if day.lunch_dessert %}
+                    <div class="meal-text meal-text--dessert">Dessert: {{ day.lunch_dessert }}</div>
+                  {% endif %}
+                  <div class="residents-count">Boende: {{ day.residents_lunch }}</div>
+                  <div class="meal-summary">Registrerad: {{ day.lunch_registered_count if day.lunch_registered_count is defined else (1 if day.lunch_registered else 0) }} / {{ day.residents_lunch }}</div>
+                  <a class="registration-link" href="/ui/register/meal?site_id={{ vm.site_id }}&department_id={{ vm.department_id }}&date={{ day.date }}&meal=lunch">Registrera</a>
+                  <form method="post" action="{{ url_for('ui.weekview_registration_save') }}" data-quick-toggle-form>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_value }}">
+                    <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+                    <input type="hidden" name="department_id" value="{{ vm.department_id }}">
+                    <input type="hidden" name="year" value="{{ vm.year }}">
+                    <input type="hidden" name="week" value="{{ vm.week }}">
+                    <input type="hidden" name="date" value="{{ day.date }}">
+                    <input type="hidden" name="meal_type" value="lunch">
+                    {% if day.lunch_registered %}
+                      <input type="hidden" name="registered" value="0">
+                    {% else %}
+                      <input type="hidden" name="registered" value="1">
+                    {% endif %}
+                  </form>
+                </div>
+
+                {% if vm.has_dinner %}
+                  {% set dinner_is_alt2 = day.dinner_alt2 %}
+                  {% set dinner_has_menu = day.dinner_alt1 or day.dinner_alt2 %}
+                  <div class="meal-section meal-section--dinner{% if dinner_is_alt2 %} is-alt2{% endif %}{% if day.dinner_registered or dinner_has_menu %} is-done{% endif %}" data-meal-cell data-date="{{ day.date }}" data-meal-type="dinner" data-registered="{{ 'true' if day.dinner_registered else 'false' }}" role="button" tabindex="0" aria-label="Middag {{ day.weekday_name }} {{ day.date }} {{ 'registrerad' if day.dinner_registered else 'ej registrerad' }}">
+                    <div class="meal-header">
+                      <div class="meal-label"><span class="meal-icon">🌙</span> MIDDAG</div>
+                      {% if day.dinner_registered %}
+                        <span class="yp-badge registration-badge">✓ Registrerad</span>
+                      {% else %}
+                        <span class="yp-badge yp-badge-muted registration-badge">Ej registrerad</span>
+                      {% endif %}
+                    </div>
+                    {% if dinner_is_alt2 %}
+                      <span class="yp-badge alt2-badge">ALT 2</span>
+                    {% endif %}
+                    {% if day.dinner_alt1 %}
+                      <div class="meal-text">{{ day.dinner_alt1 }}</div>
+                    {% else %}
+                      <div class="meal-text meal-text--empty">Ingen meny</div>
+                    {% endif %}
+                    {% if day.dinner_alt2 %}
+                      <div class="meal-text meal-text--alt2">ALT 2: {{ day.dinner_alt2 }}</div>
+                    {% endif %}
+                    <div class="residents-count">Boende: {{ day.residents_dinner }}</div>
+                    <div class="meal-summary">Registrerad: {{ day.dinner_registered_count if day.dinner_registered_count is defined else (1 if day.dinner_registered else 0) }} / {{ day.residents_dinner }}</div>
+                    <form method="post" action="{{ url_for('ui.weekview_registration_save') }}" data-quick-toggle-form>
+                      <input type="hidden" name="csrf_token" value="{{ csrf_value }}">
+                      <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+                      <input type="hidden" name="department_id" value="{{ vm.department_id }}">
+                      <input type="hidden" name="year" value="{{ vm.year }}">
+                      <input type="hidden" name="week" value="{{ vm.week }}">
+                      <input type="hidden" name="date" value="{{ day.date }}">
+                      <input type="hidden" name="meal_type" value="dinner">
+                      {% if day.dinner_registered %}
+                        <input type="hidden" name="registered" value="0">
+                      {% else %}
+                        <input type="hidden" name="registered" value="1">
+                      {% endif %}
+                    </form>
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+
+          <div class="department-footer week-summary">
+            <div class="week-summary-row">
+              <span class="week-summary-registered">{{ vm.week_summary.lunch.registered }}</span>
+              <span class="week-summary-separator">/</span>
+              <span class="week-summary-total">{{ vm.week_summary.lunch.total }}</span>
+              <span class="week-summary-label">registrerade denna vecka</span>
+            </div>
+          </div>
+
+          {% if vm.days %}
+            <div class="weekview-diets">
+              {% set render_state = namespace(did_render=false) %}
+              {% for d in vm.days %}
+                <div class="weekview-diets-row">
+                  <div class="diet-label-cell">Specialkost - {{ meal_labels.lunch }}</div>
+                  <div class="diet-pill-group">
+                    {% set use_fallback = (d.lunch_diets|length == 0) and vm.department and vm.department.diet_rows %}
+                    {% if use_fallback %}
+                      {% for row in vm.department.diet_rows %}
+                        {% set label = (row.diet_type_name or '') %}
+                        {% set label_clean = label.strip() %}
+                        {% set is_legacy = (not label_clean) or label_clean.isdigit() or label_clean.lower().startswith('legacy') %}
+                        {% if not is_legacy %}
+                          {% set cells = row.cells or [] %}
+                          {% set idx = (d.day_of_week|int - 1) * 2 %}
+                          {% if idx >= 0 and idx < (cells|length) %}
+                            {% set cell = cells[idx] %}
+                            {% set count = cell.count or 0 %}
+                            {% if count %}
+                              <span class="diet-pill{% if cell.is_done %} diet-marked{% endif %} kostcell-btn"
+                                role="button"
+                                tabindex="0"
+                                aria-pressed="{{ 'true' if cell.is_done else 'false' }}"
+                                aria-label="{{ label_clean }} {{ count }} for {{ meal_labels.lunch }} {{ d.weekday_name }}"
+                                data-diet-type-id="{{ row.diet_type_id }}"
+                                data-meal="lunch"
+                                data-date="{{ d.date }}"
+                                data-year="{{ vm.year }}"
+                                data-week="{{ vm.week }}"
+                                data-department-id="{{ vm.department_id }}"
+                                data-day-of-week="{{ d.day_of_week }}"
+                                data-marked="{{ 'true' if cell.is_done else 'false' }}">
+                                {{ label_clean }} [{{ count }}]
+                              </span>
+                              {% set render_state.did_render = true %}
+                            {% endif %}
+                          {% endif %}
+                        {% endif %}
+                      {% else %}
+                        <span class="subtle">Inga specialkoster</span>
+                      {% endfor %}
+                    {% else %}
+                      {% for diet in d.lunch_diets %}
+                        {% set label = (diet.diet_name or '') %}
+                        {% set label_clean = label.strip() %}
+                        {% set is_legacy = (not label_clean) or label_clean.isdigit() or label_clean.lower().startswith('legacy') %}
+                        {% if (not is_legacy) and diet.resident_count %}
+                          <span class="diet-pill{% if diet.marked %} diet-marked{% endif %} kostcell-btn"
+                            role="button"
+                            tabindex="0"
+                            aria-pressed="{{ 'true' if diet.marked else 'false' }}"
+                            aria-label="{{ label_clean }} {{ diet.resident_count }} for {{ meal_labels.lunch }} {{ d.weekday_name }}"
+                            data-diet-type-id="{{ diet.diet_type_id }}"
+                            data-meal="lunch"
+                            data-date="{{ d.date }}"
+                            data-year="{{ vm.year }}"
+                            data-week="{{ vm.week }}"
+                            data-department-id="{{ vm.department_id }}"
+                            data-day-of-week="{{ d.day_of_week }}"
+                            data-marked="{{ 'true' if diet.marked else 'false' }}">
+                            {{ label_clean }} [{{ diet.resident_count }}]
+                          </span>
+                          {% set render_state.did_render = true %}
+                        {% endif %}
+                      {% else %}
+                        <span class="subtle">Inga specialkoster</span>
+                      {% endfor %}
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+              {% if (not render_state.did_render) and vm.department and vm.department.diet_rows and (vm.days|length > 0) %}
+                {% set day_ref = vm.days[0] %}
+                <div class="weekview-diets-row">
+                  <div class="diet-label-cell">Specialkost - {{ meal_labels.lunch }}</div>
+                  <div class="diet-pill-group">
+                    {% for row in vm.department.diet_rows %}
+                      {% set label = (row.diet_type_name or '') %}
+                      {% set label_clean = label.strip() %}
+                      {% set is_legacy = (not label_clean) or label_clean.isdigit() or label_clean.lower().startswith('legacy') %}
+                      {% if not is_legacy %}
+                        {% set cells = row.cells or [] %}
+                        {% set idx = (day_ref.day_of_week|int - 1) * 2 %}
+                        {% if idx >= 0 and idx < (cells|length) %}
+                          {% set cell = cells[idx] %}
+                          {% set count = cell.count or 0 %}
+                          {% if count %}
+                            <span class="diet-pill{% if cell.is_done %} diet-marked{% endif %} kostcell-btn"
+                              role="button"
+                              tabindex="0"
+                              aria-pressed="{{ 'true' if cell.is_done else 'false' }}"
+                              aria-label="{{ label_clean }} {{ count }} for {{ meal_labels.lunch }} {{ day_ref.weekday_name }}"
+                              data-diet-type-id="{{ row.diet_type_id }}"
+                              data-meal="lunch"
+                              data-date="{{ day_ref.date }}"
+                              data-year="{{ vm.year }}"
+                              data-week="{{ vm.week }}"
+                              data-department-id="{{ vm.department_id }}"
+                              data-day-of-week="{{ day_ref.day_of_week }}"
+                              data-marked="{{ 'true' if cell.is_done else 'false' }}">
+                              {{ label_clean }} [{{ count }}]
+                            </span>
+                          {% endif %}
+                        {% endif %}
+                      {% endif %}
+                    {% else %}
+                      <span class="subtle">Inga specialkoster</span>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+          {% endif %}
+        </section>
+      {% endif %}
+    </div>
+
+    {% include "ui/_menu_modal.html" %}
+
+    <div id="registrationModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalSubtitle">
+      <div class="modal-content" role="document">
+        <div class="modal-header">
+          <h2 id="modalTitle" class="modal-title">Registrera måltid</h2>
+          <p id="modalSubtitle" class="modal-subtitle"></p>
+        </div>
+        <form method="post" action="{{ url_for('ui.weekview_registration_save') }}">
+          <div class="modal-body">
+            <label class="checkbox-label">
+              <input id="modalRegistered" name="registered" type="checkbox" value="1">
+              <span class="checkbox-label-text">Registrerad</span>
+            </label>
+            <input type="hidden" id="modalDate" name="date">
+            <input type="hidden" id="modalMealType" name="meal_type">
+            <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+            <input type="hidden" name="department_id" value="{{ vm.department_id }}">
+            <input type="hidden" name="year" value="{{ vm.year }}">
+            <input type="hidden" name="week" value="{{ vm.week }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_value }}">
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="modal-btn modal-btn--cancel" data-action="close-modal">Avbryt</button>
+            <button type="submit" class="modal-btn modal-btn--save">Spara</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script defer src="{{ url_for('static', filename='js/unified_weekview.js') }}"></script>
   <script defer src="{{ url_for('static', filename='js/menu_utils.js') }}"></script>
   <script defer src="{{ url_for('static', filename='js/menu_modal.js') }}"></script>
-</div>
-</div>
 {% endblock %}

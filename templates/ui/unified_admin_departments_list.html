@@ -20,7 +20,7 @@
                 </p>
             </div>
             <div class="app-shell__page-actions">
-                <a class="app-shell__user-pill" href="{{ url_for('ui.admin_departments_new_form') }}">➕ Skapa avdelning</a>
+                <a class="yp-button yp-button-primary" href="{{ url_for('ui.admin_departments_new_form') }}">➕ Skapa avdelning</a>
             </div>
         </section>
 
@@ -72,7 +72,7 @@
                         <div class="admin-departments__empty-icon">📋</div>
                         <h3 class="admin-departments__empty-title">Inga avdelningar ännu</h3>
                         <p class="app-shell__card-text">Skapa din första avdelning för att komma igång.</p>
-                        <a class="app-shell__btn app-shell__btn--primary" href="{{ url_for('ui.admin_departments_new_form') }}">Lägg till avdelning</a>
+                        <a class="yp-button yp-button-primary" href="{{ url_for('ui.admin_departments_new_form') }}">➕ Lägg till avdelning</a>
                     </div>
                 {% endif %}
             </article>

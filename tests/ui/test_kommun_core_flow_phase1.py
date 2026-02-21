@@ -103,7 +103,7 @@ def test_end_to_end_department_choice_to_weekly_report(app_session):
     assert wk.status_code == 200
     assert "Registrerad" in wk.data.decode("utf-8")
 
-    # Weekly report HTML shows full coverage (100%) for the registered lunch
+    # Weekly report HTML shows full coverage (100 procent) for the registered lunch
     rep = client.get(
         f"/ui/reports/weekly?site_id={site_id}&year={year}&week={week}",
         headers=HEADERS,
@@ -111,4 +111,4 @@ def test_end_to_end_department_choice_to_weekly_report(app_session):
     assert rep.status_code == 200
     html = rep.data.decode("utf-8")
     assert "Avd Alpha" in html
-    assert "100%" in html
+    assert "100 procent" in html

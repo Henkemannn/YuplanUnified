@@ -46,12 +46,29 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
         summaries = payload.get("department_summaries") or []
         s = summaries[0] if summaries else {}
         days = s.get("days") or []
-        alt2_days = set()
+        alt2_days = set(s.get("alt2_days") or [])
         try:
             alt2_rows = Alt2Repo().list_for_department_week(dep_id, week)
-            alt2_days = {int(r.get("weekday")) for r in alt2_rows if bool(r.get("enabled"))}
+            alt2_days.update({int(r.get("weekday")) for r in alt2_rows if bool(r.get("enabled"))})
         except Exception:
-            alt2_days = set()
+            pass
+        try:
+            db_alt2 = get_session()
+            rows = db_alt2.execute(
+                text(
+                    "SELECT day_of_week FROM weekview_alt2_flags "
+                    "WHERE site_id=:s AND department_id=:d AND year=:y AND week=:w AND enabled=1"
+                ),
+                {"s": site_id, "d": dep_id, "y": year, "w": week},
+            ).fetchall()
+            alt2_days.update({int(r[0]) for r in rows})
+        except Exception:
+            pass
+        finally:
+            try:
+                db_alt2.close()
+            except Exception:
+                pass
         try:
             for d in days:
                 if not d.get("alt2_lunch"):
@@ -78,8 +95,13 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
             name_by_id = {}
             allowed_diet_ids = set()
         defaults_pos = [it for it in (defaults or []) if int(it.get("default_count", 0) or 0) > 0]
+        default_count_by_id = {
+            str(it.get("diet_type_id")): int(it.get("default_count") or 0)
+            for it in defaults_pos
+        }
         default_ids = [str(it.get("diet_type_id")) for it in defaults_pos]
-        default_ids = [dtid for dtid in default_ids if dtid in allowed_diet_ids]
+        if allowed_diet_ids:
+            default_ids = [dtid for dtid in default_ids if dtid in allowed_diet_ids]
         diet_rows = []
         if default_ids:
             for dtid in default_ids:
@@ -92,10 +114,13 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                     rd = 0
                     ml = ((dow, "lunch", str(dtid)) in marked_idx)
                     md = ((dow, "dinner", str(dtid)) in marked_idx)
-                    for it in diets_l:
-                        if str(it.get("diet_type_id")) == str(dtid):
-                            rl = int(it.get("resident_count") or 0)
-                            break
+                    if diets_l:
+                        for it in diets_l:
+                            if str(it.get("diet_type_id")) == str(dtid):
+                                rl = int(it.get("resident_count") or 0)
+                                break
+                    else:
+                        rl = int(default_count_by_id.get(str(dtid), 0) or 0)
                     for it in diets_d:
                         if str(it.get("diet_type_id")) == str(dtid):
                             rd = int(it.get("resident_count") or 0)

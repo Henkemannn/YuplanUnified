@@ -7,6 +7,7 @@ from __future__ import annotations
 from contextlib import suppress
 
 from sqlalchemy import create_engine, text
+from flask import current_app, has_app_context
 import logging
 import os
 from typing import Mapping
@@ -95,6 +96,11 @@ def create_all() -> (
         raise RuntimeError("Engine not initialized")
     log = logging.getLogger("unified.db")
     log.info("create_all: start")
+    if has_app_context() and bool(current_app.config.get("TESTING")):
+        log.warning("create_all: TESTING -> drop_all enabled")
+        Base.metadata.drop_all(_engine)
+        Base.metadata.create_all(_engine)
+        return
     # For sqlite test runs we want a clean schema each invocation to avoid
     # primary key collisions when tests call create_all() multiple times.
     if _engine.dialect.name == "sqlite":

@@ -336,16 +336,19 @@ def test_users_update_success(client_admin):
             pw_hash = generate_password_hash("pass123")
             db.execute(
                 text(
-                    "INSERT INTO users (id, tenant_id, email, password_hash, role, username, full_name, is_active) "
-                    "VALUES (1, 1, 'update@test.com', :ph, 'staff', 'update_user', 'Update Me', 1)"
+                    "INSERT OR IGNORE INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, 'update@test.com', :ph, 'staff', 'update_user', 'Update Me', 1)"
                 ),
                 {"ph": pw_hash}
             )
             db.commit()
+            user_id = db.execute(
+                text("SELECT id FROM users WHERE email='update@test.com' LIMIT 1")
+            ).fetchone()[0]
         finally:
             db.close()
     
-    resp = client_admin.post("/ui/admin/users/1/edit", data={
+    resp = client_admin.post(f"/ui/admin/users/{user_id}/edit", data={
         "email": "updated@test.com",
         "full_name": "Updated Name",
         "role": "cook"
@@ -358,7 +361,8 @@ def test_users_update_success(client_admin):
         db = get_session()
         try:
             row = db.execute(
-                text("SELECT email, full_name, role FROM users WHERE id = 1")
+                text("SELECT email, full_name, role FROM users WHERE id = :uid"),
+                {"uid": user_id}
             ).fetchone()
             assert row[0] == "updated@test.com"
             assert row[1] == "Updated Name"
@@ -385,16 +389,19 @@ def test_users_deactivate_success(client_admin):
             pw_hash = generate_password_hash("pass123")
             db.execute(
                 text(
-                    "INSERT INTO users (id, tenant_id, email, password_hash, role, username, full_name, is_active) "
-                    "VALUES (2, 1, 'deactivate@test.com', :ph, 'staff', 'deactivate_user', 'Deactivate Me', 1)"
+                    "INSERT OR IGNORE INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, 'deactivate@test.com', :ph, 'staff', 'deactivate_user', 'Deactivate Me', 1)"
                 ),
                 {"ph": pw_hash}
             )
             db.commit()
+            user_id = db.execute(
+                text("SELECT id FROM users WHERE email='deactivate@test.com' LIMIT 1")
+            ).fetchone()[0]
         finally:
             db.close()
     
-    resp = client_admin.post("/ui/admin/users/2/deactivate", headers=_h("admin"), follow_redirects=True)
+    resp = client_admin.post(f"/ui/admin/users/{user_id}/deactivate", headers=_h("admin"), follow_redirects=True)
     
     assert resp.status_code == 200
     
@@ -403,7 +410,8 @@ def test_users_deactivate_success(client_admin):
         db = get_session()
         try:
             row = db.execute(
-                text("SELECT is_active FROM users WHERE id = 2")
+                text("SELECT is_active FROM users WHERE id = :uid"),
+                {"uid": user_id}
             ).fetchone()
             assert row[0] == 0  # is_active = False
         finally:
@@ -442,16 +450,19 @@ def test_users_reset_password_stub(client_admin):
             pw_hash = generate_password_hash("oldpass")
             db.execute(
                 text(
-                    "INSERT INTO users (id, tenant_id, email, password_hash, role, username, full_name, is_active) "
-                    "VALUES (2, 1, 'reset@test.com', :ph, 'staff', 'reset_user', 'Reset User', 1)"
+                    "INSERT OR IGNORE INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, 'reset@test.com', :ph, 'staff', 'reset_user', 'Reset User', 1)"
                 ),
                 {"ph": pw_hash}
             )
             db.commit()
+            user_id = db.execute(
+                text("SELECT id FROM users WHERE email='reset@test.com' LIMIT 1")
+            ).fetchone()[0]
         finally:
             db.close()
     
-    resp = client_admin.post("/ui/admin/users/2/reset-password", headers=_h("admin"), follow_redirects=True)
+    resp = client_admin.post(f"/ui/admin/users/{user_id}/reset-password", headers=_h("admin"), follow_redirects=True)
     html = resp.data.decode("utf-8")
     
     assert resp.status_code == 200

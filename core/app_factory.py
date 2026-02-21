@@ -560,6 +560,21 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         except Exception:
             # Non-fatal; continue to handlers
             pass
+        # Query param site_id should not override session site; show banner when mismatched
+        # Explicit mismatch should fail fast only for weekview UI routes.
+        try:
+            q_site = (request.args.get("site_id") or "").strip()
+            s_site = (session.get("site_id") or "").strip()
+            t_sess = session.get("tenant_id")
+            if q_site and s_site and q_site != s_site:
+                g.site_context_banner = True
+                if t_sess:
+                    from .db import get_site_tenant
+                    q_tenant = get_site_tenant(str(q_site))
+                    if q_tenant is not None and int(q_tenant) != int(t_sess) and request.path.startswith("/ui/weekview"):
+                        return Response("\u00c5tkomst nekad: site tillh\u00f6r en annan tenant", status=403)
+        except Exception:
+            pass
         # Handle stale site selection if it belongs to a different tenant
         try:
             from flask import session as _sess
@@ -569,32 +584,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 from .db import get_site_tenant
                 site_tenant = get_site_tenant(str(s_sess))
                 if site_tenant is not None and int(site_tenant) != int(t_sess):
-                    # Minimal fix: show a clear error for weekview UI instead of silently clearing
-                    if str(request.path).startswith("/ui/weekview"):
-                        try:
-                            msg = f"Site {s_sess} tillhör en annan tenant. Välj en site från din tenant."
-                            html = (
-                                "<!doctype html><html lang='sv'><head><meta charset='utf-8'>"
-                                "<title>Felaktig site</title><meta name='robots' content='noindex'>"
-                                "<style>body{font-family:system-ui;margin:3rem;color:#111}" 
-                                "h1{font-size:1.6rem;margin-bottom:.5rem}p{margin:.25rem 0}</style>"
-                                f"</head><body><h1>Åtkomst nekad</h1><p>{msg}</p></body></html>"
-                            )
-                            resp = Response(html, status=403)
-                            resp.headers["Content-Type"] = "text/html; charset=utf-8"
-                            log.info({
-                                "event": "site_tenant_mismatch_weekview",
-                                "tenant_id_session": t_sess,
-                                "site_id_session": s_sess,
-                                "site_tenant": site_tenant,
-                                "path": request.path,
-                            })
-                            return resp
-                        except Exception:
-                            pass
-                    # Default behavior (non-weekview paths): clear and proceed
+                    if (request.args.get("site_id") or "").strip() and request.path.startswith("/ui/weekview"):
+                        return Response("\u00c5tkomst nekad: site tillh\u00f6r en annan tenant", status=403)
                     _sess.pop("site_id", None)
                     g.site_id = None
+                    g.site_context_banner = True
                     log.info({
                         "event": "cleared_site_on_tenant_mismatch",
                         "tenant_id_session": t_sess,

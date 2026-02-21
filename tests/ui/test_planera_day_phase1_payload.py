@@ -12,13 +12,22 @@ def _seed(db, site_id: str, dep_id: str, date_str: str):
     db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:i,:s,'Dept','manual')"), {"i": dep_id, "s": site_id})
     # Minimal menu + residents via Weekview backing tables
     db.execute(text("CREATE TABLE IF NOT EXISTS menus(id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, year INTEGER NOT NULL, week INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'draft', updated_at TEXT)"))
-    db.execute(text("INSERT INTO menus(id, tenant_id, year, week, status, updated_at) VALUES(1,1,2025,47,'draft','2025-11-20T12:00:00Z')"))
+    db.execute(
+        text(
+            "INSERT OR IGNORE INTO menus(tenant_id, year, week, status, updated_at) "
+            "VALUES(1, 2025, 47, 'draft', '2025-11-20T12:00:00Z')"
+        )
+    )
+    menu_id = db.execute(
+        text("SELECT id FROM menus WHERE tenant_id=1 AND year=2025 AND week=47 ORDER BY id DESC LIMIT 1")
+    ).scalar()
     db.execute(text("CREATE TABLE IF NOT EXISTS menu_variants(menu_id INTEGER, day TEXT, meal TEXT, variant_type TEXT, dish_id INTEGER)"))
+    db.execute(text("DELETE FROM menu_variants WHERE menu_id=:mid"), {"mid": menu_id})
     # Insert alt1/alt2 for lunch and alt1 for dinner
     for day in ["Måndag"]:
-        db.execute(text("INSERT OR REPLACE INTO menu_variants(menu_id, day, meal, variant_type, dish_id) VALUES(1,:d,'Lunch','alt1',NULL)"), {"d": day})
-        db.execute(text("INSERT OR REPLACE INTO menu_variants(menu_id, day, meal, variant_type, dish_id) VALUES(1,:d,'Lunch','alt2',NULL)"), {"d": day})
-        db.execute(text("INSERT OR REPLACE INTO menu_variants(menu_id, day, meal, variant_type, dish_id) VALUES(1,:d,'Kväll','alt1',NULL)"), {"d": day})
+        db.execute(text("INSERT OR REPLACE INTO menu_variants(menu_id, day, meal, variant_type, dish_id) VALUES(:mid,:d,'Lunch','alt1',NULL)"), {"mid": menu_id, "d": day})
+        db.execute(text("INSERT OR REPLACE INTO menu_variants(menu_id, day, meal, variant_type, dish_id) VALUES(:mid,:d,'Lunch','alt2',NULL)"), {"mid": menu_id, "d": day})
+        db.execute(text("INSERT OR REPLACE INTO menu_variants(menu_id, day, meal, variant_type, dish_id) VALUES(:mid,:d,'Kväll','alt1',NULL)"), {"mid": menu_id, "d": day})
     # Residents
     db.execute(text("CREATE TABLE IF NOT EXISTS residents_counts(site_id TEXT, department_id TEXT, date TEXT, lunch INTEGER, dinner INTEGER)"))
     db.execute(text("INSERT OR REPLACE INTO residents_counts(site_id, department_id, date, lunch, dinner) VALUES(:s,:d,:dt,10,8)"), {"s": site_id, "d": dep_id, "dt": date_str})

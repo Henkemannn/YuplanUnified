@@ -1338,6 +1338,13 @@ def systemadmin_switch_site(site_id: str):
         # Persist selected site context and start impersonation for tenant
         from flask import session as _sess
         _sess["site_id"] = site_id
+        _sess["tenant_id"] = tenant_id
+        _sess.pop("site_lock", None)
+        try:
+            import uuid as _uuid
+            _sess["site_context_version"] = str(_uuid.uuid4())
+        except Exception:
+            pass
         start_impersonation(tenant_id, f"switch-site:{site_id}")
     except Exception:
         flash("Kunde inte starta impersonation.", "danger")

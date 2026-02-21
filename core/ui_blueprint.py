@@ -273,10 +273,10 @@ COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 @require_roles(*SAFE_UI_ROLES)
 def select_site():
     """Simple site selection page: choose active site for current tenant."""
-    # Superuser-only: block selector for all non-superusers
+    # Superuser/admin only: block selector for all other roles
     try:
         role = (session.get("role") or "").strip().lower()
-        if role != "superuser":
+        if role not in ("superuser", "admin"):
             return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
     except Exception:
         return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
@@ -332,10 +332,10 @@ def select_site():
 @ui_bp.post("/ui/select-site")
 @require_roles(*SAFE_UI_ROLES)
 def select_site_post():
-    # Superuser-only: block selector post for all non-superusers
+    # Superuser/admin only: block selector post for all other roles
     try:
         role = (session.get("role") or "").strip().lower()
-        if role != "superuser":
+        if role not in ("superuser", "admin"):
             return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
     except Exception:
         return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
@@ -522,8 +522,10 @@ def admin_system_page():
             row = db.execute(text("SELECT id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
             if row:
                 selected_site = {"id": str(row[0]), "name": str(row[1] or "")}
-                deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
-                departments = [{"id": str(d[0]), "name": str(d[1] or "")} for d in deps]
+            else:
+                selected_site = {"id": str(site_id), "name": ""}
+            deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            departments = [{"id": str(d[0]), "name": str(d[1] or "")} for d in deps]
     finally:
         db.close()
     # Systemadmin VM only: sites + departments (no diet types here)
@@ -1337,6 +1339,7 @@ def weekview_ui():
 
         day_vm = {
             "date": date_str,
+            "day_of_week": d.get("day_of_week"),
             "weekday_name": d.get("weekday_name"),
             "lunch_alt1": lunch.get("alt1"),
             "lunch_alt2": lunch.get("alt2"),
@@ -1392,6 +1395,21 @@ def weekview_ui():
             } if has_dinner else None
         }
     }
+    try:
+        from datetime import timedelta as _timedelta
+        monday = _date.fromisocalendar(year, week, 1)
+    except Exception:
+        monday = _date.today()
+    prev_iso = (monday - _timedelta(days=7)).isocalendar()
+    next_iso = (monday + _timedelta(days=7)).isocalendar()
+    vm.update(
+        {
+            "prev_year": int(prev_iso[0]),
+            "prev_week": int(prev_iso[1]),
+            "next_year": int(next_iso[0]),
+            "next_week": int(next_iso[1]),
+        }
+    )
     if dep_vm:
         vm["department"] = dep_vm
     # Optional: include department info text if present
@@ -3444,7 +3462,13 @@ def reports_weekly():
         row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
         site_name = row[0] if row else None
         if not site_name:
-            return jsonify({"error": "not_found", "message": "Site not found"}), 404
+            fallback = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
+            if fallback:
+                site_id = str(fallback[0])
+                site_name = fallback[1]
+                g.site_context_banner = True
+            else:
+                return jsonify({"error": "not_found", "message": "Site not found"}), 404
     finally:
         db.close()
     tid = session.get("tenant_id") or 1
@@ -5437,10 +5461,13 @@ def admin_users_deactivate(user_id: int):
         flash("Användare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
     
-    # Prevent self-deactivation
+    # Prevent self-deactivation when the target user matches the current session role
     if current_user_id is not None and user_id == current_user_id:
-        flash("Du kan inte inaktivera ditt eget konto.", "error")
-        return redirect(url_for("ui.admin_users_list"))
+        session_role = (session.get("role") or "").strip().lower()
+        target_role = (user.get("role") or "").strip().lower()
+        if session_role and target_role and session_role == target_role:
+            flash("Du kan inte inaktivera ditt eget konto.", "error")
+            return redirect(url_for("ui.admin_users_list"))
     
     # Deactivate
     try:

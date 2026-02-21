@@ -4,6 +4,7 @@
 
 {% block head_extra %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+ <link rel="stylesheet" href="{{ url_for('static', filename='css/unified_admin.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -108,6 +109,9 @@
                   <div class="admin-report-week__chips">
                     <span class="admin-report-week__chip">🍽️ Lunch: Normal {{ lunch_normal }} · Special {{ lunch_special }}</span>
                     <span class="admin-report-week__chip">🌙 Kväll: Normal {{ dinner_normal }} · Special {{ dinner_special }}</span>
+                    {% if request.args.get("site_id") %}
+                      <span class="admin-report-week__chip">Täckning {{ "%.0f"|format(item.coverage_percent or 0) }} procent</span>
+                    {% endif %}
                   </div>
                 </summary>
                 <div class="admin-report-week__day-grid">
