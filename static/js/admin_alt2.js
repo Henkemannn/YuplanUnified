@@ -20,16 +20,37 @@
     const statusEl = $('#alt2-status', dlg);
     const order = ['mon','tue','wed','thu','fri','sat','sun'];
     let selected = [];
+    let selectedDays = new Set();
     let departmentId = null;
+    const hiddenInput = $('#alt2-days', dlg);
 
     // Apply selection classes to existing day buttons
+    function updateHidden(){
+      if(!hiddenInput) return;
+      const ordered = order.filter(function(day){ return selectedDays.has(day); });
+      hiddenInput.value = ordered.join(',');
+    }
+
+    function syncSelected(){
+      selected = order.filter(function(day){ return selectedDays.has(day); });
+      updateHidden();
+    }
+
+    function toggleSelected(day){
+      if(!day) return;
+      if(selectedDays.has(day)){
+        selectedDays.delete(day);
+      } else {
+        selectedDays.add(day);
+      }
+      syncSelected();
+    }
+
     function applySelection(){
-      const idxToShort = order;
       $all('.js-alt2-day', bodyEl).forEach(function(btn){
-        const idx = parseInt(btn.getAttribute('data-day-index') || '-1', 10);
-        const short = idxToShort[idx];
-        const active = short && selected.includes(short);
-        btn.classList.toggle('is-alt2-selected', !!active);
+        const short = (btn.getAttribute('data-day') || '').trim();
+        const active = short && selectedDays.has(short);
+        btn.classList.toggle('is-selected', !!active);
       });
     }
 
@@ -45,6 +66,8 @@
         if(!r.ok){ bodyEl.innerHTML = '<p class="ua-error">Kunde inte hämta Alt2.</p>'; return; }
         const data = await r.json();
         selected = Array.isArray(data.alt2_days) ? data.alt2_days.slice() : [];
+        selectedDays = new Set(selected);
+        updateHidden();
         applySelection();
       } catch(e){ bodyEl.innerHTML = '<p class="ua-error">Fel vid hämtning.</p>'; }
       bodyEl.removeAttribute('data-loading');
@@ -69,6 +92,8 @@
         if(!r.ok){ if(statusEl) statusEl.textContent = 'Kunde inte spara.'; return; }
         const data = await r.json();
         selected = Array.isArray(data.alt2_days) ? data.alt2_days.slice() : [];
+        selectedDays = new Set(selected);
+        updateHidden();
         applySelection();
         if(statusEl){ statusEl.textContent = 'Sparat ✔'; setTimeout(function(){ statusEl.textContent=''; }, 1500); }
       } catch(e){ if(statusEl) statusEl.textContent = 'Fel vid sparande.'; }
@@ -87,13 +112,10 @@
     bodyEl.addEventListener('click', function(ev){
       const btn = ev.target && ev.target.closest('.js-alt2-day');
       if(!btn) return;
-      const idx = parseInt(btn.getAttribute('data-day-index') || '-1', 10);
-      if(isNaN(idx) || idx < 0 || idx > 6) return;
-      const short = order[idx];
-      const i = selected.indexOf(short);
-      if(i>=0) selected.splice(i,1); else selected.push(short);
-      selected.sort(function(a,b){ return order.indexOf(a) - order.indexOf(b); });
-      btn.classList.toggle('is-alt2-selected');
+      const short = (btn.getAttribute('data-day') || '').trim();
+      if(!short || order.indexOf(short) === -1) return;
+      toggleSelected(short);
+      btn.classList.toggle('is-selected');
     });
 
     $all('[data-modal-close]', dlg).forEach(function(el){ el.addEventListener('click', function(){ closeDialog(dlg); }); });

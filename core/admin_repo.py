@@ -149,11 +149,13 @@ class DepartmentsRepo:
         name: str,
         resident_count_mode: str,
         resident_count_fixed: int | None,
+        notes: str | None = None,
     ) -> tuple[dict, int]:
         db = get_session()
         try:
             did = str(uuid.uuid4())
             rc_fixed = int(resident_count_fixed or 0)
+            notes_value = notes if notes is not None else None
             if _is_sqlite(db):
                 # Ensure departments table exists (sqlite test/dev)
                 db.execute(
@@ -175,24 +177,45 @@ class DepartmentsRepo:
                 db.execute(
                     text(
                         """
-                        INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version)
-                        VALUES(:id, :site_id, :name, :mode, :fixed, 0)
+                        INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes, version)
+                        VALUES(:id, :site_id, :name, :mode, :fixed, :notes, 0)
                         """
                     ),
-                    {"id": did, "site_id": site_id, "name": name, "mode": resident_count_mode, "fixed": rc_fixed},
+                    {
+                        "id": did,
+                        "site_id": site_id,
+                        "name": name,
+                        "mode": resident_count_mode,
+                        "fixed": rc_fixed,
+                        "notes": notes_value,
+                    },
                 )
             else:
                 db.execute(
                     text(
                         """
-                        INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed)
-                        VALUES(:id, :site_id, :name, :mode, :fixed)
+                        INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes)
+                        VALUES(:id, :site_id, :name, :mode, :fixed, :notes)
                         """
                     ),
-                    {"id": did, "site_id": site_id, "name": name, "mode": resident_count_mode, "fixed": rc_fixed},
+                    {
+                        "id": did,
+                        "site_id": site_id,
+                        "name": name,
+                        "mode": resident_count_mode,
+                        "fixed": rc_fixed,
+                        "notes": notes_value,
+                    },
                 )
             db.commit()
-            return {"id": did, "site_id": site_id, "name": name, "resident_count_mode": resident_count_mode, "resident_count_fixed": rc_fixed}, 0
+            return {
+                "id": did,
+                "site_id": site_id,
+                "name": name,
+                "resident_count_mode": resident_count_mode,
+                "resident_count_fixed": rc_fixed,
+                "notes": notes_value,
+            }, 0
         except Exception as exc:
             db.rollback()
             if _is_sqlite(db) and "UNIQUE constraint failed: departments.site_id, departments.name" in str(exc):

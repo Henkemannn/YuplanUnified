@@ -7,13 +7,13 @@
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-proposal.svg') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
   {% block unified_ui_css %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/unified_ui.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}" />
   {% endblock %}
   <meta name="current-site-id" content="{{ session.get('site_id') or '' }}">
   {% block head_extra %}{% endblock %}
   <script src="{{ url_for('static', filename='js/app_shell.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/remember_to_order.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='js/unified_ui.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='unified_ui.js') }}" defer></script>
 </head>
 <body>
   <div class="app-shell app-shell--full" aria-label="Yuplan premium app shell" data-testid="app-shell">
@@ -112,7 +112,7 @@
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/menu-import') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/menu-import">Menyimport</a>
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/specialkost">Specialkost</a>
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/report/week') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/report/week">Rapport / Statistik</a>
-              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin') and not current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="/ui/admin">Admin</a>
+              {# Admin hidden in pilot #}
             </nav>
           {% elif nav_context == 'kitchen' %}
             {% set kitchen_home_url = url_for('ui.kitchen_dashboard') %}
@@ -137,7 +137,7 @@
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/planera') %}app-shell__nav-item--active{% endif %}" href="{{ planera_url }}">Planera</a>
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/reports') %}app-shell__nav-item--active{% endif %}" href="{{ report_url }}">Rapport</a>
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="{{ specialkost_url }}">Specialkost</a>
-              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin') and not current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="{{ admin_url }}">Admin</a>
+              {# Admin hidden in pilot #}
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/portal/week') %}app-shell__nav-item--active{% endif %}" href="{{ portal_url }}">Avdelningsportal</a>
             </nav>
           {% endif %}

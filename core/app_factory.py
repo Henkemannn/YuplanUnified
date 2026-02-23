@@ -338,10 +338,78 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     # --- DB setup ---
     _log_sqlite_fingerprint("before_init_engine")
     if app.config.get("TESTING"):
-        init_engine(cfg.database_url, force=True)
+        engine = init_engine(cfg.database_url, force=True)
     else:
-        init_engine(cfg.database_url)
+        engine = init_engine(cfg.database_url)
     _log_sqlite_fingerprint("after_init_engine")
+
+    is_dev = (app.config.get("ENV") == "development") or bool(app.config.get("DEBUG"))
+    if is_dev:
+        from sqlalchemy import event
+        import hashlib
+        import sqlite3
+        from datetime import datetime
+
+        mutation_tables = {
+            "tenants",
+            "sites",
+            "departments",
+            "dietary_types",
+            "menus",
+            "menu_variants",
+            "users",
+        }
+
+        log_dir = os.path.join(base_dir, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "dev_db_mutations.log")
+        sqlite_path = sqlite_file or "dev.db"
+
+        def dev_db_fingerprint() -> tuple[str, dict[str, str]]:
+            counts: dict[str, str] = {}
+            try:
+                conn = sqlite3.connect(sqlite_path)
+                cur = conn.cursor()
+                for table in mutation_tables:
+                    try:
+                        counts[table] = str(cur.execute(f"select count(*) from {table}").fetchone()[0])
+                    except Exception:
+                        counts[table] = "?"
+                conn.close()
+            except Exception:
+                for table in mutation_tables:
+                    counts.setdefault(table, "?")
+            raw = str(counts).encode("utf-8")
+            return hashlib.sha256(raw).hexdigest()[:12], counts
+
+        @event.listens_for(engine, "before_cursor_execute")
+        def log_mutations(conn, cursor, statement, parameters, context, executemany):
+            stmt_lower = statement.lower()
+            if any(f" {table} " in stmt_lower for table in mutation_tables):
+                if stmt_lower.strip().startswith(("insert", "update", "delete")):
+                    fp, counts = dev_db_fingerprint()
+                    try:
+                        from flask import has_request_context, request
+                        path = request.path if has_request_context() else "CLI/NO_REQUEST"
+                    except Exception:
+                        path = "CLI/NO_REQUEST"
+                    statement_short = (statement or "")[:500]
+                    print("\n🚨 DB MUTATION DETECTED")
+                    print("Time:", datetime.utcnow())
+                    print("PID:", os.getpid())
+                    print("Statement:", statement)
+                    print("Counts:", counts)
+                    print("Fingerprint:", fp)
+                    try:
+                        with open(log_path, "a", encoding="utf-8") as fh:
+                            fh.write("\nUTC: " + datetime.utcnow().isoformat() + "Z\n")
+                            fh.write("PID: " + str(os.getpid()) + "\n")
+                            fh.write("Path: " + path + "\n")
+                            fh.write("Statement: " + statement_short + "\n")
+                            fh.write("Counts: " + str(counts) + "\n")
+                            fh.write("Fingerprint: " + fp + "\n")
+                    except Exception:
+                        pass
     try:
         # Emit a single startup line with DB location and git info (dev only)
         sqlite_exists = False
@@ -749,6 +817,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     @app.before_request
     def _before_req() -> Response | None:
+        from flask import request
         # Dev-only host mismatch banner (avoid cookie confusion between hosts).
         try:
             if emit_startup_log and not app.config.get("TESTING"):

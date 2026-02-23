@@ -243,7 +243,7 @@ def test_admin_dashboard_js_loaded(client_admin):
 # ============================================================================
 
 def test_admin_navigation_link_visible_to_admin(client_admin):
-    """Test admin sees admin link in weekview."""
+    """Test admin does not see admin link in weekview (pilot)."""
     app = client_admin.application
     site_id = str(uuid.uuid4())
     dep_id = str(uuid.uuid4())
@@ -274,13 +274,12 @@ def test_admin_navigation_link_visible_to_admin(client_admin):
     )
     html = resp.data.decode("utf-8")
     
-    # Should have admin button
-    assert "Admin" in html
-    assert "/ui/admin" in html
+    # Admin link should be hidden in pilot
+    assert "Admin" not in html
 
 
 def test_admin_navigation_link_visible_to_superuser(client_superuser):
-    """Test superuser sees admin link in weekview."""
+    """Test superuser does not see admin link in weekview (pilot)."""
     app = client_superuser.application
     site_id = str(uuid.uuid4())
     dep_id = str(uuid.uuid4())
@@ -311,9 +310,8 @@ def test_admin_navigation_link_visible_to_superuser(client_superuser):
     )
     html = resp.data.decode("utf-8")
     
-    # Should have admin button
-    assert "Admin" in html
-    assert "/ui/admin" in html
+    # Admin link should be hidden in pilot
+    assert "Admin" not in html
 
 
 def test_admin_navigation_link_hidden_from_staff(client_user):

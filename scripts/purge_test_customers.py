@@ -20,6 +20,22 @@ from core import create_app
 from core.db import get_session
 
 
+def _dev_user_log(action: str) -> None:
+    try:
+        env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+        if env_val != "dev" and env_val != "development" and os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+            return
+        import inspect
+
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame else None
+        func = caller.f_code.co_name if caller else "unknown"
+        line = caller.f_lineno if caller else 0
+        print(f"DEV_USER_MUTATION action={action} func={func} file={__file__} line={line}")
+    except Exception:
+        pass
+
+
 def table_exists(conn, table: str) -> bool:
     try:
         if conn.bind.dialect.name == "sqlite":
@@ -86,6 +102,12 @@ def main() -> int:
             _delete_tables(conn, parent_tables, removed_counts)
 
             # Optionally delete non-superuser users
+            if include_users and table_exists(conn, "users"):
+                if os.getenv("YUPLAN_DEV_SEED", "0").lower() not in ("1", "true", "yes"):
+                    print("SKIP: set YUPLAN_DEV_SEED=1 to delete users")
+                    include_users = False
+                else:
+                    _dev_user_log("delete_users")
             if include_users and table_exists(conn, "users"):
                 try:
                     res = conn.execute(

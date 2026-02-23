@@ -4675,6 +4675,7 @@ def admin_departments_create():
     # Get form data
     name = request.form.get("name", "").strip()
     resident_count = request.form.get("resident_count", "0").strip()
+    notes = request.form.get("notes")
     
     # Validate
     if not name:
@@ -4697,7 +4698,8 @@ def admin_departments_create():
             site_id=site_id,
             name=name,
             resident_count_mode="fixed",
-            resident_count_fixed=resident_count_int
+            resident_count_fixed=resident_count_int,
+            notes=notes,
         )
         flash(f"Avdelning '{name}' skapad.", "success")
     except Exception as e:

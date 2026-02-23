@@ -535,6 +535,27 @@ def ensure_bootstrap_superuser():
     reloader_ok = (reloader_flag is None) or (reloader_flag == "true")
     create_allowed = auto_create and allow_destructive and reloader_ok
 
+    import inspect as _inspect
+
+    def _dev_user_log(action: str) -> None:
+        try:
+            env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+            if env_val != "dev" and env_val != "development" and os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+                return
+            frame = _inspect.currentframe()
+            caller = frame.f_back if frame else None
+            func = caller.f_code.co_name if caller else "unknown"
+            line = caller.f_lineno if caller else 0
+            current_app.logger.info(
+                "dev_user_mutation action=%s func=%s file=%s line=%s",
+                action,
+                func,
+                __file__,
+                line,
+            )
+        except Exception:
+            pass
+
     try:
         current_app.logger.info("bootstrap_superuser: start auto_create=%s", auto_create)
     except Exception:
@@ -601,6 +622,7 @@ def ensure_bootstrap_superuser():
             role="superuser",
             unit_id=None,
         )
+        _dev_user_log("insert_user")
         db.add(user)
         db.commit()
         try:
@@ -620,7 +642,27 @@ def ensure_dev_superuser_henrik():
     are missing and auto-create not allowed.
     """
     import os as _os
+    import inspect as _inspect
     from werkzeug.security import generate_password_hash as _gph
+
+    def _dev_user_log(action: str) -> None:
+        try:
+            env_val = (_os.getenv("APP_ENV") or _os.getenv("FLASK_ENV") or "").lower()
+            if env_val != "dev" and env_val != "development" and _os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+                return
+            frame = _inspect.currentframe()
+            caller = frame.f_back if frame else None
+            func = caller.f_code.co_name if caller else "unknown"
+            line = caller.f_lineno if caller else 0
+            current_app.logger.info(
+                "dev_user_mutation action=%s func=%s file=%s line=%s",
+                action,
+                func,
+                __file__,
+                line,
+            )
+        except Exception:
+            pass
 
     seed_enabled = (
         _os.getenv("YUPLAN_SEED_HENRIK", "0").lower() in ("1", "true", "yes")
@@ -687,6 +729,7 @@ def ensure_dev_superuser_henrik():
         password = _os.getenv("YUPLAN_SEED_HENRIK_PASSWORD", "Hen1024")
         user = db.query(User).filter(User.email == email.lower()).first()
         if not user:
+            _dev_user_log("insert_user")
             user = User(
                 tenant_id=t.id,
                 email=email.lower(),
@@ -704,10 +747,13 @@ def ensure_dev_superuser_henrik():
             if not user.full_name:
                 user.full_name = "Henrik Jonsson"
             # Always refresh password hash to match requested DEV credentials
-            try:
-                user.password_hash = _gph(password)
-            except Exception:
-                pass
+            seed_overwrite = _os.getenv("YUPLAN_DEV_SEED", "0").lower() in ("1", "true", "yes")
+            if seed_overwrite:
+                _dev_user_log("update_user_password")
+                try:
+                    user.password_hash = _gph(password)
+                except Exception:
+                    pass
         db.commit()
     finally:
         db.close()

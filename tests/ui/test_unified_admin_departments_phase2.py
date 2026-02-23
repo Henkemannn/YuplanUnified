@@ -136,6 +136,7 @@ def test_departments_create_happy_path(client_admin):
     app = client_admin.application
     site_id = str(uuid.uuid4())
     user_id = 1
+    notes_text = "Skapad med anteckning"
     
     # Seed site
     from core.db import create_all, get_session
@@ -151,6 +152,9 @@ def test_departments_create_happy_path(client_admin):
             db.commit()
         finally:
             db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     
     # Create department
     resp = client_admin.post(
@@ -159,6 +163,7 @@ def test_departments_create_happy_path(client_admin):
         data={
             "name": "New Test Department",
             "resident_count": "30",
+            "notes": notes_text,
         },
         follow_redirects=True
     )
@@ -168,6 +173,26 @@ def test_departments_create_happy_path(client_admin):
     
     # Should redirect to list with success message
     assert "New Test Department" in html or "skapad" in html
+
+    with app.app_context():
+        db = get_session()
+        try:
+            dept_row = db.execute(
+                text("SELECT id, notes FROM departments WHERE name = :name AND site_id = :sid"),
+                {"name": "New Test Department", "sid": site_id},
+            ).fetchone()
+        finally:
+            db.close()
+
+    assert dept_row is not None
+    dept_id, saved_notes = dept_row[0], dept_row[1]
+    assert saved_notes == notes_text
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+    resp = client_admin.get(f"/ui/admin/departments/{dept_id}/edit", headers=_h("admin"))
+    html = resp.data.decode("utf-8")
+    assert notes_text in html
 
 
 def test_departments_create_validation_empty_name(client_admin):
