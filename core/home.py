@@ -89,6 +89,12 @@ def ui_login():  # Simple HTML login that sets session directly or redirects to 
                 target = "/ui/weekview"
             resp = make_response(redirect(target))
             _set_csrf_cookie(resp, tok)
+            try:
+                logger = current_app.config.get("DEV_AUTH_FINGERPRINT_LOGGER")
+                if callable(logger):
+                    logger("login_ok")
+            except Exception:
+                pass
             return resp
         finally:
             db.close()

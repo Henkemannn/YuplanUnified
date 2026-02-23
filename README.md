@@ -87,9 +87,17 @@ To avoid repeated reinstall of dependencies and 403 errors on the portal UI:
   ```powershell
   python run.py
   ```
+  Use one host in dev: http://127.0.0.1:5000
+  Set SECRET_KEY in .env for stable cookies.
 6. Visit the portal week view:
   - UI (HTML): `http://127.0.0.1:5000/ui/portal/department/week?year=2025&week=47`
   - JSON API (silent refresh): `http://127.0.0.1:5000/portal/department/week?year=2025&week=47`
+
+Dev bootstrapping guard (local):
+- DEV_CREATE_ALL=1 alone does nothing.
+- Schema auto-create requires ALLOW_DESTRUCTIVE_DB=1 (or YUPLAN_ALLOW_DESTRUCTIVE_DB=1) too.
+- With debug reloader, destructive work only runs in child process.
+- Child process is identified by WERKZEUG_RUN_MAIN=true.
 
 ### Demo Mode (First-Time Evaluation)
 Add `&demo=1` to the UI URL for a smoother first impression when only seed data exists:

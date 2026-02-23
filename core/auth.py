@@ -139,6 +139,15 @@ def _normalize_role(role: str | None) -> str:
     return r
 
 
+def _emit_dev_auth_fingerprint(tag: str) -> None:
+    try:
+        logger = current_app.config.get("DEV_AUTH_FINGERPRINT_LOGGER")
+        if callable(logger):
+            logger(tag)
+    except Exception:
+        pass
+
+
 # --- Routes ---
 @bp.post("/login")
 def login():
@@ -159,6 +168,7 @@ def login():
         resp = make_response(jsonify({"ok": True, "demo": True, "role": role}))
         # Lightweight signed-ish cookie (not cryptographically strong; staging only)
         resp.set_cookie("yp_demo", role, httponly=True, samesite="Lax")
+        _emit_dev_auth_fingerprint("login_ok")
         return resp
     data = request.get_json(silent=True) or {}
     # Fallback to form fields when JSON isn't provided (browser form posts)
@@ -327,6 +337,7 @@ def login():
                 target = "/"
             resp = redirect(target, code=302)
             set_csrf_cookie(resp, csrf_token)
+            _emit_dev_auth_fingerprint("login_ok")
             return resp
         else:
             # JSON/API: if non-superuser and active site is missing, enforce 403
@@ -353,6 +364,7 @@ def login():
                 )
             )
             set_csrf_cookie(resp, csrf_token)
+            _emit_dev_auth_fingerprint("login_ok")
             return resp
     finally:
         db.close()
@@ -515,6 +527,13 @@ def ensure_bootstrap_superuser():
     auto_create = (
         os.getenv("DEV_CREATE_ALL", "0") == "1" or os.getenv("YUPLAN_DEV_CREATE_ALL", "0") == "1"
     )
+    allow_destructive = (
+        os.getenv("ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes")
+        or os.getenv("YUPLAN_ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes")
+    )
+    reloader_flag = os.getenv("WERKZEUG_RUN_MAIN")
+    reloader_ok = (reloader_flag is None) or (reloader_flag == "true")
+    create_allowed = auto_create and allow_destructive and reloader_ok
 
     try:
         current_app.logger.info("bootstrap_superuser: start auto_create=%s", auto_create)
@@ -529,7 +548,7 @@ def ensure_bootstrap_superuser():
 
     try:
         # Ensure schema exists when allowed in dev
-        if auto_create:
+        if create_allowed:
             try:
                 from .db import create_all as _create_all  # local import to avoid cycles
                 try:
@@ -539,6 +558,13 @@ def ensure_bootstrap_superuser():
                 _create_all()
             except Exception:
                 # Non-fatal; continue and let the next step decide
+                pass
+        elif auto_create:
+            try:
+                current_app.logger.warning(
+                    "bootstrap_superuser: create_all blocked (ALLOW_DESTRUCTIVE_DB + WERKZEUG_RUN_MAIN required)"
+                )
+            except Exception:
                 pass
 
         # Check that required tables exist; if not, skip (or they were just created)
@@ -613,13 +639,28 @@ def ensure_dev_superuser_henrik():
     try:
         # Optionally create schema
         try:
-            if _os.getenv("DEV_CREATE_ALL", "0").lower() in ("1", "true", "yes"):
+            dev_create_all = _os.getenv("DEV_CREATE_ALL", "0").lower() in ("1", "true", "yes")
+            allow_destructive = (
+                _os.getenv("ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes")
+                or _os.getenv("YUPLAN_ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes")
+            )
+            reloader_flag = _os.getenv("WERKZEUG_RUN_MAIN")
+            reloader_ok = (reloader_flag is None) or (reloader_flag == "true")
+            create_allowed = dev_create_all and allow_destructive and reloader_ok
+            if create_allowed:
                 from .db import create_all as _create_all
                 try:
                     current_app.logger.warning("dev_superuser_henrik: create_all requested")
                 except Exception:
                     pass
                 _create_all()
+            elif dev_create_all:
+                try:
+                    current_app.logger.warning(
+                        "dev_superuser_henrik: create_all blocked (ALLOW_DESTRUCTIVE_DB + WERKZEUG_RUN_MAIN required)"
+                    )
+                except Exception:
+                    pass
         except Exception:
             pass
         # Ensure basic tables exist by best-effort inspection

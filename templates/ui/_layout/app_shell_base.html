@@ -72,6 +72,12 @@
       </div>
     {% endif %}
 
+    {% if g and g.host_mismatch_banner %}
+      <div id="host-mismatch-banner" class="ua-flash ua-flash-warning" role="alert" style="margin: 8px 16px;">
+        Du anvander flera hosts i dev. Anvand bara http://127.0.0.1:5000 for stabila cookies.
+      </div>
+    {% endif %}
+
     <div class="app-shell__body">
       <aside class="app-shell__sidebar" aria-label="Huvudnavigering">
         <div class="app-shell__sidebar-panel">
