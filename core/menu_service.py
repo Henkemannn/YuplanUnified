@@ -27,7 +27,7 @@ class MenuServiceDB:
     """Database-backed MenuService implementation.
 
     Responsibilities:
-    - create_or_get_menu(tenant_id, week, year)
+    - create_or_get_menu(tenant_id, site_id, week, year)
     - set_variant(...)
     - get_week_view(...): returns structured dict {days: {day: {meal: {variant_type: {dish_id, dish_name}}}}}
       (override handling to be layered later)
@@ -36,15 +36,23 @@ class MenuServiceDB:
     def __init__(self):
         pass
 
-    def create_or_get_menu(self, tenant_id: int, week: int, year: int) -> Menu:
+    def create_or_get_menu(self, tenant_id: int, site_id: str, week: int, year: int) -> Menu:
         db = get_new_session()
         try:
             existing: Menu | None = (
-                db.query(Menu).filter_by(tenant_id=tenant_id, week=week, year=year).first()
+                db.query(Menu)
+                .filter_by(tenant_id=tenant_id, site_id=site_id, week=week, year=year)
+                .first()
             )
             if existing is not None:
                 return existing
-            new_menu = Menu(tenant_id=tenant_id, week=week, year=year, updated_at=datetime.now(timezone.utc))
+            new_menu = Menu(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                week=week,
+                year=year,
+                updated_at=datetime.now(timezone.utc),
+            )
             db.add(new_menu)
             db.commit()
             db.refresh(new_menu)
@@ -113,14 +121,14 @@ class MenuServiceDB:
         finally:
             db.close()
 
-    def get_week_view(self, tenant_id: int, week: int, year: int) -> WeekView:
+    def get_week_view(self, tenant_id: int, site_id: str, week: int, year: int) -> WeekView:
         db = get_new_session()
         try:
             # TODO: If multiple versions exist, prefer published over draft
             # For now, prefer published status when querying
             menu = (
                 db.query(Menu)
-                .filter_by(tenant_id=tenant_id, week=week, year=year)
+                .filter_by(tenant_id=tenant_id, site_id=site_id, week=week, year=year)
                 .order_by(Menu.status.desc())  # 'published' > 'draft' alphabetically
                 .first()
             )

@@ -18,10 +18,20 @@ def get_week():
         return jsonify({"ok": False, "error": "no tenant"}), 400
     week = int(request.args.get("week", 0) or 0)
     year = int(request.args.get("year", 0) or 0)
+    site_id = request.args.get("site_id") or session.get("site_id")
     if not week or not year:
         return jsonify({"ok": False, "error": "week/year required"}), 400
+    if not site_id:
+        return jsonify(
+            {
+                "type": "https://unified.example/errors/bad-request",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "site_id required",
+            }
+        ), 400
     svc = current_app.menu_service  # type: ignore[attr-defined]
-    view = svc.get_week_view(tenant_id, week, year)
+    view = svc.get_week_view(tenant_id, str(site_id), week, year)
     # Translate canonical keys to legacy labels expected by API tests
     def _legacy_day_label(d: str) -> str:
         m = {
@@ -71,9 +81,19 @@ def set_variant():
     variant_type = data["variant_type"]
     dish_id = data.get("dish_id")
     dish_name = data.get("dish_name")
+    site_id = data.get("site_id") or session.get("site_id")
+    if not site_id:
+        return jsonify(
+            {
+                "type": "https://unified.example/errors/bad-request",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "site_id required",
+            }
+        ), 400
     # Create or get menu
     menu_svc = current_app.menu_service  # type: ignore[attr-defined]
-    menu = menu_svc.create_or_get_menu(tenant_id, week, year)
+    menu = menu_svc.create_or_get_menu(tenant_id, str(site_id), week, year)
     # Optional on-the-fly dish creation
     if dish_id is None and dish_name:
         db = get_session()
