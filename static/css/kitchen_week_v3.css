@@ -1,0 +1,248 @@
+.kitchen-week {
+  --kw-alt2-bg: var(--yp-alt2-bg);
+  --kw-border: var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kitchen-week .toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.kitchen-week .toolbar-right {
+  justify-content: flex-end;
+}
+
+.kitchen-week .toolbar a {
+  text-decoration: none;
+}
+
+.kitchen-week .dept-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.kitchen-week .dept-title {
+  font-weight: 600;
+}
+
+.kitchen-week .dept-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.kitchen-week .yp-info-box {
+  background: var(--surface-2);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.kitchen-week .grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: var(--surface);
+}
+
+.kitchen-week .grid-table th,
+.kitchen-week .grid-table td {
+  border: 1px solid var(--kw-border);
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.kitchen-week .grid-table thead th {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.kitchen-week .grid-subhead th {
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.kitchen-week .meal-icon {
+  text-align: center;
+  font-size: 1.05rem;
+}
+
+.kitchen-week .grid-table tbody tr.diet-row:nth-child(odd) {
+  background: color-mix(in srgb, var(--surface-2) 65%, transparent);
+}
+
+.kitchen-week .grid-table tbody tr.diet-row:nth-child(even) {
+  background: var(--surface);
+}
+
+.kitchen-week .diet-name {
+  text-align: left;
+  font-weight: 600;
+  min-width: 160px;
+}
+
+.kitchen-week .grid-table td.is-alt2,
+.kitchen-week .grid-table th.is-alt2,
+.kitchen-week .kw-cell.is-alt2 {
+  background: var(--kw-alt2-bg);
+  color: var(--yp-alt2-fg);
+}
+
+.kitchen-week .kw-grid td:focus,
+.kitchen-week .kw-grid td:focus-visible,
+.kitchen-week .kw-grid td:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.kitchen-week .grid-table th:first-child,
+.kitchen-week .grid-table td.diet-name {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 2;
+}
+
+.kitchen-week .grid-table th:first-child {
+  z-index: 3;
+  background: var(--surface-2);
+}
+
+.kitchen-week .day-start {
+  border-left: 3px solid var(--kw-border);
+}
+
+.kitchen-week .kw-cell {
+  padding: 0;
+}
+
+.kitchen-week .kw-cell .kostcell-btn {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.kitchen-week .kostcell-btn {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  min-width: auto;
+  cursor: pointer;
+  pointer-events: auto;
+  color: inherit;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.kitchen-week .kostcell-btn:hover,
+.kitchen-week .kostcell-btn:focus {
+  outline: none;
+  text-decoration: none;
+}
+
+.kitchen-week .kostcell-btn.is-done::before {
+  content: "";
+  position: absolute;
+  width: 1.9em;
+  height: 1.9em;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  box-sizing: border-box;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.kitchen-week .menu-icon {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+
+
+@media print {
+  .kitchen-week .toolbar button,
+  .kitchen-week .toolbar a {
+    display: none !important;
+  }
+
+  .kitchen-week .app-card {
+    width: 100% !important;
+    padding: 8px 10px !important;
+    margin: 0 0 10px !important;
+  }
+
+  .kitchen-week .dept-header {
+    border-bottom: 1px solid #999;
+  }
+
+  .kitchen-week .grid-table {
+    width: 100% !important;
+    font-size: 12.5px !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
+  }
+
+  .kitchen-week .grid-table th,
+  .kitchen-week .grid-table td {
+    border: 1px solid #999 !important;
+    padding: 6px 8px !important;
+    font-size: 12.5px !important;
+  }
+
+  .kitchen-week .grid-table thead th,
+  .kitchen-week .grid-subhead th {
+    background: #fff !important;
+  }
+
+  .kitchen-week .grid-table th {
+    white-space: nowrap !important;
+  }
+
+  .kitchen-week .diet-name {
+    min-width: 120px !important;
+  }
+
+  .kitchen-week .kostcell-btn {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    cursor: default !important;
+    color: #000 !important;
+  }
+
+  .kitchen-week .kostcell-btn.is-done {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .kitchen-week .kostcell-btn.is-done::before {
+    border: 2px solid currentColor !important;
+  }
+}

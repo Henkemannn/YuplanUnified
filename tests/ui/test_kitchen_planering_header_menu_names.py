@@ -30,7 +30,9 @@ def _set_menu_variant(client, week: int, year: int, day: str, meal: str, variant
         "variant_type": variant,
         "dish_name": dish_name,
     }
-    r = client.post("/menu/variant/set", json=payload, headers=HEADERS)
+    hdrs = dict(HEADERS)
+    hdrs["X-Site-Id"] = "site-plan-1"
+    r = client.post("/menu/variant/set", json=payload, headers=hdrs)
     assert r.status_code == 200
 
 

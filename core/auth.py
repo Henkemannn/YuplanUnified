@@ -139,6 +139,15 @@ def _normalize_role(role: str | None) -> str:
     return r
 
 
+def _emit_dev_auth_fingerprint(tag: str) -> None:
+    try:
+        logger = current_app.config.get("DEV_AUTH_FINGERPRINT_LOGGER")
+        if callable(logger):
+            logger(tag)
+    except Exception:
+        pass
+
+
 # --- Routes ---
 @bp.post("/login")
 def login():
@@ -159,6 +168,7 @@ def login():
         resp = make_response(jsonify({"ok": True, "demo": True, "role": role}))
         # Lightweight signed-ish cookie (not cryptographically strong; staging only)
         resp.set_cookie("yp_demo", role, httponly=True, samesite="Lax")
+        _emit_dev_auth_fingerprint("login_ok")
         return resp
     data = request.get_json(silent=True) or {}
     # Fallback to form fields when JSON isn't provided (browser form posts)
@@ -327,6 +337,7 @@ def login():
                 target = "/"
             resp = redirect(target, code=302)
             set_csrf_cookie(resp, csrf_token)
+            _emit_dev_auth_fingerprint("login_ok")
             return resp
         else:
             # JSON/API: if non-superuser and active site is missing, enforce 403
@@ -353,6 +364,7 @@ def login():
                 )
             )
             set_csrf_cookie(resp, csrf_token)
+            _emit_dev_auth_fingerprint("login_ok")
             return resp
     finally:
         db.close()
@@ -367,6 +379,11 @@ def login_get():  # pragma: no cover
     vm = {"error": None}
     # Use render_template so context processors provide csrf helpers
     return render_template("login.html", vm=vm, error_message=None)
+
+
+@bp.get("/forgot")
+def forgot_password():  # pragma: no cover
+    return render_template("auth_forgot.html")
 
 
 @bp.post("/logout")
@@ -510,6 +527,39 @@ def ensure_bootstrap_superuser():
     auto_create = (
         os.getenv("DEV_CREATE_ALL", "0") == "1" or os.getenv("YUPLAN_DEV_CREATE_ALL", "0") == "1"
     )
+    allow_destructive = (
+        os.getenv("ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes")
+        or os.getenv("YUPLAN_ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes")
+    )
+    reloader_flag = os.getenv("WERKZEUG_RUN_MAIN")
+    reloader_ok = (reloader_flag is None) or (reloader_flag == "true")
+    create_allowed = auto_create and allow_destructive and reloader_ok
+
+    import inspect as _inspect
+
+    def _dev_user_log(action: str) -> None:
+        try:
+            env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+            if env_val != "dev" and env_val != "development" and os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+                return
+            frame = _inspect.currentframe()
+            caller = frame.f_back if frame else None
+            func = caller.f_code.co_name if caller else "unknown"
+            line = caller.f_lineno if caller else 0
+            current_app.logger.info(
+                "dev_user_mutation action=%s func=%s file=%s line=%s",
+                action,
+                func,
+                __file__,
+                line,
+            )
+        except Exception:
+            pass
+
+    try:
+        current_app.logger.info("bootstrap_superuser: start auto_create=%s", auto_create)
+    except Exception:
+        pass
 
     try:
         db = get_session()
@@ -519,13 +569,23 @@ def ensure_bootstrap_superuser():
 
     try:
         # Ensure schema exists when allowed in dev
-        if auto_create:
+        if create_allowed:
             try:
                 from .db import create_all as _create_all  # local import to avoid cycles
-
+                try:
+                    current_app.logger.warning("bootstrap_superuser: create_all requested")
+                except Exception:
+                    pass
                 _create_all()
             except Exception:
                 # Non-fatal; continue and let the next step decide
+                pass
+        elif auto_create:
+            try:
+                current_app.logger.warning(
+                    "bootstrap_superuser: create_all blocked (ALLOW_DESTRUCTIVE_DB + WERKZEUG_RUN_MAIN required)"
+                )
+            except Exception:
                 pass
 
         # Check that required tables exist; if not, skip (or they were just created)
@@ -562,6 +622,7 @@ def ensure_bootstrap_superuser():
             role="superuser",
             unit_id=None,
         )
+        _dev_user_log("insert_user")
         db.add(user)
         db.commit()
         try:
@@ -581,7 +642,27 @@ def ensure_dev_superuser_henrik():
     are missing and auto-create not allowed.
     """
     import os as _os
+    import inspect as _inspect
     from werkzeug.security import generate_password_hash as _gph
+
+    def _dev_user_log(action: str) -> None:
+        try:
+            env_val = (_os.getenv("APP_ENV") or _os.getenv("FLASK_ENV") or "").lower()
+            if env_val != "dev" and env_val != "development" and _os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+                return
+            frame = _inspect.currentframe()
+            caller = frame.f_back if frame else None
+            func = caller.f_code.co_name if caller else "unknown"
+            line = caller.f_lineno if caller else 0
+            current_app.logger.info(
+                "dev_user_mutation action=%s func=%s file=%s line=%s",
+                action,
+                func,
+                __file__,
+                line,
+            )
+        except Exception:
+            pass
 
     seed_enabled = (
         _os.getenv("YUPLAN_SEED_HENRIK", "0").lower() in ("1", "true", "yes")
@@ -590,16 +671,38 @@ def ensure_dev_superuser_henrik():
     if not seed_enabled:
         return
     try:
+        current_app.logger.info("dev_superuser_henrik: seed enabled")
+    except Exception:
+        pass
+    try:
         db = get_session()
     except Exception:
         return
     try:
         # Optionally create schema
         try:
-            if _os.getenv("DEV_CREATE_ALL", "0").lower() in ("1", "true", "yes"):
+            dev_create_all = _os.getenv("DEV_CREATE_ALL", "0").lower() in ("1", "true", "yes")
+            allow_destructive = (
+                _os.getenv("ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes")
+                or _os.getenv("YUPLAN_ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes")
+            )
+            reloader_flag = _os.getenv("WERKZEUG_RUN_MAIN")
+            reloader_ok = (reloader_flag is None) or (reloader_flag == "true")
+            create_allowed = dev_create_all and allow_destructive and reloader_ok
+            if create_allowed:
                 from .db import create_all as _create_all
-
+                try:
+                    current_app.logger.warning("dev_superuser_henrik: create_all requested")
+                except Exception:
+                    pass
                 _create_all()
+            elif dev_create_all:
+                try:
+                    current_app.logger.warning(
+                        "dev_superuser_henrik: create_all blocked (ALLOW_DESTRUCTIVE_DB + WERKZEUG_RUN_MAIN required)"
+                    )
+                except Exception:
+                    pass
         except Exception:
             pass
         # Ensure basic tables exist by best-effort inspection
@@ -626,6 +729,7 @@ def ensure_dev_superuser_henrik():
         password = _os.getenv("YUPLAN_SEED_HENRIK_PASSWORD", "Hen1024")
         user = db.query(User).filter(User.email == email.lower()).first()
         if not user:
+            _dev_user_log("insert_user")
             user = User(
                 tenant_id=t.id,
                 email=email.lower(),
@@ -643,10 +747,13 @@ def ensure_dev_superuser_henrik():
             if not user.full_name:
                 user.full_name = "Henrik Jonsson"
             # Always refresh password hash to match requested DEV credentials
-            try:
-                user.password_hash = _gph(password)
-            except Exception:
-                pass
+            seed_overwrite = _os.getenv("YUPLAN_DEV_SEED", "0").lower() in ("1", "true", "yes")
+            if seed_overwrite:
+                _dev_user_log("update_user_password")
+                try:
+                    user.password_hash = _gph(password)
+                except Exception:
+                    pass
         db.commit()
     finally:
         db.close()

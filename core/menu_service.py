@@ -27,7 +27,7 @@ class MenuServiceDB:
     """Database-backed MenuService implementation.
 
     Responsibilities:
-    - create_or_get_menu(tenant_id, week, year)
+    - create_or_get_menu(tenant_id, site_id, week, year)
     - set_variant(...)
     - get_week_view(...): returns structured dict {days: {day: {meal: {variant_type: {dish_id, dish_name}}}}}
       (override handling to be layered later)
@@ -36,15 +36,35 @@ class MenuServiceDB:
     def __init__(self):
         pass
 
-    def create_or_get_menu(self, tenant_id: int, week: int, year: int) -> Menu:
+    def create_or_get_menu(self, tenant_id: int, site_id: str, week: int, year: int) -> Menu:
+        if not site_id:
+            raise ValueError("site_id required")
         db = get_new_session()
         try:
             existing: Menu | None = (
-                db.query(Menu).filter_by(tenant_id=tenant_id, week=week, year=year).first()
+                db.query(Menu)
+                .filter_by(tenant_id=tenant_id, site_id=site_id, week=week, year=year)
+                .first()
             )
             if existing is not None:
                 return existing
-            new_menu = Menu(tenant_id=tenant_id, week=week, year=year, updated_at=datetime.now(timezone.utc))
+            legacy: Menu | None = (
+                db.query(Menu)
+                .filter_by(tenant_id=tenant_id, site_id=None, week=week, year=year)
+                .first()
+            )
+            if legacy is not None:
+                legacy.site_id = site_id
+                db.commit()
+                db.refresh(legacy)
+                return legacy
+            new_menu = Menu(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                week=week,
+                year=year,
+                updated_at=datetime.now(timezone.utc),
+            )
             db.add(new_menu)
             db.commit()
             db.refresh(new_menu)
@@ -113,17 +133,31 @@ class MenuServiceDB:
         finally:
             db.close()
 
-    def get_week_view(self, tenant_id: int, week: int, year: int) -> WeekView:
+    def get_week_view(self, tenant_id: int, site_id: str, week: int, year: int, source: str | None = None) -> WeekView:
         db = get_new_session()
         try:
             # TODO: If multiple versions exist, prefer published over draft
             # For now, prefer published status when querying
-            menu = (
-                db.query(Menu)
-                .filter_by(tenant_id=tenant_id, week=week, year=year)
-                .order_by(Menu.status.desc())  # 'published' > 'draft' alphabetically
-                .first()
-            )
+            if source == "weekview_overview":
+                # Legacy bridge until all menus have site_id
+                menu = (
+                    db.query(Menu)
+                    .filter(
+                        Menu.tenant_id == tenant_id,
+                        Menu.week == week,
+                        Menu.year == year,
+                        (Menu.site_id == site_id) | (Menu.site_id.is_(None)),
+                    )
+                    .order_by(Menu.status.desc())  # 'published' > 'draft' alphabetically
+                    .first()
+                )
+            else:
+                menu = (
+                    db.query(Menu)
+                    .filter_by(tenant_id=tenant_id, site_id=site_id, week=week, year=year)
+                    .order_by(Menu.status.desc())  # 'published' > 'draft' alphabetically
+                    .first()
+                )
             if not menu:
                 return {"menu_id": None, "menu_status": None, "updated_at": None, "days": {}}  # type: ignore[return-value]
             # Ensure updated_at populated (older seed data may have NULL)

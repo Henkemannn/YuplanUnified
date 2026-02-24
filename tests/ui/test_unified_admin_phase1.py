@@ -5,7 +5,8 @@ Tests navigation shell, dashboard, permissions, and static assets.
 
 import pytest
 import uuid
-from datetime import date as _date
+from datetime import date as _date, timedelta
+from sqlalchemy import text
 
 
 def _h(role):
@@ -24,7 +25,101 @@ def test_admin_dashboard_happy_path_admin(client_admin):
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     assert "Adminpanel" in html
-    assert "Välkommen till Adminpanelen" in html
+    assert "Översikt" in html
+    assert "Idag" in html
+    assert "data-testid=\"dashboard-today-card\"" in html
+    assert "Menyval – kommande 4 veckor" in html
+    assert "Kom ihåg att beställa" in html
+    assert "Bockade rader visas i 2 dagar och rensas sedan automatiskt." in html
+    assert "Veckostatus" not in html
+    assert "Meny framåt" not in html
+    assert "Kommunikation mellan avdelningar" not in html
+    assert "Spara" not in html
+
+
+def test_admin_dashboard_menu_choice_status_missing_week(client_admin):
+    app = client_admin.application
+    from core.db import get_session
+    from core.week_key import build_week_key
+
+    site_id = "site-menu"
+    base = _date.today()
+    week_keys = []
+    menu_weeks = []
+    for i in range(4):
+        dt = base + timedelta(weeks=i)
+        year, week, _ = dt.isocalendar()
+        menu_weeks.append((int(year), int(week)))
+        week_keys.append(build_week_key(int(year), int(week)))
+
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, version INTEGER)"))
+            db.execute(text("CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT, name TEXT, resident_count_mode TEXT, resident_count_fixed INTEGER, version INTEGER)"))
+            db.execute(
+                text("INSERT OR REPLACE INTO sites(id,name,version) VALUES(:id,:name,0)"),
+                {"id": site_id, "name": "TestSite"},
+            )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO departments(id,site_id,name,resident_count_mode,resident_count_fixed,version) "
+                    "VALUES('dep-a',:sid,'Avd A','fixed',0,0)"
+                ),
+                {"sid": site_id},
+            )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO departments(id,site_id,name,resident_count_mode,resident_count_fixed,version) "
+                    "VALUES('dep-b',:sid,'Avd B','fixed',0,0)"
+                ),
+                {"sid": site_id},
+            )
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS menus(id INTEGER PRIMARY KEY, tenant_id INTEGER, week INTEGER, year INTEGER, status TEXT, updated_at TEXT)"
+                )
+            )
+            for year, week in menu_weeks:
+                db.execute(
+                    text("INSERT OR REPLACE INTO menus(id, tenant_id, year, week, status) VALUES(:id, 1, :y, :w, 'published')"),
+                    {"id": int(f"{year}{week:02d}"), "y": year, "w": week},
+                )
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS menu_choice_completion(site_id TEXT NOT NULL, department_id TEXT NOT NULL, week_key TEXT NOT NULL, completed_at TEXT, UNIQUE(site_id, department_id, week_key))"
+                )
+            )
+            for wk in week_keys:
+                db.execute(
+                    text(
+                        "INSERT OR REPLACE INTO menu_choice_completion(site_id, department_id, week_key, completed_at) "
+                        "VALUES(:sid, 'dep-a', :wk, '2026-01-01T00:00:00Z')"
+                    ),
+                    {"sid": site_id, "wk": wk},
+                )
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO menu_choice_completion(site_id, department_id, week_key, completed_at) "
+                    "VALUES(:sid, 'dep-b', :wk, NULL)"
+                ),
+                {"sid": site_id, "wk": week_keys[0]},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+
+    resp = client_admin.get("/ui/admin", headers=_h("admin"))
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    assert "Menyval – kommande 4 veckor" in html
+    assert "1 avdelningar ligger inte i fas" in html
+    assert "Visa avdelningar och saknade veckor" in html
+    assert "avdelningar ligger inte i fas" in html
 
 
 def test_admin_dashboard_happy_path_superuser(client_superuser):
@@ -78,42 +173,35 @@ def test_admin_dashboard_sidebar_present(client_admin):
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    assert 'class="admin-sidebar"' in html
-    assert 'class="sidebar-nav"' in html
-    assert "Översikt" in html  # Dashboard link
-    assert "Menyimport" in html
+    assert 'class="app-shell__sidebar"' in html
+    assert 'class="app-shell__nav"' in html
+    assert "Översikt" in html
+    assert "Veckovy" in html
     assert "Avdelningar" in html
-    assert "Användare" in html
-    assert "Rapporter" in html
-    assert "Inställningar" in html
-    assert "Tillbaka till Veckovy" in html
+    assert "Menyimport" in html
+    assert "Specialkost" in html
+    assert "Rapport / Statistik" in html
 
 
 def test_admin_dashboard_quick_links_present(client_admin):
-    """Test all 6 quick link cards are present."""
+    """Test dashboard quick links are present."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    assert 'class="quick-links-grid"' in html
-    assert 'class="quick-link-card"' in html
-    
-    # Check all 6 cards
-    assert "Menyimport & Veckomeny" in html
     assert "Avdelningar" in html
-    assert "Användare" in html
-    assert "Rapporter" in html
-    assert "Inställningar" in html
-    assert "Tillbaka till Veckovy" in html
+    assert "Menyimport" in html
+    assert "Specialkost" in html
+    assert "Rapport" in html
 
 
-def test_admin_dashboard_flash_area_present(client_admin):
-    """Test flash message area exists."""
+def test_admin_dashboard_layout_structure(client_admin):
+    """Test app shell layout structure exists."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    # Flash container should be in the template structure
-    assert 'class="content-header"' in html
-    assert 'class="page-content"' in html
+    assert 'class="app-shell__page-header"' in html
+    assert 'class="app-shell__grid"' in html
+    assert 'class="app-shell__card"' in html
 
 
 def test_admin_dashboard_current_week_displayed(client_admin):
@@ -133,19 +221,21 @@ def test_admin_dashboard_current_week_displayed(client_admin):
 # ============================================================================
 
 def test_admin_dashboard_css_loaded(client_admin):
-    """Test unified_admin.css is linked."""
+    """Test app shell CSS is linked."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    assert 'unified_admin.css' in html
+    assert 'css/app_shell.css' in html
+    assert 'unified_admin.css' not in html
 
 
 def test_admin_dashboard_js_loaded(client_admin):
-    """Test unified_admin.js is linked."""
+    """Test app shell JS is linked."""
     resp = client_admin.get("/ui/admin", headers=_h("admin"))
     html = resp.data.decode("utf-8")
     
-    assert 'unified_admin.js' in html
+    assert 'js/app_shell.js' in html
+    assert 'unified_admin.js' not in html
 
 
 # ============================================================================
@@ -153,7 +243,7 @@ def test_admin_dashboard_js_loaded(client_admin):
 # ============================================================================
 
 def test_admin_navigation_link_visible_to_admin(client_admin):
-    """Test admin sees admin link in weekview."""
+    """Test admin does not see admin link in weekview (pilot)."""
     app = client_admin.application
     site_id = str(uuid.uuid4())
     dep_id = str(uuid.uuid4())
@@ -184,13 +274,12 @@ def test_admin_navigation_link_visible_to_admin(client_admin):
     )
     html = resp.data.decode("utf-8")
     
-    # Should have admin button
-    assert "Admin" in html
-    assert "/ui/admin" in html
+    # Admin link should be hidden in pilot
+    assert "Admin" not in html
 
 
 def test_admin_navigation_link_visible_to_superuser(client_superuser):
-    """Test superuser sees admin link in weekview."""
+    """Test superuser does not see admin link in weekview (pilot)."""
     app = client_superuser.application
     site_id = str(uuid.uuid4())
     dep_id = str(uuid.uuid4())
@@ -221,9 +310,8 @@ def test_admin_navigation_link_visible_to_superuser(client_superuser):
     )
     html = resp.data.decode("utf-8")
     
-    # Should have admin button
-    assert "Admin" in html
-    assert "/ui/admin" in html
+    # Admin link should be hidden in pilot
+    assert "Admin" not in html
 
 
 def test_admin_navigation_link_hidden_from_staff(client_user):
@@ -267,6 +355,6 @@ def test_weekview_link_in_admin_sidebar(client_admin):
     html = resp.data.decode("utf-8")
     
     # Should have weekview link in sidebar
-    assert "Tillbaka till Veckovy" in html
+    assert "Veckovy" in html
     assert "/ui/weekview" in html
 

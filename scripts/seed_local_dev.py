@@ -35,6 +35,22 @@ STAFF_EMAIL = "staff@dev.local"
 STAFF_PASSWORD = "admin123!"
 
 
+def _dev_user_log(action: str) -> None:
+    try:
+        env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+        if env_val != "dev" and env_val != "development" and os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+            return
+        import inspect
+
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame else None
+        func = caller.f_code.co_name if caller else "unknown"
+        line = caller.f_lineno if caller else 0
+        print(f"DEV_USER_MUTATION action={action} func={func} file={__file__} line={line}")
+    except Exception:
+        pass
+
+
 def table_exists(conn, table: str) -> bool:
     try:
         engine = getattr(conn, "bind", conn)
@@ -145,6 +161,7 @@ def main() -> int:
             else:
                 # Use the app's hashing helper
                 pw_hash = app_hash(ADMIN_PASSWORD)
+                _dev_user_log("insert_user")
                 params = {
                     "tenant_id": tenant_id,
                     "email": ADMIN_EMAIL.lower(),
@@ -179,6 +196,7 @@ def main() -> int:
                 sys_created = False
             else:
                 pw_hash2 = app_hash(SYSADMIN_PASSWORD)
+                _dev_user_log("insert_user")
                 params2 = {
                     "tenant_id": tenant_id,
                     "email": SYSADMIN_EMAIL.lower(),
@@ -212,6 +230,7 @@ def main() -> int:
                 staff_created = False
             else:
                 pw_hash3 = app_hash(STAFF_PASSWORD)
+                _dev_user_log("insert_user")
                 params3 = {
                     "tenant_id": tenant_id,
                     "email": STAFF_EMAIL.lower(),

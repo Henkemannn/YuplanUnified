@@ -52,7 +52,7 @@ def test_weekview_ui_renders_diets_and_mark_state(client_admin):
             d_dinner = Dish(tenant_id=1, name="Soppa", category=None)
             db.add(d_dinner)
             db.commit(); db.refresh(d_dinner)
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="wed", meal="dinner", variant_type="alt1", dish_id=d_dinner.id)
 
             # Diet defaults: Gluten(2), Laktos(1)

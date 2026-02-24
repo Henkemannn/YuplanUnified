@@ -51,7 +51,7 @@ def test_admin_specialkost_list_shows_diet_types(client_admin: FlaskClient):
     
     # Check page structure
     assert "Specialkost" in html
-    assert "Lägg till ny kosttyp" in html
+    assert "Skapa specialkost" in html
     
     # Check seeded diet types appear
     assert "Vegetarisk" in html
@@ -176,7 +176,7 @@ def test_admin_specialkost_list_empty_when_none(app_session: Flask):
     
     # Template should handle empty state gracefully
     assert "Specialkost" in html
-    assert "Lägg till ny kosttyp" in html
+    assert "Skapa specialkost" in html
     # Table might be empty or show "Inga kosttyper"
     assert "Vegetarisk" not in html
     assert "Glutenfri" not in html

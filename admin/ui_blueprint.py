@@ -566,7 +566,41 @@ def admin_menu_import() -> str:  # type: ignore[override]
     finally:
         db.close()
     
-    vm = {"weeks": weeks}
+    import datetime as _dt
+
+    iso = _dt.date.today().isocalendar()
+    current_year = int(iso[0])
+    current_week = int(iso[1])
+    weeks_sorted = sorted(weeks, key=lambda w: (w["year"], w["week"]), reverse=True)
+    active_weeks = [w for w in weeks_sorted if (w["year"], w["week"]) >= (current_year, current_week)]
+    archive_weeks = [w for w in weeks_sorted if (w["year"], w["week"]) < (current_year, current_week)]
+    archive_years = []
+    archive_index = {}
+    for w in archive_weeks:
+        year = w["year"]
+        entry = archive_index.get(year)
+        if not entry:
+            entry = {"year": year, "weeks": []}
+            archive_index[year] = entry
+            archive_years.append(entry)
+        entry["weeks"].append(w)
+
+    import_summary = None
+    try:
+        from flask import session as _sess
+        import_summary = _sess.pop("import_summary", None)
+    except Exception:
+        import_summary = None
+
+    vm = {
+        "weeks": weeks_sorted,
+        "active_weeks": active_weeks,
+        "archive_years": archive_years,
+        "current_year": current_year,
+        "current_week": current_week,
+    }
+    if import_summary:
+        vm["import_summary"] = import_summary
     return render_template("admin_menu_import.html", vm=vm)
 
 
@@ -647,6 +681,7 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
     try:
         menu_service = MenuServiceDB()
         import_service = MenuImportService(menu_service)
+        site_id = request.args.get("site_id") or session.get("site_id")
         if fname_low.endswith('.csv'):
             rows = parse_menu_csv(uploaded_file.stream)
             import_result = csv_rows_to_import_result(rows)
@@ -661,18 +696,21 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
             flash("Ogiltigt menyformat eller saknad fil.", "danger")
             return redirect(url_for("admin_ui.admin_menu_import"))
 
-        summary = import_service.apply(tenant_id, import_result)
+        summary = import_service.apply(tenant_id, site_id, import_result)
         weeks = summary.get("weeks", [])
         created_total = sum(int(w.get("created", 0)) for w in weeks)
         updated_total = sum(int(w.get("updated", 0)) for w in weeks)
         skipped_total = sum(int(w.get("skipped", 0)) for w in weeks)
         weeks_imported = len(weeks)
-        flash(
-            f"Menyn importerad: {created_total} skapade, "
-            f"{updated_total} uppdaterade, "
-            f"{skipped_total} hoppade över ({weeks_imported} veckor).",
-            "success",
-        )
+        try:
+            _sess["import_summary"] = {
+                "weeks": weeks_imported,
+                "created": created_total,
+                "updated": updated_total,
+                "skipped": skipped_total,
+            }
+        except Exception:
+            flash("Import klar.", "success")
         return redirect(url_for("admin_ui.admin_menu_import"))
     except MenuCSVParseError as e:
         flash(f"Ogiltigt menyformat: {e}", "danger")
@@ -687,26 +725,51 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
 def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[override]
     """Display menu variants for a specific week."""
     from core.etag_utils import generate_menu_etag
+    from core.db import get_session
+    from core.models import Menu
+    from datetime import datetime, timezone
     
     tenant_id = 1  # TODO: Extract from session
-    
-    menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
-    
-    if not week_view or not week_view.get("menu_id"):
-        flash(f"Ingen meny hittades för vecka {week}/{year}.", "warning")
+    site_id = request.args.get("site_id") or session.get("site_id")
+
+    db = get_session()
+    try:
+        menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+        if (not menu) and site_id:
+            orphan = db.query(Menu).filter_by(tenant_id=tenant_id, year=year, week=week, site_id=None).first()
+            if orphan:
+                orphan.site_id = site_id
+                db.commit()
+                menu = orphan
+        menu_id = menu.id if menu else None
+        menu_updated_at = getattr(menu, "updated_at", None) if menu else None
+        if menu is not None and menu_updated_at is None:
+            menu.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(menu)
+            menu_updated_at = menu.updated_at
+    finally:
+        db.close()
+
+    if not menu:
+        flash("Ingen meny hittades för vald site.", "warning")
         return redirect(url_for("admin_ui.admin_menu_import"))
+
+    menu_service = MenuServiceDB()
+    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
+    raw_status = (week_view or {}).get("menu_status") or getattr(menu, "status", None)
+    menu_status = str(raw_status or "draft").strip().lower()
     
     # Generate ETag for optimistic locking
-    etag = generate_menu_etag(week_view["menu_id"], week_view["updated_at"])
+    etag = generate_menu_etag(menu_id, menu_updated_at)
     
     vm = {
         "year": year,
         "week": week,
-        "menu_id": week_view["menu_id"],
-        "menu_status": week_view.get("menu_status", "draft"),
+        "menu_id": menu_id,
+        "menu_status": menu_status,
         "etag": etag,
-        "days": week_view.get("days", {})
+        "days": (week_view or {}).get("days", {})
     }
     
     response = make_response(render_template("admin_menu_import_week.html", vm=vm))
@@ -719,25 +782,51 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
 def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[override]
     """Edit menu variants for a specific week."""
     from core.etag_utils import generate_menu_etag
+    from core.db import get_session
+    from core.models import Menu
+    from datetime import datetime, timezone
     
     tenant_id = 1  # TODO: Extract from session
-    
-    menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
-    
-    if not week_view or not week_view.get("menu_id"):
+    site_id = request.args.get("site_id") or session.get("site_id")
+
+    db = get_session()
+    try:
+        if site_id:
+            menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+            if not menu:
+                legacy = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=None, year=year, week=week).first()
+                if legacy is not None:
+                    legacy.site_id = site_id
+                    db.commit()
+                    menu = legacy
+        else:
+            menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=None, year=year, week=week).first()
+        menu_id = menu.id if menu else None
+        menu_updated_at = getattr(menu, "updated_at", None) if menu else None
+        if menu is not None and menu_updated_at is None:
+            menu.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(menu)
+            menu_updated_at = menu.updated_at
+    finally:
+        db.close()
+
+    if not menu:
         flash(f"Ingen meny hittades för vecka {week}/{year}.", "warning")
         return redirect(url_for("admin_ui.admin_menu_import"))
     
+    menu_service = MenuServiceDB()
+    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
+
     # Generate ETag
-    etag = generate_menu_etag(week_view["menu_id"], week_view["updated_at"])
+    etag = generate_menu_etag(menu_id, menu_updated_at)
     
     vm = {
         "year": year,
         "week": week,
-        "menu_id": week_view["menu_id"],
+        "menu_id": menu_id,
         "etag": etag,
-        "days": week_view.get("days", {})
+        "days": (week_view or {}).get("days", {})
     }
     return render_template("admin_menu_import_week_edit.html", vm=vm)
 
@@ -751,15 +840,24 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
     from core.etag_utils import validate_etag
     
     tenant_id = 1  # TODO: Extract from session
+    site_id = request.args.get("site_id") or session.get("site_id")
     
-    menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
-    
-    if not week_view or not week_view.get("menu_id"):
-        flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
-        return redirect(url_for("admin_ui.admin_menu_import"))
-    
-    menu_id = week_view["menu_id"]
+    db = get_session()
+    try:
+        menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+        if (not menu) and site_id:
+            orphan = db.query(Menu).filter_by(tenant_id=tenant_id, year=year, week=week, site_id=None).first()
+            if orphan:
+                orphan.site_id = site_id
+                db.commit()
+                menu = orphan
+        if not menu:
+            flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
+            return redirect(url_for("admin_ui.admin_menu_import"))
+        menu_id = menu.id
+        menu_updated_at = menu.updated_at
+    finally:
+        db.close()
     
     # Validate ETag from If-Match header or form data
     if_match = request.headers.get("If-Match") or request.form.get("_etag")
@@ -771,7 +869,7 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
         else:
             is_valid, error_msg = False, "If-Match header required for this operation"
     else:
-        is_valid, error_msg = validate_etag(if_match, menu_id, week_view["updated_at"])
+        is_valid, error_msg = validate_etag(if_match, menu_id, menu_updated_at)
     
     if not is_valid:
         # Return 412 Precondition Failed for AJAX, flash for form submit
@@ -842,9 +940,10 @@ def admin_menu_import_week_publish(year: int, week: int) -> str:  # type: ignore
     from core.etag_utils import validate_etag
     
     tenant_id = 1  # TODO: Extract from session
+    site_id = request.args.get("site_id") or session.get("site_id")
     
     menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
+    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
     
     if not week_view or not week_view.get("menu_id"):
         flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
@@ -884,9 +983,10 @@ def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: igno
     from core.etag_utils import validate_etag
     
     tenant_id = 1  # TODO: Extract from session
+    site_id = request.args.get("site_id") or session.get("site_id")
     
     menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
+    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
     
     if not week_view or not week_view.get("menu_id"):
         flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
@@ -1301,6 +1401,13 @@ def systemadmin_switch_site(site_id: str):
         # Persist selected site context and start impersonation for tenant
         from flask import session as _sess
         _sess["site_id"] = site_id
+        _sess["tenant_id"] = tenant_id
+        _sess.pop("site_lock", None)
+        try:
+            import uuid as _uuid
+            _sess["site_context_version"] = str(_uuid.uuid4())
+        except Exception:
+            pass
         start_impersonation(tenant_id, f"switch-site:{site_id}")
     except Exception:
         flash("Kunde inte starta impersonation.", "danger")

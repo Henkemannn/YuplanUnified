@@ -10,7 +10,7 @@ except Exception:  # pragma: no cover
 
 from sqlalchemy import text
 
-from ..db import get_session
+from ..db import allow_destructive_db, get_session
 
 
 class WeekviewRepo:
@@ -91,17 +91,17 @@ class WeekviewRepo:
                     """
                 )
             )
-            # Canonicalization/migration guard: dev/test only, or explicit env flag
+            # Canonicalization/migration guard: explicit env flag or tests only
             try:
-                # Allow when YUPLAN_ALLOW_SCHEMA_REPAIR truthy, or Flask TESTING/DEBUG
                 allow_env = os.getenv("YUPLAN_ALLOW_SCHEMA_REPAIR", "0").lower() in ("1", "true", "yes")
                 allow_cfg = False
+                cfg = None
                 try:
                     if flask_current_app is not None:
                         cfg = flask_current_app.config  # may raise if no app context
-                        allow_cfg = bool(cfg.get("TESTING") or cfg.get("DEBUG"))
                 except Exception:
-                    allow_cfg = False
+                    cfg = None
+                allow_cfg = allow_destructive_db(cfg)
                 if allow_env or allow_cfg:
                     cols_rows = db.execute(text("PRAGMA table_info('weekview_alt2_flags')")).fetchall()
                     cols = {str(r[1]) for r in cols_rows}

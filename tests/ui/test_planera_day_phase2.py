@@ -28,9 +28,9 @@ def _seed_site_with_departments(app, dep_count=3):
             db.close()
 
 
-def _seed_menu_for_day(app, year, week, dep_ids):
+def _seed_menu_for_day(app, site_id, year, week, dep_ids):
     from core.models import Dish
-    menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+    menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
     from core.db import get_new_session
     db = get_new_session()
     try:
@@ -47,7 +47,7 @@ def test_get_planera_day_overview(client_admin):
     app = client_admin.application
     site_id, dep_ids = _seed_site_with_departments(app, dep_count=3)
     today = _date.today(); year, week, _ = today.isocalendar()
-    _seed_menu_for_day(app, year, week, dep_ids)
+    _seed_menu_for_day(app, site_id, year, week, dep_ids)
 
     r = client_admin.get(f"/ui/planera/day?ui=unified&site_id={site_id}&date={today.isoformat()}&meal=lunch", headers=ADMIN_HEADERS)
     assert r.status_code == 200

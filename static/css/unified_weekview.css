@@ -48,6 +48,94 @@
   padding: var(--wv-spacing-lg);
 }
 
+/* Read-only admin weekview */
+.weekview--readonly .kostcell-btn {
+  pointer-events: none;
+  cursor: default;
+}
+
+.weekview--readonly .kw-cell {
+  cursor: default;
+}
+
+.weekview--readonly .menu-icon {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Admin-only modal overlay/backdrop */
+body.menu-modal-open::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 9999;
+}
+
+/* HARD GUARD: menu modal must never be visible unless explicitly opened */
+#menuModal[hidden] {
+  display: none !important;
+}
+
+.ui-weekview #menuModal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  background: transparent;
+}
+
+.ui-weekview #menuModal.is-open {
+  display: flex;
+}
+
+.ui-weekview #menuModal .menu-modal__content {
+  position: relative;
+  z-index: 10001;
+}
+
+.app-shell--dark .ui-weekview .menu-modal__content {
+  background: #0f1b2d;
+  color: #e7eefc;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55);
+}
+
+.app-shell--dark .ui-weekview .menu-modal__header,
+.app-shell--dark .ui-weekview .menu-modal__header-title {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.app-shell--dark .ui-weekview .menu-modal__meta,
+.app-shell--dark .ui-weekview .menu-modal__subtitle {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.app-shell--dark .ui-weekview .menu-modal__item {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.app-shell--dark .ui-weekview .menu-modal__item--muted,
+.app-shell--dark .ui-weekview .menu-modal__item.is-muted {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.app-shell--dark .ui-weekview .menu-modal__close,
+.app-shell--dark .ui-weekview .menu-modal__x {
+  color: rgba(255, 255, 255, 0.70);
+}
+
+.app-shell--dark .ui-weekview .chip,
+.app-shell--dark .ui-weekview .pill,
+.app-shell--dark .ui-weekview .badge {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+
 /* Header */
 .weekview-header {
   margin-bottom: var(--wv-spacing-xl);
@@ -197,6 +285,34 @@
   padding: var(--yp-gap-lg);
   background: var(--yp-color-bg-alt);
   overflow-x: auto;
+}
+
+.kostcell-btn {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6em;
+  min-height: 1.6em;
+  position: relative;
+  font-weight: 600;
+  color: inherit;
+}
+
+.kostcell-btn.is-done::before {
+  content: "";
+  position: absolute;
+  width: 1.8em;
+  height: 1.8em;
+  border: 2px solid var(--yp-color-success);
+  border-radius: 50%;
+  box-sizing: border-box;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 /* Day Cell - Premium Card Design */

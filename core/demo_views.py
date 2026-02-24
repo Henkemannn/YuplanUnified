@@ -55,8 +55,9 @@ def index():
     week = int(today.strftime("%W")) or 1
     year = today.year
     tenant_id = session.get("tenant_id")
+    site_id = request.args.get("site_id") or session.get("site_id")
     svc = current_app.menu_service  # type: ignore[attr-defined]
-    week_view = svc.get_week_view(tenant_id, week, year)
+    week_view = svc.get_week_view(tenant_id, site_id, week, year)
     inner = """
     <p>Vecka {{ week }} / {{ year }} (tenant {{ tenant_id }})</p>
     {% if week_view.menu_id %}

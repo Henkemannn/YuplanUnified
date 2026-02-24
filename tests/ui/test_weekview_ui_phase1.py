@@ -1,3 +1,4 @@
+import re
 import uuid
 
 import pytest
@@ -30,6 +31,7 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
     from core.db import create_all, get_session
     from sqlalchemy import text
     from core.models import Dish
+    from core.admin_repo import DietTypesRepo, DepartmentsRepo
 
     with app.app_context():
         create_all()
@@ -46,13 +48,23 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
             db.add_all([d1, d2, d3, d4])
             db.commit()
             db.refresh(d1); db.refresh(d2); db.refresh(d3); db.refresh(d4)
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            d1_id = d1.id
+            d2_id = d2.id
+            d3_id = d3.id
+            d4_id = d4.id
+            diet_id = DietTypesRepo().create(site_id=site_id, name="Gluten", default_select=False)
+            DepartmentsRepo().upsert_department_diet_defaults(
+                dep_id,
+                0,
+                [{"diet_type_id": str(diet_id), "default_count": 2}],
+            )
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             # Monday lunch alt1/alt2/dessert
-            app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
-            app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt2", dish_id=d2.id)
-            app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="dessert", dish_id=d3.id)
+            app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1_id)
+            app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt2", dish_id=d2_id)
+            app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="dessert", dish_id=d3_id)
             # Tuesday dinner alt1
-            app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tue", meal="dinner", variant_type="alt1", dish_id=d4.id)
+            app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tue", meal="dinner", variant_type="alt1", dish_id=d4_id)
         finally:
             db.close()
 
@@ -89,6 +101,23 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
         headers={**_h("admin"), "If-Match": etag1},
     )
     assert r_res.status_code in (200, 201)
+    etag2 = r_res.headers.get("ETag") or etag1
+
+    r_mark = client_admin.post(
+        "/api/weekview/specialdiets/mark",
+        json={
+            "year": year,
+            "week": week,
+            "department_id": dep_id,
+            "diet_type_id": str(diet_id),
+            "meal": "Lunch",
+            "weekday_abbr": "Mån",
+            "marked": True,
+            "site_id": site_id,
+        },
+        headers={**_h("admin"), "If-Match": etag2},
+    )
+    assert r_mark.status_code == 200
 
     # Render UI
     r_ui = client_admin.get(
@@ -97,14 +126,24 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
     )
     assert r_ui.status_code == 200
     html = r_ui.get_data(as_text=True)
-    # Header
-    assert f"Vecka {week} – Avd 1, Varberg" in html
-    # Menu
-    assert "Köttbullar" in html and "Fiskgratäng" in html and "Vaniljpudding" in html
-    # Alt2 highlight present on lunch alt2 cell
-    assert "alt2-gul" in html
-    # Dinner columns present (we added a dinner dish on Tue) using new label
-    assert "Kvällsmat Alt 1" in html
+    assert "data-testid=\"app-shell\"" in html
+    assert "data-testid=\"weekview-grid\"" in html
+    assert "data-testid=\"day-menu-icon\"" in html
+    assert "Veckovy" in html
+    assert "app-shell__nav-item app-shell__nav-item--active\" href=\"/ui/weekview\">Veckovy" in html
+    assert "Rapport / Statistik" in html
+    assert "Specialkost" in html
+    assert "Menyimport" in html
+    assert "Avdelningar" in html
+    assert "Planera" not in html
+    assert "Avdelningsportal" not in html
+    assert "DEBUG:" not in html
+    assert "Aktiv site:" not in html
+    assert "kostcell-btn" in html
+    assert "is-alt2" in html
+    assert "is-done" in html
+    assert "Gluten" in html
+    assert not re.search(r">\d+ \[", html)
 
 
 @pytest.mark.usefixtures("enable_weekview")
@@ -129,7 +168,7 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
             d1 = Dish(tenant_id=1, name="Pytt i panna", category=None)
             db.add(d1)
             db.commit(); db.refresh(d1)
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
         finally:
             db.close()
@@ -146,6 +185,220 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
     )
     assert r_ui.status_code == 200
     html = r_ui.get_data(as_text=True)
+    assert "data-testid=\"app-shell\"" in html
+    assert "data-testid=\"weekview-grid\"" in html
+    assert "data-testid=\"day-menu-icon\"" in html
+    assert "Veckovy" in html
+    assert "app-shell__nav-item app-shell__nav-item--active\" href=\"/ui/weekview\">Veckovy" in html
+    assert "Rapport / Statistik" in html
+    assert "Specialkost" in html
+    assert "Menyimport" in html
+    assert "Avdelningar" in html
+    assert "Planera" not in html
+    assert "Avdelningsportal" not in html
+    assert "DEBUG:" not in html
+    assert "Aktiv site:" not in html
     assert "Vecka" in html and "Avd 2" in html and "Varberg" in html
-    # Dinner columns hidden when no dinner data
-    assert "Kvällsmat Alt 1" not in html and "Kvällsmat Alt 2" not in html
+
+
+@pytest.mark.usefixtures("enable_weekview")
+def test_weekview_ui_empty_params_redirects_without_500(client_admin):
+    site_id = str(uuid.uuid4())
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+
+    resp = client_admin.get(
+        "/ui/weekview?site_id=&department_id=&year=2026&week=8",
+        headers=_h("admin"),
+        follow_redirects=False,
+    )
+    assert resp.status_code in (200, 302)
+
+
+@pytest.mark.usefixtures("enable_weekview")
+def test_weekview_ui_empty_department_id_does_not_500(client_admin):
+    app = client_admin.application
+    site_id = str(uuid.uuid4())
+    dep_id = str(uuid.uuid4())
+
+    from core.db import create_all, get_session
+    from sqlalchemy import text
+
+    with app.app_context():
+        create_all()
+        db = get_session()
+        try:
+            db.execute(
+                text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"),
+                {"i": site_id, "n": "Varberg"},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"
+                ),
+                {"i": dep_id, "s": site_id, "n": "Avd 1"},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+
+    resp = client_admin.get(
+        f"/ui/weekview?site_id={site_id}&department_id=&year=2026&week=8",
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "data-testid=\"app-shell\"" in html
+    assert "data-testid=\"weekview-grid\"" in html
+
+
+@pytest.mark.usefixtures("enable_weekview")
+def test_weekview_ui_filters_orphan_diets_single_department(client_admin):
+    app = client_admin.application
+    site_id = str(uuid.uuid4())
+    dep_id = str(uuid.uuid4())
+    year, week = 2026, 8
+
+    from core.db import create_all, get_session
+    from sqlalchemy import text
+    from core.admin_repo import DietTypesRepo
+
+    with app.app_context():
+        create_all()
+        db = get_session()
+        try:
+            db.execute(
+                text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"),
+                {"i": site_id, "n": "Varberg"},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"
+                ),
+                {"i": dep_id, "s": site_id, "n": "Avd 9"},
+            )
+            diet_a = DietTypesRepo().create(site_id=site_id, name="Gluten", default_select=False)
+            diet_b = DietTypesRepo().create(site_id=site_id, name="Laktos", default_select=False)
+            db.execute(
+                text(
+                    "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
+                    "VALUES(:d,:dt,:c)"
+                ),
+                {"d": dep_id, "dt": str(diet_a), "c": 2},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
+                    "VALUES(:d,:dt,:c)"
+                ),
+                {"d": dep_id, "dt": str(diet_b), "c": 3},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
+                    "VALUES(:d,:dt,:c)"
+                ),
+                {"d": dep_id, "dt": "999", "c": 4},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+
+    resp = client_admin.get(
+        f"/ui/weekview?site_id={site_id}&department_id={dep_id}&year={year}&week={week}",
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Gluten" in html
+    assert "Laktos" in html
+    assert "Okänd kost" not in html
+
+
+@pytest.mark.usefixtures("enable_weekview")
+def test_weekview_ui_filters_orphan_diets_all_departments(client_admin):
+    app = client_admin.application
+    site_id = str(uuid.uuid4())
+    dep_a = str(uuid.uuid4())
+    dep_b = str(uuid.uuid4())
+    year, week = 2026, 9
+
+    from core.db import create_all, get_session
+    from sqlalchemy import text
+    from core.admin_repo import DietTypesRepo
+
+    with app.app_context():
+        create_all()
+        db = get_session()
+        try:
+            db.execute(
+                text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0) ON CONFLICT(id) DO NOTHING"),
+                {"i": site_id, "n": "Varberg"},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"
+                ),
+                {"i": dep_a, "s": site_id, "n": "Avd A"},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES(:i,:s,:n,'fixed',0,0) ON CONFLICT(id) DO NOTHING"
+                ),
+                {"i": dep_b, "s": site_id, "n": "Avd B"},
+            )
+            diet_a = DietTypesRepo().create(site_id=site_id, name="Gluten", default_select=False)
+            diet_b = DietTypesRepo().create(site_id=site_id, name="Laktos", default_select=False)
+            for dep_id in (dep_a, dep_b):
+                db.execute(
+                    text(
+                        "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
+                        "VALUES(:d,:dt,:c)"
+                    ),
+                    {"d": dep_id, "dt": str(diet_a), "c": 2},
+                )
+                db.execute(
+                    text(
+                        "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
+                        "VALUES(:d,:dt,:c)"
+                    ),
+                    {"d": dep_id, "dt": str(diet_b), "c": 3},
+                )
+                db.execute(
+                    text(
+                        "INSERT INTO department_diet_defaults(department_id, diet_type_id, default_count) "
+                        "VALUES(:d,:dt,:c)"
+                    ),
+                    {"d": dep_id, "dt": "999", "c": 4},
+                )
+            db.commit()
+        finally:
+            db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+
+    resp = client_admin.get(
+        f"/ui/weekview?site_id={site_id}&department_id=&year={year}&week={week}",
+        headers=_h("admin"),
+    )
+    assert resp.status_code in (200, 302)
+    html = resp.get_data(as_text=True)
+    assert "Gluten" in html
+    assert "Laktos" in html
+    assert "Okänd kost" not in html

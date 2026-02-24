@@ -25,8 +25,8 @@ def _build_minimal_docx() -> bytes:
 
 
 @pytest.mark.skipif(docx is None, reason="python-docx not installed")
-def test_docx_upload_returns_success(app_session) -> None:
-    client: FlaskClient = app_session.test_client()
+def test_docx_upload_returns_success(client_admin) -> None:
+    client: FlaskClient = client_admin
     data = {"menu_file": (BytesIO(_build_minimal_docx()), "test_menu.docx")}
     resp = client.post(
         "/ui/admin/menu-import/upload",

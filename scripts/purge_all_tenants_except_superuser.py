@@ -23,6 +23,22 @@ from core import create_app
 from core.db import get_session
 
 
+def _dev_user_log(action: str) -> None:
+    try:
+        env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+        if env_val != "dev" and env_val != "development" and os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+            return
+        import inspect
+
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame else None
+        func = caller.f_code.co_name if caller else "unknown"
+        line = caller.f_lineno if caller else 0
+        print(f"DEV_USER_MUTATION action={action} func={func} file={__file__} line={line}")
+    except Exception:
+        pass
+
+
 def table_exists(conn, table: str) -> bool:
     try:
         if conn.bind.dialect.name == "sqlite":
@@ -90,9 +106,13 @@ def main() -> int:
                 del_from(tbl)
             # Users for those tenants, excluding superusers
             if table_exists(conn, "users"):
-                ids = ",".join(str(t) for t in sorted(to_delete))
-                res = conn.execute(text(f"DELETE FROM users WHERE tenant_id IN ({ids}) AND (role IS NULL OR role!='superuser')"))
-                removed_counts["users"] = res.rowcount or 0
+                if os.getenv("YUPLAN_DEV_SEED", "0").lower() not in ("1", "true", "yes"):
+                    print("SKIP: set YUPLAN_DEV_SEED=1 to delete users")
+                else:
+                    ids = ",".join(str(t) for t in sorted(to_delete))
+                    _dev_user_log("delete_users")
+                    res = conn.execute(text(f"DELETE FROM users WHERE tenant_id IN ({ids}) AND (role IS NULL OR role!='superuser')"))
+                    removed_counts["users"] = res.rowcount or 0
             # Finally remove tenants
             if table_exists(conn, "tenants"):
                 ids = ",".join(str(t) for t in sorted(to_delete))

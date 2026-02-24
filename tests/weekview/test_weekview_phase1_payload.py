@@ -66,7 +66,7 @@ def test_phase1_days_payload_includes_menu_alt2_and_residents(client_admin):
             db.refresh(d2)
         finally:
             db.close()
-        menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+        menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
         app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
         app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt2", dish_id=d2.id)
 

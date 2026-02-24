@@ -110,6 +110,8 @@ def test_admin_menu_import_list_shows_weeks(client_admin: FlaskClient):
     # Check page structure
     assert "Menyimport" in html
     assert "Ladda upp menyfil" in html
+    assert "Aktiva menyer" in html
+    assert "Arkiv (tidigare veckor)" in html
     
     # Check seeded week appears in list
     assert "2025" in html

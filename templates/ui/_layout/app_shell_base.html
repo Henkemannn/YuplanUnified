@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block page_title %}Yuplan{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-proposal.svg') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
+  {% block unified_ui_css %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}" />
+  {% endblock %}
+  <meta name="current-site-id" content="{{ session.get('site_id') or '' }}">
+  {% block head_extra %}{% endblock %}
+  <script src="{{ url_for('static', filename='js/app_shell.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/remember_to_order.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='unified_ui.js') }}" defer></script>
+</head>
+<body>
+  <div class="app-shell app-shell--full" aria-label="Yuplan premium app shell" data-testid="app-shell">
+    {% set env_raw = (config.get('DEPLOY_ENV') or config.get('APP_ENV') or 'local') %}
+    {% set env_lower = env_raw | lower %}
+    {% if env_lower in ('prod', 'production') %}
+      {% set env_label = 'PROD' %}
+    {% elif env_lower == 'staging' %}
+      {% set env_label = 'STAGING' %}
+    {% else %}
+      {% set env_label = 'LOCAL' %}
+    {% endif %}
+    {% set user_display = session.get('full_name') or session.get('user_email') or session.get('username') or 'Inloggad' %}
+    {% set user_role = session.get('role') %}
+    {% set role_key = (user_role or '') | lower %}
+    {% set allow_site_switch = (vm.allow_site_switch if vm is defined and vm.allow_site_switch is defined else false) %}
+    {% if user_role %}
+      {% set user_label = user_display ~ ' (' ~ user_role ~ ')' %}
+    {% else %}
+      {% set user_label = user_display %}
+    {% endif %}
+    <header class="app-shell__topbar">
+      <div class="app-shell__brand">
+        <img class="app-shell__logo" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" />
+        <span class="app-shell__brand-text">Yuplan</span>
+      </div>
+      <div class="app-shell__topbar-actions">
+        <span class="app-shell__env-badge">Kund: {{ tenant_name or '—' }} • Arbetsplats: {{ current_site_name or '—' }}</span>
+        {% if current_site_name %}
+          <span class="app-shell__env-badge">{{ current_site_name }}</span>
+        {% endif %}
+        <span class="app-shell__env-badge">{{ env_label }}</span>
+        {% if role_key in ['systemadmin', 'superuser'] or allow_site_switch %}
+          <a class="app-shell__user-pill" href="{{ url_for('ui.select_site', next=request.full_path or request.path) }}">Byt site</a>
+        {% endif %}
+        <button class="app-shell__theme-toggle" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle>
+          <span data-theme-icon>🌙</span>
+        </button>
+        <div class="app-shell__user-menu" data-user-menu>
+          <button class="app-shell__user-pill" type="button" aria-haspopup="menu" aria-expanded="false" data-user-menu-trigger>
+            {{ user_label }}
+          </button>
+          <div class="app-shell__user-dropdown" role="menu" aria-label="Användarmeny">
+            <a class="app-shell__user-item" role="menuitem" href="#">Användarinfo</a>
+            <a class="app-shell__user-item" role="menuitem" href="#">Support</a>
+            <a class="app-shell__user-item" role="menuitem" href="#">Logga ut</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    {% if g and g.site_context_banner %}
+      <div id="site-context-banner" class="ua-flash ua-flash-warning" role="alert" style="margin: 8px 16px;">
+        Du har bytt arbetsplats i en annan flik. Ladda om för att se aktuell arbetsplats.
+        <button type="button" class="ua-btn ua-btn-small" style="margin-left: 12px;" onclick="location.reload()">Ladda om</button>
+      </div>
+    {% endif %}
+
+    {% if g and g.host_mismatch_banner %}
+      <div id="host-mismatch-banner" class="ua-flash ua-flash-warning" role="alert" style="margin: 8px 16px;">
+        Du anvander flera hosts i dev. Anvand bara http://127.0.0.1:5000 for stabila cookies.
+      </div>
+    {% endif %}
+
+    <div class="app-shell__body">
+      <aside class="app-shell__sidebar" aria-label="Huvudnavigering">
+        <div class="app-shell__sidebar-panel">
+          {% set current_path = request.path or '' %}
+          {% set nav_context = nav_context if nav_context is defined else (vm.nav_context if vm is defined and vm.nav_context is defined else '') %}
+          {% if not nav_context and current_path.startswith('/ui/kitchen') %}
+            {% set nav_context = 'kitchen' %}
+          {% endif %}
+          {% if not nav_context and current_path.startswith('/ui/admin') %}
+            {% set nav_context = 'admin' %}
+          {% endif %}
+          {% if nav_context == 'systemadmin' %}
+            {% set sa_overview_url = url_for('ui.systemadmin_dashboard') %}
+            {% set sa_customers_url = url_for('admin_ui.systemadmin_customers') %}
+            {% set sa_sites_url = url_for('ui.systemadmin_coming_soon', feature='sites') %}
+            {% set sa_users_url = url_for('ui.systemadmin_coming_soon', feature='users') %}
+            {% set sa_settings_url = url_for('ui.systemadmin_coming_soon', feature='settings') %}
+            {% set sa_logs_url = url_for('ui.systemadmin_coming_soon', feature='logs') %}
+            <nav class="app-shell__nav">
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_overview_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_overview_url }}">Översikt</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_customers_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_customers_url }}">Kunder</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_sites_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_sites_url }}">Sites</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_users_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_users_url }}">Users</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_settings_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_settings_url }}">Inställningar</a>
+              <a class="app-shell__nav-item {% if current_path.startswith(sa_logs_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_logs_url }}">Loggar</a>
+            </nav>
+          {% elif nav_context == 'admin' %}
+            <nav class="app-shell__nav">
+              <a class="app-shell__nav-item {% if current_path == '/ui/admin' %}app-shell__nav-item--active{% endif %}" href="/ui/admin">Översikt</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/weekview') %}app-shell__nav-item--active{% endif %}" href="{{ url_for('ui.weekview_ui') }}">Veckovy</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/departments') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/departments">Avdelningar</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/menu-import') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/menu-import">Menyimport</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/specialkost">Specialkost</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/report/week') %}app-shell__nav-item--active{% endif %}" href="/ui/admin/report/week">Rapport / Statistik</a>
+              {# Admin hidden in pilot #}
+            </nav>
+          {% elif nav_context == 'kitchen' %}
+            {% set kitchen_home_url = url_for('ui.kitchen_dashboard') %}
+            {% set kitchen_week_url = url_for('ui.kitchen_veckovy_week') %}
+            {% set kitchen_plan_url = url_for('ui.kitchen_planering_v1') %}
+            {% set kitchen_menu_url = url_for('ui.kitchen_menu_overview') %}
+            <nav class="app-shell__nav">
+              <a class="app-shell__nav-item {% if current_path == '/ui/kitchen' %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_home_url }}">Översikt</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/kitchen/week') %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_week_url }}">Veckovy</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/kitchen/planering') %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_plan_url }}">Planera</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/kitchen/menu') %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_menu_url }}">Menyöversikt</a>
+            </nav>
+          {% else %}
+            {% set weekview_url = url_for('ui.weekview_ui') %}
+            {% set planera_url = url_for('ui.planera_week_ui') %}
+            {% set report_url = url_for('ui.reports_weekly') %}
+            {% set admin_url = url_for('ui.admin_dashboard') %}
+            {% set specialkost_url = url_for('ui.admin_specialkost_list') %}
+            {% set portal_url = url_for('ui.portal_weeks_unified') %}
+            <nav class="app-shell__nav">
+              <a class="app-shell__nav-item {% if current_path.startswith(weekview_url) %}app-shell__nav-item--active{% endif %}" href="{{ weekview_url }}">Veckovy</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/planera') %}app-shell__nav-item--active{% endif %}" href="{{ planera_url }}">Planera</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/reports') %}app-shell__nav-item--active{% endif %}" href="{{ report_url }}">Rapport</a>
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/admin/specialkost') %}app-shell__nav-item--active{% endif %}" href="{{ specialkost_url }}">Specialkost</a>
+              {# Admin hidden in pilot #}
+              <a class="app-shell__nav-item {% if current_path.startswith('/ui/portal/week') %}app-shell__nav-item--active{% endif %}" href="{{ portal_url }}">Avdelningsportal</a>
+            </nav>
+          {% endif %}
+          <div class="app-shell__sidebar-footer">Yuplan</div>
+        </div>
+      </aside>
+
+      <main class="app-shell__main">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import os
 import secrets
+import inspect
 
 from dotenv import load_dotenv
 from sqlalchemy import text
@@ -81,6 +82,20 @@ def _generate_temp_password() -> str:
     return secrets.token_urlsafe(12)
 
 
+def _dev_user_log(action: str) -> None:
+    try:
+        env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+        if env_val != "dev" and env_val != "development" and os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+            return
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame else None
+        func = caller.f_code.co_name if caller else "unknown"
+        line = caller.f_lineno if caller else 0
+        print(f"DEV_USER_MUTATION action={action} func={func} file={__file__} line={line}")
+    except Exception:
+        pass
+
+
 def auth_doctor() -> int:
     app = create_app()
     with app.app_context():
@@ -152,6 +167,7 @@ def auth_reset(email: str, role: str, password: str | None, password_env: str | 
 
             user = db.query(User).filter(User.email == normalized).first()
             if not user:
+                _dev_user_log("insert_user")
                 user = User(
                     tenant_id=tenant.id,
                     email=normalized,
@@ -164,6 +180,7 @@ def auth_reset(email: str, role: str, password: str | None, password_env: str | 
                 )
                 db.add(user)
             else:
+                _dev_user_log("update_user_password")
                 user.password_hash = pw_hash
                 user.role = role
                 if not user.username:
@@ -208,6 +225,7 @@ def auth_ensure_superuser() -> int:
 
             user = db.query(User).filter(User.email == normalized).first()
             if not user:
+                _dev_user_log("insert_user")
                 user = User(
                     tenant_id=tenant.id,
                     email=normalized,
@@ -220,6 +238,7 @@ def auth_ensure_superuser() -> int:
                 )
                 db.add(user)
             else:
+                _dev_user_log("update_user_password")
                 user.password_hash = pw_hash
                 user.role = "superuser"
                 if not user.username:

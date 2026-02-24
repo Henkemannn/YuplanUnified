@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block page_title %}Logga in{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}" />
+  {% block head_extra %}{% endblock %}
+  <script src="{{ url_for('static', filename='js/app_shell.js') }}" defer></script>
+</head>
+<body>
+  <div class="app-shell app-shell--full app-shell--auth" aria-label="Yuplan authentication">
+    <div class="auth-shell">
+      <div class="auth-shell__theme">
+        <button class="app-shell__theme-toggle auth-shell__theme-toggle" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle>
+          <span data-theme-icon>🌙</span>
+        </button>
+      </div>
+      <main class="auth-shell__main">
+        <section class="app-shell__card">
+          {% block content %}{% endblock %}
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

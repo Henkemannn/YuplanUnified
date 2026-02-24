@@ -69,8 +69,8 @@ class TestGlobalHeader:
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
         
-        # Global header should be present
-        assert "yp-global-header" in html
+        # App shell header should be present
+        assert "app-shell__topbar" in html
         assert "<header" in html
 
     def test_header_has_environment_badge(self, app_session: Flask, client_admin: FlaskClient):
@@ -80,7 +80,7 @@ class TestGlobalHeader:
         html = resp.data.decode("utf-8")
         
         # Environment badge should be present
-        assert "yp-global-header__env-badge" in html
+        assert "app-shell__env-badge" in html
         assert "LOCAL" in html or "STAGING" in html or "PROD" in html
 
     def test_header_has_user_info(self, app_session: Flask, client_cook: FlaskClient):
@@ -112,9 +112,9 @@ class TestGlobalFooter:
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
         
-        # Global footer should be present
-        assert "yp-global-footer" in html
-        assert "<footer" in html
+        # App shell sidebar footer should be present
+        assert "app-shell__sidebar-footer" in html
+        assert "Yuplan" in html
 
     def test_footer_has_copyright(self, app_session: Flask, client_admin: FlaskClient):
         """Footer should contain Yuplan copyright"""
@@ -122,9 +122,9 @@ class TestGlobalFooter:
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
         
-        # Copyright should be present
-        assert "Yuplan Unified" in html
-        assert "©" in html or "&copy;" in html
+        # App shell footer should carry brand name
+        assert "app-shell__sidebar-footer" in html
+        assert "Yuplan" in html
         
     def test_footer_has_support_text(self, app_session: Flask, client_admin: FlaskClient):
         """Footer should contain support information"""
@@ -132,8 +132,8 @@ class TestGlobalFooter:
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
         
-        # Support text should be present
-        assert "support" in html.lower() or "kontakta" in html.lower()
+        # Support link should be present in user menu
+        assert "Support" in html or "support" in html.lower()
 
 
 class TestNavigation:
@@ -145,9 +145,9 @@ class TestNavigation:
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
         
-        # Logo should be a link (new class name)
-        assert "yp-header-brand" in html
-        assert 'href="' in html
+        # App shell brand should be present
+        assert "app-shell__brand" in html
+        assert "/static/img/logo-proposal.svg" in html
 
     def test_admin_sidebar_has_navigation_icons(self, app_session: Flask, client_admin: FlaskClient):
         """Admin sidebar should have navigation with icons"""
@@ -155,11 +155,14 @@ class TestNavigation:
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
         
-        # Sidebar navigation should have icons
-        assert "nav-icon" in html
-        # Should have various admin links
-        assert "Avdelningar" in html or "avdelningar" in html.lower()
-        assert "Användare" in html or "användare" in html.lower()
+        # Sidebar navigation should have main app links
+        assert "app-shell__nav" in html
+        assert "Översikt" in html
+        assert "Veckovy" in html
+        assert "Avdelningar" in html
+        assert "Menyimport" in html
+        assert "Specialkost" in html
+        assert "Rapport / Statistik" in html
 
 
 class TestAccessibility:
@@ -171,9 +174,9 @@ class TestAccessibility:
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
         
-        # Logo link should have aria-label
+        # App shell should include ARIA labels
         assert "aria-label" in html
-        assert "startsidan" in html.lower() or "yuplan" in html.lower()
+        assert "Huvudnavigering" in html or "Användarmeny" in html
 
     def test_header_uses_semantic_html(self, app_session: Flask, client_admin: FlaskClient):
         """Header should use semantic <header> element"""
@@ -183,7 +186,7 @@ class TestAccessibility:
         
         # Should use semantic HTML
         assert '<header' in html
-        assert 'role="banner"' in html or 'role="contentinfo"' in html
+        assert 'app-shell__topbar' in html
 
     def test_footer_uses_semantic_html(self, app_session: Flask, client_admin: FlaskClient):
         """Footer should use semantic <footer> element"""
@@ -192,8 +195,8 @@ class TestAccessibility:
         html = resp.data.decode("utf-8")
         
         # Should use semantic HTML
-        assert '<footer' in html
-        assert 'role="contentinfo"' in html or 'yp-global-footer' in html
+        assert '<main' in html
+        assert 'app-shell__main' in html
 
 
 class TestFavicons:
@@ -277,7 +280,7 @@ class TestPageTitles:
         html = resp.data.decode("utf-8")
         
         assert "<title>" in html
-        assert "Yuplan Unified" in html
+        assert "Yuplan" in html
 
     def test_test_login_title(self, app_session: Flask, client: FlaskClient):
         """Test login title should mention Yuplan Unified"""

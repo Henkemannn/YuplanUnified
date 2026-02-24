@@ -121,17 +121,307 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         app.config["DEV_DEPARTMENT_ID"] = dev_dept.strip()
     # ProblemDetails is canonical now (ADR-003). No problem-only flag propagation.
 
+    db_url = str(cfg.database_url)
+    sqlite_file = None
+    if db_url.startswith("sqlite:///"):
+        sqlite_file = os.path.abspath(db_url.replace("sqlite:///", "", 1))
+    testing_flag = bool(app.config.get("TESTING"))
+    env_flask = os.getenv("FLASK_ENV") or ""
+    env_app = os.getenv("APP_ENV") or ""
+    env_deploy = os.getenv("DEPLOY_ENV") or ""
+    env_lower = (env_flask or env_app or env_deploy or "").lower()
+    emit_startup_log = (env_lower == "development") and (not testing_flag)
+
+    def _log_sqlite_fingerprint(tag: str) -> None:
+        if not emit_startup_log:
+            return
+        werkzeug_flag = os.getenv("WERKZEUG_RUN_MAIN") or ""
+        pid = os.getpid()
+        secret_value = app.config.get("SECRET_KEY") or ""
+        secret_len = len(secret_value) if secret_value else 0
+        secret_prefix = secret_value[:6] if secret_value else ""
+        secret_hash = ""
+        if secret_value:
+            try:
+                import hashlib
+
+                secret_hash = hashlib.sha256(secret_value.encode("utf-8")).hexdigest()[:12]
+            except Exception:
+                secret_hash = "error"
+        print(
+            f"STARTUP_RUN_MAIN pid={pid} WERKZEUG_RUN_MAIN={werkzeug_flag} "
+            f"DB_URL={db_url} SQLITE_FILE={sqlite_file or ''}",
+            flush=True,
+        )
+        exists = False
+        size = 0
+        mtime = 0.0
+        digest = ""
+        if sqlite_file:
+            try:
+                exists = os.path.exists(sqlite_file)
+                if exists:
+                    size = os.path.getsize(sqlite_file)
+                    mtime = os.path.getmtime(sqlite_file)
+                    try:
+                        import hashlib
+                        hasher = hashlib.sha256()
+                        with open(sqlite_file, "rb") as fh:
+                            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                                hasher.update(chunk)
+                        digest = hasher.hexdigest()
+                    except Exception:
+                        digest = ""
+            except Exception:
+                exists = False
+                size = 0
+                mtime = 0.0
+                digest = ""
+        users_count = "missing"
+        tenants_count = "missing"
+        sites_count = "missing"
+        sessions_count = "missing"
+        if sqlite_file and exists:
+            try:
+                import sqlite3
+
+                conn = sqlite3.connect(sqlite_file)
+                cur = conn.cursor()
+                def _count(table: str) -> str:
+                    row = cur.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                        (table,),
+                    ).fetchone()
+                    if not row:
+                        return "missing"
+                    c_row = cur.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+                    return str(int(c_row[0] or 0))
+
+                users_count = _count("users")
+                tenants_count = _count("tenants")
+                sites_count = _count("sites")
+                sessions_count = _count("user_sessions")
+                if sessions_count == "missing":
+                    sessions_count = _count("sessions")
+                conn.close()
+            except Exception:
+                users_count = "error"
+                tenants_count = "error"
+                sites_count = "error"
+                sessions_count = "error"
+        try:
+            app.logger.info(
+                "sqlite_fingerprint: tag=%s db_url=%s sqlite_file=%s exists=%s size=%s mtime=%s sha256=%s users=%s tenants=%s sites=%s sessions=%s secret_key_sha256=%s secret_key_len=%s secret_key_prefix=%s werkzeug_run_main=%s",
+                tag,
+                db_url,
+                sqlite_file or "",
+                exists,
+                size,
+                mtime,
+                digest,
+                users_count,
+                tenants_count,
+                sites_count,
+                sessions_count,
+                secret_hash,
+                secret_len,
+                secret_prefix,
+                werkzeug_flag,
+            )
+        except Exception:
+            pass
+        print(
+            f"SQLITE_FINGERPRINT {tag} db_url={db_url} sqlite_file={sqlite_file or ''} "
+            f"exists={exists} size={size} mtime={mtime} sha256={digest} "
+            f"users={users_count} tenants={tenants_count} sites={sites_count} sessions={sessions_count} "
+            f"secret_key_sha256={secret_hash} secret_key_len={secret_len} secret_key_prefix={secret_prefix} "
+            f"WERKZEUG_RUN_MAIN={werkzeug_flag}",
+            flush=True,
+        )
+
+    def _log_auth_fingerprint(tag: str) -> None:
+        if not emit_startup_log:
+            return
+        try:
+            from flask import has_request_context
+        except Exception:
+            return
+        werkzeug_flag = os.getenv("WERKZEUG_RUN_MAIN") or ""
+        pid = os.getpid()
+        secret_value = app.config.get("SECRET_KEY") or ""
+        secret_len = len(secret_value) if secret_value else 0
+        secret_prefix = secret_value[:6] if secret_value else ""
+        secret_hash = ""
+        if secret_value:
+            try:
+                import hashlib
+
+                secret_hash = hashlib.sha256(secret_value.encode("utf-8")).hexdigest()[:12]
+            except Exception:
+                secret_hash = "error"
+        request_host = ""
+        forwarded_host = ""
+        host_header = ""
+        if has_request_context():
+            try:
+                request_host = request.host or ""
+                forwarded_host = request.headers.get("X-Forwarded-Host", "")
+                host_header = request.headers.get("Host", "")
+            except Exception:
+                request_host = ""
+                forwarded_host = ""
+                host_header = ""
+        server_name = app.config.get("SERVER_NAME") or ""
+        exists = False
+        size = 0
+        mtime = 0.0
+        digest = ""
+        users_count = "missing"
+        sessions_count = "missing"
+        if sqlite_file:
+            try:
+                exists = os.path.exists(sqlite_file)
+                if exists:
+                    size = os.path.getsize(sqlite_file)
+                    mtime = os.path.getmtime(sqlite_file)
+                    try:
+                        import hashlib
+
+                        hasher = hashlib.sha256()
+                        with open(sqlite_file, "rb") as fh:
+                            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                                hasher.update(chunk)
+                        digest = hasher.hexdigest()
+                    except Exception:
+                        digest = ""
+            except Exception:
+                exists = False
+                size = 0
+                mtime = 0.0
+                digest = ""
+        if sqlite_file and exists:
+            try:
+                import sqlite3
+
+                conn = sqlite3.connect(sqlite_file)
+                cur = conn.cursor()
+
+                def _count(table: str) -> str:
+                    row = cur.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                        (table,),
+                    ).fetchone()
+                    if not row:
+                        return "missing"
+                    c_row = cur.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+                    return str(int(c_row[0] or 0))
+
+                users_count = _count("users")
+                sessions_count = _count("user_sessions")
+                if sessions_count == "missing":
+                    sessions_count = _count("sessions")
+                conn.close()
+            except Exception:
+                users_count = "error"
+                sessions_count = "error"
+        print(
+            f"AUTH_FINGERPRINT {tag} pid={pid} WERKZEUG_RUN_MAIN={werkzeug_flag} "
+            f"db_url={db_url} sqlite_file={sqlite_file or ''} exists={exists} size={size} mtime={mtime} sha256={digest} "
+            f"users={users_count} sessions={sessions_count} secret_key_sha256={secret_hash} "
+            f"secret_key_len={secret_len} secret_key_prefix={secret_prefix} "
+            f"request_host={request_host} host_header={host_header} forwarded_host={forwarded_host} server_name={server_name}",
+            flush=True,
+        )
+
+    app.config["DEV_AUTH_FINGERPRINT_LOGGER"] = _log_auth_fingerprint
+
     # --- DB setup ---
+    _log_sqlite_fingerprint("before_init_engine")
     if app.config.get("TESTING"):
-        init_engine(cfg.database_url, force=True)
+        engine = init_engine(cfg.database_url, force=True)
     else:
-        init_engine(cfg.database_url)
+        engine = init_engine(cfg.database_url)
+    _log_sqlite_fingerprint("after_init_engine")
+
+    is_dev = (app.config.get("ENV") == "development") or bool(app.config.get("DEBUG"))
+    if is_dev:
+        from sqlalchemy import event
+        import hashlib
+        import sqlite3
+        from datetime import datetime
+
+        mutation_tables = {
+            "tenants",
+            "sites",
+            "departments",
+            "dietary_types",
+            "menus",
+            "menu_variants",
+            "users",
+        }
+
+        log_dir = os.path.join(base_dir, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "dev_db_mutations.log")
+        sqlite_path = sqlite_file or "dev.db"
+
+        def dev_db_fingerprint() -> tuple[str, dict[str, str]]:
+            counts: dict[str, str] = {}
+            try:
+                conn = sqlite3.connect(sqlite_path)
+                cur = conn.cursor()
+                for table in mutation_tables:
+                    try:
+                        counts[table] = str(cur.execute(f"select count(*) from {table}").fetchone()[0])
+                    except Exception:
+                        counts[table] = "?"
+                conn.close()
+            except Exception:
+                for table in mutation_tables:
+                    counts.setdefault(table, "?")
+            raw = str(counts).encode("utf-8")
+            return hashlib.sha256(raw).hexdigest()[:12], counts
+
+        @event.listens_for(engine, "before_cursor_execute")
+        def log_mutations(conn, cursor, statement, parameters, context, executemany):
+            stmt_lower = statement.lower()
+            if any(f" {table} " in stmt_lower for table in mutation_tables):
+                if stmt_lower.strip().startswith(("insert", "update", "delete")):
+                    fp, counts = dev_db_fingerprint()
+                    try:
+                        from flask import has_request_context, request
+                        path = request.path if has_request_context() else "CLI/NO_REQUEST"
+                    except Exception:
+                        path = "CLI/NO_REQUEST"
+                    statement_short = (statement or "")[:500]
+                    print("\n🚨 DB MUTATION DETECTED")
+                    print("Time:", datetime.utcnow())
+                    print("PID:", os.getpid())
+                    print("Statement:", statement)
+                    print("Counts:", counts)
+                    print("Fingerprint:", fp)
+                    try:
+                        with open(log_path, "a", encoding="utf-8") as fh:
+                            fh.write("\nUTC: " + datetime.utcnow().isoformat() + "Z\n")
+                            fh.write("PID: " + str(os.getpid()) + "\n")
+                            fh.write("Path: " + path + "\n")
+                            fh.write("Statement: " + statement_short + "\n")
+                            fh.write("Counts: " + str(counts) + "\n")
+                            fh.write("Fingerprint: " + fp + "\n")
+                    except Exception:
+                        pass
     try:
-        # Always emit a single startup line with DB location and git info
-        db_url = str(cfg.database_url)
-        sqlite_file = None
-        if db_url.startswith("sqlite:///"):
-            sqlite_file = os.path.abspath(db_url.replace("sqlite:///", "", 1))
+        # Emit a single startup line with DB location and git info (dev only)
+        sqlite_exists = False
+        sqlite_size = 0
+        if sqlite_file:
+            try:
+                sqlite_exists = os.path.exists(sqlite_file)
+                if sqlite_exists:
+                    sqlite_size = os.path.getsize(sqlite_file)
+            except Exception:
+                sqlite_exists = False
+                sqlite_size = 0
         # Try to resolve git branch and short commit
         branch = None
         commit = None
@@ -166,7 +456,29 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if sqlite_file:
             app.config["RUNTIME_SQLITE_FILE"] = sqlite_file
         line = f"DB_URL={db_url}" + (f" ; SQLITE_FILE={sqlite_file}" if sqlite_file else "")
-        print(line)
+        if emit_startup_log:
+            try:
+                app.logger.info("startup_db: db_url=%s sqlite_file=%s", db_url, sqlite_file or "")
+                app.logger.info(
+                    "startup_env: testing=%s flask_env=%s app_env=%s deploy_env=%s",
+                    testing_flag,
+                    env_flask,
+                    env_app,
+                    env_deploy,
+                )
+                if sqlite_file:
+                    app.logger.info(
+                        "startup_sqlite: path=%s exists=%s size_bytes=%s",
+                        sqlite_file,
+                        sqlite_exists,
+                        sqlite_size,
+                    )
+            except Exception:
+                pass
+            print(line)
+            print(f"STARTUP_ENV: testing={testing_flag} FLASK_ENV={env_flask} APP_ENV={env_app} DEPLOY_ENV={env_deploy}")
+            if sqlite_file:
+                print(f"STARTUP_SQLITE: path={sqlite_file} exists={sqlite_exists} size_bytes={sqlite_size}")
         if branch or commit:
             print(f"RUNTIME: branch={branch or 'unknown'} commit={commit or 'unknown'} sqlite_file={sqlite_file or ''}")
     except Exception:
@@ -505,6 +817,17 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     @app.before_request
     def _before_req() -> Response | None:
+        from flask import request
+        # Dev-only host mismatch banner (avoid cookie confusion between hosts).
+        try:
+            if emit_startup_log and not app.config.get("TESTING"):
+                host_val = (request.host or "").strip().lower()
+                allowed_hosts = {"127.0.0.1:5000", "localhost:5000"}
+                if host_val and host_val not in allowed_hosts:
+                    g.host_mismatch_banner = True
+                    g.host_mismatch_host = host_val
+        except Exception:
+            pass
         # Sync request context from session for consistent access
         try:
             g.tenant_id = session.get("tenant_id")
@@ -556,6 +879,21 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         except Exception:
             # Non-fatal; continue to handlers
             pass
+        # Query param site_id should not override session site; show banner when mismatched
+        # Explicit mismatch should fail fast only for weekview UI routes.
+        try:
+            q_site = (request.args.get("site_id") or "").strip()
+            s_site = (session.get("site_id") or "").strip()
+            t_sess = session.get("tenant_id")
+            if q_site and s_site and q_site != s_site:
+                g.site_context_banner = True
+                if t_sess:
+                    from .db import get_site_tenant
+                    q_tenant = get_site_tenant(str(q_site))
+                    if q_tenant is not None and int(q_tenant) != int(t_sess) and request.path.startswith("/ui/weekview"):
+                        return Response("\u00c5tkomst nekad: site tillh\u00f6r en annan tenant", status=403)
+        except Exception:
+            pass
         # Handle stale site selection if it belongs to a different tenant
         try:
             from flask import session as _sess
@@ -565,32 +903,11 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 from .db import get_site_tenant
                 site_tenant = get_site_tenant(str(s_sess))
                 if site_tenant is not None and int(site_tenant) != int(t_sess):
-                    # Minimal fix: show a clear error for weekview UI instead of silently clearing
-                    if str(request.path).startswith("/ui/weekview"):
-                        try:
-                            msg = f"Site {s_sess} tillhör en annan tenant. Välj en site från din tenant."
-                            html = (
-                                "<!doctype html><html lang='sv'><head><meta charset='utf-8'>"
-                                "<title>Felaktig site</title><meta name='robots' content='noindex'>"
-                                "<style>body{font-family:system-ui;margin:3rem;color:#111}" 
-                                "h1{font-size:1.6rem;margin-bottom:.5rem}p{margin:.25rem 0}</style>"
-                                f"</head><body><h1>Åtkomst nekad</h1><p>{msg}</p></body></html>"
-                            )
-                            resp = Response(html, status=403)
-                            resp.headers["Content-Type"] = "text/html; charset=utf-8"
-                            log.info({
-                                "event": "site_tenant_mismatch_weekview",
-                                "tenant_id_session": t_sess,
-                                "site_id_session": s_sess,
-                                "site_tenant": site_tenant,
-                                "path": request.path,
-                            })
-                            return resp
-                        except Exception:
-                            pass
-                    # Default behavior (non-weekview paths): clear and proceed
+                    if (request.args.get("site_id") or "").strip() and request.path.startswith("/ui/weekview"):
+                        return Response("\u00c5tkomst nekad: site tillh\u00f6r en annan tenant", status=403)
                     _sess.pop("site_id", None)
                     g.site_id = None
+                    g.site_context_banner = True
                     log.info({
                         "event": "cleared_site_on_tenant_mismatch",
                         "tenant_id_session": t_sess,
@@ -3045,6 +3362,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             ensure_dev_superuser_henrik()
         except Exception:
             pass
+        _log_sqlite_fingerprint("after_bootstrap_superuser")
 
     # --- Guard test endpoints (P6.2) ---
     @app.get("/_guard/editor")
@@ -3112,5 +3430,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             return {"ok": True, "limited": False}
     except Exception:  # pragma: no cover
         pass
+
+    _log_sqlite_fingerprint("end_of_factory")
 
     return app

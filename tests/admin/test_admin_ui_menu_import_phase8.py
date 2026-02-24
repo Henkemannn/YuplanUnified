@@ -106,6 +106,8 @@ def test_week_list_shows_imported_weeks(app_session, client_admin, csv_file_cont
     assert "2025" in html
     assert "49" in html
     assert "50" in html
+    assert "Aktiva menyer" in html
+    assert "Arkiv (tidigare veckor)" in html
 
 
 def test_week_detail_shows_imported_dishes(app_session, client_admin, csv_file_content):
@@ -218,5 +220,6 @@ def test_upload_success_shows_summary(app_session, client_admin, csv_file_conten
     assert response.status_code == 200
     html = response.data.decode('utf-8')
     
-    # Should show success message with summary
-    assert "importerad" in html.lower() or "skapade" in html.lower()
+    # Should show friendly success banner
+    assert "Import klar" in html
+    assert "veckor importerades/uppdaterades" in html

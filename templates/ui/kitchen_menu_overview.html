@@ -1,0 +1,48 @@
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Kök – Menyöversikt{% endblock %}
+
+{% block content %}
+  <div class="app-page kitchen-menu">
+    <section class="app-shell__page-header">
+      <div>
+        <h1 class="app-shell__title">Menyöversikt</h1>
+        <p class="app-shell__subtitle">Veckans meny för lunch och middag.</p>
+      </div>
+      <div class="app-shell__page-actions">
+        {% set base_path = url_for('ui.kitchen_menu_overview') %}
+        {% set year = vm.year %}
+        {% set week = vm.week %}
+        {% set site_id = vm.site_id %}
+        {% include "ui/_components/week_picker.html" %}
+        <button type="button" class="yp-iconbtn no-print" data-action="print" aria-label="Skriv ut">🖨️</button>
+      </div>
+    </section>
+
+    <div class="app-shell__card-meta">År {{ vm.year }} • Vecka {{ vm.week }}</div>
+
+    {% if not vm.has_menu %}
+      <section class="app-shell__grid">
+        <article class="app-shell__card">
+          <h2 class="app-shell__card-title">Ingen meny ännu</h2>
+          <p class="app-shell__card-text">Det finns ingen publicerad meny för den här veckan.</p>
+        </article>
+      </section>
+    {% endif %}
+
+    <section class="app-shell__grid kitchen-menu__grid">
+      {% for day in vm.menu_days %}
+        <article class="app-shell__card app-card">
+          <h2 class="app-shell__card-title">{{ day.label }}</h2>
+          <p class="app-shell__card-text"><strong>Lunch:</strong></p>
+          <p class="app-shell__card-text">Alt 1: {{ day.lunch_alt1 or '—' }}</p>
+          {% if day.lunch_alt2 %}
+            <p class="app-shell__card-text"><span class="yp-pill yp-pill--alt2">Alt 2</span> {{ day.lunch_alt2 }}</p>
+          {% endif %}
+          <p class="app-shell__card-text">Dessert: {{ day.dessert or '—' }}</p>
+          <p class="app-shell__card-text"><strong>Kvällsmat:</strong> {{ day.dinner or '—' }}</p>
+        </article>
+      {% endfor %}
+    </section>
+  </div>
+{% endblock %}

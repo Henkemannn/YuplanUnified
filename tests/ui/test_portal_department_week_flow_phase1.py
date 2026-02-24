@@ -20,13 +20,13 @@ def _seed_site_and_department():
         conn.close()
 
 
-def _ensure_menu_for_week(tenant_id: int, year: int, week: int, dish_name: str = "Test Lunch") -> None:
+def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int, dish_name: str = "Test Lunch") -> None:
     from core.menu_service import MenuServiceDB
     from core.db import get_new_session
     from core.models import Dish
 
     svc = MenuServiceDB()
-    menu = svc.create_or_get_menu(tenant_id, week, year)
+    menu = svc.create_or_get_menu(tenant_id, site_id, week, year)
     # Create a dish for alt1
     db = get_new_session()
     try:
@@ -52,7 +52,7 @@ def test_portal_department_week_choice_happy_path(app_session):
     week = 48
     tid = 1
 
-    _ensure_menu_for_week(tid, year, week)
+    _ensure_menu_for_week(tid, site_id, year, week)
 
     # Initial GET: portal week should render lunch block (menu exists)
     r0 = client.get(
@@ -102,7 +102,7 @@ def test_portal_department_week_choice_persists(app_session):
     week = 48
     tid = 1
 
-    _ensure_menu_for_week(tid, year, week)
+    _ensure_menu_for_week(tid, site_id, year, week)
     monday = _date.fromisocalendar(year, week, 1).isoformat()
     client.post(
         "/ui/weekview/registration",

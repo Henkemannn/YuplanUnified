@@ -1,0 +1,64 @@
+{% extends "ui/_layout/app_shell_base.html" %}
+{% set is_readonly = session.role in ['admin', 'superuser'] %}
+
+{% block page_title %}Veckovy – alla avdelningar{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kitchen_week_v3.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/unified_weekview.css') }}">
+  <style>
+    .weekview-all { display: grid; gap: 16px; }
+    .weekview--readonly .kostcell-btn {
+      pointer-events: none;
+    }
+    .weekview--readonly .kostcell-btn[disabled] {
+      opacity: 1;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div class="ui-weekview">
+<div class="app-page kitchen-week">
+  <section class="app-shell__page-header">
+    <div class="no-print">
+      <h1 class="app-shell__title">Veckovy</h1>
+      <p class="app-shell__subtitle">Alla avdelningar ({{ vm.site_name }})</p>
+    </div>
+    <div class="app-shell__page-actions no-print">
+      {% set base_path = url_for('ui.weekview_ui') %}
+      {% set year = vm.year %}
+      {% set week = vm.week %}
+      {% set site_id = vm.site_id %}
+      {% include "ui/_components/week_picker.html" %}
+    </div>
+  </section>
+  <div class="app-shell__card-meta no-print">År {{ vm.year }} • Vecka {{ vm.week }}</div>
+
+  <section class="weekview-all{% if is_readonly %} weekview--readonly{% endif %}" data-weekview-readonly="{{ 'true' if is_readonly else 'false' }}">
+    {% for dep in vm.departments %}
+      <section class="app-shell__card app-card" data-department-id="{{ dep.id }}">
+        <div class="dept-header">
+          {% set _dn = dep.name or '' %}
+          {% set dep_display = _dn if _dn[:4]|lower == 'avd ' else 'Avd ' ~ _dn %}
+          <div class="dept-title">{{ dep_display }}</div>
+        </div>
+        {% if dep.info_text %}
+          <div class="yp-info-box">{{ dep.info_text }}</div>
+        {% endif %}
+        {% set interactive = false %}
+        {% include "ui/_partials/week_grid.html" %}
+        {% if dep.no_diets %}
+          <div class="dept-empty" aria-live="polite">Inga specialkoster kopplade</div>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </section>
+
+  {% include "ui/_menu_modal.html" %}
+  <script defer src="{{ url_for('static', filename='js/menu_utils.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='js/menu_modal.js') }}"></script>
+</div>
+</div>
+{% endblock %}

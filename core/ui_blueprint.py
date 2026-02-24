@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g
+import os
+
+from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g, abort
 from sqlalchemy import text
 
 from .auth import require_roles
 from .db import get_session
 from .models import Note, Task, User
 from .weekview.service import WeekviewService
+from .weekview_vm import build_weekview_vm
 # use string roles consistently elsewhere; avoid Role import
 from .meal_registration_repo import MealRegistrationRepo
 from datetime import date as _date
@@ -14,6 +17,15 @@ from datetime import timedelta
 import uuid
 
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
+
+
+@ui_bp.get("/ui/_proto/app-shell")
+@require_roles("superuser")
+def ui_proto_app_shell():
+    env = (os.getenv("DEPLOY_ENV") or os.getenv("APP_ENV") or "local").lower()
+    if env not in ("local", "staging"):
+        abort(404)
+    return render_template("ui/_proto/app_shell_preview.html")
 # Weekview special diets mark toggle API (ETag-safe), aligned with report marks
 @ui_bp.route("/api/weekview/specialdiets/mark", methods=["POST"])
 @require_roles("cook", "admin", "superuser")
@@ -261,10 +273,10 @@ COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 @require_roles(*SAFE_UI_ROLES)
 def select_site():
     """Simple site selection page: choose active site for current tenant."""
-    # Superuser-only: block selector for all non-superusers
+    # Superuser/admin only: block selector for all other roles
     try:
         role = (session.get("role") or "").strip().lower()
-        if role != "superuser":
+        if role not in ("superuser", "admin"):
             return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
     except Exception:
         return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
@@ -320,10 +332,10 @@ def select_site():
 @ui_bp.post("/ui/select-site")
 @require_roles(*SAFE_UI_ROLES)
 def select_site_post():
-    # Superuser-only: block selector post for all non-superusers
+    # Superuser/admin only: block selector post for all other roles
     try:
         role = (session.get("role") or "").strip().lower()
-        if role != "superuser":
+        if role not in ("superuser", "admin"):
             return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
     except Exception:
         return jsonify({"type": "about:blank", "title": "forbidden", "detail": "site_selector_superuser_only"}), 403
@@ -480,8 +492,16 @@ def systemadmin_dashboard():
         tenants_vm = []
     finally:
         db.close()
-    vm = {"user_name": user_name, "tenants": tenants_vm}
+    vm = {"user_name": user_name, "tenants": tenants_vm, "nav_context": "systemadmin", "allow_site_switch": True}
     return render_template("systemadmin_dashboard.html", vm=vm)
+
+
+@ui_bp.get("/ui/systemadmin/coming-soon")
+@require_roles("superuser")
+def systemadmin_coming_soon():
+    feature = (request.args.get("feature") or "").strip() or "funktion"
+    vm = {"feature": feature, "nav_context": "systemadmin", "allow_site_switch": True}
+    return render_template("ui/systemadmin/coming_soon.html", vm=vm)
 
 # Note: Sites listing for a tenant is provided by existing admin routes.
 
@@ -502,8 +522,10 @@ def admin_system_page():
             row = db.execute(text("SELECT id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
             if row:
                 selected_site = {"id": str(row[0]), "name": str(row[1] or "")}
-                deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
-                departments = [{"id": str(d[0]), "name": str(d[1] or "")} for d in deps]
+            else:
+                selected_site = {"id": str(site_id), "name": ""}
+            deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            departments = [{"id": str(d[0]), "name": str(d[1] or "")} for d in deps]
     finally:
         db.close()
     # Systemadmin VM only: sites + departments (no diet types here)
@@ -694,6 +716,13 @@ def admin_department_detail_get(department_id: str):
     lunch_eff = int((ov.get("residents_lunch") if ov else None) or resident_count_fixed or 0)
     dinner_eff = int((ov.get("residents_dinner") if ov else None) or resident_count_fixed or 0)
 
+    try:
+        from .weekview.repo import WeekviewRepo
+        svc = WeekviewService()
+        version = WeekviewRepo().get_version(tid, year, week, department_id)
+        _etag = svc.build_etag(tid, department_id, year, week, version)
+    except Exception:
+        _etag = ""
     vm = {
         "department": {
             "id": department_id,
@@ -1037,8 +1066,8 @@ def weekview_ui():
     except Exception:
         pass
     # Validate query params - default to current week if not provided
-    req_site_id = (request.args.get("site_id") or "").strip()
-    department_id = (request.args.get("department_id") or "").strip()
+    req_site_id = (request.args.get("site_id") or "").strip() or None
+    department_id = (request.args.get("department_id") or "").strip() or None
     # Enforce site-lock for bound admins: ignore querystring site_id
     session_site_id = (session.get("site_id") or "").strip()
     site_lock = bool(session.get("site_lock"))
@@ -1059,7 +1088,7 @@ def weekview_ui():
         else:
             # No year/week provided - redirect to current week with all params
             from flask import redirect, url_for
-            return redirect(url_for('ui.weekview_ui', site_id=site_id, department_id=department_id, 
+            return redirect(url_for('ui.weekview_ui', site_id=site_id or "", department_id=department_id or "", 
                                    year=current_year, week=current_week))
     except Exception:
         return jsonify({"error": "bad_request", "message": "Invalid year/week"}), 400
@@ -1067,6 +1096,22 @@ def weekview_ui():
         return jsonify({"error": "bad_request", "message": "Invalid year"}), 400
     if week < 1 or week > 53:
         return jsonify({"error": "bad_request", "message": "Invalid week"}), 400
+
+    if not site_id:
+        from .context import get_active_context as _get_ctx
+        ctx = _get_ctx()
+        resolved_site_id = (ctx.get("site_id") or "").strip() or None
+        if resolved_site_id:
+            from flask import redirect, url_for
+            return redirect(
+                url_for(
+                    "ui.weekview_ui",
+                    site_id=resolved_site_id,
+                    department_id=department_id or "",
+                    year=year,
+                    week=week,
+                )
+            )
 
     # Resolve names (sites/departments) using effective site_id
     db = get_session()
@@ -1089,7 +1134,7 @@ def weekview_ui():
         db.close()
 
     # If department_id is empty: show all departments for the site (Yuplan 3.5-style)
-    if not (department_id and department_id.strip()):
+    if not department_id:
         # Resolve site_id strictly from active context; if missing → redirect to selector
         if not site_id:
             # If site-locked, rely on session; otherwise try active context
@@ -1144,121 +1189,37 @@ def weekview_ui():
         # tenant_id not needed here for diet types; ensure site_id exists
         if not site_id:
             return jsonify({"error": "bad_request", "message": "Missing site"}), 400
-        svc = WeekviewService()
-        # Diet type names map for display
-        try:
-            types = DietTypesRepo().list_all(site_id=site_id)
-            diet_name_map = {int(t["id"]): str(t["name"]) for t in types}
-        except Exception:
-            diet_name_map = {}
-        days_with_menu_total = 0
-        for d in dept_rows:
-            dep_id = str(d.get("id"))
-            dep_name_row = str(d.get("name") or "")
-            payload, etag = svc.fetch_weekview(tid, year, week, dep_id)
-            summaries = payload.get("department_summaries") or []
-            days = (summaries[0].get("days") if summaries else []) or []
-            # DEBUG: after enrichment
-            try:
-                from flask import current_app as _app
-                menus_found = 1 if any(((day.get("menu_texts") or {}).get("lunch") or (day.get("menu_texts") or {}).get("dinner")) for day in days) else 0
-                days_with_menu = sum(1 for day in days if ((day.get("menu_texts") or {}).get("lunch") or (day.get("menu_texts") or {}).get("dinner")))
-                days_with_menu_total += days_with_menu
-                _app.logger.debug({
-                    "event": "weekview_ui_post_enrich",
-                    "department_id": dep_id,
-                    "menus_found_count": menus_found,
-                    "days_with_menu": days_with_menu,
-                })
-            except Exception:
-                pass
-            # Fetch optional notes/info for department
-            notes_text = ""
-            try:
-                dbn = get_session()
-                rown = dbn.execute(text("SELECT COALESCE(notes,'') FROM departments WHERE id=:id"), {"id": dep_id}).fetchone()
-                notes_text = str(rown[0] or "") if rown else ""
-            except Exception:
-                notes_text = ""
-            finally:
-                try:
-                    dbn.close()
-                except Exception:
-                    pass
-            deps.append({
-                "id": dep_id,
-                "name": dep_name_row,
-                "etag": etag,
-                "days": days,
-                "notes": notes_text,
-            })
-        # DEBUG: consolidated summary for site-level view
-        try:
-            from flask import current_app as _app
-            _app.logger.debug({
-                "event": "weekview_ui_summary",
-                "site_id": site_id,
-                "year": year,
-                "week": week,
-                "departments_count": len(deps),
-                "menus_found_count_total": days_with_menu_total,
-            })
-        except Exception:
-            pass
-        # Site-level menu availability per day (use weekly menu regardless of department)
-        menu_days_site = [False]*7
-        try:
-            from flask import current_app as _app
-            ms = getattr(_app, "menu_service", None)
-            if ms is not None and tid is not None:
-                mv = ms.get_week_view(int(tid), week, year)  # canonical keys mon..sun
-                days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
-                order = ["mon","tue","wed","thu","fri","sat","sun"]
-                for i, key in enumerate(order):
-                    d = days_struct.get(key) or {}
-                    lunch = d.get("lunch") or {}
-                    dinner = d.get("dinner") or {}
-                    menu_days_site[i] = bool(
-                        lunch.get("alt1")
-                        or lunch.get("alt2")
-                        or lunch.get("dessert")
-                        or dinner.get("alt1")
-                        or dinner.get("alt2")
-                    )
-        except Exception:
-            menu_days_site = [False]*7
-
-        vm_all = {
-            "site_id": site_id,
-            "site_name": site_name,
-            "year": year,
-            "week": week,
-            "current_year": current_year,
-            "current_week": current_week,
-            "departments": deps,
-            "diet_name_map": diet_name_map,
-            "menu_days_site": menu_days_site,
-            # P0 security: suppress site switching for locked admins
-            "allow_site_switch": (not site_lock),
-            "sites": all_sites if (not site_lock) else [],
-            "active_site": site_id,
-        }
+        vm_all = build_weekview_vm(site_id=site_id, year=year, week=week, tenant_id=tid)
+        vm_all.update(
+            {
+                "current_year": current_year,
+                "current_week": current_week,
+                "allow_site_switch": (not site_lock),
+                "sites": all_sites if (not site_lock) else [],
+                "active_site": site_id,
+            }
+        )
         try:
             from flask import current_app
-            current_app.logger.info("weekview template=weekview_all.html deps=%s", len(deps))
-            print(f"WEEKVIEW_RENDER: template=weekview_all.html deps={len(deps)}")
+            current_app.logger.info("weekview template=weekview_all.html deps=%s", len(vm_all.get("departments") or []))
+            print(f"WEEKVIEW_RENDER: template=weekview_all.html deps={len(vm_all.get('departments') or [])}")
         except Exception:
             pass
         meal_labels = get_meal_labels_for_site(site_id)
-        return render_template("ui/weekview_all.html", vm=vm_all, meal_labels=meal_labels)
+        return render_template("ui/unified_weekview_all.html", vm=vm_all, meal_labels=meal_labels, nav_context="admin")
 
     # Fetch enriched weekview payload via service (no extra SQL here)
     tid = session.get("tenant_id") or getattr(g, "tenant_id", None)
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    svc = WeekviewService()
-    payload, _etag = svc.fetch_weekview(tid, year, week, department_id)
-    summaries = payload.get("department_summaries") or []
+    vm_all = build_weekview_vm(site_id=site_id, year=year, week=week, tenant_id=tid)
+    dep_vm = None
+    try:
+        dep_vm = next((d for d in (vm_all.get("departments") or []) if d.get("id") == department_id), None)
+    except Exception:
+        dep_vm = None
+    days = (dep_vm.get("days") if dep_vm else []) or []
+    summaries = [{"days": days}] if days else []
     # DEBUG: after enrichment
     try:
         from flask import current_app as _app
@@ -1295,7 +1256,7 @@ def weekview_ui():
             "current_year": current_year,
             "current_week": current_week,
         }
-        return render_template("ui/unified_weekview.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id))
+        return render_template("ui/unified_weekview.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id), nav_context="admin")
     days = summaries[0].get("days") or []
 
     # Fetch meal registrations for this week (Phase 2)
@@ -1308,6 +1269,8 @@ def weekview_ui():
     registrations = reg_repo.get_registrations_for_week(tid, site_id, department_id, year, week)
     # Index by (date, meal_type) for quick lookup
     reg_map = {(r["date"], r["meal_type"]): r["registered"] for r in registrations}
+
+    diet_rows = (dep_vm or {}).get("diet_rows") or []
 
     # Build DayVM list (Phase 2 - with registration data, Phase 4 - with summaries)
     day_vms = []
@@ -1350,34 +1313,33 @@ def weekview_ui():
         week_dinner_registered += (1 if dinner_registered else 0)
         
         # Build diets list for lunch from enriched payload (Phase 2b)
-        diets_obj = d.get("diets", {}) or {}
         lunch_diets = []
         try:
-            for it in diets_obj.get("lunch") or []:
-                lunch_diets.append(
-                    {
-                        "diet_type_id": str(it.get("diet_type_id")),
-                        "diet_name": str(it.get("diet_name")),
-                        "resident_count": int(it.get("resident_count") or 0),
-                        "marked": bool(it.get("marked")),
-                    }
-                )
+            dow_val = int(d.get("day_of_week") or 0)
+            if 1 <= dow_val <= 7:
+                for row in diet_rows:
+                    cells = row.get("cells") or []
+                    idx = (dow_val - 1) * 2
+                    if idx < 0 or idx >= len(cells):
+                        continue
+                    cell = cells[idx]
+                    count = int(cell.get("count") or 0)
+                    if count <= 0:
+                        continue
+                    lunch_diets.append(
+                        {
+                            "diet_type_id": str(row.get("diet_type_id") or ""),
+                            "diet_name": str(row.get("diet_type_name") or ""),
+                            "resident_count": count,
+                            "marked": bool(cell.get("is_done")),
+                        }
+                    )
         except Exception:
             lunch_diets = []
 
-        # Filter out legacy/sentinel diet labels in weekview UI
-        try:
-            def _is_legacy_label(name: str) -> bool:
-                s = (name or "").strip()
-                return s == "1" or s.lower() == "legacy 1"
-
-            lunch_diets = [x for x in lunch_diets if not _is_legacy_label(x.get("diet_name", ""))]
-        except Exception:
-            # If anything goes wrong, keep the unfiltered list to avoid breaking the page
-            pass
-
         day_vm = {
             "date": date_str,
+            "day_of_week": d.get("day_of_week"),
             "weekday_name": d.get("weekday_name"),
             "lunch_alt1": lunch.get("alt1"),
             "lunch_alt2": lunch.get("alt2"),
@@ -1401,6 +1363,13 @@ def weekview_ui():
             has_dinner = True
         day_vms.append(day_vm)
 
+    try:
+        from .weekview.repo import WeekviewRepo
+        svc = WeekviewService()
+        version = WeekviewRepo().get_version(tid, year, week, department_id)
+        _etag = svc.build_etag(tid, department_id, year, week, version)
+    except Exception:
+        _etag = ""
     force_flag = request.path.startswith("/ui/portal/week")
     vm = {
         "site_id": site_id,
@@ -1426,6 +1395,23 @@ def weekview_ui():
             } if has_dinner else None
         }
     }
+    try:
+        from datetime import timedelta as _timedelta
+        monday = _date.fromisocalendar(year, week, 1)
+    except Exception:
+        monday = _date.today()
+    prev_iso = (monday - _timedelta(days=7)).isocalendar()
+    next_iso = (monday + _timedelta(days=7)).isocalendar()
+    vm.update(
+        {
+            "prev_year": int(prev_iso[0]),
+            "prev_week": int(prev_iso[1]),
+            "next_year": int(next_iso[0]),
+            "next_week": int(next_iso[1]),
+        }
+    )
+    if dep_vm:
+        vm["department"] = dep_vm
     # Optional: include department info text if present
     try:
         dbn = get_session()
@@ -1440,7 +1426,7 @@ def weekview_ui():
         except Exception:
             pass
     meal_labels = get_meal_labels_for_site(site_id)
-    return render_template("ui/unified_weekview.html", vm=vm, meal_labels=meal_labels)
+    return render_template("ui/unified_weekview.html", vm=vm, meal_labels=meal_labels, nav_context="admin")
     # TODO: Expose MenuComponent.component_id in day_vms once model/migration exists.
 
 
@@ -1511,7 +1497,7 @@ def portal_week():
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
 
     svc = WeekviewService()
-    payload, _etag = svc.fetch_weekview(tid, year, week, department_id)
+    payload, _etag = svc.fetch_weekview(tid, year, week, department_id, site_id)
     summaries = payload.get("department_summaries") or []
     days_raw = (summaries[0].get("days") if summaries else []) or []
     # Fallback: if no days returned, synthesize Mon–Sun entries so unified UI renders
@@ -1802,8 +1788,169 @@ def kitchen_dashboard():
         site_name = str(row_s[0]) if row_s else ""
     finally:
         db.close()
-    vm = {"site_id": site_id, "site_name": site_name}
+    remember_items = []
+    remember_week_key = None
+    try:
+        from .remember_to_order_repo import RememberToOrderRepo
+        from .week_key import week_key_from_date
+        remember_week_key = week_key_from_date(_date.today())
+        remember_items = RememberToOrderRepo().list_visible(site_id, remember_week_key)
+    except Exception:
+        remember_items = []
+    vm = {
+        "site_id": site_id,
+        "site_name": site_name,
+        "allow_site_switch": False,
+        "nav_context": "kitchen",
+        "remember_to_order": [
+            {
+                "id": it.id,
+                "text": it.text,
+                "created_at": it.created_at,
+                "created_by_role": it.created_by_role,
+                "checked_at": it.checked_at,
+            }
+            for it in remember_items
+        ],
+        "remember_to_order_week_key": remember_week_key,
+        "remember_to_order_can_check": False,
+    }
     return render_template("ui/kitchen_dashboard.html", vm=vm)
+
+
+@ui_bp.get("/ui/kitchen/menu")
+@require_roles(*SAFE_UI_ROLES)
+def kitchen_menu_overview():
+    q_site_id = (request.args.get("site_id") or "").strip()
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/kitchen/menu"))
+    week_token = (request.args.get("week") or "").strip()
+    if "-" in week_token:
+        try:
+            year_part, week_part = week_token.split("-", 1)
+            year = int(year_part)
+            week = int(week_part)
+        except Exception:
+            year = _date.today().year
+            week = _date.today().isocalendar()[1]
+    else:
+        try:
+            year = int(request.args.get("year") or _date.today().year)
+        except Exception:
+            year = _date.today().year
+        try:
+            week = int(week_token or _date.today().isocalendar()[1])
+        except Exception:
+            week = _date.today().isocalendar()[1]
+    db = get_session()
+    try:
+        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = str(row_s[0]) if row_s else ""
+    finally:
+        db.close()
+    tenant_id = int(session.get("tenant_id") or 1)
+    from .menu_service import MenuServiceDB
+    menu_service = MenuServiceDB()
+    try:
+        week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
+    except Exception:
+        week_view = {"days": {}}
+    days_raw = (week_view or {}).get("days") or {}
+    day_map: dict[str, dict] = {}
+    for k, v in (days_raw or {}).items():
+        day_map[str(k).strip().lower()] = v
+
+    day_keys = [
+        ("mon", "Måndag"),
+        ("tue", "Tisdag"),
+        ("wed", "Onsdag"),
+        ("thu", "Torsdag"),
+        ("fri", "Fredag"),
+        ("sat", "Lördag"),
+        ("sun", "Söndag"),
+    ]
+    day_aliases = {
+        "mon": ["mon", "monday", "mån", "måndag"],
+        "tue": ["tue", "tuesday", "tis", "tisdag"],
+        "wed": ["wed", "wednesday", "ons", "onsdag"],
+        "thu": ["thu", "thursday", "tor", "torsdag"],
+        "fri": ["fri", "friday", "fre", "fredag"],
+        "sat": ["sat", "saturday", "lör", "lördag"],
+        "sun": ["sun", "sunday", "sön", "söndag"],
+    }
+
+    def _pick_name(val) -> str:
+        if not val:
+            return ""
+        if isinstance(val, dict):
+            return str(val.get("dish_name") or val.get("name") or "")
+        return str(val)
+
+    def _meal_obj(day: dict, meal_key: str) -> dict:
+        if not day:
+            return {}
+        meal = day.get(meal_key) or day.get(meal_key.capitalize()) or {}
+        if isinstance(meal, dict):
+            return meal
+        return {"main": meal}
+
+    def _variant_text(meal: dict, keys: list[str]) -> str:
+        for key in keys:
+            name = _pick_name(meal.get(key) or meal.get(key.capitalize()))
+            if name:
+                return name
+        return ""
+
+    menu_days = []
+    has_menu = False
+    for key, label in day_keys:
+        day_val = {}
+        for alias in day_aliases.get(key, [key]):
+            day_val = day_map.get(alias) or {}
+            if day_val:
+                break
+        lunch_meal = _meal_obj(day_val, "lunch")
+        dinner_meal = _meal_obj(day_val, "dinner")
+        lunch_alt1 = _variant_text(lunch_meal, ["main", "alt1"])
+        lunch_alt2 = _variant_text(lunch_meal, ["alt2"])
+        dessert_text = _variant_text(lunch_meal, ["dessert"])
+        dinner_text = _variant_text(dinner_meal, ["main", "dinner", "alt1", "alt2"])
+        if lunch_alt1 or lunch_alt2 or dessert_text or dinner_text:
+            has_menu = True
+        menu_days.append({
+            "label": label,
+            "lunch_alt1": lunch_alt1,
+            "lunch_alt2": lunch_alt2,
+            "dessert": dessert_text,
+            "dinner": dinner_text,
+        })
+
+    week_options = []
+    today = _date.today()
+    for i in range(0, 6):
+        wk_date = today + timedelta(weeks=i)
+        iso = wk_date.isocalendar()
+        week_options.append({
+            "year": iso[0],
+            "week": iso[1],
+            "label": f"v{iso[1]} {iso[0]}",
+        })
+
+    vm = {
+        "site_id": site_id,
+        "site_name": site_name,
+        "year": year,
+        "week": week,
+        "week_options": week_options,
+        "menu_days": menu_days,
+        "has_menu": has_menu,
+        "allow_site_switch": False,
+        "nav_context": "kitchen",
+    }
+    return render_template("ui/kitchen_menu_overview.html", vm=vm)
 
 # Kitchen planning v1 (read-only summary + print + week picker)
 @ui_bp.get("/ui/kitchen/planering")
@@ -2154,7 +2301,8 @@ def kitchen_planering_v1():
                 from flask import current_app as _app
                 ms = getattr(_app, "menu_service", None)
                 if ms is not None and tid is not None:
-                    mv = ms.get_week_view(int(tid), week, year)
+                    site_id = request.args.get("site_id") or session.get("site_id")
+                    mv = ms.get_week_view(int(tid), site_id, week, year)
                     days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
                     keys = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
                     day_key = keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
@@ -2278,6 +2426,8 @@ def kitchen_planering_v1():
         "alt_groups": {"alt1_dept_ids": alt1_dept_ids, "alt2_dept_ids": alt2_dept_ids},
         "diet_counts_by_dept": per_dept_defaults,
         "print_preview_mode": print_preview_mode,
+        "allow_site_switch": False,
+        "nav_context": "kitchen",
     }
     return render_template("ui/kitchen_planering_v1.html", vm=vm)
 
@@ -2329,6 +2479,21 @@ def kitchen_veckovy_week():
             summaries = payload.get("department_summaries") or []
             s = summaries[0] if summaries else {}
             days = s.get("days") or []
+            alt2_days = set()
+            try:
+                from core.admin_repo import Alt2Repo
+                alt2_rows = Alt2Repo().list_for_department_week(dep_id, week)
+                alt2_days = {int(r.get("weekday")) for r in alt2_rows if bool(r.get("enabled"))}
+            except Exception:
+                alt2_days = set()
+            try:
+                for d in days:
+                    if not d.get("alt2_lunch"):
+                        dow_val = int(d.get("day_of_week") or 0)
+                        if dow_val in alt2_days:
+                            d["alt2_lunch"] = True
+            except Exception:
+                pass
             # Build mark index from persisted state to ensure VM reflects what /mark writes
             raw_marks = s.get("marks") or []
             marked_idx = set()
@@ -2374,7 +2539,14 @@ def kitchen_veckovy_week():
                             if str(it.get("diet_type_id")) == str(dtid):
                                 rd = int(it.get("resident_count") or 0)
                                 break
-                        cells.append({"day_index": dow, "meal": "lunch", "count": rl, "is_done": ml, "is_alt2": bool(day_obj.get("alt2_lunch")) if day_obj else False, "diet_type_id": str(dtid)})
+                        is_alt2 = False
+                        try:
+                            is_alt2 = bool(day_obj.get("alt2_lunch")) if day_obj else False
+                            if not is_alt2 and dow in alt2_days:
+                                is_alt2 = True
+                        except Exception:
+                            is_alt2 = False
+                        cells.append({"day_index": dow, "meal": "lunch", "count": rl, "is_done": ml, "is_alt2": is_alt2, "diet_type_id": str(dtid)})
                         cells.append({"day_index": dow, "meal": "dinner", "count": rd, "is_done": md, "is_alt2": False, "diet_type_id": str(dtid)})
                     # Resolve diet name from site-linked types only
                     diet_name = name_by_id.get(str(dtid), str(dtid))
@@ -2403,6 +2575,8 @@ def kitchen_veckovy_week():
             "next_year": next_year,
             "next_week": next_week,
             "departments": deps_out,
+            "allow_site_switch": False,
+            "nav_context": "kitchen",
         }
         return render_template("ui/kitchen_week_v3.html", vm=vm)
     # Legacy path rendering remains unchanged below
@@ -2411,17 +2585,23 @@ def kitchen_veckovy_week():
     year = int(request.args.get("year") or _date.today().year)
     week = int(request.args.get("week") or _date.today().isocalendar()[1])
     # Fetch names
+    tenant_id = getattr(g, "tenant_id", None) or session.get("tenant_id")
     db = get_session()
     try:
         row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
         row_d = db.execute(text("SELECT name FROM departments WHERE id=:i"), {"i": department_id}).fetchone()
+        if tenant_id is None:
+            row_t = db.execute(text("SELECT tenant_id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+            tenant_id = row_t[0] if row_t else None
         site_name = row_s[0] if row_s else "Site"
         dep_name = row_d[0] if row_d else "Avdelning"
     finally:
         db.close()
     # Build minimal grid structure from existing week payload via WeekviewService
     svc = WeekviewService()
-    payload, _ = svc.fetch_weekview(tenant_id=1, year=year, week=week, department_id=department_id)
+    if tenant_id is None:
+        tenant_id = 1
+    payload, _ = svc.fetch_weekview(tenant_id=tenant_id, year=year, week=week, department_id=department_id, site_id=site_id, source="kitchen_week_legacy")
     summaries = payload.get("department_summaries") or []
     dep = summaries[0] if summaries else {}
     days = dep.get("days") or []
@@ -2440,7 +2620,7 @@ def kitchen_veckovy_week():
     reg_repo = MealRegistrationRepo()
     try:
         reg_repo.ensure_table_exists()
-        regs = reg_repo.get_registrations_for_week(1, site_id, department_id, year, week)
+        regs = reg_repo.get_registrations_for_week(tenant_id, site_id, department_id, year, week)
     except Exception:
         regs = []
     reg_map = {(r["date"], r["meal_type"]): bool(r.get("registered")) for r in regs}
@@ -2698,7 +2878,7 @@ def admin_specialkost_list():
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_list")))
     items = repo.list_all(site_id=site_id)
     vm = {"diet_types": items, "user_role": role, "site_id": site_id}
-    return render_template("ui/unified_admin_specialkost_list.html", vm=vm)
+    return render_template("ui/unified_admin_specialkost_list.html", vm=vm, nav_context="admin")
 
 
 @ui_bp.get("/ui/admin/specialkost/new")
@@ -2797,7 +2977,7 @@ def admin_menu_import_list():
             weeks = [{"year": int(r[0]), "week": int(r[1])} for r in rows]
         finally:
             db.close()
-        return render_template("admin_menu_import.html", vm={"weeks": weeks})
+        return render_template("admin_menu_import.html", vm={"weeks": weeks}, nav_context="admin")
 
 
 @ui_bp.post("/ui/admin/menu-import/upload")
@@ -2820,16 +3000,31 @@ def admin_menu_import_week(year: int, week: int):
         return _impl(year, week)  # type: ignore[misc]
     except Exception:
         # Fallback minimal behavior
+        from core.etag_utils import generate_menu_etag
         db = get_session()
-        vm = {"year": year, "week": week, "days": {}}
+        vm = {"year": year, "week": week, "days": {}, "menu_status": "draft", "etag": None}
         try:
             menu_row = db.execute(
-                text("SELECT id FROM menus WHERE year=:y AND week=:w"), {"y": year, "w": week}
+                text("SELECT id, status, updated_at FROM menus WHERE year=:y AND week=:w"),
+                {"y": year, "w": week},
             ).fetchone()
             if not menu_row:
                 flash("Ingen meny hittades för vald vecka.", "warning")
                 return redirect(url_for("ui.admin_menu_import_list"))
             menu_id = int(menu_row[0])
+            raw_status = menu_row[1]
+            vm["menu_status"] = str(raw_status or "draft").strip().lower()
+            menu_updated_at = menu_row[2]
+            if isinstance(menu_updated_at, str):
+                try:
+                    from datetime import datetime
+                    menu_updated_at = datetime.fromisoformat(menu_updated_at)
+                except Exception:
+                    menu_updated_at = None
+            if menu_updated_at is None:
+                from datetime import datetime, timezone
+                menu_updated_at = datetime.now(timezone.utc)
+            vm["etag"] = generate_menu_etag(menu_id, menu_updated_at)
             rows = db.execute(
                 text(
                     """
@@ -2869,8 +3064,9 @@ def admin_menu_import_week_save(year: int, week: int):
         from core.etag_utils import validate_etag
 
         tenant_id = 1
+        site_id = request.args.get("site_id") or session.get("site_id")
         menu_service = MenuServiceDB()
-        week_view = menu_service.get_week_view(tenant_id, week, year)
+        week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
         if not week_view or not week_view.get("menu_id"):
             flash("Ingen meny hittades för vald vecka.", "warning")
             return redirect(url_for("ui.admin_menu_import_list"))
@@ -3077,7 +3273,7 @@ def weekview_overview_ui():
     has_any_dinner = False
     rows = []
     for dep_id, dep_name in departments:
-        payload, _etag = svc.fetch_weekview(tid, year, week, dep_id)
+        payload, _etag = svc.fetch_weekview(tid, year, week, dep_id, site_id=site_id, source="weekview_overview")
         summaries = payload.get("department_summaries") or []
         days = (summaries[0].get("days") if summaries else []) or []
         res_l = 0
@@ -3289,7 +3485,13 @@ def reports_weekly():
         row = db.execute(text("SELECT name FROM sites WHERE id = :id"), {"id": site_id}).fetchone()
         site_name = row[0] if row else None
         if not site_name:
-            return jsonify({"error": "not_found", "message": "Site not found"}), 404
+            fallback = db.execute(text("SELECT id, name FROM sites ORDER BY name LIMIT 1")).fetchone()
+            if fallback:
+                site_id = str(fallback[0])
+                site_name = fallback[1]
+                g.site_context_banner = True
+            else:
+                return jsonify({"error": "not_found", "message": "Site not found"}), 404
     finally:
         db.close()
     tid = session.get("tenant_id") or 1
@@ -3332,7 +3534,7 @@ def reports_weekly():
         vm["all_departments_names"] = [str(r[0]) for r in all_dept_rows]
     finally:
         db2.close()
-    return render_template("ui/unified_report_weekly.html", vm=vm)
+    return render_template("ui/unified_report_weekly.html", vm=vm, nav_context="admin")
 
 # ----------------------------------------------------------------------------
 # Admin – Weekly Diets Report (Module 3 MVP)
@@ -3504,6 +3706,71 @@ def reports_weekly_csv():
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = f"attachment; filename=veckorapport_v{week}_{year}.csv"
     return resp
+
+
+@ui_bp.get("/ui/api/remember-to-order")
+@require_roles(*SAFE_UI_ROLES)
+def remember_to_order_list_api():
+    site_id = (request.args.get("site_id") or "").strip()
+    week_key = (request.args.get("week_key") or "").strip()
+    if not site_id or not week_key:
+        return jsonify({"error": "bad_request", "message": "Missing site_id/week_key"}), 400
+    from .remember_to_order_repo import RememberToOrderRepo
+    repo = RememberToOrderRepo()
+    items = repo.list_visible(site_id, week_key)
+    payload = [
+        {
+            "id": it.id,
+            "text": it.text,
+            "created_at": it.created_at.isoformat() if it.created_at else None,
+            "created_by_user_id": it.created_by_user_id,
+            "created_by_role": it.created_by_role,
+            "checked_at": it.checked_at.isoformat() if it.checked_at else None,
+            "checked_by_user_id": it.checked_by_user_id,
+        }
+        for it in items
+    ]
+    return jsonify({"items": payload}), 200
+
+
+@ui_bp.post("/ui/api/remember-to-order/add")
+@require_roles(*SAFE_UI_ROLES)
+def remember_to_order_add_api():
+    data = request.get_json(silent=True) or {}
+    if not data:
+        data = request.form or {}
+    site_id = str((data.get("site_id") or "").strip())
+    week_key = str((data.get("week_key") or "").strip())
+    text_val = str((data.get("text") or "").strip())
+    if not site_id or not week_key or not text_val:
+        return jsonify({"error": "bad_request", "message": "Missing site_id/week_key/text"}), 400
+    user_id = session.get("user_id")
+    role = (session.get("role") or "").strip().lower()
+    from .remember_to_order_repo import RememberToOrderRepo
+    repo = RememberToOrderRepo()
+    item = repo.add(site_id, week_key, text_val, int(user_id) if user_id else None, role or "cook")
+    return jsonify({"ok": True, "id": item.id}), 200
+
+
+@ui_bp.post("/ui/api/remember-to-order/check")
+@require_roles(*ADMIN_ROLES)
+def remember_to_order_check_api():
+    data = request.get_json(silent=True) or {}
+    if not data:
+        data = request.form or {}
+    try:
+        item_id = int(data.get("id"))
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Missing id"}), 400
+    checked_raw = data.get("checked")
+    checked = str(checked_raw).lower() in ("1", "true", "yes", "on")
+    user_id = session.get("user_id")
+    from .remember_to_order_repo import RememberToOrderRepo
+    repo = RememberToOrderRepo()
+    updated = repo.set_checked(item_id, checked, int(user_id) if user_id else None)
+    if not updated:
+        return jsonify({"error": "not_found"}), 404
+    return jsonify({"ok": True}), 200
 # Cook Dashboard (Phase 5) – Unified cook view
 @ui_bp.get("/ui/cook/dashboard")
 @require_roles("cook", "admin", "superuser")
@@ -4113,9 +4380,79 @@ def admin_dashboard():
     try:
         WEEKDAY_SE = {1: "Måndag", 2: "Tisdag", 3: "Onsdag", 4: "Torsdag", 5: "Fredag", 6: "Lördag", 7: "Söndag"}
         MONTH_SE = {1: "januari", 2: "februari", 3: "mars", 4: "april", 5: "maj", 6: "juni", 7: "juli", 8: "augusti", 9: "september", 10: "oktober", 11: "november", 12: "december"}
-        today_label = f"{WEEKDAY_SE.get(today.isoweekday(), '')} {today.day} {MONTH_SE.get(today.month, '')}"
+        weekday_sv = WEEKDAY_SE.get(today.isoweekday(), "")
+        month_sv = MONTH_SE.get(today.month, "")
+        today_label = f"{weekday_sv} {today.day} {month_sv}"
+        date_long_sv = f"{today.day} {month_sv} {today.year}"
     except Exception:
-        today_label = today.strftime("%Y-%m-%d")
+        weekday_sv = ""
+        date_long_sv = today.strftime("%Y-%m-%d")
+        today_label = date_long_sv
+
+    def _pick_dish_title(meal_obj):
+        if not isinstance(meal_obj, dict):
+            return None
+        for key in ("alt1", "standard", "main", "alt2", "dessert"):
+            value = meal_obj.get(key)
+            if isinstance(value, dict):
+                name = value.get("dish_name")
+                if name:
+                    return str(name)
+            elif isinstance(value, str) and value:
+                return value
+        for value in meal_obj.values():
+            if isinstance(value, dict):
+                name = value.get("dish_name")
+                if name:
+                    return str(name)
+            elif isinstance(value, str) and value:
+                return value
+        return None
+
+    def _build_today_card():
+        lunch_title = None
+        dinner_title = None
+        has_published_menu_today = False
+        try:
+            if tid is not None:
+                from .menu_service import MenuServiceDB
+                svc = MenuServiceDB()
+                site_id = request.args.get("site_id") or session.get("site_id")
+                week_view = svc.get_week_view(int(tid), site_id, current_week, current_year)
+                if (week_view or {}).get("menu_status") == "published":
+                    day_key = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][today.isoweekday() - 1]
+                    day_obj = (week_view.get("days") or {}).get(day_key, {})
+                    lunch_title = _pick_dish_title(day_obj.get("lunch"))
+                    dinner_title = _pick_dish_title(day_obj.get("dinner"))
+                    has_published_menu_today = bool(lunch_title or dinner_title)
+        except Exception:
+            pass
+        return {
+            "weekday_sv": weekday_sv,
+            "date_long_sv": date_long_sv,
+            "week_number": current_week,
+            "lunch_title": lunch_title,
+            "dinner_title": dinner_title,
+            "has_published_menu_today": has_published_menu_today,
+        }
+
+    today_card = _build_today_card()
+
+    menu_choice = {
+        "out_of_sync_count": 0,
+        "department_gaps": [],
+    }
+    if active_site_id:
+        try:
+            from .menu_choice_status import get_menu_choice_overview
+            from .week_key import week_key_from_date
+            from_week_key = week_key_from_date(today)
+            menu_choice = get_menu_choice_overview(active_site_id, from_week_key, n=4)
+        except Exception:
+            menu_choice = {
+                "out_of_sync_count": 0,
+                "department_gaps": [],
+            }
 
     # Last week number (ISO)
     try:
@@ -4123,6 +4460,17 @@ def admin_dashboard():
         last_week = int(last_week_dt.isocalendar()[1])
     except Exception:
         last_week = max(1, current_week - 1)
+
+    remember_items = []
+    remember_week_key = None
+    if active_site_id:
+        try:
+            from .remember_to_order_repo import RememberToOrderRepo
+            from .week_key import week_key_from_date
+            remember_week_key = week_key_from_date(today)
+            remember_items = RememberToOrderRepo().list_visible(active_site_id, remember_week_key)
+        except Exception:
+            remember_items = []
 
     # Menu forward dummy weeks
     try:
@@ -4136,6 +4484,7 @@ def admin_dashboard():
     vm = {
         "tenant_name": tenant_name,
         "site_name": site_name,
+        "site_id": active_site_id,
         "current_year": current_year,
         "current_week": current_week,
         "user_role": role,
@@ -4144,6 +4493,7 @@ def admin_dashboard():
         "department_count": len(departments),
         # Dashboard v1 fields
         "today_label": today_label,
+        "today_card": today_card,
         "today": {
             "lunch_name": None,
             "lunch_portions": None,
@@ -4165,13 +4515,22 @@ def admin_dashboard():
                 {"week": w4, "status_label": "⛔ Ingen meny"},
             ],
         },
-        "order_reminders": [
-            {"text": "Beställ mer timbalbas"},
-            {"text": "Kaffefilter vecka 15"},
+        "menu_choice": menu_choice,
+        "remember_to_order": [
+            {
+                "id": it.id,
+                "text": it.text,
+                "created_at": it.created_at,
+                "created_by_role": it.created_by_role,
+                "checked_at": it.checked_at,
+            }
+            for it in remember_items
         ],
+        "remember_to_order_week_key": remember_week_key,
+        "remember_to_order_can_check": bool(role in ADMIN_ROLES),
     }
     
-    return render_template("ui/unified_admin_dashboard.html", vm=vm)
+    return render_template("ui/unified_admin_dashboard.html", vm=vm, nav_context="admin")
 
 
 # ============================================================================
@@ -4290,7 +4649,7 @@ def admin_departments_list():
         "site_name": site_name,
     }
     
-    return render_template("ui/unified_admin_departments_list.html", vm=vm)
+    return render_template("ui/unified_admin_departments_list.html", vm=vm, nav_context="admin")
 
 
 @ui_bp.get("/ui/admin/departments/new")
@@ -4340,6 +4699,7 @@ def admin_departments_create():
     # Get form data
     name = request.form.get("name", "").strip()
     resident_count = request.form.get("resident_count", "0").strip()
+    notes = request.form.get("notes")
     
     # Validate
     if not name:
@@ -4362,7 +4722,8 @@ def admin_departments_create():
             site_id=site_id,
             name=name,
             resident_count_mode="fixed",
-            resident_count_fixed=resident_count_int
+            resident_count_fixed=resident_count_int,
+            notes=notes,
         )
         flash(f"Avdelning '{name}' skapad.", "success")
     except Exception as e:
@@ -5126,10 +5487,13 @@ def admin_users_deactivate(user_id: int):
         flash("Användare hittades inte.", "error")
         return redirect(url_for("ui.admin_users_list"))
     
-    # Prevent self-deactivation
+    # Prevent self-deactivation when the target user matches the current session role
     if current_user_id is not None and user_id == current_user_id:
-        flash("Du kan inte inaktivera ditt eget konto.", "error")
-        return redirect(url_for("ui.admin_users_list"))
+        session_role = (session.get("role") or "").strip().lower()
+        target_role = (user.get("role") or "").strip().lower()
+        if session_role and target_role and session_role == target_role:
+            flash("Du kan inte inaktivera ditt eget konto.", "error")
+            return redirect(url_for("ui.admin_users_list"))
     
     # Deactivate
     try:

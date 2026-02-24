@@ -55,6 +55,22 @@ def _ensure_users_site_id_column(db) -> None:
         pass
 
 
+def _dev_user_log(action: str) -> None:
+    try:
+        env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+        if env_val != "dev" and env_val != "development" and os.getenv("YUPLAN_DEV_HELPERS", "0").lower() not in ("1", "true", "yes"):
+            return
+        import inspect
+
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame else None
+        func = caller.f_code.co_name if caller else "unknown"
+        line = caller.f_lineno if caller else 0
+        print(f"DEV_USER_MUTATION action={action} func={func} file={__file__} line={line}")
+    except Exception:
+        pass
+
+
 def main() -> int:
     url, sqlite_file = _effective_db_url()
     print(f"Using DATABASE_URL={url}")
@@ -114,6 +130,7 @@ def main() -> int:
         pw_hash = app_hash("pass123")
         urow = db.execute(text("SELECT id FROM users WHERE LOWER(email) = :e"), {"e": email.lower()}).fetchone()
         if not urow:
+            _dev_user_log("insert_user")
             db.execute(
                 text(
                     "INSERT INTO users(tenant_id, email, password_hash, role, is_active) "
@@ -124,8 +141,11 @@ def main() -> int:
             uid = int(db.execute(text("SELECT id FROM users WHERE LOWER(email) = :e"), {"e": email.lower()}).fetchone()[0])
         else:
             uid = int(urow[0])
-            # Refresh password to known value for local dev
-            db.execute(text("UPDATE users SET password_hash=:ph WHERE id=:id"), {"ph": pw_hash, "id": uid})
+            # Refresh password only when explicitly requested
+            seed_overwrite = os.getenv("YUPLAN_DEV_SEED", "0").lower() in ("1", "true", "yes")
+            if seed_overwrite:
+                _dev_user_log("update_user_password")
+                db.execute(text("UPDATE users SET password_hash=:ph WHERE id=:id"), {"ph": pw_hash, "id": uid})
 
         # Bind site_id on the user (column added above if necessary)
         try:

@@ -26,7 +26,7 @@ def _seed_base(app, site_id: str, dep_id: str, year: int, week: int):
             d3 = Dish(tenant_id=1, name="Chokladpudding", category=None)
             db.add_all([d1, d2, d3]); db.commit()
             for d in [d1, d2, d3]: db.refresh(d)
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt2", dish_id=d2.id)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="dessert", dish_id=d3.id)

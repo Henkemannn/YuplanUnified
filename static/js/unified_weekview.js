@@ -15,6 +15,8 @@
    * Initialize weekview functionality on DOM ready
    */
   function init() {
+    const readonlyRoot = document.querySelector('[data-weekview-readonly="true"]');
+    if (readonlyRoot) return;
     modalElement = document.getElementById('registrationModal');
     if (!modalElement) return;
 

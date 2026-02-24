@@ -8,6 +8,35 @@ def _seed_site_dep_with_no_diets(site_id: str, dep_id: str, residents_fixed: int
     conn = get_session()
     try:
         # Ensure minimal core tables exist; in SQLite, they should already by migrations/tests
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS sites (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT NULL,
+                    updated_at TEXT
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS departments (
+                    id TEXT PRIMARY KEY,
+                    site_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    resident_count_mode TEXT NOT NULL,
+                    resident_count_fixed INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT NULL,
+                    version INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT
+                )
+                """
+            )
+        )
         # Create site and department
         row = conn.execute(text("SELECT 1 FROM sites WHERE id=:id"), {"id": site_id}).fetchone()
         if not row:
@@ -43,6 +72,9 @@ def _seed_site_dep_with_no_diets(site_id: str, dep_id: str, residents_fixed: int
 
 
 def test_kitchen_week_no_diets_still_shows_grid(app_session):
+    from core.db import create_all
+    with app_session.app_context():
+        create_all()
     client = app_session.test_client()
     site_id = 'site-k3-1'
     dep_id = 'dep-k3-1'

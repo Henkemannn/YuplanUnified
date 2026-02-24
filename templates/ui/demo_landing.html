@@ -1,8 +1,8 @@
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-  <meta charset="utf-8">
-  <title>Demo – Snabbåtkomst</title>
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Demo – Snabbåtkomst{% endblock %}
+
+{% block head_extra %}
   <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">
   <style>
     .container{max-width:860px;margin:2rem auto;padding:1.5rem}
@@ -12,8 +12,9 @@
     .btn:hover{background:#2563eb;color:#fff}
     .muted{color:#6b7280}
   </style>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
   <div class="container">
     <h1>Yuplan Unified – Demo</h1>
     <p class="muted">Förifyllda länkar med demo-ID:n för snabb kontroll.</p>
@@ -29,5 +30,4 @@
       <a class="btn" href="{{ url_for('ui.weekview_report_ui', site_id=vm.site_id, year=vm.year, week=vm.week) }}">Visa Rapport</a>
     </div>
   </div>
-</body>
-</html>
+{% endblock %}

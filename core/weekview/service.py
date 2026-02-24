@@ -24,13 +24,15 @@ class WeekviewService:
         # Weak ETag format per spec
         return f'W/"weekview:dept:{department_id}:year:{year}:week:{week}:v{version}"'
 
-    def fetch_weekview(self, tenant_id: int | str, year: int, week: int, department_id: str | None, site_id: str | None = None) -> tuple[dict, str]:
+    def fetch_weekview(self, tenant_id: int | str, year: int, week: int, department_id: str | None, site_id: str | None = None, source: str | None = None) -> tuple[dict, str]:
         dep = department_id or "__none__"
         version = 0 if not department_id else self.repo.get_version(tenant_id, year, week, department_id)
         payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
+        if site_id and isinstance(payload, dict) and not payload.get("site_id"):
+            payload["site_id"] = site_id
         # Enrich with Phase 1 days[] structure for UI (backwards compatible)
         try:
-            self._enrich_days(payload, tenant_id, year, week)
+            self._enrich_days(payload, tenant_id, year, week, source)
         except Exception:
             # Non-fatal: keep existing payload if enrichment fails
             pass
@@ -88,6 +90,8 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         if if_none_match and if_none_match == etag:
             return True, None, etag
         payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
+        if site_id and isinstance(payload, dict) and not payload.get("site_id"):
+            payload["site_id"] = site_id
         try:
             self._enrich_days(payload, tenant_id, year, week)
         except Exception:
@@ -208,7 +212,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         return {"lunch": int(wk["lunch"]), "dinner": int(wk["dinner"]), "source": src}
 
     # --- Internal helpers ---
-    def _enrich_days(self, payload: dict, tenant_id: int | str, year: int, week: int) -> None:
+    def _enrich_days(self, payload: dict, tenant_id: int | str, year: int, week: int, source: str | None = None) -> None:
         """Populate department_summaries[*].days with Phase 1 fields.
 
         Keeps existing keys (marks, residents_counts, alt2_days) for backward compatibility.
@@ -226,7 +230,8 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         try:
             svc = getattr(current_app, "menu_service", None)
             if svc is not None:
-                mv = svc.get_week_view(int(tenant_id), week, year)
+                site_id = payload.get("site_id") if isinstance(payload, dict) else None
+                mv = svc.get_week_view(int(tenant_id), site_id, week, year, source=source)
                 menu_days = dict(mv.get("days", {}))
         except Exception:
             menu_days = {}

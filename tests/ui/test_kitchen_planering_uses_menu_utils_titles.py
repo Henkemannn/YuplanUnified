@@ -32,7 +32,7 @@ def test_planering_uses_menu_utils_titles_prefers_main_over_alt1():
             db.refresh(alt1_dish)
             # Create or get menu for specific week/year and set Saturday lunch: main != alt1
             svc = app.menu_service  # type: ignore[attr-defined]
-            menu = svc.create_or_get_menu(tenant_id=1, week=9, year=2026)
+            menu = svc.create_or_get_menu(tenant_id=1, site_id=site_id, week=9, year=2026)
             svc.set_variant(tenant_id=1, menu_id=menu.id, day="sat", meal="lunch", variant_type="main", dish_id=main_dish.id)
             svc.set_variant(tenant_id=1, menu_id=menu.id, day="sat", meal="lunch", variant_type="alt1", dish_id=alt1_dish.id)
             svc.publish_menu(tenant_id=1, menu_id=menu.id)

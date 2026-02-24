@@ -1,54 +1,68 @@
-{% extends "ui/unified_admin_base.html" %}
-{% block admin_title %}Specialkost{% endblock %}
-{% block admin_subtitle %}Hantera kosttyper{% endblock %}
-{% block admin_main %}
-<section class="ua-section">
-<div class="ua-card admin-header">
-  <h1>Specialkost</h1>
-  <div class="header-actions">
-    <a href="{{ url_for('ui.admin_specialkost_new_form') }}" class="yp-button yp-button-primary">Lägg till ny kosttyp</a>
-  </div>
-</div>
+{% extends "ui/_layout/app_shell_base.html" %}
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-  <div class="flash-messages">
-    {% for category, message in messages %}
-    <div class="flash flash-{{ category }}">{{ message }}</div>
-    {% endfor %}
-  </div>
-  {% endif %}
-{% endwith %}
+{% block page_title %}Specialkost – Yuplan{% endblock %}
 
-<div class="ua-card card">
-  <div class="card-body">
-    <table class="yp-table">
-      <thead>
-        <tr>
-          <th>Namn</th>
-          <th>Förinställd</th>
-          <th>Åtgärder</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in vm.diet_types %}
-        <tr>
-          <td>{{ row.name }}</td>
-          <td>{{ "✓" if row.default_select else "" }}</td>
-          <td>
-            <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}">Redigera</a>
-            <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" style="display:inline">
-              {{ csrf_token_input()|safe }}
-              <button type="submit" class="yp-button yp-button-danger">Ta bort</button>
-            </form>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="3">Inga kosttyper hittades.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-</section>
+{% block head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+{% endblock %}
+
+{% block content %}
+    <div class="app-page admin-specialkost admin-list">
+        <section class="app-shell__page-header">
+            <div>
+                <h1 class="app-shell__title">Specialkost</h1>
+                <p class="app-shell__subtitle">Hantera kosttyper.</p>
+            </div>
+            <div class="app-shell__page-actions">
+                <a class="app-shell__user-pill" href="{{ url_for('ui.admin_specialkost_new_form') }}">➕ Skapa specialkost</a>
+            </div>
+        </section>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="ua-flashes">
+                    {% for category, message in messages %}
+                        <div class="ua-flash ua-flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <section class="app-shell__grid">
+            <article class="app-shell__card">
+                <h2 class="app-shell__card-title">Specialkost</h2>
+                <p class="app-shell__card-text">Tryck på en kosttyp för detaljer.</p>
+                {% if vm.diet_types %}
+                    <div class="app-shell__list">
+                        {% for row in vm.diet_types %}
+                        <div class="app-shell__list-item">
+                            <div class="app-shell__list-main">
+                                <span class="app-shell__list-title">{{ row.name }}</span>
+                                <div class="app-shell__list-meta">
+                                    {% if row.default_select %}
+                                        <span class="app-shell__badge">✓ Förmarkeras</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="app-shell__list-actions">
+                                <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}">Redigera</a>
+                                <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" data-confirm="Är du säker på att du vill ta bort kosttypen {{ row.name }}?">
+                                    {{ csrf_token_input()|safe }}
+                                    <button type="submit" class="app-shell__icon-btn app-shell__icon-btn--danger" aria-label="Ta bort kosttyp {{ row.name }}" title="Ta bort">🗑️</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="admin-departments__empty">
+                        <div class="admin-departments__empty-icon">📋</div>
+                        <h3 class="admin-departments__empty-title">Inga kosttyper ännu</h3>
+                        <p class="app-shell__card-text">Skapa din första kosttyp för att komma igång.</p>
+                        <a class="app-shell__btn app-shell__btn--primary" href="{{ url_for('ui.admin_specialkost_new_form') }}">Lägg till kosttyp</a>
+                    </div>
+                {% endif %}
+            </article>
+        </section>
+    </div>
 {% endblock %}

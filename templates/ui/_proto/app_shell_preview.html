@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yuplan App Shell Preview</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
+  <script src="{{ url_for('static', filename='js/app_shell.js') }}" defer></script>
+</head>
+<body>
+  <div class="app-shell app-shell--full" aria-label="Yuplan premium app shell">
+    <header class="app-shell__topbar">
+      <div class="app-shell__brand">
+        <img class="app-shell__logo" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" />
+        <span class="app-shell__brand-text">Yuplan</span>
+      </div>
+      <div class="app-shell__topbar-actions">
+        <span class="app-shell__env-badge app-shell__env-badge--local">LOCAL</span>
+        <button class="app-shell__theme-toggle" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle>
+          <span data-theme-icon>🌙</span>
+        </button>
+        <div class="app-shell__user-menu" data-user-menu>
+          <button class="app-shell__user-pill" type="button" aria-haspopup="menu" aria-expanded="false" data-user-menu-trigger>
+            superuser
+          </button>
+          <div class="app-shell__user-dropdown" role="menu" aria-label="Användarmeny">
+            <a class="app-shell__user-item" role="menuitem" href="#">Användarinfo</a>
+            <a class="app-shell__user-item" role="menuitem" href="#">Support</a>
+            <a class="app-shell__user-item" role="menuitem" href="#">Logga ut</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="app-shell__body">
+      <aside class="app-shell__sidebar" aria-label="Huvudnavigering">
+        <div class="app-shell__sidebar-panel">
+          <nav class="app-shell__nav">
+            <a class="app-shell__nav-item app-shell__nav-item--active" href="#">Översikt</a>
+            <a class="app-shell__nav-item" href="#">Avdelningar</a>
+            <a class="app-shell__nav-item" href="#">Meny &amp; registrering</a>
+            <a class="app-shell__nav-item" href="#">Specialkost</a>
+            <a class="app-shell__nav-item" href="#">Statistik/Rapport</a>
+            <a class="app-shell__nav-item" href="#">Veckovy</a>
+          </nav>
+          <div class="app-shell__sidebar-footer">Yuplan</div>
+        </div>
+      </aside>
+
+      <main class="app-shell__main">
+        <section class="app-shell__page-header">
+          <div>
+            <h1 class="app-shell__title">Översikt</h1>
+            <p class="app-shell__subtitle">En lugn, samlad vy över kökets dag, avdelningarnas läge och det som kräver fokus.</p>
+          </div>
+        </section>
+
+        <section class="app-shell__grid" aria-label="Snabböversikt">
+          <article class="app-shell__card">
+            <h2 class="app-shell__card-title">Idag i köket</h2>
+            <p class="app-shell__card-text">Lunch: 128 portioner · Kväll: 94 portioner. Specialkost uppdaterad kl 10:15.</p>
+            <div class="app-shell__card-meta">Senaste notis: köket bekräftade leverans 10:42.</div>
+          </article>
+
+          <article class="app-shell__card">
+            <h2 class="app-shell__card-title">Veckostatus</h2>
+            <p class="app-shell__card-text">5 av 6 avdelningar är klara för vecka 8. Inga avvikelser i menyn.</p>
+            <div class="app-shell__card-meta">Nästa kontroll: tisdag kl 13:00.</div>
+          </article>
+
+          <article class="app-shell__card">
+            <h2 class="app-shell__card-title">Kom ihåg att beställa</h2>
+            <p class="app-shell__card-text">Beställning för torsdag saknas från Avdelning Solgläntan.</p>
+            <div class="app-shell__card-meta">Skicka påminnelse till avdelningen.</div>
+          </article>
+
+          <article class="app-shell__card app-shell__card--coming">
+            <h2 class="app-shell__card-title">Kommunikation mellan avdelningar &amp; kök</h2>
+            <p class="app-shell__card-text">En trygg kanal för uppdateringar, snabba frågor och bekräftelser.</p>
+            <span class="app-shell__badge">Kommer snart</span>
+          </article>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

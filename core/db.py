@@ -7,7 +7,10 @@ from __future__ import annotations
 from contextlib import suppress
 
 from sqlalchemy import create_engine, text
+from flask import current_app, has_app_context
+import logging
 import os
+from typing import Mapping
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 
@@ -15,6 +18,24 @@ from .models import Base
 
 _engine: Engine | None = None
 _SessionFactory: scoped_session[Session] | None = None
+
+
+def allow_destructive_db(app_config: Mapping[str, object] | None = None) -> bool:
+    """Return True when destructive DB operations are explicitly allowed."""
+    if os.getenv("ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes"):
+        return True
+    if os.getenv("YUPLAN_ALLOW_DESTRUCTIVE_DB", "0").lower() in ("1", "true", "yes"):
+        return True
+    if app_config and bool(app_config.get("TESTING")):
+        return True
+    return False
+
+
+def _is_sqlite_memory(engine: Engine | None) -> bool:
+    try:
+        return bool(engine and engine.dialect.name == "sqlite" and engine.url.database == ":memory:")
+    except Exception:
+        return False
 
 
 def _normalize_url(url: str) -> str:
@@ -73,13 +94,25 @@ def create_all() -> (
 ):  # dev helper ONLY for fresh ephemeral DBs (tests, scratch). Use Alembic in normal flows.
     if _engine is None:
         raise RuntimeError("Engine not initialized")
+    log = logging.getLogger("unified.db")
+    log.info("create_all: start")
+    if has_app_context() and bool(current_app.config.get("TESTING")):
+        log.warning("create_all: TESTING -> drop_all enabled")
+        Base.metadata.drop_all(_engine)
+        Base.metadata.create_all(_engine)
+        return
     # For sqlite test runs we want a clean schema each invocation to avoid
     # primary key collisions when tests call create_all() multiple times.
     if _engine.dialect.name == "sqlite":
-        try:
-            Base.metadata.drop_all(_engine)
-        except Exception:
-            pass
+        allow_drop = _is_sqlite_memory(_engine) or allow_destructive_db()
+        if allow_drop:
+            try:
+                log.warning("create_all: dropping sqlite schema (destructive)")
+                Base.metadata.drop_all(_engine)
+            except Exception:
+                pass
+        else:
+            log.warning("create_all: skip drop_all; ALLOW_DESTRUCTIVE_DB not set")
     Base.metadata.create_all(_engine)
     # Align SQLite test schema with production migrations for specific tables
     try:
@@ -136,6 +169,10 @@ def create_all() -> (
                         wcols = _cols("weekview_alt2_flags")
                         is_canonical = ("site_id" in wcols) and ("enabled" in wcols) and ("tenant_id" not in wcols) and ("is_alt2" not in wcols)
                         if not is_canonical:
+                            allow_repair = _is_sqlite_memory(_engine) or allow_destructive_db()
+                            if not allow_repair:
+                                log.warning("create_all: skip weekview_alt2_flags repair; ALLOW_DESTRUCTIVE_DB not set")
+                                raise RuntimeError("Destructive schema repair not allowed")
                             # Create canonical table with proper UNIQUE constraint
                             conn.execute(text(
                                 """

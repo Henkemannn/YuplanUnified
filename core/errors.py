@@ -11,7 +11,7 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
-from flask import request
+from flask import current_app, request
 from werkzeug.wrappers.response import Response
 
 from .app_authz import AuthzError
@@ -109,6 +109,12 @@ def register_error_handlers(app: Any) -> None:  # pragma: no cover - integration
 
     @app.errorhandler(SessionError)
     def _h_session(err: SessionError) -> Response:
+        try:
+            logger = current_app.config.get("DEV_AUTH_FINGERPRINT_LOGGER")
+            if callable(logger):
+                logger("auth_missing_session")
+        except Exception:
+            pass
         resp = unauthorized(detail=str(err) or "authentication_required")
         _emit_problem(resp.get_json())
         return resp

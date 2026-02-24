@@ -53,6 +53,28 @@ class Unit(Base):
     default_attendance: Mapped[int] = mapped_column(Integer, nullable=True)
 
 
+class Site(Base):
+    __tablename__ = "sites"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    tenant_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Department(Base):
+    __tablename__ = "departments"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    site_id: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(120))
+    resident_count_mode: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
+    resident_count_fixed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 # --- Menus & Dishes ---
 class Dish(Base):
     __tablename__ = "dishes"
@@ -74,6 +96,7 @@ class Menu(Base):
     __tablename__ = "menus"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
+    site_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     week: Mapped[int] = mapped_column(Integer)
     year: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), default="draft")

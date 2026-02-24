@@ -5,6 +5,10 @@
   var modal = null;
   var modalBody = null;
 
+  function ypCurrentSiteId() {
+    return document.querySelector('meta[name="current-site-id"]')?.content || '';
+  }
+
   function getYearWeek(){
     try{
       var p = new URLSearchParams(window.location.search);
@@ -19,6 +23,12 @@
     var yw = { year: year, week: week };
     if(!yw.year || !yw.week){ yw = getYearWeek(); }
     var url = '/menu/week' + (yw.year && yw.week ? ('?year=' + encodeURIComponent(yw.year) + '&week=' + encodeURIComponent(yw.week)) : '');
+    const siteId = ypCurrentSiteId();
+    if (siteId && !url.includes('site_id=')) {
+      url += (url.includes('?') ? '&' : '?') + 'site_id=' + encodeURIComponent(siteId);
+    } else if (!siteId) {
+      console.warn("menu/week: missing site_id meta");
+    }
     return fetch(url, { headers: { 'Accept': 'application/json' } })
       .then(function(res){ if(!res.ok) throw new Error('status ' + res.status); return res.json(); })
       .then(function(data){
@@ -49,6 +59,7 @@
     if(!modal||!modalBody) return;
     modalBody.innerHTML=html;
     modal.hidden=false;
+    modal.setAttribute('aria-hidden', 'false');
     modal.classList.add('is-open');
     document.body.classList.add('menu-modal-open');
   }
@@ -56,6 +67,7 @@
     ensureRefs();
     if(!modal) return;
     modal.hidden=true;
+    modal.setAttribute('aria-hidden', 'true');
     modal.classList.remove('is-open');
     document.body.classList.remove('menu-modal-open');
   }
@@ -112,6 +124,19 @@
   window.openMenuModal=openMenuModal;
 
   document.addEventListener('keydown', function(ev){ if(ev.key==='Escape'){ hideModal(); }});
+  document.addEventListener('DOMContentLoaded', function(){
+    ensureRefs();
+    if(!modal) return;
+    modal.classList.remove('is-open');
+    modal.hidden=true;
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('menu-modal-open');
+  });
+  document.addEventListener('contextmenu', function(ev){
+    if(document.body.classList.contains('menu-modal-open')){
+      ev.preventDefault();
+    }
+  });
   var OPEN_SELECTORS=[
     '[data-action="open-menu-modal"]',
     '#openMenuModal',

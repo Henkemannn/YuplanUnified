@@ -1,4 +1,5 @@
 import re
+from uuid import uuid4
 from flask.testing import FlaskClient
 from sqlalchemy import text
 
@@ -8,7 +9,8 @@ from core.db import get_session
 
 def _seed_site_with_departments(db, site_id: str, dep_pairs: list[tuple[str, str]]):
     if not db.execute(text("SELECT 1 FROM sites WHERE id=:i"), {"i": site_id}).fetchone():
-        db.execute(text("INSERT INTO sites(id,name) VALUES(:i,:n)"), {"i": site_id, "n": "Test Site"})
+        name = f"Test Site {uuid4().hex[:8]}"
+        db.execute(text("INSERT INTO sites(id,name) VALUES(:i,:n)"), {"i": site_id, "n": name})
     for dep_id, dep_name in dep_pairs:
         if not db.execute(text("SELECT 1 FROM departments WHERE id=:i"), {"i": dep_id}).fetchone():
             # Detect schema columns and insert accordingly
@@ -16,13 +18,16 @@ def _seed_site_with_departments(db, site_id: str, dep_pairs: list[tuple[str, str
             if {"resident_count_mode", "resident_count_fixed"}.issubset(cols):
                 db.execute(
                     text(
-                        "INSERT INTO departments(id,site_id,name,resident_count_mode,resident_count_fixed) "
+                        "INSERT OR IGNORE INTO departments(id,site_id,name,resident_count_mode,resident_count_fixed) "
                         "VALUES(:i,:s,:n,'fixed',0)"
                     ),
                     {"i": dep_id, "s": site_id, "n": dep_name},
                 )
             else:
-                db.execute(text("INSERT INTO departments(id,site_id,name) VALUES(:i,:s,:n)"), {"i": dep_id, "s": site_id, "n": dep_name})
+                db.execute(
+                    text("INSERT OR IGNORE INTO departments(id,site_id,name) VALUES(:i,:s,:n)"),
+                    {"i": dep_id, "s": site_id, "n": dep_name},
+                )
     db.commit()
 
 
