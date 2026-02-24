@@ -96,6 +96,7 @@ class Menu(Base):
     __tablename__ = "menus"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
+    site_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     week: Mapped[int] = mapped_column(Integer)
     year: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), default="draft")

@@ -5,6 +5,10 @@
   var modal = null;
   var modalBody = null;
 
+  function ypCurrentSiteId() {
+    return document.querySelector('meta[name="current-site-id"]')?.content || '';
+  }
+
   function getYearWeek(){
     try{
       var p = new URLSearchParams(window.location.search);
@@ -18,6 +22,12 @@
     if(cachedMenu) return Promise.resolve(cachedMenu);
     var yw = getYearWeek();
     var url = '/menu/week' + (yw.year && yw.week ? ('?year=' + encodeURIComponent(yw.year) + '&week=' + encodeURIComponent(yw.week)) : '');
+    const siteId = ypCurrentSiteId();
+    if (siteId && !url.includes('site_id=')) {
+      url += (url.includes('?') ? '&' : '?') + 'site_id=' + encodeURIComponent(siteId);
+    } else if (!siteId) {
+      console.warn("menu/week: missing site_id meta");
+    }
     return fetch(url, { headers: { 'Accept': 'application/json' } })
       .then(function(res){
         if(!res.ok) throw new Error('status ' + res.status);
