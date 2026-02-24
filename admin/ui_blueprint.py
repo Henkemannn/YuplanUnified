@@ -778,22 +778,20 @@ def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[ov
     tenant_id = 1  # TODO: Extract from session
     site_id = request.args.get("site_id") or session.get("site_id")
 
-    if not site_id:
-        flash("Välj site.", "warning")
-        return redirect(url_for("admin_ui.admin_menu_import"))
-
     db = get_session()
     try:
-        menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+        if site_id:
+            menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+            if not menu:
+                legacy = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=None, year=year, week=week).first()
+                if legacy is not None:
+                    legacy.site_id = site_id
+                    db.commit()
+                    menu = legacy
+        else:
+            menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=None, year=year, week=week).first()
     finally:
         db.close()
-
-    if not menu and site_id:
-        legacy = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=None, year=year, week=week).first()
-        if legacy is not None:
-            legacy.site_id = site_id
-            db.commit()
-            menu = legacy
 
     if not menu:
         flash(f"Ingen meny hittades för vecka {week}/{year}.", "warning")
