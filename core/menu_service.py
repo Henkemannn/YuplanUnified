@@ -138,12 +138,26 @@ class MenuServiceDB:
         try:
             # TODO: If multiple versions exist, prefer published over draft
             # For now, prefer published status when querying
-            menu = (
-                db.query(Menu)
-                .filter_by(tenant_id=tenant_id, site_id=site_id, week=week, year=year)
-                .order_by(Menu.status.desc())  # 'published' > 'draft' alphabetically
-                .first()
-            )
+            if source == "weekview_overview":
+                # Legacy bridge until all menus have site_id
+                menu = (
+                    db.query(Menu)
+                    .filter(
+                        Menu.tenant_id == tenant_id,
+                        Menu.week == week,
+                        Menu.year == year,
+                        (Menu.site_id == site_id) | (Menu.site_id.is_(None)),
+                    )
+                    .order_by(Menu.status.desc())  # 'published' > 'draft' alphabetically
+                    .first()
+                )
+            else:
+                menu = (
+                    db.query(Menu)
+                    .filter_by(tenant_id=tenant_id, site_id=site_id, week=week, year=year)
+                    .order_by(Menu.status.desc())  # 'published' > 'draft' alphabetically
+                    .first()
+                )
             if not menu:
                 return {"menu_id": None, "menu_status": None, "updated_at": None, "days": {}}  # type: ignore[return-value]
             # Ensure updated_at populated (older seed data may have NULL)

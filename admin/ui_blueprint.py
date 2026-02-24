@@ -727,6 +727,7 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
     from core.etag_utils import generate_menu_etag
     from core.db import get_session
     from core.models import Menu
+    from datetime import datetime, timezone
     
     tenant_id = 1  # TODO: Extract from session
     site_id = request.args.get("site_id") or session.get("site_id")
@@ -740,6 +741,13 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
                 orphan.site_id = site_id
                 db.commit()
                 menu = orphan
+        menu_id = menu.id if menu else None
+        menu_updated_at = getattr(menu, "updated_at", None) if menu else None
+        if menu is not None and menu_updated_at is None:
+            menu.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(menu)
+            menu_updated_at = menu.updated_at
     finally:
         db.close()
 
@@ -749,15 +757,17 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
 
     menu_service = MenuServiceDB()
     week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
+    raw_status = (week_view or {}).get("menu_status") or getattr(menu, "status", None)
+    menu_status = str(raw_status or "draft").strip().lower()
     
     # Generate ETag for optimistic locking
-    etag = generate_menu_etag(menu.id, getattr(menu, "updated_at", None))
+    etag = generate_menu_etag(menu_id, menu_updated_at)
     
     vm = {
         "year": year,
         "week": week,
-        "menu_id": menu.id,
-        "menu_status": (week_view or {}).get("menu_status", "draft"),
+        "menu_id": menu_id,
+        "menu_status": menu_status,
         "etag": etag,
         "days": (week_view or {}).get("days", {})
     }
@@ -774,6 +784,7 @@ def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[ov
     from core.etag_utils import generate_menu_etag
     from core.db import get_session
     from core.models import Menu
+    from datetime import datetime, timezone
     
     tenant_id = 1  # TODO: Extract from session
     site_id = request.args.get("site_id") or session.get("site_id")
@@ -790,6 +801,13 @@ def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[ov
                     menu = legacy
         else:
             menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=None, year=year, week=week).first()
+        menu_id = menu.id if menu else None
+        menu_updated_at = getattr(menu, "updated_at", None) if menu else None
+        if menu is not None and menu_updated_at is None:
+            menu.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(menu)
+            menu_updated_at = menu.updated_at
     finally:
         db.close()
 
@@ -801,12 +819,12 @@ def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[ov
     week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
 
     # Generate ETag
-    etag = generate_menu_etag(menu.id, getattr(menu, "updated_at", None))
+    etag = generate_menu_etag(menu_id, menu_updated_at)
     
     vm = {
         "year": year,
         "week": week,
-        "menu_id": menu.id,
+        "menu_id": menu_id,
         "etag": etag,
         "days": (week_view or {}).get("days", {})
     }

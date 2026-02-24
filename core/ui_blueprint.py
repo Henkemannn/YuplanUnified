@@ -3000,16 +3000,31 @@ def admin_menu_import_week(year: int, week: int):
         return _impl(year, week)  # type: ignore[misc]
     except Exception:
         # Fallback minimal behavior
+        from core.etag_utils import generate_menu_etag
         db = get_session()
-        vm = {"year": year, "week": week, "days": {}}
+        vm = {"year": year, "week": week, "days": {}, "menu_status": "draft", "etag": None}
         try:
             menu_row = db.execute(
-                text("SELECT id FROM menus WHERE year=:y AND week=:w"), {"y": year, "w": week}
+                text("SELECT id, status, updated_at FROM menus WHERE year=:y AND week=:w"),
+                {"y": year, "w": week},
             ).fetchone()
             if not menu_row:
                 flash("Ingen meny hittades för vald vecka.", "warning")
                 return redirect(url_for("ui.admin_menu_import_list"))
             menu_id = int(menu_row[0])
+            raw_status = menu_row[1]
+            vm["menu_status"] = str(raw_status or "draft").strip().lower()
+            menu_updated_at = menu_row[2]
+            if isinstance(menu_updated_at, str):
+                try:
+                    from datetime import datetime
+                    menu_updated_at = datetime.fromisoformat(menu_updated_at)
+                except Exception:
+                    menu_updated_at = None
+            if menu_updated_at is None:
+                from datetime import datetime, timezone
+                menu_updated_at = datetime.now(timezone.utc)
+            vm["etag"] = generate_menu_etag(menu_id, menu_updated_at)
             rows = db.execute(
                 text(
                     """
@@ -3258,7 +3273,7 @@ def weekview_overview_ui():
     has_any_dinner = False
     rows = []
     for dep_id, dep_name in departments:
-        payload, _etag = svc.fetch_weekview(tid, year, week, dep_id)
+        payload, _etag = svc.fetch_weekview(tid, year, week, dep_id, site_id=site_id, source="weekview_overview")
         summaries = payload.get("department_summaries") or []
         days = (summaries[0].get("days") if summaries else []) or []
         res_l = 0

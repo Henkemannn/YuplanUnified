@@ -110,7 +110,8 @@ def get_published_weeks(site_id: str | None, from_week_key: str | None) -> list[
         params = {"from_year": from_year, "from_week": from_week}
         clauses = ["status = 'published'", "(year > :from_year OR (year = :from_year AND week >= :from_week))"]
         if _menus_has_column(db, "site_id") and site_id:
-            clauses.append("site_id = :site_id")
+            # Include legacy menus without site_id for backward compatibility
+            clauses.append("(site_id = :site_id OR site_id IS NULL)")
             params["site_id"] = site_id
         else:
             tenant_id = _resolve_tenant_id_for_site(db, site_id)
