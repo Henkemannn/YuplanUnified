@@ -5,8 +5,8 @@ import os
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
-def test_csv_upload_returns_success(app_session) -> None:
-    client: FlaskClient = app_session.test_client()
+def test_csv_upload_returns_success(client_admin) -> None:
+    client: FlaskClient = client_admin
     # Load fixture CSV
     fixture_path = os.path.join(os.path.dirname(__file__), "..", "fixtures", "sample_menu.csv")
     with open(fixture_path, "rb") as f:

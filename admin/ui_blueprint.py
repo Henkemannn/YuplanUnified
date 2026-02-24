@@ -681,6 +681,7 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
     try:
         menu_service = MenuServiceDB()
         import_service = MenuImportService(menu_service)
+        site_id = request.args.get("site_id") or session.get("site_id")
         if fname_low.endswith('.csv'):
             rows = parse_menu_csv(uploaded_file.stream)
             import_result = csv_rows_to_import_result(rows)
@@ -695,7 +696,7 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
             flash("Ogiltigt menyformat eller saknad fil.", "danger")
             return redirect(url_for("admin_ui.admin_menu_import"))
 
-        summary = import_service.apply(tenant_id, import_result)
+        summary = import_service.apply(tenant_id, site_id, import_result)
         weeks = summary.get("weeks", [])
         created_total = sum(int(w.get("created", 0)) for w in weeks)
         updated_total = sum(int(w.get("updated", 0)) for w in weeks)
@@ -724,26 +725,41 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
 def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[override]
     """Display menu variants for a specific week."""
     from core.etag_utils import generate_menu_etag
+    from core.db import get_session
+    from core.models import Menu
     
     tenant_id = 1  # TODO: Extract from session
-    
-    menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
-    
-    if not week_view or not week_view.get("menu_id"):
-        flash(f"Ingen meny hittades för vecka {week}/{year}.", "warning")
+    site_id = request.args.get("site_id") or session.get("site_id")
+
+    db = get_session()
+    try:
+        menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+        if (not menu) and site_id:
+            orphan = db.query(Menu).filter_by(tenant_id=tenant_id, year=year, week=week, site_id=None).first()
+            if orphan:
+                orphan.site_id = site_id
+                db.commit()
+                menu = orphan
+    finally:
+        db.close()
+
+    if not menu:
+        flash("Ingen meny hittades för vald site.", "warning")
         return redirect(url_for("admin_ui.admin_menu_import"))
+
+    menu_service = MenuServiceDB()
+    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
     
     # Generate ETag for optimistic locking
-    etag = generate_menu_etag(week_view["menu_id"], week_view["updated_at"])
+    etag = generate_menu_etag(menu.id, getattr(menu, "updated_at", None))
     
     vm = {
         "year": year,
         "week": week,
-        "menu_id": week_view["menu_id"],
-        "menu_status": week_view.get("menu_status", "draft"),
+        "menu_id": menu.id,
+        "menu_status": (week_view or {}).get("menu_status", "draft"),
         "etag": etag,
-        "days": week_view.get("days", {})
+        "days": (week_view or {}).get("days", {})
     }
     
     response = make_response(render_template("admin_menu_import_week.html", vm=vm))
@@ -756,25 +772,45 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
 def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[override]
     """Edit menu variants for a specific week."""
     from core.etag_utils import generate_menu_etag
+    from core.db import get_session
+    from core.models import Menu
     
     tenant_id = 1  # TODO: Extract from session
-    
-    menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
-    
-    if not week_view or not week_view.get("menu_id"):
+    site_id = request.args.get("site_id") or session.get("site_id")
+
+    if not site_id:
+        flash("Välj site.", "warning")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+
+    db = get_session()
+    try:
+        menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+    finally:
+        db.close()
+
+    if not menu and site_id:
+        legacy = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=None, year=year, week=week).first()
+        if legacy is not None:
+            legacy.site_id = site_id
+            db.commit()
+            menu = legacy
+
+    if not menu:
         flash(f"Ingen meny hittades för vecka {week}/{year}.", "warning")
         return redirect(url_for("admin_ui.admin_menu_import"))
     
+    menu_service = MenuServiceDB()
+    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
+
     # Generate ETag
-    etag = generate_menu_etag(week_view["menu_id"], week_view["updated_at"])
+    etag = generate_menu_etag(menu.id, getattr(menu, "updated_at", None))
     
     vm = {
         "year": year,
         "week": week,
-        "menu_id": week_view["menu_id"],
+        "menu_id": menu.id,
         "etag": etag,
-        "days": week_view.get("days", {})
+        "days": (week_view or {}).get("days", {})
     }
     return render_template("admin_menu_import_week_edit.html", vm=vm)
 
@@ -788,15 +824,24 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
     from core.etag_utils import validate_etag
     
     tenant_id = 1  # TODO: Extract from session
+    site_id = request.args.get("site_id") or session.get("site_id")
     
-    menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
-    
-    if not week_view or not week_view.get("menu_id"):
-        flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
-        return redirect(url_for("admin_ui.admin_menu_import"))
-    
-    menu_id = week_view["menu_id"]
+    db = get_session()
+    try:
+        menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+        if (not menu) and site_id:
+            orphan = db.query(Menu).filter_by(tenant_id=tenant_id, year=year, week=week, site_id=None).first()
+            if orphan:
+                orphan.site_id = site_id
+                db.commit()
+                menu = orphan
+        if not menu:
+            flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
+            return redirect(url_for("admin_ui.admin_menu_import"))
+        menu_id = menu.id
+        menu_updated_at = menu.updated_at
+    finally:
+        db.close()
     
     # Validate ETag from If-Match header or form data
     if_match = request.headers.get("If-Match") or request.form.get("_etag")
@@ -808,7 +853,7 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
         else:
             is_valid, error_msg = False, "If-Match header required for this operation"
     else:
-        is_valid, error_msg = validate_etag(if_match, menu_id, week_view["updated_at"])
+        is_valid, error_msg = validate_etag(if_match, menu_id, menu_updated_at)
     
     if not is_valid:
         # Return 412 Precondition Failed for AJAX, flash for form submit
@@ -879,9 +924,10 @@ def admin_menu_import_week_publish(year: int, week: int) -> str:  # type: ignore
     from core.etag_utils import validate_etag
     
     tenant_id = 1  # TODO: Extract from session
+    site_id = request.args.get("site_id") or session.get("site_id")
     
     menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
+    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
     
     if not week_view or not week_view.get("menu_id"):
         flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
@@ -921,9 +967,10 @@ def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: igno
     from core.etag_utils import validate_etag
     
     tenant_id = 1  # TODO: Extract from session
+    site_id = request.args.get("site_id") or session.get("site_id")
     
     menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, week, year)
+    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
     
     if not week_view or not week_view.get("menu_id"):
         flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")

@@ -26,7 +26,8 @@ def test_kitchen_menu_overview_renders():
         svc = MenuServiceDB()
         year = 2026
         week = 5
-        menu = svc.create_or_get_menu(1, week, year)
+        site_id = "site-menu"
+        menu = svc.create_or_get_menu(1, site_id, week, year)
         db2 = get_new_session()
         try:
             d1 = Dish(tenant_id=1, name="Alt1 Gryta", category=None)
@@ -49,8 +50,8 @@ def test_kitchen_menu_overview_renders():
     headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
-        sess["site_id"] = "site-menu"
-    rv = client.get(f"/ui/kitchen/menu?site_id=site-menu&year={year}&week={week}", headers=headers)
+        sess["site_id"] = site_id
+    rv = client.get(f"/ui/kitchen/menu?site_id={site_id}&year={year}&week={week}", headers=headers)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert "Menyöversikt" in html

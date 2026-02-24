@@ -1497,7 +1497,7 @@ def portal_week():
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
 
     svc = WeekviewService()
-    payload, _etag = svc.fetch_weekview(tid, year, week, department_id)
+    payload, _etag = svc.fetch_weekview(tid, year, week, department_id, site_id)
     summaries = payload.get("department_summaries") or []
     days_raw = (summaries[0].get("days") if summaries else []) or []
     # Fallback: if no days returned, synthesize Mon–Sun entries so unified UI renders
@@ -1855,7 +1855,7 @@ def kitchen_menu_overview():
     from .menu_service import MenuServiceDB
     menu_service = MenuServiceDB()
     try:
-        week_view = menu_service.get_week_view(tenant_id, week, year)
+        week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
     except Exception:
         week_view = {"days": {}}
     days_raw = (week_view or {}).get("days") or {}
@@ -2301,7 +2301,8 @@ def kitchen_planering_v1():
                 from flask import current_app as _app
                 ms = getattr(_app, "menu_service", None)
                 if ms is not None and tid is not None:
-                    mv = ms.get_week_view(int(tid), week, year)
+                    site_id = request.args.get("site_id") or session.get("site_id")
+                    mv = ms.get_week_view(int(tid), site_id, week, year)
                     days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
                     keys = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
                     day_key = keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
@@ -2584,17 +2585,23 @@ def kitchen_veckovy_week():
     year = int(request.args.get("year") or _date.today().year)
     week = int(request.args.get("week") or _date.today().isocalendar()[1])
     # Fetch names
+    tenant_id = getattr(g, "tenant_id", None) or session.get("tenant_id")
     db = get_session()
     try:
         row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
         row_d = db.execute(text("SELECT name FROM departments WHERE id=:i"), {"i": department_id}).fetchone()
+        if tenant_id is None:
+            row_t = db.execute(text("SELECT tenant_id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+            tenant_id = row_t[0] if row_t else None
         site_name = row_s[0] if row_s else "Site"
         dep_name = row_d[0] if row_d else "Avdelning"
     finally:
         db.close()
     # Build minimal grid structure from existing week payload via WeekviewService
     svc = WeekviewService()
-    payload, _ = svc.fetch_weekview(tenant_id=1, year=year, week=week, department_id=department_id)
+    if tenant_id is None:
+        tenant_id = 1
+    payload, _ = svc.fetch_weekview(tenant_id=tenant_id, year=year, week=week, department_id=department_id, site_id=site_id, source="kitchen_week_legacy")
     summaries = payload.get("department_summaries") or []
     dep = summaries[0] if summaries else {}
     days = dep.get("days") or []
@@ -2613,7 +2620,7 @@ def kitchen_veckovy_week():
     reg_repo = MealRegistrationRepo()
     try:
         reg_repo.ensure_table_exists()
-        regs = reg_repo.get_registrations_for_week(1, site_id, department_id, year, week)
+        regs = reg_repo.get_registrations_for_week(tenant_id, site_id, department_id, year, week)
     except Exception:
         regs = []
     reg_map = {(r["date"], r["meal_type"]): bool(r.get("registered")) for r in regs}
@@ -3042,8 +3049,9 @@ def admin_menu_import_week_save(year: int, week: int):
         from core.etag_utils import validate_etag
 
         tenant_id = 1
+        site_id = request.args.get("site_id") or session.get("site_id")
         menu_service = MenuServiceDB()
-        week_view = menu_service.get_week_view(tenant_id, week, year)
+        week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
         if not week_view or not week_view.get("menu_id"):
             flash("Ingen meny hittades för vald vecka.", "warning")
             return redirect(url_for("ui.admin_menu_import_list"))
@@ -4394,7 +4402,8 @@ def admin_dashboard():
             if tid is not None:
                 from .menu_service import MenuServiceDB
                 svc = MenuServiceDB()
-                week_view = svc.get_week_view(int(tid), current_week, current_year)
+                site_id = request.args.get("site_id") or session.get("site_id")
+                week_view = svc.get_week_view(int(tid), site_id, current_week, current_year)
                 if (week_view or {}).get("menu_status") == "published":
                     day_key = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][today.isoweekday() - 1]
                     day_obj = (week_view.get("days") or {}).get(day_key, {})

@@ -62,7 +62,7 @@ def test_week_page_has_link_to_weeks_overview(app_session):
     today = _date.today()
     year, week, _ = today.isocalendar()
     svc = MenuServiceDB()
-    menu = svc.create_or_get_menu(1, week, year)
+    menu = svc.create_or_get_menu(1, site_id, week, year)
 
     # Create a dish and set alt1 for Monday
     db = get_new_session()

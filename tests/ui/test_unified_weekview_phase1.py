@@ -67,7 +67,7 @@ def test_weekview_happy_path_with_menu_data(client_admin):
             for d in [d1, d2, d3, d4, d5]:
                 db.refresh(d)
             
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             # Monday lunch with all variants
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt2", dish_id=d2.id)
@@ -241,7 +241,7 @@ def test_weekview_alt2_highlighting_visible(client_admin):
             db.commit()
             db.refresh(d1); db.refresh(d2)
             
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt2", dish_id=d2.id)
         finally:
@@ -382,7 +382,7 @@ def test_weekview_dinner_columns_hidden_when_no_dinner(client_admin):
             db.add(d1)
             db.commit(); db.refresh(d1)
             
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
         finally:
             db.close()

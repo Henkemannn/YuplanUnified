@@ -49,7 +49,7 @@ def test_weekview_site_overview_phase1(client_admin):
             db.add_all([d1, d2, d3, d4, d5])
             db.commit()
             db.refresh(d1); db.refresh(d2); db.refresh(d3); db.refresh(d4); db.refresh(d5)
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             # Department-independent menu variants (site-wide)
             # Mon lunch alt1/alt2/dessert, Tue dinner alt1, Thu lunch alt1
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)

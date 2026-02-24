@@ -18,7 +18,7 @@ class MenuImportService:
     def __init__(self, menu_service: MenuServiceDB):
         self.menu_service = menu_service
 
-    def apply(self, tenant_id: int, result: MenuImportResult) -> dict:
+    def apply(self, tenant_id: int, site_id: str, result: MenuImportResult) -> dict:
         summary = []
         db = get_session()
         try:
@@ -27,7 +27,7 @@ class MenuImportService:
                 updated = 0
                 skipped = 0
                 menu = self.menu_service.create_or_get_menu(
-                    tenant_id, week_block.week, week_block.year
+                    tenant_id, site_id, week_block.week, week_block.year
                 )
                 # Preload existing variants map
                 existing_map = self._existing_variant_map(db, menu.id)

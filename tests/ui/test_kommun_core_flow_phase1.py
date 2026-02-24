@@ -20,13 +20,13 @@ def _seed_site_and_department():
         conn.close()
 
 
-def _ensure_menu_for_week(tenant_id: int, year: int, week: int) -> None:
+def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int) -> None:
     from core.menu_service import MenuServiceDB
     from core.db import get_new_session
     from core.models import Dish
 
     svc = MenuServiceDB()
-    menu = svc.create_or_get_menu(tenant_id, week, year)
+    menu = svc.create_or_get_menu(tenant_id, site_id, week, year)
     db = get_new_session()
     try:
         d = Dish(tenant_id=tenant_id, name="Köttbullar", category=None)
@@ -75,7 +75,7 @@ def test_end_to_end_department_choice_to_weekly_report(app_session):
     week = 48
     tid = 1
 
-    _ensure_menu_for_week(tid, year, week)
+    _ensure_menu_for_week(tid, site_id, year, week)
     _seed_weekview_expected_for_report(department_id, year, week)
 
     monday = _date.fromisocalendar(year, week, 1).isoformat()

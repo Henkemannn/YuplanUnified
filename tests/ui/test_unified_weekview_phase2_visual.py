@@ -63,7 +63,7 @@ def seed_weekview_data(client_admin):
             db.commit()
             
             # Create a menu for current week using menu service
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             
         finally:
             db.close()

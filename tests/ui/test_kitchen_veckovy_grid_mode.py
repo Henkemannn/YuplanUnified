@@ -12,7 +12,8 @@ def _seed_basics():
     try:
         site = conn.execute(text("SELECT id FROM sites WHERE id='00000000-0000-0000-0000-000000000000'"))
         if not site.fetchone():
-            conn.execute(text("INSERT INTO sites (id, name) VALUES ('00000000-0000-0000-0000-000000000000', 'Test Site')"))
+            conn.execute(text("INSERT INTO sites (id, tenant_id, name) VALUES ('00000000-0000-0000-0000-000000000000', 1, 'Test Site')"))
+        conn.execute(text("UPDATE sites SET tenant_id=1 WHERE id='00000000-0000-0000-0000-000000000000' AND tenant_id IS NULL"))
         dep = conn.execute(text("SELECT id FROM departments WHERE id='00000000-0000-0000-0000-000000000001'"))
         if not dep.fetchone():
             conn.execute(text("INSERT INTO departments (id, site_id, name, resident_count_mode, resident_count_fixed) VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'Avd Alpha', 'fixed', 5)"))
@@ -21,13 +22,13 @@ def _seed_basics():
         conn.close()
 
 
-def _ensure_menu_for_week(tenant_id: int, year: int, week: int) -> None:
+def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int) -> None:
     from core.menu_service import MenuServiceDB
     from core.db import get_new_session
     from core.models import Dish
 
     svc = MenuServiceDB()
-    menu = svc.create_or_get_menu(tenant_id, week, year)
+    menu = svc.create_or_get_menu(tenant_id, site_id, week=week, year=year)
     db = get_new_session()
     try:
         d1 = Dish(tenant_id=tenant_id, name="Alt1 Renskav", category=None)
@@ -47,8 +48,15 @@ def _ensure_menu_for_week(tenant_id: int, year: int, week: int) -> None:
     svc.publish_menu(tenant_id, menu.id)
 
 
-def test_kitchen_grid_renders_and_icons_present(app_session):
+def test_kitchen_grid_renders_and_icons_present(app_session, monkeypatch):
     client = app_session.test_client()
+    from datetime import date as _real_date
+    from core import ui_blueprint
+    class _FrozenDate(_real_date):
+        @classmethod
+        def today(cls):
+            return cls(2025, 12, 3)
+    monkeypatch.setattr(ui_blueprint, "_date", _FrozenDate)
     _seed_basics()
     site_id = "00000000-0000-0000-0000-000000000000"
     department_id = "00000000-0000-0000-0000-000000000001"
@@ -56,7 +64,25 @@ def test_kitchen_grid_renders_and_icons_present(app_session):
     week = 49
     tid = 1
 
-    _ensure_menu_for_week(tid, year, week)
+    _ensure_menu_for_week(tid, site_id, year, week)
+
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = tid
+
+    print("DB_PATH:", app_session.config.get("DB_PATH"))
+    print("site_id_session:", site_id)
+    from core.db import get_session
+    db = get_session()
+    try:
+        rows_sites = db.execute(text("SELECT id, tenant_id, name FROM sites")).fetchall()
+        rows_menus = db.execute(text("SELECT id, tenant_id, site_id, week, year, status FROM menus")).fetchall()
+        rows_site_id = db.execute(text("SELECT id FROM sites WHERE id=:id"), {"id": site_id}).fetchall()
+        print("sites:", rows_sites)
+        print("menus:", rows_menus)
+        print("site_id_exists:", rows_site_id)
+    finally:
+        db.close()
 
     rv = client.get(
         f"/ui/kitchen/week?site_id={site_id}&department_id={department_id}&year={year}&week={week}",
@@ -100,7 +126,7 @@ def test_cell_classes_markerad_and_alt2(app_session):
     week = 49
     tid = 1
 
-    _ensure_menu_for_week(tid, year, week)
+    _ensure_menu_for_week(tid, site_id, year, week)
     monday = _date.fromisocalendar(year, week, 1).isoformat()
 
     # Register lunch for monday to create "markerad"

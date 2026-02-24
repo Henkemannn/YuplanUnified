@@ -37,6 +37,8 @@ class MenuServiceDB:
         pass
 
     def create_or_get_menu(self, tenant_id: int, site_id: str, week: int, year: int) -> Menu:
+        if not site_id:
+            raise ValueError("site_id required")
         db = get_new_session()
         try:
             existing: Menu | None = (
@@ -46,6 +48,16 @@ class MenuServiceDB:
             )
             if existing is not None:
                 return existing
+            legacy: Menu | None = (
+                db.query(Menu)
+                .filter_by(tenant_id=tenant_id, site_id=None, week=week, year=year)
+                .first()
+            )
+            if legacy is not None:
+                legacy.site_id = site_id
+                db.commit()
+                db.refresh(legacy)
+                return legacy
             new_menu = Menu(
                 tenant_id=tenant_id,
                 site_id=site_id,
@@ -121,7 +133,7 @@ class MenuServiceDB:
         finally:
             db.close()
 
-    def get_week_view(self, tenant_id: int, site_id: str, week: int, year: int) -> WeekView:
+    def get_week_view(self, tenant_id: int, site_id: str, week: int, year: int, source: str | None = None) -> WeekView:
         db = get_new_session()
         try:
             # TODO: If multiple versions exist, prefer published over draft

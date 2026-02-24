@@ -58,7 +58,7 @@ def test_weekview_ui_renders_header_menu_and_alt2(client_admin):
                 0,
                 [{"diet_type_id": str(diet_id), "default_count": 2}],
             )
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             # Monday lunch alt1/alt2/dessert
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1_id)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt2", dish_id=d2_id)
@@ -168,7 +168,7 @@ def test_weekview_ui_no_dinner_hides_columns(client_admin):
             d1 = Dish(tenant_id=1, name="Pytt i panna", category=None)
             db.add(d1)
             db.commit(); db.refresh(d1)
-            menu = app.menu_service.create_or_get_menu(tenant_id=1, week=week, year=year)
+            menu = app.menu_service.create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
             app.menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="mon", meal="lunch", variant_type="alt1", dish_id=d1.id)
         finally:
             db.close()
