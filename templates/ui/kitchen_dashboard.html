@@ -2,34 +2,135 @@
 
 {% block page_title %}Kök{% endblock %}
 
-{% block head_extra %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
-{% endblock %}
-
 {% block content %}
   <section class="app-shell__page-header">
     <div>
       <h1 class="app-shell__title">Kök</h1>
-      <p class="app-shell__subtitle">Välj modul för veckovy, planering och rapport.</p>
+      <p class="app-shell__subtitle">Översikt för idag.</p>
     </div>
+    {% if vm.site_name %}
+      <span class="app-shell__badge">{{ vm.site_name }}</span>
+    {% endif %}
   </section>
 
-  <section class="app-shell__grid">
-    <a class="app-shell__card" href="{{ url_for('ui.kitchen_veckovy_week', site_id=vm.site_id) }}" aria-label="Öppna veckovy">
-      <h2 class="app-shell__card-title">Veckovy</h2>
-      <p class="app-shell__card-text">Visa och markera specialkost per dag.</p>
-      <div class="app-shell__card-meta">Klicka på siffran när specialkost har anpassats.</div>
-    </a>
-    <a class="app-shell__card" href="{{ url_for('ui.kitchen_planering_v1', site_id=vm.site_id) }}" aria-label="Öppna planering">
-      <h2 class="app-shell__card-title">Planera</h2>
-      <p class="app-shell__card-text">Sammanställning och utskrift för veckan.</p>
-      <div class="app-shell__card-meta">Öppna planeringsöversikten.</div>
-    </a>
-    <a class="app-shell__card" href="{{ url_for('ui.kitchen_menu_overview', site_id=vm.site_id) }}" aria-label="Öppna menyöversikt">
-      <h2 class="app-shell__card-title">Menyöversikt</h2>
-      <p class="app-shell__card-text">Veckans meny, lunch och middag.</p>
-      <div class="app-shell__card-meta">Läs-only översikt av menyn.</div>
-    </a>
-    {% include "ui/_partials/remember_to_order_card.html" %}
+  <section class="app-shell__grid app-shell__grid--2col">
+    <article class="app-shell__card">
+      <div class="app-shell__card-header">
+        <div>
+          <h2 class="app-shell__card-title">Hej {{ session.get('username') or session.get('role') }}</h2>
+          <p class="app-shell__card-text">{{ vm.today_formatted }} · Vecka {{ vm.current_week }}</p>
+        </div>
+      </div>
+      <div class="app-shell__card-body">
+        <div class="app-shell__card-meta">Dagens meny</div>
+        <table class="app-shell__table">
+          <tbody>
+            <tr>
+              <td>
+                <div>🍽 Lunch: {{ vm.today_menu.lunch_alt1 or '—' }}</div>
+                <div class="menu-alt2-text">Alt 2: {{ vm.today_menu.lunch_alt2 or '—' }}</div>
+                <div>Dessert: {{ vm.today_menu.dessert or '—' }}</div>
+              </td>
+              <td>
+                <div>Kväll: {{ vm.today_menu.dinner or '—' }}</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="app-shell__card app-shell__card--coming">
+      <div class="app-shell__card-header">
+        <div>
+          <h2 class="app-shell__card-title">Anslagstavla</h2>
+          <p class="app-shell__card-text">Publicerade påminnelser från admin visas här.</p>
+        </div>
+        <span class="app-shell__badge">Kommer snart</span>
+      </div>
+      <div class="app-shell__card-body">
+        <p class="app-shell__card-meta">Ons 31/7 – Fika 10 pers (kaffe/kaka)</p>
+      </div>
+    </article>
+
+    <article class="app-shell__card remember-to-order" data-testid="remember-to-order-card">
+      <div class="app-shell__card-header">
+        <div>
+          <h2 class="app-shell__card-title">Kom ihåg att beställa</h2>
+          <p class="app-shell__card-text">Admin markerar beställt i kundadmin.</p>
+        </div>
+      </div>
+      <div class="app-shell__card-body">
+        {% set items = vm.remember_to_order or [] %}
+        <div class="remember-card">
+          <div class="remember-card__list">
+            {% if items %}
+              <div class="remember-to-order__list" role="list">
+                {% for item in items %}
+                  {% set is_checked = item.checked_at %}
+                  {% set added_by = item.created_by_role %}
+                  {% set date_label = (item.created_at.strftime("%Y-%m-%d") if item.created_at else "") %}
+                  <div class="remember-to-order__item {% if is_checked %}remember-to-order__item--checked{% endif %}" role="listitem">
+                    <div class="remember-to-order__row remember-to-order__row--compact">
+                      <div class="remember-to-order__text">{{ item.text }}</div>
+                      <div class="remember-to-order__meta">
+                        <span>✏️ {% if added_by in ["admin", "superuser"] %}Admin{% else %}Kök{% endif %}{% if date_label %} · {{ date_label }}{% endif %}</span>
+                        {% if is_checked %}
+                          <span class="remember-to-order__status">✓ Beställt</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="app-shell__card-text remember-to-order__empty">Inga rader inlagda.</p>
+            {% endif %}
+            <div class="remember-card__fade" aria-hidden="true"></div>
+          </div>
+
+          <div class="remember-card__composer">
+            <form
+              id="rto-add-form"
+              class="remember-to-order__add-form"
+              data-testid="remember-to-order-add-form"
+              method="post"
+              action="#"
+              data-site-id="{{ vm.site_id }}"
+              data-week-key="{{ vm.remember_to_order_week_key }}"
+            >
+              <input type="hidden" name="site_id" value="{{ vm.site_id }}" />
+              <input type="hidden" name="week_key" value="{{ vm.remember_to_order_week_key }}" />
+              <label class="remember-to-order__label" for="remember-to-order-text">Lägg till rad</label>
+              <div class="remember-to-order__add-row">
+                <input
+                  id="remember-to-order-text"
+                  class="remember-to-order__input"
+                  name="text"
+                  type="text"
+                  placeholder="Ex: Beställ mer timbalbas"
+                  data-site-id="{{ vm.site_id }}"
+                  data-week-key="{{ vm.remember_to_order_week_key }}"
+                  required
+                />
+                <button class="app-shell__btn app-shell__btn--primary" type="submit">Lägg till</button>
+              </div>
+            </form>
+
+            <p class="remember-to-order__help">Bockade rader visas i 2 dagar och rensas sedan automatiskt.</p>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="app-shell__card app-shell__card--coming">
+      <div class="app-shell__card-header">
+        <div>
+          <h2 class="app-shell__card-title">Preppförslag</h2>
+          <p class="app-shell__card-text">Preppförslag och påminnelser från Planera 2.0 visas här.</p>
+        </div>
+        <span class="app-shell__badge">Under utveckling</span>
+      </div>
+    </article>
   </section>
 {% endblock %}

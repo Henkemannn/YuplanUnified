@@ -1774,6 +1774,7 @@ def portal_week_legacy_short():
 @ui_bp.get("/ui/kitchen")
 @require_roles(*SAFE_UI_ROLES)
 def kitchen_dashboard():
+    print("KITCHEN_DASH ENTERED")
     # Resolve active site: query param -> context -> session; else redirect
     q_site_id = (request.args.get("site_id") or "").strip()
     from .context import get_active_context as _get_ctx
@@ -1781,13 +1782,131 @@ def kitchen_dashboard():
     site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
     if not site_id:
         return redirect(url_for("ui.select_site", next="/ui/kitchen"))
+    print("STEP 1 after site resolution")
+    today = _date.today()
+    iso = today.isocalendar()
+    current_year = iso[0]
+    current_week = iso[1]
+    day_names = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
+    month_names = [
+        "januari",
+        "februari",
+        "mars",
+        "april",
+        "maj",
+        "juni",
+        "juli",
+        "augusti",
+        "september",
+        "oktober",
+        "november",
+        "december",
+    ]
+    today_formatted = f"{day_names[today.weekday()]} {today.day} {month_names[today.month - 1]}"
+    today_menu = {
+        "lunch_alt1": "—",
+        "lunch_alt2": "—",
+        "dessert": "—",
+        "dinner": "—",
+    }
+    tenant_id = int(session.get("tenant_id") or 1)
+    dep_id = None
     # Optional site name
     db = get_session()
     try:
         row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
         site_name = str(row_s[0]) if row_s else ""
+        from .models import Department
+        default_dep = (
+            db.query(Department)
+            .filter_by(site_id=site_id)
+            .order_by(Department.name)
+            .first()
+        )
+        dep_id = str(default_dep.id) if default_dep else None
     finally:
         db.close()
+    try:
+        print("STEP 2 before menu fetch")
+        svc = WeekviewService()
+        payload, _etag = svc.fetch_weekview(
+            tenant_id=tenant_id,
+            year=current_year,
+            week=current_week,
+            department_id=dep_id,
+            site_id=site_id,
+            source="weekview",
+        )
+        print("STEP 3 after menu fetch")
+        print(
+            "KITCHEN_DASH ctx",
+            {
+                "year": current_year,
+                "week": current_week,
+                "today": today.isoformat(),
+                "site_id": site_id,
+                "tenant_id": tenant_id,
+                "dep_id": dep_id,
+            },
+        )
+        try:
+            print("KITCHEN_DASH payload keys", sorted(list((payload or {}).keys())))
+        except Exception:
+            print("KITCHEN_DASH payload keys", None)
+        summaries = payload.get("department_summaries") or []
+        days_list = (summaries[0].get("days") if summaries else []) or []
+        days_payload = (payload or {}).get("days")
+        days_probe = days_payload if days_payload is not None else days_list
+        days_len = len(days_probe) if hasattr(days_probe, "__len__") else None
+        print("KITCHEN_DASH days_type", type(days_probe), "days_len", days_len)
+        sample_day = None
+        if isinstance(days_probe, list) and days_probe:
+            sample_day = days_probe[0]
+        if isinstance(sample_day, dict):
+            print("KITCHEN_DASH days_sample keys", list(sample_day.keys()))
+            mt_dbg = sample_day.get("menu_texts") or {}
+            print(
+                "KITCHEN_DASH days_sample menu_texts keys",
+                list(mt_dbg.keys()) if isinstance(mt_dbg, dict) else None,
+            )
+            print(
+                "KITCHEN_DASH days_sample lunch",
+                mt_dbg.get("lunch") if isinstance(mt_dbg, dict) else None,
+            )
+            print(
+                "KITCHEN_DASH days_sample dinner",
+                mt_dbg.get("dinner") if isinstance(mt_dbg, dict) else None,
+            )
+        else:
+            print("KITCHEN_DASH days_sample keys", None)
+        target_day = None
+        today_iso = today.isoformat()
+        for day in days_list:
+            if str(day.get("date")) == today_iso:
+                target_day = day
+                break
+        if target_day is None:
+            dow = today.isocalendar()[2]
+            for day in days_list:
+                if int(day.get("day_of_week") or 0) == dow:
+                    target_day = day
+                    break
+        if target_day:
+            mt = target_day.get("menu_texts") or {}
+            lunch_obj = mt.get("lunch") or {}
+            dinner_obj = mt.get("dinner") or {}
+            if isinstance(lunch_obj, dict):
+                today_menu["lunch_alt1"] = lunch_obj.get("alt1") or today_menu["lunch_alt1"]
+                today_menu["lunch_alt2"] = lunch_obj.get("alt2") or today_menu["lunch_alt2"]
+                today_menu["dessert"] = lunch_obj.get("dessert") or today_menu["dessert"]
+            elif isinstance(lunch_obj, str):
+                today_menu["lunch_alt1"] = lunch_obj
+            if isinstance(dinner_obj, dict):
+                today_menu["dinner"] = dinner_obj.get("alt1") or dinner_obj.get("alt2") or today_menu["dinner"]
+            elif isinstance(dinner_obj, str):
+                today_menu["dinner"] = dinner_obj
+    except Exception:
+        pass
     remember_items = []
     remember_week_key = None
     try:
@@ -1798,6 +1917,10 @@ def kitchen_dashboard():
     except Exception:
         remember_items = []
     vm = {
+        "today_formatted": today_formatted,
+        "current_week": current_week,
+        "current_year": current_year,
+        "today_menu": today_menu,
         "site_id": site_id,
         "site_name": site_name,
         "allow_site_switch": False,
@@ -1815,6 +1938,7 @@ def kitchen_dashboard():
         "remember_to_order_week_key": remember_week_key,
         "remember_to_order_can_check": False,
     }
+    print("STEP 4 before render")
     return render_template("ui/kitchen_dashboard.html", vm=vm)
 
 

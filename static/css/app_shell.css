@@ -690,9 +690,118 @@
   line-height: 1.6;
 }
 
+.menu-alt2-text {
+  color: var(--yp-color-warning);
+  font-weight: 500;
+}
+
+.app-shell--dark .app-shell__card-title {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.app-shell--dark .app-shell__card-text {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.app-shell--dark .app-shell__title {
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.app-shell--dark .app-shell__subtitle {
+  color: rgba(255, 255, 255, 0.72);
+}
+
 .app-shell__card-meta {
   font-size: var(--yp-font-size-sm);
   color: var(--muted);
+}
+
+.remember-to-order__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.remember-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.remember-card__list {
+  max-height: 220px;
+  overflow-y: auto;
+  position: relative;
+  padding-right: 8px;
+}
+
+.remember-card__fade {
+  position: sticky;
+  bottom: 0;
+  display: block;
+  height: 28px;
+  pointer-events: none;
+}
+
+.app-shell .remember-card__fade {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), var(--surface));
+}
+
+.app-shell--dark .remember-card__fade {
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0), var(--surface));
+}
+
+.remember-to-order__item {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.remember-to-order__row--compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.remember-to-order__text {
+  font-weight: 600;
+}
+
+.remember-to-order__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: var(--yp-font-size-sm);
+  color: var(--muted);
+}
+
+.remember-to-order__status {
+  color: var(--yp-color-success);
+  font-weight: 600;
+}
+
+.remember-to-order__add-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.remember-to-order__input {
+  flex: 1;
+  min-height: 36px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--yp-color-border);
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.app-shell--dark .remember-to-order__input {
+  background: var(--surface-2);
 }
 
 .app-shell__card--coming {
