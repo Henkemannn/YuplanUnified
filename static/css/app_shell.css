@@ -716,6 +716,62 @@
   color: var(--muted);
 }
 
+.kitchen-dashboard {
+  display: grid;
+  gap: 24px;
+  padding-top: 6px;
+}
+
+.kitchen-dashboard__date {
+  font-size: var(--yp-font-size-sm);
+  opacity: 0.72;
+}
+
+.kitchen-dashboard__menu-heading {
+  font-size: var(--yp-font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.kitchen-dash__menu {
+  display: grid;
+  gap: 8px;
+}
+
+.kitchen-dash__menu-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  line-height: 1.4;
+}
+
+.kitchen-dash__menu-label {
+  font-size: var(--yp-font-size-sm);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.kitchen-dash__menu-label--empty {
+  visibility: hidden;
+}
+
+.kitchen-dash__menu-dish {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kitchen-dash__menu-alt {
+  color: var(--yp-alt2-bg);
+  padding-left: 0;
+  font-weight: 600;
+}
+
 .remember-to-order__list {
   display: flex;
   flex-direction: column;
@@ -729,18 +785,54 @@
 }
 
 .remember-card__list {
-  max-height: 220px;
+  --remember-row-height: 52px;
+  max-height: calc(var(--remember-row-height) * 4);
   overflow-y: auto;
   position: relative;
   padding-right: 8px;
+  padding-bottom: 18px;
+  padding-top: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 55%, transparent) transparent;
+}
+
+.remember-card__list::before,
+.remember-card__list::after {
+  content: "";
+  position: sticky;
+  display: block;
+  height: 22px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.remember-card__list::before {
+  top: 0;
+  margin-top: -8px;
+  background: linear-gradient(to bottom, var(--surface), rgba(0, 0, 0, 0));
+}
+
+.remember-card__list::after {
+  bottom: 0;
+  margin-bottom: -8px;
+  background: linear-gradient(to top, var(--surface), rgba(0, 0, 0, 0));
+}
+
+.remember-card__list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.remember-card__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.remember-card__list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  border-radius: var(--r-full);
 }
 
 .remember-card__fade {
-  position: sticky;
-  bottom: 0;
-  display: block;
-  height: 28px;
-  pointer-events: none;
+  display: none;
 }
 
 .app-shell .remember-card__fade {

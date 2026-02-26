@@ -734,6 +734,7 @@ def admin_department_detail_get(department_id: str):
         "week": week,
         "selected_week": week,
         "resident_count_fixed": resident_count_fixed,
+            "site_id": site_id,
         "residents_lunch": lunch_eff,
         "residents_dinner": dinner_eff,
         "has_override": bool(ov.get("residents_lunch") or ov.get("residents_dinner")),
@@ -1771,10 +1772,86 @@ def portal_week_legacy_short():
     return portal_week()
 
 # Kitchen dashboard landing page
+def resolve_day_menu_for_site(*, db, site_id: str, date: _date) -> dict:
+    try:
+        from .menu_service import MenuServiceDB
+
+        tenant_id = int(getattr(g, "tenant_id", None) or session.get("tenant_id") or 1)
+        iso = date.isocalendar()
+        year = iso[0]
+        week = iso[1]
+        menu_service = MenuServiceDB()
+        week_view = menu_service.get_week_view(tenant_id, site_id, week, year) or {}
+        days_raw = (week_view.get("days") or {}) if isinstance(week_view, dict) else {}
+        day_map = {str(k).strip().lower(): v for k, v in (days_raw or {}).items()}
+
+        weekday = date.weekday()  # Mon=0..Sun=6
+        key_by_idx = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        day_key = key_by_idx[weekday]
+        day_aliases = {
+            "mon": ["mon", "monday", "mån", "måndag"],
+            "tue": ["tue", "tuesday", "tis", "tisdag"],
+            "wed": ["wed", "wednesday", "ons", "onsdag"],
+            "thu": ["thu", "thursday", "tor", "torsdag"],
+            "fri": ["fri", "friday", "fre", "fredag"],
+            "sat": ["sat", "saturday", "lör", "lördag"],
+            "sun": ["sun", "sunday", "sön", "söndag"],
+        }
+
+        def _pick_name(val) -> str:
+            if not val:
+                return ""
+            if isinstance(val, dict):
+                return str(val.get("dish_name") or val.get("name") or "")
+            return str(val)
+
+        def _meal_obj(day: dict, meal_key: str) -> dict:
+            if not day:
+                return {}
+            meal = day.get(meal_key) or day.get(meal_key.capitalize()) or {}
+            if isinstance(meal, dict):
+                return meal
+            return {"main": meal}
+
+        def _variant_text(meal: dict, keys: list[str]) -> str:
+            for key in keys:
+                name = _pick_name(meal.get(key) or meal.get(key.capitalize()))
+                if name:
+                    return name
+            return ""
+
+        day_val = {}
+        for alias in day_aliases.get(day_key, [day_key]):
+            day_val = day_map.get(alias) or {}
+            if day_val:
+                break
+
+        lunch_meal = _meal_obj(day_val, "lunch")
+        dinner_meal = _meal_obj(day_val, "dinner")
+
+        lunch_alt1 = _variant_text(lunch_meal, ["main", "alt1"])
+        lunch_alt2 = _variant_text(lunch_meal, ["alt2"])
+        dessert_text = _variant_text(lunch_meal, ["dessert"])
+        dinner_text = _variant_text(dinner_meal, ["main", "dinner", "alt1", "alt2"])
+
+        return {
+            "lunch_alt1": lunch_alt1,
+            "lunch_alt2": lunch_alt2,
+            "dessert": dessert_text,
+            "dinner": dinner_text,
+        }
+    except Exception:
+        return {
+            "lunch_alt1": "",
+            "lunch_alt2": "",
+            "dessert": "",
+            "dinner": "",
+        }
+
+
 @ui_bp.get("/ui/kitchen")
 @require_roles(*SAFE_UI_ROLES)
 def kitchen_dashboard():
-    print("KITCHEN_DASH ENTERED")
     # Resolve active site: query param -> context -> session; else redirect
     q_site_id = (request.args.get("site_id") or "").strip()
     from .context import get_active_context as _get_ctx
@@ -1782,7 +1859,6 @@ def kitchen_dashboard():
     site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
     if not site_id:
         return redirect(url_for("ui.select_site", next="/ui/kitchen"))
-    print("STEP 1 after site resolution")
     today = _date.today()
     iso = today.isocalendar()
     current_year = iso[0]
@@ -1803,110 +1879,14 @@ def kitchen_dashboard():
         "december",
     ]
     today_formatted = f"{day_names[today.weekday()]} {today.day} {month_names[today.month - 1]}"
-    today_menu = {
-        "lunch_alt1": "—",
-        "lunch_alt2": "—",
-        "dessert": "—",
-        "dinner": "—",
-    }
-    tenant_id = int(session.get("tenant_id") or 1)
-    dep_id = None
     # Optional site name
     db = get_session()
     try:
         row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
         site_name = str(row_s[0]) if row_s else ""
-        from .models import Department
-        default_dep = (
-            db.query(Department)
-            .filter_by(site_id=site_id)
-            .order_by(Department.name)
-            .first()
-        )
-        dep_id = str(default_dep.id) if default_dep else None
+        today_menu = resolve_day_menu_for_site(db=db, site_id=site_id, date=today)
     finally:
         db.close()
-    try:
-        print("STEP 2 before menu fetch")
-        svc = WeekviewService()
-        payload, _etag = svc.fetch_weekview(
-            tenant_id=tenant_id,
-            year=current_year,
-            week=current_week,
-            department_id=dep_id,
-            site_id=site_id,
-            source="weekview",
-        )
-        print("STEP 3 after menu fetch")
-        print(
-            "KITCHEN_DASH ctx",
-            {
-                "year": current_year,
-                "week": current_week,
-                "today": today.isoformat(),
-                "site_id": site_id,
-                "tenant_id": tenant_id,
-                "dep_id": dep_id,
-            },
-        )
-        try:
-            print("KITCHEN_DASH payload keys", sorted(list((payload or {}).keys())))
-        except Exception:
-            print("KITCHEN_DASH payload keys", None)
-        summaries = payload.get("department_summaries") or []
-        days_list = (summaries[0].get("days") if summaries else []) or []
-        days_payload = (payload or {}).get("days")
-        days_probe = days_payload if days_payload is not None else days_list
-        days_len = len(days_probe) if hasattr(days_probe, "__len__") else None
-        print("KITCHEN_DASH days_type", type(days_probe), "days_len", days_len)
-        sample_day = None
-        if isinstance(days_probe, list) and days_probe:
-            sample_day = days_probe[0]
-        if isinstance(sample_day, dict):
-            print("KITCHEN_DASH days_sample keys", list(sample_day.keys()))
-            mt_dbg = sample_day.get("menu_texts") or {}
-            print(
-                "KITCHEN_DASH days_sample menu_texts keys",
-                list(mt_dbg.keys()) if isinstance(mt_dbg, dict) else None,
-            )
-            print(
-                "KITCHEN_DASH days_sample lunch",
-                mt_dbg.get("lunch") if isinstance(mt_dbg, dict) else None,
-            )
-            print(
-                "KITCHEN_DASH days_sample dinner",
-                mt_dbg.get("dinner") if isinstance(mt_dbg, dict) else None,
-            )
-        else:
-            print("KITCHEN_DASH days_sample keys", None)
-        target_day = None
-        today_iso = today.isoformat()
-        for day in days_list:
-            if str(day.get("date")) == today_iso:
-                target_day = day
-                break
-        if target_day is None:
-            dow = today.isocalendar()[2]
-            for day in days_list:
-                if int(day.get("day_of_week") or 0) == dow:
-                    target_day = day
-                    break
-        if target_day:
-            mt = target_day.get("menu_texts") or {}
-            lunch_obj = mt.get("lunch") or {}
-            dinner_obj = mt.get("dinner") or {}
-            if isinstance(lunch_obj, dict):
-                today_menu["lunch_alt1"] = lunch_obj.get("alt1") or today_menu["lunch_alt1"]
-                today_menu["lunch_alt2"] = lunch_obj.get("alt2") or today_menu["lunch_alt2"]
-                today_menu["dessert"] = lunch_obj.get("dessert") or today_menu["dessert"]
-            elif isinstance(lunch_obj, str):
-                today_menu["lunch_alt1"] = lunch_obj
-            if isinstance(dinner_obj, dict):
-                today_menu["dinner"] = dinner_obj.get("alt1") or dinner_obj.get("alt2") or today_menu["dinner"]
-            elif isinstance(dinner_obj, str):
-                today_menu["dinner"] = dinner_obj
-    except Exception:
-        pass
     remember_items = []
     remember_week_key = None
     try:
@@ -1921,8 +1901,8 @@ def kitchen_dashboard():
         "current_week": current_week,
         "current_year": current_year,
         "today_menu": today_menu,
-        "site_id": site_id,
         "site_name": site_name,
+        "site_id": site_id,
         "allow_site_switch": False,
         "nav_context": "kitchen",
         "remember_to_order": [

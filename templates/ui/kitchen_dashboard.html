@@ -3,44 +3,51 @@
 {% block page_title %}Kök{% endblock %}
 
 {% block content %}
-  <section class="app-shell__page-header">
-    <div>
-      <h1 class="app-shell__title">Kök</h1>
-      <p class="app-shell__subtitle">Översikt för idag.</p>
-    </div>
-    {% if vm.site_name %}
-      <span class="app-shell__badge">{{ vm.site_name }}</span>
-    {% endif %}
-  </section>
+  <div class="kitchen-dashboard">
+    <section class="app-shell__page-header">
+      <div>
+        <h1 class="app-shell__title">Kök</h1>
+        <p class="app-shell__subtitle">Översikt för idag.</p>
+      </div>
+      {% if vm.site_name %}
+        <span class="app-shell__badge">{{ vm.site_name }}</span>
+      {% endif %}
+    </section>
 
-  <section class="app-shell__grid app-shell__grid--2col">
-    <article class="app-shell__card">
-      <div class="app-shell__card-header">
-        <div>
-          <h2 class="app-shell__card-title">Hej {{ session.get('username') or session.get('role') }}</h2>
-          <p class="app-shell__card-text">{{ vm.today_formatted }} · Vecka {{ vm.current_week }}</p>
+    <section class="app-shell__grid app-shell__grid--2col">
+      <article class="app-shell__card">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">Hej {{ session.get('username') or session.get('role') }}</h2>
+            <p class="app-shell__card-text kitchen-dashboard__date">{{ vm.today_formatted }} · Vecka {{ vm.current_week }}</p>
+          </div>
         </div>
-      </div>
-      <div class="app-shell__card-body">
-        <div class="app-shell__card-meta">Dagens meny</div>
-        <table class="app-shell__table">
-          <tbody>
-            <tr>
-              <td>
-                <div>🍽 Lunch: {{ vm.today_menu.lunch_alt1 or '—' }}</div>
-                <div class="menu-alt2-text">Alt 2: {{ vm.today_menu.lunch_alt2 or '—' }}</div>
-                <div>Dessert: {{ vm.today_menu.dessert or '—' }}</div>
-              </td>
-              <td>
-                <div>Kväll: {{ vm.today_menu.dinner or '—' }}</div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </article>
+        <div class="app-shell__card-body">
+          <div class="kitchen-dashboard__menu-heading">Dagens meny</div>
+          <div class="kitchen-dash__menu">
+            <div class="kitchen-dash__menu-row">
+              <div class="kitchen-dash__menu-label">Lunch</div>
+              <div class="kitchen-dash__menu-dish">{{ vm.today_menu.lunch_alt1 or '—' }}</div>
+            </div>
+            {% if vm.today_menu.lunch_alt2 %}
+              <div class="kitchen-dash__menu-row">
+                <div class="kitchen-dash__menu-label kitchen-dash__menu-label--empty" aria-hidden="true"></div>
+                <div class="kitchen-dash__menu-dish kitchen-dash__menu-alt">{{ vm.today_menu.lunch_alt2 }}</div>
+              </div>
+            {% endif %}
+            <div class="kitchen-dash__menu-row">
+              <div class="kitchen-dash__menu-label">Dessert</div>
+              <div class="kitchen-dash__menu-dish">{{ vm.today_menu.dessert or '—' }}</div>
+            </div>
+            <div class="kitchen-dash__menu-row">
+              <div class="kitchen-dash__menu-label">Kväll</div>
+              <div class="kitchen-dash__menu-dish">{{ vm.today_menu.dinner or '—' }}</div>
+            </div>
+          </div>
+        </div>
+      </article>
 
-    <article class="app-shell__card app-shell__card--coming">
+      <article class="app-shell__card app-shell__card--coming">
       <div class="app-shell__card-header">
         <div>
           <h2 class="app-shell__card-title">Anslagstavla</h2>
@@ -53,7 +60,7 @@
       </div>
     </article>
 
-    <article class="app-shell__card remember-to-order" data-testid="remember-to-order-card">
+      <article class="app-shell__card remember-to-order" data-testid="remember-to-order-card">
       <div class="app-shell__card-header">
         <div>
           <h2 class="app-shell__card-title">Kom ihåg att beställa</h2>
@@ -123,7 +130,7 @@
       </div>
     </article>
 
-    <article class="app-shell__card app-shell__card--coming">
+      <article class="app-shell__card app-shell__card--coming">
       <div class="app-shell__card-header">
         <div>
           <h2 class="app-shell__card-title">Preppförslag</h2>
@@ -132,5 +139,6 @@
         <span class="app-shell__badge">Under utveckling</span>
       </div>
     </article>
-  </section>
+    </section>
+  </div>
 {% endblock %}
