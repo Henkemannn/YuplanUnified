@@ -9,6 +9,14 @@ ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
 @pytest.fixture
+def client_admin(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["site_id"] = "site-publish-10"
+    return client
+
+
+@pytest.fixture
 def seeded_draft_week(app_session):
     """Seed database with test menu data for week 47/2025 with status='draft'."""
     from core.db import get_session
@@ -21,10 +29,15 @@ def seeded_draft_week(app_session):
         db.execute(text("DELETE FROM dishes"))
         db.commit()
         
+        db.execute(
+            text("INSERT OR REPLACE INTO sites (id, name, tenant_id, version) VALUES (:id, :name, :tid, 0)"),
+            {"id": "site-publish-10", "name": "Site Publish 10", "tid": 1},
+        )
+
         # Create menu for week 47 with draft status
         db.execute(
-            text("INSERT INTO menus (id, tenant_id, week, year, status) VALUES (:id, :tid, :week, :year, :status)"),
-            {"id": 101, "tid": 1, "week": 47, "year": 2025, "status": "draft"}
+            text("INSERT INTO menus (id, tenant_id, site_id, week, year, status) VALUES (:id, :tid, :sid, :week, :year, :status)"),
+            {"id": 101, "tid": 1, "sid": "site-publish-10", "week": 47, "year": 2025, "status": "draft"}
         )
         
         # Create a dish

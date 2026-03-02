@@ -53,11 +53,15 @@ def app_with_menu(app_session: Flask):
     conn.execute(text("DELETE FROM menu_variants"))
     conn.execute(text("DELETE FROM menus"))
     conn.execute(text("DELETE FROM dishes"))
+    conn.execute(
+        text("INSERT OR REPLACE INTO sites (id, name, tenant_id, version) VALUES (:id, :name, :tid, 0)"),
+        {"id": "site-import-7", "name": "Site Import 7", "tid": 1},
+    )
     
     # Seed menu for week 48/2025
     conn.execute(
-        text("INSERT INTO menus (tenant_id, week, year, status) VALUES (:tid, :week, :year, :status)"),
-        {"tid": 1, "week": 48, "year": 2025, "status": "draft"}
+        text("INSERT INTO menus (tenant_id, site_id, week, year, status) VALUES (:tid, :sid, :week, :year, :status)"),
+        {"tid": 1, "sid": "site-import-7", "week": 48, "year": 2025, "status": "draft"}
     )
     menu_id = conn.execute(text("SELECT last_insert_rowid()")).fetchone()[0]
     
@@ -98,7 +102,10 @@ def app_with_menu(app_session: Flask):
 @pytest.fixture
 def client_admin(app_with_menu: Flask) -> FlaskClient:
     """Authenticated test client for admin routes."""
-    return app_with_menu.test_client()
+    client = app_with_menu.test_client()
+    with client.session_transaction() as sess:
+        sess["site_id"] = "site-import-7"
+    return client
 
 
 def test_admin_menu_import_list_shows_weeks(client_admin: FlaskClient):

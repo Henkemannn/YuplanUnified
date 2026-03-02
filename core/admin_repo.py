@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Iterable
 
 from sqlalchemy import text
+from flask import current_app, has_app_context
 
 from .db import get_session
 from .etag import ConcurrencyError
@@ -16,10 +18,78 @@ def _is_sqlite(db) -> bool:
         return True
 
 
+def _sites_has_tenant_col(db) -> bool:
+    try:
+        cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
+        return any(str(c[1]) == "tenant_id" for c in cols)
+    except Exception:
+        try:
+            chk = db.execute(
+                text(
+                    "SELECT 1 FROM information_schema.columns WHERE table_name='sites' AND column_name='tenant_id'"
+                )
+            )
+            return chk.fetchone() is not None
+        except Exception:
+            return False
+
+
+def _resolve_default_tenant_id(db) -> int | None:
+    try:
+        row = db.execute(text("SELECT id FROM tenants WHERE id=1")).fetchone()
+        if row and row[0] is not None:
+            return int(row[0])
+    except Exception:
+        row = None
+    try:
+        rows = db.execute(text("SELECT id FROM tenants ORDER BY id")).fetchall()
+        if len(rows) == 1 and rows[0][0] is not None:
+            return int(rows[0][0])
+        allow_seed = (not has_app_context()) or bool(current_app.config.get("TESTING"))
+        if not rows and allow_seed:
+            try:
+                db.execute(
+                    text("INSERT INTO tenants(id, name, active) VALUES(1, 'TestTenant', 1)")
+                )
+                return 1
+            except Exception:
+                return None
+    except Exception:
+        return None
+    return None
+
+
+def tenant_exists(db, tenant_id: int | None) -> bool:
+    if tenant_id is None:
+        return False
+    try:
+        row = db.execute(text("SELECT 1 FROM tenants WHERE id=:id"), {"id": int(tenant_id)}).fetchone()
+        return row is not None
+    except Exception:
+        return False
+
+
 class SitesRepo:
-    def create_site(self, name: str) -> tuple[dict, int]:
+    def create_site(self, name: str, tenant_id: int | None = None) -> tuple[dict, int]:
         db = get_session()
         try:
+            tenant_value = tenant_id
+            if tenant_value is None:
+                tenant_value = _resolve_default_tenant_id(db)
+            if tenant_value is None and current_app.config.get("TESTING"):
+                tenant_value = 1
+            if tenant_value is None:
+                raise ValueError("tenant_required")
+            if not tenant_exists(db, tenant_value):
+                if current_app.config.get("TESTING") and int(tenant_value) == 1:
+                    try:
+                        db.execute(
+                            text("INSERT INTO tenants(id, name, active) VALUES(1, 'TestTenant', 1)")
+                        )
+                    except Exception:
+                        pass
+                if not tenant_exists(db, tenant_value):
+                    raise ValueError("tenant_not_found")
             sid = str(uuid.uuid4())
             if _is_sqlite(db):
                 # Ensure minimal admin tables exist for sqlite test/dev environments
@@ -29,6 +99,7 @@ class SitesRepo:
                         CREATE TABLE IF NOT EXISTS sites (
                             id TEXT PRIMARY KEY,
                             name TEXT NOT NULL,
+                            tenant_id INTEGER,
                             version INTEGER NOT NULL DEFAULT 0,
                             notes TEXT NULL,
                             updated_at TEXT
@@ -36,24 +107,33 @@ class SitesRepo:
                         """
                     )
                 )
+                try:
+                    if not _sites_has_tenant_col(db):
+                        db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+                except Exception:
+                    pass
+                try:
+                    db.execute(text("CREATE INDEX IF NOT EXISTS idx_sites_tenant_id ON sites(tenant_id)"))
+                except Exception:
+                    pass
                 db.execute(
                     text(
                         """
-                        INSERT INTO sites(id, name, version)
-                        VALUES(:id, :name, 0)
+                        INSERT INTO sites(id, name, tenant_id, version)
+                        VALUES(:id, :name, :tenant_id, 0)
                         """
                     ),
-                    {"id": sid, "name": name},
+                    {"id": sid, "name": name, "tenant_id": tenant_value},
                 )
             else:
                 db.execute(
                     text(
                         """
-                        INSERT INTO sites(id, name)
-                        VALUES(:id, :name)
+                        INSERT INTO sites(id, name, tenant_id)
+                        VALUES(:id, :name, :tenant_id)
                         """
                     ),
-                    {"id": sid, "name": name},
+                    {"id": sid, "name": name, "tenant_id": tenant_value},
                 )
             db.commit()
             return {"id": sid, "name": name}, 0
@@ -84,6 +164,7 @@ class SitesRepo:
                         CREATE TABLE IF NOT EXISTS sites (
                             id TEXT PRIMARY KEY,
                             name TEXT NOT NULL,
+                            tenant_id INTEGER,
                             version INTEGER NOT NULL DEFAULT 0,
                             notes TEXT NULL,
                             updated_at TEXT
@@ -112,6 +193,7 @@ class SitesRepo:
                         CREATE TABLE IF NOT EXISTS sites (
                             id TEXT PRIMARY KEY,
                             name TEXT NOT NULL,
+                            tenant_id INTEGER,
                             version INTEGER NOT NULL DEFAULT 0,
                             notes TEXT NULL,
                             updated_at TEXT
@@ -140,6 +222,44 @@ class SitesRepo:
             return [{"id": r[0], "name": r[1], "version": int(r[2] or 0)} for r in rows]
         finally:
             db.close()
+
+
+def dev_repair_null_site_tenant_ids() -> None:
+    if current_app.config.get("TESTING"):
+        return
+    env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+    if env_val not in ("dev", "development"):
+        return
+    if os.getenv("YUPLAN_DEV_REPAIR_TENANT_IDS", "0").lower() not in ("1", "true", "yes"):
+        return
+    db = get_session()
+    try:
+        try:
+            tenants = db.execute(text("SELECT id FROM tenants ORDER BY id")).fetchall()
+        except Exception:
+            return
+        if len(tenants) != 1:
+            return
+        try:
+            only_id = int(tenants[0][0]) if tenants[0][0] is not None else 0
+        except Exception:
+            return
+        if only_id != 1:
+            return
+        if not _sites_has_tenant_col(db):
+            return
+        row = db.execute(text("SELECT COUNT(*) FROM sites WHERE tenant_id IS NULL")).fetchone()
+        missing = int(row[0] or 0) if row else 0
+        if missing <= 0:
+            return
+        db.execute(text("UPDATE sites SET tenant_id=1 WHERE tenant_id IS NULL"))
+        db.commit()
+        try:
+            current_app.logger.info("DEV REPAIR: backfilled tenant_id=1 for %s sites.", missing)
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
 class DepartmentsRepo:

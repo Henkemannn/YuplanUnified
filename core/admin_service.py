@@ -18,10 +18,10 @@ class AdminService:
         self.alt2_repo = Alt2Repo()
 
     # --- Sites ---
-    def create_site(self, name: str) -> tuple[dict, str]:
+    def create_site(self, name: str, tenant_id: int | None = None) -> tuple[dict, str]:
         if not name or len(name.strip()) == 0:
             raise ValueError("name_required")
-        rec, ver = self.sites_repo.create_site(name.strip())
+        rec, ver = self.sites_repo.create_site(name.strip(), tenant_id=tenant_id)
         etag = make_etag("admin", "site", rec["id"], ver)
         return rec, etag
 

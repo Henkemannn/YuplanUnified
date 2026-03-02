@@ -11,10 +11,10 @@ def test_remember_to_order_ttl_filter(app_session):
 
     with app_session.app_context():
         item_recent = repo.add(site_id, week_key, "Synlig 1 dag", None, "admin", now=now)
-        repo.set_checked(item_recent.id, True, None, now=now - timedelta(days=1))
+        repo.set_checked(item_recent.id, True, None, site_id, now=now - timedelta(days=1))
 
         item_old = repo.add(site_id, week_key, "Dolj 3 dagar", None, "admin", now=now)
-        repo.set_checked(item_old.id, True, None, now=now - timedelta(days=3))
+        repo.set_checked(item_old.id, True, None, site_id, now=now - timedelta(days=3))
 
         repo.add(site_id, week_key, "Obockad", None, "cook", now=now)
 

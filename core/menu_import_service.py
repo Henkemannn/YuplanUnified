@@ -22,17 +22,20 @@ class MenuImportService:
         summary = []
         db = get_session()
         try:
+            effective_tenant_id = self.menu_service._resolve_site_tenant_id(db, site_id, tenant_id)  # type: ignore[attr-defined]
+            if effective_tenant_id is None:
+                raise ValueError("site_tenant_required")
             for week_block in result.weeks:
                 created = 0
                 updated = 0
                 skipped = 0
                 menu = self.menu_service.create_or_get_menu(
-                    tenant_id, site_id, week_block.week, week_block.year
+                    effective_tenant_id, site_id, week_block.week, week_block.year
                 )
                 # Preload existing variants map
                 existing_map = self._existing_variant_map(db, menu.id)
                 for item in week_block.items:
-                    dish_id = self._get_or_create_dish(db, tenant_id, item)
+                    dish_id = self._get_or_create_dish(db, effective_tenant_id, item)
                     key = (item.day, item.meal, item.variant_type)
                     prev = existing_map.get(key)
                     if prev == dish_id:
@@ -43,7 +46,7 @@ class MenuImportService:
                     else:
                         updated += 1
                     self.menu_service.set_variant(
-                        tenant_id, menu.id, item.day, item.meal, item.variant_type, dish_id
+                        effective_tenant_id, menu.id, item.day, item.meal, item.variant_type, dish_id
                     )
                 summary.append(
                     {

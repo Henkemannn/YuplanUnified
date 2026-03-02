@@ -2,6 +2,11 @@ def test_remember_to_order_add_and_check_permissions(client_admin, client_cook):
     site_id = "site-remember"
     week_key = "2026-W08"
 
+    with client_cook.session_transaction() as sess:
+        sess["site_id"] = site_id
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
     add_resp = client_cook.post(
         "/ui/api/remember-to-order/add",
         json={"site_id": site_id, "week_key": week_key, "text": "Bestall kaffe"},

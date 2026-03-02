@@ -84,17 +84,23 @@
                     {% if vm.weeks %}
                         {% set active_weeks = vm.active_weeks if vm.active_weeks is defined else vm.weeks %}
                         {% set archive_years = vm.archive_years if vm.archive_years is defined else [] %}
+                        {% set recent_weeks = vm.import_summary.weeks_list if vm.import_summary and vm.import_summary.weeks_list is defined else [] %}
 
                         <div class="admin-list__section">
                             <h4 class="app-shell__section-title">Aktiva menyer</h4>
                             {% if active_weeks %}
                                 <div class="app-shell__list">
                                     {% for w in active_weeks %}
+                                    {% set status = w.status if w.status is defined else 'draft' %}
+                                    {% set is_recent = recent_weeks | selectattr('year', 'equalto', w.year) | selectattr('week', 'equalto', w.week) | list %}
                                     <div class="app-shell__list-item">
                                         <a class="app-shell__list-link" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}" aria-label="Öppna vecka {{ w.week }} {{ w.year }}"></a>
                                         <div class="app-shell__list-main">
                                             <span class="app-shell__list-title">Vecka {{ w.week }}</span>
-                                            <div class="app-shell__list-meta">År {{ w.year }}</div>
+                                            <div class="app-shell__list-meta">
+                                                År {{ w.year }} · {{ 'PUBLICERAD' if status == 'published' else 'UTKAST' }}
+                                                {% if is_recent %} · Ny{% endif %}
+                                            </div>
                                         </div>
                                         <div class="app-shell__list-actions">
                                             <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}">Visa / Redigera</a>
@@ -116,11 +122,16 @@
                                         <div class="app-shell__details-body">
                                             <div class="app-shell__list">
                                                 {% for w in year_block.weeks %}
+                                                {% set status = w.status if w.status is defined else 'draft' %}
+                                                {% set is_recent = recent_weeks | selectattr('year', 'equalto', w.year) | selectattr('week', 'equalto', w.week) | list %}
                                                 <div class="app-shell__list-item">
                                                     <a class="app-shell__list-link" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}" aria-label="Öppna vecka {{ w.week }} {{ w.year }}"></a>
                                                     <div class="app-shell__list-main">
                                                         <span class="app-shell__list-title">Vecka {{ w.week }}</span>
-                                                        <div class="app-shell__list-meta">År {{ w.year }}</div>
+                                                        <div class="app-shell__list-meta">
+                                                            År {{ w.year }} · {{ 'PUBLICERAD' if status == 'published' else 'UTKAST' }}
+                                                            {% if is_recent %} · Ny{% endif %}
+                                                        </div>
                                                     </div>
                                                     <div class="app-shell__list-actions">
                                                         <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}">Visa / Redigera</a>

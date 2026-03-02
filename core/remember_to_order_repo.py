@@ -24,6 +24,17 @@ class RememberToOrderItem:
 
 
 class RememberToOrderRepo:
+    def _require_site_week(self, site_id: str, week_key: str) -> str:
+        if not site_id:
+            raise ValueError("site_id is required")
+        if not week_key:
+            raise ValueError("week_key is required")
+        return normalize_week_key(week_key)
+
+    def _require_site(self, site_id: str) -> None:
+        if not site_id:
+            raise ValueError("site_id is required")
+
     def _ensure_schema(self, db) -> None:
         try:
             if db.bind and db.bind.dialect.name != "sqlite":
@@ -57,7 +68,7 @@ class RememberToOrderRepo:
         )
 
     def list_visible(self, site_id: str, week_key: str, now: datetime | None = None) -> list[RememberToOrderItem]:
-        wk = normalize_week_key(week_key)
+        wk = self._require_site_week(site_id, week_key)
         current = now or datetime.now(timezone.utc)
         if current.tzinfo is None:
             current = current.replace(tzinfo=timezone.utc)
@@ -116,7 +127,7 @@ class RememberToOrderRepo:
         created_by_role: str,
         now: datetime | None = None,
     ) -> RememberToOrderItem:
-        wk = normalize_week_key(week_key)
+        wk = self._require_site_week(site_id, week_key)
         current = now or datetime.now(timezone.utc)
         if current.tzinfo is None:
             current = current.replace(tzinfo=timezone.utc)
@@ -180,8 +191,10 @@ class RememberToOrderRepo:
         item_id: int,
         checked: bool,
         user_id: int | None,
+        site_id: str,
         now: datetime | None = None,
     ) -> bool:
+        self._require_site(site_id)
         current = now or datetime.now(timezone.utc)
         if current.tzinfo is None:
             current = current.replace(tzinfo=timezone.utc)
@@ -195,10 +208,10 @@ class RememberToOrderRepo:
                         """
                         UPDATE remember_to_order_items
                         SET checked_at=:checked_at, checked_by_user_id=:checked_by_user_id
-                        WHERE id=:id
+                        WHERE id=:id AND site_id=:sid
                         """
                     ),
-                    {"checked_at": current, "checked_by_user_id": user_id, "id": int(item_id)},
+                    {"checked_at": current, "checked_by_user_id": user_id, "id": int(item_id), "sid": site_id},
                 )
             else:
                 res = db.execute(
@@ -206,10 +219,10 @@ class RememberToOrderRepo:
                         """
                         UPDATE remember_to_order_items
                         SET checked_at=NULL, checked_by_user_id=NULL
-                        WHERE id=:id
+                        WHERE id=:id AND site_id=:sid
                         """
                     ),
-                    {"id": int(item_id)},
+                    {"id": int(item_id), "sid": site_id},
                 )
             db.commit()
             return bool(res.rowcount)

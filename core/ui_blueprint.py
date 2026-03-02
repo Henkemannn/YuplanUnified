@@ -541,10 +541,47 @@ def admin_system_site_create():
     if not name:
         flash("Namn måste anges.", "error")
         return redirect(url_for("ui.admin_system_page"))
+    tenant_id = None
+    try:
+        tenant_id = session.get("tenant_id") or getattr(g, "tenant_id", None)
+    except Exception:
+        tenant_id = None
     db = get_session()
     try:
+        if tenant_id is None:
+            try:
+                rows = db.execute(text("SELECT id FROM tenants ORDER BY id")).fetchall()
+                if len(rows) == 1 and rows[0][0] is not None:
+                    tenant_id = int(rows[0][0])
+            except Exception:
+                tenant_id = None
+        if tenant_id is None:
+            flash("Saknar tenant för site.", "error")
+            return redirect(url_for("ui.admin_system_page"))
+        try:
+            from .admin_repo import tenant_exists as _tenant_exists
+
+            if not _tenant_exists(db, int(tenant_id)):
+                flash("Kund saknas för tenant_id.", "error")
+                return redirect(url_for("ui.admin_system_page"))
+        except Exception:
+            pass
+        try:
+            cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
+            has_tenant_col = any(str(c[1]) == "tenant_id" for c in cols)
+            if not has_tenant_col:
+                db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+        except Exception:
+            pass
+        try:
+            db.execute(text("CREATE INDEX IF NOT EXISTS idx_sites_tenant_id ON sites(tenant_id)"))
+        except Exception:
+            pass
         # Optional code column; insert minimal fields
-        db.execute(text("INSERT INTO sites(id,name) VALUES(:i,:n)"), {"i": str(uuid.uuid4()), "n": name})
+        db.execute(
+            text("INSERT INTO sites(id,name,tenant_id) VALUES(:i,:n,:t)"),
+            {"i": str(uuid.uuid4()), "n": name, "t": int(tenant_id)},
+        )
         db.commit()
         flash("Arbetsplats skapad.", "success")
     finally:
@@ -723,6 +760,7 @@ def admin_department_detail_get(department_id: str):
         _etag = svc.build_etag(tid, department_id, year, week, version)
     except Exception:
         _etag = ""
+    site_id = dept_site_id
     vm = {
         "department": {
             "id": department_id,
@@ -734,7 +772,7 @@ def admin_department_detail_get(department_id: str):
         "week": week,
         "selected_week": week,
         "resident_count_fixed": resident_count_fixed,
-            "site_id": site_id,
+        "site_id": site_id,
         "residents_lunch": lunch_eff,
         "residents_dinner": dinner_eff,
         "has_override": bool(ov.get("residents_lunch") or ov.get("residents_dinner")),
@@ -1852,13 +1890,10 @@ def resolve_day_menu_for_site(*, db, site_id: str, date: _date) -> dict:
 @ui_bp.get("/ui/kitchen")
 @require_roles(*SAFE_UI_ROLES)
 def kitchen_dashboard():
-    # Resolve active site: query param -> context -> session; else redirect
-    q_site_id = (request.args.get("site_id") or "").strip()
+    # Resolve active site: context -> session; never trust query param for remember-to-order
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
-    site_id = q_site_id or (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None))
-    if not site_id:
-        return redirect(url_for("ui.select_site", next="/ui/kitchen"))
+    site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
     today = _date.today()
     iso = today.isocalendar()
     current_year = iso[0]
@@ -1879,30 +1914,33 @@ def kitchen_dashboard():
         "december",
     ]
     today_formatted = f"{day_names[today.weekday()]} {today.day} {month_names[today.month - 1]}"
-    # Optional site name
-    db = get_session()
-    try:
-        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
-        site_name = str(row_s[0]) if row_s else ""
-        today_menu = resolve_day_menu_for_site(db=db, site_id=site_id, date=today)
-    finally:
-        db.close()
+    site_name = ""
+    today_menu = {"lunch_alt1": "", "lunch_alt2": "", "dessert": "", "dinner": ""}
+    if site_id:
+        db = get_session()
+        try:
+            row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+            site_name = str(row_s[0]) if row_s else ""
+            today_menu = resolve_day_menu_for_site(db=db, site_id=site_id, date=today)
+        finally:
+            db.close()
     remember_items = []
-    remember_week_key = None
-    try:
-        from .remember_to_order_repo import RememberToOrderRepo
-        from .week_key import week_key_from_date
-        remember_week_key = week_key_from_date(_date.today())
-        remember_items = RememberToOrderRepo().list_visible(site_id, remember_week_key)
-    except Exception:
-        remember_items = []
+    remember_week_key = ""
+    if site_id:
+        try:
+            from .remember_to_order_repo import RememberToOrderRepo
+            from .week_key import week_key_from_date
+            remember_week_key = week_key_from_date(_date.today())
+            remember_items = RememberToOrderRepo().list_visible(site_id, remember_week_key)
+        except Exception:
+            remember_items = []
     vm = {
         "today_formatted": today_formatted,
         "current_week": current_week,
         "current_year": current_year,
         "today_menu": today_menu,
         "site_name": site_name,
-        "site_id": site_id,
+        "site_id": site_id or "",
         "allow_site_switch": False,
         "nav_context": "kitchen",
         "remember_to_order": [
@@ -1918,7 +1956,6 @@ def kitchen_dashboard():
         "remember_to_order_week_key": remember_week_key,
         "remember_to_order_can_check": False,
     }
-    print("STEP 4 before render")
     return render_template("ui/kitchen_dashboard.html", vm=vm)
 
 
@@ -3817,8 +3854,15 @@ def reports_weekly_csv():
 def remember_to_order_list_api():
     site_id = (request.args.get("site_id") or "").strip()
     week_key = (request.args.get("week_key") or "").strip()
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
+    if not active_site_id:
+        return jsonify({"error": "bad_request", "message": "Missing active site"}), 400
     if not site_id or not week_key:
         return jsonify({"error": "bad_request", "message": "Missing site_id/week_key"}), 400
+    if str(site_id) != str(active_site_id):
+        return jsonify({"error": "forbidden", "message": "Site mismatch"}), 403
     from .remember_to_order_repo import RememberToOrderRepo
     repo = RememberToOrderRepo()
     items = repo.list_visible(site_id, week_key)
@@ -3846,8 +3890,15 @@ def remember_to_order_add_api():
     site_id = str((data.get("site_id") or "").strip())
     week_key = str((data.get("week_key") or "").strip())
     text_val = str((data.get("text") or "").strip())
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
+    if not active_site_id:
+        return jsonify({"error": "bad_request", "message": "Missing active site"}), 400
     if not site_id or not week_key or not text_val:
         return jsonify({"error": "bad_request", "message": "Missing site_id/week_key/text"}), 400
+    if str(site_id) != str(active_site_id):
+        return jsonify({"error": "forbidden", "message": "Site mismatch"}), 403
     user_id = session.get("user_id")
     role = (session.get("role") or "").strip().lower()
     from .remember_to_order_repo import RememberToOrderRepo
@@ -3866,12 +3917,20 @@ def remember_to_order_check_api():
         item_id = int(data.get("id"))
     except Exception:
         return jsonify({"error": "bad_request", "message": "Missing id"}), 400
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
+    if not active_site_id:
+        return jsonify({"error": "bad_request", "message": "Missing active site"}), 400
+    data_site_id = (data.get("site_id") or "").strip()
+    if data_site_id and str(data_site_id) != str(active_site_id):
+        return jsonify({"error": "forbidden", "message": "Site mismatch"}), 403
     checked_raw = data.get("checked")
     checked = str(checked_raw).lower() in ("1", "true", "yes", "on")
     user_id = session.get("user_id")
     from .remember_to_order_repo import RememberToOrderRepo
     repo = RememberToOrderRepo()
-    updated = repo.set_checked(item_id, checked, int(user_id) if user_id else None)
+    updated = repo.set_checked(item_id, checked, int(user_id) if user_id else None, str(active_site_id))
     if not updated:
         return jsonify({"error": "not_found"}), 404
     return jsonify({"ok": True}), 200
@@ -4518,11 +4577,10 @@ def admin_dashboard():
         dinner_title = None
         has_published_menu_today = False
         try:
-            if tid is not None:
+            if tid is not None and active_site_id:
                 from .menu_service import MenuServiceDB
                 svc = MenuServiceDB()
-                site_id = request.args.get("site_id") or session.get("site_id")
-                week_view = svc.get_week_view(int(tid), site_id, current_week, current_year)
+                week_view = svc.get_week_view(int(tid), active_site_id, current_week, current_year)
                 if (week_view or {}).get("menu_status") == "published":
                     day_key = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][today.isoweekday() - 1]
                     day_obj = (week_view.get("days") or {}).get(day_key, {})
@@ -4566,7 +4624,7 @@ def admin_dashboard():
         last_week = max(1, current_week - 1)
 
     remember_items = []
-    remember_week_key = None
+    remember_week_key = ""
     if active_site_id:
         try:
             from .remember_to_order_repo import RememberToOrderRepo
@@ -4588,7 +4646,7 @@ def admin_dashboard():
     vm = {
         "tenant_name": tenant_name,
         "site_name": site_name,
-        "site_id": active_site_id,
+        "site_id": active_site_id or "",
         "current_year": current_year,
         "current_week": current_week,
         "user_role": role,
@@ -4631,7 +4689,7 @@ def admin_dashboard():
             for it in remember_items
         ],
         "remember_to_order_week_key": remember_week_key,
-        "remember_to_order_can_check": bool(role in ADMIN_ROLES),
+        "remember_to_order_can_check": bool(active_site_id and role in ADMIN_ROLES),
     }
     
     return render_template("ui/unified_admin_dashboard.html", vm=vm, nav_context="admin")
