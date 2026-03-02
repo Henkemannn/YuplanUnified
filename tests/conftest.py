@@ -83,6 +83,10 @@ def app_session(tmp_path_factory):
     create_app, create_all, Tenant = _lazy_imports()
     db_file = tmp_path_factory.mktemp("db") / "test_app.db"
     url = f"sqlite:///{db_file}"
+
+    # Force tests to use the temp DB even if .env or user env points at dev.db
+    os.environ["DATABASE_URL"] = url
+    os.environ["APP_ENV"] = "testing"
     
     # Enable SQLite bootstrap for test environments
     os.environ["YP_ENABLE_SQLITE_BOOTSTRAP"] = "1"

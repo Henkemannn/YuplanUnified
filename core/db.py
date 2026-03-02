@@ -38,6 +38,29 @@ def _is_sqlite_memory(engine: Engine | None) -> bool:
         return False
 
 
+def _sqlite_db_path(engine: Engine | None) -> str | None:
+    try:
+        if not engine or engine.dialect.name != "sqlite":
+            return None
+        db_path = engine.url.database
+        if not db_path or db_path == ":memory:":
+            return None
+        return os.path.abspath(db_path)
+    except Exception:
+        return None
+
+
+def _is_dev_db_path(db_path: str) -> bool:
+    try:
+        norm = os.path.normcase(os.path.normpath(db_path))
+        if os.path.basename(norm) == "dev.db":
+            return True
+        marker = os.path.normcase(os.path.join("unified_platform", "dev.db"))
+        return norm.endswith(marker)
+    except Exception:
+        return False
+
+
 def _normalize_url(url: str) -> str:
     # Normalize postgres schemes to ensure SQLAlchemy uses psycopg v3
     if url.startswith("postgres://"):
@@ -97,6 +120,9 @@ def create_all() -> (
     log = logging.getLogger("unified.db")
     log.info("create_all: start")
     if has_app_context() and bool(current_app.config.get("TESTING")):
+        db_path = _sqlite_db_path(_engine)
+        if db_path and _is_dev_db_path(db_path):
+            raise RuntimeError("Refusing to run TESTING destructive operations on dev.db")
         log.warning("create_all: TESTING -> drop_all enabled")
         Base.metadata.drop_all(_engine)
         Base.metadata.create_all(_engine)
@@ -104,15 +130,15 @@ def create_all() -> (
     # For sqlite test runs we want a clean schema each invocation to avoid
     # primary key collisions when tests call create_all() multiple times.
     if _engine.dialect.name == "sqlite":
-        allow_drop = _is_sqlite_memory(_engine) or allow_destructive_db()
+        allow_drop = bool(has_app_context() and current_app.config.get("TESTING"))
         if allow_drop:
             try:
-                log.warning("create_all: dropping sqlite schema (destructive)")
+                log.warning("create_all: dropping sqlite schema (testing)")
                 Base.metadata.drop_all(_engine)
             except Exception:
                 pass
         else:
-            log.warning("create_all: skip drop_all; ALLOW_DESTRUCTIVE_DB not set")
+            log.warning("create_all: skip drop_all; TESTING not set")
     Base.metadata.create_all(_engine)
     # Align SQLite test schema with production migrations for specific tables
     try:
@@ -169,7 +195,7 @@ def create_all() -> (
                         wcols = _cols("weekview_alt2_flags")
                         is_canonical = ("site_id" in wcols) and ("enabled" in wcols) and ("tenant_id" not in wcols) and ("is_alt2" not in wcols)
                         if not is_canonical:
-                            allow_repair = _is_sqlite_memory(_engine) or allow_destructive_db()
+                            allow_repair = bool(has_app_context() and current_app.config.get("TESTING"))
                             if not allow_repair:
                                 log.warning("create_all: skip weekview_alt2_flags repair; ALLOW_DESTRUCTIVE_DB not set")
                                 raise RuntimeError("Destructive schema repair not allowed")
@@ -242,6 +268,7 @@ def create_all() -> (
                     CREATE TABLE IF NOT EXISTS sites (
                         id TEXT PRIMARY KEY,
                         name TEXT NOT NULL,
+                        tenant_id INTEGER,
                         version INTEGER NOT NULL DEFAULT 0,
                         notes TEXT NULL,
                         updated_at TEXT
