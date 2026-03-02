@@ -26,33 +26,15 @@ def _insert_menu(app, *, site_id: str, status: str, dish_name: str | None = None
 
     with app.app_context():
         from core.db import get_session
+        from core.menu_service import MenuServiceDB
 
-        db = get_session()
-        try:
-            db.execute(
-                text(
-                    "INSERT INTO menus (tenant_id, site_id, week, year, status, updated_at) "
-                    "VALUES (:tid, :sid, :week, :year, :status, :updated_at)"
-                ),
-                {
-                    "tid": 1,
-                    "sid": site_id,
-                    "week": week,
-                    "year": year,
-                    "status": status,
-                    "updated_at": datetime.now(timezone.utc),
-                },
-            )
-            menu_row = db.execute(
-                text(
-                    "SELECT id FROM menus WHERE site_id=:sid AND week=:week AND year=:year "
-                    "AND status=:status ORDER BY id DESC LIMIT 1"
-                ),
-                {"sid": site_id, "week": week, "year": year, "status": status},
-            ).fetchone()
-            menu_id = int(menu_row[0]) if menu_row else None
+        svc = MenuServiceDB()
+        menu = svc.create_or_get_menu(1, site_id, week, year)
+        menu_id = menu.id
 
-            if dish_name and menu_id:
+        if dish_name and menu_id:
+            db = get_session()
+            try:
                 db.execute(
                     text("INSERT INTO dishes (tenant_id, name, category) VALUES (:tid, :name, :cat)"),
                     {"tid": 1, "name": dish_name, "cat": "main"},
@@ -76,9 +58,12 @@ def _insert_menu(app, *, site_id: str, status: str, dish_name: str | None = None
                             "dish_id": dish_id,
                         },
                     )
-            db.commit()
-        finally:
-            db.close()
+                db.commit()
+            finally:
+                db.close()
+
+        if status == "published":
+            svc.publish_menu(1, menu_id)
 
 
 def test_admin_dashboard_today_menu_draft_state(client_admin):

@@ -111,6 +111,36 @@ class MenuServiceDB:
     def _day_key_from_date(self, value: date) -> str:
         return ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][value.isoweekday() - 1]
 
+    def _extract_dishes_from_day(self, day_obj: dict | None) -> list[str]:
+        if not isinstance(day_obj, dict):
+            return []
+        ordered_meals = ["breakfast", "lunch", "dinner", "evening", "kvall", "supper"]
+        seen: set[str] = set()
+        dishes: list[str] = []
+
+        def _collect(meal_obj) -> None:
+            if not isinstance(meal_obj, dict):
+                return
+            for variant_key in sorted(meal_obj.keys()):
+                variant = meal_obj.get(variant_key)
+                if isinstance(variant, dict):
+                    name = variant.get("dish_name")
+                elif isinstance(variant, str):
+                    name = variant
+                else:
+                    name = None
+                if name:
+                    name = str(name)
+                    if name not in seen:
+                        seen.add(name)
+                        dishes.append(name)
+
+        for meal_key in ordered_meals:
+            _collect(day_obj.get(meal_key))
+        for meal_key in sorted(set(day_obj.keys()) - set(ordered_meals)):
+            _collect(day_obj.get(meal_key))
+        return dishes
+
     def resolve_today_menu_card(self, tid: int, site_id: str, value: date) -> TodayMenuCard:
         if not tid or not site_id:
             return {
@@ -175,22 +205,9 @@ class MenuServiceDB:
                     "dishes": [],
                     "menu_id": menu.id,
                 }
-
-            dishes: list[str] = []
-            rows = (
-                db.query(MenuVariant, Dish)
-                .join(Dish, Dish.id == MenuVariant.dish_id, isouter=True)
-                .filter(MenuVariant.menu_id == menu.id, MenuVariant.day == day_key)
-                .order_by(MenuVariant.meal, MenuVariant.variant_type, MenuVariant.id)
-                .all()
-            )
-            seen: set[str] = set()
-            for mv, dish in rows:
-                if dish and dish.name:
-                    name = str(dish.name)
-                    if name not in seen:
-                        seen.add(name)
-                        dishes.append(name)
+            week_view = self.get_week_view(int(tid), site_id, week, year)
+            day_obj = (week_view.get("days") or {}).get(day_key, {})
+            dishes = self._extract_dishes_from_day(day_obj)
             return {
                 "state": "published",
                 "title": "Dagens meny",
