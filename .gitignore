@@ -102,3 +102,8 @@ migrations/versions/__pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+check_*.py
+fix_kaktusen.py
+tripwire_*.ps1
+legacy/kommun/*.docx
