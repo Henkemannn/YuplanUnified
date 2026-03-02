@@ -533,7 +533,7 @@ def ensure_bootstrap_superuser():
     )
     reloader_flag = os.getenv("WERKZEUG_RUN_MAIN")
     reloader_ok = (reloader_flag is None) or (reloader_flag == "true")
-    create_allowed = auto_create and allow_destructive and reloader_ok
+    create_allowed = bool(current_app.config.get("TESTING")) and auto_create and allow_destructive and reloader_ok
 
     import inspect as _inspect
 
@@ -607,6 +607,14 @@ def ensure_bootstrap_superuser():
         except Exception:
             # Likely missing tables; nothing to do
             return
+        try:
+            current_app.logger.info(
+                "AUTH: seed_mode=bootstrap_env superuser_exists=%s will_update_password=%s",
+                bool(has_user),
+                False,
+            )
+        except Exception:
+            pass
         if has_user:
             return
 
@@ -688,7 +696,7 @@ def ensure_dev_superuser_henrik():
             )
             reloader_flag = _os.getenv("WERKZEUG_RUN_MAIN")
             reloader_ok = (reloader_flag is None) or (reloader_flag == "true")
-            create_allowed = dev_create_all and allow_destructive and reloader_ok
+            create_allowed = bool(current_app.config.get("TESTING")) and dev_create_all and allow_destructive and reloader_ok
             if create_allowed:
                 from .db import create_all as _create_all
                 try:
@@ -728,6 +736,15 @@ def ensure_dev_superuser_henrik():
         import os as _os
         password = _os.getenv("YUPLAN_SEED_HENRIK_PASSWORD", "Hen1024")
         user = db.query(User).filter(User.email == email.lower()).first()
+        seed_overwrite = _os.getenv("YUPLAN_DEV_SEED", "0").lower() in ("1", "true", "yes")
+        try:
+            current_app.logger.info(
+                "AUTH: seed_mode=henrik superuser_exists=%s will_update_password=%s",
+                bool(user),
+                bool(user and seed_overwrite),
+            )
+        except Exception:
+            pass
         if not user:
             _dev_user_log("insert_user")
             user = User(
@@ -747,7 +764,6 @@ def ensure_dev_superuser_henrik():
             if not user.full_name:
                 user.full_name = "Henrik Jonsson"
             # Always refresh password hash to match requested DEV credentials
-            seed_overwrite = _os.getenv("YUPLAN_DEV_SEED", "0").lower() in ("1", "true", "yes")
             if seed_overwrite:
                 _dev_user_log("update_user_password")
                 try:
@@ -755,5 +771,96 @@ def ensure_dev_superuser_henrik():
                 except Exception:
                     pass
         db.commit()
+    finally:
+        db.close()
+
+
+def ensure_dev_sync_superuser_from_env() -> None:
+    """Ensure a dev superuser exists from env without overwriting passwords.
+
+    Guarded by YUPLAN_DEV_SYNC_SUPERUSER=1 and non-testing environments.
+    """
+    if current_app.config.get("TESTING"):
+        return
+    env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+    if env_val not in ("dev", "development"):
+        return
+    if os.getenv("YUPLAN_DEV_SYNC_SUPERUSER", "0").lower() not in ("1", "true", "yes"):
+        return
+
+    email = os.getenv("SUPERUSER_EMAIL") or ""
+    password = os.getenv("SUPERUSER_PASSWORD") or ""
+    if not email or not password:
+        try:
+            current_app.logger.info("AUTH: superuser_bootstrap action=skip_missing_env")
+        except Exception:
+            pass
+        return
+
+    normalized = email.strip().lower()
+    try:
+        db = get_session()
+    except Exception:
+        return
+    try:
+        try:
+            from sqlalchemy import inspect as _sa_inspect  # type: ignore
+
+            insp = _sa_inspect(db.bind)
+            if not (insp.has_table("users") and insp.has_table("tenants")):
+                return
+        except Exception:
+            pass
+
+        tenant = db.query(Tenant).filter(Tenant.id == 1).first()
+        if not tenant:
+            tenant = db.query(Tenant).first()
+        if not tenant:
+            try:
+                current_app.logger.info("AUTH: superuser_bootstrap action=skip_no_tenant")
+            except Exception:
+                pass
+            return
+
+        try:
+            from sqlalchemy import func as _func
+
+            user = (
+                db.query(User)
+                .filter(User.tenant_id == tenant.id, _func.lower(User.email) == normalized)
+                .first()
+            )
+        except Exception:
+            user = db.query(User).filter(User.tenant_id == tenant.id, User.email == normalized).first()
+
+        if user:
+            try:
+                current_app.logger.info(
+                    "AUTH: superuser_bootstrap action=exists email=%s",
+                    normalized,
+                )
+            except Exception:
+                pass
+            return
+
+        user = User(
+            tenant_id=tenant.id,
+            email=normalized,
+            username=normalized,
+            password_hash=generate_password_hash(password),
+            role="superuser",
+            full_name="Henrik Jonsson",
+            is_active=True,
+            unit_id=None,
+        )
+        db.add(user)
+        db.commit()
+        try:
+            current_app.logger.info(
+                "AUTH: superuser_bootstrap action=created email=%s",
+                normalized,
+            )
+        except Exception:
+            pass
     finally:
         db.close()

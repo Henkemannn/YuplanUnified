@@ -5,20 +5,30 @@ Set DEV_CREATE_ALL=1 to auto-create tables (development only).
 
 from __future__ import annotations
 
-import argparse
+from pathlib import Path
 import os
-import secrets
-import inspect
 
 from dotenv import load_dotenv
+
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(env_path, override=False)
+secret_value = os.getenv("SECRET_KEY") or ""
+secret_prefix = secret_value[:6]
+print(
+    f"DOTENV: path={env_path} exists={env_path.exists()} SECRET_KEY_len={len(secret_value)} prefix={secret_prefix}",
+    flush=True,
+)
+
+import argparse
+import inspect
+import secrets
+
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core.db import get_session, init_engine
 from core.models import Tenant, User
-
-load_dotenv()
 
 
 def _sqlite_db_path(db_url: str | None) -> str | None:
@@ -94,6 +104,36 @@ def _dev_user_log(action: str) -> None:
         print(f"DEV_USER_MUTATION action={action} func={func} file={__file__} line={line}")
     except Exception:
         pass
+
+
+def dev_repair_menu_tenant() -> int:
+    env_val = (os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+    if env_val not in ("dev", "development"):
+        print("DEV REPAIR: skipped (not in development)")
+        return 1
+    app = create_app()
+    with app.app_context():
+        db_url = app.config.get("SQLALCHEMY_DATABASE_URI")
+        if db_url:
+            init_engine(db_url, force=True)
+        db = get_session()
+        try:
+            res = db.execute(
+                text(
+                    """
+                    UPDATE menus
+                    SET tenant_id = (SELECT tenant_id FROM sites WHERE sites.id = menus.site_id)
+                    WHERE site_id IS NOT NULL
+                      AND tenant_id != (SELECT tenant_id FROM sites WHERE sites.id = menus.site_id)
+                    """
+                )
+            )
+            db.commit()
+            count = int(res.rowcount or 0)
+            print(f"DEV REPAIR: fixed {count} menu rows tenant_id")
+            return 0
+        finally:
+            db.close()
 
 
 def auth_doctor() -> int:
@@ -257,6 +297,40 @@ def auth_ensure_superuser() -> int:
             db.close()
 
 
+def auth_reset_superuser_env() -> int:
+    email = os.getenv("SUPERUSER_EMAIL")
+    password = os.getenv("SUPERUSER_PASSWORD")
+    if not email or not password:
+        print("Set SUPERUSER_EMAIL and SUPERUSER_PASSWORD in the environment.")
+        print("Then run: python run.py auth-reset-superuser")
+        return 2
+
+    app = create_app()
+    with app.app_context():
+        db_url = app.config.get("SQLALCHEMY_DATABASE_URI")
+        if db_url:
+            init_engine(db_url, force=True)
+        db = get_session()
+        try:
+            if not _table_exists(db, "users"):
+                print("ERROR: users table is missing. Run migrations or start the app once.")
+                return 1
+
+            normalized = email.strip().lower()
+            user = db.query(User).filter(User.email == normalized).first()
+            if not user:
+                print(f"ERROR: superuser not found for {normalized}")
+                return 1
+
+            _dev_user_log("update_user_password")
+            user.password_hash = generate_password_hash(password)
+            db.commit()
+            print(f"AUTH RESET: superuser password updated for {normalized}")
+            return 0
+        finally:
+            db.close()
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Dev runner and auth utilities")
     sub = parser.add_subparsers(dest="command")
@@ -270,6 +344,8 @@ def _build_parser() -> argparse.ArgumentParser:
     reset.add_argument("--password-env", help="Environment variable containing the password")
 
     sub.add_parser("auth-ensure-superuser", help="Ensure SUPERUSER_EMAIL/PASSWORD exists in DB")
+    sub.add_parser("auth-reset-superuser", help="Reset existing SUPERUSER_EMAIL password from env")
+    sub.add_parser("dev-repair-menu-tenant", help="DEV: fix menus.tenant_id to match sites.tenant_id")
     return parser
 
 
@@ -283,6 +359,10 @@ def main() -> int:
         return auth_reset(args.email, args.role, args.password, args.password_env)
     if args.command == "auth-ensure-superuser":
         return auth_ensure_superuser()
+    if args.command == "auth-reset-superuser":
+        return auth_reset_superuser_env()
+    if args.command == "dev-repair-menu-tenant":
+        return dev_repair_menu_tenant()
 
     app = create_app()
     host = os.getenv("HOST", "0.0.0.0")

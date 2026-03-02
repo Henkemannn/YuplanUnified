@@ -71,7 +71,9 @@
         {% set items = vm.remember_to_order or [] %}
         <div class="remember-card">
           <div class="remember-card__list">
-            {% if items %}
+            {% if not vm.site_id or not vm.remember_to_order_week_key %}
+              <p class="app-shell__card-text remember-to-order__empty">Välj site för att se listan.</p>
+            {% elif items %}
               <div class="remember-to-order__list" role="list">
                 {% for item in items %}
                   {% set is_checked = item.checked_at %}

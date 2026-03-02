@@ -24,9 +24,11 @@
       <div>
         <h1>{{ vm.tenant_name }}</h1>
         <p class="sa-subtitle">Sites (anläggningar) för denna kund.</p>
+        <p class="sa-subtitle">Context: Tenant {{ session.get('tenant_id') or '—' }} · Site {{ session.get('site_id') or '—' }}</p>
       </div>
       <div class="sa-header-actions">
         <a href="{{ url_for('admin_ui.systemadmin_customers') }}" class="sa-btn sa-btn-secondary">⬅ Tillbaka</a>
+        <a href="{{ url_for('ui.select_site', next=request.full_path or request.path) }}" class="sa-btn sa-btn-secondary">Byt context</a>
       </div>
     </header>
 

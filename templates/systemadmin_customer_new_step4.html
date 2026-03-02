@@ -23,7 +23,7 @@
     <header class="sa-header">
       <div>
         <h1>Steg 4 · Bekräfta</h1>
-        <p class="sa-subtitle">Skapa kund (utan site). Lägg till site efteråt.</p>
+        <p class="sa-subtitle">Skapa kund och första site samtidigt.</p>
       </div>
     </header>
 
@@ -37,6 +37,18 @@
         </div>
         <form method="post" action="{{ url_for('admin_ui.systemadmin_customer_create') }}" class="sa-form">
           {{ csrf_token_input()|safe }}
+          <div class="sa-field">
+            <label for="site_name">Första site</label>
+            <input id="site_name" name="site_name" type="text" required placeholder="Ex: Huvudköket" />
+          </div>
+          <div class="sa-field">
+            <label for="admin_email">Admin e-post</label>
+            <input id="admin_email" name="admin_email" type="email" required placeholder="admin@kund.se" />
+          </div>
+          <div class="sa-field">
+            <label for="admin_password">Admin lösenord</label>
+            <input id="admin_password" name="admin_password" type="password" required />
+          </div>
           <button type="submit" class="sa-btn sa-btn-primary">Skapa kund</button>
           <a class="sa-btn sa-btn-secondary" href="{{ url_for('admin_ui.systemadmin_customers') }}">Avbryt</a>
         </form>

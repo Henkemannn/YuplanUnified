@@ -3,7 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, render_template, request, current_app, redirect, url_for, flash, make_response, jsonify
 from core.app_authz import require_roles
 from core.db import get_session
-from core.admin_repo import DepartmentsRepo, SitesRepo, DietTypesRepo
+from core.admin_repo import DepartmentsRepo, SitesRepo, DietTypesRepo, tenant_exists
 from core.menu_service import MenuServiceDB
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
@@ -37,6 +37,7 @@ def systemadmin_dashboard():
                         CREATE TABLE IF NOT EXISTS sites (
                             id TEXT PRIMARY KEY,
                             name TEXT NOT NULL,
+                            tenant_id INTEGER,
                             version INTEGER NOT NULL DEFAULT 0,
                             notes TEXT NULL,
                             updated_at TEXT
@@ -548,21 +549,51 @@ def admin_specialkost_delete(kosttyp_id: int) -> str:  # type: ignore[override]
 @require_roles("admin", "superuser")
 def admin_menu_import() -> str:  # type: ignore[override]
     """Display menu import page with file upload form and list of weeks with menu data."""
-    tenant_id = 1  # TODO: Extract from session when multi-tenancy enabled
-    
-    # Fetch all unique (year, week) combinations from menus table
+    from core.db import get_site_tenant
+
+    site_id = request.args.get("site_id") or session.get("site_id")
+    if not site_id and current_app.config.get("TESTING"):
+        try:
+            from core.context import get_single_site_id_for_tenant
+
+            tid = session.get("tenant_id")
+            if tid:
+                site_id = get_single_site_id_for_tenant(int(tid))
+        except Exception:
+            site_id = None
+    if not site_id:
+        flash("Saknar site för menylistan.", "warning")
+        return render_template("admin_menu_import.html", vm={"weeks": []})
+    site_tenant_id = get_site_tenant(str(site_id))
+    if site_tenant_id is None:
+        flash("Kunde inte hitta tenant för vald site.", "warning")
+        return render_template("admin_menu_import.html", vm={"weeks": []})
+
+    # Fetch menus for the active site, include draft + published.
     db = get_session()
     try:
         rows = db.execute(
             text("""
-                SELECT DISTINCT year, week 
-                FROM menus 
-                WHERE tenant_id = :tid 
-                ORDER BY year DESC, week DESC
+                SELECT year, week, status, updated_at
+                FROM menus
+                WHERE site_id = :sid
+                ORDER BY year DESC, week DESC, status DESC
             """),
-            {"tid": tenant_id}
+            {"sid": str(site_id)}
         ).fetchall()
-        weeks = [{"year": r[0], "week": r[1]} for r in rows]
+        week_map: dict[tuple[int, int], dict] = {}
+        for year, week, status, updated_at in rows:
+            key = (int(year), int(week))
+            status_norm = (status or "draft").strip().lower()
+            prev = week_map.get(key)
+            if prev is None or (prev.get("status") != "published" and status_norm == "published"):
+                week_map[key] = {
+                    "year": int(year),
+                    "week": int(week),
+                    "status": status_norm,
+                    "updated_at": updated_at,
+                }
+        weeks = list(week_map.values())
     finally:
         db.close()
     
@@ -598,6 +629,7 @@ def admin_menu_import() -> str:  # type: ignore[override]
         "archive_years": archive_years,
         "current_year": current_year,
         "current_week": current_week,
+        "site_id": str(site_id),
     }
     if import_summary:
         vm["import_summary"] = import_summary
@@ -614,7 +646,7 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
     from flask import session as _sess
     import os as _os
     
-    tenant_id = 1  # TODO: Extract from session when multi-tenancy enabled
+    from core.db import get_site_tenant
     uploaded_file = request.files.get("menu_file")
     # Debug-only metadata logging: keys, filename, content_type, size, chosen branch
     try:
@@ -682,6 +714,22 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
         menu_service = MenuServiceDB()
         import_service = MenuImportService(menu_service)
         site_id = request.args.get("site_id") or session.get("site_id")
+        if not site_id and current_app.config.get("TESTING"):
+            try:
+                from core.context import get_single_site_id_for_tenant
+
+                tid = session.get("tenant_id")
+                if tid:
+                    site_id = get_single_site_id_for_tenant(int(tid))
+            except Exception:
+                site_id = None
+        if not site_id:
+            flash("Saknar site för import.", "danger")
+            return redirect(url_for("admin_ui.admin_menu_import"))
+        site_tenant_id = get_site_tenant(str(site_id))
+        if site_tenant_id is None:
+            flash("Kunde inte hitta tenant för vald site.", "danger")
+            return redirect(url_for("admin_ui.admin_menu_import"))
         if fname_low.endswith('.csv'):
             rows = parse_menu_csv(uploaded_file.stream)
             import_result = csv_rows_to_import_result(rows)
@@ -696,7 +744,7 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
             flash("Ogiltigt menyformat eller saknad fil.", "danger")
             return redirect(url_for("admin_ui.admin_menu_import"))
 
-        summary = import_service.apply(tenant_id, site_id, import_result)
+        summary = import_service.apply(int(site_tenant_id), str(site_id), import_result)
         weeks = summary.get("weeks", [])
         created_total = sum(int(w.get("created", 0)) for w in weeks)
         updated_total = sum(int(w.get("updated", 0)) for w in weeks)
@@ -708,6 +756,7 @@ def admin_menu_import_upload() -> str:  # type: ignore[override]
                 "created": created_total,
                 "updated": updated_total,
                 "skipped": skipped_total,
+                "weeks_list": [{"year": int(w.get("year")), "week": int(w.get("week"))} for w in weeks],
             }
         except Exception:
             flash("Import klar.", "success")
@@ -729,16 +778,34 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
     from core.models import Menu
     from datetime import datetime, timezone
     
-    tenant_id = 1  # TODO: Extract from session
+    from core.db import get_site_tenant
+
     site_id = request.args.get("site_id") or session.get("site_id")
+    if not site_id and current_app.config.get("TESTING"):
+        try:
+            from core.context import get_single_site_id_for_tenant
+
+            tid = session.get("tenant_id")
+            if tid:
+                site_id = get_single_site_id_for_tenant(int(tid))
+        except Exception:
+            site_id = None
+    if not site_id:
+        flash("Saknar site för meny.", "warning")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+    site_tenant_id = get_site_tenant(str(site_id))
+    if site_tenant_id is None:
+        flash("Kunde inte hitta tenant för vald site.", "warning")
+        return redirect(url_for("admin_ui.admin_menu_import"))
 
     db = get_session()
     try:
-        menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+        menu = db.query(Menu).filter_by(tenant_id=site_tenant_id, site_id=site_id, year=year, week=week).first()
         if (not menu) and site_id:
-            orphan = db.query(Menu).filter_by(tenant_id=tenant_id, year=year, week=week, site_id=None).first()
+            orphan = db.query(Menu).filter_by(tenant_id=site_tenant_id, year=year, week=week, site_id=None).first()
             if orphan:
                 orphan.site_id = site_id
+                orphan.tenant_id = site_tenant_id
                 db.commit()
                 menu = orphan
         menu_id = menu.id if menu else None
@@ -756,7 +823,7 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
         return redirect(url_for("admin_ui.admin_menu_import"))
 
     menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
+    week_view = menu_service.get_week_view(int(site_tenant_id), str(site_id), week, year)
     raw_status = (week_view or {}).get("menu_status") or getattr(menu, "status", None)
     menu_status = str(raw_status or "draft").strip().lower()
     
@@ -786,21 +853,39 @@ def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[ov
     from core.models import Menu
     from datetime import datetime, timezone
     
-    tenant_id = 1  # TODO: Extract from session
+    from core.db import get_site_tenant
+
     site_id = request.args.get("site_id") or session.get("site_id")
+    if not site_id and current_app.config.get("TESTING"):
+        try:
+            from core.context import get_single_site_id_for_tenant
+
+            tid = session.get("tenant_id")
+            if tid:
+                site_id = get_single_site_id_for_tenant(int(tid))
+        except Exception:
+            site_id = None
+    if not site_id:
+        flash("Saknar site för meny.", "warning")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+    site_tenant_id = get_site_tenant(str(site_id))
+    if site_tenant_id is None:
+        flash("Kunde inte hitta tenant för vald site.", "warning")
+        return redirect(url_for("admin_ui.admin_menu_import"))
 
     db = get_session()
     try:
         if site_id:
-            menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+            menu = db.query(Menu).filter_by(tenant_id=site_tenant_id, site_id=site_id, year=year, week=week).first()
             if not menu:
-                legacy = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=None, year=year, week=week).first()
+                legacy = db.query(Menu).filter_by(tenant_id=site_tenant_id, site_id=None, year=year, week=week).first()
                 if legacy is not None:
                     legacy.site_id = site_id
+                    legacy.tenant_id = site_tenant_id
                     db.commit()
                     menu = legacy
         else:
-            menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=None, year=year, week=week).first()
+            menu = db.query(Menu).filter_by(tenant_id=site_tenant_id, site_id=None, year=year, week=week).first()
         menu_id = menu.id if menu else None
         menu_updated_at = getattr(menu, "updated_at", None) if menu else None
         if menu is not None and menu_updated_at is None:
@@ -816,7 +901,7 @@ def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[ov
         return redirect(url_for("admin_ui.admin_menu_import"))
     
     menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
+    week_view = menu_service.get_week_view(int(site_tenant_id), str(site_id), week, year)
 
     # Generate ETag
     etag = generate_menu_etag(menu_id, menu_updated_at)
@@ -839,16 +924,34 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
     from core.models import Dish, Menu
     from core.etag_utils import validate_etag
     
-    tenant_id = 1  # TODO: Extract from session
+    from core.db import get_site_tenant
+
     site_id = request.args.get("site_id") or session.get("site_id")
+    if not site_id and current_app.config.get("TESTING"):
+        try:
+            from core.context import get_single_site_id_for_tenant
+
+            tid = session.get("tenant_id")
+            if tid:
+                site_id = get_single_site_id_for_tenant(int(tid))
+        except Exception:
+            site_id = None
+    if not site_id:
+        flash("Saknar site för meny.", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+    site_tenant_id = get_site_tenant(str(site_id))
+    if site_tenant_id is None:
+        flash("Kunde inte hitta tenant för vald site.", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
     
     db = get_session()
     try:
-        menu = db.query(Menu).filter_by(tenant_id=tenant_id, site_id=site_id, year=year, week=week).first()
+        menu = db.query(Menu).filter_by(tenant_id=site_tenant_id, site_id=site_id, year=year, week=week).first()
         if (not menu) and site_id:
-            orphan = db.query(Menu).filter_by(tenant_id=tenant_id, year=year, week=week, site_id=None).first()
+            orphan = db.query(Menu).filter_by(tenant_id=site_tenant_id, year=year, week=week, site_id=None).first()
             if orphan:
                 orphan.site_id = site_id
+                orphan.tenant_id = site_tenant_id
                 db.commit()
                 menu = orphan
         if not menu:
@@ -938,12 +1041,28 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
 def admin_menu_import_week_publish(year: int, week: int) -> str:  # type: ignore[override]
     """Publish a menu week (set status to 'published')."""
     from core.etag_utils import validate_etag
+    from core.db import get_site_tenant
     
-    tenant_id = 1  # TODO: Extract from session
     site_id = request.args.get("site_id") or session.get("site_id")
+    if not site_id and current_app.config.get("TESTING"):
+        try:
+            from core.context import get_single_site_id_for_tenant
+
+            tid = session.get("tenant_id")
+            if tid:
+                site_id = get_single_site_id_for_tenant(int(tid))
+        except Exception:
+            site_id = None
+    if not site_id:
+        flash("Saknar site för meny.", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+    site_tenant_id = get_site_tenant(str(site_id))
+    if site_tenant_id is None:
+        flash("Kunde inte hitta tenant för vald site.", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
     
     menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
+    week_view = menu_service.get_week_view(int(site_tenant_id), str(site_id), week, year)
     
     if not week_view or not week_view.get("menu_id"):
         flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
@@ -968,7 +1087,7 @@ def admin_menu_import_week_publish(year: int, week: int) -> str:  # type: ignore
             return redirect(url_for("admin_ui.admin_menu_import_week", year=year, week=week))
     
     try:
-        menu_service.publish_menu(tenant_id, menu_id)
+        menu_service.publish_menu(int(site_tenant_id), menu_id)
         flash(f"Vecka {week} publicerad.", "success")
     except Exception as e:
         flash(f"Fel vid publicering: {e}", "danger")
@@ -981,12 +1100,28 @@ def admin_menu_import_week_publish(year: int, week: int) -> str:  # type: ignore
 def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: ignore[override]
     """Unpublish a menu week (set status to 'draft')."""
     from core.etag_utils import validate_etag
+    from core.db import get_site_tenant
     
-    tenant_id = 1  # TODO: Extract from session
     site_id = request.args.get("site_id") or session.get("site_id")
+    if not site_id and current_app.config.get("TESTING"):
+        try:
+            from core.context import get_single_site_id_for_tenant
+
+            tid = session.get("tenant_id")
+            if tid:
+                site_id = get_single_site_id_for_tenant(int(tid))
+        except Exception:
+            site_id = None
+    if not site_id:
+        flash("Saknar site för meny.", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
+    site_tenant_id = get_site_tenant(str(site_id))
+    if site_tenant_id is None:
+        flash("Kunde inte hitta tenant för vald site.", "danger")
+        return redirect(url_for("admin_ui.admin_menu_import"))
     
     menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(tenant_id, site_id, week, year)
+    week_view = menu_service.get_week_view(int(site_tenant_id), str(site_id), week, year)
     
     if not week_view or not week_view.get("menu_id"):
         flash(f"Ingen meny hittades för vecka {week}/{year}.", "danger")
@@ -1011,7 +1146,7 @@ def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: igno
             return redirect(url_for("admin_ui.admin_menu_import_week", year=year, week=week))
     
     try:
-        menu_service.unpublish_menu(tenant_id, menu_id)
+        menu_service.unpublish_menu(int(site_tenant_id), menu_id)
         flash(f"Vecka {week} satt till utkast.", "success")
     except Exception as e:
         flash(f"Fel vid återgång till utkast: {e}", "danger")
@@ -1221,6 +1356,9 @@ def systemadmin_customer_sites_create(tenant_id: int):
     site_id = name.lower().replace(" ", "-")
     db = get_session()
     try:
+        if not tenant_exists(db, tenant_id):
+            flash("Kund saknas för tenant_id.", "danger")
+            return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
         # Ensure sites table exists and has tenant_id column (SQLite/dev friendly)
         try:
             db.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER, notes TEXT, updated_at TEXT)"))
@@ -1301,22 +1439,43 @@ def systemadmin_customer_sites_create(tenant_id: int):
 @admin_ui_bp.post("/ui/systemadmin/customers/new/admin")
 @require_roles("superuser")
 def systemadmin_customer_create():
-    """Create a new customer from wizard: create tenant only, then redirect to Sites."""
-    # Use wizard session data; do not require site or admin here
+    """Create a new customer + first site atomically from wizard."""
+    # Use wizard session data; require site and admin credentials
     from flask import session as _sess
     data = _sess.get("wizard_new_customer", {})
     tenant_name = (data.get("tenant_name") or "").strip()
     raw_type = (data.get("customer_type") or "").strip()
+    site_name = (request.form.get("site_name") or "").strip()
+    admin_email = (request.form.get("admin_email") or "").strip().lower()
+    admin_password = (request.form.get("admin_password") or "").strip()
 
     if not tenant_name:
         flash("Kundnamn saknas.", "danger")
         return redirect(url_for("admin_ui.systemadmin_customer_new_step1"))
+    if not site_name or not admin_email or not admin_password:
+        flash("Ange site-namn, admin e-post och lösenord.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_new_step4"))
 
     db = get_session()
     try:
+        # Prepare sites schema before tenant insert to avoid DDL auto-commit after tenant creation
+        try:
+            db.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT, version INTEGER, tenant_id INTEGER, notes TEXT, updated_at TEXT)"))
+        except Exception as e:
+            flash(f"Fel vid skapande av sites-tabell: {e}", "danger")
+            return make_response(render_template("systemadmin_customer_new_step4.html", vm={"data": data}), 400)
+        try:
+            cols = db.execute(text("PRAGMA table_info('sites')")).fetchall()
+            has_tenant_col = any(str(c[1]) == "tenant_id" for c in cols)
+            if not has_tenant_col:
+                db.execute(text("ALTER TABLE sites ADD COLUMN tenant_id INTEGER"))
+        except Exception as e:
+            flash(f"Fel vid uppdatering av sites-tabell: {e}", "danger")
+            return make_response(render_template("systemadmin_customer_new_step4.html", vm={"data": data}), 400)
         tenant = Tenant(name=tenant_name)
         db.add(tenant)
         db.flush()
+        tenant_id = int(tenant.id)
         # Normalize and persist customer type to tenant_metadata.kind
         def _canonicalize_customer_type(s: str) -> str | None:
             if not s:
@@ -1346,7 +1505,7 @@ def systemadmin_customer_create():
             pass
         try:
             from core.tenant_metadata_service import TenantMetadataService
-            TenantMetadataService().upsert(tenant.id, kind=canon, description=None)
+            TenantMetadataService().upsert(tenant_id, kind=canon, description=None)
         except Exception as e:
             try:
                 current_app.logger.warning("Tenant metadata upsert failed for tenant_id=%s: %s", tenant.id, e)
@@ -1363,20 +1522,54 @@ def systemadmin_customer_create():
                 current_app.logger.info("SQLite: tenants.customer_type not present")
         except Exception:
             pass
+        if not tenant_exists(db, tenant_id):
+            flash("Kund saknas för tenant_id.", "danger")
+            db.rollback()
+            resp = make_response(render_template("systemadmin_customer_new_step4.html", vm={"data": data}), 400)
+            return resp
+        site_id = site_name.lower().replace(" ", "-")
+        db.execute(
+            text("INSERT INTO sites(id,name,version,tenant_id) VALUES(:id,:name,0,:t)"),
+            {"id": site_id, "name": site_name, "t": tenant_id},
+        )
+        pw_hash = generate_password_hash(admin_password)
+        user = User(
+            tenant_id=tenant_id,
+            email=admin_email,
+            password_hash=pw_hash,
+            role="admin",
+            unit_id=None,
+        )
+        db.add(user)
         db.commit()
         # Clear wizard state
         try:
             _sess.pop("wizard_new_customer", None)
         except Exception:
             pass
-        flash("Kund skapad. Lägg till första site.", "success")
-        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant.id))
+        try:
+            _sess["active_tenant_id"] = tenant_id
+            _sess["active_site_id"] = site_id
+            _sess["tenant_id"] = tenant_id
+            _sess["site_id"] = site_id
+        except Exception:
+            pass
+        flash("Kund och site skapade.", "success")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
     except Exception as e:
         try:
             db.rollback()
         except Exception:
             pass
+        try:
+            current_app.logger.exception("systemadmin_customer_create failed")
+        except Exception:
+            pass
+        if "tenant_not_found" in str(e):
+            flash("Kund saknas för tenant_id.", "danger")
+            return make_response(render_template("systemadmin_customer_new_step4.html", vm={"data": data}), 400)
         flash(f"Fel vid skapande: {e}", "danger")
+        return make_response(render_template("systemadmin_customer_new_step4.html", vm={"data": data}), 400)
     finally:
         db.close()
     return redirect(url_for("admin_ui.systemadmin_customers"))

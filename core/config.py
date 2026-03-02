@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Config:
-    secret_key: str = "change-me"
+    secret_key: str = ""
     database_url: str = "sqlite:///dev.db"
     default_enabled_modules: list[str] = field(
         default_factory=lambda: ["municipal"]
@@ -31,7 +31,7 @@ class Config:
         # JWT_SECRETS allows key rotation: comma-separated secrets; first used for signing.
         jwt_list = [s for s in [j.strip() for j in jwt_multi.split(",")] if s]
         return cls(
-            secret_key=os.getenv("SECRET_KEY", "change-me"),
+            secret_key=os.getenv("SECRET_KEY", ""),
             database_url=os.getenv("DATABASE_URL", "sqlite:///dev.db"),
             default_enabled_modules=[m.strip() for m in mods.split(",") if m.strip()],
             cors_allowed_origins=[o for o in [c.strip() for c in cors.split(",")] if o],

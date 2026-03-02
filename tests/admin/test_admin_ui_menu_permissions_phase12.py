@@ -12,6 +12,13 @@ STAFF_HEADERS = {"X-User-Role": "staff", "X-Tenant-Id": "1"}
 SUPERUSER_HEADERS = {"X-User-Role": "superuser", "X-Tenant-Id": "1"}
 
 
+def _client_with_site(app, site_id: str):
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+    return client
+
+
 @pytest.fixture
 def seeded_menu_for_permissions(app_session):
     """Seed database with test menu data for permission tests."""
@@ -25,14 +32,19 @@ def seeded_menu_for_permissions(app_session):
         db.execute(text("DELETE FROM dishes"))
         db.commit()
         
+        # Create a site for tenant 1
+        db.execute(
+            text("INSERT OR REPLACE INTO sites (id, name, tenant_id, version) VALUES (:id, :name, :tid, 0)"),
+            {"id": "site-perm", "name": "Site Perm", "tid": 1},
+        )
         # Create menu for week 49/2025 with draft status
         now = datetime.now(timezone.utc)
         db.execute(
             text("""
-                INSERT INTO menus (id, tenant_id, week, year, status, updated_at) 
-                VALUES (:id, :tid, :week, :year, :status, :updated_at)
+                INSERT INTO menus (id, tenant_id, site_id, week, year, status, updated_at) 
+                VALUES (:id, :tid, :sid, :week, :year, :status, :updated_at)
             """),
-            {"id": 103, "tid": 1, "week": 49, "year": 2025, "status": "draft", "updated_at": now}
+            {"id": 103, "tid": 1, "sid": "site-perm", "week": 49, "year": 2025, "status": "draft", "updated_at": now}
         )
         
         # Create a dish
@@ -61,7 +73,7 @@ def seeded_menu_for_permissions(app_session):
 
 def test_staff_cannot_access_week_view(seeded_menu_for_permissions):
     """Test that staff role cannot access menu week view."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     response = client.get("/ui/admin/menu-import/week/2025/49", headers=STAFF_HEADERS)
     
@@ -78,7 +90,7 @@ def test_staff_cannot_access_week_view(seeded_menu_for_permissions):
 
 def test_staff_cannot_access_week_edit(seeded_menu_for_permissions):
     """Test that staff role cannot access menu edit page."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     response = client.get("/ui/admin/menu-import/week/2025/49/edit", headers=STAFF_HEADERS)
     
@@ -87,7 +99,7 @@ def test_staff_cannot_access_week_edit(seeded_menu_for_permissions):
 
 def test_staff_cannot_save_menu(seeded_menu_for_permissions):
     """Test that staff role cannot POST save menu changes."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     form_data = {
         "Måndag_Lunch_alt1": "Hacked dish",
@@ -104,7 +116,7 @@ def test_staff_cannot_save_menu(seeded_menu_for_permissions):
 
 def test_staff_cannot_publish_menu(seeded_menu_for_permissions):
     """Test that staff role cannot publish a menu."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     response = client.post(
         "/ui/admin/menu-import/week/2025/49/publish",
@@ -116,7 +128,7 @@ def test_staff_cannot_publish_menu(seeded_menu_for_permissions):
 
 def test_staff_cannot_unpublish_menu(seeded_menu_for_permissions):
     """Test that staff role cannot unpublish a menu."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     # First set menu to published
     from core.db import get_session
@@ -137,7 +149,7 @@ def test_staff_cannot_unpublish_menu(seeded_menu_for_permissions):
 
 def test_admin_can_access_week_view(seeded_menu_for_permissions):
     """Test that admin role can access menu week view."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     response = client.get("/ui/admin/menu-import/week/2025/49", headers=ADMIN_HEADERS)
     
@@ -147,7 +159,7 @@ def test_admin_can_access_week_view(seeded_menu_for_permissions):
 
 def test_admin_can_access_week_edit(seeded_menu_for_permissions):
     """Test that admin role can access menu edit page."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     response = client.get("/ui/admin/menu-import/week/2025/49/edit", headers=ADMIN_HEADERS)
     
@@ -157,7 +169,7 @@ def test_admin_can_access_week_edit(seeded_menu_for_permissions):
 
 def test_superuser_can_access_all_menu_operations(seeded_menu_for_permissions):
     """Test that superuser role can access all menu operations."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     # Can view
     response = client.get("/ui/admin/menu-import/week/2025/49", headers=SUPERUSER_HEADERS)
@@ -175,7 +187,7 @@ def test_superuser_can_access_all_menu_operations(seeded_menu_for_permissions):
 
 def test_csrf_token_in_week_view_forms(seeded_menu_for_permissions):
     """Test that CSRF token inputs are present in week view forms."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     response = client.get("/ui/admin/menu-import/week/2025/49", headers=ADMIN_HEADERS)
     
@@ -186,7 +198,7 @@ def test_csrf_token_in_week_view_forms(seeded_menu_for_permissions):
 
 def test_csrf_token_in_edit_form(seeded_menu_for_permissions):
     """Test that CSRF token input is present in edit form."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     response = client.get("/ui/admin/menu-import/week/2025/49/edit", headers=ADMIN_HEADERS)
     
@@ -197,7 +209,7 @@ def test_csrf_token_in_edit_form(seeded_menu_for_permissions):
 
 def test_save_works_with_valid_auth_and_etag(seeded_menu_for_permissions):
     """Test that POST /save works with valid authorization and ETag."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     # Get current ETag
     get_response = client.get("/ui/admin/menu-import/week/2025/49", headers=ADMIN_HEADERS)
@@ -220,7 +232,7 @@ def test_save_works_with_valid_auth_and_etag(seeded_menu_for_permissions):
 
 def test_publish_works_with_valid_auth_and_etag(seeded_menu_for_permissions):
     """Test that POST /publish works with valid authorization and ETag."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     # Get ETag
     get_response = client.get("/ui/admin/menu-import/week/2025/49", headers=ADMIN_HEADERS)
@@ -238,7 +250,7 @@ def test_publish_works_with_valid_auth_and_etag(seeded_menu_for_permissions):
 
 def test_unpublish_works_with_valid_auth_and_etag(seeded_menu_for_permissions):
     """Test that POST /unpublish works with valid authorization and ETag."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     # Set menu to published
     from core.db import get_session
@@ -267,7 +279,7 @@ def test_unpublish_works_with_valid_auth_and_etag(seeded_menu_for_permissions):
 
 def test_conflict_flash_message_present(seeded_menu_for_permissions):
     """Test that conflict flash message is shown when ETag mismatches."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     # Use wrong ETag
     wrong_etag = 'W/"menu-103-1234567890000"'
@@ -293,7 +305,7 @@ def test_conflict_flash_message_present(seeded_menu_for_permissions):
 
 def test_status_text_displayed_correctly(seeded_menu_for_permissions):
     """Test that status badge shows correct text for draft/published."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     # Check draft status
     response = client.get("/ui/admin/menu-import/week/2025/49", headers=ADMIN_HEADERS)
@@ -317,7 +329,7 @@ def test_status_text_displayed_correctly(seeded_menu_for_permissions):
 
 def test_reload_link_in_conflict_flash(seeded_menu_for_permissions):
     """Test that reload link appears in conflict flash messages."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     # Use wrong ETag to trigger conflict
     wrong_etag = 'W/"menu-103-9999999999999"'
@@ -343,7 +355,7 @@ def test_reload_link_in_conflict_flash(seeded_menu_for_permissions):
 
 def test_status_banner_styling(seeded_menu_for_permissions):
     """Test that status banner with proper CSS classes is present."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     response = client.get("/ui/admin/menu-import/week/2025/49", headers=ADMIN_HEADERS)
     
@@ -355,7 +367,7 @@ def test_status_banner_styling(seeded_menu_for_permissions):
 
 def test_double_submit_protection_script(seeded_menu_for_permissions):
     """Test that admin.js is included for double-submit protection."""
-    client = seeded_menu_for_permissions.test_client()
+    client = _client_with_site(seeded_menu_for_permissions, "site-perm")
     
     response = client.get("/ui/admin/menu-import/week/2025/49/edit", headers=ADMIN_HEADERS)
     

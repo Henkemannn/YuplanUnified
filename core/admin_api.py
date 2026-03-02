@@ -636,9 +636,23 @@ def create_site():
     name = (data.get("name") or "").strip()
     if not name:
         return bad_request("name is required")
+    tenant_id = session.get("tenant_id")
+    if tenant_id is None:
+        try:
+            from flask import g
+
+            tenant_id = getattr(g, "tenant_id", None)
+        except Exception:
+            tenant_id = None
+    if tenant_id is None:
+        return bad_request("tenant_id required")
+    try:
+        tenant_id = int(tenant_id)
+    except Exception:
+        return bad_request("invalid tenant_id")
     svc = AdminService()
     try:
-        rec, etag = svc.create_site(name)
+        rec, etag = svc.create_site(name, tenant_id=tenant_id)
     except Exception as e:  # pragma: no cover – unexpected
         return bad_request(str(e))
     resp = jsonify(rec)

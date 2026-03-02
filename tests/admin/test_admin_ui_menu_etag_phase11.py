@@ -9,6 +9,13 @@ from sqlalchemy import text
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
+def _client_with_site(app, site_id: str):
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+    return client
+
+
 @pytest.fixture
 def seeded_menu_with_updated_at(app_session):
     """Seed database with test menu data including updated_at timestamp."""
@@ -25,11 +32,15 @@ def seeded_menu_with_updated_at(app_session):
         # Create menu for week 48/2025 with explicit updated_at
         now = datetime.now(timezone.utc)
         db.execute(
+            text("INSERT OR REPLACE INTO sites (id, name, tenant_id, version) VALUES (:id, :name, :tid, 0)"),
+            {"id": "site-etag", "name": "Site ETag", "tid": 1},
+        )
+        db.execute(
             text("""
-                INSERT INTO menus (id, tenant_id, week, year, status, updated_at) 
-                VALUES (:id, :tid, :week, :year, :status, :updated_at)
+                INSERT INTO menus (id, tenant_id, site_id, week, year, status, updated_at) 
+                VALUES (:id, :tid, :sid, :week, :year, :status, :updated_at)
             """),
-            {"id": 102, "tid": 1, "week": 48, "year": 2025, "status": "draft", "updated_at": now}
+            {"id": 102, "tid": 1, "sid": "site-etag", "week": 48, "year": 2025, "status": "draft", "updated_at": now}
         )
         
         # Create a dish
@@ -56,7 +67,7 @@ def seeded_menu_with_updated_at(app_session):
 
 def test_get_week_view_includes_etag_header(seeded_menu_with_updated_at):
     """Test that GET /week/<y>/<w> includes ETag in response headers."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     response = client.get("/ui/admin/menu-import/week/2025/48", headers=ADMIN_HEADERS)
     
@@ -68,7 +79,7 @@ def test_get_week_view_includes_etag_header(seeded_menu_with_updated_at):
 
 def test_get_edit_includes_etag_in_viewmodel(seeded_menu_with_updated_at):
     """Test that GET /edit includes ETag in template context."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     response = client.get("/ui/admin/menu-import/week/2025/48/edit", headers=ADMIN_HEADERS)
     
@@ -81,7 +92,7 @@ def test_get_edit_includes_etag_in_viewmodel(seeded_menu_with_updated_at):
 
 def test_save_without_if_match_returns_412(seeded_menu_with_updated_at):
     """Test that POST /save without If-Match header returns 412 with ProblemDetails."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     form_data = {
         "Måndag_Lunch_alt1": "Fiskgratäng",
@@ -102,7 +113,7 @@ def test_save_without_if_match_returns_412(seeded_menu_with_updated_at):
 
 def test_save_with_wrong_etag_returns_412(seeded_menu_with_updated_at):
     """Test that POST /save with incorrect ETag returns 412."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     # Use wrong ETag
     wrong_etag = 'W/"menu-102-1234567890000"'
@@ -125,7 +136,7 @@ def test_save_with_wrong_etag_returns_412(seeded_menu_with_updated_at):
 
 def test_save_with_correct_etag_succeeds(seeded_menu_with_updated_at):
     """Test that POST /save with correct ETag succeeds."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     # First get the current ETag
     get_response = client.get("/ui/admin/menu-import/week/2025/48", headers=ADMIN_HEADERS)
@@ -151,7 +162,7 @@ def test_save_with_correct_etag_succeeds(seeded_menu_with_updated_at):
 
 def test_publish_without_etag_returns_412(seeded_menu_with_updated_at):
     """Test that POST /publish without ETag returns 412."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     response = client.post(
         "/ui/admin/menu-import/week/2025/48/publish",
@@ -165,7 +176,7 @@ def test_publish_without_etag_returns_412(seeded_menu_with_updated_at):
 
 def test_publish_with_correct_etag_succeeds(seeded_menu_with_updated_at):
     """Test that POST /publish with correct ETag succeeds."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     # Get current ETag
     get_response = client.get("/ui/admin/menu-import/week/2025/48", headers=ADMIN_HEADERS)
@@ -184,7 +195,7 @@ def test_publish_with_correct_etag_succeeds(seeded_menu_with_updated_at):
 
 def test_unpublish_without_etag_returns_412(seeded_menu_with_updated_at):
     """Test that POST /unpublish without ETag returns 412."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     # First publish the menu
     from core.db import get_session
@@ -209,7 +220,7 @@ def test_unpublish_without_etag_returns_412(seeded_menu_with_updated_at):
 
 def test_unpublish_with_correct_etag_succeeds(seeded_menu_with_updated_at):
     """Test that POST /unpublish with correct ETag succeeds."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     # First publish the menu
     from core.db import get_session
@@ -239,7 +250,7 @@ def test_unpublish_with_correct_etag_succeeds(seeded_menu_with_updated_at):
 
 def test_etag_changes_after_save(seeded_menu_with_updated_at):
     """Test that ETag value changes after a successful save operation."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     # Get initial ETag
     response1 = client.get("/ui/admin/menu-import/week/2025/48", headers=ADMIN_HEADERS)
@@ -269,7 +280,7 @@ def test_etag_changes_after_save(seeded_menu_with_updated_at):
 
 def test_concurrent_edit_scenario(seeded_menu_with_updated_at):
     """Test concurrent edit scenario where second save detects conflict."""
-    client = seeded_menu_with_updated_at.test_client()
+    client = _client_with_site(seeded_menu_with_updated_at, "site-etag")
     
     # User A gets the page and ETag
     response_a = client.get("/ui/admin/menu-import/week/2025/48", headers=ADMIN_HEADERS)
