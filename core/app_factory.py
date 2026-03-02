@@ -29,10 +29,16 @@ from werkzeug.wrappers.response import Response
 
 from .admin_api import bp as admin_api_bp
 from .admin_audit_api import bp as admin_audit_bp
+from .admin_repo import dev_repair_null_site_tenant_ids
 from .app_authz import require_roles
 
 # Legacy JSON error handler removed in ADR-003 sweep
-from .auth import bp as auth_bp, ensure_bootstrap_superuser, ensure_dev_superuser_henrik
+from .auth import (
+    bp as auth_bp,
+    ensure_bootstrap_superuser,
+    ensure_dev_superuser_henrik,
+    ensure_dev_sync_superuser_from_env,
+)
 from .config import Config
 from .db import get_session, init_engine
 from .diet_api import bp as diet_api_bp
@@ -131,6 +137,16 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     env_deploy = os.getenv("DEPLOY_ENV") or ""
     env_lower = (env_flask or env_app or env_deploy or "").lower()
     emit_startup_log = (env_lower == "development") and (not testing_flag)
+
+    secret_env = os.getenv("SECRET_KEY") or ""
+    if secret_env:
+        app.config["SECRET_KEY"] = secret_env
+    if env_lower == "development" and len(app.config.get("SECRET_KEY") or "") < 32:
+        app.config["SECRET_KEY"] = "dev-static-secret-key-0123456789abcdef0123456789abcdef"
+        try:
+            app.logger.warning("WARN: SECRET_KEY missing/short, using dev fallback")
+        except Exception:
+            pass
 
     def _log_sqlite_fingerprint(tag: str) -> None:
         if not emit_startup_log:
@@ -343,6 +359,47 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         engine = init_engine(cfg.database_url)
     _log_sqlite_fingerprint("after_init_engine")
 
+    if (not testing_flag) and env_lower == "development" and sqlite_file:
+        try:
+            import sqlite3
+            import traceback
+
+            if os.path.basename(sqlite_file) == "dev.db":
+                conn = sqlite3.connect(sqlite_file)
+                cur = conn.cursor()
+                try:
+                    t_row = cur.execute("SELECT COUNT(*) FROM tenants").fetchone()
+                    s_row = cur.execute("SELECT COUNT(*) FROM sites").fetchone()
+                    u_row = cur.execute("SELECT COUNT(*) FROM users").fetchone()
+                except Exception:
+                    t_row = s_row = u_row = None
+                tenants_count = int(t_row[0]) if t_row and t_row[0] is not None else -1
+                sites_count = int(s_row[0]) if s_row and s_row[0] is not None else -1
+                users_count = int(u_row[0]) if u_row and u_row[0] is not None else -1
+                names = []
+                if sites_count >= 0:
+                    try:
+                        names = [r[0] for r in cur.execute("SELECT name FROM sites").fetchall()]
+                    except Exception:
+                        names = []
+                conn.close()
+
+                if tenants_count == 1 and sites_count == 15:
+                    if names and all((n or "") == "Default Test Site" for n in names):
+                        stack = "".join(traceback.format_stack(limit=20))
+                        app.logger.error(
+                            "DB_RESET_DETECTED: looks like test seed in dev.db branch=%s commit=%s sqlite_file=%s users=%s tenants=%s sites=%s\nSTACKTRACE:\n%s",
+                            app.config.get("RUNTIME_GIT_BRANCH"),
+                            app.config.get("RUNTIME_GIT_COMMIT"),
+                            sqlite_file,
+                            users_count,
+                            tenants_count,
+                            sites_count,
+                            stack,
+                        )
+        except Exception:
+            pass
+
     is_dev = (app.config.get("ENV") == "development") or bool(app.config.get("DEBUG"))
     if is_dev:
         from sqlalchemy import event
@@ -414,11 +471,27 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         # Emit a single startup line with DB location and git info (dev only)
         sqlite_exists = False
         sqlite_size = 0
+        tenants_count = "?"
+        sites_count = "?"
+        users_count = "?"
         if sqlite_file:
             try:
                 sqlite_exists = os.path.exists(sqlite_file)
                 if sqlite_exists:
                     sqlite_size = os.path.getsize(sqlite_file)
+                    try:
+                        import sqlite3
+
+                        conn = sqlite3.connect(sqlite_file)
+                        cur = conn.cursor()
+                        tenants_count = cur.execute("SELECT COUNT(*) FROM tenants").fetchone()[0]
+                        sites_count = cur.execute("SELECT COUNT(*) FROM sites").fetchone()[0]
+                        users_count = cur.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+                        conn.close()
+                    except Exception:
+                        tenants_count = "?"
+                        sites_count = "?"
+                        users_count = "?"
             except Exception:
                 sqlite_exists = False
                 sqlite_size = 0
@@ -455,6 +528,25 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             app.config["RUNTIME_GIT_COMMIT"] = commit
         if sqlite_file:
             app.config["RUNTIME_SQLITE_FILE"] = sqlite_file
+        if not app.config.get("_runtime_line_emitted"):
+            app.config["_runtime_line_emitted"] = True
+            secret_value = app.config.get("SECRET_KEY") or ""
+            secret_len = len(secret_value)
+            secret_hash = ""
+            if secret_value:
+                try:
+                    import hashlib
+
+                    secret_hash = hashlib.sha256(secret_value.encode("utf-8")).hexdigest()
+                except Exception:
+                    secret_hash = "error"
+            print(
+                f"RUNTIME: sqlite_file={sqlite_file or ''} testing={testing_flag} "
+                f"branch={branch or 'unknown'} commit={commit or 'unknown'} "
+                f"tenants={tenants_count} sites={sites_count} users={users_count} "
+                f"secret_key_len={secret_len} secret_key_sha256={secret_hash}",
+                flush=True,
+            )
         line = f"DB_URL={db_url}" + (f" ; SQLITE_FILE={sqlite_file}" if sqlite_file else "")
         if emit_startup_log:
             try:
@@ -479,8 +571,6 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             print(f"STARTUP_ENV: testing={testing_flag} FLASK_ENV={env_flask} APP_ENV={env_app} DEPLOY_ENV={env_deploy}")
             if sqlite_file:
                 print(f"STARTUP_SQLITE: path={sqlite_file} exists={sqlite_exists} size_bytes={sqlite_size}")
-        if branch or commit:
-            print(f"RUNTIME: branch={branch or 'unknown'} commit={commit or 'unknown'} sqlite_file={sqlite_file or ''}")
     except Exception:
         pass
 
@@ -3360,6 +3450,14 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         ensure_bootstrap_superuser()
         try:
             ensure_dev_superuser_henrik()
+        except Exception:
+            pass
+        try:
+            ensure_dev_sync_superuser_from_env()
+        except Exception:
+            pass
+        try:
+            dev_repair_null_site_tenant_ids()
         except Exception:
             pass
         _log_sqlite_fingerprint("after_bootstrap_superuser")
