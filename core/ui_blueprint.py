@@ -4573,29 +4573,30 @@ def admin_dashboard():
         return None
 
     def _build_today_card():
-        lunch_title = None
-        dinner_title = None
-        has_published_menu_today = False
+        card = {
+            "state": "missing",
+            "title": "Ingen meny",
+            "message": "Ingen meny för idag",
+            "dishes": [],
+            "menu_id": None,
+        }
         try:
             if tid is not None and active_site_id:
                 from .menu_service import MenuServiceDB
                 svc = MenuServiceDB()
-                week_view = svc.get_week_view(int(tid), active_site_id, current_week, current_year)
-                if (week_view or {}).get("menu_status") == "published":
-                    day_key = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][today.isoweekday() - 1]
-                    day_obj = (week_view.get("days") or {}).get(day_key, {})
-                    lunch_title = _pick_dish_title(day_obj.get("lunch"))
-                    dinner_title = _pick_dish_title(day_obj.get("dinner"))
-                    has_published_menu_today = bool(lunch_title or dinner_title)
+                card = svc.resolve_today_menu_card(int(tid), active_site_id, today)
         except Exception:
             pass
         return {
             "weekday_sv": weekday_sv,
             "date_long_sv": date_long_sv,
             "week_number": current_week,
-            "lunch_title": lunch_title,
-            "dinner_title": dinner_title,
-            "has_published_menu_today": has_published_menu_today,
+            "state": card.get("state"),
+            "title": card.get("title"),
+            "message": card.get("message"),
+            "dishes": card.get("dishes") or [],
+            "menu_id": card.get("menu_id"),
+            "cta_url": url_for("ui.admin_menu_import_list"),
         }
 
     today_card = _build_today_card()

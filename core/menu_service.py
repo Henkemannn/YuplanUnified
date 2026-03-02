@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from .db import get_new_session
 from .models import Dish, Menu, MenuVariant
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 
 _MISMATCH_LOGGED: set[str] = set()
@@ -28,6 +28,14 @@ class _DayMealVariants(TypedDict):
 class WeekView(TypedDict):
     menu_id: int | None
     days: dict[str, dict[str, dict[str, _VariantInfo]]]
+
+
+class TodayMenuCard(TypedDict):
+    state: str
+    title: str
+    message: str
+    dishes: list[str]
+    menu_id: int | None
 
 
 class MenuServiceDB:
@@ -99,6 +107,99 @@ class MenuServiceDB:
             except Exception:
                 return None
         return None
+
+    def _day_key_from_date(self, value: date) -> str:
+        return ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][value.isoweekday() - 1]
+
+    def resolve_today_menu_card(self, tid: int, site_id: str, value: date) -> TodayMenuCard:
+        if not tid or not site_id:
+            return {
+                "state": "missing",
+                "title": "Ingen meny",
+                "message": "Ingen meny för idag",
+                "dishes": [],
+                "menu_id": None,
+            }
+        year, week = value.isocalendar()[0], value.isocalendar()[1]
+        day_key = self._day_key_from_date(value)
+        db = get_new_session()
+        try:
+            effective_tenant_id = tid
+            site_tenant_id = self._resolve_site_tenant_id(db, site_id, tid)
+            if site_tenant_id is None:
+                return {
+                    "state": "missing",
+                    "title": "Ingen meny",
+                    "message": "Ingen meny för idag",
+                    "dishes": [],
+                    "menu_id": None,
+                }
+            if int(site_tenant_id) != int(tid):
+                effective_tenant_id = site_tenant_id
+
+            menu = (
+                db.query(Menu)
+                .filter_by(
+                    tenant_id=effective_tenant_id,
+                    site_id=site_id,
+                    week=week,
+                    year=year,
+                    status="published",
+                )
+                .first()
+            )
+            if not menu:
+                menu = (
+                    db.query(Menu)
+                    .filter_by(
+                        tenant_id=effective_tenant_id,
+                        site_id=site_id,
+                        week=week,
+                        year=year,
+                        status="draft",
+                    )
+                    .first()
+                )
+                if not menu:
+                    return {
+                        "state": "missing",
+                        "title": "Ingen meny",
+                        "message": "Ingen meny för idag",
+                        "dishes": [],
+                        "menu_id": None,
+                    }
+                return {
+                    "state": "draft",
+                    "title": "Utkast finns",
+                    "message": "Utkast finns för idag (ej publicerad)",
+                    "dishes": [],
+                    "menu_id": menu.id,
+                }
+
+            dishes: list[str] = []
+            rows = (
+                db.query(MenuVariant, Dish)
+                .join(Dish, Dish.id == MenuVariant.dish_id, isouter=True)
+                .filter(MenuVariant.menu_id == menu.id, MenuVariant.day == day_key)
+                .order_by(MenuVariant.meal, MenuVariant.variant_type, MenuVariant.id)
+                .all()
+            )
+            seen: set[str] = set()
+            for mv, dish in rows:
+                if dish and dish.name:
+                    name = str(dish.name)
+                    if name not in seen:
+                        seen.add(name)
+                        dishes.append(name)
+            return {
+                "state": "published",
+                "title": "Dagens meny",
+                "message": "Dagens meny för idag",
+                "dishes": dishes,
+                "menu_id": menu.id,
+            }
+        finally:
+            db.close()
 
     def create_or_get_menu(self, tenant_id: int, site_id: str, week: int, year: int) -> Menu:
         if not site_id:

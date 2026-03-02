@@ -111,7 +111,9 @@ def test_menu_import_uses_site_tenant_id_and_publish():
 
 
 def test_docx_import_filters_footer_and_keeps_sunday_lunch():
-    matsedel_path = Path(__file__).resolve().parents[2] / "legacy" / "kommun" / "Matsedel v. 8-15.docx"
+    matsedel_path = (
+        Path(__file__).resolve().parents[1] / "fixtures" / "docx" / "Matsedel_v8-15.docx"
+    )
     data = matsedel_path.read_bytes()
     importer = DocxMenuImporter()
     result = importer.parse(data, matsedel_path.name)
