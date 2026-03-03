@@ -1,38 +1,57 @@
-<!doctype html>
-<html lang="sv">
-<head>
-  <meta charset="utf-8">
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Kök – Planering{% endblock %}
+
+{% block head_extra %}
   <meta name="csrf-token" content="{{ csrf_meta_token() }}">
   <!-- dev: csrf meta length={{ csrf_meta_token()|length }}; cookie differs from header by design -->
-  <title>Kök – Planering</title>
   <link rel="stylesheet" href="/static/css/unified_cook.css">
-  <link rel="stylesheet" href="/static/unified_ui.css">
+  <link rel="stylesheet" href="/static/css/kitchen_planering_app_shell.css">
   <link rel="stylesheet" href="/static/css/kitchen_planering_print.css">
-</head>
+{% endblock %}
+
 {% set _req_mode = request.args.get('mode') %}
 {% set cur_mode = _req_mode if _req_mode in ['special','normal'] else 'special' %}
-<body class="cook-dashboard" data-print-mode="{{ 'normal' if cur_mode == 'normal' else 'special' }}">
-  <div class="cook-content">
-    <h1 class="section-title">Kök – Planering</h1>
-    {% set show_results = (request.args.get('show_results') == '1') %}
 
-    <!-- Steg 1: Mode -->
-    <div class="kp-card kp-mb-12">
-      <h2 class="kp-h2-tight">Steg 1 – Vad ska du planera?</h2>
-      <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap">
-        <label><input type="radio" name="mode" value="special" {% if cur_mode == 'special' %}checked{% endif %}> Specialkost (anpassningar)</label>
-        <label><input type="radio" name="mode" value="normal" {% if cur_mode == 'normal' %}checked{% endif %}> Normalkost (Alt 1 / Alt 2)</label>
+{% block content %}
+  <div class="app-page kitchen-planering-page" data-print-mode="{{ 'normal' if cur_mode == 'normal' else 'special' }}">
+    <section class="app-shell__page-header">
+      <div>
+        <h1 class="app-shell__title">Kök – Planering</h1>
+        {% if vm.site_name %}
+          <p class="app-shell__subtitle">{{ vm.site_name }}</p>
+        {% endif %}
       </div>
-    </div>
+    </section>
 
-    <!-- Steg 2: Vecka/Dag/Måltid -->
-    <div class="kp-controls">
-      <div class="kp-card">
-        <div class="kp-toolbar">
-          <h2 class="kp-h2-tight">Steg 2 – Välj vecka, dag och måltid</h2>
-          <div class="kp-week-picker kp-flex kp-gap-8 kp-align-center kp-flex-wrap">
-            <a class="kp-button" aria-label="Föregående vecka"
-               href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.prev_year }}&week={{ vm.prev_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">⟵ Föregående</a>
+    <section class="app-shell__grid kitchen-planering-grid">
+      <article class="app-shell__card kitchen-planering-card kitchen-planering-card--intro">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">Vad ska du planera?</h2>
+            <p class="app-shell__card-text">Välj spår för dagens planering.</p>
+          </div>
+        </div>
+        <div class="app-shell__card-body">
+          <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap kitchen-planering-radio">
+            <label><input type="radio" name="mode" value="special" {% if cur_mode == 'special' %}checked{% endif %}> Specialkost (anpassningar)</label>
+            <label><input type="radio" name="mode" value="normal" {% if cur_mode == 'normal' %}checked{% endif %}> Normalkost (Alt 1 / Alt 2)</label>
+          </div>
+          <p class="kitchen-planering-help">Byt spår när du vill växla mellan specialkost och normalkost.</p>
+        </div>
+      </article>
+
+      <article class="app-shell__card kp-controls kitchen-planering-card kitchen-planering-card--controls">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">Välj vecka, dag och måltid</h2>
+          </div>
+        </div>
+        <div class="app-shell__card-body kitchen-planering-controls">
+          <div class="kitchen-planering-row kitchen-planering-row--week">
+            <div class="kp-week-picker kp-flex kp-gap-8 kp-align-center kp-flex-wrap kitchen-planering-toolbar">
+            <a class="kp-button kp-button--icon" aria-label="Föregående vecka"
+               href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.prev_year }}&week={{ vm.prev_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">◀</a>
             <form method="get" action="" class="kp-form-row">
               <input type="hidden" name="site_id" value="{{ vm.site_id }}">
               <input type="hidden" name="mode" value="{{ cur_mode }}">
@@ -50,105 +69,117 @@
                   <option value="{{ y }}" {% if vm.year == y %}selected{% endif %}>{{ y }}</option>
                 {% endfor %}
               </select>
-              <button type="submit" class="kp-button">Välj</button>
             </form>
-            <a class="kp-button" aria-label="Nästa vecka"
-               href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.next_year }}&week={{ vm.next_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">Nästa ⟶</a>
+            <a class="kp-button kp-button--icon" aria-label="Nästa vecka"
+               href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.next_year }}&week={{ vm.next_week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal={{ vm.selected_meal or '' }}">▶</a>
+            </div>
           </div>
-          <div class="kp-day-buttons">
+          <div class="kitchen-planering-row kitchen-planering-row--days">
+            <div class="kp-day-buttons">
             {% for label in vm.day_labels %}
               {% set idx = loop.index0 %}
               <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ idx }}&meal={{ vm.selected_meal or '' }}"
                  class="kp-button {% if vm.selected_day is not none and vm.selected_day == idx %}is-active{% endif %}">{{ label }}</a>
             {% endfor %}
+            </div>
           </div>
-          <div class="kp-meal-buttons">
+          <div class="kitchen-planering-row kitchen-planering-row--meals">
+            <div class="kp-meal-buttons">
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=lunch"
                class="kp-button {% if vm.selected_meal == 'lunch' %}is-active{% endif %}">🍽️ Lunch</a>
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dinner"
               class="kp-button {% if vm.selected_meal == 'dinner' %}is-active{% endif %}">🌙 Kvällsmat</a>
             <a href="?site_id={{ vm.site_id }}&mode={{ cur_mode }}&year={{ vm.year }}&week={{ vm.week }}&day={{ vm.selected_day if vm.selected_day is not none else '' }}&meal=dessert"
                class="kp-button {% if vm.selected_meal == 'dessert' %}is-active{% endif %}">🍮 Dessert</a>
-            <button class="kp-button js-print">🖨 Skriv ut</button>
-            {% if vm.selected_day is not none %}
-              <button type="button"
-                      class="yp-button"
-                      data-action="open-menu-modal"
-                      data-site-id="{{ vm.site_id }}"
-                      data-year="{{ vm.year }}"
-                      data-week="{{ vm.week }}"
-                      data-day-index="{{ vm.selected_day }}"
-                      {% if vm.selected_meal %}data-focus-meal="{{ vm.selected_meal }}"{% endif %}
-              >📋 Visa meny</button>
-            {% else %}
-              <button type="button" class="yp-button" data-action="open-menu-modal" disabled>📋 Visa meny</button>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Steg 3: Planering/Resultat -->
-    <div class="kp-card">
-      {% if vm.selected_day is none or vm.selected_meal is none %}
-        <div class="empty-state">
-          <div class="empty-icon">📝</div>
-          <h2 class="empty-text">Välj dag och måltid</h2>
-          <p class="empty-text">Planeringen visas här när du gjort ett val.</p>
-        </div>
-      {% else %}
-        <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}'>
-          <div class="kp-card kp-mb-12">
-            <h2 class="kp-h2-tight">Vad planerar vi?</h2>
-            <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap">
-              <div>Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
             </div>
-            {% if cur_mode == 'special' %}
-              {% if vm.selected_meal == 'lunch' %}
-                <div class="kp-what-grid">
-                  <div class="kp-what-row">
-                    <label for="kp-what-alt1">Lunch – Alt 1</label>
-                    <input id="kp-what-alt1" type="text" class="yp-input kp-what-input" placeholder="Alt 1" value="{{ vm.header_menu.alt1 or '' }}">
-                  </div>
-                  <div class="kp-what-row is-alt2">
-                    <label for="kp-what-alt2">Lunch – Alt 2</label>
-                    <input id="kp-what-alt2" type="text" class="yp-input kp-what-input is-alt2" placeholder="Alt 2" value="{{ vm.header_menu.alt2 or '' }}">
-                  </div>
-                </div>
-              {% elif vm.selected_meal == 'dinner' %}
-                <div class="kp-what-grid">
-                  <div class="kp-what-row">
-                    <label for="kp-what-dinner">Kvällsmat</label>
-                    <input id="kp-what-dinner" type="text" class="yp-input kp-what-input" placeholder="Kvällsmat" value="{{ vm.header_menu.dinner or '' }}">
-                  </div>
-                </div>
-              {% else %}
-                <div class="kp-what-grid">
-                  <div class="kp-what-row">
-                    <label for="kp-what-dessert">Dessert</label>
-                    <input id="kp-what-dessert" type="text" class="yp-input kp-what-input" placeholder="Dessert" value="{{ vm.header_menu.dessert or '' }}">
-                  </div>
-                </div>
-              {% endif %}
-            {% else %}
-              {% if vm.selected_meal == 'lunch' %}
-              <div class="alt-banners">
-                <span class="alt-banner alt1">
-                  <span class="label">Alt 1:</span>
-                  <span class="dish"><strong id="kp-lunch-alt1">{{ vm.header_menu.alt1 or '—' }}</strong></span>
-                </span>
-                <span class="alt-banner alt2">
-                  <span class="label">Alt 2:</span>
-                  <span class="dish"><strong id="kp-lunch-alt2" class="is-alt2 alt2-text">{{ vm.header_menu.alt2 or '—' }}</strong></span>
-                </span>
-              </div>
-              {% elif vm.selected_meal == 'dinner' %}
-                <div>Kvällsmat: <strong id="kp-dinner-main">{{ vm.header_menu.dinner or '—' }}</strong></div>
-              {% else %}
-                <div>Dessert: <strong id="kp-dessert-main">{{ vm.header_menu.dessert or '—' }}</strong></div>
-              {% endif %}
-            {% endif %}
           </div>
+          <div class="kitchen-planering-row kitchen-planering-row--actions">
+            <div class="kp-action-row">
+              <button class="kp-button js-print">🖨 Skriv ut</button>
+              {% if vm.selected_day is not none %}
+                <button type="button"
+                        class="yp-button"
+                        data-action="open-menu-modal"
+                        data-site-id="{{ vm.site_id }}"
+                        data-year="{{ vm.year }}"
+                        data-week="{{ vm.week }}"
+                        data-day-index="{{ vm.selected_day }}"
+                        {% if vm.selected_meal %}data-focus-meal="{{ vm.selected_meal }}"{% endif %}
+                >📋 Visa meny</button>
+              {% else %}
+                <button type="button" class="yp-button" data-action="open-menu-modal" disabled>📋 Visa meny</button>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="app-shell__card kitchen-planering-card kitchen-planering-card--planering">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">Planering</h2>
+          </div>
+        </div>
+        <div class="app-shell__card-body">
+          {% if vm.selected_day is none or vm.selected_meal is none %}
+            <div class="empty-state">
+              <div class="empty-icon">📝</div>
+              <h2 class="empty-text">Välj dag och måltid</h2>
+              <p class="empty-text">Planeringen visas här när du gjort ett val.</p>
+            </div>
+          {% else %}
+            <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}'>
+              <div class="kp-card kp-mb-12">
+                <h2 class="kp-h2-tight">Vad planerar vi?</h2>
+                <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap">
+                  <div>Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
+                </div>
+                {% if cur_mode == 'special' %}
+                  {% if vm.selected_meal == 'lunch' %}
+                    <div class="kp-what-grid">
+                      <div class="kp-what-row">
+                        <label for="kp-what-alt1">Lunch – Alt 1</label>
+                        <input id="kp-what-alt1" type="text" class="yp-input kp-what-input" placeholder="Alt 1" value="{{ vm.header_menu.alt1 or '' }}">
+                      </div>
+                      <div class="kp-what-row is-alt2">
+                        <label for="kp-what-alt2">Lunch – Alt 2</label>
+                        <input id="kp-what-alt2" type="text" class="yp-input kp-what-input is-alt2" placeholder="Alt 2" value="{{ vm.header_menu.alt2 or '' }}">
+                      </div>
+                    </div>
+                  {% elif vm.selected_meal == 'dinner' %}
+                    <div class="kp-what-grid">
+                      <div class="kp-what-row">
+                        <label for="kp-what-dinner">Kvällsmat</label>
+                        <input id="kp-what-dinner" type="text" class="yp-input kp-what-input" placeholder="Kvällsmat" value="{{ vm.header_menu.dinner or '' }}">
+                      </div>
+                    </div>
+                  {% else %}
+                    <div class="kp-what-grid">
+                      <div class="kp-what-row">
+                        <label for="kp-what-dessert">Dessert</label>
+                        <input id="kp-what-dessert" type="text" class="yp-input kp-what-input" placeholder="Dessert" value="{{ vm.header_menu.dessert or '' }}">
+                      </div>
+                    </div>
+                  {% endif %}
+                {% else %}
+                  {% if vm.selected_meal == 'lunch' %}
+                  <div class="alt-banners">
+                    <span class="alt-banner alt1">
+                      <span class="label">Alt 1:</span>
+                      <span class="dish"><strong id="kp-lunch-alt1">{{ vm.header_menu.alt1 or '—' }}</strong></span>
+                    </span>
+                    <span class="alt-banner alt2">
+                      <span class="label">Alt 2:</span>
+                      <span class="dish"><strong id="kp-lunch-alt2" class="is-alt2 alt2-text">{{ vm.header_menu.alt2 or '—' }}</strong></span>
+                    </span>
+                  </div>
+                  {% elif vm.selected_meal == 'dinner' %}
+                    <div>Kvällsmat: <strong id="kp-dinner-main">{{ vm.header_menu.dinner or '—' }}</strong></div>
+                  {% else %}
+                    <div>Dessert: <strong id="kp-dessert-main">{{ vm.header_menu.dessert or '—' }}</strong></div>
+                  {% endif %}
+                {% endif %}
+              </div>
 
           <!-- Formulär steg 3 enligt läge -->
           {% if cur_mode == 'special' %}
@@ -357,15 +388,15 @@
               <p class="empty-text">Inga data för normalkost.</p>
             {% endif %}
           {% endif %}
+            </div>
+          {% endif %}
         </div>
-      {% endif %}
-    </div>
+      </article>
+    </section>
 
-  </div>
+    {% include "ui/_menu_modal.html" %}
 
-  {% include "ui/_menu_modal.html" %}
-
-  <div id="dept-summary-modal" class="kp-modal" aria-hidden="true">
+    <div id="dept-summary-modal" class="kp-modal" aria-hidden="true">
     <div class="kp-modal-card" role="dialog" aria-modal="true" aria-labelledby="dept-summary-title">
       <div class="kp-modal-header">
         <h3 id="dept-summary-title">Sammanfattning per boende</h3>
@@ -379,13 +410,9 @@
         <div class="empty-text">Välj specialkoster för att se sammanfattning.</div>
       </div>
     </div>
-  </div>
+    </div>
 
-  <!-- Footer scripts (defer for CSP compliance) -->
-  <script src="/static/js/menu_utils.js" defer></script>
-  <script src="/static/js/menu_modal.js" defer></script>
-  <script src="/static/ui/kitchen_planering_v1.js" defer></script>
-  <div id="yp-print-root" class="kp-print" aria-hidden="true">
+    <div id="yp-print-root" class="kp-print" aria-hidden="true">
     {% if vm.print_preview_mode %}
       <div class="kp-print-sheet">
         <div class="kp-print-header">
@@ -443,6 +470,13 @@
     {% elif vm.selected_meal == 'lunch' and vm.alt_groups and (vm.alt_groups.alt2_dept_ids or []) %}
       <div class="kp-print-seed is-alt2"></div>
     {% endif %}
+    </div>
   </div>
-</body>
-</html>
+{% endblock %}
+
+{% block scripts %}
+  <!-- Footer scripts (defer for CSP compliance) -->
+  <script src="/static/js/menu_utils.js" defer></script>
+  <script src="/static/js/menu_modal.js" defer></script>
+  <script src="/static/ui/kitchen_planering_v1.js" defer></script>
+{% endblock %}

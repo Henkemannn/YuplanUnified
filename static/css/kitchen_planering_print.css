@@ -197,6 +197,18 @@
   font-size: 11pt;
 }
 
+@media print {
+  .app-shell__topbar,
+  .app-shell__sidebar,
+  .app-shell__page-header,
+  .kp-action-row {
+    display: none !important;
+  }
+  .app-shell__main {
+    padding: 0 !important;
+  }
+}
+
 .kp-print-special {
   margin-top: 10px;
 }

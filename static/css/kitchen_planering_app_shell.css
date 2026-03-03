@@ -1,0 +1,279 @@
+/* Kitchen Planering app-shell layout overrides (UI-only) */
+
+.kitchen-planering-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.kitchen-planering-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.kitchen-planering-card--intro {
+  grid-column: span 4;
+}
+
+.kitchen-planering-card--controls {
+  grid-column: span 6;
+}
+
+.kitchen-planering-card--planering {
+  grid-column: 1 / -1;
+}
+
+.kitchen-planering-card {
+  min-width: 0;
+}
+
+.kitchen-planering-help {
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.kitchen-planering-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kitchen-planering-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kitchen-planering-toolbar {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.kp-form-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.kitchen-planering-page .kp-form-row select {
+  appearance: none;
+  background-color: #eef2f7;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  color: #111827;
+  font-size: 0.9rem;
+  padding: 0.35rem 2rem 0.35rem 0.7rem;
+  line-height: 1.2;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 10px 6px;
+}
+
+.kp-button--icon {
+  padding: 0.35rem 0.55rem;
+  min-width: 2rem;
+  justify-content: center;
+}
+
+.kitchen-planering-radio label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1rem;
+}
+
+.kp-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.kp-action-row .kp-button,
+.kp-action-row .yp-button {
+  min-height: 40px;
+}
+
+.kp-button {
+  background: #f8fafc;
+  color: #111827;
+  border-color: #d1d5db;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.9rem;
+  border-radius: 999px;
+}
+
+.kp-button:hover {
+  background: #eef2f7;
+  border-color: #cbd5f5;
+}
+
+.kp-button.is-active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #f8fafc;
+}
+
+.kp-day-buttons .kp-button,
+.kp-meal-buttons .kp-button {
+  min-width: 64px;
+  justify-content: center;
+}
+
+.kitchen-planering-page .kp-meal-buttons,
+.kitchen-planering-page .kp-day-buttons,
+.kitchen-planering-page .kp-week-picker {
+  gap: 6px;
+}
+
+.kitchen-planering-page .alt-banner.alt2,
+.kitchen-planering-page .alt2-text,
+.kitchen-planering-page .is-alt2,
+.kitchen-planering-page .kp-row-alt2,
+.kitchen-planering-page .is-alt2-row {
+  background: transparent !important;
+  color: #b3860b;
+}
+
+.kitchen-planering-page .alt-banner.alt2,
+.kitchen-planering-page .menu-alt.alt2,
+.kitchen-planering-page .kp-worklist-row.is-alt2-row,
+.app-shell--dark .kitchen-planering-page .alt-banner.alt2,
+.app-shell--dark .kitchen-planering-page .menu-alt.alt2,
+.app-shell--dark .kitchen-planering-page .kp-worklist-row.is-alt2-row {
+  border-color: transparent !important;
+  border-left-color: transparent !important;
+}
+
+.kitchen-planering-page .kp-what-row.is-alt2 .kp-what-input,
+.kitchen-planering-page .kp-what-input.is-alt2 {
+  background: inherit !important;
+  border-color: inherit !important;
+  box-shadow: none !important;
+  color: #b3860b;
+}
+
+.kitchen-planering-page .kp-what-row.is-alt2 {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.app-shell--dark .kitchen-planering-card--intro {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--intro .app-shell__card-text,
+.app-shell--dark .kitchen-planering-card--intro .kitchen-planering-help {
+  color: var(--muted);
+}
+
+.app-shell--dark .kitchen-planering-card--intro .kitchen-planering-radio label {
+  color: var(--text);
+}
+
+.kitchen-planering-page .menu-modal__body .is-alt2,
+.kitchen-planering-page .menu-modal__body .alt2-text {
+  background: transparent !important;
+  color: #b3860b;
+}
+
+.kitchen-planering-page .kp-card {
+  margin: 0 0 12px 0;
+}
+
+.kitchen-planering-page .empty-state {
+  padding: 18px 12px;
+}
+
+@media (max-width: 900px) {
+  .kitchen-planering-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kitchen-planering-card--intro,
+  .kitchen-planering-card--controls {
+    grid-column: auto;
+  }
+
+  .kp-action-row {
+    justify-content: flex-start;
+  }
+
+  .kitchen-planering-radio label {
+    width: 100%;
+  }
+}
+
+@media (min-width: 901px) {
+  .kitchen-planering-grid {
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+  }
+}
+
+.app-shell--dark .kitchen-planering-page .kp-button {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-page .kp-button:hover {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: #475569;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-button.is-active {
+  background: #1e3a8a;
+  border-color: #60a5fa;
+  color: #e2e8f0;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-form-row select {
+  background-color: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23cbd5f5' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.app-shell--dark .kitchen-planering-page .kp-action-row .yp-button {
+  background: var(--surface);
+  border-color: #475569;
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-page .kp-action-row .yp-button:hover {
+  background: var(--surface-2);
+  border-color: #60a5fa;
+}
+
+.app-shell--dark .kitchen-planering-page #menuModal .menu-modal__content {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-page #menuModal .menu-modal__body {
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-page #menuModal .menu-modal__body * {
+  color: inherit;
+}
+
+.app-shell--dark .kitchen-planering-page #menuModal .is-alt2,
+.app-shell--dark .kitchen-planering-page #menuModal .alt2-text {
+  background: transparent !important;
+  color: #f6c453;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-action-row {
+  border-top-color: #334155;
+}
