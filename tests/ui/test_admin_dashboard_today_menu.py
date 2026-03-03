@@ -8,7 +8,9 @@ def _headers(role: str = "admin", tid: str = "1") -> dict[str, str]:
 
 
 def _day_key(value: date) -> str:
-    return ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][value.isoweekday() - 1]
+    from core.weekview.service import DAY_KEYS
+
+    return DAY_KEYS[value.isoweekday() - 1]
 
 
 def _seed_site(app, name: str) -> str:
@@ -19,7 +21,7 @@ def _seed_site(app, name: str) -> str:
     return site["id"]
 
 
-def _insert_menu(app, *, site_id: str, status: str, dish_name: str | None = None) -> None:
+def _insert_menu(app, *, site_id: str, status: str, dish_name: str | None = None) -> dict[str, int | str]:
     today = date.today()
     year, week = today.isocalendar()[0], today.isocalendar()[1]
     day_key = _day_key(today)
@@ -27,43 +29,30 @@ def _insert_menu(app, *, site_id: str, status: str, dish_name: str | None = None
     with app.app_context():
         from core.db import get_session
         from core.menu_service import MenuServiceDB
+        from core.models import Dish
 
         svc = MenuServiceDB()
         menu = svc.create_or_get_menu(1, site_id, week, year)
         menu_id = menu.id
 
-        if dish_name and menu_id:
+        dish_id = None
+        if dish_name:
             db = get_session()
             try:
-                db.execute(
-                    text("INSERT INTO dishes (tenant_id, name, category) VALUES (:tid, :name, :cat)"),
-                    {"tid": 1, "name": dish_name, "cat": "main"},
-                )
-                dish_row = db.execute(
-                    text("SELECT id FROM dishes WHERE name=:name ORDER BY id DESC LIMIT 1"),
-                    {"name": dish_name},
-                ).fetchone()
-                dish_id = int(dish_row[0]) if dish_row else None
-                if dish_id:
-                    db.execute(
-                        text(
-                            "INSERT INTO menu_variants (menu_id, day, meal, variant_type, dish_id) "
-                            "VALUES (:menu_id, :day, :meal, :variant, :dish_id)"
-                        ),
-                        {
-                            "menu_id": menu_id,
-                            "day": day_key,
-                            "meal": "lunch",
-                            "variant": "standard",
-                            "dish_id": dish_id,
-                        },
-                    )
+                dish = Dish(tenant_id=1, name=dish_name, category=None)
+                db.add(dish)
                 db.commit()
+                db.refresh(dish)
+                dish_id = int(dish.id)
             finally:
                 db.close()
+        if dish_id and menu_id:
+            svc.set_variant(1, menu_id, day_key, "lunch", "alt1", dish_id)
 
         if status == "published":
             svc.publish_menu(1, menu_id)
+
+    return {"year": int(year), "week": int(week), "day_key": str(day_key)}
 
 
 def test_admin_dashboard_today_menu_draft_state(client_admin):
@@ -85,7 +74,15 @@ def test_admin_dashboard_today_menu_draft_state(client_admin):
 def test_admin_dashboard_today_menu_published_state(client_admin):
     app = client_admin.application
     site_id = _seed_site(app, "Published Today Site")
-    _insert_menu(app, site_id=site_id, status="published", dish_name="Test Dish")
+    info = _insert_menu(app, site_id=site_id, status="published", dish_name="Test Dish")
+
+    with app.app_context():
+        from core.menu_service import MenuServiceDB
+
+        svc = MenuServiceDB()
+        today = date.today()
+        today_menu = svc.get_today_menu_for_site(1, site_id, today)
+        assert today_menu.get("lunch_alt1") == "Test Dish", f"today_menu={today_menu}"
 
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site_id
@@ -93,7 +90,8 @@ def test_admin_dashboard_today_menu_published_state(client_admin):
     resp = client_admin.get("/ui/admin", headers=_headers("admin"))
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
+    debug_line = next((line.strip() for line in html.splitlines() if "DEBUG:" in line), "")
 
     assert "Dagens meny" in html
-    assert "Test Dish" in html
+    assert "Test Dish" in html, f"DEBUG line: {debug_line}"
     assert "Utkast finns" not in html

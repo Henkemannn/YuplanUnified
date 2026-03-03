@@ -36,6 +36,7 @@ class TodayMenuCard(TypedDict):
     message: str
     dishes: list[str]
     menu_id: int | None
+    today_menu: dict[str, str]
 
 
 class MenuServiceDB:
@@ -109,37 +110,68 @@ class MenuServiceDB:
         return None
 
     def _day_key_from_date(self, value: date) -> str:
-        return ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][value.isoweekday() - 1]
+        from .weekview.service import DAY_KEYS
 
-    def _extract_dishes_from_day(self, day_obj: dict | None) -> list[str]:
-        if not isinstance(day_obj, dict):
-            return []
-        ordered_meals = ["breakfast", "lunch", "dinner", "evening", "kvall", "supper"]
-        seen: set[str] = set()
-        dishes: list[str] = []
+        iso_weekday = value.isoweekday()
+        if iso_weekday < 1 or iso_weekday > 7:
+            return ""
+        return DAY_KEYS[iso_weekday - 1]
 
-        def _collect(meal_obj) -> None:
-            if not isinstance(meal_obj, dict):
-                return
-            for variant_key in sorted(meal_obj.keys()):
-                variant = meal_obj.get(variant_key)
-                if isinstance(variant, dict):
-                    name = variant.get("dish_name")
-                elif isinstance(variant, str):
-                    name = variant
-                else:
-                    name = None
-                if name:
-                    name = str(name)
-                    if name not in seen:
-                        seen.add(name)
-                        dishes.append(name)
+    def get_today_menu_for_site(self, tid: int, site_id: str, value: date) -> dict[str, str]:
+        try:
+            iso = value.isocalendar()
+            year, week = int(iso[0]), int(iso[1])
+            week_view = self.get_week_view(int(tid), site_id, week, year) or {}
+            days_raw = (week_view.get("days") or {}) if isinstance(week_view, dict) else {}
+            day_map = {str(k).strip().lower(): v for k, v in (days_raw or {}).items()}
+            day_key = self._day_key_from_date(value)
+            day_aliases = {
+                "mon": ["mon", "monday", "mån", "måndag"],
+                "tue": ["tue", "tuesday", "tis", "tisdag"],
+                "wed": ["wed", "wednesday", "ons", "onsdag"],
+                "thu": ["thu", "thursday", "tor", "torsdag"],
+                "fri": ["fri", "friday", "fre", "fredag"],
+                "sat": ["sat", "saturday", "lör", "lördag"],
+                "sun": ["sun", "sunday", "sön", "söndag"],
+            }
 
-        for meal_key in ordered_meals:
-            _collect(day_obj.get(meal_key))
-        for meal_key in sorted(set(day_obj.keys()) - set(ordered_meals)):
-            _collect(day_obj.get(meal_key))
-        return dishes
+            def _pick_name(val) -> str:
+                if not val:
+                    return ""
+                if isinstance(val, dict):
+                    return str(val.get("dish_name") or val.get("name") or "")
+                return str(val)
+
+            def _meal_obj(day: dict, meal_key: str) -> dict:
+                meal = day.get(meal_key) or day.get(meal_key.capitalize()) or {}
+                if isinstance(meal, dict):
+                    return meal
+                return {"main": meal}
+
+            def _variant_text(meal: dict, keys: list[str]) -> str:
+                for key in keys:
+                    name = _pick_name(meal.get(key) or meal.get(key.capitalize()))
+                    if name:
+                        return name
+                return ""
+
+            day_val = {}
+            for alias in day_aliases.get(day_key, [day_key]):
+                day_val = day_map.get(alias) or {}
+                if day_val:
+                    break
+
+            lunch_meal = _meal_obj(day_val, "lunch")
+            dinner_meal = _meal_obj(day_val, "dinner")
+
+            return {
+                "lunch_alt1": _variant_text(lunch_meal, ["main", "alt1"]),
+                "lunch_alt2": _variant_text(lunch_meal, ["alt2"]),
+                "dessert": _variant_text(lunch_meal, ["dessert"]),
+                "dinner": _variant_text(dinner_meal, ["main", "dinner", "alt1", "alt2"]),
+            }
+        except Exception:
+            return {"lunch_alt1": "", "lunch_alt2": "", "dessert": "", "dinner": ""}
 
     def resolve_today_menu_card(self, tid: int, site_id: str, value: date) -> TodayMenuCard:
         if not tid or not site_id:
@@ -149,6 +181,7 @@ class MenuServiceDB:
                 "message": "Ingen meny för idag",
                 "dishes": [],
                 "menu_id": None,
+                "today_menu": {"lunch_alt1": "", "lunch_alt2": "", "dessert": "", "dinner": ""},
             }
         year, week = value.isocalendar()[0], value.isocalendar()[1]
         day_key = self._day_key_from_date(value)
@@ -163,6 +196,7 @@ class MenuServiceDB:
                     "message": "Ingen meny för idag",
                     "dishes": [],
                     "menu_id": None,
+                    "today_menu": {"lunch_alt1": "", "lunch_alt2": "", "dessert": "", "dinner": ""},
                 }
             if int(site_tenant_id) != int(tid):
                 effective_tenant_id = site_tenant_id
@@ -197,6 +231,7 @@ class MenuServiceDB:
                         "message": "Ingen meny för idag",
                         "dishes": [],
                         "menu_id": None,
+                        "today_menu": {"lunch_alt1": "", "lunch_alt2": "", "dessert": "", "dinner": ""},
                     }
                 return {
                     "state": "draft",
@@ -204,16 +239,28 @@ class MenuServiceDB:
                     "message": "Utkast finns för idag (ej publicerad)",
                     "dishes": [],
                     "menu_id": menu.id,
+                    "today_menu": {"lunch_alt1": "", "lunch_alt2": "", "dessert": "", "dinner": ""},
                 }
-            week_view = self.get_week_view(int(tid), site_id, week, year)
-            day_obj = (week_view.get("days") or {}).get(day_key, {})
-            dishes = self._extract_dishes_from_day(day_obj)
+            menu_today = self.get_today_menu_for_site(int(tid), site_id, value)
+            candidates = [
+                menu_today.get("lunch_alt1", ""),
+                menu_today.get("lunch_alt2", ""),
+                menu_today.get("dessert", ""),
+                menu_today.get("dinner", ""),
+            ]
+            dishes: list[str] = []
+            seen: set[str] = set()
+            for name in candidates:
+                if name and name not in seen:
+                    seen.add(name)
+                    dishes.append(name)
             return {
                 "state": "published",
                 "title": "Dagens meny",
                 "message": "Dagens meny för idag",
                 "dishes": dishes,
                 "menu_id": menu.id,
+                "today_menu": menu_today,
             }
         finally:
             db.close()

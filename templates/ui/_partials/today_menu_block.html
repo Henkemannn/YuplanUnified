@@ -1,0 +1,21 @@
+<div class="kitchen-dashboard__menu-heading">Dagens meny</div>
+<div class="kitchen-dash__menu">
+  <div class="kitchen-dash__menu-row">
+    <div class="kitchen-dash__menu-label">Lunch</div>
+    <div class="kitchen-dash__menu-dish">{{ today_menu.lunch_alt1 or "—" }}</div>
+  </div>
+  {% if today_menu.lunch_alt2 %}
+    <div class="kitchen-dash__menu-row">
+      <div class="kitchen-dash__menu-label kitchen-dash__menu-label--empty" aria-hidden="true"></div>
+      <div class="kitchen-dash__menu-dish kitchen-dash__menu-alt">{{ today_menu.lunch_alt2 }}</div>
+    </div>
+  {% endif %}
+  <div class="kitchen-dash__menu-row">
+    <div class="kitchen-dash__menu-label">Dessert</div>
+    <div class="kitchen-dash__menu-dish">{{ today_menu.dessert or "—" }}</div>
+  </div>
+  <div class="kitchen-dash__menu-row">
+    <div class="kitchen-dash__menu-label">Kväll</div>
+    <div class="kitchen-dash__menu-dish">{{ today_menu.dinner or "—" }}</div>
+  </div>
+</div>

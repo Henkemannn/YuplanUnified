@@ -19,25 +19,25 @@
 
     <section class="app-shell__grid">
       <article class="app-shell__card" data-testid="dashboard-today-card">
-        <h2 class="app-shell__card-title">Idag</h2>
-        <p class="app-shell__card-text">{{ vm.today_card.weekday_sv }} {{ vm.today_card.date_long_sv }}</p>
-        <p class="app-shell__card-text">Vecka {{ vm.today_card.week_number }}</p>
-        {% if vm.today_card.state == "published" %}
-          <p class="app-shell__card-text"><strong>{{ vm.today_card.title }}</strong></p>
-          {% if vm.today_card.dishes %}
-            {% for dish in vm.today_card.dishes %}
-              <p class="app-shell__card-text">{{ dish }}</p>
-            {% endfor %}
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">Idag</h2>
+            <p class="app-shell__card-text">{{ vm.today_card.weekday_sv }} {{ vm.today_card.date_long_sv }}</p>
+            <p class="app-shell__card-text">Vecka {{ vm.today_card.week_number }}</p>
+          </div>
+        </div>
+        <div class="app-shell__card-body">
+          {% if vm.today_card.state == "published" %}
+            {% set today_menu = vm.today_card.today_menu %}
+            {% include "ui/_partials/today_menu_block.html" %}
+          {% elif vm.today_card.state == "draft" %}
+            <p class="app-shell__card-text">📝 {{ vm.today_card.message }}</p>
+            <p class="app-shell__card-text"><a href="{{ vm.today_card.cta_url }}">Gå till meny</a></p>
           {% else %}
-            <p class="app-shell__card-text">{{ vm.today_card.message }}</p>
+            <p class="app-shell__card-text">⚠ {{ vm.today_card.message }}</p>
+            <p class="app-shell__card-text"><a href="{{ vm.today_card.cta_url }}">Gå till meny</a></p>
           {% endif %}
-        {% elif vm.today_card.state == "draft" %}
-          <p class="app-shell__card-text">📝 {{ vm.today_card.message }}</p>
-          <p class="app-shell__card-text"><a href="{{ vm.today_card.cta_url }}">Gå till meny</a></p>
-        {% else %}
-          <p class="app-shell__card-text">⚠ {{ vm.today_card.message }}</p>
-          <p class="app-shell__card-text"><a href="{{ vm.today_card.cta_url }}">Gå till meny</a></p>
-        {% endif %}
+        </div>
       </article>
 
       <article class="app-shell__card admin-dashboard__status-card" data-testid="dashboard-menuval-card">

@@ -12,6 +12,9 @@ from ..db import get_session
 from .repo import WeekviewRepo
 
 
+DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
 class WeekviewService:
     def __init__(self, repo: WeekviewRepo | None = None) -> None:
         self.repo = repo or WeekviewRepo()
@@ -237,7 +240,6 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
             menu_days = {}
 
         # Helper maps
-        day_keys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
         name_map = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
         for summary in summaries:
@@ -280,7 +282,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                     iso_date = date.fromisocalendar(year, week, dow).isoformat()
                 except Exception:
                     iso_date = None
-                dkey = day_keys[dow - 1]
+                dkey = DAY_KEYS[dow - 1]
                 # menu_texts lookup
                 menu_for_day = menu_days.get(dkey, {}) if isinstance(menu_days, dict) else {}
                 def _dish_name(meal: str, variant: str) -> str | None:

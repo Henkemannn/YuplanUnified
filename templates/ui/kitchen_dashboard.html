@@ -23,27 +23,8 @@
           </div>
         </div>
         <div class="app-shell__card-body">
-          <div class="kitchen-dashboard__menu-heading">Dagens meny</div>
-          <div class="kitchen-dash__menu">
-            <div class="kitchen-dash__menu-row">
-              <div class="kitchen-dash__menu-label">Lunch</div>
-              <div class="kitchen-dash__menu-dish">{{ vm.today_menu.lunch_alt1 or '—' }}</div>
-            </div>
-            {% if vm.today_menu.lunch_alt2 %}
-              <div class="kitchen-dash__menu-row">
-                <div class="kitchen-dash__menu-label kitchen-dash__menu-label--empty" aria-hidden="true"></div>
-                <div class="kitchen-dash__menu-dish kitchen-dash__menu-alt">{{ vm.today_menu.lunch_alt2 }}</div>
-              </div>
-            {% endif %}
-            <div class="kitchen-dash__menu-row">
-              <div class="kitchen-dash__menu-label">Dessert</div>
-              <div class="kitchen-dash__menu-dish">{{ vm.today_menu.dessert or '—' }}</div>
-            </div>
-            <div class="kitchen-dash__menu-row">
-              <div class="kitchen-dash__menu-label">Kväll</div>
-              <div class="kitchen-dash__menu-dish">{{ vm.today_menu.dinner or '—' }}</div>
-            </div>
-          </div>
+          {% set today_menu = vm.today_menu %}
+          {% include "ui/_partials/today_menu_block.html" %}
         </div>
       </article>
 

@@ -1815,69 +1815,8 @@ def resolve_day_menu_for_site(*, db, site_id: str, date: _date) -> dict:
         from .menu_service import MenuServiceDB
 
         tenant_id = int(getattr(g, "tenant_id", None) or session.get("tenant_id") or 1)
-        iso = date.isocalendar()
-        year = iso[0]
-        week = iso[1]
         menu_service = MenuServiceDB()
-        week_view = menu_service.get_week_view(tenant_id, site_id, week, year) or {}
-        days_raw = (week_view.get("days") or {}) if isinstance(week_view, dict) else {}
-        day_map = {str(k).strip().lower(): v for k, v in (days_raw or {}).items()}
-
-        weekday = date.weekday()  # Mon=0..Sun=6
-        key_by_idx = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-        day_key = key_by_idx[weekday]
-        day_aliases = {
-            "mon": ["mon", "monday", "mån", "måndag"],
-            "tue": ["tue", "tuesday", "tis", "tisdag"],
-            "wed": ["wed", "wednesday", "ons", "onsdag"],
-            "thu": ["thu", "thursday", "tor", "torsdag"],
-            "fri": ["fri", "friday", "fre", "fredag"],
-            "sat": ["sat", "saturday", "lör", "lördag"],
-            "sun": ["sun", "sunday", "sön", "söndag"],
-        }
-
-        def _pick_name(val) -> str:
-            if not val:
-                return ""
-            if isinstance(val, dict):
-                return str(val.get("dish_name") or val.get("name") or "")
-            return str(val)
-
-        def _meal_obj(day: dict, meal_key: str) -> dict:
-            if not day:
-                return {}
-            meal = day.get(meal_key) or day.get(meal_key.capitalize()) or {}
-            if isinstance(meal, dict):
-                return meal
-            return {"main": meal}
-
-        def _variant_text(meal: dict, keys: list[str]) -> str:
-            for key in keys:
-                name = _pick_name(meal.get(key) or meal.get(key.capitalize()))
-                if name:
-                    return name
-            return ""
-
-        day_val = {}
-        for alias in day_aliases.get(day_key, [day_key]):
-            day_val = day_map.get(alias) or {}
-            if day_val:
-                break
-
-        lunch_meal = _meal_obj(day_val, "lunch")
-        dinner_meal = _meal_obj(day_val, "dinner")
-
-        lunch_alt1 = _variant_text(lunch_meal, ["main", "alt1"])
-        lunch_alt2 = _variant_text(lunch_meal, ["alt2"])
-        dessert_text = _variant_text(lunch_meal, ["dessert"])
-        dinner_text = _variant_text(dinner_meal, ["main", "dinner", "alt1", "alt2"])
-
-        return {
-            "lunch_alt1": lunch_alt1,
-            "lunch_alt2": lunch_alt2,
-            "dessert": dessert_text,
-            "dinner": dinner_text,
-        }
+        return menu_service.get_today_menu_for_site(tenant_id, site_id, date)
     except Exception:
         return {
             "lunch_alt1": "",
@@ -4596,6 +4535,7 @@ def admin_dashboard():
             "message": card.get("message"),
             "dishes": card.get("dishes") or [],
             "menu_id": card.get("menu_id"),
+            "today_menu": card.get("today_menu") or {"lunch_alt1": "", "lunch_alt2": "", "dessert": "", "dinner": ""},
             "cta_url": url_for("ui.admin_menu_import_list"),
         }
 
