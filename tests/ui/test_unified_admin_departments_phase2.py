@@ -310,6 +310,9 @@ def test_departments_edit_form_happy_path(client_admin):
     assert "Redigera avdelning" in html
     assert "Edit Test Dept" in html
     assert "20" in html
+    assert "app-shell__env-badge" in html
+    assert "TestSite" in html
+    assert '<div class="app-shell__card-meta">Vecka ' not in html
 
 
 def test_departments_edit_form_permissions_admin_allowed(client_admin):

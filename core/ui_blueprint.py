@@ -725,6 +725,10 @@ def admin_department_detail_get(department_id: str):
         resident_count_fixed = int(row[1] or 0)
         notes = str(row[2] or "")
         dept_site_id = str(row[3]) if row[3] is not None else None
+        site_name_row = None
+        if dept_site_id:
+            site_name_row = db.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": dept_site_id}).fetchone()
+        dept_site_name = str(site_name_row[0] or "") if site_name_row else ""
     finally:
         db.close()
 
@@ -773,6 +777,7 @@ def admin_department_detail_get(department_id: str):
         "selected_week": week,
         "resident_count_fixed": resident_count_fixed,
         "site_id": site_id,
+        "site_name": dept_site_name,
         "residents_lunch": lunch_eff,
         "residents_dinner": dinner_eff,
         "has_override": bool(ov.get("residents_lunch") or ov.get("residents_dinner")),
@@ -804,9 +809,31 @@ def admin_department_detail_get(department_id: str):
         vm["diet_types"] = types
         # Use integer keys to simplify template lookup with t.id
         vm["diet_defaults"] = {int(it["diet_type_id"]): int(it.get("default_count", 0) or 0) for it in defaults}
+        specialkost_rows: list[dict[str, int | str]] = []
+        for t in types:
+            if isinstance(t, dict):
+                tid = t.get("id")
+                name = str(t.get("name") or "")
+            else:
+                tid = getattr(t, "id", None)
+                name = str(getattr(t, "name", "") or "")
+            try:
+                tid_int = int(tid)
+            except Exception:
+                continue
+            count = int(vm["diet_defaults"].get(tid_int, 0) or 0)
+            if count > 0:
+                specialkost_rows.append({"name": name, "count": count})
+        specialkost_rows.sort(key=lambda row: (-int(row["count"]), str(row["name"]).lower()))
+        vm["specialkost_rows"] = specialkost_rows
+        vm["specialkost_total"] = sum(int(row["count"]) for row in specialkost_rows)
+        vm["total_specialkost"] = vm["specialkost_total"]
     except Exception:
         vm["diet_types"] = []
         vm["diet_defaults"] = {}
+        vm["total_specialkost"] = 0
+        vm["specialkost_rows"] = []
+        vm["specialkost_total"] = 0
     return render_template("ui/unified_admin_department_detail.html", vm=vm)
 
 
@@ -5274,7 +5301,7 @@ def admin_departments_update(dept_id: str):
     # Update department
     repo = DepartmentsRepo()
     try:
-        repo.update_department(
+        new_version = repo.update_department(
             dept_id=dept_id,
             expected_version=expected_version,
             name=name,
@@ -5302,11 +5329,12 @@ def admin_departments_update(dept_id: str):
             try:
                 repo.upsert_department_diet_defaults(
                     dept_id=dept_id,
-                    expected_version=expected_version if expected_version is not None else 0,
+                    expected_version=new_version,
                     items=items,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                flash(f"Kunde inte spara specialkost: {str(e)}", "error")
+                return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
         # copy keyword contains 'uppdaterad' for assertions
         flash(f"Avdelning '{name}' uppdaterad.", "success")
     except ConcurrencyError:

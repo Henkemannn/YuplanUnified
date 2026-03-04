@@ -1,7 +1,27 @@
 {% extends "ui/unified_admin_base.html" %}
 
+{% block admin_head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+{% endblock %}
+
 {% block admin_title %}{{ 'Ny avdelning' if vm.mode == 'new' else 'Redigera Avdelning' }}{% endblock %}
-{% block admin_subtitle %}Hantera avdelningsuppgifter och boendeantal.{% endblock %}
+{% block admin_subtitle %}
+    {% if vm.mode == 'edit' %}
+        <span class="app-shell__env-badge">{{ vm.site_name or current_site_name or '—' }}</span>
+    {% else %}
+        Hantera avdelningsuppgifter och boendeantal.
+    {% endif %}
+{% endblock %}
+{% block admin_context_meta %}
+    {% if vm.mode != 'edit' %}
+        {{ super() }}
+    {% endif %}
+{% endblock %}
+{% block admin_week_meta %}
+    {% if vm.mode != 'edit' %}
+        {{ super() }}
+    {% endif %}
+{% endblock %}
 
 {% block admin_main %}
 
@@ -14,19 +34,16 @@
 </form>
 {% endif %}
 
-<section class="app-shell__grid">
+<section class="app-shell__grid{% if vm.mode == 'edit' and vm.department %} admin-department-edit__grid{% endif %}">
     {% if vm.mode == 'edit' and vm.department %}
         <article class="app-shell__card">
             <h2 class="app-shell__card-title">Avdelningsuppgifter</h2>
             <!-- Keep legacy-cased string for tests -->
-            <span style="display:none">Redigera avdelning</span>
-            {% if vm.site_name %}
-            <p class="app-shell__card-text">{{ vm.site_name }}</p>
-            {% endif %}
+            <span class="u-visually-hidden">Redigera avdelning</span>
 
             <div class="yp-form-field">
                 <label for="name" class="yp-label">
-                    🏷️ Namn <span class="required">*</span>
+                    Namn <span class="required">*</span>
                 </label>
                   <input type="text"
                        id="name"
@@ -42,7 +59,7 @@
 
             <div class="yp-form-field">
                 <label for="notes" class="yp-label">
-                    📝 Faktaruta
+                    Faktaruta
                 </label>
                 <textarea id="notes" name="notes" class="yp-input" rows="4" placeholder="Valfri beskrivning" form="department-form">{{ vm.department.notes }}</textarea>
                 <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
@@ -53,7 +70,7 @@
             <h2 class="app-shell__card-title">Boendeantal</h2>
             <div class="yp-form-field">
                 <label for="resident_count" class="yp-label">
-                    🔢 Fast antal <span class="required">*</span>
+                    Fast antal <span class="required">*</span>
                 </label>
                 <input type="number"
                        id="resident_count"
@@ -82,46 +99,56 @@
                 </table>
             </div>
             {% endif %}
-            <div class="variation-actions" style="margin-top:8px;">
-                <button type="button" id="openVariationBtn" class="yp-button yp-button-secondary js-open-modal" data-modal-target="#residents-variation-modal">Varierat boendeantal</button>
+            <div class="admin-variation-group">
+                <div class="variation-actions">
+                    <button type="button" id="openVariationBtn" class="yp-button yp-button-secondary js-open-modal" data-modal-target="#residents-variation-modal">Varierat boendeantal</button>
+                </div>
+                <p class="yp-form-help">Spara avvikande antal per vecka eller tills vidare.</p>
             </div>
-            <p class="yp-form-help">Spara avvikande antal per vecka eller tills vidare.</p>
         </article>
 
         <article class="app-shell__card">
-            <h2 class="app-shell__card-title">Menyval (Alt1/Alt2)</h2>
-            <div>
-                <button type="button" id="openAlt2Modal" class="yp-button yp-button-secondary js-open-alt2" data-department-id="{{ vm.department.id }}">Visa veckans Alt2</button>
-            </div>
-            <p class="yp-form-help">Markera vilka dagar som ska använda Alt2 för lunch.</p>
-            <div class="form-actions">
-                <button type="submit" class="yp-button yp-button-primary" form="department-form">💾 Spara ändringar</button>
-                <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-secondary">✖ Avbryt</a>
+            <h2 class="app-shell__card-title">Menyval</h2>
+            <div class="admin-menuval-group">
+                <div>
+                    <button type="button" id="openAlt2Modal" class="yp-button yp-button-secondary js-open-alt2" data-department-id="{{ vm.department.id }}">Ändra menyval</button>
+                </div>
+                <p class="yp-form-help">Här kan du ändra avdelningens menyval.</p>
             </div>
         </article>
         <article class="app-shell__card">
         <h2 class="app-shell__card-title">Specialkost</h2>
-        <form method="POST" action="{{ url_for('ui.admin_departments_edit_save_diets', dept_id=vm.department.id) }}" class="yp-form">
-            {{ csrf_token_input()|safe }}
-            <input type="hidden" name="version" value="{{ vm.department.version }}">
+        <div class="yp-form">
             {% if vm.diet_types and vm.diet_types|length > 0 %}
-            <div class="ua-grid ua-grid-2cols">
+            {% set totals = namespace(value=0) %}
+            {% for t in vm.diet_types %}
+                {% set dtid = t.id %}
+                {% set val = (vm.diet_defaults[dtid|string] if vm.diet_defaults else 0)|int %}
+                {% set totals.value = totals.value + val %}
+            {% endfor %}
+            <p class="app-shell__card-text specialkost-edit-total"><strong>Totalt:</strong> {{ totals.value }} personer</p>
+            <div class="specialkost-edit-grid" role="group" aria-label="Specialkost antal per typ">
                 {% for t in vm.diet_types %}
                     {% set dtid = t.id %}
                     {% set val = vm.diet_defaults[dtid|string] if vm.diet_defaults else 0 %}
-                    <div class="yp-form-field">
-                        <label class="yp-label">{{ t.name }}</label>
-                        <input type="number" name="diet_default_{{ dtid }}" class="yp-input" min="0" value="{{ val }}">
+                    <div class="specialkost-edit-row">
+                        <label class="specialkost-edit-label" for="diet_default_{{ dtid }}">{{ t.name }}</label>
+                        <input
+                            type="number"
+                            id="diet_default_{{ dtid }}"
+                            name="diet_default_{{ dtid }}"
+                            class="yp-input specialkost-edit-input sk-input"
+                            form="department-form"
+                            min="0"
+                            value="{{ val }}"
+                        >
                     </div>
                 {% endfor %}
             </div>
             {% else %}
             <p class="ua-muted">Inga specialkosttyper finns på denna site – skapa under <a href="{{ url_for('ui.admin_specialkost_list') }}">Specialkost</a>.</p>
             {% endif %}
-            <div class="form-actions">
-                <button type="submit" class="yp-button yp-button-primary">Spara specialkost</button>
-            </div>
-        </form>
+        </div>
         </article>
     {% else %}
     <article class="app-shell__card">
@@ -227,6 +254,13 @@
     </article>
     {% endif %}
 </section>
+
+{% if vm.mode == 'edit' and vm.department %}
+<div class="admin-edit-actions" role="group" aria-label="Åtgärder för redigering">
+    <button type="submit" class="yp-button yp-button-primary" form="department-form">Spara ändringar</button>
+    <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-secondary">Avbryt</a>
+</div>
+{% endif %}
 
 <!-- Modal: Varierat boendeantal (edit form) -->
 {% if vm.mode == 'edit' and vm.department %}

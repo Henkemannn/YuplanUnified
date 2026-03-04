@@ -1,154 +1,80 @@
 {% extends "ui/unified_admin_base.html" %}
 
+{% block admin_head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+{% endblock %}
+
 {% block admin_title %}Avdelning – {{ vm.department.name }}{% endblock %}
-{% block admin_subtitle %}All information om denna avdelning på en plats.{% endblock %}
+{% block admin_subtitle %}<span class="admin-detail-site-chip">{{ vm.site_name or '—' }}</span>{% endblock %}
+{% block admin_context_meta %}{% endblock %}
+{% block admin_week_meta %}{% endblock %}
+
+{% block admin_header_actions %}
+  <div class="app-shell__page-actions">
+    <a class="yp-button yp-button-primary" href="{{ url_for('ui.admin_departments_edit_form', dept_id=vm.department.id) }}">Redigera</a>
+  </div>
+{% endblock %}
 
 {% block admin_main %}
+<section class="app-shell__grid admin-department-detail__grid">
+  <article class="app-shell__card">
+    <h2 class="app-shell__card-title">Grundinformation</h2>
+    <p class="app-shell__card-text"><strong>Namn:</strong> {{ vm.department.name }}</p>
+    <p class="app-shell__card-text"><strong>Arbetsplats:</strong> {{ vm.site_name or '—' }}</p>
+    <p class="app-shell__card-text"><strong>Faktaruta:</strong><br>{{ vm.department.notes or "Ingen information ännu." }}</p>
+  </article>
 
-<section class="ua-section">
-  <div class="ua-card">
-    <h2>Grundinformation</h2>
-    <p><strong>Namn:</strong> {{ vm.department.name }}</p>
-    <p><strong>Info:</strong><br>{{ vm.department.notes or "Ingen information ännu." }}</p>
-  </div>
-  <div style="display:none" class="quick-links-grid"><div class="quick-link-card">Avdelning</div></div>
-</section>
-
-<section class="ua-section">
-  <div class="ua-card">
-    <h2>Antal boende – fast</h2>
-    <form method="post" action="{{ url_for('ui.admin_department_update_fixed_residents', department_id=vm.department.id) }}">
-      {{ csrf_token_input()|safe }}
-      <label>Antal boende (normalt):</label>
-      <input type="number" name="resident_count_fixed"
-             value="{{ vm.resident_count_fixed }}"
-             class="ua-input" min="0">
-      <button class="yp-button">Spara</button>
-    </form>
-  </div>
-  <span style="display:none">content-header</span>
-</section>
-
-<section class="ua-section">
-  <div class="ua-card">
-    <h2>👥 Boendeantal – {{ vm.department.name }}</h2>
-    <div style="display:flex;align-items:center;gap:8px;">
+  <article class="app-shell__card">
+    <h2 class="app-shell__card-title">Boendeantal</h2>
+    <div class="admin-department-detail__weeknav">
       {% set prev_w = vm.selected_week-1 if vm.selected_week>1 else 1 %}
       {% set next_w = vm.selected_week+1 if vm.selected_week<52 else 52 %}
-      <a class="yp-button" href="{{ url_for('ui.admin_department_detail', department_id=vm.department.id, week=prev_w) }}" aria-label="Föregående vecka">◀︎</a>
-      <span>Vecka {{ vm.selected_week }}</span>
-      <a class="yp-button" href="{{ url_for('ui.admin_department_detail', department_id=vm.department.id, week=next_w) }}" aria-label="Nästa vecka">▶︎</a>
+      <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_department_detail', department_id=vm.department.id, week=prev_w) }}" aria-label="Föregående vecka">◀︎</a>
+      <span class="app-shell__card-text"><strong>Vecka {{ vm.selected_week }}</strong></span>
+      <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_department_detail', department_id=vm.department.id, week=next_w) }}" aria-label="Nästa vecka">▶︎</a>
     </div>
-
-    {% if not vm.has_variation %}
-      <p>Normalt antal: {{ vm.resident_count_fixed }} boende</p>
-      <button class="ua-button ua-button-secondary js-open-modal" type="button" data-modal-target="#residents-variation-modal">Ange varierat antal</button>
-    {% else %}
-      <p>Varierat denna vecka (normalt {{ vm.resident_count_fixed }} boende)</p>
-      {% if vm.weekly_table %}
-        <table class="ua-table">
-          <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
-          {% for row in vm.weekly_table %}
-            <tr><td>{{ row.weekday }}</td><td>{{ row.lunch }}</td><td>{{ row.dinner }}</td></tr>
-          {% endfor %}
-        </table>
-      {% endif %}
-      <button class="ua-button ua-button-secondary js-open-modal" type="button" data-modal-target="#residents-variation-modal">Ändra varierat antal</button>
-    {% endif %}
-
-    <!-- Modal: Varierat boendeantal -->
-    <dialog id="residents-variation-modal" class="ua-modal">
-      <div class="ua-modal-inner">
-        <header class="ua-modal-header">
-          <h2>👥 Varierat boendeantal – {{ vm.department.name }}</h2>
-          <button type="button" class="ua-modal-close" data-modal-close>&times;</button>
-        </header>
-        <div class="ua-modal-body">
-          <form id="residents-variation-form" method="post" action="{{ url_for('ui.admin_department_save_variation', department_id=vm.department.id) }}">
-            {{ csrf_token_input()|safe }}
-            <p class="ua-muted">Mån–Sön × Lunch/Kväll</p>
-            <input type="hidden" name="selected_week" value="{{ vm.selected_week }}">
-            <table class="ua-table">
-              <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
-              {% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
-              {% for dow in range(1,8) %}
-                {% set lunch_default = vm.resident_count_fixed %}
-                {% set dinner_default = vm.resident_count_fixed %}
-                {% if vm.weekly_table %}
-                  {% set lunch_default = vm.weekly_table[dow-1].lunch %}
-                  {% set dinner_default = vm.weekly_table[dow-1].dinner %}
-                {% endif %}
-                <tr>
-                  <td>{{ day_names[dow-1] }}</td>
-                  <td><input type="number" name="day_{{ dow }}_lunch" value="{{ lunch_default }}" min="0" class="ua-input"></td>
-                  <td><input type="number" name="day_{{ dow }}_dinner" value="{{ dinner_default }}" min="0" class="ua-input"></td>
-                </tr>
-              {% endfor %}
-            </table>
-            <fieldset class="ua-fieldset">
-              <legend>Gäller</legend>
-              <label><input type="radio" name="mode" value="week" checked> Endast för vecka
-                <select name="selected_week_override">
-                  {% for w in range(1,53) %}
-                    <option value="{{ w }}" {% if w == vm.selected_week %}selected{% endif %}>{{ w }}</option>
-                  {% endfor %}
-                </select>
-              </label>
-              <label><input type="radio" name="mode" value="forever"> Tills vidare</label>
-            </fieldset>
-          </form>
-        </div>
-        <footer class="ua-modal-footer">
-          <button type="button" class="ua-button ua-button-ghost" data-modal-close>Avbryt</button>
-          <button type="submit" form="residents-variation-form" class="ua-button ua-button-primary">Spara schema</button>
-        </footer>
-      </div>
-    </dialog>
-    <!-- Preserve weekly override quick form for legacy tests, hidden from users -->
-    <div class="legacy-variation-block" style="display:none">
-      <form method="post" action="{{ url_for('ui.admin_department_detail', department_id=vm.department.id) }}" style="margin-top:12px;">
-        {{ csrf_token_input()|safe }}
-        <input type="hidden" name="year" value="{{ vm.year }}">
-        <input type="hidden" name="week" value="{{ vm.week }}">
-        <table class="ua-table">
-          <tr><th>Lunch</th><th>Kväll</th></tr>
-          <tr>
-            <td>
-              <input type="number" name="dept_{{ vm.department.id }}_lunch" value="{{ vm.residents_lunch }}" min="0" class="ua-input">
-            </td>
-            <td>
-              <input type="number" name="dept_{{ vm.department.id }}_dinner" value="{{ vm.residents_dinner }}" min="0" class="ua-input">
-            </td>
-          </tr>
-        </table>
-        <button class="yp-button">Spara veckovariation</button>
-      </form>
-    </div>
-  </div>
-</section>
-
-<section class="ua-section">
-  <div class="ua-card">
-    <h2>Specialkost</h2>
-    {% if vm.diet_types and vm.diet_types|length > 0 %}
-      <table class="ua-table">
-        <tr><th>Typ</th><th>Standardantal</th></tr>
-        {% for t in vm.diet_types %}
-          {% set cnt = vm.diet_defaults.get(t.id, 0) %}
-          <tr>
-            <td>{{ t.name }}</td>
-            <td>{{ cnt }}</td>
-          </tr>
+    <p class="app-shell__card-text"><strong>Normalt antal:</strong> {{ vm.resident_count_fixed }} boende</p>
+    {% if vm.has_variation and vm.weekly_table %}
+      <p class="app-shell__card-text"><strong>Veckoöverstyrning:</strong> Lunch/Kväll visas nedan.</p>
+      <table class="ua-table ua-table-compact">
+        <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
+        {% for row in vm.weekly_table %}
+          <tr><td>{{ row.weekday }}</td><td>{{ row.lunch }}</td><td>{{ row.dinner }}</td></tr>
         {% endfor %}
       </table>
     {% else %}
-      <p class="ua-muted">Inga specialkosttyper definierade.</p>
+      <p class="app-shell__card-text">Inga veckovariationer sparade för vald vecka.</p>
     {% endif %}
-    <div style="margin-top:8px; display:flex; gap:8px;">
-      <a class="ua-button ua-button-secondary" href="{{ url_for('ui.admin_departments_edit_form', dept_id=vm.department.id) }}">Redigera specialkost</a>
-      <a class="ua-button ua-button-ghost" href="{{ url_for('ui.admin_specialkost_list') }}">Hantera specialkosttyper</a>
-    </div>
-  </div>
+  </article>
+
+  <article class="app-shell__card">
+    <h2 class="app-shell__card-title">Specialkost</h2>
+    <p class="app-shell__card-text"><strong>Totalt:</strong> {{ vm.specialkost_total or 0 }} personer</p>
+    {% if vm.specialkost_rows %}
+      <div class="sk-list" aria-label="Specialkostlista">
+        {% for row in vm.specialkost_rows %}
+          <div class="sk-row">
+            <span>{{ row.name }}</span>
+            <span class="sk-pill">{{ row.count }} personer</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="app-shell__card-text">Ingen specialkost registrerad.</p>
+    {% endif %}
+  </article>
+
+  <article class="app-shell__card">
+    <h2 class="app-shell__card-title">Snabbstatistik</h2>
+    {% set diet_count = (vm.diet_types|length) if vm.diet_types else 0 %}
+    {% if diet_count > 0 or vm.has_variation %}
+      <p class="app-shell__card-text"><strong>Specialkosttyper:</strong> {{ diet_count }}</p>
+      <p class="app-shell__card-text"><strong>Totalt antal specialkost:</strong> {{ vm.specialkost_total or 0 }}</p>
+      <p class="app-shell__card-text"><strong>Veckovariation aktiv:</strong> {{ 'Ja' if vm.has_variation else 'Nej' }}</p>
+    {% else %}
+      <p class="app-shell__card-text">Ingen statistik tillgänglig ännu.</p>
+    {% endif %}
+  </article>
 </section>
 
 {% endblock %}

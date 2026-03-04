@@ -19,6 +19,8 @@ def test_edit_form_shows_specialkost_heading(client_admin):
     assert r.status_code == 200
     html = r.get_data(as_text=True)
     assert "Specialkost (antal på avdelningen)" in html
+    assert "app-shell__env-badge" in html
+    assert '<div class="app-shell__card-meta">Vecka ' not in html
 
 def test_edit_post_saves_default_and_reads_back(client_admin):
     # Create a department and one diet type
