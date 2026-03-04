@@ -156,7 +156,7 @@
 .kitchen-planering-page .kp-what-row.is-alt2 .kp-what-input,
 .kitchen-planering-page .kp-what-input.is-alt2 {
   background: inherit !important;
-  border-color: inherit !important;
+  border-color: var(--border) !important;
   box-shadow: none !important;
   color: #b3860b;
 }
