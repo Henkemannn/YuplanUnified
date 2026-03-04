@@ -80,11 +80,62 @@
   justify-content: center;
 }
 
+.kitchen-planering-radio {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
 .kitchen-planering-radio label {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   font-size: 1rem;
+  padding: 10px 12px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #f8fbff;
+  color: #0f172a;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.kitchen-planering-radio input[type="radio"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border-radius: 999px;
+  border: 2px solid #7c93b5;
+  display: inline-grid;
+  place-items: center;
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.kitchen-planering-radio input[type="radio"]::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  transform: scale(0);
+  transition: transform 120ms ease;
+  background: #1d4ed8;
+}
+
+.kitchen-planering-radio input[type="radio"]:checked::before {
+  transform: scale(1);
+}
+
+.kitchen-planering-radio label:has(input[type="radio"]:checked) {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
+}
+
+.kitchen-planering-radio label:has(input[type="radio"]:focus-visible) {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
 }
 
 .kp-action-row {
@@ -179,6 +230,147 @@
 
 .app-shell--dark .kitchen-planering-card--intro .kitchen-planering-radio label {
   color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.app-shell--dark .kitchen-planering-card--intro .kitchen-planering-radio input[type="radio"] {
+  border-color: #6f87ad;
+}
+
+.app-shell--dark .kitchen-planering-card--intro .kitchen-planering-radio input[type="radio"]::before {
+  background: #60a5fa;
+}
+
+.app-shell--dark .kitchen-planering-card--intro .kitchen-planering-radio label:has(input[type="radio"]:checked) {
+  background: rgba(30, 58, 138, 0.35);
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+}
+
+.app-shell--dark .kitchen-planering-card--intro .kitchen-planering-radio label:has(input[type="radio"]:focus-visible) {
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.3);
+}
+
+.app-shell--dark .kitchen-planering-card--planering {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .app-shell__card-title,
+.app-shell--dark .kitchen-planering-card--planering .kp-h2-tight,
+.app-shell--dark .kitchen-planering-card--planering .kp-heading,
+.app-shell--dark .kitchen-planering-card--planering label,
+.app-shell--dark .kitchen-planering-card--planering .empty-text {
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .kp-card,
+.app-shell--dark .kitchen-planering-card--planering .kp-summary-details,
+.app-shell--dark .kitchen-planering-card--planering .kp-accordion,
+.app-shell--dark .kitchen-planering-card--planering .kp-worklist-group,
+.app-shell--dark .kitchen-planering-card--planering .menu-alt {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.app-shell--dark .kitchen-planering-card--planering .kp-worklist-row {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .menu-alt h3,
+.app-shell--dark .kitchen-planering-card--planering .cannot-eat,
+.app-shell--dark .kitchen-planering-card--planering .menu-alt {
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .alt-dish-input {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .alt-dish-input::placeholder {
+  color: var(--muted);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .diet-chip {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .diet-chip.active {
+  background: rgba(29, 78, 216, 0.2);
+  border-color: #60a5fa;
+  box-shadow: none;
+}
+
+.app-shell--dark .kitchen-planering-card--planering .diet-chip .kp-chip-badge {
+  background: rgba(148, 163, 184, 0.25);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .grid-table th,
+.app-shell--dark .kitchen-planering-card--planering .grid-table td {
+  border-color: var(--border);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .grid-table thead th,
+.app-shell--dark .kitchen-planering-card--planering .grid-subhead th {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .grid-table tbody tr.diet-row:nth-child(odd),
+.app-shell--dark .kitchen-planering-card--planering .grid-table tbody tr.diet-row:nth-child(even) {
+  background: var(--surface-2);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .grid-table th:first-child,
+.app-shell--dark .kitchen-planering-card--planering .grid-table td.diet-name {
+  background: var(--surface);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .grid-table td.is-alt2,
+.app-shell--dark .kitchen-planering-card--planering .grid-table th.is-alt2 {
+  background: transparent;
+  color: #b3860b;
+}
+
+.app-shell--dark .kitchen-planering-card--planering .kp-what-input {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .kp-what-input::placeholder {
+  color: var(--muted);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .alt-banner {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .alt-banner .label,
+.app-shell--dark .kitchen-planering-card--planering .alt-banner .dish,
+.app-shell--dark .kitchen-planering-card--planering .alt-banner .dish strong {
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-card--planering .alt-banner.alt2 {
+  background: transparent;
+  border-color: transparent;
+}
+
+.app-shell--dark .kitchen-planering-card--planering .kp-muted-line {
+  color: var(--muted);
 }
 
 .kitchen-planering-page .menu-modal__body .is-alt2,
@@ -189,6 +381,72 @@
 
 .kitchen-planering-page .kp-card {
   margin: 0 0 12px 0;
+}
+
+.kitchen-planering-card--planering .app-shell__card-body {
+  padding-top: 12px;
+}
+
+.kitchen-planering-card--planering .kp-card {
+  padding: 0.8rem 0.9rem;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.kitchen-planering-card--planering .kp-h2-tight,
+.kitchen-planering-card--planering h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.kitchen-planering-card--planering .kp-muted-line {
+  color: var(--muted);
+  margin: 0;
+}
+
+.kitchen-planering-card--planering .kp-context-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.kitchen-planering-card--planering .kp-context-dish {
+  font-size: 0.92rem;
+  margin-bottom: 8px;
+}
+
+.kitchen-planering-card--planering .menu-alternatives {
+  gap: 10px;
+  margin-top: 0;
+}
+
+.kitchen-planering-card--planering .menu-alt {
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.kitchen-planering-card--planering .menu-alt h3 {
+  margin-bottom: 6px;
+}
+
+.kitchen-planering-card--planering .cannot-eat {
+  margin-top: 8px;
+}
+
+.kitchen-planering-card--planering .diet-chips {
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.kitchen-planering-card--planering .kp-worklist-header {
+  margin-bottom: 6px;
+}
+
+.kitchen-planering-card--planering .kp-worklist-actions {
+  gap: 6px;
 }
 
 .kitchen-planering-page .empty-state {
@@ -211,6 +469,10 @@
 
   .kitchen-planering-radio label {
     width: 100%;
+  }
+
+  .kitchen-planering-radio {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -276,4 +538,55 @@
 
 .app-shell--dark .kitchen-planering-page .kp-action-row {
   border-top-color: #334155;
+}
+
+.app-shell--dark .kitchen-planering-page #dept-summary-modal {
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-modal-card {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 40px rgba(2, 6, 23, 0.55);
+}
+
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-modal-header,
+.app-shell--dark .kitchen-planering-page #dept-summary-modal #dept-summary-title,
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-modal-body,
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .empty-text {
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-modal-actions .kp-button {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-modal-actions .kp-button:hover {
+  background: rgba(30, 58, 138, 0.25);
+  border-color: #60a5fa;
+}
+
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-dept-summary {
+  background: var(--surface-2);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-worklist-row {
+  background: rgba(15, 23, 42, 0.5);
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-row-name,
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-row-count,
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-dept-diet {
+  color: var(--text);
+}
+
+.app-shell--dark .kitchen-planering-page #dept-summary-modal .kp-row-alt2 {
+  color: #f6c453;
+  background: rgba(245, 158, 11, 0.18);
 }

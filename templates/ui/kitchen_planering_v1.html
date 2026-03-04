@@ -34,8 +34,8 @@
         </div>
         <div class="app-shell__card-body">
           <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap kitchen-planering-radio">
-            <label><input type="radio" name="mode" value="special" {% if cur_mode == 'special' %}checked{% endif %}> Specialkost (anpassningar)</label>
-            <label><input type="radio" name="mode" value="normal" {% if cur_mode == 'normal' %}checked{% endif %}> Normalkost (Alt 1 / Alt 2)</label>
+            <label><input type="radio" name="mode" value="special" {% if cur_mode == 'special' %}checked{% endif %}> Specialkost</label>
+            <label><input type="radio" name="mode" value="normal" {% if cur_mode == 'normal' %}checked{% endif %}> Normalkost</label>
           </div>
           <p class="kitchen-planering-help">Byt spår när du vill växla mellan specialkost och normalkost.</p>
         </div>
@@ -128,12 +128,16 @@
               <p class="empty-text">Planeringen visas här när du gjort ett val.</p>
             </div>
           {% else %}
-            <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}'>
+            <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}' data-current-dish-label="{{ (vm.current_dish_label or '')|e }}" data-dev-mode="{{ '1' if vm.dev_mode else '0' }}">
               <div class="kp-card kp-mb-12">
-                <h2 class="kp-h2-tight">Vad planerar vi?</h2>
-                <div class="kp-flex kp-gap-16 kp-align-center kp-flex-wrap">
-                  <div>Vecka <strong>{{ vm.week }}</strong>, Dag <strong>{{ vm.day_labels[vm.selected_day] }}</strong>, Måltid <strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></div>
+                <div class="kp-context-row">
+                  <span>Vecka <strong>{{ vm.week }}</strong></span>
+                  <span>·</span>
+                  <span><strong>{{ vm.day_labels[vm.selected_day] }}</strong></span>
+                  <span>·</span>
+                  <span><strong>{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}</strong></span>
                 </div>
+                <div class="kp-context-dish kp-muted-line">Rätt: <strong id="kp-planering-title">{{ vm.current_dish_label or '—' }}</strong></div>
                 {% if cur_mode == 'special' %}
                   {% if vm.selected_meal == 'lunch' %}
                     <div class="kp-what-grid">
@@ -160,23 +164,6 @@
                         <input id="kp-what-dessert" type="text" class="yp-input kp-what-input" placeholder="Dessert" value="{{ vm.header_menu.dessert or '' }}">
                       </div>
                     </div>
-                  {% endif %}
-                {% else %}
-                  {% if vm.selected_meal == 'lunch' %}
-                  <div class="alt-banners">
-                    <span class="alt-banner alt1">
-                      <span class="label">Alt 1:</span>
-                      <span class="dish"><strong id="kp-lunch-alt1">{{ vm.header_menu.alt1 or '—' }}</strong></span>
-                    </span>
-                    <span class="alt-banner alt2">
-                      <span class="label">Alt 2:</span>
-                      <span class="dish"><strong id="kp-lunch-alt2" class="is-alt2 alt2-text">{{ vm.header_menu.alt2 or '—' }}</strong></span>
-                    </span>
-                  </div>
-                  {% elif vm.selected_meal == 'dinner' %}
-                    <div>Kvällsmat: <strong id="kp-dinner-main">{{ vm.header_menu.dinner or '—' }}</strong></div>
-                  {% else %}
-                    <div>Dessert: <strong id="kp-dessert-main">{{ vm.header_menu.dessert or '—' }}</strong></div>
                   {% endif %}
                 {% endif %}
               </div>
@@ -208,7 +195,6 @@
           {% else %}
             {% if vm.selected_meal == 'lunch' %}
               <div class="kp-card kp-mb-12">
-                <h2 class="kp-h2-tight">Vad ska vi laga?</h2>
                 <section class="menu-alternatives">
                   <div class="menu-alt alt1">
                     <h3>Alt 1</h3>
@@ -261,7 +247,6 @@
               </div>
             {% else %}
               <div class="kp-card kp-mb-12">
-                <h2 class="kp-h2-tight">Vad ska vi laga?</h2>
                 <div class="menu-alt">
                   <input type="text" class="alt-dish-input" value="{{ vm.selected_meal == 'dinner' and (vm.header_menu.dinner or '') or (vm.header_menu.dessert or '') }}">
                   <div class="cannot-eat">
@@ -325,24 +310,11 @@
 
           {% if cur_mode == 'normal' %}
             <h3>Normalkost – resultat</h3>
-            <div class="kp-muted-line">Rätt: <strong id="kp-planering-title">
-              {% if vm.selected_meal == 'lunch' %}
-                {% if vm.header_menu.alt2 %}
-                  Alt 1: {{ vm.header_menu.alt1 or '—' }} | Alt 2: {{ vm.header_menu.alt2 }}
-                {% else %}
-                  Alt 1: {{ vm.header_menu.alt1 or '—' }}
-                {% endif %}
-              {% elif vm.selected_meal == 'dinner' %}
-                {{ vm.header_menu.dinner or '—' }}
-              {% else %}
-                {{ vm.header_menu.dessert or '—' }}
-              {% endif %}
-            </strong></div>
             {% if vm.normalkost_rows and vm.normalkost_rows|length > 0 %}
               {% if vm.selected_meal == 'lunch' %}
-                <table class="grid-table kp-mt-6">
+                <table id="kp-normal-table" class="grid-table kp-mt-6">
                   <thead><tr><th>Avdelning</th><th>Alt 1</th><th class="is-alt2">Alt 2</th></tr></thead>
-                  <tbody>
+                  <tbody id="kp-normal-table-body">
                     {% for r in vm.normalkost_rows %}
                       <tr>
                         <td class="kp-text-left">{{ r.department_name }}</td>

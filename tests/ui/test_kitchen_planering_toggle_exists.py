@@ -23,5 +23,5 @@ def test_toggle_exists_on_selected_state(app_session):
     assert 'name="mode"' in html
     assert 'value="special"' in html
     assert 'value="normal"' in html
-    assert "Specialkost (anpassningar)" in html
-    assert "Normalkost (Alt 1 / Alt 2)" in html
+    assert "Specialkost" in html
+    assert "Normalkost" in html

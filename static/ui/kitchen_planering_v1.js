@@ -173,6 +173,122 @@
     } catch(e){ return 0; }
   }
 
+  function getExcludedForDepartment(alt, departmentId){
+    try {
+      var diets = Array.from((cannotEat[alt] || new Set()));
+      var deptKey = String(departmentId || '');
+      var perDept = null;
+      if(specialPerDept && specialPerDept.length > 0){
+        for(var p=0; p<specialPerDept.length; p++){
+          var dep = specialPerDept[p];
+          if(String(dep.department_id || '') !== deptKey) continue;
+          perDept = {};
+          var items = dep.items || [];
+          for(var it=0; it<items.length; it++){
+            var item = items[it] || {};
+            perDept[String(item.diet_type_id || '')] = parseInt(item.count || 0, 10) || 0;
+          }
+          break;
+        }
+      }
+      if(!perDept){ perDept = (dietCountsByDept && dietCountsByDept[deptKey]) || {}; }
+      var total = 0;
+      for(var i=0; i<diets.length; i++){
+        var dietId = String(diets[i]);
+        var raw = perDept[dietId];
+        var cnt = parseInt(raw || '0', 10);
+        if(!isNaN(cnt)) total += cnt;
+      }
+      return total;
+    } catch(e){
+      return 0;
+    }
+  }
+
+  function buildNormalLunchModel(){
+    if((!specialPerDept || specialPerDept.length === 0) && qs('#kp-context')){
+      var parsedSpecial = parseSpecialSummary();
+      if(parsedSpecial && parsedSpecial.per_department){
+        specialPerDept = (parsedSpecial.per_department || []).map(function(dep){
+          var depItems = dep.items || dep['items'] || [];
+          return {
+            department_id: String(dep.department_id || ''),
+            department_name: String(dep.department_name || ''),
+            items: depItems.map(function(row){
+              return {
+                diet_type_id: String(row.diet_type_id || ''),
+                count: parseInt(row.count || 0, 10) || 0
+              };
+            })
+          };
+        });
+      }
+    }
+    var rows = parseNormalkostRows();
+    var totals = { alt1: 0, alt2: 0, total: 0 };
+    var overflow = false;
+    var mapped = [];
+    var alt2Set = new Set((altGroups && altGroups.alt2_dept_ids) || []);
+    for(var i=0; i<rows.length; i++){
+      var row = rows[i] || {};
+      var departmentId = row.department_id || row.departmentId || row.id || '';
+      var deptKey = String(departmentId || '');
+      var baseAlt1 = parseInt(row.alt1 || '0', 10);
+      var baseAlt2 = parseInt(row.alt2 || '0', 10);
+      if(isNaN(baseAlt1)) baseAlt1 = 0;
+      if(isNaN(baseAlt2)) baseAlt2 = 0;
+      var explicitChoice = String(row.selected_alt || row.alt_choice || row.choice || '').toLowerCase();
+      var deptChoice = 'alt1';
+      if(explicitChoice === 'alt2' || explicitChoice === '2'){
+        deptChoice = 'alt2';
+      } else if(explicitChoice === 'alt1' || explicitChoice === '1'){
+        deptChoice = 'alt1';
+      } else if(alt2Set.has(deptKey)){
+        deptChoice = 'alt2';
+      } else if(baseAlt2 > 0 && baseAlt1 === 0){
+        deptChoice = 'alt2';
+      }
+      var exChosen = getExcludedForDepartment(deptChoice === 'alt2' ? 2 : 1, departmentId);
+      if(deptChoice === 'alt2'){
+        if(exChosen > baseAlt2){ overflow = true; }
+      } else {
+        if(exChosen > baseAlt1){ overflow = true; }
+      }
+      var alt1 = baseAlt1;
+      var alt2 = baseAlt2;
+      if(deptChoice === 'alt2'){
+        alt2 = clamp(baseAlt2 - Math.min(baseAlt2, exChosen), 0, baseAlt2);
+      } else {
+        alt1 = clamp(baseAlt1 - Math.min(baseAlt1, exChosen), 0, baseAlt1);
+      }
+      totals.alt1 += alt1;
+      totals.alt2 += alt2;
+      totals.total += (alt1 + alt2);
+      mapped.push({
+        department_id: deptKey,
+        department_name: String(row.department_name || ''),
+        alt1: alt1,
+        alt2: alt2,
+        alt_choice: deptChoice
+      });
+    }
+    return { rows: mapped, totals: totals, overflow: overflow };
+  }
+
+  function renderNormalLunchTableRows(model){
+    var tbody = document.getElementById('kp-normal-table-body');
+    if(!tbody) return;
+    var rows = (model && model.rows) || [];
+    var html = rows.map(function(row){
+      return '<tr>'
+        + '<td class="kp-text-left">' + String(row.department_name || '') + '</td>'
+        + '<td>' + String(row.alt1 || 0) + '</td>'
+        + '<td class="is-alt2">' + String(row.alt2 || 0) + '</td>'
+        + '</tr>';
+    }).join('');
+    tbody.innerHTML = html;
+  }
+
   function renderAllTotals(){
     var ctx = qs('#kp-context');
     if(!ctx) return;
@@ -180,16 +296,10 @@
     var modeParam = (new URLSearchParams(window.location.search).get('mode')||'').toLowerCase();
     var mode = modeParam || 'special';
     if(mode !== 'normal' || meal !== 'lunch') return; // only lunch normal mode has Alt 1/2
-    var bases = getBaselines();
-    var baseAlt1 = bases.baseAlt1, baseAlt2 = bases.baseAlt2, baseTotal = bases.baseTotal;
-    var ex1 = sumExcluded(1);
-    var ex2 = sumExcluded(2);
-    var overflow = (ex1 > baseAlt1) || (ex2 > baseAlt2);
-    var excluded1 = Math.min(baseAlt1, ex1);
-    var excluded2 = Math.min(baseAlt2, ex2);
-    var alt1 = clamp(baseAlt1 - excluded1, 0, baseTotal);
-    var alt2 = clamp(baseAlt2 - excluded2, 0, baseTotal);
-    var total = baseTotal; // keep consistent with table baseline
+    var model = buildNormalLunchModel();
+    var alt1 = model.totals.alt1;
+    var alt2 = model.totals.alt2;
+    var total = alt1 + alt2;
     var elA1 = qs('#kp-total-alt1');
     var elA2 = qs('#kp-total-alt2');
     var elSum = qs('#kp-total-sum');
@@ -202,7 +312,8 @@
     if(resA1) resA1.textContent = String(alt1);
     if(resA2) resA2.textContent = String(alt2);
     var warn = qs('#kp-exclusions-warning');
-    if(warn){ warn.style.display = overflow ? 'block' : 'none'; }
+    if(warn){ warn.style.display = model.overflow ? 'block' : 'none'; }
+    renderNormalLunchTableRows(model);
   }
 
   function renderSpecialSelectedList(){
@@ -211,10 +322,28 @@
     if(!list || !empty) return;
     list.innerHTML = '';
     var selected = Array.from(selectedSpecialDietIds);
+    if(!specialPerDept || specialPerDept.length === 0){
+      var groups = qsa('#kp-special-worklist .kp-worklist-group');
+      if(selected.length === 0){
+        empty.style.display = 'block';
+        groups.forEach(function(group){ group.style.display = 'none'; });
+      } else {
+        empty.style.display = 'none';
+        groups.forEach(function(group){
+          var id = String(group.getAttribute('data-diet-id') || '');
+          group.style.display = selectedSpecialDietIds.has(id) ? '' : 'none';
+        });
+      }
+      updateBulkButtonState();
+      renderDeptSummary();
+      renderSpecialResults();
+      return;
+    }
     if(selected.length === 0){
       empty.style.display = 'block';
       updateBulkButtonState();
       renderDeptSummary();
+      renderSpecialResults();
       return;
     }
     empty.style.display = 'none';
@@ -304,6 +433,105 @@
     renderDeptSummary();
     renderPrintContainer();
     savePlaneringState();
+    renderSpecialResults();
+  }
+
+  function buildSpecialResultsModel(){
+    var ctx = qs('#kp-context');
+    if(!ctx) return null;
+    var meal = ctx.getAttribute('data-meal') || '';
+    var selected = Array.from(selectedSpecialDietIds);
+    var rows = [];
+    var totals = { alt1: 0, alt2: 0, total: 0 };
+    if(!specialPerDept || specialPerDept.length === 0){
+      return { meal: meal, rows: rows, totals: totals, selected: selected };
+    }
+    if(selected.length === 0){
+      return { meal: meal, rows: rows, totals: totals, selected: selected };
+    }
+    var alt2Set = new Set((altGroups && altGroups.alt2_dept_ids) || []);
+    for(var i=0;i<specialPerDept.length;i++){
+      var dep = specialPerDept[i];
+      var deptTotal = 0;
+      for(var j=0;j<dep.items.length;j++){
+        var row = dep.items[j];
+        var dietId = String(row.diet_type_id);
+        if(selectedSpecialDietIds.has(dietId)){
+          deptTotal += parseInt(row.count || 0, 10) || 0;
+        }
+      }
+      if(deptTotal === 0){
+        continue;
+      }
+      var isAlt2 = (meal === 'lunch' && alt2Set.has(String(dep.department_id)));
+      var alt1 = isAlt2 ? 0 : deptTotal;
+      var alt2 = isAlt2 ? deptTotal : 0;
+      totals.alt1 += alt1;
+      totals.alt2 += alt2;
+      totals.total += deptTotal;
+      rows.push({
+        department_id: String(dep.department_id || ''),
+        department_name: String(dep.department_name || ''),
+        alt1: alt1,
+        alt2: alt2,
+        total: deptTotal
+      });
+    }
+    return { meal: meal, rows: rows, totals: totals, selected: selected };
+  }
+
+  function renderSpecialResults(){
+    var model = buildSpecialResultsModel();
+    if(!model) return;
+    var elA1 = qs('#kp-total-alt1');
+    var elA2 = qs('#kp-total-alt2');
+    var elSum = qs('#kp-total-sum');
+    if(elA1) elA1.textContent = String(model.totals.alt1);
+    if(elA2) elA2.textContent = String(model.totals.alt2);
+    if(elSum) elSum.textContent = String(model.totals.total);
+    var resA1 = qs('[data-result-normal="alt1"]');
+    var resA2 = qs('[data-result-normal="alt2"]');
+    if(resA1) resA1.textContent = String(model.totals.alt1);
+    if(resA2) resA2.textContent = String(model.totals.alt2);
+    var table = qs('.kitchen-planering-card--planering .grid-table');
+    if(!table) return;
+    var tbody = table.querySelector('tbody');
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    if(model.rows.length === 0){
+      return;
+    }
+    if(model.meal === 'lunch'){
+      model.rows.forEach(function(row){
+        var tr = document.createElement('tr');
+        var tdName = document.createElement('td');
+        tdName.className = 'kp-text-left';
+        tdName.textContent = row.department_name;
+        var tdA1 = document.createElement('td');
+        tdA1.textContent = String(row.alt1);
+        var tdA2 = document.createElement('td');
+        tdA2.className = 'is-alt2';
+        tdA2.textContent = String(row.alt2);
+        tr.appendChild(tdName);
+        tr.appendChild(tdA1);
+        tr.appendChild(tdA2);
+        tbody.appendChild(tr);
+      });
+    } else {
+      model.rows.forEach(function(row){
+        var tr2 = document.createElement('tr');
+        var tdName2 = document.createElement('td');
+        tdName2.className = 'kp-text-left';
+        tdName2.textContent = row.department_name;
+        var tdTotal = document.createElement('td');
+        tdTotal.textContent = String(row.total);
+        tr2.appendChild(tdName2);
+        tr2.appendChild(tdTotal);
+        tbody.appendChild(tr2);
+      });
+      var totalCell = table.querySelector('tfoot th:last-child');
+      if(totalCell) totalCell.textContent = String(model.totals.total);
+    }
   }
 
   function updateBulkButtonState(){
@@ -943,8 +1171,15 @@
 
   function resolveDay(data, dayIndex){
     var dayNames = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
-    var idx = dayIndex;
-    if(idx >= 1 && idx <= 7){ idx = idx - 1; }
+    var idx = parseInt(dayIndex, 10);
+    if(isNaN(idx)) return null;
+    if(idx < 0 || idx > 6){
+      if(idx >= 1 && idx <= 7){
+        idx = idx - 1;
+      } else {
+        return null;
+      }
+    }
     var dayKey = dayNames[idx];
     var days = (data && data.menu && data.menu.days) || data.days;
     var objByKey = (data && data.menu && data.menu.days) || data.days || (data && data.menu) || data;
@@ -979,7 +1214,17 @@
 
   function setPlaneringTitle(value){
     var el = qs('#kp-planering-title');
-    if(el){ el.textContent = value || '—'; }
+    if(!el) return;
+    var next = String(value || '').trim();
+    var current = String(el.textContent || '').trim();
+    if(next){
+      el.textContent = next;
+      return;
+    }
+    if(current){
+      return;
+    }
+    el.textContent = '—';
   }
 
   function setInputValue(input, value, pristine){
@@ -1005,6 +1250,7 @@
   function initMenuAndTitle(){
     var ctx = qs('#kp-context');
     if(!ctx) return;
+    var currentTitleText = String((qs('#kp-planering-title') || {}).textContent || '').trim();
     var qsParams = new URLSearchParams(window.location.search);
     var siteId = qsParams.get('site_id') || (ctx && ctx.getAttribute('data-site-id')) || '';
     var mode = (qsParams.get('mode') || 'special').toLowerCase();
@@ -1012,11 +1258,12 @@
     var week = qsParams.get('week') || '';
     var dayIndex = parseInt(ctx.getAttribute('data-day-index'), 10);
     var meal = ctx.getAttribute('data-meal');
+    var serverDishLabel = String(ctx.getAttribute('data-current-dish-label') || '').trim();
     if(isNaN(dayIndex) || meal == null) return;
 
     if(!siteId){
       console.warn('Missing site_id in planering URL');
-      var fb = '—';
+      var fb = serverDishLabel || currentTitleText || '—';
       var el1 = qs('#kp-lunch-alt1');
       var el2 = qs('#kp-lunch-alt2');
       var ed = qs('#kp-dinner-main');
@@ -1056,7 +1303,7 @@
       });
     })
     .then(function(data){
-      var fallback = '—';
+      var fallback = serverDishLabel || currentTitleText || '—';
       // instrumentation removed
       if(!data){
         setPlaneringTitle(fallback);
@@ -1070,6 +1317,21 @@
       var suggestionText = null;
       var alt1 = titles.alt1Text || '';
       var alt2 = titles.alt2Text || '';
+      var dinnerDish = (meal === 'dinner') ? (alt1 || alt2 || fallback) : '';
+      var dessertDish = (meal === 'dessert') ? (alt1 || alt2 || '') : '';
+      if(meal === 'dessert' && !dessertDish){
+        var dayObj = resolveDay(data, dayIndex) || {};
+        var dessertResolved = pick(dayObj, [
+          'Dessert.main', 'Dessert.name', 'Dessert.dish_name',
+          'dessert.main', 'dessert.name', 'dessert.dish_name',
+          'Lunch.dessert', 'lunch.dessert',
+          'Dinner.dessert', 'dinner.dessert'
+        ]);
+        dessertDish = dessertResolved || '';
+      }
+      if(meal === 'dessert' && !dessertDish){
+        dessertDish = fallback;
+      }
       if(meal === 'lunch'){
         var el1 = qs('#kp-lunch-alt1');
         var el2 = qs('#kp-lunch-alt2');
@@ -1089,28 +1351,28 @@
         }
       } else if(meal === 'dinner'){
         var ed = qs('#kp-dinner-main');
-        if(ed) ed.textContent = alt1 || fallback;
+        if(ed) ed.textContent = dinnerDish;
+        if(mode === 'normal'){
+          var nd = qs('.alt-dish-input');
+          if(nd) setInputValue(nd, dinnerDish || '', true);
+        }
         if(mode === 'special'){
           var sd = qs('#kp-what-dinner');
-          if(sd) setInputValue(sd, alt1 || '', true);
+          if(sd) setInputValue(sd, dinnerDish || '', true);
         }
       } else {
         var es = qs('#kp-dessert-main');
-        if(es) es.textContent = alt1 || fallback;
+        if(es) es.textContent = dessertDish;
+        if(mode === 'normal'){
+          var ndes = qs('.alt-dish-input');
+          if(ndes) setInputValue(ndes, dessertDish || '', true);
+        }
         if(mode === 'special'){
           var ds = qs('#kp-what-dessert');
-          if(ds) setInputValue(ds, alt1 || '', true);
+          if(ds) setInputValue(ds, dessertDish || '', true);
         }
       }
-      // Compute neutral suggestion for normal lunch (e.g., "Lunch – Tor vecka 9")
-      if(mode === 'normal' && meal === 'lunch'){
-        var dayAbbr = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
-        var mealLabel = 'Lunch';
-        var di = dayIndex;
-        suggestionText = mealLabel + ' – ' + (dayAbbr[di] || '') + ' vecka ' + (week || '');
-      } else {
-        suggestionText = buildSuggestionText(mode, meal, { alt1: alt1, alt2: alt2, dinner: null, dessert: null }, fallback);
-      }
+      suggestionText = buildSuggestionText(mode, meal, { alt1: alt1, alt2: alt2, dinner: dinnerDish, dessert: dessertDish }, fallback);
       setPlaneringTitle(suggestionText);
     })
     .catch(function(){ /* ignore */ });
@@ -1166,6 +1428,20 @@
     // Parse CSP-safe data attributes for alt groups and per-department diet counts
     var ctxData = qs('#kp-context');
     if(ctxData){
+      try {
+        var isDev = String(ctxData.getAttribute('data-dev-mode') || '') === '1';
+        var currentDish = String(ctxData.getAttribute('data-current-dish-label') || '').trim();
+        var selectedMeal = String(ctxData.getAttribute('data-meal') || '').trim();
+        if(isDev && selectedMeal && !currentDish){
+          console.warn('[kitchen_planering_v1] missing current dish label', {
+            meal: selectedMeal,
+            site_id: ctxData.getAttribute('data-site-id') || '',
+            year: ctxData.getAttribute('data-year') || '',
+            week: ctxData.getAttribute('data-week') || '',
+            day_index: ctxData.getAttribute('data-day-index') || ''
+          });
+        }
+      } catch(e){ /* ignore */ }
       try {
         var ag = ctxData.getAttribute('data-alt-groups');
         if(ag){ altGroups = JSON.parse(ag); }

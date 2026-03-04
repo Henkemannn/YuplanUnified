@@ -2054,7 +2054,7 @@ def kitchen_planering_v1():
     except Exception:
         week = _date.today().isocalendar()[1]
 
-    # Optional day (0-6, 0=Mon) and meal (lunch/dinner)
+    # Optional day (0-6, 0=Mon) and meal (lunch/dinner/dessert)
     day_param = request.args.get("day")
     meal_param = (request.args.get("meal") or "").strip().lower()
     selected_day = None
@@ -2065,7 +2065,49 @@ def kitchen_planering_v1():
                 selected_day = di
     except Exception:
         selected_day = None
-    selected_meal = meal_param if meal_param in ("lunch", "dinner") else None
+    selected_meal = meal_param if meal_param in ("lunch", "dinner", "dessert") else None
+
+    def _day_key_from_index(day_index: int | None) -> str | None:
+        try:
+            idx = int(day_index) if day_index is not None else -1
+        except Exception:
+            return None
+        if idx < 0 or idx > 6:
+            return None
+        return ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][idx]
+
+    def _resolve_menu_day(days_struct: dict, day_index: int | None) -> tuple[str | None, dict]:
+        if not isinstance(days_struct, dict):
+            return (None, {})
+        canon = _day_key_from_index(day_index)
+        if not canon:
+            return (None, {})
+        lower_map = {str(k).strip().lower(): k for k in days_struct.keys()}
+        eng_full = {
+            "mon": "monday", "tue": "tuesday", "wed": "wednesday", "thu": "thursday",
+            "fri": "friday", "sat": "saturday", "sun": "sunday",
+        }
+        swe_abbrev = {"mon": "mån", "tue": "tis", "wed": "ons", "thu": "tor", "fri": "fre", "sat": "lör", "sun": "sön"}
+        swe_full = {
+            "mon": "måndag", "tue": "tisdag", "wed": "onsdag", "thu": "torsdag",
+            "fri": "fredag", "sat": "lördag", "sun": "söndag",
+        }
+        candidates = [
+            canon,
+            canon.capitalize(),
+            eng_full.get(canon),
+            swe_abbrev.get(canon),
+            swe_full.get(canon),
+        ]
+        for candidate in candidates:
+            if not candidate:
+                continue
+            hit = lower_map.get(str(candidate).strip().lower())
+            if hit is not None:
+                obj = days_struct.get(hit)
+                return (canon, obj if isinstance(obj, dict) else {})
+        return (canon, {})
+
 
     # Site name for display
     db = get_session()
@@ -2108,6 +2150,7 @@ def kitchen_planering_v1():
     alt2_dept_ids: list[str] = []
     per_dept_defaults: dict[str, dict[str, int]] = {}
     header_menu: dict[str, str | None] = {"alt1": None, "alt2": None, "dessert": None, "dinner": None}
+    current_dish_label: str | None = None
     normal_exclusions: dict[str, list[str]] = {"1": [], "2": []}
     if selected_day is not None and selected_meal is not None:
         # Departments for site
@@ -2325,6 +2368,7 @@ def kitchen_planering_v1():
         # Prefer WeekviewService enrichment for a department within the active site; fallback to tenant-level menu service
         try:
             tid = session.get("tenant_id")
+            week_view_day = None
             # Use first department in this site to scope menu texts, if available
             dep_for_site = None
             try:
@@ -2347,9 +2391,11 @@ def kitchen_planering_v1():
                         target = dd
                         break
                 if target:
+                    week_view_day = target
                     mt = (target.get("menu_texts") or {}) if isinstance(target, dict) else {}
                     lunch_obj = mt.get("lunch") or {}
                     dinner_obj = mt.get("dinner") or {}
+                    dessert_obj = mt.get("dessert") or {}
                     def _valname(v):
                         if v is None:
                             return None
@@ -2361,7 +2407,7 @@ def kitchen_planering_v1():
                             return None
                     header_menu["alt1"] = _valname(lunch_obj.get("main")) or _valname(lunch_obj.get("alt1"))
                     header_menu["alt2"] = _valname(lunch_obj.get("alt2"))
-                    header_menu["dessert"] = _valname(lunch_obj.get("dessert"))
+                    header_menu["dessert"] = _valname(lunch_obj.get("dessert")) or _valname(dessert_obj.get("dessert")) or _valname(dessert_obj.get("main")) or _valname(dinner_obj.get("dessert"))
                     dn = None
                     for cand in ("main", "alt1", "alt2"):
                         if dinner_obj.get(cand) is not None:
@@ -2376,26 +2422,27 @@ def kitchen_planering_v1():
                         except Exception:
                             pass
                     header_menu["dinner"] = dn
-            # Fallback to tenant-wide MenuService if WeekviewService path not available
-            if not any(header_menu.values()):
+            # Fallback to tenant-wide MenuService when current meal dish is still missing
+            needs_meal_fallback = (
+                (selected_meal == "lunch" and not (header_menu.get("alt1") or header_menu.get("alt2")))
+                or (selected_meal == "dinner" and not header_menu.get("dinner"))
+                or (selected_meal == "dessert" and not header_menu.get("dessert"))
+            )
+            if needs_meal_fallback:
                 from flask import current_app as _app
                 ms = getattr(_app, "menu_service", None)
                 if ms is not None and tid is not None:
                     site_id = request.args.get("site_id") or session.get("site_id")
                     mv = ms.get_week_view(int(tid), site_id, week, year)
                     days_struct = (mv.get("days") or {}) if isinstance(mv, dict) else {}
-                    keys = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
-                    day_key = keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
                     meals_obj = {}
-                    if day_key:
-                        # Resolve case-insensitive keys (e.g., 'sat' vs 'Sat')
-                        lower_map = {str(k).strip().lower(): k for k in days_struct.keys()}
-                        canon_keys = ["mon","tue","wed","thu","fri","sat","sun"]
-                        canon = canon_keys[int(selected_day)] if 0 <= int(selected_day) <= 6 else None
-                        hit = lower_map.get(canon) if canon else None
-                        meals_obj = days_struct.get(hit) or days_struct.get(day_key) or {}
+                    resolved_day_key, meals_obj = _resolve_menu_day(days_struct, selected_day)
+                    if resolved_day_key and isinstance(meals_obj, dict) and meals_obj:
                         lunch_obj = meals_obj.get("Lunch") or meals_obj.get("lunch") or {}
                         dinner_obj = meals_obj.get("Dinner") or meals_obj.get("dinner") or {}
+                        dessert_obj = meals_obj.get("Dessert") or meals_obj.get("dessert") or {}
+                        if (not dessert_obj) and isinstance(lunch_obj, dict) and lunch_obj.get("dessert") is not None:
+                            dessert_obj = {"dessert": lunch_obj.get("dessert")}
                         def _valname2(v):
                             if v is None:
                                 return None
@@ -2422,6 +2469,80 @@ def kitchen_planering_v1():
                             except Exception:
                                 pass
                         header_menu["dinner"] = header_menu["dinner"] or dn
+                        if isinstance(dessert_obj, dict):
+                            header_menu["dessert"] = header_menu["dessert"] or _valname2(dessert_obj.get("dessert")) or _valname2(dessert_obj.get("main")) or _valname2(dinner_obj.get("dessert"))
+
+                        # Ensure current-day menu payload exists for current_dish_label resolution below
+                        if not isinstance(week_view_day, dict):
+                            week_view_day = {"menu_texts": {}}
+                        menu_texts_obj = week_view_day.setdefault("menu_texts", {})
+                        if isinstance(menu_texts_obj, dict):
+                            if lunch_obj and not menu_texts_obj.get("lunch"):
+                                menu_texts_obj["lunch"] = lunch_obj
+                            if dinner_obj and not menu_texts_obj.get("dinner"):
+                                menu_texts_obj["dinner"] = dinner_obj
+                            if dessert_obj and not menu_texts_obj.get("dessert"):
+                                menu_texts_obj["dessert"] = dessert_obj
+
+            def _dish_name_from_value(v):
+                if v is None:
+                    return None
+                if isinstance(v, str):
+                    vv = v.strip()
+                    return vv or None
+                if isinstance(v, dict):
+                    for key in ("dish_name", "name", "title"):
+                        val = v.get(key)
+                        if isinstance(val, str) and val.strip():
+                            return val.strip()
+                return None
+
+            def _first_dish_from_obj(obj):
+                if not isinstance(obj, dict):
+                    return None
+                for _k, _v in obj.items():
+                    nm = _dish_name_from_value(_v)
+                    if nm:
+                        return nm
+                return None
+
+            try:
+                menu_texts = (week_view_day.get("menu_texts") or {}) if isinstance(week_view_day, dict) else {}
+                lunch_obj = (menu_texts.get("lunch") or {}) if isinstance(menu_texts, dict) else {}
+                dinner_obj = (menu_texts.get("dinner") or {}) if isinstance(menu_texts, dict) else {}
+                dessert_obj = (menu_texts.get("dessert") or {}) if isinstance(menu_texts, dict) else {}
+                if selected_meal == "lunch":
+                    current_dish_label = _dish_name_from_value(lunch_obj.get("alt1"))
+                    if not current_dish_label:
+                        current_dish_label = _dish_name_from_value(lunch_obj.get("main"))
+                    if not current_dish_label:
+                        current_dish_label = _dish_name_from_value(lunch_obj.get("alt2"))
+                    if not current_dish_label:
+                        current_dish_label = _first_dish_from_obj(lunch_obj)
+                elif selected_meal == "dinner":
+                    current_dish_label = _dish_name_from_value(dinner_obj.get("main"))
+                    if not current_dish_label:
+                        current_dish_label = _first_dish_from_obj(dinner_obj)
+                elif selected_meal == "dessert":
+                    current_dish_label = _dish_name_from_value(dessert_obj.get("dessert"))
+                    if not current_dish_label:
+                        current_dish_label = _dish_name_from_value(lunch_obj.get("dessert"))
+                    if not current_dish_label:
+                        current_dish_label = _dish_name_from_value(dinner_obj.get("dessert"))
+                    if not current_dish_label:
+                        current_dish_label = _first_dish_from_obj(dessert_obj)
+                    if not current_dish_label:
+                        current_dish_label = _first_dish_from_obj(lunch_obj)
+            except Exception:
+                current_dish_label = None
+
+            if not current_dish_label:
+                if selected_meal == "lunch":
+                    current_dish_label = header_menu.get("alt1") or header_menu.get("alt2")
+                elif selected_meal == "dinner":
+                    current_dish_label = header_menu.get("dinner")
+                elif selected_meal == "dessert":
+                    current_dish_label = header_menu.get("dessert") or header_menu.get("dinner") or header_menu.get("alt1")
         except Exception:
             pass
 
@@ -2501,6 +2622,8 @@ def kitchen_planering_v1():
         "normalkost_rows": normalkost_rows,
         "normalkost_sum": normalkost_sum,
         "header_menu": header_menu,
+        "current_dish_label": current_dish_label,
+        "dev_mode": bool(current_app.debug or current_app.config.get("TESTING")),
         "normal_exclusions": normal_exclusions,
         # Alt group mapping and per-department diet counts (used by client to scope exclusions correctly)
         "alt_groups": {"alt1_dept_ids": alt1_dept_ids, "alt2_dept_ids": alt2_dept_ids},

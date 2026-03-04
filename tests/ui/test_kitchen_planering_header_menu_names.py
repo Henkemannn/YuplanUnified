@@ -47,6 +47,8 @@ def test_header_shows_dish_names_for_lunch_and_dinner(app_session):
     # Seed menu: Monday lunch Alt1/Alt2 and Dinner main (use Alt1)
     _set_menu_variant(client, week, year, day="Mon", meal="Lunch", variant="alt1", dish_name="Fiskgryta")
     _set_menu_variant(client, week, year, day="Mon", meal="Lunch", variant="alt2", dish_name="Veg Lasagne")
+    _set_menu_variant(client, week, year, day="Mon", meal="Lunch", variant="dessert", dish_name="Äppelpaj")
+    _set_menu_variant(client, week, year, day="Tue", meal="Lunch", variant="dessert", dish_name="Chokladmousse")
     _set_menu_variant(client, week, year, day="Mon", meal="Dinner", variant="alt1", dish_name="Pannkakor")
 
     # Lunch header shows Alt1/Alt2 names
@@ -61,3 +63,32 @@ def test_header_shows_dish_names_for_lunch_and_dinner(app_session):
     assert rv_din.status_code == 200
     html_d = rv_din.data.decode("utf-8")
     assert "Pannkakor" in html_d
+
+    # Dinner in normal mode uses the same resolved dish label in "Rätt:"
+    rv_din_normal = client.get(
+        f"/ui/kitchen/planering?site_id={site_id}&mode=normal&year={year}&week={week}&day=0&meal=dinner",
+        headers=HEADERS,
+    )
+    assert rv_din_normal.status_code == 200
+    html_dn = rv_din_normal.data.decode("utf-8")
+    assert "Rätt:" in html_dn
+    assert 'id="kp-planering-title">Pannkakor<' in html_dn
+
+    # Dessert in normal mode should use resolved dessert dish label
+    rv_des_normal = client.get(
+        f"/ui/kitchen/planering?site_id={site_id}&mode=normal&year={year}&week={week}&day=0&meal=dessert",
+        headers=HEADERS,
+    )
+    assert rv_des_normal.status_code == 200
+    html_ds = rv_des_normal.data.decode("utf-8")
+    assert "Rätt:" in html_ds
+    assert 'id="kp-planering-title">Äppelpaj<' in html_ds
+
+    # Tuesday dessert should not reuse Monday dessert
+    rv_des_tue = client.get(
+        f"/ui/kitchen/planering?site_id={site_id}&mode=normal&year={year}&week={week}&day=1&meal=dessert",
+        headers=HEADERS,
+    )
+    assert rv_des_tue.status_code == 200
+    html_tue = rv_des_tue.data.decode("utf-8")
+    assert 'id="kp-planering-title">Chokladmousse<' in html_tue
