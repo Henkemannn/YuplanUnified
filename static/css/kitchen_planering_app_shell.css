@@ -1,5 +1,11 @@
 /* Kitchen Planering app-shell layout overrides (UI-only) */
 
+/* Failsafe: print containers must stay hidden in normal screen mode */
+.kp-print,
+.kp-modal-print-header {
+  display: none;
+}
+
 .kitchen-planering-page {
   display: flex;
   flex-direction: column;

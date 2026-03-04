@@ -95,7 +95,7 @@
           </div>
           <div class="kitchen-planering-row kitchen-planering-row--actions">
             <div class="kp-action-row">
-              <button class="kp-button js-print">🖨 Skriv ut</button>
+              <button type="button" class="kp-button js-print">🖨 Skriv ut</button>
               {% if vm.selected_day is not none %}
                 <button type="button"
                         class="yp-button"
@@ -253,7 +253,14 @@
                     <span>Kan INTE äta:</span>
                     <div class="diet-buttons" role="group" aria-label="Specialkoster">
                       {% for opt in vm.diet_options %}
-                        <button type="button" class="kp-button diet-btn" data-diet-type-id="{{ opt.diet_type_id }}">{{ opt.diet_type_name }}</button>
+                        {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
+                        {% if not is_unknown %}
+                          <button type="button"
+                                  class="kp-button diet-btn diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
+                                  data-alt="1"
+                                  data-diet-id="{{ opt.diet_type_id }}"
+                                  data-diet-type-id="{{ opt.diet_type_id }}">{{ opt.diet_type_name }}</button>
+                        {% endif %}
                       {% endfor %}
                     </div>
                   </div>
@@ -340,7 +347,7 @@
               {% else %}
                 <table class="grid-table kp-mt-6">
                   <thead><tr><th>Avdelning</th><th>Mängd</th></tr></thead>
-                  <tbody>
+                  <tbody id="kp-normal-single-table-body">
                     {% for r in vm.normalkost_rows %}
                       <tr>
                         <td class="kp-text-left">{{ r.department_name }}</td>
@@ -350,8 +357,8 @@
                   </tbody>
                   <tfoot>
                     <tr>
-                      <th>TOTALT</th>
-                      <th>{{ vm.normalkost_sum.total }}</th>
+                      <th>TOTALT <span id="kp-base-total" class="yp-sr-only">{{ vm.normalkost_sum.total }}</span></th>
+                      <th><span data-result-normal="total">{{ vm.normalkost_sum.total }}</span></th>
                     </tr>
                   </tfoot>
                 </table>

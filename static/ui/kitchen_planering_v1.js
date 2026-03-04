@@ -289,31 +289,80 @@
     tbody.innerHTML = html;
   }
 
+  function buildNormalSingleModel(){
+    var rows = parseNormalkostRows();
+    var total = 0;
+    var overflow = false;
+    var mapped = [];
+    for(var i=0; i<rows.length; i++){
+      var row = rows[i] || {};
+      var departmentId = row.department_id || row.departmentId || row.id || '';
+      var baseTotal = parseInt(row.total || '0', 10);
+      if(isNaN(baseTotal)) baseTotal = 0;
+      var excluded = getExcludedForDepartment(1, departmentId);
+      if(excluded > baseTotal){ overflow = true; }
+      var remaining = clamp(baseTotal - Math.min(baseTotal, excluded), 0, baseTotal);
+      total += remaining;
+      mapped.push({
+        department_id: String(departmentId || ''),
+        department_name: String(row.department_name || ''),
+        total: remaining
+      });
+    }
+    return { rows: mapped, total: total, overflow: overflow };
+  }
+
+  function renderNormalSingleTableRows(model){
+    var tbody = document.getElementById('kp-normal-single-table-body');
+    if(!tbody) return;
+    var rows = (model && model.rows) || [];
+    var html = rows.map(function(row){
+      return '<tr>'
+        + '<td class="kp-text-left">' + String(row.department_name || '') + '</td>'
+        + '<td>' + String(row.total || 0) + '</td>'
+        + '</tr>';
+    }).join('');
+    tbody.innerHTML = html;
+  }
+
   function renderAllTotals(){
     var ctx = qs('#kp-context');
     if(!ctx) return;
     var meal = ctx.getAttribute('data-meal');
     var modeParam = (new URLSearchParams(window.location.search).get('mode')||'').toLowerCase();
     var mode = modeParam || 'special';
-    if(mode !== 'normal' || meal !== 'lunch') return; // only lunch normal mode has Alt 1/2
-    var model = buildNormalLunchModel();
-    var alt1 = model.totals.alt1;
-    var alt2 = model.totals.alt2;
-    var total = alt1 + alt2;
-    var elA1 = qs('#kp-total-alt1');
-    var elA2 = qs('#kp-total-alt2');
-    var elSum = qs('#kp-total-sum');
-    if(elA1) elA1.textContent = String(alt1);
-    if(elA2) elA2.textContent = String(alt2);
-    if(elSum) elSum.textContent = String(total);
-    // Update bottom result table spans
-    var resA1 = qs('[data-result-normal="alt1"]');
-    var resA2 = qs('[data-result-normal="alt2"]');
-    if(resA1) resA1.textContent = String(alt1);
-    if(resA2) resA2.textContent = String(alt2);
-    var warn = qs('#kp-exclusions-warning');
-    if(warn){ warn.style.display = model.overflow ? 'block' : 'none'; }
-    renderNormalLunchTableRows(model);
+    if(mode !== 'normal') return;
+    if(meal === 'lunch'){
+      var model = buildNormalLunchModel();
+      var alt1 = model.totals.alt1;
+      var alt2 = model.totals.alt2;
+      var total = alt1 + alt2;
+      var elA1 = qs('#kp-total-alt1');
+      var elA2 = qs('#kp-total-alt2');
+      var elSum = qs('#kp-total-sum');
+      if(elA1) elA1.textContent = String(alt1);
+      if(elA2) elA2.textContent = String(alt2);
+      if(elSum) elSum.textContent = String(total);
+      // Update bottom result table spans
+      var resA1 = qs('[data-result-normal="alt1"]');
+      var resA2 = qs('[data-result-normal="alt2"]');
+      if(resA1) resA1.textContent = String(alt1);
+      if(resA2) resA2.textContent = String(alt2);
+      var warn = qs('#kp-exclusions-warning');
+      if(warn){ warn.style.display = model.overflow ? 'block' : 'none'; }
+      renderNormalLunchTableRows(model);
+      return;
+    }
+    if(meal === 'dinner' || meal === 'dessert'){
+      var singleModel = buildNormalSingleModel();
+      var elSumSingle = qs('#kp-total-sum');
+      if(elSumSingle) elSumSingle.textContent = String(singleModel.total);
+      var resTotal = qs('[data-result-normal="total"]');
+      if(resTotal) resTotal.textContent = String(singleModel.total);
+      var warnSingle = qs('#kp-exclusions-warning');
+      if(warnSingle){ warnSingle.style.display = singleModel.overflow ? 'block' : 'none'; }
+      renderNormalSingleTableRows(singleModel);
+    }
   }
 
   function renderSpecialSelectedList(){
@@ -339,6 +388,7 @@
       renderSpecialResults();
       return;
     }
+
     if(selected.length === 0){
       empty.style.display = 'block';
       updateBulkButtonState();
@@ -346,6 +396,7 @@
       renderSpecialResults();
       return;
     }
+
     empty.style.display = 'none';
     var byDiet = {};
     var totalsByDiet = {};
@@ -1381,7 +1432,9 @@
   function initPrintButton(){
     var btn = qs('.js-print');
     if(btn){
-      btn.addEventListener('click', function(){
+      btn.addEventListener('click', function(ev){
+        if(ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+        if(ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
         var qsParams = new URLSearchParams(window.location.search);
         var mode = (qsParams.get('mode') || 'special').toLowerCase();
         if(mode === 'normal'){
@@ -1452,9 +1505,9 @@
       } catch(e){ dietCountsByDept = {}; }
     }
     // Initialize cannotEat sets based on server-rendered state
-    qsa('.diet-chip.active').forEach(function(btn){
+    qsa('.diet-chip.active, .diet-btn.active').forEach(function(btn){
       var alt = Number(btn.getAttribute('data-alt'));
-      var dietId = btn.getAttribute('data-diet-id');
+      var dietId = btn.getAttribute('data-diet-id') || btn.getAttribute('data-diet-type-id');
       if(!alt || !dietId) return;
       var set = cannotEat[alt] || (cannotEat[alt] = new Set());
       set.add(dietId);
@@ -1491,10 +1544,10 @@
     renderSpecialSelectedList();
     // Event delegation for diet-chip toggling (normal mode UI only)
     document.addEventListener('click', function(e){
-      var btn = e.target && e.target.closest && e.target.closest('.diet-chip');
+      var btn = e.target && e.target.closest && e.target.closest('.diet-chip, .diet-btn');
       if(!btn) return;
-      var alt = Number(btn.getAttribute('data-alt'));
-      var dietId = btn.getAttribute('data-diet-id');
+      var alt = Number(btn.getAttribute('data-alt') || '1');
+      var dietId = btn.getAttribute('data-diet-id') || btn.getAttribute('data-diet-type-id');
       if(!alt || !dietId) return;
       var set = cannotEat[alt] || (cannotEat[alt] = new Set());
       var wasActive = btn.classList.contains('active');

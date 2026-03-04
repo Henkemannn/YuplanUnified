@@ -73,3 +73,14 @@ def test_normalkost_view_table_and_totals(app_session):
     assert "Avd C" in html and ">7<" in html
     # SUM = 24
     assert ">24<" in html
+
+    # Dessert should use same resident baseline as lunch (not all zeros)
+    rv_des = client.get(
+        f"/ui/kitchen/planering?site_id={site_id}&mode=normal&day=0&meal=dessert&selected_diets={dt_id}&show_results=1",
+        headers=HEADERS,
+    )
+    assert rv_des.status_code == 200
+    html_des = rv_des.data.decode("utf-8")
+    assert "Avd A" in html_des and ">9<" in html_des
+    assert "Avd B" in html_des and ">8<" in html_des
+    assert "Avd C" in html_des and ">7<" in html_des

@@ -2066,6 +2066,7 @@ def kitchen_planering_v1():
     except Exception:
         selected_day = None
     selected_meal = meal_param if meal_param in ("lunch", "dinner", "dessert") else None
+    effective_planera_meal = "lunch" if selected_meal == "dessert" else selected_meal
 
     def _day_key_from_index(day_index: int | None) -> str | None:
         try:
@@ -2218,7 +2219,7 @@ def kitchen_planering_v1():
             svc = PlaneraService()
             dep_pairs = [(it["id"], it["name"]) for it in departments]
             vm_day = svc.compute_day(int(session.get("tenant_id") or 1), site_id, d.isoformat(), dep_pairs)
-            residents_total_for_meal = int((vm_day.get("totals") or {}).get(selected_meal, {}).get("residents_total", 0) or 0)
+            residents_total_for_meal = int((vm_day.get("totals") or {}).get(effective_planera_meal, {}).get("residents_total", 0) or 0)
         except Exception:
             residents_total_for_meal = sum(int(dep.get("resident_count", 0)) for dep in departments)
 
@@ -2256,7 +2257,7 @@ def kitchen_planering_v1():
                     did = str(dep["id"])
                     dvm = dep_payloads.get(did) or {}
                     meals = dvm.get("meals", {}) if isinstance(dvm, dict) else {}
-                    m = meals.get(selected_meal, {}) if isinstance(meals, dict) else {}
+                    m = meals.get(effective_planera_meal, {}) if isinstance(meals, dict) else {}
                     residents = int(m.get("residents_total") or 0)
                     # Sum selected specials for this department from defaults
                     sel_sum = 0
@@ -2318,7 +2319,7 @@ def kitchen_planering_v1():
                     day_obj = None
                 dep_items: list[dict] = []
                 if day_obj:
-                    diets_obj = (day_obj.get("diets") or {}).get(selected_meal, [])
+                    diets_obj = (day_obj.get("diets") or {}).get(effective_planera_meal, [])
                     for di in diets_obj or []:
                         dtid = str(di.get("diet_type_id"))
                         cnt = int(di.get("resident_count") or 0)
