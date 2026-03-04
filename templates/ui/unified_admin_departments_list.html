@@ -19,9 +19,6 @@
                     {% endif %}
                 </p>
             </div>
-            <div class="app-shell__page-actions">
-                <a class="yp-button yp-button-primary" href="{{ url_for('ui.admin_departments_new_form') }}">➕ Skapa avdelning</a>
-            </div>
         </section>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -36,7 +33,10 @@
 
         <section class="app-shell__grid">
             <article class="app-shell__card">
-                <h2 class="app-shell__card-title">Avdelningar</h2>
+                <div class="admin-departments__card-header">
+                    <h2 class="app-shell__card-title">Avdelningar</h2>
+                    <a class="admin-departments__create-btn" href="{{ url_for('ui.admin_departments_new_form') }}">+ Skapa avdelning</a>
+                </div>
                 <p class="app-shell__card-text">Tryck på en avdelning för detaljer.</p>
                 {% if vm.departments and vm.departments|length > 0 %}
                     <div class="app-shell__list">
@@ -47,10 +47,11 @@
                                 <a class="app-shell__list-title" href="{{ url_for('ui.admin_department_detail', department_id=dept.id) }}">{{ dept.name }}</a>
                                 <div class="app-shell__list-meta">
                                     {{ dept.site_name }} •
-                                    {% if dept.has_variation %}
-                                        Varierat boendeantal
-                                    {% else %}
-                                        {{ dept.resident_count_fixed }} boende
+                                    <span class="admin-departments__mode-badge {% if dept.has_variation %}is-variable{% else %}is-fixed{% endif %}">
+                                        {% if dept.has_variation %}Varierat{% else %}Fast{% endif %}
+                                    </span>
+                                    {% if not dept.has_variation %}
+                                        • {{ dept.resident_count_fixed }} boende
                                     {% endif %}
                                 </div>
                                 {% if dept.notes %}
@@ -71,7 +72,7 @@
                     <div class="admin-departments__empty">
                         <div class="admin-departments__empty-icon">📋</div>
                         <h3 class="admin-departments__empty-title">Inga avdelningar ännu</h3>
-                        <p class="app-shell__card-text">Skapa din första avdelning för att komma igång.</p>
+                        <p class="app-shell__card-text">Skapa din första avdelning för att börja hantera boende och specialkost per enhet.</p>
                         <a class="yp-button yp-button-primary" href="{{ url_for('ui.admin_departments_new_form') }}">➕ Lägg till avdelning</a>
                     </div>
                 {% endif %}
