@@ -1,0 +1,73 @@
+.admin-specialkost {
+  display: block;
+}
+
+.admin-specialkost__card {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-specialkost__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-specialkost__item {
+  align-items: center;
+}
+
+.admin-specialkost__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-specialkost__edit-btn {
+  padding: 6px 10px;
+  font-size: 0.86rem;
+}
+
+.admin-specialkost__delete-btn {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+.admin-specialkost__inline-form {
+  margin: 0;
+}
+
+.admin-specialkost__empty {
+  border: 1px dashed var(--yp-border-color, var(--border));
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.admin-specialkost__empty-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.admin-specialkost__footer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  .admin-specialkost__header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-specialkost__actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

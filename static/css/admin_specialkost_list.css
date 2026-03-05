@@ -1,0 +1,34 @@
+.admin-specialkost-list__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.admin-specialkost-list__item {
+  align-items: center;
+}
+
+.admin-specialkost-list__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-specialkost-list__edit-btn {
+  padding: 6px 10px;
+  font-size: 0.86rem;
+}
+
+@media (max-width: 760px) {
+  .admin-specialkost-list__header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-specialkost-list__actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

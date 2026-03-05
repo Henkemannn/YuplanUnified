@@ -1,35 +1,33 @@
 {% extends "ui/unified_admin_base.html" %}
 {% block admin_title %}Redigera kosttyp{% endblock %}
 {% block admin_subtitle %}Uppdatera kosttypens uppgifter{% endblock %}
+{% block admin_context_meta %}{% endblock %}
+{% block admin_week_meta %}{% endblock %}
 {% block admin_main %}
-<section class="ua-section">
-<div class="ua-card admin-header">
-  <h1>Redigera kosttyp</h1>
-</div>
+<section class="app-shell__grid">
+  <article class="app-shell__card">
+    <form method="POST" class="yp-form" style="max-width: 620px;">
+      {{ csrf_token_input()|safe }}
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-  <div class="flash-messages">
-    {% for category, message in messages %}
-    <div class="flash flash-{{ category }}">{{ message }}</div>
-    {% endfor %}
-  </div>
-  {% endif %}
-{% endwith %}
+      <div class="yp-form-field">
+        <label for="name" class="yp-label">Kosttypens namn</label>
+        <input id="name" name="name" class="yp-input" value="{{ vm.diet_type.name }}" required>
+      </div>
 
-<form method="POST" class="yp-form" style="max-width:520px">
-  <div class="yp-form-field">
-    <label for="name" class="yp-label">Kosttypsnamn</label>
-    <input id="name" name="name" class="yp-input" value="{{ vm.diet_type.name }}" required>
-  </div>
-  <div class="yp-form-field">
-    <label><input type="checkbox" name="default_select" {% if vm.diet_type.default_select %}checked{% endif %}> Förinställd</label>
-  </div>
-  <div class="form-actions">
-    <button class="yp-button yp-button-primary" type="submit">Spara</button>
-    <a class="yp-button yp-button-secondary" href="{{ url_for('ui.admin_specialkost_list') }}">Avbryt</a>
-  </div>
-</form>
-</div>
+      <div class="yp-form-field">
+        <label class="yp-label" for="default_select">Förinställd kosttyp</label>
+        <label>
+          <input id="default_select" type="checkbox" name="default_select" {% if vm.diet_type.default_select %}checked{% endif %}>
+          Markera automatiskt i planeringen
+        </label>
+        <p class="yp-form-help">Denna kosttyp markeras automatiskt i planeringen.</p>
+      </div>
+
+      <div class="form-actions" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px;">
+        <button class="yp-btn yp-btn-primary" type="submit">Spara</button>
+        <a class="yp-btn yp-btn-secondary" href="{{ url_for('ui.admin_specialkost_list') }}">Avbryt</a>
+      </div>
+    </form>
+  </article>
 </section>
 {% endblock %}

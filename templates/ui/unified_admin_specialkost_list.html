@@ -4,6 +4,7 @@
 
 {% block head_extra %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_specialkost_list.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -12,9 +13,6 @@
             <div>
                 <h1 class="app-shell__title">Specialkost</h1>
                 <p class="app-shell__subtitle">Hantera kosttyper.</p>
-            </div>
-            <div class="app-shell__page-actions">
-                <a class="app-shell__user-pill" href="{{ url_for('ui.admin_specialkost_new_form') }}">➕ Skapa specialkost</a>
             </div>
         </section>
 
@@ -30,12 +28,16 @@
 
         <section class="app-shell__grid">
             <article class="app-shell__card">
-                <h2 class="app-shell__card-title">Specialkost</h2>
-                <p class="app-shell__card-text">Tryck på en kosttyp för detaljer.</p>
+                <div class="admin-specialkost-list__header-row">
+                    <h2 class="app-shell__card-title">Specialkost</h2>
+                    <a class="yp-btn yp-btn-primary" href="{{ url_for('ui.admin_specialkost_new_form') }}" data-testid="specialkost-create-cta">Skapa kosttyp</a>
+                </div>
+                <p class="app-shell__card-text">Här kan du redigera eller ta bort kosttyper.</p>
                 {% if vm.diet_types %}
                     <div class="app-shell__list">
                         {% for row in vm.diet_types %}
-                        <div class="app-shell__list-item">
+                        <div class="app-shell__list-item admin-specialkost-list__item">
+                            <a class="app-shell__list-link" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}" aria-label="Redigera kosttyp {{ row.name }}"></a>
                             <div class="app-shell__list-main">
                                 <span class="app-shell__list-title">{{ row.name }}</span>
                                 <div class="app-shell__list-meta">
@@ -44,22 +46,44 @@
                                     {% endif %}
                                 </div>
                             </div>
-                            <div class="app-shell__list-actions">
-                                <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}">Redigera</a>
-                                <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" data-confirm="Är du säker på att du vill ta bort kosttypen {{ row.name }}?">
-                                    {{ csrf_token_input()|safe }}
-                                    <button type="submit" class="app-shell__icon-btn app-shell__icon-btn--danger" aria-label="Ta bort kosttyp {{ row.name }}" title="Ta bort">🗑️</button>
-                                </form>
+                            <div class="app-shell__list-actions admin-specialkost-list__actions">
+                                <a class="yp-btn yp-btn-secondary admin-specialkost-list__edit-btn" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}">Redigera</a>
+                                <button
+                                    type="button"
+                                    class="app-shell__icon-btn app-shell__icon-btn--danger"
+                                    data-testid="specialkost-delete-trigger"
+                                    data-modal-target="#specialkost-delete-modal-{{ row.id }}"
+                                    aria-label="Ta bort kosttyp {{ row.name }}"
+                                    title="Ta bort"
+                                >🗑️</button>
                             </div>
                         </div>
+
+                        <dialog id="specialkost-delete-modal-{{ row.id }}" class="ua-modal" data-testid="specialkost-delete-modal">
+                            <div class="ua-modal-inner">
+                                <header class="ua-modal-header">
+                                    <h3>Ta bort kosttyp?</h3>
+                                    <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
+                                </header>
+                                <div class="ua-modal-body">
+                                    <p>Kosttypen tas bort och kan påverka avdelningar som använder den.</p>
+                                </div>
+                                <footer class="ua-modal-footer">
+                                    <button type="button" class="yp-btn yp-btn-secondary" data-modal-close>Avbryt</button>
+                                    <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}">
+                                        {{ csrf_token_input()|safe }}
+                                        <button type="submit" class="yp-btn btn-danger">Ta bort</button>
+                                    </form>
+                                </footer>
+                            </div>
+                        </dialog>
                         {% endfor %}
                     </div>
                 {% else %}
                     <div class="admin-departments__empty">
                         <div class="admin-departments__empty-icon">📋</div>
-                        <h3 class="admin-departments__empty-title">Inga kosttyper ännu</h3>
-                        <p class="app-shell__card-text">Skapa din första kosttyp för att komma igång.</p>
-                        <a class="app-shell__btn app-shell__btn--primary" href="{{ url_for('ui.admin_specialkost_new_form') }}">Lägg till kosttyp</a>
+                        <h3 class="admin-departments__empty-title">Inga kosttyper ännu.</h3>
+                        <a class="yp-btn yp-btn-primary" href="{{ url_for('ui.admin_specialkost_new_form') }}">Skapa första kosttypen</a>
                     </div>
                 {% endif %}
             </article>

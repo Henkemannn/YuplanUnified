@@ -51,7 +51,9 @@ def test_admin_specialkost_list_shows_diet_types(client_admin: FlaskClient):
     
     # Check page structure
     assert "Specialkost" in html
-    assert "Skapa specialkost" in html
+    assert "Skapa kosttyp" in html
+    assert "specialkost-create-cta" in html
+    assert "Här kan du redigera eller ta bort kosttyper." in html
     
     # Check seeded diet types appear
     assert "Vegetarisk" in html
@@ -129,6 +131,15 @@ def test_admin_specialkost_edit_updates_diet_type(client_admin: FlaskClient):
 
 def test_admin_specialkost_delete_removes_diet_type(client_admin: FlaskClient):
     """Delete route removes dietary type and shows confirmation."""
+    # Verify delete is guarded by confirm modal trigger in list UI
+    list_response = client_admin.get("/ui/admin/specialkost", headers=ADMIN_HEADERS)
+    assert list_response.status_code == 200
+    list_html = list_response.data.decode()
+    assert "specialkost-delete-trigger" in list_html
+    assert "Ta bort kosttyp?" in list_html
+    assert "Kosttypen tas bort och kan påverka avdelningar som använder den." in list_html
+    assert "return confirm(" not in list_html
+
     # Delete "Vegetarisk" (id=1)
     diet_id = 1
     
@@ -176,7 +187,9 @@ def test_admin_specialkost_list_empty_when_none(app_session: Flask):
     
     # Template should handle empty state gracefully
     assert "Specialkost" in html
-    assert "Skapa specialkost" in html
+    assert "Skapa kosttyp" in html
+    assert "Inga kosttyper ännu." in html
+    assert "Skapa första kosttypen" in html
     # Table might be empty or show "Inga kosttyper"
     assert "Vegetarisk" not in html
     assert "Glutenfri" not in html

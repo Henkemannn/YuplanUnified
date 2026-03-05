@@ -1,75 +1,73 @@
 {% extends "ui/unified_admin_base.html" %}
 {% block admin_title %}Specialkost{% endblock %}
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% block admin_subtitle %}Hantera kosttyper{% endblock %}
+{% block admin_context_meta %}{% endblock %}
+{% block admin_week_meta %}{% endblock %}
+{% block admin_head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_specialkost.css') }}">
 {% endblock %}
 {% block admin_main %}
-  <section class="ua-section">
-    <div class="ua-card">
-      <h1>Specialkost</h1>
-      <p class="admin-subtitle">Hantera kosttyper och förinställningar</p>
-    </div>
-  </section>
+  <section class="app-shell__grid admin-specialkost">
+    <article class="app-shell__card admin-specialkost__card">
+      <div class="admin-specialkost__header-row">
+        <h2 class="app-shell__card-title">Specialkost</h2>
+        <a href="{{ url_for('admin_ui.admin_specialkost_new') }}" class="yp-btn yp-btn-primary" data-testid="specialkost-create-cta">Skapa kosttyp</a>
+      </div>
+      <p class="app-shell__card-text">Här kan du redigera eller ta bort kosttyper.</p>
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      <section class="ua-section">
-        <div class="ua-card">
-          <div class="admin-flash-messages">
-            {% for category, message in messages %}
-              <div class="admin-flash admin-flash-{{ category }}">{{ message }}</div>
-            {% endfor %}
-          </div>
+      {% if vm.diet_types %}
+        <div class="app-shell__list" aria-label="Kosttyper">
+          {% for dt in vm.diet_types %}
+            <div class="app-shell__list-item admin-specialkost__item">
+              <a class="app-shell__list-link" href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" aria-label="Redigera {{ dt.name }}"></a>
+              <div class="app-shell__list-main">
+                <span class="app-shell__list-title">{{ dt.name }}</span>
+                <div class="app-shell__list-meta">
+                  <span>{% if dt.default_select %}Förinställd: Ja{% else %}Förinställd: Nej{% endif %}</span>
+                </div>
+              </div>
+              <div class="app-shell__list-actions admin-specialkost__actions">
+                <a href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" class="yp-btn yp-btn-secondary admin-specialkost__edit-btn">Redigera</a>
+                <button
+                  type="button"
+                  class="yp-btn yp-btn-secondary app-shell__icon-btn--danger admin-specialkost__delete-btn"
+                  data-testid="specialkost-delete-trigger"
+                  data-modal-target="#delete-diet-modal-{{ dt.id }}"
+                  aria-label="Ta bort {{ dt.name }}"
+                >🗑</button>
+              </div>
+            </div>
+
+            <dialog id="delete-diet-modal-{{ dt.id }}" class="ua-modal admin-specialkost__modal" data-testid="specialkost-delete-modal">
+              <div class="ua-modal-inner">
+                <header class="ua-modal-header">
+                  <h3>Ta bort kosttyp?</h3>
+                  <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
+                </header>
+                <div class="ua-modal-body">
+                  <p>Kosttypen tas bort och kan påverka avdelningar som använder den.</p>
+                </div>
+                <footer class="ua-modal-footer">
+                  <button type="button" class="yp-btn yp-btn-secondary" data-modal-close>Avbryt</button>
+                  <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" class="admin-specialkost__inline-form">
+                    {{ csrf_token_input() | safe }}
+                    <button type="submit" class="yp-btn btn-danger">Ta bort</button>
+                  </form>
+                </footer>
+              </div>
+            </dialog>
+          {% endfor %}
         </div>
-      </section>
-    {% endif %}
-  {% endwith %}
-
-  <section class="ua-section">
-    <div class="ua-card">
-      <div class="admin-actions" style="margin-bottom: 1rem;">
-        <a href="{{ url_for('admin_ui.admin_specialkost_new') }}" class="admin-btn-primary">Lägg till ny kosttyp</a>
-      </div>
-    </div>
-  </section>
-
-  <section class="ua-section">
-    <div class="ua-card">
-      <table class="admin-table">
-    <thead>
-      <tr>
-        <th>Namn</th>
-        <th>Förinställd</th>
-        <th>Åtgärder</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for dt in vm.diet_types %}
-      <tr>
-        <td>{{ dt.name }}</td>
-        <td>{% if dt.default_select %}Ja{% else %}Nej{% endif %}</td>
-        <td>
-          <a href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" class="admin-link-btn">Redigera</a>
-          <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" style="display:inline;" onsubmit="return confirm('Är du säker på att du vill ta bort denna kosttyp?');">
-            <button type="submit" class="admin-link-btn admin-btn-danger">Ta bort</button>
-          </form>
-        </td>
-      </tr>
       {% else %}
-      <tr>
-        <td colspan="3" class="admin-empty">Inga kosttyper hittades.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-      </table>
-    </div>
-  </section>
+        <div class="admin-specialkost__empty" data-testid="specialkost-empty-state">
+          <h3 class="admin-specialkost__empty-title">Inga kosttyper ännu.</h3>
+          <a href="{{ url_for('admin_ui.admin_specialkost_new') }}" class="yp-btn yp-btn-primary">Skapa första kosttypen</a>
+        </div>
+      {% endif %}
 
-  <section class="ua-section">
-    <div class="ua-card">
-      <div class="admin-actions">
-        <a href="{{ url_for('ui.admin_dashboard') }}" class="admin-btn-secondary">Tillbaka till Dashboard</a>
+      <div class="admin-specialkost__footer-actions">
+        <a href="{{ url_for('ui.admin_dashboard') }}" class="yp-btn yp-btn-secondary">Tillbaka</a>
       </div>
-    </div>
+    </article>
   </section>
 {% endblock %}
