@@ -577,7 +577,7 @@ def admin_menu_import() -> str:  # type: ignore[override]
                 SELECT year, week, status, updated_at
                 FROM menus
                 WHERE site_id = :sid
-                ORDER BY year DESC, week DESC, status DESC
+                ORDER BY year ASC, week ASC, status DESC
             """),
             {"sid": str(site_id)}
         ).fetchall()
@@ -602,7 +602,7 @@ def admin_menu_import() -> str:  # type: ignore[override]
     iso = _dt.date.today().isocalendar()
     current_year = int(iso[0])
     current_week = int(iso[1])
-    weeks_sorted = sorted(weeks, key=lambda w: (w["year"], w["week"]), reverse=True)
+    weeks_sorted = sorted(weeks, key=lambda w: (w["year"], w["week"]))
     active_weeks = [w for w in weeks_sorted if (w["year"], w["week"]) >= (current_year, current_week)]
     archive_weeks = [w for w in weeks_sorted if (w["year"], w["week"]) < (current_year, current_week)]
     archive_years = []
@@ -815,6 +815,14 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
             db.commit()
             db.refresh(menu)
             menu_updated_at = menu.updated_at
+
+        imported_week_rows = (
+            db.query(Menu.year, Menu.week, Menu.status)
+            .filter_by(tenant_id=site_tenant_id, site_id=site_id)
+            .distinct()
+            .order_by(Menu.year.asc(), Menu.week.asc())
+            .all()
+        )
     finally:
         db.close()
 
@@ -830,13 +838,198 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
     # Generate ETag for optimistic locking
     etag = generate_menu_etag(menu_id, menu_updated_at)
     
+    edit_mode = (request.args.get("edit") or "").strip().lower() in {"1", "true", "yes", "on"}
+    saved_mode = (request.args.get("saved") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+    def _norm(value: object) -> str:
+        return str(value or "").strip().lower()
+
+    day_aliases = {
+        "monday": "Måndag",
+        "mon": "Måndag",
+        "måndag": "Måndag",
+        "mån": "Måndag",
+        "tuesday": "Tisdag",
+        "tue": "Tisdag",
+        "tisdag": "Tisdag",
+        "tis": "Tisdag",
+        "wednesday": "Onsdag",
+        "wed": "Onsdag",
+        "onsdag": "Onsdag",
+        "ons": "Onsdag",
+        "thursday": "Torsdag",
+        "thu": "Torsdag",
+        "torsdag": "Torsdag",
+        "tor": "Torsdag",
+        "friday": "Fredag",
+        "fri": "Fredag",
+        "fredag": "Fredag",
+        "fre": "Fredag",
+        "saturday": "Lördag",
+        "sat": "Lördag",
+        "lördag": "Lördag",
+        "lör": "Lördag",
+        "lordag": "Lördag",
+        "sunday": "Söndag",
+        "sun": "Söndag",
+        "söndag": "Söndag",
+        "sön": "Söndag",
+        "sondag": "Söndag",
+    }
+    ordered_days = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
+    slot_specs = [
+        {
+            "key": "lunch_alt1",
+            "label": "Lunch alt 1",
+            "field": ("Lunch", "alt1"),
+            "candidates": [("lunch", "alt1"), ("lunch", "main"), ("lunch", "standard")],
+        },
+        {
+            "key": "lunch_alt2",
+            "label": "Lunch alt 2",
+            "field": ("Lunch", "alt2"),
+            "candidates": [("lunch", "alt2")],
+        },
+        {
+            "key": "dessert",
+            "label": "Dessert",
+            "field": ("Lunch", "dessert"),
+            "candidates": [("lunch", "dessert"), ("dessert", "main")],
+        },
+        {
+            "key": "dinner",
+            "label": "Middag",
+            "field": ("Kväll", "kvall"),
+            "candidates": [
+                ("kväll", "kvall"),
+                ("kväll", "main"),
+                ("kvall", "kvall"),
+                ("kvall", "main"),
+                ("dinner", "main"),
+                ("dinner", "dinner"),
+                ("dinner", "alt1"),
+                ("dinner", "alt2"),
+                ("middag", "main"),
+                ("evening", "main"),
+            ],
+        },
+    ]
+
+    raw_days = (week_view or {}).get("days", {})
+    normalized_days: dict[str, dict[str, dict[str, dict[str, object]]]] = {}
+    if isinstance(raw_days, dict):
+        for raw_day, raw_meals in raw_days.items():
+            day_label = day_aliases.get(_norm(raw_day))
+            if not day_label or not isinstance(raw_meals, dict):
+                continue
+            day_bucket = normalized_days.setdefault(day_label, {})
+            for raw_meal, raw_variants in raw_meals.items():
+                meal_key = _norm(raw_meal)
+                if not meal_key:
+                    continue
+                meal_bucket = day_bucket.setdefault(meal_key, {})
+                if isinstance(raw_variants, dict):
+                    for raw_variant, raw_info in raw_variants.items():
+                        variant_key = _norm(raw_variant)
+                        if not variant_key:
+                            continue
+                        if isinstance(raw_info, dict):
+                            meal_bucket[variant_key] = raw_info
+                        else:
+                            meal_bucket[variant_key] = {"dish_name": str(raw_info or "")}
+                else:
+                    meal_bucket["main"] = {"dish_name": str(raw_variants or "")}
+
+    def _pick_slot(day_meals: dict[str, dict[str, dict[str, object]]], candidates: list[tuple[str, str]]) -> dict[str, object]:
+        for meal_key, variant_key in candidates:
+            variant = (day_meals.get(meal_key) or {}).get(variant_key)
+            if isinstance(variant, dict):
+                return variant
+            if variant:
+                return {"dish_name": str(variant)}
+        return {}
+
+    day_rows: list[dict[str, object]] = []
+    slot_order: list[str] = [spec["key"] for spec in slot_specs]
+    for day_label in ordered_days:
+        day_meals = normalized_days.get(day_label, {})
+        slots: dict[str, dict[str, str]] = {}
+        for spec in slot_specs:
+            slot_info = _pick_slot(day_meals, spec["candidates"])
+            meal_name, variant_name = spec["field"]
+            slots[spec["key"]] = {
+                "label": str(spec["label"]),
+                "dish_name": str(slot_info.get("dish_name") or ""),
+                "field_name": f"{day_label}_{meal_name}_{variant_name}",
+            }
+        day_rows.append({"day_label": day_label, "slots": slots})
+
+    imported_weeks: list[tuple[int, int]] = []
+    week_status_map: dict[tuple[int, int], str] = {}
+    for row in imported_week_rows or []:
+        try:
+            year_key = int(row[0])
+            week_key = int(row[1])
+            status_val = str(row[2] or "draft").strip().lower()
+            key = (year_key, week_key)
+            imported_weeks.append(key)
+            existing = week_status_map.get(key)
+            if existing is None:
+                week_status_map[key] = status_val
+            elif existing != "published" and status_val == "published":
+                week_status_map[key] = "published"
+        except Exception:
+            continue
+
+    imported_weeks = sorted(set(imported_weeks), key=lambda val: (val[0], val[1]))
+
+    available_weeks: list[dict[str, object]] = []
+    for y_key, w_key in imported_weeks:
+        raw_status = week_status_map.get((y_key, w_key), "draft")
+        status_label = "PUBLICERAD" if raw_status == "published" else "UTKAST"
+        available_weeks.append(
+            {
+                "year": y_key,
+                "week": w_key,
+                "status": status_label,
+                "url": url_for("admin_ui.admin_menu_import_week", year=y_key, week=w_key),
+            }
+        )
+
+    current_week_tuple = (int(year), int(week))
+    week_index = -1
+    if imported_weeks:
+        try:
+            week_index = imported_weeks.index(current_week_tuple)
+        except ValueError:
+            week_index = -1
+
+    prev_week = None
+    next_week = None
+    if week_index > 0:
+        prev_year, prev_week_no = imported_weeks[week_index - 1]
+        prev_week = {"year": prev_year, "week": prev_week_no}
+    if week_index >= 0 and week_index < (len(imported_weeks) - 1):
+        next_year, next_week_no = imported_weeks[week_index + 1]
+        next_week = {"year": next_year, "week": next_week_no}
+
     vm = {
         "year": year,
         "week": week,
         "menu_id": menu_id,
         "menu_status": menu_status,
         "etag": etag,
-        "days": (week_view or {}).get("days", {})
+        "days": (week_view or {}).get("days", {}),
+        "day_rows": day_rows,
+        "slot_order": slot_order,
+        "available_weeks": available_weeks,
+        "current_week_key": f"{year}-{week}",
+        "prev_week": prev_week,
+        "next_week": next_week,
+        "week_nav_has_prev": prev_week is not None,
+        "week_nav_has_next": next_week is not None,
+        "edit_mode": edit_mode,
+        "saved": saved_mode,
     }
     
     response = make_response(render_template("admin_menu_import_week.html", vm=vm))
@@ -921,7 +1114,7 @@ def admin_menu_import_week_edit(year: int, week: int) -> str:  # type: ignore[ov
 def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[override]
     """Save edited menu variants for a specific week."""
     from core.db import get_session
-    from core.models import Dish, Menu
+    from core.models import Dish, Menu, MenuVariant
     from core.etag_utils import validate_etag
     
     from core.db import get_site_tenant
@@ -985,43 +1178,114 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
             }), 412
         else:
             flash(f"Konflikt: {error_msg} Ladda om sidan för att se senaste versionen.", "warning")
-            return redirect(url_for("admin_ui.admin_menu_import_week_edit", year=year, week=week))
+            return redirect(url_for("admin_ui.admin_menu_import_week", year=year, week=week, edit=1))
     
-    # Days in Swedish
+    def _norm(value: object) -> str:
+        return str(value or "").strip().lower()
+
+    day_aliases = {
+        "monday": "Måndag",
+        "mon": "Måndag",
+        "måndag": "Måndag",
+        "mån": "Måndag",
+        "tuesday": "Tisdag",
+        "tue": "Tisdag",
+        "tisdag": "Tisdag",
+        "tis": "Tisdag",
+        "wednesday": "Onsdag",
+        "wed": "Onsdag",
+        "onsdag": "Onsdag",
+        "ons": "Onsdag",
+        "thursday": "Torsdag",
+        "thu": "Torsdag",
+        "torsdag": "Torsdag",
+        "tor": "Torsdag",
+        "friday": "Fredag",
+        "fri": "Fredag",
+        "fredag": "Fredag",
+        "fre": "Fredag",
+        "saturday": "Lördag",
+        "sat": "Lördag",
+        "lördag": "Lördag",
+        "lör": "Lördag",
+        "lordag": "Lördag",
+        "sunday": "Söndag",
+        "sun": "Söndag",
+        "söndag": "Söndag",
+        "sön": "Söndag",
+        "sondag": "Söndag",
+    }
     days = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
-    meals_variants = [
-        ("Lunch", "alt1"),
-        ("Lunch", "alt2"),
-        ("Lunch", "dessert"),
-        ("Kväll", "kvall")
+    slot_specs = [
+        {"slot": "lunch_alt1", "field": ("Lunch", "alt1"), "create": ("Lunch", "alt1")},
+        {"slot": "lunch_alt2", "field": ("Lunch", "alt2"), "create": ("Lunch", "alt2")},
+        {"slot": "dessert", "field": ("Lunch", "dessert"), "create": ("Lunch", "dessert")},
+        {"slot": "dinner", "field": ("Kväll", "kvall"), "create": ("Kväll", "kvall")},
     ]
+
+    def _canonical_day(day_value: object) -> str | None:
+        return day_aliases.get(_norm(day_value))
+
+    def _canonical_slot(meal_value: object, variant_value: object) -> str | None:
+        meal_key = _norm(meal_value)
+        variant_key = _norm(variant_value)
+        if meal_key == "lunch":
+            if variant_key in {"alt1", "main", "standard"}:
+                return "lunch_alt1"
+            if variant_key == "alt2":
+                return "lunch_alt2"
+            if variant_key in {"dessert", "efterratt", "efterrätt"}:
+                return "dessert"
+        if meal_key == "dessert":
+            return "dessert"
+        if meal_key in {"kväll", "kvall", "dinner", "middag", "evening"}:
+            if variant_key in {"kvall", "main", "dinner", "alt1", "alt2", "evening"}:
+                return "dinner"
+        return None
     
     # Process form data
     updates_count = 0
     db = get_session()
     try:
+        existing_slot_rows: dict[tuple[str, str], MenuVariant] = {}
+        existing_rows = db.query(MenuVariant).filter_by(menu_id=menu_id).all()
+        for existing in existing_rows:
+            day_label = _canonical_day(existing.day)
+            slot_key = _canonical_slot(existing.meal, existing.variant_type)
+            if day_label and slot_key and (day_label, slot_key) not in existing_slot_rows:
+                existing_slot_rows[(day_label, slot_key)] = existing
+
         for day in days:
-            for meal, variant_type in meals_variants:
-                field_name = f"{day}_{meal}_{variant_type}"
+            for spec in slot_specs:
+                field_meal, field_variant = spec["field"]
+                field_name = f"{day}_{field_meal}_{field_variant}"
+                if field_name not in request.form:
+                    continue
                 dish_text = (request.form.get(field_name) or "").strip()
                 dish_id = None
                 if dish_text:
-                    dish = db.query(Dish).filter_by(tenant_id=tenant_id, name=dish_text).first()
+                    dish = db.query(Dish).filter_by(tenant_id=site_tenant_id, name=dish_text).first()
                     if not dish:
-                        dish = Dish(tenant_id=tenant_id, name=dish_text, category=None)
+                        dish = Dish(tenant_id=site_tenant_id, name=dish_text, category=None)
                         db.add(dish)
                         db.flush()
                     dish_id = dish.id
-                mv = (
-                    db.query(MenuVariant)
-                    .filter_by(menu_id=menu_id, day=day, meal=meal, variant_type=variant_type)
-                    .first()
-                )
+
+                slot_key = str(spec["slot"])
+                mv = existing_slot_rows.get((day, slot_key))
                 if mv:
                     mv.dish_id = dish_id
                 else:
-                    mv = MenuVariant(menu_id=menu_id, day=day, meal=meal, variant_type=variant_type, dish_id=dish_id)
+                    create_meal, create_variant = spec["create"]
+                    mv = MenuVariant(
+                        menu_id=menu_id,
+                        day=day,
+                        meal=create_meal,
+                        variant_type=create_variant,
+                        dish_id=dish_id,
+                    )
                     db.add(mv)
+                    existing_slot_rows[(day, slot_key)] = mv
                 updates_count += 1
         # Update menu's updated_at timestamp
         menu = db.query(Menu).filter_by(id=menu_id).first()
@@ -1032,8 +1296,8 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
     finally:
         db.close()
     
-    flash(f"Menyn uppdaterad ({updates_count} ändringar sparade).", "success")
-    return redirect(url_for("admin_ui.admin_menu_import_week", year=year, week=week))
+    flash("Sparat ✓", "success")
+    return redirect(url_for("admin_ui.admin_menu_import_week", year=year, week=week, saved=1))
 
 
 @admin_ui_bp.post("/ui/admin/menu-import/week/<int:year>/<int:week>/publish")

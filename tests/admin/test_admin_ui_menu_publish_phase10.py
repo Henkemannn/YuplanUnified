@@ -77,8 +77,24 @@ def test_week_view_shows_draft_status(seeded_draft_week, client_admin):
     assert "Status:" in html or "status:" in html.lower()
 
 
+def test_week_view_status_card_has_helptext_and_edit_button(seeded_draft_week, client_admin):
+    """Status card should include guidance text and a clear edit action."""
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/47",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "Granska menyn." in html
+    assert "publicera när den är klar" in html
+    assert "Redigera" in html
+    assert "menu-editor-day-card" in html
+
+
 def test_week_view_shows_publish_button_for_draft(seeded_draft_week, client_admin):
-    """Test that draft menu shows 'Publicera vecka' button."""
+    """Test that draft menu shows 'Publicera' button."""
     response = client_admin.get(
         "/ui/admin/menu-import/week/2025/47",
         headers=ADMIN_HEADERS
@@ -88,7 +104,7 @@ def test_week_view_shows_publish_button_for_draft(seeded_draft_week, client_admi
     html = response.data.decode('utf-8')
     
     # Check for publish button
-    assert "Publicera vecka" in html
+    assert "Publicera" in html
     assert "/ui/admin/menu-import/week/2025/47/publish" in html
 
 
@@ -242,7 +258,7 @@ def test_published_menu_does_not_show_publish_button(seeded_draft_week, client_a
     html = response.data.decode('utf-8')
     
     # Should not have publish button anymore
-    assert "Publicera vecka" not in html or html.count("Publicera vecka") == 0
+    assert ">Publicera<" not in html
 
 
 def test_unpublish_changes_status_to_draft(seeded_draft_week, client_admin):

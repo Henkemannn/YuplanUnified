@@ -123,7 +123,7 @@ def test_admin_menu_import_list_shows_weeks(client_admin: FlaskClient):
     # Check seeded week appears in list
     assert "2025" in html
     assert "48" in html
-    assert "Visa / Redigera" in html
+    assert "Redigera" in html
 
 
 def test_admin_menu_import_upload_shows_flash(client_admin: FlaskClient):
@@ -174,7 +174,7 @@ def test_admin_menu_import_week_shows_menu_data(client_admin: FlaskClient):
     assert "2025" in html
     
     # Check menu data appears
-    assert "Mon" in html
+    assert "Måndag" in html
     assert "Lunch" in html
     assert "Köttbullar" in html
     assert "Fiskgratäng" in html

@@ -1,111 +1,108 @@
-{% from 'macros/admin_menu.html' import render_flash_messages %}
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redigera Meny Vecka {{ vm.week }}/{{ vm.year }} - Admin</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
-    <style>
-        .edit-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-        .edit-table th {
-            background-color: #f5f5f5;
-            padding: 0.75rem;
-            text-align: left;
-            border: 1px solid #ddd;
-            font-weight: 600;
-        }
-        .edit-table td {
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-        }
-        .edit-table input[type="text"] {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .edit-table input[type="text"]:focus {
-            outline: none;
-            border-color: #0066cc;
-        }
-        .day-header {
-            background-color: #e8f4f8;
-            font-weight: 600;
-            padding: 0.75rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="admin-container">
-        <h2>Redigera meny för vecka {{ vm.week }}, {{ vm.year }}</h2>
-        
-        {{ render_flash_messages() }}
-        
-        <p style="color: #666; margin-bottom: 1.5rem;">
-            Redigera rätterna nedan. Tomma fält tillåts (rätten tas bort).
-        </p>
-        
-        <!-- Edit form -->
-        <form action="{{ url_for('admin_ui.admin_menu_import_week_save', year=vm.year, week=vm.week) }}" method="POST" class="admin-form admin-form-protect">
-            {{ csrf_token_input() | safe }}
-            <input type="hidden" name="_etag" value="{{ vm.etag }}">
-            
-            {% set days = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"] %}
-            {% set meals_variants = [
-                ("Lunch", "alt1", "Alt 1"),
-                ("Lunch", "alt2", "Alt 2"),
-                ("Lunch", "dessert", "Dessert"),
-                ("Kväll", "kvall", "Kvällsmat")
-            ] %}
-            
-            <table class="edit-table">
-                <thead>
-                    <tr>
-                        <th style="width: 15%;">Dag</th>
-                        <th style="width: 15%;">Måltid</th>
-                        <th style="width: 70%;">Rätt</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for day in days %}
-                        {% for meal, variant_type, display_name in meals_variants %}
-                            {% set day_data = vm.days.get(day, {}) %}
-                            {% set meal_data = day_data.get(meal, {}) %}
-                            {% set variant_info = meal_data.get(variant_type, {}) %}
-                            {% set current_dish = variant_info.get('dish_name', '') %}
-                            
-                            <tr>
-                                {% if loop.first %}
-                                    <td rowspan="4" class="day-header">{{ day }}</td>
-                                {% endif %}
-                                <td>{{ display_name }}</td>
-                                <td>
-                                    <input 
-                                        type="text" 
+{% extends "ui/unified_admin_base.html" %}
+
+{% block admin_title %}Redigera meny - vecka {{ vm.week }}{% endblock %}
+{% block admin_subtitle %}{{ vm.site_name or current_site_name or '-' }}{% endblock %}
+{% block admin_context_meta %}{% endblock %}
+{% block admin_week_meta %}{% endblock %}
+
+{% block admin_head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/menu_editor.css') }}">
+{% endblock %}
+
+{% block admin_main %}
+    {% set menu_status = (vm.menu_status or 'draft')|lower %}
+
+    <form id="menu-edit-form" action="{{ url_for('admin_ui.admin_menu_import_week_save', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect">
+        {{ csrf_token_input() | safe }}
+        <input type="hidden" name="_etag" value="{{ vm.etag }}">
+    </form>
+
+    <section class="app-shell__grid menu-editor-grid menu-editor-edit" data-menu-editor-edit="1">
+        <article class="app-shell__card menu-editor-card menu-editor-card--status">
+            <div class="menu-editor-card__header">
+                <h2 class="app-shell__card-title">Status</h2>
+            </div>
+            <div class="menu-editor-status">
+                <div>
+                    {% if menu_status == 'published' %}
+                        <span class="menu-editor-badge is-published">PUBLICERAD</span>
+                    {% else %}
+                        <span class="menu-editor-badge is-draft">UTKAST</span>
+                    {% endif %}
+                </div>
+                <div class="menu-editor-actions">
+                    <button type="submit" form="menu-edit-form" class="yp-btn yp-btn-primary">Spara</button>
+                    <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week) }}" class="yp-btn yp-btn-secondary">Tillbaka</a>
+
+                    {% if vm.menu_status is defined and menu_status == 'draft' %}
+                        <form action="{{ url_for('admin_ui.admin_menu_import_week_publish', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect menu-editor-inline-form">
+                            {{ csrf_token_input() | safe }}
+                            <input type="hidden" name="_etag" value="{{ vm.etag }}">
+                            <button type="submit" class="yp-btn yp-btn-secondary">Publicera</button>
+                        </form>
+                    {% elif vm.menu_status is defined and menu_status == 'published' %}
+                        <form action="{{ url_for('admin_ui.admin_menu_import_week_unpublish', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect menu-editor-inline-form">
+                            {{ csrf_token_input() | safe }}
+                            <input type="hidden" name="_etag" value="{{ vm.etag }}">
+                            <button type="submit" class="yp-btn yp-btn-secondary">Aterga till utkast</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        </article>
+
+        <article class="app-shell__card menu-editor-card">
+            <p class="menu-editor-help-text">Redigera ratterna for veckan. Andringar sparas nar du trycker Spara.</p>
+        </article>
+
+        {% set days = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"] %}
+        {% set meals_variants = [
+            ("Lunch", "alt1", "Lunch (Alt 1)"),
+            ("Lunch", "alt2", "Lunch (Alt 2)"),
+            ("Lunch", "dessert", "Dessert"),
+            ("Kväll", "kvall", "Kväll")
+        ] %}
+
+        <article class="app-shell__card menu-editor-card">
+            <div class="menu-editor-card__header">
+                <h2 class="app-shell__card-title">Weekly menu</h2>
+            </div>
+            <div class="menu-editor-days">
+                {% for day in days %}
+                    <section class="menu-editor-day-card">
+                        <h3 class="menu-editor-day-title">{{ day }}</h3>
+                        <div class="menu-editor-edit-rows">
+                            {% for meal, variant_type, display_name in meals_variants %}
+                                {% set day_data = vm.days.get(day, {}) %}
+                                {% set meal_data = day_data.get(meal, {}) %}
+                                {% set variant_info = meal_data.get(variant_type, {}) %}
+                                {% set current_dish = variant_info.get('dish_name', '') %}
+                                <div class="menu-editor-edit-row">
+                                    <label class="menu-editor-meal-type" for="dish-{{ loop.index0 }}-{{ day|replace('å','a')|replace('ä','a')|replace('ö','o')|replace('Å','A')|replace('Ä','A')|replace('Ö','O')|lower }}-{{ variant_type }}">{{ display_name }}</label>
+                                    <input
+                                        id="dish-{{ loop.index0 }}-{{ day|replace('å','a')|replace('ä','a')|replace('ö','o')|replace('Å','A')|replace('Ä','A')|replace('Ö','O')|lower }}-{{ variant_type }}"
+                                        class="yp-input menu-editor-input"
+                                        type="text"
+                                        form="menu-edit-form"
                                         name="{{ day }}_{{ meal }}_{{ variant_type }}"
                                         value="{{ current_dish }}"
-                                        placeholder="Ange rättens namn..."
+                                        placeholder="Ange ratt"
                                     >
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    {% endfor %}
-                </tbody>
-            </table>
-            
-            <!-- Action buttons -->
-            <div class="admin-form-actions" style="margin-top: 2rem; display: flex; gap: 1rem;">
-                <button type="submit" class="admin-btn-primary">Spara ändringar</button>
-                <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week) }}" class="admin-btn-secondary">Avbryt</a>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </section>
+                {% endfor %}
             </div>
-        </form>
+        </article>
+    </section>
+
+    <div class="menu-editor-sticky-save" aria-hidden="true">
+        <button type="submit" form="menu-edit-form" class="yp-btn yp-btn-primary">Spara</button>
     </div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
-</body>
-</html>
+{% endblock %}

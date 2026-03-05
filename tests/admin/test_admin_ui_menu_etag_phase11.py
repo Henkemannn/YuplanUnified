@@ -157,7 +157,7 @@ def test_save_with_correct_etag_succeeds(seeded_menu_with_updated_at):
     # Follow redirect
     response = client.get(response.location, headers=ADMIN_HEADERS)
     assert response.status_code == 200
-    assert b"Menyn uppdaterad" in response.data
+    assert b"Sparat" in response.data
 
 
 def test_publish_without_etag_returns_412(seeded_menu_with_updated_at):

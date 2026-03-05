@@ -1,20 +1,18 @@
 {% extends "ui/_layout/app_shell_base.html" %}
 
-{% block page_title %}Menyimport – Yuplan{% endblock %}
+{% block page_title %}Menyhantering – Yuplan{% endblock %}
 
 {% block head_extra %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_menu_import.css') }}">
 {% endblock %}
 
 {% block content %}
     <div class="app-page admin-menu-import admin-list">
         <section class="app-shell__page-header">
             <div>
-                <h1 class="app-shell__title">Menyimport</h1>
-                <p class="app-shell__subtitle">Importera och granska veckomenyer.</p>
-            </div>
-            <div class="app-shell__page-actions">
-                <a class="app-shell__user-pill" href="#upload">➕ Ladda upp meny</a>
+                <h1 class="app-shell__title">Menyhantering</h1>
+                <p class="app-shell__subtitle">Importera och hantera veckomenyer.</p>
             </div>
         </section>
 
@@ -29,32 +27,28 @@
         {% endwith %}
 
         <section class="app-shell__grid">
-            <article class="app-shell__card">
-                <h2 class="app-shell__card-title">Menyimport</h2>
-                <p class="app-shell__card-text">Ladda upp och administrera menyer per vecka.</p>
+            <article class="app-shell__card admin-menu-import__card">
+                <h2 class="app-shell__card-title">Importera meny</h2>
 
-                <div id="upload">
-                    <h3 class="app-shell__card-title">Ladda upp menyfil</h3>
-                    <div class="admin-menu-import__upload-grid">
-                        <form action="{{ url_for('admin_ui.admin_menu_import_upload') }}" method="POST" enctype="multipart/form-data" class="yp-form">
-                            {{ csrf_token_input() | safe }}
-                            <div class="yp-form-field">
-                                <div class="admin-menu-import__file-drop">
-                                    <input type="file" id="menu_file" name="menu_file" class="yp-input" accept=".csv,.docx" aria-label="Välj menufil (CSV eller DOCX)" required>
-                                </div>
-                            </div>
-                            <div class="form-actions">
-                                <button type="submit" class="app-shell__btn app-shell__btn--ghost">Importera meny</button>
-                            </div>
-                        </form>
-                        <aside class="admin-menu-import__info">
-                            <h4 class="admin-menu-import__info-title">Tips</h4>
-                            <ul class="admin-menu-import__info-list">
-                                <li>CSV eller DOCX fungerar.</li>
-                                <li>En fil kan täcka flera veckor.</li>
-                                <li>Granska veckorna efter import.</li>
-                            </ul>
-                        </aside>
+                <div id="upload" class="admin-menu-import__upload-card admin-menu-import__section">
+                    <form action="{{ url_for('admin_ui.admin_menu_import_upload') }}" method="POST" enctype="multipart/form-data" class="yp-form admin-menu-import__form">
+                        {{ csrf_token_input() | safe }}
+                        <input type="file" id="menu_file" name="menu_file" class="admin-menu-import__file-input" accept=".csv,.docx" aria-label="Välj menufil (CSV eller DOCX)" required>
+                        <div class="admin-menu-import__upload-row">
+                            <label for="menu_file" class="yp-btn yp-btn-secondary admin-menu-import__file-trigger" aria-label="Ladda upp menyfil">Välj menyfil</label>
+                            <span id="menu-file-name" class="admin-menu-import__file-name" aria-live="polite">Ingen fil vald</span>
+                        </div>
+                        <div class="admin-menu-import__submit-row">
+                            <button id="menu-import-submit" type="submit" class="yp-btn yp-btn-primary" disabled>Importera meny</button>
+                        </div>
+                    </form>
+                    <div class="admin-menu-import__tips" aria-label="Tips">
+                        <h4 class="admin-menu-import__tips-title">Tips</h4>
+                        <ul class="admin-menu-import__tips-list">
+                            <li>CSV eller DOCX fungerar.</li>
+                            <li>En fil kan innehålla flera veckor.</li>
+                            <li>Granska veckorna efter import.</li>
+                        </ul>
                     </div>
                 </div>
 
@@ -79,7 +73,7 @@
                     </div>
                 {% endif %}
 
-                <div>
+                <div class="admin-menu-import__section admin-menu-import__list-section">
                     <h3 class="app-shell__card-title">Importerade menyer</h3>
                     {% if vm.weeks %}
                         {% set active_weeks = vm.active_weeks if vm.active_weeks is defined else vm.weeks %}
@@ -89,21 +83,22 @@
                         <div class="admin-list__section">
                             <h4 class="app-shell__section-title">Aktiva menyer</h4>
                             {% if active_weeks %}
-                                <div class="app-shell__list">
+                                <div class="app-shell__list admin-menu-import__weeks-list">
                                     {% for w in active_weeks %}
                                     {% set status = w.status if w.status is defined else 'draft' %}
                                     {% set is_recent = recent_weeks | selectattr('year', 'equalto', w.year) | selectattr('week', 'equalto', w.week) | list %}
-                                    <div class="app-shell__list-item">
+                                    <div class="app-shell__list-item admin-menu-import__week-item">
                                         <a class="app-shell__list-link" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}" aria-label="Öppna vecka {{ w.week }} {{ w.year }}"></a>
                                         <div class="app-shell__list-main">
                                             <span class="app-shell__list-title">Vecka {{ w.week }}</span>
                                             <div class="app-shell__list-meta">
-                                                År {{ w.year }} · {{ 'PUBLICERAD' if status == 'published' else 'UTKAST' }}
-                                                {% if is_recent %} · Ny{% endif %}
+                                                <span>{{ w.year }}</span>
+                                                <span class="admin-menu-import__status-pill {% if status == 'published' %}is-published{% else %}is-draft{% endif %}">{{ 'PUBLICERAD' if status == 'published' else 'UTKAST' }}</span>
+                                                {% if is_recent %}<span class="admin-menu-import__status-pill is-recent">NY</span>{% endif %}
                                             </div>
                                         </div>
-                                        <div class="app-shell__list-actions">
-                                            <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}">Visa / Redigera</a>
+                                        <div class="app-shell__list-actions admin-menu-import__week-actions">
+                                            <a class="yp-btn yp-btn-secondary" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}">Redigera</a>
                                         </div>
                                     </div>
                                     {% endfor %}
@@ -120,21 +115,22 @@
                                     <details class="app-shell__details">
                                         <summary>{{ year_block.year }}</summary>
                                         <div class="app-shell__details-body">
-                                            <div class="app-shell__list">
+                                            <div class="app-shell__list admin-menu-import__weeks-list">
                                                 {% for w in year_block.weeks %}
                                                 {% set status = w.status if w.status is defined else 'draft' %}
                                                 {% set is_recent = recent_weeks | selectattr('year', 'equalto', w.year) | selectattr('week', 'equalto', w.week) | list %}
-                                                <div class="app-shell__list-item">
+                                                <div class="app-shell__list-item admin-menu-import__week-item">
                                                     <a class="app-shell__list-link" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}" aria-label="Öppna vecka {{ w.week }} {{ w.year }}"></a>
                                                     <div class="app-shell__list-main">
                                                         <span class="app-shell__list-title">Vecka {{ w.week }}</span>
                                                         <div class="app-shell__list-meta">
-                                                            År {{ w.year }} · {{ 'PUBLICERAD' if status == 'published' else 'UTKAST' }}
-                                                            {% if is_recent %} · Ny{% endif %}
+                                                            <span>{{ w.year }}</span>
+                                                            <span class="admin-menu-import__status-pill {% if status == 'published' %}is-published{% else %}is-draft{% endif %}">{{ 'PUBLICERAD' if status == 'published' else 'UTKAST' }}</span>
+                                                            {% if is_recent %}<span class="admin-menu-import__status-pill is-recent">NY</span>{% endif %}
                                                         </div>
                                                     </div>
-                                                    <div class="app-shell__list-actions">
-                                                        <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}">Visa / Redigera</a>
+                                                    <div class="app-shell__list-actions admin-menu-import__week-actions">
+                                                        <a class="yp-btn yp-btn-secondary" href="{{ url_for('admin_ui.admin_menu_import_week', year=w.year, week=w.week) }}">Redigera</a>
                                                     </div>
                                                 </div>
                                                 {% endfor %}
@@ -155,4 +151,9 @@
             </article>
         </section>
     </div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/admin_menu_import.js') }}" defer></script>
 {% endblock %}

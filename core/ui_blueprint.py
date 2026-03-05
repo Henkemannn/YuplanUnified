@@ -3203,7 +3203,7 @@ def admin_menu_import_list():
         db = get_session()
         try:
             rows = db.execute(
-                text("SELECT DISTINCT year, week FROM menus ORDER BY year, week")
+                text("SELECT DISTINCT year, week FROM menus ORDER BY year ASC, week ASC")
             ).fetchall()
             weeks = [{"year": int(r[0]), "week": int(r[1])} for r in rows]
         finally:

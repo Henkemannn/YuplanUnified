@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+import re
 from sqlalchemy import text
 
 
@@ -76,6 +77,129 @@ def seeded_week_48(app_session):
     return app_session
 
 
+@pytest.fixture
+def client_admin_imported(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["site_id"] = "site-import-11"
+    return client
+
+
+@pytest.fixture
+def seeded_imported_week_11(app_session):
+    """Seed importer-like keys (monday/lunch/main + dinner/main) for regression coverage."""
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        db.execute(text("DELETE FROM menu_variants"))
+        db.execute(text("DELETE FROM menus"))
+        db.execute(text("DELETE FROM dishes"))
+        db.commit()
+
+        db.execute(
+            text("INSERT OR REPLACE INTO sites (id, name, tenant_id, version) VALUES (:id, :name, :tid, 0)"),
+            {"id": "site-import-11", "name": "Site Import 11", "tid": 1},
+        )
+
+        db.execute(
+            text("INSERT INTO menus (id, tenant_id, site_id, week, year, status) VALUES (:id, :tid, :sid, :week, :year, :status)"),
+            {"id": 111, "tid": 1, "sid": "site-import-11", "week": 11, "year": 2026, "status": "draft"},
+        )
+
+        dishes = [
+            (401, 1, "Lasagne"),
+            (402, 1, "Fiskgryta"),
+            (403, 1, "Chokladpudding"),
+            (404, 1, "Köttsoppa"),
+        ]
+        for dish_id, tenant_id, name in dishes:
+            db.execute(
+                text("INSERT INTO dishes (id, tenant_id, name) VALUES (:id, :tid, :name)"),
+                {"id": dish_id, "tid": tenant_id, "name": name},
+            )
+
+        # Importer-style keys: english day/meal with 'main' variant.
+        variants = [
+            (111, "monday", "lunch", "main", 401),
+            (111, "monday", "lunch", "alt2", 402),
+            (111, "monday", "lunch", "dessert", 403),
+            (111, "monday", "dinner", "main", 404),
+        ]
+        for menu_id, day, meal, variant_type, dish_id in variants:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO menu_variants (menu_id, day, meal, variant_type, dish_id)
+                    VALUES (:mid, :day, :meal, :vtype, :did)
+                    """
+                ),
+                {"mid": menu_id, "day": day, "meal": meal, "vtype": variant_type, "did": dish_id},
+            )
+
+        db.commit()
+    finally:
+        db.close()
+
+    return app_session
+
+
+@pytest.fixture
+def seeded_week_nav_cross_year(app_session):
+    """Seed three imported weeks across year boundary for week-nav assertions."""
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        db.execute(text("DELETE FROM menu_variants"))
+        db.execute(text("DELETE FROM menus"))
+        db.execute(text("DELETE FROM dishes"))
+        db.commit()
+
+        db.execute(
+            text("INSERT OR REPLACE INTO sites (id, name, tenant_id, version) VALUES (:id, :name, :tid, 0)"),
+            {"id": "site-import-nav", "name": "Site Import Nav", "tid": 1},
+        )
+
+        menus = [
+            (151, 1, "site-import-nav", 52, 2025, "draft"),
+            (152, 1, "site-import-nav", 1, 2026, "draft"),
+            (153, 1, "site-import-nav", 2, 2026, "published"),
+        ]
+        for menu_id, tid, sid, week, year, status in menus:
+            db.execute(
+                text(
+                    "INSERT INTO menus (id, tenant_id, site_id, week, year, status) VALUES (:id, :tid, :sid, :week, :year, :status)"
+                ),
+                {"id": menu_id, "tid": tid, "sid": sid, "week": week, "year": year, "status": status},
+            )
+
+        db.execute(
+            text("INSERT INTO dishes (id, tenant_id, name) VALUES (:id, :tid, :name)"),
+            {"id": 451, "tid": 1, "name": "Nav rätt"},
+        )
+
+        for menu_id in [151, 152, 153]:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO menu_variants (menu_id, day, meal, variant_type, dish_id)
+                    VALUES (:mid, :day, :meal, :vtype, :did)
+                    """
+                ),
+                {"mid": menu_id, "day": "monday", "meal": "lunch", "vtype": "main", "did": 451},
+            )
+
+        db.commit()
+    finally:
+        db.close()
+
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["site_id"] = "site-import-nav"
+    return client
+
+
 def test_get_edit_route_shows_input_fields(seeded_week_48, client_admin):
     """Test GET /edit route shows editable input fields with current dish names."""
     response = client_admin.get(
@@ -103,6 +227,30 @@ def test_get_edit_route_shows_input_fields(seeded_week_48, client_admin):
     assert "Fiskgratäng" in html
     assert "Glass" in html
     assert "Smörgåsar" in html
+
+
+def test_edit_route_uses_app_shell_cards_and_primary_save(seeded_week_48, client_admin):
+    """Edit page should use app-shell card UI hooks and single primary save action."""
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/48/edit",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    # App-shell migration hooks
+    assert 'class="app-shell__card menu-editor-card menu-editor-card--status"' in html
+    assert 'data-menu-editor-edit="1"' in html
+    assert 'menu-editor-day-card' in html
+
+    # Single save action semantics
+    assert '>Spara<' in html
+    assert 'class="yp-btn yp-btn-primary"' in html
+
+    # Legacy inline white style block should be gone
+    assert '<style>' not in html
+    assert 'background-color: #f5f5f5' not in html
 
 
 def test_get_edit_route_missing_menu_redirects(app_session, client_admin):
@@ -180,7 +328,7 @@ def test_post_save_shows_success_message(seeded_week_48, client_admin):
     
     assert response.status_code == 200
     html = response.data.decode('utf-8')
-    assert "uppdaterad" in html.lower() or "sparade" in html.lower()
+    assert "Sparat ✓" in html
 
 
 def test_week_view_shows_updated_dish(seeded_week_48, client_admin):
@@ -216,7 +364,7 @@ def test_week_view_shows_updated_dish(seeded_week_48, client_admin):
 
 
 def test_week_view_has_edit_button(seeded_week_48, client_admin):
-    """Test that week view has 'Redigera meny' button."""
+    """Test that week view has 'Redigera' button."""
     response = client_admin.get(
         "/ui/admin/menu-import/week/2025/48",
         headers=ADMIN_HEADERS
@@ -226,8 +374,88 @@ def test_week_view_has_edit_button(seeded_week_48, client_admin):
     html = response.data.decode('utf-8')
     
     # Check for edit button
-    assert "Redigera meny" in html
-    assert "/ui/admin/menu-import/week/2025/48/edit" in html
+    assert "Redigera" in html
+    assert "/ui/admin/menu-import/week/2025/48?edit=1" in html
+    assert "/ui/admin/menu-import/week/2025/48/edit" not in html
+
+
+def test_week_view_read_only_default_has_no_inputs_and_swedish_labels(seeded_week_48, client_admin):
+    """Default week page should be read-only with Swedish labels and no input fields."""
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/48",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "Meny - vecka 48/2025" in html
+    assert "Veckomeny" in html
+    assert "Måndag" in html
+    assert "Lördag" in html
+    assert "Söndag" in html
+    assert "menu-day-row" in html
+    assert 'name="Måndag_Lunch_alt1"' not in html
+    assert "menu-editor-input" not in html
+
+
+def test_week_view_edit_mode_shows_inputs_save_and_cancel(seeded_week_48, client_admin):
+    """Edit mode should render editable fields and save/cancel actions on same route."""
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/48?edit=1",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert 'name="Måndag_Lunch_alt1"' in html
+    assert 'name="Måndag_Lunch_alt2"' in html
+    assert 'name="Måndag_Lunch_dessert"' in html
+    assert 'name="Måndag_Kväll_kvall"' in html
+    assert ">Spara<" in html
+    assert "Avbryt" in html
+    assert "/ui/admin/menu-import/week/2025/48/save" in html
+    assert 'href="/ui/admin/menu-import/week/2025/48"' in html
+    assert "/ui/admin/menu-import/week/2025/48/edit" not in html
+
+
+def test_week_view_edit_mode_has_tight_day_row_grid_selectors(seeded_week_48, client_admin):
+    """Edit mode should render row hooks for tight label/input grid layout."""
+    response = client_admin.get(
+        "/ui/admin/menu-import/week/2025/48?edit=1",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "menu-day-row" in html
+    assert "menu-editor-edit-row" in html
+    assert "menu-editor-meal-type" in html
+    assert "menu-editor-input" in html
+
+
+def test_post_save_from_edit_mode_redirects_to_read_only_with_success_banner(seeded_week_48, client_admin):
+    """Saving from edit mode should redirect back to read-only week page with success banner."""
+    response = client_admin.post(
+        "/ui/admin/menu-import/week/2025/48/save?edit=1",
+        data={
+            "Måndag_Lunch_alt1": "Pyttipanna",
+            "Måndag_Lunch_alt2": "Fiskgratäng",
+            "Måndag_Lunch_dessert": "Glass",
+            "Måndag_Kväll_kvall": "Smörgåsar",
+        },
+        headers=ADMIN_HEADERS,
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "Sparat ✓" in html
+    assert 'name="Måndag_Lunch_alt1"' not in html
+    assert "/ui/admin/menu-import/week/2025/48?edit=1" in html
 
 
 def test_save_allows_empty_dishes(seeded_week_48, client_admin):
@@ -307,3 +535,90 @@ def test_save_trims_whitespace(seeded_week_48, client_admin):
         assert result[0] == "Pasta med sås"  # Trimmed
     finally:
         db.close()
+
+
+def test_week_view_renders_imported_dishes_for_2026_w11(seeded_imported_week_11, client_admin_imported):
+    """Read-only week view should render imported dish names (not only placeholder dashes)."""
+    response = client_admin_imported.get(
+        "/ui/admin/menu-import/week/2026/11",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "Veckomeny" in html
+    assert "Måndag" in html
+    assert "Lunch alt 1" in html
+    assert "Lunch alt 2" in html
+    assert "Dessert" in html
+    assert "Middag" in html
+    assert "Lasagne" in html
+    assert "Fiskgryta" in html
+    assert "Chokladpudding" in html
+    assert "Köttsoppa" in html
+
+
+def test_week_view_edit_mode_prefills_imported_values_for_2026_w11(seeded_imported_week_11, client_admin_imported):
+    """Edit mode should prefill inputs with existing imported values for same week route."""
+    response = client_admin_imported.get(
+        "/ui/admin/menu-import/week/2026/11?edit=1",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert 'name="Måndag_Lunch_alt1"' in html
+    assert 'value="Lasagne"' in html
+    assert 'name="Måndag_Kväll_kvall"' in html
+    assert 'value="Köttsoppa"' in html
+    assert "/ui/admin/menu-import/week/2026/11/edit" not in html
+
+
+def test_week_picker_shows_cross_year_options_and_status_chips(seeded_week_nav_cross_year):
+    """Picker should render imported cross-year week options with status chips."""
+    response = seeded_week_nav_cross_year.get(
+        "/ui/admin/menu-import/week/2026/1",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert 'data-testid="menu-week-picker"' in html
+    assert 'id="menu-week-picker-dropdown"' in html
+    assert "Vecka 1 / 2026" in html
+    assert 'data-url="/ui/admin/menu-import/week/2025/52"' in html
+    assert 'data-url="/ui/admin/menu-import/week/2026/1"' in html
+    assert 'data-url="/ui/admin/menu-import/week/2026/2"' in html
+    assert "PUBLICERAD" in html
+    assert "UTKAST" in html
+
+
+def test_week_nav_disables_left_on_first_imported_week(seeded_week_nav_cross_year):
+    """First imported week should disable previous-arrow and keep next-arrow enabled."""
+    response = seeded_week_nav_cross_year.get(
+        "/ui/admin/menu-import/week/2025/52",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert re.search(r'data-week-nav="prev"[^>]*disabled', html)
+    assert re.search(r'data-week-nav="next"(?![^>]*disabled)', html)
+
+
+def test_week_nav_disables_right_on_last_imported_week(seeded_week_nav_cross_year):
+    """Last imported week should disable next-arrow and keep previous-arrow enabled."""
+    response = seeded_week_nav_cross_year.get(
+        "/ui/admin/menu-import/week/2026/2",
+        headers=ADMIN_HEADERS,
+    )
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert re.search(r'data-week-nav="next"[^>]*disabled', html)
+    assert re.search(r'data-week-nav="prev"(?![^>]*disabled)', html)

@@ -34,7 +34,7 @@
             {% endif %}
         </div>
         <div class="admin-actions-group">
-            <a href="{{ url_for('admin_ui.admin_menu_import_week_edit', year=year, week=week) }}" class="admin-btn-primary">Redigera meny</a>
+            <a href="{{ url_for('admin_ui.admin_menu_import_week', year=year, week=week, edit=1) }}" class="admin-btn-primary">Redigera meny</a>
             
             {% if menu_status == 'draft' %}
                 <form action="{{ url_for('admin_ui.admin_menu_import_week_publish', year=year, week=week) }}" method="POST" class="admin-form-protect" style="display: inline;">

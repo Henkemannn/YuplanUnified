@@ -1,66 +1,159 @@
-{% from 'macros/admin_menu.html' import render_flash_messages, render_status_banner %}
 {% extends "ui/unified_admin_base.html" %}
-{% block admin_title %}Meny Vecka {{ vm.week }}/{{ vm.year }}{% endblock %}
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% block admin_title %}Meny - vecka {{ vm.week }}/{{ vm.year }}{% endblock %}
+{% block admin_subtitle %}<span class="menu-week__site-chip">{{ vm.site_name or current_site_name or '-' }}</span>{% endblock %}
+{% block admin_context_meta %}{% endblock %}
+{% block admin_week_meta %}
+    <div class="menu-week-picker" data-testid="menu-week-picker">
+        <button
+            type="button"
+            class="yp-icon-btn yp-btn-secondary menu-week-picker__icon-btn js-week-prev"
+            data-week-nav="prev"
+            aria-label="Föregående importerade vecka"
+            {% if not vm.week_nav_has_prev %}disabled{% endif %}
+        >◀</button>
+
+        <button
+            type="button"
+            class="yp-btn yp-btn-secondary menu-week-picker__current js-week-dropdown-toggle"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="menu-week-picker-dropdown"
+        >Vecka {{ vm.week }} / {{ vm.year }} ▾</button>
+
+        <button
+            type="button"
+            class="yp-icon-btn yp-btn-secondary menu-week-picker__icon-btn js-week-next"
+            data-week-nav="next"
+            aria-label="Nästa importerade vecka"
+            {% if not vm.week_nav_has_next %}disabled{% endif %}
+        >▶</button>
+
+        <div id="menu-week-picker-dropdown" class="menu-week-picker__dropdown js-week-dropdown" hidden>
+            {% for item in vm.available_weeks %}
+                <a
+                    href="{{ item.url }}"
+                    class="menu-week-picker__item{% if item.year == vm.year and item.week == vm.week %} is-active{% endif %}"
+                    data-year="{{ item.year }}"
+                    data-week="{{ item.week }}"
+                    data-url="{{ item.url }}"
+                >
+                    <span class="menu-week-picker__item-label">Vecka {{ item.week }} / {{ item.year }}</span>
+                    <span class="menu-week-picker__status-chip {% if item.status == 'PUBLICERAD' %}menu-status-chip--published{% else %}menu-status-chip--draft{% endif %}">{{ item.status }}</span>
+                </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script type="application/json" id="js-available-weeks">{{ vm.available_weeks|tojson }}</script>
+    <script type="application/json" id="js-current-week-key">{{ vm.current_week_key|tojson }}</script>
+{% endblock %}
+{% block admin_head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/menu_editor.css') }}">
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='ui/admin_menu_week_picker.js') }}" defer></script>
 {% endblock %}
 {% block admin_main %}
-    <section class="ua-section">
-        <div class="ua-card">
-            <h1>Meny för vecka {{ vm.week }}, {{ vm.year }}</h1>
-            <p class="admin-intro">Importera och granska veckomeny. Backendfält och texter bibehålls.</p>
-        </div>
-    </section>
+    {% set is_edit_mode = vm.edit_mode if vm.edit_mode is defined else false %}
+    {% set slot_order = vm.slot_order if vm.slot_order is defined else ['lunch_alt1', 'lunch_alt2', 'dessert', 'dinner'] %}
 
-    <section class="ua-section">
-        <div class="ua-card">
-            {{ render_status_banner(vm.menu_status, vm.year, vm.week, vm.etag, csrf_token_input()) }}
-        </div>
-    </section>
+    {% if is_edit_mode %}
+        <form id="menu-edit-form" action="{{ url_for('admin_ui.admin_menu_import_week_save', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect">
+            {{ csrf_token_input() | safe }}
+            <input type="hidden" name="_etag" value="{{ vm.etag }}">
+        </form>
+    {% endif %}
 
-    <section class="ua-section">
-        <div class="ua-card">
-            {{ render_flash_messages() }}
-        </div>
-    </section>
-
-    {% if vm.days %}
-        {% for day_name, meals in vm.days.items() %}
-            <section class="ua-section">
-                <div class="ua-card">
-                    <h2>{{ day_name }}</h2>
-                    {% if meals %}
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Måltid</th>
-                                    <th>Variant</th>
-                                    <th>Rätt</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for meal_name, variants in meals.items() %}
-                                    {% for variant_type, info in variants.items() %}
-                                        <tr>
-                                            <td>{{ meal_name }}</td>
-                                            <td>{{ variant_type }}</td>
-                                            <td>{{ info.dish_name or '—' }}</td>
-                                        </tr>
-                                    {% endfor %}
-                                {% endfor %}
-                            </tbody>
-                        </table>
+    <section class="menu-week__grid menu-editor-grid">
+        <article class="app-shell__card menu-editor-card menu-week__status admin-status-banner">
+            <div class="menu-editor-card__header">
+                <h2 class="app-shell__card-title">Status</h2>
+            </div>
+            <div class="menu-editor-status">
+                <div>
+                    <span class="menu-week__status-label">Status:</span>
+                    {% if vm.menu_status == 'published' %}
+                        <span class="menu-editor-badge is-published">Publicerad</span>
                     {% else %}
-                        <p style="color: #666; font-style: italic;">Ingen menydata för denna dag.</p>
+                        <span class="menu-editor-badge is-draft">Utkast</span>
                     {% endif %}
                 </div>
-            </section>
-        {% endfor %}
-    {% else %}
-        <section class="ua-section">
-            <div class="ua-card">
-                <p style="color: #666; font-style: italic;">Ingen menydata tillgänglig för denna vecka.</p>
+                {% if is_edit_mode %}
+                    <p class="menu-week__help-text">Redigeringsläge aktivt. Spara ändringar och gå tillbaka till översikten för att publicera.</p>
+                    <div class="menu-editor-actions menu-editor-actions--edit admin-actions-group">
+                        <button type="submit" form="menu-edit-form" class="yp-btn yp-btn-primary">Spara</button>
+                        <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week) }}" class="yp-btn yp-btn-secondary">Avbryt</a>
+                    </div>
+                {% else %}
+                    <p class="menu-week__help-text">Granska menyn. Redigera vid behov och publicera när den är klar för matval och köksproduktion.</p>
+                    <div class="menu-editor-actions menu-editor-actions--status admin-actions-group">
+                        {% if vm.menu_status == 'draft' %}
+                            <form action="{{ url_for('admin_ui.admin_menu_import_week_publish', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect menu-editor-inline-form">
+                                {{ csrf_token_input() | safe }}
+                                <input type="hidden" name="_etag" value="{{ vm.etag }}">
+                                <button type="submit" class="yp-btn yp-btn-primary">Publicera</button>
+                            </form>
+                        {% elif vm.menu_status == 'published' %}
+                            <form action="{{ url_for('admin_ui.admin_menu_import_week_unpublish', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect menu-editor-inline-form">
+                                {{ csrf_token_input() | safe }}
+                                <input type="hidden" name="_etag" value="{{ vm.etag }}">
+                                <button type="submit" class="yp-btn yp-btn-primary">Återgå till utkast</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                    <div class="menu-editor-actions menu-editor-actions--page admin-actions-group">
+                        <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week, edit=1) }}" class="yp-btn yp-btn-secondary">Redigera</a>
+                        <a href="{{ url_for('admin_ui.admin_menu_import') }}" class="yp-btn yp-btn-secondary">Tillbaka</a>
+                    </div>
+                {% endif %}
             </div>
-        </section>
-    {% endif %}
+        </article>
+
+        <article class="app-shell__card menu-editor-card">
+            <div class="menu-editor-card__header">
+                <h2 class="app-shell__card-title">Veckomeny</h2>
+            </div>
+
+            <div class="menu-editor-days">
+                {% for day_row in vm.day_rows %}
+
+                    <section class="menu-editor-day-card">
+                        <h3 class="menu-editor-day-title">{{ day_row.day_label }}</h3>
+
+                        {% if is_edit_mode %}
+                            <div class="menu-editor-edit-rows">
+                                {% for slot_key in slot_order %}
+                                    {% set slot = day_row.slots.get(slot_key, {}) %}
+                                    <div class="menu-editor-edit-row menu-day-row">
+                                        <label class="menu-editor-meal-type" for="dish-{{ day_row.day_label|replace('å','a')|replace('ä','a')|replace('ö','o')|replace('Å','A')|replace('Ä','A')|replace('Ö','O')|lower }}-{{ slot_key }}">{{ slot.get('label', '-') }}</label>
+                                        <input
+                                            id="dish-{{ day_row.day_label|replace('å','a')|replace('ä','a')|replace('ö','o')|replace('Å','A')|replace('Ä','A')|replace('Ö','O')|lower }}-{{ slot_key }}"
+                                            class="yp-input menu-editor-input"
+                                            type="text"
+                                            form="menu-edit-form"
+                                            name="{{ slot.get('field_name', '') }}"
+                                            value="{{ slot.get('dish_name', '') }}"
+                                            placeholder="Ange rätt"
+                                        >
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="menu-editor-meals">
+                                {% for slot_key in slot_order %}
+                                    {% set slot = day_row.slots.get(slot_key, {}) %}
+                                    <div class="menu-editor-meal-row menu-day-row">
+                                        <div class="menu-editor-meal-type">{{ slot.get('label', '-') }}</div>
+                                        <div class="menu-editor-meal-dish menu-editor-readonly-field">{{ slot.get('dish_name') or '—' }}</div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </section>
+                {% endfor %}
+            </div>
+        </article>
+    </section>
 {% endblock %}
