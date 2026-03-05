@@ -62,4 +62,5 @@ def test_planering_renders_active_chips_from_db(app_session):
     html = rv.data.decode("utf-8")
     # Ensure Alt 1 group present and at least one active chip rendered
     assert 'aria-label="Specialkoster – Alt 1"' in html
-    assert 'class="diet-chip active"' in html
+    assert 'js-normal-chip' in html
+    assert 'js-normal-chip active' in html

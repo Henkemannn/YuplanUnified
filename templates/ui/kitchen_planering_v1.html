@@ -170,7 +170,7 @@
 
           <!-- Formulär steg 3 enligt läge -->
           {% if cur_mode == 'special' %}
-            <div class="kp-card kp-mb-12">
+            <div class="kp-card kp-mb-12 specialkost-view">
               <div class="kp-heading kp-mb-8">Vilka specialkoster behöver anpassas för den här rätten?</div>
               {% if vm.special_summary and vm.special_summary.totals and vm.special_summary.totals|length > 0 %}
                 <div class="kp-chip-grid" data-mode="special" role="group" aria-label="Specialkoster att anpassa">
@@ -194,7 +194,7 @@
             </div>
           {% else %}
             {% if vm.selected_meal == 'lunch' %}
-              <div class="kp-card kp-mb-12">
+              <div class="kp-card kp-mb-12 normalkost-view">
                 <section class="menu-alternatives">
                   <div class="menu-alt alt1">
                     <h3>Alt 1</h3>
@@ -205,8 +205,8 @@
                         {% for opt in vm.diet_options %}
                           {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
                           {% if not is_unknown %}
-                            <button type="button"
-                                    class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
+                                <button type="button"
+                                  class="diet-chip js-normal-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
                                     data-alt="1"
                                     data-diet-id="{{ opt.diet_type_id }}"
                                     data-total-count="{{ opt.total_count }}">{{ opt.diet_type_name }}</button>
@@ -224,8 +224,8 @@
                         {% for opt in vm.diet_options %}
                           {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
                           {% if not is_unknown %}
-                            <button type="button"
-                                    class="diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('2') or [])) %}active{% endif %}"
+                                <button type="button"
+                                  class="diet-chip js-normal-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('2') or [])) %}active{% endif %}"
                                     data-alt="2"
                                     data-diet-id="{{ opt.diet_type_id }}"
                                     data-total-count="{{ opt.total_count }}">{{ opt.diet_type_name }}</button>
@@ -246,7 +246,7 @@
                 </div>
               </div>
             {% else %}
-              <div class="kp-card kp-mb-12">
+              <div class="kp-card kp-mb-12 normalkost-view">
                 <div class="menu-alt">
                   <input type="text" class="alt-dish-input" value="{{ vm.selected_meal == 'dinner' and (vm.header_menu.dinner or '') or (vm.header_menu.dessert or '') }}">
                   <div class="cannot-eat">
@@ -255,8 +255,8 @@
                       {% for opt in vm.diet_options %}
                         {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
                         {% if not is_unknown %}
-                          <button type="button"
-                                  class="kp-button diet-btn diet-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
+                            <button type="button"
+                              class="kp-button diet-btn diet-chip js-normal-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
                                   data-alt="1"
                                   data-diet-id="{{ opt.diet_type_id }}"
                                   data-diet-type-id="{{ opt.diet_type_id }}">{{ opt.diet_type_name }}</button>
@@ -270,7 +270,7 @@
           {% endif %}
 
           {% if cur_mode == 'special' %}
-            <div class="kp-card kp-mb-12">
+            <div class="kp-card kp-mb-12 specialkost-view">
               <div class="kp-worklist-header">
                 <h3>Specialkost – arbetslista</h3>
                 <div class="kp-worklist-actions">
@@ -316,6 +316,7 @@
           {% endif %}
 
           {% if cur_mode == 'normal' %}
+            <div class="normalkost-view">
             <h3>Normalkost – resultat</h3>
             {% if vm.normalkost_rows and vm.normalkost_rows|length > 0 %}
               {% if vm.selected_meal == 'lunch' %}
@@ -366,6 +367,7 @@
             {% else %}
               <p class="empty-text">Inga data för normalkost.</p>
             {% endif %}
+            </div>
           {% endif %}
             </div>
           {% endif %}

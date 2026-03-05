@@ -30,12 +30,14 @@
   }
 
   // In-memory UI-only state for normal-mode diet toggles
-  var cannotEat = { 1: new Set(), 2: new Set() };
+  var selectedChipsNormal = { 1: new Set(), 2: new Set() };
   // Alt group department IDs and per-department diet counts
   var altGroups = { alt1_dept_ids: [], alt2_dept_ids: [] };
   var dietCountsByDept = {};
   // Specialkost selection state
-  var selectedSpecialDietIds = new Set();
+  var selectedChipsSpecial = new Set();
+  var isSpecialChipHandlerBound = false;
+  var isNormalChipHandlerBound = false;
   var specialSummary = { totals: [], per_department: [] };
   var specialById = {};
   var specialPerDept = [];
@@ -101,7 +103,7 @@
       var key = getStorageKey();
       if(!key || !window.localStorage) return;
       var state = {
-        selected_diets: Array.from(selectedSpecialDietIds),
+        selected_diets: Array.from(selectedChipsSpecial),
         inputs: {
           alt1: getTextValue('#kp-what-alt1') || '',
           alt2: getTextValue('#kp-what-alt2') || '',
@@ -153,14 +155,11 @@
     try {
       var ctx = qs('#kp-context');
       if(!ctx) return 0;
-      var selected = parseSelectedDiets();
-      var isSelected = function(id){ return selected.indexOf(String(id)) !== -1; };
       var deptIds = alt === 2 ? (altGroups.alt2_dept_ids || []) : (altGroups.alt1_dept_ids || []);
-      var diets = Array.from((cannotEat[alt] || new Set()));
+      var diets = Array.from((selectedChipsNormal[alt] || new Set()));
       var s = 0;
       for(var d=0; d<diets.length; d++){
         var dietId = String(diets[d]);
-        if(isSelected(dietId)) continue; // adapted specials are excluded from normal
         for(var j=0; j<deptIds.length; j++){
           var deptId = String(deptIds[j]);
           var m = dietCountsByDept && dietCountsByDept[deptId];
@@ -175,7 +174,7 @@
 
   function getExcludedForDepartment(alt, departmentId){
     try {
-      var diets = Array.from((cannotEat[alt] || new Set()));
+      var diets = Array.from((selectedChipsNormal[alt] || new Set()));
       var deptKey = String(departmentId || '');
       var perDept = null;
       if(specialPerDept && specialPerDept.length > 0){
@@ -370,7 +369,7 @@
     var empty = qs('#kp-special-selected-empty');
     if(!list || !empty) return;
     list.innerHTML = '';
-    var selected = Array.from(selectedSpecialDietIds);
+    var selected = Array.from(selectedChipsSpecial);
     if(!specialPerDept || specialPerDept.length === 0){
       var groups = qsa('#kp-special-worklist .kp-worklist-group');
       if(selected.length === 0){
@@ -380,7 +379,7 @@
         empty.style.display = 'none';
         groups.forEach(function(group){
           var id = String(group.getAttribute('data-diet-id') || '');
-          group.style.display = selectedSpecialDietIds.has(id) ? '' : 'none';
+          group.style.display = selectedChipsSpecial.has(id) ? '' : 'none';
         });
       }
       updateBulkButtonState();
@@ -405,7 +404,7 @@
       for(var j=0;j<dep.items.length;j++){
         var row = dep.items[j];
         var dietId = String(row.diet_type_id);
-        if(selectedSpecialDietIds.has(dietId) && specialById[dietId]){
+        if(selectedChipsSpecial.has(dietId) && specialById[dietId]){
           if(!byDiet[dietId]){ byDiet[dietId] = []; }
           byDiet[dietId].push({
             department_id: dep.department_id,
@@ -491,7 +490,7 @@
     var ctx = qs('#kp-context');
     if(!ctx) return null;
     var meal = ctx.getAttribute('data-meal') || '';
-    var selected = Array.from(selectedSpecialDietIds);
+    var selected = Array.from(selectedChipsSpecial);
     var rows = [];
     var totals = { alt1: 0, alt2: 0, total: 0 };
     if(!specialPerDept || specialPerDept.length === 0){
@@ -507,7 +506,7 @@
       for(var j=0;j<dep.items.length;j++){
         var row = dep.items[j];
         var dietId = String(row.diet_type_id);
-        if(selectedSpecialDietIds.has(dietId)){
+        if(selectedChipsSpecial.has(dietId)){
           deptTotal += parseInt(row.count || 0, 10) || 0;
         }
       }
@@ -593,14 +592,14 @@
       btn.textContent = btn.dataset.defaultLabel;
       btn.dataset.success = '0';
     }
-    btn.disabled = (selectedSpecialDietIds.size === 0);
+    btn.disabled = (selectedChipsSpecial.size === 0);
   }
 
   function renderDeptSummary(){
     var body = qs('#dept-summary-body');
     if(!body) return;
     body.innerHTML = '';
-    var selected = Array.from(selectedSpecialDietIds);
+    var selected = Array.from(selectedChipsSpecial);
     if(selected.length === 0){
       var empty = document.createElement('div');
       empty.className = 'empty-text';
@@ -615,7 +614,7 @@
       for(var j=0;j<dep.items.length;j++){
         var row = dep.items[j];
         var dietId = String(row.diet_type_id);
-        if(selectedSpecialDietIds.has(dietId) && specialById[dietId]){
+        if(selectedChipsSpecial.has(dietId) && specialById[dietId]){
           items.push({
             diet_type_id: dietId,
             diet_type_name: specialById[dietId].name,
@@ -859,7 +858,7 @@
         var sum = 0;
         for(var j=0; j<dep.items.length; j++){
           var row = dep.items[j];
-          if(selectedSpecialDietIds.has(String(row.diet_type_id))){
+          if(selectedChipsSpecial.has(String(row.diet_type_id))){
             sum += row.count;
           }
         }
@@ -1009,8 +1008,11 @@
   function initSpecialChips(){
     var ctx = qs('#kp-context');
     if(!ctx) return;
-    var chips = qsa('.js-special-chip');
-    if(!chips.length) return;
+    var specialView = qs('.specialkost-view');
+    if(!specialView) return;
+    var chipGrid = specialView.querySelector('.kp-chip-grid[data-mode="special"]');
+    var chips = Array.prototype.slice.call(specialView.querySelectorAll('.js-special-chip'));
+    if(!chipGrid || !chips.length) return;
     // Build special summary maps
     specialSummary = parseSpecialSummary();
     specialById = {};
@@ -1058,26 +1060,62 @@
     } catch(e){ /* ignore */ }
 
     var initialSelected = parseSelectedDiets();
-    selectedSpecialDietIds = new Set((initialSelected || []).map(String));
+    selectedChipsSpecial = new Set((initialSelected || []).map(String));
     chips.forEach(function(btn){
       var id = String(btn.getAttribute('data-diet-id') || '');
-      var isActive = selectedSpecialDietIds.has(id);
+      var isActive = selectedChipsSpecial.has(id);
       if(isActive){ btn.classList.add('active'); }
       btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-      btn.addEventListener('click', function(){
-        if(selectedSpecialDietIds.has(id)){
-          selectedSpecialDietIds.delete(id);
+    });
+    if(!isSpecialChipHandlerBound){
+      chipGrid.addEventListener('click', function(e){
+        var btn = e.target && e.target.closest && e.target.closest('.js-special-chip');
+        if(!btn) return;
+        if(!btn.closest('.specialkost-view')) return;
+        var id = String(btn.getAttribute('data-diet-id') || '');
+        if(!id) return;
+        if(selectedChipsSpecial.has(id)){
+          selectedChipsSpecial.delete(id);
           btn.classList.remove('active');
           btn.setAttribute('aria-pressed', 'false');
         } else {
-          selectedSpecialDietIds.add(id);
+          selectedChipsSpecial.add(id);
           btn.classList.add('active');
           btn.setAttribute('aria-pressed', 'true');
         }
         renderSpecialSelectedList();
       });
-    });
+      isSpecialChipHandlerBound = true;
+    }
     renderSpecialSelectedList();
+  }
+
+  function clearNormalChipState(){
+    selectedChipsNormal = { 1: new Set(), 2: new Set() };
+    qsa('.normalkost-view .js-normal-chip').forEach(function(btn){
+      btn.classList.remove('active');
+    });
+  }
+
+  function clearSpecialChipState(){
+    selectedChipsSpecial = new Set();
+    qsa('.specialkost-view .js-special-chip').forEach(function(btn){
+      btn.classList.remove('active');
+      btn.setAttribute('aria-pressed', 'false');
+    });
+  }
+
+  function resetChipStateForMode(mode){
+    var next = String(mode || '').toLowerCase();
+    if(next === 'special'){
+      clearNormalChipState();
+      renderAllTotals();
+      return;
+    }
+    if(next === 'normal'){
+      clearSpecialChipState();
+      renderSpecialSelectedList();
+    }
   }
 
   function showToast(message){
@@ -1107,8 +1145,8 @@
         day_index: parseInt(ctx.getAttribute('data-day-index') || '0', 10),
         meal: ctx.getAttribute('data-meal')
       };
-      if(selectedSpecialDietIds.size > 0){
-        var selected = Array.from(selectedSpecialDietIds);
+      if(selectedChipsSpecial.size > 0){
+        var selected = Array.from(selectedChipsSpecial);
         payload.selected_diet_type_ids = selected;
         payload.diet_type_ids = selected;
       }
@@ -1154,8 +1192,10 @@
   // Mode change: radios without inline handlers
   function kpSetMode(mode){
     try {
+      resetChipStateForMode(mode);
       var url = new URL(window.location.href);
       url.searchParams.set('mode', mode);
+      url.searchParams.delete('selected_diets');
       window.location.href = url.toString();
     } catch(e){}
   }
@@ -1504,27 +1544,37 @@
         if(dc){ dietCountsByDept = JSON.parse(dc); }
       } catch(e){ dietCountsByDept = {}; }
     }
-    // Initialize cannotEat sets based on server-rendered state
-    qsa('.diet-chip.active, .diet-btn.active').forEach(function(btn){
-      var alt = Number(btn.getAttribute('data-alt'));
-      var dietId = btn.getAttribute('data-diet-id') || btn.getAttribute('data-diet-type-id');
-      if(!alt || !dietId) return;
-      var set = cannotEat[alt] || (cannotEat[alt] = new Set());
-      set.add(dietId);
-    });
+    if(initialMode === 'normal'){
+      var normalView = qs('.normalkost-view');
+      if(normalView){
+        Array.prototype.slice.call(normalView.querySelectorAll('.js-normal-chip.active')).forEach(function(btn){
+          var alt = Number(btn.getAttribute('data-alt'));
+          var dietId = btn.getAttribute('data-diet-id') || btn.getAttribute('data-diet-type-id');
+          if(!alt || !dietId) return;
+          var set = selectedChipsNormal[alt] || (selectedChipsNormal[alt] = new Set());
+          set.add(dietId);
+        });
+      }
+    } else {
+      clearNormalChipState();
+    }
     // Initial totals
     renderAllTotals();
-    // Initialize special chips and bulk-mark buttons once on load
-    initSpecialChips();
-    initBulkMarkButtons();
+    // Initialize special chips and bulk-mark buttons only in special mode
+    if(initialMode === 'special'){
+      initSpecialChips();
+      initBulkMarkButtons();
+    } else {
+      clearSpecialChipState();
+    }
     renderPrintContainer();
     updateModalPrintHeader();
     var state = loadPlaneringState();
     if(state && Array.isArray(state.selected_diets)){
-      selectedSpecialDietIds = new Set(state.selected_diets.map(String));
+      selectedChipsSpecial = new Set(state.selected_diets.map(String));
       qsa('.js-special-chip').forEach(function(btn){
         var id = String(btn.getAttribute('data-diet-id') || '');
-        var active = selectedSpecialDietIds.has(id);
+        var active = selectedChipsSpecial.has(id);
         btn.classList.toggle('active', active);
         btn.setAttribute('aria-pressed', active ? 'true' : 'false');
       });
@@ -1541,88 +1591,94 @@
         }
       }
     }
-    renderSpecialSelectedList();
+    if(initialMode === 'special'){
+      renderSpecialSelectedList();
+    }
     // Event delegation for diet-chip toggling (normal mode UI only)
-    document.addEventListener('click', function(e){
-      var btn = e.target && e.target.closest && e.target.closest('.diet-chip, .diet-btn');
-      if(!btn) return;
-      var alt = Number(btn.getAttribute('data-alt') || '1');
-      var dietId = btn.getAttribute('data-diet-id') || btn.getAttribute('data-diet-type-id');
-      if(!alt || !dietId) return;
-      var set = cannotEat[alt] || (cannotEat[alt] = new Set());
-      var wasActive = btn.classList.contains('active');
-      // Optimistic UI toggle
-      if(wasActive){
-        btn.classList.remove('active');
-        set.delete(dietId);
-      } else {
-        btn.classList.add('active');
-        set.add(dietId);
-      }
-      // Recalc after optimistic change
-      renderAllTotals();
-      // Build payload from context
-      var ctx = qs('#kp-context');
-      if(!ctx){ return; }
-      var qsParams = new URLSearchParams(window.location.search);
-      var siteId = qsParams.get('site_id') || (ctx && ctx.getAttribute('data-site-id')) || '';
-      var year = parseInt(qsParams.get('year') || ctx.getAttribute('data-year') || '0', 10);
-      var week = parseInt(qsParams.get('week') || ctx.getAttribute('data-week') || '0', 10);
-      var dayIndex = parseInt(ctx.getAttribute('data-day-index'), 10);
-      var meal = ctx.getAttribute('data-meal');
-      var payload = {
-        site_id: siteId,
-        year: year,
-        week: week,
-        day_index: dayIndex,
-        meal: meal,
-        alt: String(alt),
-        diet_type_id: dietId
-      };
-      var csrf = getCsrfToken();
-      var hdrs = { 'Content-Type': 'application/json' };
-      // Always send CSRF headers; backend will validate value
-      hdrs['X-CSRFToken'] = csrf;
-      hdrs['X-CSRF-Token'] = csrf;
-      fetch('/api/kitchen/planering/normal_exclusions/toggle', {
-        method: 'POST',
-        headers: hdrs,
-        credentials: 'same-origin',
-        body: JSON.stringify(payload)
-      })
-      .then(function(r){
-        if(!r.ok){
-          throw new Error('toggle_failed:' + r.status);
+    if(!isNormalChipHandlerBound){
+      document.addEventListener('click', function(e){
+        var btn = e.target && e.target.closest && e.target.closest('.js-normal-chip');
+        if(!btn) return;
+        if(!btn.closest('.normalkost-view')) return;
+        var alt = Number(btn.getAttribute('data-alt') || '1');
+        var dietId = btn.getAttribute('data-diet-id') || btn.getAttribute('data-diet-type-id');
+        if(!alt || !dietId) return;
+        var set = selectedChipsNormal[alt] || (selectedChipsNormal[alt] = new Set());
+        var wasActive = btn.classList.contains('active');
+        // Optimistic UI toggle
+        if(wasActive){
+          btn.classList.remove('active');
+          set.delete(dietId);
+        } else {
+          btn.classList.add('active');
+          set.add(dietId);
         }
-        return r.json().catch(function(){ return { excluded: btn.classList.contains('active') }; });
-      })
-      .then(function(resp){
-        var shouldActive = !!resp && !!resp.excluded;
-        var isActive = btn.classList.contains('active');
-        if(shouldActive !== isActive){
-          if(shouldActive){
+        // Recalc after optimistic change
+        renderAllTotals();
+        // Build payload from context
+        var ctx = qs('#kp-context');
+        if(!ctx){ return; }
+        var qsParams = new URLSearchParams(window.location.search);
+        var siteId = qsParams.get('site_id') || (ctx && ctx.getAttribute('data-site-id')) || '';
+        var year = parseInt(qsParams.get('year') || ctx.getAttribute('data-year') || '0', 10);
+        var week = parseInt(qsParams.get('week') || ctx.getAttribute('data-week') || '0', 10);
+        var dayIndex = parseInt(ctx.getAttribute('data-day-index'), 10);
+        var meal = ctx.getAttribute('data-meal');
+        var payload = {
+          site_id: siteId,
+          year: year,
+          week: week,
+          day_index: dayIndex,
+          meal: meal,
+          alt: String(alt),
+          diet_type_id: dietId
+        };
+        var csrf = getCsrfToken();
+        var hdrs = { 'Content-Type': 'application/json' };
+        // Always send CSRF headers; backend will validate value
+        hdrs['X-CSRFToken'] = csrf;
+        hdrs['X-CSRF-Token'] = csrf;
+        fetch('/api/kitchen/planering/normal_exclusions/toggle', {
+          method: 'POST',
+          headers: hdrs,
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        })
+        .then(function(r){
+          if(!r.ok){
+            throw new Error('toggle_failed:' + r.status);
+          }
+          return r.json().catch(function(){ return { excluded: btn.classList.contains('active') }; });
+        })
+        .then(function(resp){
+          var shouldActive = !!resp && !!resp.excluded;
+          var isActive = btn.classList.contains('active');
+          if(shouldActive !== isActive){
+            if(shouldActive){
+              btn.classList.add('active');
+              set.add(dietId);
+            } else {
+              btn.classList.remove('active');
+              set.delete(dietId);
+            }
+          }
+          // Recalc in case server reconciled differently
+          renderAllTotals();
+        })
+        .catch(function(){
+          // Revert to previous state on error
+          if(wasActive){
             btn.classList.add('active');
             set.add(dietId);
           } else {
             btn.classList.remove('active');
             set.delete(dietId);
           }
-        }
-        // Recalc in case server reconciled differently
-        renderAllTotals();
-      })
-      .catch(function(){
-        // Revert to previous state on error
-        if(wasActive){
-          btn.classList.add('active');
-          set.add(dietId);
-        } else {
-          btn.classList.remove('active');
-          set.delete(dietId);
-        }
-        renderAllTotals();
+          renderAllTotals();
+        });
       });
-    });
+      isNormalChipHandlerBound = true;
+    }
     qsa('.kp-what-input, .alt-dish-input').forEach(function(input){
       input.addEventListener('input', function(){
         savePlaneringState();
