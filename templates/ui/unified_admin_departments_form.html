@@ -85,10 +85,14 @@
                 <p class="yp-form-help">Normalt antal (fast). Denna vecka kan vara varierad.</p>
             </div>
             {% if vm.weekly_table %}
-            <div class="ua-effective-week" style="margin-top:6px;">
-                <p class="ua-muted" style="margin:0 0 4px;">Denna vecka: <strong>Varierat</strong></p>
-                <table class="ua-table ua-table-compact">
-                    <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
+            <div class="ua-effective-week admin-weekly-preview">
+                <p class="ua-muted admin-weekly-preview__status">Denna vecka: <strong>Varierat</strong></p>
+                <table class="ua-table ua-table-compact admin-weekly-preview__table">
+                    <tr>
+                        <th>Dag</th>
+                        <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span></th>
+                        <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
+                    </tr>
                     {% for row in vm.weekly_table %}
                     <tr>
                         <td>{{ row.weekday }}</td>
@@ -200,10 +204,14 @@
                            placeholder="0">
                     <p class="yp-form-help">Normalt antal (fast). Denna vecka kan vara varierad.</p>
                     {% if vm.weekly_table %}
-                    <div class="ua-effective-week" style="margin-top:6px;">
-                        <p class="ua-muted" style="margin:0 0 4px;">Denna vecka: <strong>Varierat</strong></p>
-                        <table class="ua-table ua-table-compact">
-                            <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
+                    <div class="ua-effective-week admin-weekly-preview">
+                        <p class="ua-muted admin-weekly-preview__status">Denna vecka: <strong>Varierat</strong></p>
+                        <table class="ua-table ua-table-compact admin-weekly-preview__table">
+                            <tr>
+                                <th>Dag</th>
+                                <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span></th>
+                                <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
+                            </tr>
                             {% for row in vm.weekly_table %}
                             <tr>
                                 <td>{{ row.weekday }}</td>
@@ -264,19 +272,30 @@
 
 <!-- Modal: Varierat boendeantal (edit form) -->
 {% if vm.mode == 'edit' and vm.department %}
-<dialog id="residents-variation-modal" class="ua-modal">
-    <div class="ua-modal-inner">
-        <header class="ua-modal-header">
-            <h2>👥 Varierat boendeantal – {{ vm.department.name }}</h2>
-            <button type="button" class="ua-modal-close" data-modal-close>&times;</button>
+<dialog id="residents-variation-modal" class="ua-modal admin-variation-modal">
+    <div class="ua-modal-inner admin-variation-modal__inner">
+        <header class="ua-modal-header admin-variation-modal__header">
+            <div class="admin-variation-modal__title-wrap">
+                <h2 class="admin-variation-modal__title">Varierat boendeantal</h2>
+                <p class="admin-variation-modal__subtitle">Mån-Sön · Lunch/Kväll</p>
+                <span class="admin-detail-site-chip admin-variation-modal__dept-chip">{{ vm.department.name }}</span>
+            </div>
+            <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
         </header>
-        <div class="ua-modal-body">
-            <form id="residents-variation-form" method="post" action="{{ url_for('ui.admin_department_save_variation', department_id=vm.department.id) }}">
+        <div class="ua-modal-body admin-variation-modal__body">
+            <form id="residents-variation-form" method="post" action="{{ url_for('ui.admin_department_save_variation', department_id=vm.department.id) }}" class="admin-variation-modal__form">
                 {{ csrf_token_input()|safe }}
-                <p class="ua-muted">Mån–Sön × Lunch/Kväll</p>
                 <input type="hidden" name="selected_week" value="{{ vm.selected_week if vm.selected_week else (vm.current_week if vm.current_week else 1) }}">
-                <table class="ua-table">
-                    <tr><th>Dag</th><th>Lunch</th><th>Kväll</th></tr>
+                <table class="ua-table admin-variation-table">
+                    <tr>
+                        <th>Dag</th>
+                        <th>
+                            <span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span>
+                        </th>
+                        <th>
+                            <span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span>
+                        </th>
+                    </tr>
                     {% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
                     {% for dow in range(1,8) %}
                         {% set lunch_default = vm.department.resident_count_fixed %}
@@ -287,40 +306,55 @@
                         {% endif %}
                         <tr>
                             <td>{{ day_names[dow-1] }}</td>
-                            <td><input type="number" name="day_{{ dow }}_lunch" value="{{ lunch_default }}" min="0" class="ua-input"></td>
-                            <td><input type="number" name="day_{{ dow }}_dinner" value="{{ dinner_default }}" min="0" class="ua-input"></td>
+                            <td><input type="number" name="day_{{ dow }}_lunch" value="{{ lunch_default }}" min="0" class="yp-input admin-variation-input"></td>
+                            <td><input type="number" name="day_{{ dow }}_dinner" value="{{ dinner_default }}" min="0" class="yp-input admin-variation-input"></td>
                         </tr>
                     {% endfor %}
                 </table>
-                <fieldset class="ua-fieldset">
-                    <legend>Gäller</legend>
-                    <label><input type="radio" name="mode" value="week" checked> Endast för vecka
-                        <select name="selected_week_override">
-                            {% for w in range(1,53) %}
-                                <option value="{{ w }}" {% if vm.selected_week and w == vm.selected_week %}selected{% endif %}>{{ w }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <label><input type="radio" name="mode" value="forever"> Tills vidare</label>
-                </fieldset>
+
+                <section class="admin-variation-scope" aria-label="Gäller">
+                    <div class="admin-variation-scope__row">
+                        <h3 class="admin-variation-scope__title">Gäller:</h3>
+                        <div class="admin-variation-scope__options">
+                            <label class="admin-variation-scope__option admin-variation-scope__option--week">
+                                <input type="radio" name="mode" value="week" checked>
+                                <span>Endast för vecka</span>
+                                <select name="selected_week_override" class="yp-input admin-variation-week-select">
+                                    {% for w in range(1,53) %}
+                                        <option value="{{ w }}" {% if vm.selected_week and w == vm.selected_week %}selected{% endif %}>{{ w }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <label class="admin-variation-scope__option admin-variation-scope__option--forever">
+                                <input type="radio" name="mode" value="forever">
+                                <span>Tills vidare</span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
                 <input type="hidden" name="return_to" value="edit">
             </form>
         </div>
-        <footer class="ua-modal-footer">
-            <button type="button" class="ua-button ua-button-ghost" data-modal-close>Avbryt</button>
+        <footer class="ua-modal-footer admin-variation-modal__footer">
+            <button type="button" class="yp-button yp-button-secondary" data-modal-close>Avbryt</button>
             <button type="submit" form="residents-variation-form" class="yp-button yp-button-primary">Spara</button>
         </footer>
     </div>
 </dialog>
 
-<dialog id="alt2Modal" class="ua-modal">
-    <div class="ua-modal-inner">
-        <header class="ua-modal-header">
-            <h2>🍽️ Menyval (Alt1/Alt2) – {{ vm.department.name }}</h2>
-            <button type="button" class="ua-modal-close" data-modal-close>&times;</button>
+<dialog id="alt2Modal" class="ua-modal admin-alt2-modal">
+    <div class="ua-modal-inner admin-alt2-modal__inner">
+        <header class="ua-modal-header admin-alt2-modal__header">
+            <div class="admin-alt2-modal__title-wrap">
+                <h2 class="admin-alt2-modal__title">Menyval</h2>
+                <p class="admin-alt2-modal__subtitle">Välj dagar för alternativ meny denna vecka.</p>
+                <span class="admin-detail-site-chip admin-alt2-modal__dept-chip">{{ vm.department.name }}</span>
+            </div>
+            <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
         </header>
-        <div class="ua-modal-body">
-            <form class="ua-form" onsubmit="return false;">
+        <div class="ua-modal-body admin-alt2-modal__body">
+            <form class="ua-form admin-alt2-modal__filters" onsubmit="return false;">
                 <input type="hidden" id="alt2-days" name="alt2_days" value="">
                 <div class="ua-grid ua-grid-2cols">
                     <div>
@@ -333,7 +367,7 @@
                     </div>
                 </div>
             </form>
-            <div id="alt2ModalBody" style="margin-top:12px;">
+            <div id="alt2ModalBody" class="admin-alt2-modal__days-wrap">
                 <div class="ua-badges alt2-toggles">
                     <button type="button" class="alt2-day js-alt2-day" data-day="mon">Mån</button>
                     <button type="button" class="alt2-day js-alt2-day" data-day="tue">Tis</button>
@@ -345,7 +379,7 @@
                 </div>
             </div>
         </div>
-        <footer class="ua-modal-footer">
+        <footer class="ua-modal-footer admin-alt2-modal__footer">
             <span id="alt2-status" class="ua-muted" aria-live="polite"></span>
             <button type="button" id="alt2-save" class="yp-button yp-button-primary js-alt2-save">Spara</button>
             <button type="button" class="yp-button yp-button-secondary" data-modal-close>Stäng</button>
