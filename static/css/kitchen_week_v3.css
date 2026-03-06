@@ -1,6 +1,8 @@
 .kitchen-week {
   --kw-alt2-bg: var(--yp-alt2-bg);
+  --kw-alt2-fg: var(--yp-alt2-fg);
   --kw-border: var(--border-subtle);
+  --kw-day-sep: rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -43,6 +45,8 @@
   border-left: 4px solid var(--accent);
   border-radius: var(--r-sm);
   color: var(--text);
+  opacity: 0.8;
+  font-size: 0.9em;
   padding: 10px 12px;
   margin-bottom: 10px;
 }
@@ -88,15 +92,25 @@
 
 .kitchen-week .diet-name {
   text-align: left;
-  font-weight: 600;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--text) 92%, #ffffff 8%);
   min-width: 160px;
 }
 
 .kitchen-week .grid-table td.is-alt2,
 .kitchen-week .grid-table th.is-alt2,
 .kitchen-week .kw-cell.is-alt2 {
-  background: var(--kw-alt2-bg);
-  color: var(--yp-alt2-fg);
+  background: color-mix(in srgb, var(--kw-alt2-bg) 88%, var(--surface) 12%);
+  color: var(--kw-alt2-fg);
+}
+
+.kitchen-week .day-sep {
+  border-left: 1px solid var(--kw-day-sep) !important;
+}
+
+.kitchen-week .grid-table thead th.is-weekend,
+.kitchen-week .grid-subhead th.is-weekend {
+  background: color-mix(in srgb, var(--surface-2) 92%, rgba(255, 255, 255, 0.02));
 }
 
 .kitchen-week .kw-grid td:focus,
@@ -120,7 +134,7 @@
 }
 
 .kitchen-week .day-start {
-  border-left: 3px solid var(--kw-border);
+  border-left: 1px solid transparent;
 }
 
 .kitchen-week .kw-cell {
@@ -175,11 +189,35 @@
   pointer-events: none;
 }
 
+.app-shell--dark .kitchen-week {
+  --kw-alt2-bg: #c89a15;
+  --kw-alt2-fg: #241500;
+}
+
 .kitchen-week .menu-icon {
   background: transparent;
   border: 0;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.86rem;
+  opacity: 0.92;
+  transition: opacity 120ms ease;
+}
+
+.kitchen-week .menu-icon:hover,
+.kitchen-week .menu-icon:focus-visible {
+  opacity: 1;
+}
+
+.kitchen-week .yp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 

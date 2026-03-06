@@ -1,5 +1,16 @@
 /* Yuplan App Shell Prototype (scoped) */
 
+html,
+body {
+  margin: 0;
+  overflow-x: hidden;
+}
+
+.app-shell__nav a:hover,
+.app-shell__nav a:focus-visible {
+  text-decoration: none;
+}
+
 .app-shell {
   --yp-color-primary: #2563eb;
   --yp-color-primary-hover: #1d4ed8;
@@ -18,10 +29,6 @@
   --yp-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --yp-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --yp-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-.app-shell__nav a:hover,
-.app-shell__nav a:focus-visible {
-  text-decoration: none;
-}
   --yp-radius-sm: 0.25rem;
   --yp-radius: 0.5rem;
   --yp-radius-lg: 0.75rem;
@@ -58,8 +65,9 @@
   color: var(--text);
   background: var(--bg);
   min-height: 100vh;
-  margin: -8px;
-  padding: 8px;
+  margin: 0;
+  padding: 0;
+  overflow-x: clip;
   opacity: 0;
   transform: translateY(4px);
 }
@@ -188,7 +196,11 @@
 .app-shell__topbar-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 16px;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: min(72vw, 860px);
 }
 
 .app-shell__theme-toggle {
@@ -227,6 +239,10 @@
   border: 1px solid var(--border-subtle);
   background: var(--surface-2);
   color: var(--muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-shell__user-menu {
@@ -471,6 +487,7 @@
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   gap: 24px;
   padding: calc(var(--topbar-height) + 24px) 24px 32px;
+  min-width: 0;
 }
 
 .app-shell__sidebar {
@@ -559,6 +576,7 @@
   border-radius: calc(var(--r-lg) + 6px);
   padding: 24px 28px 32px;
   justify-items: center;
+  min-width: 0;
 }
 
 .app-shell__main > * {
@@ -598,6 +616,11 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
+  align-items: start;
+}
+
+.app-shell__grid > * {
+  min-width: 0;
 }
 
 .app-shell__card {
@@ -880,10 +903,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .remember-to-order__input {
   flex: 1;
+  min-width: 0;
   min-height: 36px;
   border-radius: var(--r-sm);
   border: 1px solid var(--yp-color-border);
@@ -894,6 +919,117 @@
 
 .app-shell--dark .remember-to-order__input {
   background: var(--surface-2);
+}
+
+.prep-notes-card .app-shell__card-body {
+  display: grid;
+  gap: 10px;
+}
+
+.prep-notes-card__subtitle {
+  color: color-mix(in srgb, var(--muted) 86%, transparent);
+}
+
+.prep-notes-card__badge {
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--muted) 72%, var(--accent));
+  background: color-mix(in srgb, var(--surface-2) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
+  font-weight: 600;
+}
+
+.prep-notes-list {
+  display: grid;
+  gap: 8px;
+  max-height: 190px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.prep-note-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 75%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+
+.prep-note-item__text {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.prep-note-item__text--bulleted::before {
+  content: "•";
+  display: inline-block;
+  margin-right: 8px;
+  color: color-mix(in srgb, var(--muted) 76%, transparent);
+}
+
+.prep-note-item__delete {
+  border: 1px solid color-mix(in srgb, var(--yp-color-danger) 28%, transparent);
+  color: color-mix(in srgb, var(--yp-color-danger) 78%, #fff);
+  background: color-mix(in srgb, var(--yp-color-danger-light) 65%, transparent);
+  cursor: pointer;
+}
+
+.prep-notes-empty {
+  opacity: 0.86;
+}
+
+.prep-notes-add-form {
+  display: grid;
+  gap: 6px;
+}
+
+.prep-notes-add-form__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.prep-notes-add-form__row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  align-items: center;
+}
+
+.prep-notes-add-form__row .yp-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.prep-notes-add-form__save {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface));
+  color: color-mix(in srgb, var(--accent) 78%, #0f172a);
+  box-shadow: none;
+}
+
+.prep-notes-add-form__save:hover {
+  background: color-mix(in srgb, var(--accent-soft) 90%, var(--surface));
+  transform: none;
+}
+
+.app-shell--dark .prep-notes-add-form__save {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--surface-2) 72%, var(--accent-soft));
+  color: rgba(235, 245, 255, 0.95);
 }
 
 .app-shell__card--coming {

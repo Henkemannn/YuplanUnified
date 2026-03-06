@@ -1942,6 +1942,18 @@ def kitchen_dashboard():
         except Exception:
             remember_items = []
     announcements = _build_dashboard_announcements(site_id, kitchen_only=True)
+    prep_notes = []
+    if site_id:
+        try:
+            from .prep_notes_repo import PrepNotesRepo
+
+            prep_notes = PrepNotesRepo().list_active_for_user(
+                str(site_id),
+                int(session.get("user_id")) if session.get("user_id") is not None else None,
+                limit=25,
+            )
+        except Exception:
+            prep_notes = []
     vm = {
         "today_formatted": today_formatted,
         "current_week": current_week,
@@ -1964,8 +1976,69 @@ def kitchen_dashboard():
         "remember_to_order_week_key": remember_week_key,
         "remember_to_order_can_check": False,
         "announcements": announcements,
+        "prep_notes": [
+            {
+                "id": it.id,
+                "text": it.text,
+                "created_at": it.created_at,
+            }
+            for it in prep_notes
+        ],
     }
     return render_template("ui/kitchen_dashboard.html", vm=vm)
+
+
+@ui_bp.post("/ui/kitchen/prep-notes/add")
+@require_roles(*SAFE_UI_ROLES)
+def kitchen_prep_note_add():
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/kitchen"))
+
+    note_text = str((request.form.get("text") or "").strip())
+    if not note_text:
+        flash("Skriv en anteckning först.", "error")
+        return redirect(url_for("ui.kitchen_dashboard"))
+
+    try:
+        from .prep_notes_repo import PrepNotesRepo
+
+        PrepNotesRepo().add(
+            str(site_id),
+            int(session.get("user_id")) if session.get("user_id") is not None else None,
+            note_text,
+        )
+        flash("Prepp-anteckning sparad.", "success")
+    except Exception:
+        flash("Kunde inte spara anteckningen.", "error")
+    return redirect(url_for("ui.kitchen_dashboard"))
+
+
+@ui_bp.post("/ui/kitchen/prep-notes/<int:note_id>/delete")
+@require_roles(*SAFE_UI_ROLES)
+def kitchen_prep_note_delete(note_id: int):
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/kitchen"))
+
+    try:
+        from .prep_notes_repo import PrepNotesRepo
+
+        ok = PrepNotesRepo().deactivate(
+            int(note_id),
+            str(site_id),
+            int(session.get("user_id")) if session.get("user_id") is not None else None,
+        )
+        flash("Anteckning borttagen." if ok else "Anteckningen hittades inte.", "success" if ok else "error")
+    except Exception:
+        flash("Kunde inte ta bort anteckningen.", "error")
+    return redirect(url_for("ui.kitchen_dashboard"))
 
 
 @ui_bp.route("/ui/admin/announcements", methods=["GET", "POST"])

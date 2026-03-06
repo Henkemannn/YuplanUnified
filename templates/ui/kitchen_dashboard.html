@@ -130,13 +130,41 @@
       </div>
     </article>
 
-      <article class="app-shell__card app-shell__card--coming">
+      <article class="app-shell__card prep-notes-card" data-testid="prep-notes-card">
       <div class="app-shell__card-header">
         <div>
           <h2 class="app-shell__card-title">Preppförslag</h2>
-          <p class="app-shell__card-text">Preppförslag och påminnelser från Planera 2.0 visas här.</p>
+          <p class="app-shell__card-text prep-notes-card__subtitle">Egen prepp-lista tills modulen är klar.</p>
         </div>
-        <span class="app-shell__badge">Under utveckling</span>
+        <span class="app-shell__badge prep-notes-card__badge">Tillfälligt</span>
+      </div>
+
+      <div class="app-shell__card-body">
+        {% set prep_notes = vm.prep_notes or [] %}
+        {% if prep_notes %}
+          <div class="prep-notes-list" role="list">
+            {% for note in prep_notes %}
+              <div class="prep-note-item" role="listitem">
+                <span class="prep-note-item__text prep-note-item__text--bulleted">{{ note.text }}</span>
+                <form method="POST" action="{{ url_for('ui.kitchen_prep_note_delete', note_id=note.id) }}">
+                  {{ csrf_token_input()|safe }}
+                  <button class="yp-pill prep-note-item__delete" type="submit">Ta bort</button>
+                </form>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="app-shell__card-text prep-notes-empty">Inga anteckningar ännu.</p>
+        {% endif %}
+
+        <form class="prep-notes-add-form" method="POST" action="{{ url_for('ui.kitchen_prep_note_add') }}">
+          {{ csrf_token_input()|safe }}
+          <label class="prep-notes-add-form__label" for="prep-note-text">Ny anteckning</label>
+          <div class="prep-notes-add-form__row">
+            <input id="prep-note-text" class="yp-input" type="text" name="text" maxlength="300" placeholder="Ex: Tina fisk till morgondagen" required>
+            <button class="app-shell__btn app-shell__btn--primary prep-notes-add-form__save" type="submit">Spara</button>
+          </div>
+        </form>
       </div>
     </article>
     </section>
