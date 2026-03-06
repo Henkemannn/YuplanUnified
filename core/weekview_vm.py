@@ -91,9 +91,11 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
             types = DietTypesRepo().list_all(site_id=site_id)
             name_by_id = {str(it["id"]): str(it["name"]) for it in types}
             allowed_diet_ids = {str(it["id"]) for it in types}
+            preselected_ids = {str(it["id"]) for it in types if bool(it.get("default_select"))}
         except Exception:
             name_by_id = {}
             allowed_diet_ids = set()
+            preselected_ids = set()
         defaults_pos = [it for it in (defaults or []) if int(it.get("default_count", 0) or 0) > 0]
         default_count_by_id = {
             str(it.get("diet_type_id")): int(it.get("default_count") or 0)
@@ -112,8 +114,6 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                     diets_d = ((day_obj.get("diets") or {}).get("dinner") if day_obj else []) or []
                     rl = 0
                     rd = 0
-                    ml = ((dow, "lunch", str(dtid)) in marked_idx)
-                    md = ((dow, "dinner", str(dtid)) in marked_idx)
                     if diets_l:
                         for it in diets_l:
                             if str(it.get("diet_type_id")) == str(dtid):
@@ -125,6 +125,8 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                         if str(it.get("diet_type_id")) == str(dtid):
                             rd = int(it.get("resident_count") or 0)
                             break
+                    ml = ((dow, "lunch", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rl > 0)
+                    md = ((dow, "dinner", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rd > 0)
                     is_alt2 = False
                     try:
                         is_alt2 = bool(day_obj.get("alt2_lunch")) if day_obj else False

@@ -5,6 +5,7 @@
 {% block head_extra %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
  <link rel="stylesheet" href="{{ url_for('static', filename='css/unified_admin.css') }}">
+  <script src="{{ url_for('static', filename='ui/report_weekly_filters.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -15,13 +16,15 @@
         <h1 class="app-shell__title">Veckorapport</h1>
         {% set display_week = vm.selected_week or vm.week %}
         {% set display_year = vm.selected_year or vm.year %}
-        {% set dept_label = "Alla avdelningar" %}
-        {% set selected_dept = (vm.selected_department_id if vm.selected_department_id is defined else "") | string %}
-        {% if selected_dept != "" %}
+        {% set selected_year_int = (display_year|int) %}
+        {% set year_options = [selected_year_int - 1, selected_year_int, selected_year_int + 1] %}
+        {% set selected_department = (vm.selected_department if vm.selected_department is defined else (vm.selected_department_id if vm.selected_department_id is defined else "")) | string %}
+        {% set selected_department_name = (vm.selected_department_name if vm.selected_department_name is defined else "") | string %}
+        {% if selected_department_name == "" and selected_department not in ("", "ALL") %}
           {% for opt in options %}
             {% set opt_id = opt.id|string %}
-            {% if opt_id == selected_dept or opt_id.endswith(selected_dept) or selected_dept.endswith(opt_id) %}
-              {% set dept_label = opt.name %}
+            {% if opt_id == selected_department or opt_id.endswith(selected_department) or selected_department.endswith(opt_id) %}
+              {% set selected_department_name = opt.name %}
             {% endif %}
           {% endfor %}
         {% endif %}
@@ -36,7 +39,7 @@
     <section class="app-shell__grid report-weekly__grid">
       <article class="app-shell__card report-weekly__filter-card">
         <h2 class="app-shell__card-title">Filter</h2>
-        <form method="GET" action="{{ request.path }}" class="yp-form" aria-label="Välj vecka och avdelning">
+        <form id="report-weekly-filter-form" method="GET" action="{{ request.path }}" class="yp-form" aria-label="Välj vecka och avdelning">
           {% if vm.view_mode is defined %}
             <input type="hidden" name="view" value="{{ vm.view_mode }}">
           {% endif %}
@@ -45,8 +48,12 @@
           {% endif %}
           <div class="admin-report-week__filter-grid">
             <div class="yp-form-field">
-              <label for="year-input" class="yp-label">År</label>
-              <input id="year-input" name="year" type="number" min="2000" max="2100" value="{{ display_year }}" class="yp-input" />
+              <label for="year-select" class="yp-label">År</label>
+              <select id="year-select" name="year" class="yp-input">
+                {% for y in year_options %}
+                  <option value="{{ y }}" {% if y == selected_year_int %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+              </select>
             </div>
             <div class="yp-form-field">
               <label for="week-select" class="yp-label">Vecka</label>
@@ -78,7 +85,11 @@
         <div class="admin-report-week__summary">
           <h2 class="app-shell__card-title">Sammanställning</h2>
           {% if display_week and display_year %}
-            <span class="admin-report-week__context">Vecka {{ display_week }}, {{ display_year }} · {{ dept_label }}</span>
+            {% if selected_department_name %}
+              <span class="admin-report-week__context">Vecka {{ display_week }}, {{ display_year }} · {{ selected_department_name }}</span>
+            {% else %}
+              <span class="admin-report-week__context">Vecka {{ display_week }}, {{ display_year }} · Alla avdelningar</span>
+            {% endif %}
           {% endif %}
           {% set has_coverage = vm.coverage_data is defined and vm.coverage_data %}
           {% set has_departments = vm.departments is defined and vm.departments %}
@@ -175,4 +186,5 @@
       </article>
     </section>
   </div>
+
 {% endblock %}

@@ -148,6 +148,7 @@ def test_seeded_weekly_diets_report(client):
     assert "Avd A" in html3
     assert "admin-report-week__context" in html3
     assert "Vecka 10, 2025" in html3
+    assert "Vecka 10, 2025 · Avd A" in html3
     assert "Normal" in html3
     assert "Special" in html3
 

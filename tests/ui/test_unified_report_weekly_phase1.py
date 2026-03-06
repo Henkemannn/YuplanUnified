@@ -241,6 +241,19 @@ def test_reports_weekly_renders_basic_structure(client_admin, seed_site_and_depa
     assert "<details" in html
 
 
+def test_reports_weekly_filter_has_scoped_autosubmit_hook(client_admin, seed_site_and_departments):
+    """Report filter should have page-scoped auto-submit wiring."""
+    resp = client_admin.get("/ui/reports/weekly", headers=_h("admin"))
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+
+    assert 'id="report-weekly-filter-form"' in html
+    assert 'id="year-select"' in html
+    assert 'id="week-select"' in html
+    assert 'id="department-select"' in html
+    assert "ui/report_weekly_filters.js" in html
+
+
 def test_reports_weekly_calculates_coverage_correctly(client_admin, seed_registrations):
     """Report should calculate coverage percentages correctly."""
     resp = client_admin.get("/ui/reports/weekly?year=2025&week=10", headers=_h("admin"))

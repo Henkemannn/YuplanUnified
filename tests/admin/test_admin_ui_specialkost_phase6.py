@@ -69,7 +69,10 @@ def test_admin_specialkost_new_creates_diet_type(client_admin: FlaskClient):
     # GET new form
     response = client_admin.get("/ui/admin/specialkost/new", headers=ADMIN_HEADERS)
     assert response.status_code == 200
-    assert "Lägg till kosttyp" in response.data.decode()
+    new_html = response.data.decode()
+    assert "Lägg till kosttyp" in new_html
+    assert "Förmarkera i veckolistorna" in new_html
+    assert "veckolistorna för statistiken" in new_html
     
     # POST new diet type (not pre-selected)
     response = client_admin.post(
@@ -113,6 +116,8 @@ def test_admin_specialkost_edit_updates_diet_type(client_admin: FlaskClient):
     html = response.data.decode()
     assert "Redigera kosttyp" in html
     assert "Glutenfri" in html
+    assert "Förmarkera i veckolistorna" in html
+    assert "veckolistorna för statistiken" in html
     
     # POST update (change name, enable default_select)
     response = client_admin.post(

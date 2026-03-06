@@ -156,3 +156,63 @@ def test_kitchen_week_v3_mark_toggle():
     assert rv2.status_code == 200
     html2 = rv2.data.decode("utf-8")
     assert "is-done" in html2
+
+
+def test_kitchen_week_v3_default_select_premarked_cells():
+    app = create_app()
+    app.config.update({"TESTING": True})
+    with app.app_context():
+        db = get_session()
+        try:
+            site_id = "site-k3-default-on"
+            dep = ("dep-k3-default-on", "Avd Default On", 11)
+            _seed_site_and_departments(db, site_id, [dep])
+            dt_repo = DietTypesRepo()
+            dt = dt_repo.create(site_id=site_id, name="Timbal", default_select=True)
+            _link_diets(db, dep[0], [(dt, 3)])
+        finally:
+            db.close()
+
+    client: FlaskClient = app.test_client()
+    headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["site_id"] = site_id
+
+    rv = client.get("/ui/kitchen/week?year=2026&week=8", headers=headers)
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+    assert re.search(
+        rf'class="kostcell-btn is-done"[^>]*data-department-id="{dep[0]}"[^>]*data-diet-type-id="{dt}"[^>]*data-day-index="1"[^>]*data-meal="lunch"',
+        html,
+    )
+
+
+def test_kitchen_week_v3_default_select_false_not_premarked_cells():
+    app = create_app()
+    app.config.update({"TESTING": True})
+    with app.app_context():
+        db = get_session()
+        try:
+            site_id = "site-k3-default-off"
+            dep = ("dep-k3-default-off", "Avd Default Off", 11)
+            _seed_site_and_departments(db, site_id, [dep])
+            dt_repo = DietTypesRepo()
+            dt = dt_repo.create(site_id=site_id, name="Timbal Off", default_select=False)
+            _link_diets(db, dep[0], [(dt, 3)])
+        finally:
+            db.close()
+
+    client: FlaskClient = app.test_client()
+    headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["site_id"] = site_id
+
+    rv = client.get("/ui/kitchen/week?year=2026&week=8", headers=headers)
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+    assert not re.search(
+        rf'class="kostcell-btn is-done"[^>]*data-department-id="{dep[0]}"[^>]*data-diet-type-id="{dt}"[^>]*data-day-index="1"[^>]*data-meal="lunch"',
+        html,
+    )

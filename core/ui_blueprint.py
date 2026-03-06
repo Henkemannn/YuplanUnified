@@ -2198,9 +2198,11 @@ def kitchen_planering_v1():
             types = _TypesRepo().list_all(site_id=site_id)
             diet_name_by_id = {str(it["id"]): str(it["name"]) for it in types}
             name_to_id = {str(it["name"]): str(it["id"]) for it in types}
+            preselected_diet_ids = {str(it["id"]) for it in types if bool(it.get("default_select"))}
         except Exception:
             diet_name_by_id = {}
             name_to_id = {}
+            preselected_diet_ids = set()
 
         def _is_valid_diet_name(name: str | None) -> bool:
             if not name:
@@ -2259,6 +2261,14 @@ def kitchen_planering_v1():
                 selected_diet_ids.append(v)
             elif v in name_to_id and name_to_id[v] in totals_by_diet:
                 selected_diet_ids.append(name_to_id[v])
+        # If no explicit selection was provided, preselect flagged diet types for
+        # weekly worklists/statistics context.
+        if not selected_diet_ids and preselected_diet_ids:
+            selected_diet_ids = [
+                str(opt.get("diet_type_id"))
+                for opt in diet_options
+                if str(opt.get("diet_type_id")) in preselected_diet_ids
+            ]
         # Build adaptation entries
         special_to_adapt_total = 0
         for dtid in selected_diet_ids:
@@ -2742,9 +2752,11 @@ def kitchen_veckovy_week():
                 types = types_repo.list_all(site_id=site_id)
                 name_by_id = {str(it["id"]): str(it["name"]) for it in types}
                 allowed_diet_ids = {str(it["id"]) for it in types}
+                preselected_ids = {str(it["id"]) for it in types if bool(it.get("default_select"))}
             except Exception:
                 name_by_id = {}
                 allowed_diet_ids = set()
+                preselected_ids = set()
             # Filter to only diets with configured count > 0 for K3
             defaults_pos = [it for it in (defaults or []) if int(it.get("default_count", 0) or 0) > 0]
             default_ids = [str(it.get("diet_type_id")) for it in defaults_pos]
@@ -2759,9 +2771,6 @@ def kitchen_veckovy_week():
                         diets_l = ((day_obj.get("diets") or {}).get("lunch") if day_obj else []) or []
                         diets_d = ((day_obj.get("diets") or {}).get("dinner") if day_obj else []) or []
                         rl = 0; rd = 0
-                        # is_done derived from persisted marks to avoid any scope mismatch
-                        ml = ((dow, "lunch", str(dtid)) in marked_idx)
-                        md = ((dow, "dinner", str(dtid)) in marked_idx)
                         for it in diets_l:
                             if str(it.get("diet_type_id")) == str(dtid):
                                 rl = int(it.get("resident_count") or 0)
@@ -2770,6 +2779,9 @@ def kitchen_veckovy_week():
                             if str(it.get("diet_type_id")) == str(dtid):
                                 rd = int(it.get("resident_count") or 0)
                                 break
+                        # Keep persisted marks, but premark default-select diets in weekly lists.
+                        ml = ((dow, "lunch", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rl > 0)
+                        md = ((dow, "dinner", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rd > 0)
                         is_alt2 = False
                         try:
                             is_alt2 = bool(day_obj.get("alt2_lunch")) if day_obj else False
@@ -3758,11 +3770,27 @@ def reports_weekly():
         "coverage_data": coverage_data,
         "user_role": role,
     }
-    # Include all department names (for legacy string checks in tests)
+    # Include department options and selected label for header/filter display.
+    selected_department = (request.args.get("department_id") or "ALL").strip() or "ALL"
     db2 = get_session()
     try:
-        all_dept_rows = db2.execute(text("SELECT name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
-        vm["all_departments_names"] = [str(r[0]) for r in all_dept_rows]
+        all_dept_rows = db2.execute(
+            text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"),
+            {"s": site_id},
+        ).fetchall()
+        dept_items = [{"id": str(r[0]), "name": str(r[1] or "")} for r in all_dept_rows]
+        vm["all_departments_names"] = [it["name"] for it in dept_items]
+        vm["departments_options"] = [{"id": "ALL", "name": "Alla avdelningar"}] + dept_items
+        selected_department_name = ""
+        if selected_department != "ALL":
+            for it in dept_items:
+                did = str(it["id"])
+                if did == selected_department or did.endswith(selected_department) or selected_department.endswith(did):
+                    selected_department_name = str(it["name"])
+                    break
+        vm["selected_department"] = selected_department
+        vm["selected_department_id"] = selected_department
+        vm["selected_department_name"] = selected_department_name
     finally:
         db2.close()
     return render_template("ui/unified_report_weekly.html", vm=vm, nav_context="admin")
@@ -3865,7 +3893,13 @@ def admin_report_week():
     vm = {
         "selected_year": year,
         "selected_week": week,
+        "selected_department": department_id or "ALL",
         "selected_department_id": department_id or "ALL",
+        "selected_department_name": (
+            next((d["name"] for d in all_deps if d["id"] == department_id), "")
+            if department_id and department_id != "ALL"
+            else ""
+        ),
         "view_mode": ("day" if view_mode.startswith("day") else "week"),
         "site_id": site_id,
         "site_name": site_name,
