@@ -1,0 +1,76 @@
+{% extends "ui/unified_admin_base.html" %}
+
+{% block admin_title %}Köksanvändare{% endblock %}
+{% block admin_subtitle %}Skapa och hantera användare för köksportalen{% endblock %}
+
+{% block admin_head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_kitchen_users.css') }}">
+{% endblock %}
+
+{% block admin_main %}
+<section class="ua-section">
+  <div class="ua-card kitchen-users-card" style="margin-bottom: 1rem;">
+    <h2 class="app-shell__card-title">Ny köksanvändare</h2>
+    <p class="app-shell__card-text kitchen-users-bound-site">Site: <strong>{{ vm.active_site_name or vm.active_site_id or 'Ingen aktiv site' }}</strong></p>
+    <form method="post" action="{{ url_for('ui.admin_kitchen_users_create') }}" class="yp-form kitchen-users-form" style="display:grid;gap:0.75rem;max-width:640px;">
+      <div class="yp-form-field">
+        <label for="name" class="yp-label">Namn</label>
+        <input id="name" name="name" type="text" class="yp-input" required maxlength="200">
+      </div>
+      <div class="yp-form-field">
+        <label for="email" class="yp-label">E-post</label>
+        <input id="email" name="email" type="email" class="yp-input" required maxlength="200">
+      </div>
+      <div class="yp-form-field">
+        <label for="password" class="yp-label">Lösenord</label>
+        <input id="password" name="password" type="password" class="yp-input" required minlength="6">
+      </div>
+      <input type="hidden" name="role" value="kitchen">
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button type="submit" class="yp-button yp-button-primary">Skapa köksanvändare</button>
+        <a href="{{ url_for('ui.kitchen_dashboard') }}" class="yp-button yp-button-secondary">Öppna köksportal</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="ua-card kitchen-users-card">
+    <h2 class="app-shell__card-title">Köksanvändare</h2>
+    {% if vm.kitchen_users %}
+      <div class="table-responsive">
+        <table class="yp-table" style="width:100%;">
+          <thead>
+            <tr>
+              <th>Namn</th>
+              <th>E-post</th>
+              <th>Site</th>
+              <th>Status</th>
+              <th>Åtgärd</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in vm.kitchen_users %}
+              <tr>
+                <td>{{ user.name or '-' }}</td>
+                <td>{{ user.email }}</td>
+                <td>{{ user.site_name or user.site_id or '-' }}</td>
+                <td>{% if user.is_active %}Aktiv{% else %}Inaktiv{% endif %}</td>
+                <td>
+                  {% if user.is_active %}
+                    <form method="post" action="{{ url_for('ui.admin_kitchen_users_delete', user_id=user.id) }}" onsubmit="return confirm('Ta bort köksanvändare?');">
+                      <button type="submit" class="yp-button yp-button-danger yp-button-sm">Ta bort</button>
+                    </form>
+                  {% else %}
+                    <span class="app-shell__card-meta">Borttagen</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="app-shell__card-text">Inga köksanvändare ännu.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

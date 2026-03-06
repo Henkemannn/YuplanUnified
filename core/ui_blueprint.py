@@ -21,6 +21,19 @@ import uuid
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
 
 
+@ui_bp.before_app_request
+def _redirect_kitchen_from_admin_ui():
+    """Pilot guard: kitchen users are redirected away from admin UI."""
+    try:
+        role = (session.get("role") or "").strip().lower()
+        path = request.path or ""
+        if role == "kitchen" and path.startswith("/ui/admin"):
+            return redirect(url_for("ui.kitchen_dashboard"))
+    except Exception:
+        return None
+    return None
+
+
 def _format_announcement_display(event_date: _date, event_time: _time | None, message: str) -> str:
     day_names = {1: "Mån", 2: "Tis", 3: "Ons", 4: "Tors", 5: "Fre", 6: "Lör", 7: "Sön"}
     day_label = day_names.get(int(event_date.isoweekday()), "")
@@ -441,7 +454,9 @@ def _default_dashboard_for_user(user) -> str:
                 return url_for("ui.admin_dashboard")
             if user.has_role("admin"):
                 return url_for("ui.admin_dashboard")
-            if user.has_role("kitchen") or user.has_role("cook"):
+            if user.has_role("kitchen"):
+                return url_for("ui.kitchen_dashboard")
+            if user.has_role("cook"):
                 return url_for("ui.cook_dashboard_ui")
             if user.has_role("department") or user.has_role("staff") or user.has_role("unit_portal"):
                 return url_for("ui.portal_week")
@@ -451,7 +466,9 @@ def _default_dashboard_for_user(user) -> str:
     role = (session.get("role") or "").strip().lower()
     if role in ("superuser", "admin"):
         return url_for("ui.admin_dashboard")
-    if role in ("kitchen", "cook"):
+    if role == "kitchen":
+        return url_for("ui.kitchen_dashboard")
+    if role == "cook":
         return url_for("ui.cook_dashboard_ui")
     if role in ("department", "staff", "unit_portal"):
         return url_for("ui.portal_week")
@@ -5707,6 +5724,205 @@ def admin_departments_delete(dept_id: str):
 # =======================================================================================
 # ADMIN PANEL - USER MANAGEMENT (Phase 3)
 # =======================================================================================
+
+
+def _users_table_has_site_id(db) -> bool:
+    """Best-effort schema check to keep pilot routes safe in lightweight test DBs."""
+    try:
+        cols = db.execute(text("PRAGMA table_info(users)")).fetchall()
+        return any(str(c[1]) == "site_id" for c in cols)
+    except Exception:
+        return False
+
+
+@ui_bp.get("/ui/admin/kitchen-users")
+@require_roles(*ADMIN_ROLES)
+def admin_kitchen_users_page():
+    tid = session.get("tenant_id")
+    role = session.get("role")
+    today = _date.today()
+    current_year, current_week = today.isocalendar()[0], today.isocalendar()[1]
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = (ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None) or "")
+
+    db = get_session()
+    try:
+        active_site_name = ""
+        if tid is not None and active_site_id:
+            row_site = db.execute(
+                text("SELECT name FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
+                {"sid": str(active_site_id), "tid": int(tid)},
+            ).fetchone()
+            active_site_name = str(row_site[0] or "") if row_site else ""
+
+        has_site_id = _users_table_has_site_id(db)
+        kitchen_users = []
+        if tid is not None:
+            if has_site_id:
+                if active_site_id:
+                    rows = db.execute(
+                        text(
+                            "SELECT u.id, u.full_name, u.email, u.is_active, u.site_id, s.name "
+                            "FROM users u "
+                            "LEFT JOIN sites s ON s.id = u.site_id "
+                            "WHERE u.tenant_id=:tid AND u.role='kitchen' AND u.site_id=:sid "
+                            "ORDER BY u.full_name, u.email"
+                        ),
+                        {"tid": int(tid), "sid": str(active_site_id)},
+                    ).fetchall()
+                else:
+                    rows = []
+                for r in rows:
+                    kitchen_users.append(
+                        {
+                            "id": int(r[0]),
+                            "name": str(r[1] or ""),
+                            "email": str(r[2] or ""),
+                            "is_active": bool(r[3]) if r[3] is not None else True,
+                            "site_id": str(r[4] or ""),
+                            "site_name": str(r[5] or ""),
+                        }
+                    )
+            else:
+                rows = db.execute(
+                    text(
+                        "SELECT id, full_name, email, is_active "
+                        "FROM users "
+                        "WHERE tenant_id=:tid AND role='kitchen' "
+                        "ORDER BY full_name, email"
+                    ),
+                    {"tid": int(tid)},
+                ).fetchall()
+                for r in rows:
+                    kitchen_users.append(
+                        {
+                            "id": int(r[0]),
+                            "name": str(r[1] or ""),
+                            "email": str(r[2] or ""),
+                            "is_active": bool(r[3]) if r[3] is not None else True,
+                            "site_id": "",
+                            "site_name": "",
+                        }
+                    )
+    finally:
+        db.close()
+
+    vm = {
+        "kitchen_users": kitchen_users,
+        "active_site_id": str(active_site_id or ""),
+        "active_site_name": active_site_name,
+        "current_year": current_year,
+        "current_week": current_week,
+        "user_role": role,
+    }
+    return render_template("ui/unified_admin_kitchen_users.html", vm=vm)
+
+
+@ui_bp.post("/ui/admin/kitchen-users")
+@require_roles(*ADMIN_ROLES)
+def admin_kitchen_users_create():
+    from core.admin_user_repo import AdminUserRepo
+
+    tid = session.get("tenant_id")
+    if tid is None:
+        flash("Saknar tenant-kontext.", "error")
+        return redirect(url_for("ui.admin_kitchen_users_page"))
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = str((ctx.get("site_id") or (session.get("site_id") if "site_id" in session else "") or "").strip())
+    if not site_id:
+        flash("Ingen aktiv site vald. Byt till rätt site först.", "error")
+        return redirect(url_for("ui.admin_kitchen_users_page"))
+
+    name = str((request.form.get("name") or "").strip())
+    email = str((request.form.get("email") or "").strip().lower())
+    password = str((request.form.get("password") or "").strip())
+
+    if not name or not email or not password:
+        flash("Fyll i namn, e-post och lösenord.", "error")
+        return redirect(url_for("ui.admin_kitchen_users_page"))
+
+    repo = AdminUserRepo()
+    if repo.email_exists(email):
+        flash("E-postadressen används redan.", "error")
+        return redirect(url_for("ui.admin_kitchen_users_page"))
+
+    db = get_session()
+    try:
+        site_row = db.execute(
+            text("SELECT id FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
+            {"sid": site_id, "tid": int(tid)},
+        ).fetchone()
+        if not site_row:
+            flash("Vald site är ogiltig för denna tenant.", "error")
+            return redirect(url_for("ui.admin_kitchen_users_page"))
+    finally:
+        db.close()
+
+    try:
+        new_user_id = repo.create_user(
+            tenant_id=int(tid),
+            username=email,
+            email=email,
+            password=password,
+            full_name=name,
+            role="kitchen",
+            is_active=True,
+        )
+    except Exception as exc:
+        flash(f"Kunde inte skapa köksanvändare: {str(exc)}", "error")
+        return redirect(url_for("ui.admin_kitchen_users_page"))
+
+    db = get_session()
+    try:
+        if _users_table_has_site_id(db):
+            db.execute(
+                text("UPDATE users SET site_id=:sid WHERE id=:uid"),
+                {"sid": site_id, "uid": int(new_user_id)},
+            )
+            db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+    flash("Köksanvändare skapad.", "success")
+    return redirect(url_for("ui.admin_kitchen_users_page"))
+
+
+@ui_bp.post("/ui/admin/kitchen-users/<int:user_id>/delete")
+@require_roles(*ADMIN_ROLES)
+def admin_kitchen_users_delete(user_id: int):
+    from core.admin_user_repo import AdminUserRepo
+
+    tid = session.get("tenant_id")
+    if tid is None:
+        flash("Saknar tenant-kontext.", "error")
+        return redirect(url_for("ui.admin_kitchen_users_page"))
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM users WHERE id=:uid AND tenant_id=:tid AND role='kitchen' LIMIT 1"),
+            {"uid": int(user_id), "tid": int(tid)},
+        ).fetchone()
+    finally:
+        db.close()
+
+    if not row:
+        flash("Köksanvändare hittades inte.", "error")
+        return redirect(url_for("ui.admin_kitchen_users_page"))
+
+    try:
+        AdminUserRepo().deactivate_user(int(user_id))
+        flash("Köksanvändare borttagen.", "success")
+    except Exception as exc:
+        flash(f"Kunde inte ta bort köksanvändare: {str(exc)}", "error")
+    return redirect(url_for("ui.admin_kitchen_users_page"))
 
 @ui_bp.get("/ui/admin/users")
 @require_roles(*ADMIN_ROLES)

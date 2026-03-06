@@ -303,6 +303,8 @@ def login():
                 r = (session.get("role") or "").lower()
                 if r == "superuser":
                     target = url_for("admin_ui.systemadmin_dashboard")
+                elif r == "kitchen":
+                    target = url_for("ui.kitchen_dashboard")
                 elif r == "admin":
                     # If admin lacks an active site, return 403 HTML (no selector)
                     if not (session.get("site_id") or "").strip():
@@ -319,20 +321,7 @@ def login():
                     else:
                         target = url_for("ui.admin_dashboard")
                 else:
-                    # For customer roles, require active site context before landing
-                    if not (session.get("site_id") or "").strip():
-                        html = """<!doctype html><html lang='sv'><head><meta charset='utf-8'>
-<title>Åtkomst nekad</title><meta name='robots' content='noindex'>
-<style>body{font-family:system-ui;margin:3rem;color:#111}h1{font-size:1.8rem;margin-bottom:.5rem}p{margin:.25rem 0}</style>
-</head><body><h1>Åtkomst nekad</h1>
-<p>Ditt konto är inte kopplat till någon arbetsplats.</p>
-<p>Kontakta systemadministratör.</p></body></html>"""
-                        resp = make_response(html, 403)
-                        resp.headers["Content-Type"] = "text/html; charset=utf-8"
-                        set_csrf_cookie(resp, csrf_token)
-                        return resp
-                    else:
-                        target = url_for("ui.weekview_ui")
+                    target = url_for("ui.admin_dashboard")
             except Exception:
                 target = "/"
             resp = redirect(target, code=302)

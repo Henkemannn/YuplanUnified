@@ -82,11 +82,12 @@ def ui_login():  # Simple HTML login that sets session directly or redirects to 
             target = "/"
             if user.role == "superuser":
                 target = "/ui/systemadmin/dashboard"
+            elif user.role == "kitchen":
+                target = "/ui/kitchen"
             elif user.role == "admin":
                 target = "/ui/admin"
             else:
-                # Fall back to existing start views
-                target = "/ui/weekview"
+                target = "/ui/admin"
             resp = make_response(redirect(target))
             _set_csrf_cookie(resp, tok)
             try:

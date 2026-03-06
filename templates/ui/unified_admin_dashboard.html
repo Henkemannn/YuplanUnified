@@ -15,6 +15,9 @@
           Översikt för {{ vm.site_name or current_site_name or 'din enhet' }}.
         </p>
       </div>
+      <div>
+        <a href="{{ url_for('ui.kitchen_dashboard') }}" class="yp-button yp-button-secondary">Öppna köksportal</a>
+      </div>
     </section>
 
     <section class="app-shell__grid">

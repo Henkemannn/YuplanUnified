@@ -1,0 +1,64 @@
+.admin-shell .kitchen-users-card {
+  background: #121f35 !important;
+  border: 1px solid #2a3b56 !important;
+  box-shadow: none !important;
+}
+
+.admin-shell .kitchen-users-bound-site {
+  margin-bottom: 0.5rem;
+}
+
+.admin-shell .kitchen-users-card,
+.admin-shell .kitchen-users-card .app-shell__card-title,
+.admin-shell .kitchen-users-card .app-shell__card-text,
+.admin-shell .kitchen-users-card .yp-label,
+.admin-shell .kitchen-users-card strong {
+  color: #e2e8f0 !important;
+}
+
+.admin-shell .kitchen-users-form .yp-input {
+  background: #111b2e !important;
+  border-color: #2a3b56 !important;
+  color: #e2e8f0 !important;
+  color-scheme: dark;
+}
+
+.admin-shell .kitchen-users-form .yp-input::placeholder {
+  color: #9aa6bf !important;
+}
+
+.admin-shell .kitchen-users-form .yp-input:-webkit-autofill,
+.admin-shell .kitchen-users-form .yp-input:-webkit-autofill:hover,
+.admin-shell .kitchen-users-form .yp-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #e2e8f0 !important;
+  -webkit-box-shadow: 0 0 0 1000px #111b2e inset !important;
+  box-shadow: 0 0 0 1000px #111b2e inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.admin-shell .kitchen-users-card .yp-table {
+  width: 100%;
+  background: transparent !important;
+  color: #e2e8f0 !important;
+}
+
+.admin-shell .kitchen-users-card .yp-table th,
+.admin-shell .kitchen-users-card .yp-table td {
+  border-color: #2a3b56 !important;
+  color: #e2e8f0 !important;
+}
+
+.admin-shell .kitchen-users-card .yp-table thead th {
+  background: #111b2e !important;
+}
+
+.admin-shell .kitchen-users-card .yp-table tbody tr,
+.admin-shell .kitchen-users-card .yp-table tbody tr td {
+  background: transparent !important;
+}
+
+@media (max-width: 760px) {
+  .admin-shell .kitchen-users-card .yp-table {
+    font-size: 0.9rem;
+  }
+}
