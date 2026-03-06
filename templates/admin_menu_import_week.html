@@ -87,7 +87,7 @@
                         <a href="{{ url_for('admin_ui.admin_menu_import_week', year=vm.year, week=vm.week) }}" class="yp-btn yp-btn-secondary">Avbryt</a>
                     </div>
                 {% else %}
-                    <p class="menu-week__help-text">Granska menyn. Redigera vid behov och publicera när den är klar för matval och köksproduktion.</p>
+                    <p class="menu-week__help-text">Granska menyn. Redigera vid behov och publicera när den är klar för menyval och köksproduktion.</p>
                     <div class="menu-editor-actions menu-editor-actions--status admin-actions-group">
                         {% if vm.menu_status == 'draft' %}
                             <form action="{{ url_for('admin_ui.admin_menu_import_week_publish', year=vm.year, week=vm.week) }}" method="POST" class="admin-form-protect menu-editor-inline-form">
