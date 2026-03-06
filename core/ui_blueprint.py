@@ -323,6 +323,7 @@ SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 ADMIN_ROLES = ("admin", "superuser")
 COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 ACCOUNT_ALLOWED_ROLES = ("admin", "superuser", "kitchen")
+KITCHEN_UI_ROLES = ("kitchen", "cook", "admin", "superuser")
 
 
 @ui_bp.get("/ui/account")
@@ -2083,7 +2084,7 @@ def resolve_day_menu_for_site(*, db, site_id: str, date: _date) -> dict:
 
 
 @ui_bp.get("/ui/kitchen")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*KITCHEN_UI_ROLES)
 def kitchen_dashboard():
     # Resolve active site: context -> session; never trust query param for remember-to-order
     from .context import get_active_context as _get_ctx
@@ -2177,7 +2178,7 @@ def kitchen_dashboard():
 
 
 @ui_bp.post("/ui/kitchen/prep-notes/add")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*KITCHEN_UI_ROLES)
 def kitchen_prep_note_add():
     from .context import get_active_context as _get_ctx
 
@@ -2206,7 +2207,7 @@ def kitchen_prep_note_add():
 
 
 @ui_bp.post("/ui/kitchen/prep-notes/<int:note_id>/delete")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*KITCHEN_UI_ROLES)
 def kitchen_prep_note_delete(note_id: int):
     from .context import get_active_context as _get_ctx
 
@@ -2337,7 +2338,7 @@ def admin_announcements_delete(item_id: int):
 
 
 @ui_bp.get("/ui/kitchen/menu")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*KITCHEN_UI_ROLES)
 def kitchen_menu_overview():
     q_site_id = (request.args.get("site_id") or "").strip()
     from .context import get_active_context as _get_ctx
@@ -2472,7 +2473,7 @@ def kitchen_menu_overview():
 
 # Kitchen planning v1 (read-only summary + print + week picker)
 @ui_bp.get("/ui/kitchen/planering")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*KITCHEN_UI_ROLES)
 def kitchen_planering_v1():
     # Resolve site similarly to /ui/kitchen/week
     q_site_id = (request.args.get("site_id") or "").strip()
@@ -3085,7 +3086,7 @@ def kitchen_planering_v1():
 
 # Kitchen-specific Veckovy grid route
 @ui_bp.get("/ui/kitchen/week")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*KITCHEN_UI_ROLES)
 def kitchen_veckovy_week():
     # Legacy escape hatch: if explicit site+department are provided, use unified grid mode (unchanged)
     q_site_id = (request.args.get("site_id") or "").strip()
@@ -4385,7 +4386,7 @@ def reports_weekly_csv():
 
 
 @ui_bp.get("/ui/api/remember-to-order")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*KITCHEN_UI_ROLES)
 def remember_to_order_list_api():
     site_id = (request.args.get("site_id") or "").strip()
     week_key = (request.args.get("week_key") or "").strip()
@@ -4417,7 +4418,7 @@ def remember_to_order_list_api():
 
 
 @ui_bp.post("/ui/api/remember-to-order/add")
-@require_roles(*SAFE_UI_ROLES)
+@require_roles(*KITCHEN_UI_ROLES)
 def remember_to_order_add_api():
     data = request.get_json(silent=True) or {}
     if not data:

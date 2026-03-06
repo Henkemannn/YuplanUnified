@@ -85,3 +85,33 @@ def test_menu_variant_set_and_week_view():
     assert lunch2["alt1"]["dish_name"] == "Fish Pie"
     # Dessert unchanged
     assert lunch2["dessert"]["dish_name"] == "Pasta Bolognese"
+
+
+def test_menu_week_allows_kitchen_role(client):
+    from core.db import get_session
+    from sqlalchemy import text
+    import uuid
+
+    site_id = f"site-{uuid.uuid4().hex[:8]}"
+    db = get_session()
+    try:
+        db.execute(
+            text("INSERT INTO sites (id, name, tenant_id, version) VALUES (:id, :name, 1, 0)"),
+            {"id": site_id, "name": "Kitchen Site"},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+    resp = client.get(
+        "/menu/week",
+        query_string={"week": 10, "year": 2026, "site_id": site_id},
+        headers={"X-User-Role": "kitchen", "X-Tenant-Id": "1", "X-User-Id": "8"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.get_json() or {}
+    assert body.get("ok") is True

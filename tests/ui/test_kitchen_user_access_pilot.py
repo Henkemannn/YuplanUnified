@@ -36,6 +36,14 @@ def test_kitchen_role_redirected_from_admin_subpath(client_user):
     assert "/ui/kitchen" in (resp.headers.get("Location") or "")
 
 
+def test_kitchen_role_can_open_kitchen_dashboard(client_user):
+    resp = client_user.get("/ui/kitchen", headers=_h("kitchen"), follow_redirects=False)
+
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    assert "Kök" in html or "Översikt" in html
+
+
 def test_admin_can_create_and_deactivate_kitchen_user(client_admin):
     site_id = f"site-{uuid.uuid4()}"
     _seed_site(site_id)

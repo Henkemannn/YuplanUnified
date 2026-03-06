@@ -47,9 +47,28 @@
 
   function dayKeyFromIndex(i){ var m=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']; i=parseInt(i,10); if(isNaN(i)||i<0||i>6) return null; return m[i]; }
 
-  function dayLabelSwe(dayKey){ var k=String(dayKey||'').trim(); var map={ Mon:'Måndag', Tue:'Tisdag', Wed:'Onsdag', Thu:'Torsdag', Fri:'Fredag', Sat:'Lördag', Sun:'Söndag' }; return map[k] || k; }
+  function dayLabelSwe(dayKey){
+    var k = String(dayKey || '').trim();
+    var map = {
+      Mon:'Måndag', Tue:'Tisdag', Wed:'Onsdag', Thu:'Torsdag', Fri:'Fredag', Sat:'Lördag', Sun:'Söndag',
+      mon:'Måndag', tue:'Tisdag', wed:'Onsdag', thu:'Torsdag', fri:'Fredag', sat:'Lördag', sun:'Söndag',
+      monday:'Måndag', tuesday:'Tisdag', wednesday:'Onsdag', thursday:'Torsdag', friday:'Fredag', saturday:'Lördag', sunday:'Söndag',
+      'mån':'Måndag', 'tis':'Tisdag', 'ons':'Onsdag', 'tor':'Torsdag', 'fre':'Fredag', 'lör':'Lördag', 'sön':'Söndag',
+      'måndag':'Måndag', 'tisdag':'Tisdag', 'onsdag':'Onsdag', 'torsdag':'Torsdag', 'fredag':'Fredag', 'lördag':'Lördag', 'söndag':'Söndag'
+    };
+    return map[k] || map[k.toLowerCase()] || k;
+  }
 
-  function normalizeDayKey(k){ var s=String(k||'').trim().toLowerCase(); var map={ mon:'mon', tue:'tue', wed:'wed', thu:'thu', fri:'fri', sat:'sat', sun:'sun', monday:'mon', tuesday:'tue', wednesday:'wed', thursday:'thu', friday:'fri', saturday:'sat', sunday:'sun', 'mån':'mon','tis':'tue','ons':'wed','tor':'thu','fre':'fri','lör':'sat','sön':'sun' }; return map[s]||s; }
+  function normalizeDayKey(k){
+    var s = String(k || '').trim().toLowerCase();
+    var map = {
+      mon:'mon', tue:'tue', wed:'wed', thu:'thu', fri:'fri', sat:'sat', sun:'sun',
+      monday:'mon', tuesday:'tue', wednesday:'wed', thursday:'thu', friday:'fri', saturday:'sat', sunday:'sun',
+      'mån':'mon', 'tis':'tue', 'ons':'wed', 'tor':'thu', 'fre':'fri', 'lör':'sat', 'sön':'sun',
+      'måndag':'mon', 'tisdag':'tue', 'onsdag':'wed', 'torsdag':'thu', 'fredag':'fri', 'lördag':'sat', 'söndag':'sun'
+    };
+    return map[s] || s;
+  }
   function findDayObject(days, selectedKey){ var exact=String(selectedKey||'').trim(); var canon=normalizeDayKey(exact); var lowerMap={}; Object.keys(days||{}).forEach(function(k){ lowerMap[String(k).trim().toLowerCase()]=k; }); var cap=canon.charAt(0).toUpperCase()+canon.slice(1); var fullEngMap={ mon:'monday',tue:'tuesday',wed:'wednesday',thu:'thursday',fri:'friday',sat:'saturday',sun:'sunday' }; var fullEng=fullEngMap[canon]; var sweAbbrevMap={ mon:'mån',tue:'tis',wed:'ons',thu:'tor',fri:'fre',sat:'lör',sun:'sön' }; var sweAbbrev=sweAbbrevMap[canon]; var sweFullMap={ mon:'måndag',tue:'tisdag',wed:'onsdag',thu:'torsdag',fri:'fredag',sat:'lördag',sun:'söndag' }; var sweFull=sweFullMap[canon]; var candidates=[exact,canon,cap,fullEng,sweAbbrev,sweFull].filter(Boolean); var hitKey=null; for(var i=0;i<candidates.length;i++){ var low=String(candidates[i]).trim().toLowerCase(); if(lowerMap.hasOwnProperty(low)){ hitKey=lowerMap[low]; break; } } return { key: hitKey, obj: hitKey ? days[hitKey] : undefined };
   }
 
@@ -57,6 +76,11 @@
   function showModal(html){
     ensureRefs();
     if(!modal||!modalBody) return;
+    var isWeekviewPage = !!document.querySelector('.ui-weekview');
+    var isKitchenWeekPage = !!document.querySelector('.kitchen-week');
+    var useFrostedBackdrop = isWeekviewPage || isKitchenWeekPage;
+    modal.classList.toggle('menu-modal--weekview', isWeekviewPage);
+    modal.classList.toggle('menu-modal--frosted', useFrostedBackdrop);
     modalBody.innerHTML=html;
     modal.hidden=false;
     modal.setAttribute('aria-hidden', 'false');

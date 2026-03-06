@@ -63,14 +63,7 @@
   cursor: pointer;
 }
 
-/* Admin-only modal overlay/backdrop */
-body.menu-modal-open::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 9999;
-}
+/* Use shared modal backdrop from app_shell.css; avoid double overlay in weekview. */
 
 /* HARD GUARD: menu modal must never be visible unless explicitly opened */
 #menuModal[hidden] {
@@ -84,7 +77,15 @@ body.menu-modal-open::before {
   align-items: center;
   justify-content: center;
   z-index: 10000;
-  background: transparent;
+  background: rgba(222, 232, 248, 0.16);
+  -webkit-backdrop-filter: blur(10px) saturate(125%);
+  backdrop-filter: blur(10px) saturate(125%);
+}
+
+#menuModal.menu-modal--weekview {
+  background: rgba(222, 232, 248, 0.16);
+  -webkit-backdrop-filter: blur(10px) saturate(125%);
+  backdrop-filter: blur(10px) saturate(125%);
 }
 
 .ui-weekview #menuModal.is-open {
@@ -101,6 +102,12 @@ body.menu-modal-open::before {
   color: #e7eefc;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55);
+}
+
+.app-shell--dark #menuModal.menu-modal--weekview {
+  background: rgba(18, 28, 46, 0.20);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  backdrop-filter: blur(12px) saturate(120%);
 }
 
 .app-shell--dark .ui-weekview .menu-modal__header,

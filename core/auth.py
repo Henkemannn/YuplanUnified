@@ -254,6 +254,16 @@ def login():
         session["user_id"] = user.id
         session["role"] = _normalize_role(user.role)
         session["tenant_id"] = user.tenant_id
+        # Keep display identity in session for app-shell badges/greetings.
+        try:
+            if getattr(user, "email", None):
+                session["user_email"] = str(user.email)
+            if getattr(user, "username", None):
+                session["username"] = str(user.username)
+            if getattr(user, "full_name", None):
+                session["full_name"] = str(user.full_name)
+        except Exception:
+            pass
         # Enforce site-lock contract for non-superusers: bind active site when available
         try:
             role_norm = (session.get("role") or "").strip().lower()

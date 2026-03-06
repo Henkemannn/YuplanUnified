@@ -26,7 +26,7 @@ def _resolve_site_id_for_testing(tenant_id: int) -> str | None:
 
 
 @bp.get("/week")
-@require_roles("superuser", "admin", "cook")
+@require_roles("superuser", "admin", "cook", "kitchen")
 def get_week():
     tenant_id = session.get("tenant_id")
     if not tenant_id:

@@ -18,7 +18,7 @@
       <article class="app-shell__card">
         <div class="app-shell__card-header">
           <div>
-            <h2 class="app-shell__card-title">Hej {{ session.get('username') or session.get('role') }}</h2>
+            <h2 class="app-shell__card-title">Hej {{ session.get('full_name') or session.get('user_email') or session.get('username') or session.get('role') }}</h2>
             <p class="app-shell__card-text kitchen-dashboard__date">{{ vm.today_formatted }} · Vecka {{ vm.current_week }}</p>
           </div>
         </div>

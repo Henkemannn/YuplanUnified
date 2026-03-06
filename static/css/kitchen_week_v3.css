@@ -208,6 +208,19 @@
   opacity: 1;
 }
 
+/* Kitchen week menu modal: frosted backdrop instead of heavy dark overlay. */
+#menuModal.menu-modal--frosted {
+  background: rgba(218, 231, 248, 0.16);
+  -webkit-backdrop-filter: blur(11px) saturate(125%);
+  backdrop-filter: blur(11px) saturate(125%);
+}
+
+.app-shell--dark #menuModal.menu-modal--frosted {
+  background: rgba(16, 28, 46, 0.22);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  backdrop-filter: blur(12px) saturate(120%);
+}
+
 .kitchen-week .yp-sr-only {
   position: absolute;
   width: 1px;
