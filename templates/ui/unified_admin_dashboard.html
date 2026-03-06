@@ -65,6 +65,39 @@
         {% endif %}
       </article>
 
+      <article class="app-shell__card announcement-card" data-testid="admin-announcements-card">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">Meddelanden / Påminnelser</h2>
+            <p class="app-shell__card-text">Planerade meddelanden för arbetsplatsen.</p>
+          </div>
+        </div>
+        <div class="app-shell__card-body">
+          {% if vm.announcements %}
+            <div class="app-shell__list announcement-list">
+              {% for item in vm.announcements[-5:] | reverse %}
+                <div class="app-shell__list-item">
+                  <div class="app-shell__list-main">
+                    <span class="announcement-line {% if loop.first %}announcement-line--new{% endif %}">
+                      <span class="announcement-dot" aria-hidden="true">•</span>
+                      <span class="app-shell__list-title">{{ item.display_label }}</span>
+                      {% if loop.first %}
+                        <span class="yp-pill announcement-pill announcement-pill--new">Nytt</span>
+                      {% endif %}
+                      {% if item.show_on_kitchen_dashboard %}
+                        <span class="yp-pill announcement-pill announcement-pill--kitchen">Kök</span>
+                      {% endif %}
+                    </span>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="app-shell__card-text">Inga aktuella meddelanden</p>
+          {% endif %}
+        </div>
+      </article>
+
       {% include "ui/_partials/remember_to_order_card.html" %}
     </section>
   </div>

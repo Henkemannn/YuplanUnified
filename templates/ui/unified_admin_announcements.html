@@ -1,0 +1,65 @@
+{% extends "ui/unified_admin_base.html" %}
+{% block admin_title %}Meddelanden / Påminnelser{% endblock %}
+{% block admin_subtitle %}Skapa och hantera meddelanden för dashboard{% endblock %}
+{% block admin_main %}
+<section class="app-shell__grid">
+  <article class="app-shell__card">
+    <h2 class="app-shell__card-title">{% if vm.form and vm.form.is_editing %}Redigera meddelande{% else %}Nytt meddelande{% endif %}</h2>
+    <form method="POST" class="yp-form" style="max-width: 720px;">
+      {{ csrf_token_input()|safe }}
+      {% if vm.form and vm.form.announcement_id %}
+        <input type="hidden" name="announcement_id" value="{{ vm.form.announcement_id }}">
+      {% endif %}
+      <div class="yp-form-field">
+        <label class="yp-label" for="event_date">Datum</label>
+        <input class="yp-input" id="event_date" type="date" name="event_date" value="{{ vm.form.event_date if vm.form else '' }}" required>
+      </div>
+      <div class="yp-form-field">
+        <label class="yp-label" for="event_time">Tid (valfritt)</label>
+        <input class="yp-input" id="event_time" type="time" name="event_time" value="{{ vm.form.event_time if vm.form else '' }}">
+      </div>
+      <div class="yp-form-field">
+        <label class="yp-label" for="message">Meddelande</label>
+        <textarea class="yp-input" id="message" name="message" rows="3" maxlength="400" required>{{ vm.form.message if vm.form else '' }}</textarea>
+      </div>
+      <div class="yp-form-field">
+        <label><input type="checkbox" name="show_on_kitchen_dashboard" {% if vm.form and vm.form.show_on_kitchen_dashboard %}checked{% endif %}> Visa även i köksportalen</label>
+      </div>
+      <div class="form-actions" style="display:flex; gap:8px;">
+        <button class="yp-btn yp-btn-primary" type="submit">{% if vm.form and vm.form.is_editing %}Uppdatera{% else %}Spara{% endif %}</button>
+        {% if vm.form and vm.form.is_editing %}
+          <a class="yp-btn yp-btn-secondary" href="{{ url_for('ui.admin_announcements_page') }}">Avbryt</a>
+        {% endif %}
+      </div>
+    </form>
+  </article>
+
+  <article class="app-shell__card announcement-card">
+    <h2 class="app-shell__card-title">Aktuella meddelanden</h2>
+    {% if vm.announcements %}
+      <div class="app-shell__list announcement-list">
+        {% for item in vm.announcements | reverse %}
+          <div class="app-shell__list-item">
+            <div class="app-shell__list-main">
+              <span class="announcement-line {% if loop.first %}announcement-line--new{% endif %}">
+                <span class="announcement-dot" aria-hidden="true">•</span>
+                <span class="app-shell__list-title">{{ item.display_label }}</span>
+                <span class="yp-pill announcement-pill {% if item.show_on_kitchen_dashboard %}announcement-pill--kitchen{% else %}announcement-pill--internal{% endif %}">
+                  {% if item.show_on_kitchen_dashboard %}Visas i köksportalen{% else %}Endast admin{% endif %}
+                </span>
+                <a class="yp-pill announcement-pill announcement-pill--action" href="{{ url_for('ui.admin_announcements_page', edit=item.id) }}">Redigera</a>
+                <form method="POST" action="{{ url_for('ui.admin_announcements_delete', item_id=item.id) }}" class="announcement-pill-form">
+                  {{ csrf_token_input()|safe }}
+                  <button class="yp-pill announcement-pill announcement-pill--danger" type="submit">Ta bort</button>
+                </form>
+              </span>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="app-shell__card-text">Inga aktuella meddelanden</p>
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

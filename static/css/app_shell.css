@@ -914,6 +914,125 @@
   width: fit-content;
 }
 
+.announcement-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.announcement-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.announcement-card .app-shell__card-body {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.announcement-list {
+  margin: 0;
+  padding: 0;
+}
+
+.announcement-list .app-shell__list-item {
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+}
+
+.announcement-list .app-shell__list-item:last-child {
+  border-bottom: 0;
+}
+
+.announcement-dot {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.announcement-line--new {
+  position: relative;
+}
+
+.announcement-line--new .app-shell__list-title {
+  animation: announcementTextShimmer 1.1s ease-in-out 3;
+}
+
+.announcement-pill {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+}
+
+.announcement-pill--new {
+  background: #ffeec4;
+  color: #7a4a00;
+}
+
+.announcement-pill--kitchen {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.announcement-list .app-shell__list-main {
+  width: 100%;
+}
+
+.announcement-pill--internal {
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+  color: var(--muted);
+}
+
+.announcement-pill--action {
+  text-decoration: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 82%, transparent);
+}
+
+.announcement-pill--danger {
+  border: 1px solid color-mix(in srgb, var(--yp-color-danger) 28%, transparent);
+  color: color-mix(in srgb, var(--yp-color-danger) 78%, #fff);
+  background: color-mix(in srgb, var(--yp-color-danger-light) 65%, transparent);
+  cursor: pointer;
+}
+
+.announcement-pill-form {
+  display: inline-flex;
+  margin: 0;
+}
+
+.announcement-pill-form .announcement-pill {
+  border-radius: var(--r-full);
+  font-weight: 600;
+}
+
+.announcement-list .announcement-line {
+  row-gap: 6px;
+}
+
+@keyframes announcementTextShimmer {
+  0%,
+  100% {
+    text-shadow: none;
+    filter: none;
+  }
+  40% {
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.32), 0 0 14px rgba(125, 211, 252, 0.26);
+    filter: brightness(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .announcement-line--new .app-shell__list-title {
+    animation: none;
+    text-shadow: none;
+    filter: none;
+  }
+}
+
 .yp-iconbtn {
   width: 36px;
   height: 36px;

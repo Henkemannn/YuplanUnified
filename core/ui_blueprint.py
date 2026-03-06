@@ -13,10 +13,51 @@ from .weekview_vm import build_weekview_vm
 # use string roles consistently elsewhere; avoid Role import
 from .meal_registration_repo import MealRegistrationRepo
 from datetime import date as _date
+from datetime import datetime as _datetime
+from datetime import time as _time
 from datetime import timedelta
 import uuid
 
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
+
+
+def _format_announcement_display(event_date: _date, event_time: _time | None, message: str) -> str:
+    day_names = {1: "Mån", 2: "Tis", 3: "Ons", 4: "Tors", 5: "Fre", 6: "Lör", 7: "Sön"}
+    day_label = day_names.get(int(event_date.isoweekday()), "")
+    date_part = f"{event_date.day}/{event_date.month}"
+    text = f"{day_label} {date_part} – {message}"
+    if event_time is not None:
+        text = f"{text} kl {event_time.strftime('%H:%M')}"
+    return text
+
+
+def _build_dashboard_announcements(site_id: str | None, *, kitchen_only: bool) -> list[dict]:
+    if not site_id:
+        return []
+    try:
+        from .announcements_repo import AnnouncementsRepo
+        items = AnnouncementsRepo().list_active_for_site(
+            str(site_id),
+            include_kitchen_only=bool(kitchen_only),
+            today=_date.today(),
+            include_past_days=2,
+            limit=12,
+        )
+    except Exception:
+        items = []
+    out = []
+    for it in items:
+        out.append(
+            {
+                "id": it.id,
+                "message": it.message,
+                "event_date": it.event_date,
+                "event_time": it.event_time,
+                "show_on_kitchen_dashboard": it.show_on_kitchen_dashboard,
+                "display_label": _format_announcement_display(it.event_date, it.event_time, it.message),
+            }
+        )
+    return out
 
 
 @ui_bp.get("/ui/_proto/app-shell")
@@ -1900,6 +1941,7 @@ def kitchen_dashboard():
             remember_items = RememberToOrderRepo().list_visible(site_id, remember_week_key)
         except Exception:
             remember_items = []
+    announcements = _build_dashboard_announcements(site_id, kitchen_only=True)
     vm = {
         "today_formatted": today_formatted,
         "current_week": current_week,
@@ -1921,8 +1963,116 @@ def kitchen_dashboard():
         ],
         "remember_to_order_week_key": remember_week_key,
         "remember_to_order_can_check": False,
+        "announcements": announcements,
     }
     return render_template("ui/kitchen_dashboard.html", vm=vm)
+
+
+@ui_bp.route("/ui/admin/announcements", methods=["GET", "POST"])
+@require_roles(*ADMIN_ROLES)
+def admin_announcements_page():
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/admin/announcements"))
+
+    if request.method == "POST":
+        raw_item_id = str((request.form.get("announcement_id") or "").strip())
+        raw_date = str((request.form.get("event_date") or "").strip())
+        raw_time = str((request.form.get("event_time") or "").strip())
+        message = str((request.form.get("message") or "").strip())
+        show_on_kitchen = bool(request.form.get("show_on_kitchen_dashboard"))
+
+        try:
+            event_date = _date.fromisoformat(raw_date)
+        except Exception:
+            event_date = None
+
+        event_time = None
+        if raw_time:
+            try:
+                event_time = _time.fromisoformat(raw_time)
+            except Exception:
+                event_time = None
+
+        if not event_date or not message:
+            flash("Fyll i datum och meddelande.", "error")
+            return redirect(url_for("ui.admin_announcements_page"))
+
+        try:
+            from .announcements_repo import AnnouncementsRepo
+
+            repo = AnnouncementsRepo()
+            if raw_item_id:
+                ok = repo.update(
+                    int(raw_item_id),
+                    site_id=str(site_id),
+                    message=message,
+                    event_date=event_date,
+                    event_time=event_time,
+                    show_on_kitchen_dashboard=show_on_kitchen,
+                )
+                flash("Meddelandet uppdaterades." if ok else "Meddelandet hittades inte.", "success" if ok else "error")
+            else:
+                repo.create(
+                    site_id=str(site_id),
+                    message=message,
+                    event_date=event_date,
+                    event_time=event_time,
+                    show_on_kitchen_dashboard=show_on_kitchen,
+                    created_by_user_id=int(session.get("user_id")) if session.get("user_id") else None,
+                )
+                flash("Meddelandet sparades.", "success")
+        except Exception:
+            flash("Kunde inte spara meddelandet.", "error")
+        return redirect(url_for("ui.admin_announcements_page"))
+
+    announcements = _build_dashboard_announcements(site_id, kitchen_only=False)
+    edit_item = None
+    raw_edit_id = str((request.args.get("edit") or "").strip())
+    if raw_edit_id.isdigit():
+        wanted = int(raw_edit_id)
+        edit_item = next((it for it in announcements if int(it.get("id") or 0) == wanted), None)
+
+    form_vm = {
+        "announcement_id": int(edit_item.get("id")) if edit_item else None,
+        "event_date": (edit_item.get("event_date").isoformat() if edit_item and edit_item.get("event_date") else ""),
+        "event_time": (edit_item.get("event_time").strftime("%H:%M") if edit_item and edit_item.get("event_time") else ""),
+        "message": (str(edit_item.get("message") or "") if edit_item else ""),
+        "show_on_kitchen_dashboard": bool(edit_item.get("show_on_kitchen_dashboard")) if edit_item else False,
+        "is_editing": bool(edit_item),
+    }
+
+    vm = {
+        "site_id": str(site_id),
+        "site_name": (ctx.get("site_name") or ""),
+        "announcements": announcements,
+        "form": form_vm,
+        "allow_site_switch": False,
+        "nav_context": "admin",
+    }
+    return render_template("ui/unified_admin_announcements.html", vm=vm)
+
+
+@ui_bp.post("/ui/admin/announcements/<int:item_id>/delete")
+@require_roles(*ADMIN_ROLES)
+def admin_announcements_delete(item_id: int):
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    site_id = ctx.get("site_id") or (session.get("site_id") if "site_id" in session else None)
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/admin/announcements"))
+    try:
+        from .announcements_repo import AnnouncementsRepo
+
+        ok = AnnouncementsRepo().deactivate(int(item_id), str(site_id))
+        flash("Meddelandet togs bort." if ok else "Meddelandet hittades inte.", "success" if ok else "error")
+    except Exception:
+        flash("Kunde inte ta bort meddelandet.", "error")
+    return redirect(url_for("ui.admin_announcements_page"))
 
 
 @ui_bp.get("/ui/kitchen/menu")
@@ -4816,6 +4966,7 @@ def admin_dashboard():
         ],
         "remember_to_order_week_key": remember_week_key,
         "remember_to_order_can_check": bool(active_site_id and role in ADMIN_ROLES),
+        "announcements": _build_dashboard_announcements(active_site_id, kitchen_only=False),
     }
     
     return render_template("ui/unified_admin_dashboard.html", vm=vm, nav_context="admin")
