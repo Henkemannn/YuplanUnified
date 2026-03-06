@@ -58,9 +58,12 @@
             {{ user_label }}
           </button>
           <div class="app-shell__user-dropdown" role="menu" aria-label="Användarmeny">
-            <a class="app-shell__user-item" role="menuitem" href="#">Användarinfo</a>
-            <a class="app-shell__user-item" role="menuitem" href="#">Support</a>
-            <a class="app-shell__user-item" role="menuitem" href="#">Logga ut</a>
+            <a class="app-shell__user-item" role="menuitem" href="{{ url_for('ui.account_page') }}">Användarinfo</a>
+            <a class="app-shell__user-item" role="menuitem" href="mailto:support@yuplan.se">Support</a>
+            <form method="post" action="{{ url_for('ui.ui_logout') }}" class="app-shell__user-item-form">
+              {{ csrf_token_input()|safe }}
+              <button class="app-shell__user-item app-shell__user-item-button" role="menuitem" type="submit">Logga ut</button>
+            </form>
           </div>
         </div>
       </div>

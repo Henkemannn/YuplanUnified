@@ -73,6 +73,22 @@ def ui_login():  # Simple HTML login that sets session directly or redirects to 
                         sites = repo.list_sites() or []
                     if len(sites) == 1:
                         session["site_id"] = str(sites[0]["id"])  # single-site shortcut
+                elif user.role == "kitchen":
+                    try:
+                        from sqlalchemy import text as _t
+
+                        row_k = db.execute(
+                            _t(
+                                "SELECT site_id FROM kitchen_user_sites "
+                                "WHERE user_id=:uid AND tenant_id=:tid LIMIT 1"
+                            ),
+                            {"uid": int(user.id), "tid": int(user.tenant_id)},
+                        ).fetchone()
+                        if row_k and row_k[0]:
+                            session["site_id"] = str(row_k[0])
+                            session["site_lock"] = True
+                    except Exception:
+                        pass
             except Exception:
                 pass
             # Ensure CSRF cookie

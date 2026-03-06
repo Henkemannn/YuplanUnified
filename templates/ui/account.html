@@ -1,0 +1,147 @@
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Mitt konto{% endblock %}
+
+{% block content %}
+<div class="app-page admin-shell">
+  <section class="app-shell__page-header">
+    <div>
+      <h1 class="app-shell__title">Mitt konto</h1>
+      <p class="app-shell__subtitle">Visa kontoinformation och byt lösenord</p>
+    </div>
+  </section>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="ua-flashes">
+        {% for category, message in messages %}
+          <div class="ua-flash ua-flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="ua-section" style="display:grid;gap:1rem;">
+    <div class="ua-card">
+      <h2 class="app-shell__card-title">Kontouppgifter</h2>
+      <div class="account-details" role="list" aria-label="Kontouppgifter">
+        <div class="account-details__row" role="listitem">
+          <span class="account-details__label">Namn</span>
+          <span class="account-details__value">{{ vm.account.full_name or '-' }}</span>
+        </div>
+        <div class="account-details__row" role="listitem">
+          <span class="account-details__label">E-post</span>
+          <span class="account-details__value">{{ vm.account.email or '-' }}</span>
+        </div>
+        <div class="account-details__row" role="listitem">
+          <span class="account-details__label">Roll</span>
+          <span class="account-details__value">{{ vm.account.role or '-' }}</span>
+        </div>
+        <div class="account-details__row" role="listitem">
+          <span class="account-details__label">Site</span>
+          <span class="account-details__value">{{ vm.account.site_name or vm.account.site_id or '-' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ua-card" style="max-width: 680px;">
+      <h2 class="app-shell__card-title">Byt lösenord</h2>
+      <form method="post" action="{{ url_for('ui.account_change_password') }}" class="yp-form account-password-form" style="display:grid;gap:0.8rem;" autocomplete="off">
+        {{ csrf_token_input()|safe }}
+        <div class="yp-form-field">
+          <label for="current_password" class="yp-label account-password-label">Nuvarande lösenord</label>
+          <input id="current_password" name="current_password" type="password" class="yp-input" required autocomplete="off" value="" readonly onfocus="this.removeAttribute('readonly');" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Ange nuvarande lösenord">
+        </div>
+        <div class="yp-form-field">
+          <label for="new_password" class="yp-label account-password-label">Nytt lösenord</label>
+          <input id="new_password" name="new_password" type="password" class="yp-input" minlength="6" required autocomplete="new-password" placeholder="Ange nytt lösenord">
+        </div>
+        <div class="yp-form-field">
+          <label for="confirm_password" class="yp-label account-password-label">Upprepa lösenord</label>
+          <input id="confirm_password" name="confirm_password" type="password" class="yp-input" minlength="6" required autocomplete="new-password" placeholder="Upprepa nytt lösenord">
+        </div>
+        <div>
+          <button type="submit" class="yp-button yp-button-primary">Spara nytt lösenord</button>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<style>
+.account-details {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.account-details__row {
+  display: grid;
+  grid-template-columns: minmax(110px, 180px) minmax(0, 1fr);
+  column-gap: 0.75rem;
+  align-items: baseline;
+}
+
+.account-details__label {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.account-details__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.app-shell--dark .account-details__label,
+.app-shell--dark .account-details__value {
+  color: var(--text);
+}
+
+.account-password-form .yp-label,
+.account-password-form .account-password-label {
+  color: #21324f;
+  font-weight: 600;
+}
+
+.account-password-form .yp-input {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+}
+
+.app-shell--dark .account-password-form .yp-input {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.app-shell--dark .account-password-form .yp-label {
+  color: #dbe7fb !important;
+}
+
+.app-shell--dark .account-password-form .account-password-label {
+  color: #e8f1ff !important;
+  text-shadow: 0 0 1px rgba(10, 17, 32, 0.35);
+}
+
+.account-password-form .yp-input::placeholder {
+  color: #5f6f87;
+  opacity: 1;
+}
+
+.app-shell--dark .account-password-form .yp-input::placeholder {
+  color: #aebfda;
+  opacity: 1;
+}
+
+.app-shell--dark .account-password-form input:-webkit-autofill,
+.app-shell--dark .account-password-form input:-webkit-autofill:hover,
+.app-shell--dark .account-password-form input:-webkit-autofill:focus,
+.app-shell--dark .account-password-form input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface-2) inset;
+  box-shadow: 0 0 0 1000px var(--surface-2) inset;
+}
+</style>
+{% endblock %}

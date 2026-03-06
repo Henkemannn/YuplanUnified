@@ -482,6 +482,19 @@ body {
   background: var(--surface-2);
 }
 
+.app-shell__user-item-form {
+  margin: 0;
+}
+
+.app-shell__user-item-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
 .app-shell__body {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);

@@ -13,6 +13,7 @@
     <h2 class="app-shell__card-title">Ny köksanvändare</h2>
     <p class="app-shell__card-text kitchen-users-bound-site">Site: <strong>{{ vm.active_site_name or vm.active_site_id or 'Ingen aktiv site' }}</strong></p>
     <form method="post" action="{{ url_for('ui.admin_kitchen_users_create') }}" class="yp-form kitchen-users-form" style="display:grid;gap:0.75rem;max-width:640px;">
+      {{ csrf_token_input()|safe }}
       <div class="yp-form-field">
         <label for="name" class="yp-label">Namn</label>
         <input id="name" name="name" type="text" class="yp-input" required maxlength="200">
@@ -57,6 +58,7 @@
                 <td>
                   {% if user.is_active %}
                     <form method="post" action="{{ url_for('ui.admin_kitchen_users_delete', user_id=user.id) }}" onsubmit="return confirm('Ta bort köksanvändare?');">
+                      {{ csrf_token_input()|safe }}
                       <button type="submit" class="yp-button yp-button-danger yp-button-sm">Ta bort</button>
                     </form>
                   {% else %}

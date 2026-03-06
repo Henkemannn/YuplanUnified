@@ -4,6 +4,7 @@ import os
 
 from flask import Blueprint, render_template, session, request, jsonify, redirect, url_for, flash, g, abort
 from sqlalchemy import text
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from .auth import require_roles
 from .db import get_session
@@ -321,6 +322,176 @@ def cook_week_overview_unified(year: int, week: int):
 SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 ADMIN_ROLES = ("admin", "superuser")
 COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
+ACCOUNT_ALLOWED_ROLES = ("admin", "superuser", "kitchen")
+
+
+@ui_bp.get("/ui/account")
+@require_roles(*ACCOUNT_ALLOWED_ROLES)
+def account_page():
+    """Account overview for admin and kitchen users."""
+    role = (session.get("role") or "").strip().lower()
+    user_id = session.get("user_id")
+    tenant_id = session.get("tenant_id")
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    active_site_id = str((ctx.get("site_id") or session.get("site_id") or "").strip())
+    active_site_name = ""
+
+    user_name = str((session.get("full_name") or "").strip())
+    user_email = str((session.get("user_email") or session.get("username") or "").strip())
+    user_role = role
+    user_site_id = active_site_id
+
+    db = get_session()
+    try:
+        has_site_id = _users_table_has_site_id(db)
+
+        row = None
+        if user_id is not None:
+            if has_site_id:
+                row = db.execute(
+                    text(
+                        "SELECT full_name, email, role, tenant_id, site_id "
+                        "FROM users WHERE id=:uid LIMIT 1"
+                    ),
+                    {"uid": int(user_id)},
+                ).fetchone()
+            else:
+                row = db.execute(
+                    text(
+                        "SELECT full_name, email, role, tenant_id "
+                        "FROM users WHERE id=:uid LIMIT 1"
+                    ),
+                    {"uid": int(user_id)},
+                ).fetchone()
+
+        if row:
+            user_name = str((row[0] or "").strip()) or user_name
+            user_email = str((row[1] or "").strip()) or user_email
+            user_role = str((row[2] or "").strip().lower()) or user_role
+            if tenant_id is None and row[3] is not None:
+                tenant_id = int(row[3])
+            if has_site_id:
+                user_site_id = str((row[4] or "").strip()) or user_site_id
+
+        if role == "kitchen" and not user_site_id and user_id is not None and tenant_id is not None:
+            try:
+                _ensure_kitchen_user_sites_table(db)
+                row_k = db.execute(
+                    text(
+                        "SELECT site_id FROM kitchen_user_sites "
+                        "WHERE user_id=:uid AND tenant_id=:tid LIMIT 1"
+                    ),
+                    {"uid": int(user_id), "tid": int(tenant_id)},
+                ).fetchone()
+                if row_k and row_k[0]:
+                    user_site_id = str(row_k[0])
+            except Exception:
+                pass
+
+        if tenant_id is not None and user_site_id:
+            row_site = db.execute(
+                text("SELECT name FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
+                {"sid": str(user_site_id), "tid": int(tenant_id)},
+            ).fetchone()
+            active_site_name = str(row_site[0] or "") if row_site else ""
+    finally:
+        db.close()
+
+    today = _date.today()
+    current_year, current_week = today.isocalendar()[0], today.isocalendar()[1]
+    vm = {
+        "current_year": current_year,
+        "current_week": current_week,
+        "user_role": user_role,
+        "nav_context": "kitchen" if role == "kitchen" else "admin",
+        "account": {
+            "full_name": user_name,
+            "email": user_email,
+            "role": user_role,
+            "site_id": user_site_id,
+            "site_name": active_site_name,
+        },
+    }
+    return render_template("ui/account.html", vm=vm)
+
+
+@ui_bp.post("/ui/account/password")
+@require_roles(*ACCOUNT_ALLOWED_ROLES)
+def account_change_password():
+    """Allow logged-in admin/kitchen users to change their own password."""
+    user_id = session.get("user_id")
+    tenant_id = session.get("tenant_id")
+    if user_id is None:
+        flash("Sessionen saknar användare. Logga in igen.", "error")
+        return redirect(url_for("home.ui_login"))
+
+    current_password = str((request.form.get("current_password") or "").strip())
+    new_password = str((request.form.get("new_password") or "").strip())
+    confirm_password = str((request.form.get("confirm_password") or "").strip())
+
+    if not current_password or not new_password or not confirm_password:
+        flash("Fyll i nuvarande lösenord och det nya lösenordet två gånger.", "error")
+        return redirect(url_for("ui.account_page"))
+
+    if len(new_password) < 6:
+        flash("Nytt lösenord måste vara minst 6 tecken.", "error")
+        return redirect(url_for("ui.account_page"))
+
+    if new_password != confirm_password:
+        flash("Nytt lösenord och bekräftelse matchar inte.", "error")
+        return redirect(url_for("ui.account_page"))
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT password_hash, tenant_id FROM users WHERE id=:uid LIMIT 1"),
+            {"uid": int(user_id)},
+        ).fetchone()
+
+        if not row:
+            flash("Kunde inte hitta ditt konto.", "error")
+            return redirect(url_for("ui.account_page"))
+
+        user_tenant_id = int(row[1]) if row[1] is not None else None
+        if tenant_id is not None and user_tenant_id is not None and int(tenant_id) != int(user_tenant_id):
+            flash("Kunde inte verifiera ditt konto i aktiv tenant.", "error")
+            return redirect(url_for("ui.account_page"))
+
+        stored_hash = str(row[0] or "")
+        if not stored_hash or not check_password_hash(stored_hash, current_password):
+            flash("Nuvarande lösenord är felaktigt.", "error")
+            return redirect(url_for("ui.account_page"))
+
+        db.execute(
+            text("UPDATE users SET password_hash=:ph WHERE id=:uid"),
+            {"ph": generate_password_hash(new_password), "uid": int(user_id)},
+        )
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        flash("Kunde inte uppdatera lösenordet just nu.", "error")
+        return redirect(url_for("ui.account_page"))
+    finally:
+        db.close()
+
+    flash("Lösenord uppdaterat.", "success")
+    return redirect(url_for("ui.account_page"))
+
+
+@ui_bp.post("/ui/logout")
+@require_roles("superuser", "admin", "cook", "unit_portal", "kitchen")
+def ui_logout():
+    """Session-based logout for app-shell UI."""
+    try:
+        session.clear()
+    except Exception:
+        pass
+    return redirect(url_for("home.ui_login"))
 
 # --- Site selector ---
 @ui_bp.get("/ui/select-site")
@@ -5735,6 +5906,31 @@ def _users_table_has_site_id(db) -> bool:
         return False
 
 
+def _ensure_kitchen_user_sites_table(db) -> None:
+    """Pilot fallback: persist kitchen->site mapping when users.site_id is unavailable."""
+    db.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+            "user_id INTEGER PRIMARY KEY, "
+            "tenant_id INTEGER NOT NULL, "
+            "site_id TEXT NOT NULL"
+            ")"
+        )
+    )
+
+
+def _upsert_kitchen_user_site_binding(db, *, user_id: int, tenant_id: int, site_id: str) -> None:
+    _ensure_kitchen_user_sites_table(db)
+    db.execute(
+        text(
+            "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+            "VALUES (:uid, :tid, :sid) "
+            "ON CONFLICT(user_id) DO UPDATE SET tenant_id=excluded.tenant_id, site_id=excluded.site_id"
+        ),
+        {"uid": int(user_id), "tid": int(tenant_id), "sid": str(site_id)},
+    )
+
+
 @ui_bp.get("/ui/admin/kitchen-users")
 @require_roles(*ADMIN_ROLES)
 def admin_kitchen_users_page():
@@ -5757,6 +5953,27 @@ def admin_kitchen_users_page():
             active_site_name = str(row_site[0] or "") if row_site else ""
 
         has_site_id = _users_table_has_site_id(db)
+        _ensure_kitchen_user_sites_table(db)
+        # Pilot backfill: if legacy kitchen users lack explicit binding, attach them to current active site.
+        if (not has_site_id) and tid is not None and active_site_id:
+            try:
+                db.execute(
+                    text(
+                        "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                        "SELECT u.id, u.tenant_id, :sid "
+                        "FROM users u "
+                        "LEFT JOIN kitchen_user_sites k ON k.user_id = u.id "
+                        "WHERE u.tenant_id=:tid AND u.role='kitchen' AND k.user_id IS NULL "
+                        "ON CONFLICT(user_id) DO NOTHING"
+                    ),
+                    {"sid": str(active_site_id), "tid": int(tid)},
+                )
+                db.commit()
+            except Exception:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
         kitchen_users = []
         if tid is not None:
             if has_site_id:
@@ -5785,15 +6002,19 @@ def admin_kitchen_users_page():
                         }
                     )
             else:
-                rows = db.execute(
-                    text(
-                        "SELECT id, full_name, email, is_active "
-                        "FROM users "
-                        "WHERE tenant_id=:tid AND role='kitchen' "
-                        "ORDER BY full_name, email"
-                    ),
-                    {"tid": int(tid)},
-                ).fetchall()
+                if active_site_id:
+                    rows = db.execute(
+                        text(
+                            "SELECT u.id, u.full_name, u.email, u.is_active, k.site_id "
+                            "FROM users u "
+                            "LEFT JOIN kitchen_user_sites k ON k.user_id = u.id "
+                            "WHERE u.tenant_id=:tid AND u.role='kitchen' AND k.site_id=:sid "
+                            "ORDER BY u.full_name, u.email"
+                        ),
+                        {"tid": int(tid), "sid": str(active_site_id)},
+                    ).fetchall()
+                else:
+                    rows = []
                 for r in rows:
                     kitchen_users.append(
                         {
@@ -5801,8 +6022,8 @@ def admin_kitchen_users_page():
                             "name": str(r[1] or ""),
                             "email": str(r[2] or ""),
                             "is_active": bool(r[3]) if r[3] is not None else True,
-                            "site_id": "",
-                            "site_name": "",
+                            "site_id": str(r[4] or ""),
+                            "site_name": active_site_name if str(r[4] or "") else "",
                         }
                     )
     finally:
@@ -5876,10 +6097,18 @@ def admin_kitchen_users_create():
 
     db = get_session()
     try:
+        _ensure_kitchen_user_sites_table(db)
         if _users_table_has_site_id(db):
             db.execute(
                 text("UPDATE users SET site_id=:sid WHERE id=:uid"),
                 {"sid": site_id, "uid": int(new_user_id)},
+            )
+        else:
+            _upsert_kitchen_user_site_binding(
+                db,
+                user_id=int(new_user_id),
+                tenant_id=int(tid),
+                site_id=str(site_id),
             )
             db.commit()
     except Exception:

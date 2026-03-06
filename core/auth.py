@@ -266,6 +266,23 @@ def login():
                 except Exception:
                     bound_site = None
                 if (not bound_site) and user.tenant_id is not None:
+                    # Pilot fallback: use kitchen_user_sites binding when users.site_id is unavailable.
+                    try:
+                        if role_norm == "kitchen":
+                            from sqlalchemy import text as _t
+
+                            row_k = db.execute(
+                                _t(
+                                    "SELECT site_id FROM kitchen_user_sites "
+                                    "WHERE user_id=:uid AND tenant_id=:tid LIMIT 1"
+                                ),
+                                {"uid": int(user.id), "tid": int(user.tenant_id)},
+                            ).fetchone()
+                            if row_k and row_k[0]:
+                                bound_site = str(row_k[0])
+                    except Exception:
+                        pass
+                if (not bound_site) and user.tenant_id is not None:
                     try:
                         from .context import get_single_site_id_for_tenant as _one_site
                         bound_site = _one_site(int(user.tenant_id))
