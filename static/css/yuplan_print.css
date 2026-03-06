@@ -1,0 +1,163 @@
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  @page {
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .app-shell,
+  .app-shell__body,
+  .app-shell__main,
+  .app-page,
+  .app-shell__card,
+  .app-card {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Keep only printable content area (do not hide data-bearing content). */
+  .app-shell__sidebar,
+  .app-shell__topbar,
+  .app-shell__nav,
+  .app-shell__page-actions,
+  .yp-weekpicker,
+  .no-print,
+  nav {
+    display: none !important;
+  }
+
+  /* Hide interactive controls only inside obvious control bands. */
+  .app-shell__page-header button,
+  .app-shell__page-header select,
+  .kitchen-planering-card--controls button,
+  .kitchen-planering-card--controls select,
+  .kp-action-row,
+  .toolbar button,
+  .toolbar a {
+    display: none !important;
+  }
+
+  .app-shell,
+  .app-shell__body,
+  .app-shell__main {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .app-shell__main > *,
+  .app-shell__grid,
+  .kitchen-planering-grid,
+  .kitchen-menu__grid,
+  .app-shell__card,
+  .app-card {
+    width: 100% !important;
+    max-width: none !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell__card,
+  .app-card {
+    border: 1px solid #d0d0d0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Dark-mode hardening for print legibility. */
+  .app-shell__title,
+  .app-shell__subtitle,
+  .app-shell__card-title,
+  .app-shell__card-text,
+  .app-shell__card-meta,
+  .kitchen-week .grid-table th,
+  .kitchen-week .grid-table td,
+  .kitchen-menu .app-shell__card *,
+  .kitchen-planering-page .kitchen-planering-card *,
+  .kitchen-planering-page #yp-print-root * {
+    color: #000 !important;
+  }
+
+  .kitchen-menu .app-shell__card,
+  .kitchen-menu .app-shell__card * {
+    background: #fff !important;
+  }
+
+  /* Remove clipping in print so generated content can expand fully. */
+  .app-shell__main,
+  .app-page,
+  .app-shell__card,
+  .app-card,
+  .kp-modal-body,
+  .kp-special-worklist,
+  #yp-print-root {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  /* Keep sections readable without forcing one-card-per-page. */
+  .kitchen-week .app-card,
+  .kitchen-planering-page .kitchen-planering-card,
+  .kitchen-menu__grid > * {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Weekview should flow naturally between pages when needed. */
+  .kitchen-week .app-card {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  /* Menu overview: two columns with deterministic 4/3 day split. */
+  .kitchen-menu .kitchen-menu__grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: repeat(4, minmax(0, 1fr)) !important;
+    gap: 3mm 3.5mm !important;
+    align-items: stretch !important;
+    grid-auto-flow: row !important;
+    align-content: start !important;
+    min-height: 232mm !important;
+  }
+
+  /* Explicit 4-left / 3-right placement for consistent print ordering. */
+  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(1) { grid-column: 1 !important; grid-row: 1 !important; }
+  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(2) { grid-column: 1 !important; grid-row: 2 !important; }
+  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(3) { grid-column: 1 !important; grid-row: 3 !important; }
+  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(4) { grid-column: 1 !important; grid-row: 4 !important; }
+  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(5) { grid-column: 2 !important; grid-row: 1 !important; }
+  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(6) { grid-column: 2 !important; grid-row: 2 !important; }
+  .kitchen-menu .kitchen-menu__grid > .app-card:nth-child(7) { grid-column: 2 !important; grid-row: 3 !important; }
+
+  .kitchen-menu .app-shell__card {
+    margin: 0 !important;
+    padding: 10px 12px !important;
+    border: 1px solid #cfcfcf !important;
+    height: 100% !important;
+  }
+
+  .kitchen-menu .app-shell__card-title {
+    font-size: 14px !important;
+    line-height: 1.2 !important;
+    margin-bottom: 5px !important;
+  }
+
+  .kitchen-menu .app-shell__card-text {
+    font-size: 12.8px !important;
+    line-height: 1.35 !important;
+  }
+}

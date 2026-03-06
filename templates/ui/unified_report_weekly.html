@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_departments.css') }}">
  <link rel="stylesheet" href="{{ url_for('static', filename='css/unified_admin.css') }}">
   <script src="{{ url_for('static', filename='ui/report_weekly_filters.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='ui/report_weekly_print.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -33,6 +34,9 @@
         {% elif display_week and display_year %}
           <p class="app-shell__subtitle">Vecka {{ display_week }}, {{ display_year }}</p>
         {% endif %}
+      </div>
+      <div class="app-shell__page-actions no-print">
+        <button type="button" class="yp-iconbtn js-report-weekly-print" aria-label="Skriv ut">🖨️</button>
       </div>
     </section>
 
@@ -64,12 +68,12 @@
               </select>
             </div>
             <div class="yp-form-field">
-              <label for="department-select" class="yp-label">Avdelning</label>
+              <label for="department-select" class="yp-label">Avd</label>
               <select id="department-select" name="department_id" class="yp-input">
-                <option value="ALL" {% if (vm.selected_department_id|string) == 'ALL' %}selected{% endif %}>Alla avdelningar</option>
+                <option value="ALL" {% if (vm.selected_department_id|string) == 'ALL' %}selected{% endif %}>Alla Avd</option>
                 {% for opt in options %}
                   {% if opt.id != 'ALL' %}
-                    <option value="{{ opt.id }}" {% if opt.id|string == vm.selected_department_id|string %}selected{% endif %}>{{ opt.name }}</option>
+                    <option value="{{ opt.id }}" {% if opt.id|string == vm.selected_department_id|string %}selected{% endif %}>{{ opt.name | replace('Avdelning', 'Avd') }}</option>
                   {% endif %}
                 {% endfor %}
               </select>

@@ -238,6 +238,15 @@
     border-bottom: 1px solid #999;
   }
 
+  .kitchen-week .yp-info-box {
+    background: #fff !important;
+    color: #000 !important;
+    border: 1px solid #cfcfcf !important;
+    border-left: 1px solid #cfcfcf !important;
+    border-radius: 4px !important;
+    padding: 6px 8px !important;
+  }
+
   .kitchen-week .grid-table {
     width: 100% !important;
     font-size: 12.5px !important;
@@ -255,6 +264,19 @@
   .kitchen-week .grid-table thead th,
   .kitchen-week .grid-subhead th {
     background: #fff !important;
+  }
+
+  .kitchen-week .grid-table tbody tr,
+  .kitchen-week .grid-table tbody td,
+  .kitchen-week .grid-table tbody th {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .kitchen-week .grid-table tbody td.is-alt2,
+  .kitchen-week .kw-cell.is-alt2 {
+    background: #ecd183 !important;
+    color: #000 !important;
   }
 
   .kitchen-week .grid-table th {

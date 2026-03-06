@@ -851,28 +851,62 @@
       modalTitle.textContent = 'Sammanfattning per boende';
       modalWrap.appendChild(modalTitle);
       var modalBody = document.createElement('div');
-      modalBody.className = 'kp-print-list';
-      var rows = [];
+      modalBody.className = 'kp-print-modal-body';
+      var blocks = [];
       for(var p=0; p<specialPerDept.length; p++){
         var dep = specialPerDept[p];
-        var sum = 0;
+        var items = [];
         for(var j=0; j<dep.items.length; j++){
           var row = dep.items[j];
           if(selectedChipsSpecial.has(String(row.diet_type_id))){
-            sum += row.count;
+            items.push({
+              diet_type_name: row.diet_type_name,
+              count: row.count
+            });
           }
         }
-        if(sum > 0){
-          rows.push({ department_id: dep.department_id, department_name: dep.department_name, count: sum });
+        if(items.length > 0){
+          blocks.push({
+            department_id: dep.department_id,
+            department_name: dep.department_name,
+            items: items
+          });
         }
       }
-      if(rows.length === 0){
-        modalBody.appendChild(buildPrintRow('sk-row', 'Inga avdelningar', 0, 'Alt1'));
+      if(blocks.length === 0){
+        var emptyBlock = document.createElement('div');
+        emptyBlock.className = 'kp-print-empty';
+        emptyBlock.textContent = 'Inga avdelningar';
+        modalBody.appendChild(emptyBlock);
       } else {
-        for(var r=0; r<rows.length; r++){
-          var item = rows[r];
+        for(var r=0; r<blocks.length; r++){
+          var item = blocks[r];
           var isAlt2Row = (meal === 'lunch' && alt2Set.has(String(item.department_id)));
-          modalBody.appendChild(buildPrintRow('sk-row', item.department_name, item.count, isAlt2Row ? 'Alt2' : 'Alt1'));
+          var group = document.createElement('div');
+          group.className = 'kp-print-modal-dept';
+
+          var head = document.createElement('div');
+          head.className = 'kp-print-modal-dept-head';
+          head.textContent = item.department_name;
+          if(isAlt2Row){
+            var badge = document.createElement('span');
+            badge.className = 'kp-altpill';
+            badge.textContent = 'Alt2';
+            head.appendChild(badge);
+          }
+          group.appendChild(head);
+
+          var list = document.createElement('div');
+          list.className = 'kp-print-modal-dept-list';
+          for(var d=0; d<item.items.length; d++){
+            var diet = item.items[d];
+            var rowEl = document.createElement('div');
+            rowEl.className = 'kp-print-modal-dept-row';
+            rowEl.textContent = String(diet.diet_type_name || '') + ' (' + String(diet.count || 0) + ')';
+            list.appendChild(rowEl);
+          }
+          group.appendChild(list);
+          modalBody.appendChild(group);
         }
       }
       modalWrap.appendChild(modalBody);

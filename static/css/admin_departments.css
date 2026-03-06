@@ -286,6 +286,86 @@
   }
 }
 
+@media print {
+  .admin-report-week .report-weekly__grid {
+    display: block !important;
+  }
+
+  .admin-report-week .report-weekly__filter-card,
+  .admin-report-week .admin-report-week__actions,
+  .admin-report-week .yp-form,
+  .admin-report-week .no-print,
+  .admin-report-week .js-report-weekly-print {
+    display: none !important;
+  }
+
+  .admin-report-week .report-weekly__results-card {
+    width: 100% !important;
+    max-width: none !important;
+    border: 1px solid #d0d0d0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  .admin-report-week .admin-report-week__summary,
+  .admin-report-week .admin-report-week__context,
+  .admin-report-week .admin-report-week__chips,
+  .admin-report-week .admin-report-week__chip,
+  .admin-report-week .admin-report-week__dept-summary,
+  .admin-report-week .admin-report-week__dept-summary .app-shell__list-main,
+  .admin-report-week .app-shell__card-title,
+  .admin-report-week .app-shell__list-title,
+  .admin-report-week .admin-report-week__day-title,
+  .admin-report-week .admin-report-week__day-row {
+    color: #000 !important;
+    background: #fff !important;
+    border-color: #cfcfcf !important;
+  }
+
+  .admin-report-week .admin-report-week__details {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    border: 1px solid #d9d9d9;
+    border-radius: 12px;
+    padding: 8px;
+    background: #fff !important;
+  }
+
+  .admin-report-week .admin-report-week__dept-summary {
+    border: 1px solid #d9d9d9 !important;
+    border-left: 1px solid #d9d9d9 !important;
+    border-radius: 10px !important;
+    padding: 8px 10px !important;
+    box-shadow: none !important;
+  }
+
+  .admin-report-week .admin-report-week__chips {
+    justify-content: flex-start !important;
+    gap: 6px !important;
+  }
+
+  .admin-report-week .admin-report-week__chip {
+    border-radius: 8px !important;
+    padding: 4px 8px !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* Ensure filtered department day-cards are visible even when details were collapsed on screen. */
+  .admin-report-week .admin-report-week__details > .admin-report-week__day-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px 2px 2px;
+  }
+
+  .admin-report-week .admin-report-week__day-card {
+    background: #fff !important;
+    border: 1px solid #d9d9d9 !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+
 .admin-weekly-preview {
   margin-top: 6px;
   padding: 8px 10px;
