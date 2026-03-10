@@ -52,6 +52,7 @@ def test_departments_list_happy_path_admin(client_admin):
     assert "Avdelningar" in html
     assert "Testavdelning" in html
     assert "25" in html
+    assert "Boende: Ej valt" in html
     assert "app-shell__page-header" in html
     assert "app-shell__grid" in html
     assert "app-shell__card" in html

@@ -49,12 +49,14 @@ def test_get_department_detail_page(app_session: Flask, client_admin: FlaskClien
     assert "Test Site" in html
     assert '<div class="app-shell__card-meta">Vecka ' not in html
     assert "Boendeantal" in html
+    assert "Boende:</strong> Ej valt" in html
     assert "Testinfo om avdelningen" in html
     assert "Redigera" in html
     assert f"/ui/admin/departments/{dept['id']}/edit" in html
     assert "content-header" not in html
     assert "site_id:" not in html
-    assert "<input" not in html
+    assert 'name="resident_count"' not in html
+    assert 'name="notes"' not in html
 
 
 def test_post_updates_fixed_resident_count(app_session: Flask, client_admin: FlaskClient) -> None:
@@ -167,6 +169,43 @@ def test_departments_list_shows_link_and_varierat_badge(app_session: Flask, clie
     assert "Varierat" in html
 
 
+def test_departments_list_and_detail_show_residence_name(app_session: Flask, client_admin: FlaskClient) -> None:
+    site = _seed_basic()
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+    dept, _ = DepartmentsRepo().create_department(
+        site_id=site["id"], name="Avd Boende", resident_count_mode="fixed", resident_count_fixed=13
+    )
+
+    from core.db import get_session
+    from sqlalchemy import text
+
+    residence_id = "res-test-1"
+    db = get_session()
+    try:
+        db.execute(
+            text("INSERT INTO residences (id, site_id, name) VALUES (:id, :sid, :name)"),
+            {"id": residence_id, "sid": site["id"], "name": "Solgarden"},
+        )
+        db.execute(
+            text("UPDATE departments SET residence_id=:rid WHERE id=:id"),
+            {"rid": residence_id, "id": dept["id"]},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    list_resp = client_admin.get("/ui/admin/departments", headers=HEADERS_ADMIN)
+    assert list_resp.status_code == 200
+    list_html = list_resp.data.decode()
+    assert "Boende: Solgarden" in list_html
+
+    detail_resp = client_admin.get(f"/ui/admin/departments/{dept['id']}/detail", headers=HEADERS_ADMIN)
+    assert detail_resp.status_code == 200
+    detail_html = detail_resp.data.decode()
+    assert "Boende:</strong> Solgarden" in detail_html
+
+
 def test_department_detail_is_read_only_dashboard(app_session: Flask, client_admin: FlaskClient) -> None:
     site = _seed_basic()
     with client_admin.session_transaction() as sess:
@@ -181,7 +220,8 @@ def test_department_detail_is_read_only_dashboard(app_session: Flask, client_adm
     assert "Grundinformation" in html
     assert "Specialkost" in html
     assert "Snabbstatistik" in html
-    assert "<input" not in html
+    assert 'name="resident_count"' not in html
+    assert 'name="notes"' not in html
     assert "Spara" not in html
 
 
@@ -223,7 +263,8 @@ def test_department_detail_specialkost_list_and_total_sum(app_session: Flask, cl
     assert "Totalt antal specialkost:</strong> 3" in html
     assert "Totalt standardantal specialkost:" not in html
     assert "Ingen specialkost registrerad." not in html
-    assert "<input" not in html
+    assert 'name="resident_count"' not in html
+    assert 'name="notes"' not in html
 
 
 def test_edit_single_submit_saves_name_and_specialkost_then_shows_on_detail(app_session: Flask, client_admin: FlaskClient) -> None:

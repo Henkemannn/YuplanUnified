@@ -54,6 +54,7 @@
                                         • {{ dept.resident_count_fixed }} boende
                                     {% endif %}
                                 </div>
+                                <div class="app-shell__list-note">Boende: {{ dept.residence_name or 'Ej valt' }}</div>
                                 {% if dept.notes %}
                                     <div class="app-shell__list-note">ℹ {{ dept.notes }}</div>
                                 {% endif %}

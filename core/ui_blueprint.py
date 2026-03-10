@@ -946,7 +946,10 @@ def admin_department_detail_get(department_id: str):
     db = get_session()
     try:
         row = db.execute(
-            text("SELECT name, COALESCE(resident_count_fixed,0), COALESCE(notes,''), site_id FROM departments WHERE id=:id"),
+            text(
+                "SELECT d.name, COALESCE(d.resident_count_fixed,0), COALESCE(d.notes,''), d.site_id, COALESCE(r.name, 'Ej valt') AS residence_name "
+                "FROM departments d LEFT JOIN residences r ON r.id = d.residence_id WHERE d.id=:id"
+            ),
             {"id": department_id},
         ).fetchone()
         if not row:
@@ -955,6 +958,7 @@ def admin_department_detail_get(department_id: str):
         resident_count_fixed = int(row[1] or 0)
         notes = str(row[2] or "")
         dept_site_id = str(row[3]) if row[3] is not None else None
+        residence_name = str(row[4] or "Ej valt")
         site_name_row = None
         if dept_site_id:
             site_name_row = db.execute(text("SELECT name FROM sites WHERE id=:id"), {"id": dept_site_id}).fetchone()
@@ -1001,6 +1005,7 @@ def admin_department_detail_get(department_id: str):
             "name": dept_name,
             "resident_count_fixed": resident_count_fixed,
             "notes": notes,
+            "residence_name": residence_name,
         },
         "year": year,
         "week": week,
@@ -5283,9 +5288,10 @@ def admin_departments_list():
             rows = db.execute(
                 text(
                     """
-                    SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name, COALESCE(d.notes,'') AS notes
+                    SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name, COALESCE(d.notes,'') AS notes, COALESCE(r.name, 'Ej valt') AS residence_name
                     FROM departments d
                     LEFT JOIN sites s ON s.id = d.site_id
+                    LEFT JOIN residences r ON r.id = d.residence_id
                     WHERE d.site_id = :sid
                     ORDER BY d.name
                     """
@@ -5304,6 +5310,7 @@ def admin_departments_list():
                     "resident_count_fixed": int(r[3] or 0),
                     "site_name": r[4] or None,
                     "notes": r[5] or "",
+                    "residence_name": r[6] or "Ej valt",
                 }
             )
         # Site header: strictly resolve from active site

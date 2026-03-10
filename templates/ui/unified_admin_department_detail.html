@@ -21,6 +21,7 @@
     <h2 class="app-shell__card-title">Grundinformation</h2>
     <p class="app-shell__card-text"><strong>Namn:</strong> {{ vm.department.name }}</p>
     <p class="app-shell__card-text"><strong>Arbetsplats:</strong> {{ vm.site_name or '—' }}</p>
+    <p class="app-shell__card-text"><strong>Boende:</strong> {{ vm.department.residence_name or 'Ej valt' }}</p>
     <p class="app-shell__card-text"><strong>Faktaruta:</strong><br>{{ vm.department.notes or "Ingen information ännu." }}</p>
   </article>
 
