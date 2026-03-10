@@ -49,7 +49,20 @@ def _json_error(msg: str, code: int = 400):
 
 def _jwt_primary_secret() -> str | None:
     secret = (current_app.config.get("JWT_SECRET") or os.getenv("JWT_SECRET") or "").strip()
-    return secret or None
+    if secret:
+        return secret
+    runtime_env = (
+        os.getenv("DEPLOY_ENV")
+        or os.getenv("APP_ENV")
+        or os.getenv("FLASK_ENV")
+        or ""
+    ).lower()
+    if runtime_env not in ("pilot", "prod", "production"):
+        # Local/dev fallback to avoid hard-failing login when JWT_SECRET is unset.
+        fallback = (current_app.config.get("SECRET_KEY") or "").strip()
+        if fallback:
+            return fallback
+    return None
 
 
 def set_csrf_cookie(resp, token: str):

@@ -12,6 +12,7 @@ import logging
 import os
 from typing import Mapping
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 
 from .models import Base
@@ -71,11 +72,43 @@ def _normalize_url(url: str) -> str:
     return url
 
 
+def sqlite_file_path_from_url(database_url: str) -> str | None:
+    """Return filesystem path for file-backed SQLite URLs, else None."""
+    try:
+        norm = _normalize_url(database_url)
+        parsed = make_url(norm)
+        if not parsed.drivername.startswith("sqlite"):
+            return None
+        db_path = parsed.database
+        if not db_path or db_path == ":memory:":
+            return None
+        return os.path.abspath(db_path)
+    except Exception:
+        return None
+
+
+def ensure_sqlite_file_ready(database_url: str) -> str | None:
+    """Ensure parent directory exists and SQLite file is creatable when file-backed."""
+    db_path = sqlite_file_path_from_url(database_url)
+    if not db_path:
+        return None
+    parent = os.path.dirname(db_path) or "."
+    try:
+        os.makedirs(parent, exist_ok=True)
+        if not os.path.exists(db_path):
+            with open(db_path, "ab"):
+                pass
+    except OSError as exc:
+        raise RuntimeError(f"Failed to prepare sqlite database file at {db_path}: {exc}") from exc
+    return db_path
+
+
 def init_engine(database_url: str, force: bool = False) -> Engine:
     """Initialize global engine (idempotent) or reinitialize when force=True."""
     global _engine, _SessionFactory
     if _engine is None:
         database_url = _normalize_url(database_url)
+        ensure_sqlite_file_ready(database_url)
         _engine = create_engine(database_url, future=True, echo=False)
         _SessionFactory = scoped_session(
             sessionmaker(bind=_engine, autoflush=False, autocommit=False)
@@ -84,6 +117,7 @@ def init_engine(database_url: str, force: bool = False) -> Engine:
     if force:
         _engine.dispose()
         database_url = _normalize_url(database_url)
+        ensure_sqlite_file_ready(database_url)
         _engine = create_engine(database_url, future=True, echo=False)
         if _SessionFactory is not None:
             with suppress(Exception):  # pragma: no cover

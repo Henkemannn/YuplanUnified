@@ -63,6 +63,15 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                     import os as _os
                     primary = current_app.config.get("JWT_SECRET") or _os.getenv("JWT_SECRET")
                     if not primary:
+                        runtime_env = (
+                            _os.getenv("DEPLOY_ENV")
+                            or _os.getenv("APP_ENV")
+                            or _os.getenv("FLASK_ENV")
+                            or ""
+                        ).lower()
+                        if runtime_env not in ("pilot", "prod", "production"):
+                            primary = current_app.config.get("SECRET_KEY")
+                    if not primary:
                         from .app_sessions import SessionError
 
                         raise SessionError("authentication required")

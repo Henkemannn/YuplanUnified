@@ -40,7 +40,7 @@ from .auth import (
     ensure_dev_sync_superuser_from_env,
 )
 from .config import Config
-from .db import get_session, init_engine
+from .db import get_session, init_engine, sqlite_file_path_from_url
 from .diet_api import bp as diet_api_bp
 from .errors import APIError, register_error_handlers as register_domain_handlers
 from .export_api import bp as export_bp
@@ -135,9 +135,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     # ProblemDetails is canonical now (ADR-003). No problem-only flag propagation.
 
     db_url = str(cfg.database_url)
-    sqlite_file = None
-    if db_url.startswith("sqlite:///"):
-        sqlite_file = os.path.abspath(db_url.replace("sqlite:///", "", 1))
+    sqlite_file = sqlite_file_path_from_url(db_url)
     testing_flag = bool(app.config.get("TESTING"))
     env_flask = os.getenv("FLASK_ENV") or ""
     env_app = os.getenv("APP_ENV") or ""

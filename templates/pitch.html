@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <title>Yuplan – kökets plan, samlad i en vy</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Yuplan är en plattform för köksdrift: menyer, specialkost, boendeantal, planering, prepp och rapport – i en enkel veckovy. Byggt för kommun, offshore och storkök.">
+  <meta name="robots" content="index,follow">
+  <meta name="theme-color" content="#2D9CDB">
+  <meta property="og:title" content="Yuplan – plattform för modern köksdrift">
+  <meta property="og:description" content="En tydlig plan för meny, specialkost och portionsbehov – med logik i bakgrunden och enkelhet i fronten.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://yuplan.se/">
+
+  <link rel="manifest" href="/manifest.webmanifest?v=icon-20260310">
+  <link rel="icon" href="/favicon.ico?v=icon-20260310">
+  <link rel="shortcut icon" href="/favicon.ico?v=icon-20260310">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=icon-20260310" sizes="180x180">
+  <link rel="mask-icon" href="/safari-pinned-tab.svg?v=icon-20260310" color="#111827">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --yu-blue:#2D9CDB;
+      --yu-turquoise:#00BFA6;
+      --yu-yellow:#FFD166;
+      --yu-bg:#f5f7fb;
+      --yu-text:#111827;
+      --yu-card:#ffffff;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth;}
+    body{
+      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      background:var(--yu-bg);
+      color:var(--yu-text);
+      -webkit-font-smoothing:antialiased;
+      transition:background .25s,color .25s;
+    }
+    body.dark{background:#020617;color:#e5e7eb;}
+    a{text-decoration:none;color:inherit;}
+
+    header{
+      position:fixed;top:0;left:0;right:0;z-index:50;
+      backdrop-filter:blur(12px);
+      background:rgba(245,247,251,0.9);
+      border-bottom:1px solid rgba(15,23,42,0.06);
+      transition:background .25s,border-color .25s;
+    }
+    body.dark header{background:rgba(15,23,42,0.9);border-bottom-color:rgba(148,163,184,.4);}
+    .nav-inner{
+      max-width:1120px;margin:0 auto;padding:.7rem 1.3rem;
+      display:flex;align-items:center;justify-content:space-between;gap:1rem;
+    }
+    .nav-left{display:flex;align-items:center;gap:1.5rem;min-width:0;}
+    .nav-logo{
+      display:flex;align-items:center;gap:.5rem;
+      font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+      font-size:.8rem;white-space:nowrap;
+    }
+    .nav-logo-dot{
+      width:18px;height:18px;border-radius:999px;
+      background:linear-gradient(135deg,var(--yu-blue),var(--yu-turquoise));
+      box-shadow:0 0 0 4px rgba(45,156,219,0.22);
+    }
+    .nav-links{display:flex;align-items:center;gap:1.4rem;font-size:.9rem;flex-wrap:wrap;}
+    .nav-links a{opacity:.75;}
+    .nav-links a:hover{opacity:1;}
+    .nav-right{display:flex;align-items:center;gap:.6rem;flex-shrink:0;}
+
+    .lang-switch{
+      display:flex;gap:.25rem;background:rgba(255,255,255,.7);
+      border-radius:999px;padding:.12rem;border:1px solid rgba(148,163,184,.7);
+    }
+    body.dark .lang-switch{background:rgba(15,23,42,.9);border-color:#4b5563;}
+    .lang-btn{
+      border:none;border-radius:999px;padding:.16rem .5rem;
+      font-size:.7rem;font-weight:600;cursor:pointer;background:transparent;
+      color:#0f172a;opacity:.6;
+    }
+    body.dark .lang-btn{color:#e5e7eb;}
+    .lang-btn.active{opacity:1;background:#111827;color:#f9fafb;}
+    body.dark .lang-btn.active{background:#f9fafb;color:#020617;}
+
+    .nav-cta{
+      font-size:.85rem;padding:.5rem 1rem;border-radius:999px;
+      border:1px solid rgba(45,156,219,.3);background:#fff;
+      box-shadow:0 2px 6px rgba(15,23,42,.12);
+      font-weight:600;white-space:nowrap;
+      transition:background .2s,border-color .2s,color .2s;
+    }
+    .nav-login{
+      font-size:.85rem;padding:.5rem .95rem;border-radius:999px;
+      border:1px solid rgba(15,23,42,.18);background:transparent;
+      font-weight:600;white-space:nowrap;opacity:.9;
+      transition:background .2s,border-color .2s,color .2s,opacity .2s;
+    }
+    .nav-login:hover{opacity:1;background:rgba(255,255,255,.72);}
+    body.dark .nav-cta{
+      background:#020617;border-color:#4b5563;color:#e5e7eb;
+      box-shadow:0 4px 12px rgba(15,23,42,.7);
+    }
+    body.dark .nav-login{
+      border-color:#4b5563;color:#e5e7eb;
+    }
+    body.dark .nav-login:hover{background:#020617;filter:brightness(1.08);}
+
+    .theme-toggle{
+      position:fixed;right:12px;bottom:12px;z-index:60;
+      border-radius:999px;border:1px solid rgba(148,163,184,.9);
+      background:#fff;font-size:.72rem;padding:.45rem .85rem;cursor:pointer;
+      font-weight:600;box-shadow:0 6px 16px rgba(15,23,42,.3);
+      display:flex;align-items:center;gap:.35rem;
+    }
+    body.dark .theme-toggle{
+      background:#020617;border-color:#4b5563;color:#e5e7eb;
+      box-shadow:0 10px 24px rgba(0,0,0,.8);
+    }
+
+    .hero{
+      padding:6.5rem 1.4rem 3.5rem;position:relative;overflow:hidden;
+      background:radial-gradient(circle at 0% 0%,rgba(45,156,219,0.2),transparent 60%),
+                 radial-gradient(circle at 100% 20%,rgba(0,191,166,0.18),transparent 55%);
+      transition:background .25s;
+    }
+    body.dark .hero{
+      background:radial-gradient(circle at 0% 0%,rgba(37,99,235,0.35),transparent 60%),
+                 radial-gradient(circle at 100% 20%,rgba(8,47,73,0.95),transparent 55%);
+    }
+    .hero-inner{
+      max-width:1120px;margin:0 auto;
+      display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
+      gap:2.5rem;align-items:center;
+    }
+    @media (max-width:880px){.hero-inner{grid-template-columns:1fr;text-align:center;}}
+
+    .logo-shell{display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:1.2rem;}
+    .logo-icon{
+      width:150px;max-width:45vw;
+      filter:drop-shadow(0 10px 28px rgba(15,23,42,.25));
+      transition:filter .25s;
+    }
+    body.dark .logo-icon{filter:drop-shadow(0 12px 34px rgba(0,0,0,.8));}
+    .logo-icon img{width:100%;height:auto;display:block;}
+    .login-logo-spin{will-change:transform;}
+    .login-logo-spin--globe-exp{animation:login-globe-axial-spin 24s linear infinite;}
+    @keyframes login-globe-axial-spin{
+      from{transform:rotate(0deg)}
+      to{transform:rotate(360deg)}
+    }
+    .logo-wordmark{margin-top:.45rem;font-weight:900;letter-spacing:.18em;text-transform:uppercase;font-size:.8rem;}
+
+    .hero-badge{
+      display:inline-flex;align-items:center;gap:.4rem;
+      padding:.25rem .7rem;border-radius:999px;
+      background:rgba(17,24,39,0.75);color:#f9fafb;
+      font-size:.7rem;font-weight:600;margin-bottom:.9rem;
+    }
+    .hero-badge-dot{width:8px;height:8px;border-radius:999px;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,0.35);}
+
+    .hero-title{
+      font-size:clamp(2.4rem,4.4vw,3.4rem);
+      line-height:1.08;letter-spacing:-.04em;font-weight:800;margin-bottom:.8rem;
+    }
+    .hero-sub{font-size:1.05rem;max-width:34rem;opacity:.9;margin-bottom:1.2rem;}
+    @media (max-width:880px){.hero-sub{margin-left:auto;margin-right:auto;}}
+    .hero-quote{
+      font-size:.95rem;font-weight:600;padding:.7rem .9rem;border-radius:.8rem;
+      background:rgba(255,255,255,0.9);border:1px solid rgba(15,23,42,0.05);
+      box-shadow:0 8px 22px rgba(15,23,42,.08);max-width:28rem;
+    }
+    body.dark .hero-quote{background:rgba(15,23,42,0.98);border-color:#1f2937;box-shadow:0 14px 32px rgba(0,0,0,.85);}
+    .hero-quote span{color:#0f766e;font-weight:700;}
+
+    .hero-actions{display:flex;flex-wrap:wrap;gap:.9rem;margin-top:1.6rem;align-items:center;}
+    @media (max-width:880px){.hero-actions{justify-content:center;}}
+    .btn{
+      border-radius:999px;padding:.85rem 1.4rem;font-size:.9rem;font-weight:600;
+      display:inline-flex;align-items:center;gap:.45rem;cursor:pointer;
+      border:1px solid transparent;
+      transition:filter .2s,background .2s,border-color .2s,color .2s,transform .1s;
+    }
+    .btn:active{transform:translateY(1px);}
+    .btn-primary{
+      background:linear-gradient(120deg,var(--yu-blue),var(--yu-turquoise));
+      color:#fff;box-shadow:0 10px 28px rgba(37,99,235,.35);
+    }
+    .btn-primary:hover{filter:brightness(1.05);}
+    .btn-ghost{background:#fff;border-color:rgba(15,23,42,.12);color:#0f172a;}
+    .btn-ghost:hover{background:#f9fafb;}
+    body.dark .btn-ghost{background:#020617;border-color:#4b5563;color:#e5e7eb;}
+    body.dark .btn-ghost:hover{background:#020617;filter:brightness(1.1);}
+    .hero-meta{font-size:.8rem;opacity:.75;margin-top:.7rem;}
+
+    .section{max-width:1120px;margin:0 auto;padding:2.8rem 1.4rem 0;}
+    .section h2{font-size:1.9rem;letter-spacing:-.03em;margin-bottom:1rem;}
+    .section-lead{font-size:.98rem;max-width:42rem;opacity:.88;margin-bottom:1.7rem;}
+
+    .pill-row{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.5rem;font-size:.75rem;}
+    .pill{padding:.32rem .75rem;border-radius:999px;background:#e5f2ff;color:#033156;font-weight:600;}
+    body.dark .pill{background:#020617;border:1px solid #1f2937;color:#bfdbfe;}
+
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.15rem;}
+    .card{
+      background:var(--yu-card);border-radius:1rem;border:1px solid rgba(15,23,42,0.06);
+      padding:1.1rem 1.1rem 1rem;box-shadow:0 10px 26px rgba(15,23,42,.06);
+      position:relative;overflow:hidden;transition:background .25s,border-color .25s,box-shadow .25s;
+    }
+    body.dark .card{background:#020617;border-color:#1f2937;box-shadow:0 18px 36px rgba(0,0,0,.9);}
+    .card h3{font-size:1rem;margin-bottom:.25rem;}
+    .card p{font-size:.85rem;opacity:.9;}
+    .card-tag{
+      display:inline-block;font-size:.65rem;font-weight:700;letter-spacing:.08em;
+      text-transform:uppercase;padding:.25rem .6rem;border-radius:999px;background:#eef2ff;
+      color:#3730a3;margin-bottom:.45rem;
+    }
+    body.dark .card-tag{background:#1f2937;color:#a5b4fc;}
+
+    .cols-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.4rem;margin-top:1.4rem;}
+
+    .steps{
+      display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+      gap:.9rem;margin:1.4rem 0 1.6rem;list-style:none;padding:0;
+    }
+    .step{
+      background:var(--yu-card);border-radius:.9rem;border:1px solid rgba(15,23,42,0.06);
+      padding:.9rem .95rem;font-size:.85rem;box-shadow:0 8px 20px rgba(15,23,42,.04);
+      position:relative;transition:background .25s,border-color .25s,box-shadow .25s;
+    }
+    body.dark .step{background:#020617;border-color:#1f2937;box-shadow:0 18px 36px rgba(0,0,0,.9);}
+    .step-label{position:absolute;top:.7rem;right:.7rem;font-size:.65rem;font-weight:700;color:#2563eb;opacity:.9;}
+    body.dark .step-label{color:#60a5fa;}
+    .step strong{display:block;margin-bottom:.15rem;}
+
+    .roadmap-list{
+      list-style:none;padding:0;margin:1rem 0 0;
+      display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;
+    }
+    .roadmap-item{
+      font-size:.87rem;background:rgba(255,255,255,.9);border-radius:.9rem;padding:.85rem .95rem;
+      border:1px solid rgba(148,163,184,.35);transition:background .25s,border-color .25s;
+    }
+    body.dark .roadmap-item{background:#020617;border-color:#1f2937;}
+    .roadmap-item strong{display:block;margin-bottom:.2rem;}
+
+    .cta-wrap{padding:3.2rem 1.4rem 3.4rem;}
+    .cta{
+      max-width:1120px;margin:0 auto;border-radius:1.3rem;padding:2.4rem 1.6rem 2.6rem;
+      background:radial-gradient(circle at 0% 0%,rgba(255,255,255,0.6),transparent 55%),
+                 linear-gradient(120deg,var(--yu-blue),var(--yu-turquoise));
+      color:#f9fafb;position:relative;overflow:hidden;box-shadow:0 20px 45px rgba(15,23,42,.45);
+    }
+    .cta h2{font-size:1.9rem;letter-spacing:-.03em;margin-bottom:.6rem;}
+    .cta p{font-size:.98rem;max-width:34rem;opacity:.96;margin-bottom:1.4rem;}
+    .cta-actions{display:flex;flex-wrap:wrap;gap:.9rem;align-items:center;}
+    .cta-meta{font-size:.8rem;opacity:.85;margin-top:.7rem;}
+
+    footer{text-align:center;font-size:.78rem;opacity:.7;padding:0 1.4rem 2.4rem;}
+
+    @media (max-width:640px){
+      .hero{padding-top:5.8rem;}
+      .cta{padding:2.1rem 1.4rem 2.3rem;}
+      .nav-links{display:none;}
+    }
+    @media (prefers-reduced-motion:reduce){
+      html{scroll-behavior:auto;}
+      .login-logo-spin,
+      .login-logo-spin--globe-exp{animation:none;transform:none;}
+      *,*::before,*::after{transition:none !important;}
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="nav-inner">
+    <div class="nav-left">
+      <div class="nav-logo">
+        <div class="nav-logo-dot"></div>
+        <span>YUPLAN</span>
+      </div>
+      <nav class="nav-links">
+        <a href="#home" data-i18n="nav.home">Hem</a>
+        <a href="#moduler" data-i18n="nav.features">Funktioner</a>
+        <a href="#roadmap" data-i18n="nav.roadmap">Roadmap</a>
+      </nav>
+    </div>
+    <div class="nav-right">
+      <div class="lang-switch" aria-label="Språk">
+        <button class="lang-btn" data-lang="sv">SV</button>
+        <button class="lang-btn" data-lang="no">NO</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+      </div>
+      <a class="nav-cta" href="mailto:Info@yuplan.se?subject=Yuplan%20demo" data-i18n="nav.demo">
+        Boka demo
+      </a>
+      <a class="nav-login" href="/auth/login" data-i18n="nav.login">Logga in</a>
+    </div>
+  </div>
+</header>
+
+<button id="themeToggle" class="theme-toggle" type="button" aria-label="Växla mörkt eller ljust läge">
+  <span id="themeIcon">🌙</span>
+  <span id="themeLabel">Mörkt läge</span>
+</button>
+
+<section class="hero" id="home">
+  <div class="hero-inner">
+
+    <div>
+      <div class="logo-shell">
+        <div class="logo-icon" aria-hidden="true">
+          <img src="/static/img/logo-proposal-globe-exp-v3.svg" alt="Yuplan" class="login-logo-spin login-logo-spin--globe-exp">
+        </div>
+        <div class="logo-wordmark">Yuplan</div>
+      </div>
+
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        <span data-i18n="hero.badge">Plattform för modern köksdrift</span>
+      </div>
+
+      <h1 class="hero-title" data-i18n="hero.title">
+        Kökets plan – samlad i en vy.
+      </h1>
+
+      <p class="hero-sub" data-i18n="hero.sub">
+        Yuplan gör det enkelt att se vad som ska serveras, hur många portioner som behövs och vilka specialkoster som måste anpassas – per dag, per måltid och per avdelning. Byggt för iPad och verklig drift.
+      </p>
+
+      <div class="hero-quote">
+        <span data-i18n="hero.quoteTitle">“Som ett kalkylark – men utan missar.”</span><br>
+        <span data-i18n="hero.quoteText">
+          Tydliga rader och kolumner. Smart logik som håller koll på boendeantal, specialkost och val – i bakgrunden.
+        </span>
+      </div>
+
+      <div class="hero-actions">
+        <a href="mailto:Info@yuplan.se?subject=Yuplan%20Demo" class="btn btn-primary" data-i18n="hero.cta1">
+          Boka demo
+        </a>
+        <a href="mailto:Info@yuplan.se?subject=Yuplan%20Pilot" class="btn btn-ghost" data-i18n="hero.cta2">
+          Intresse för pilot
+        </a>
+      </div>
+      <div class="hero-meta" data-i18n="hero.meta">
+        Snabbt svar, inga utskick. Vi tar en kort dialog och visar ett konkret flöde.
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-tag" data-i18n="hero.card.tag">Vad ni får</div>
+        <h3 data-i18n="hero.card.title">En driftvy som alla förstår</h3>
+        <p style="margin-bottom:.6rem;" data-i18n="hero.card.text">
+          Yuplan samlar meny, boendeantal, specialkost och status i en gemensam plan. Köket ser läget direkt – och ledningen får renare data utan extra administration.
+        </p>
+        <ul style="font-size:.82rem;opacity:.9;padding-left:1rem;margin-bottom:.4rem;">
+          <li data-i18n="hero.card.li1">Veckovy per avdelning: lunch + kväll med tydliga symboler</li>
+          <li data-i18n="hero.card.li2">Specialkost per avdelning med antal – och klickmarkering när det anpassats</li>
+          <li data-i18n="hero.card.li3">Alt2-planering som syns tydligt i veckan</li>
+          <li data-i18n="hero.card.li4">Menyvisning direkt i vyn (modal)</li>
+          <li data-i18n="hero.card.li5">Planering & utskrift av dag-/måltidssammanställning (på väg i pilot)</li>
+        </ul>
+        <p style="font-size:.8rem;opacity:.8;" data-i18n="hero.card.foot">
+          Börja smått på en site – skala upp när flödet sitter.
+        </p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="section" id="om">
+  <h2 data-i18n="about.title">Yuplan – byggt för vardag, skapat för kontroll</h2>
+  <p class="section-lead" data-i18n="about.lead">
+    Yuplan är en Unified-plattform för kök som behöver enkelhet i fronten, men stabil logik bakom. Det är ett verktyg för drift: menyer, avdelningar, boendeantal, specialkost och planering – med tydliga vyer för kök och admin.
+  </p>
+
+  <div class="pill-row">
+    <span class="pill" data-i18n="about.k1">iPad-first</span>
+    <span class="pill" data-i18n="about.k2">En datakälla</span>
+    <span class="pill" data-i18n="about.k3">Tydliga vyer</span>
+    <span class="pill" data-i18n="about.k4">Mindre missar</span>
+    <span class="pill" data-i18n="about.k5">Bättre uppföljning</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-tag" data-i18n="about.c1.tag">För köket</div>
+      <h3 data-i18n="about.c1.title">Rätt portionsbild – utan extra jobb</h3>
+      <p data-i18n="about.c1.text">
+        Boendeantal och specialkost per avdelning syns direkt. Klicka när specialkost behövt anpassas – så får ni spårbarhet utan att skriva listor.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-tag" data-i18n="about.c2.tag">För admin</div>
+      <h3 data-i18n="about.c2.title">Meny, specialkost och val – på ett ställe</h3>
+      <p data-i18n="about.c2.text">
+        Importera menyer, publicera vecka, sätt Alt2 per avdelning, och håll koll på avdelningsinfo. Det som planeras syns i kökets vy direkt.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-tag" data-i18n="about.c3.tag">För kvalitet</div>
+      <h3 data-i18n="about.c3.title">Tydlighet som minskar fel</h3>
+      <p data-i18n="about.c3.text">
+        När systemet visar rätt bild blir det enklare att göra rätt. Yuplan fokuserar på tydliga tomlägen, begripliga symboler och trygg logik.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-tag" data-i18n="about.c4.tag">För ledning</div>
+      <h3 data-i18n="about.c4.title">Ren data för rapport och beslut</h3>
+      <p data-i18n="about.c4.text">
+        När planering och status registreras enkelt i vardagen blir rapportering och uppföljning plötsligt realistiskt – utan “excel-sanningar”.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="moduler">
+  <h2 data-i18n="modules.title">Moduler – börja där ni får effekt direkt</h2>
+  <p class="section-lead" data-i18n="modules.lead">
+    Yuplan byggs modulärt. Ni kan börja med driftvyn (weekview + specialkost) och lägga på planering, prepp och rapport när ni är redo.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-tag" data-i18n="modules.c1.tag">Pilotkärna</div>
+      <h3 data-i18n="modules.c1.title">Veckovy & meny</h3>
+      <p data-i18n="modules.c1.text">
+        Tydlig veckovy per avdelning: lunch/kväll, boendeantal, specialkost och status. Meny kan visas direkt i vyn.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-tag" data-i18n="modules.c2.tag">Pilotkärna</div>
+      <h3 data-i18n="modules.c2.title">Specialkost med antal</h3>
+      <p data-i18n="modules.c2.text">
+        Koppla antal per specialkost och avdelning. Markera när specialkost behövt anpassas – snabbt, spårbart och begripligt.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-tag" data-i18n="modules.c3.tag">Pilotkärna</div>
+      <h3 data-i18n="modules.c3.title">Alt2-planering</h3>
+      <p data-i18n="modules.c3.text">
+        Sätt Alt2 per avdelning och dag. Syns tydligt i veckan som visuell hjälp – utan att störa statistik.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-tag" data-i18n="modules.c4.tag">Nästa steg</div>
+      <h3 data-i18n="modules.c4.title">Planering & utskrift</h3>
+      <p data-i18n="modules.c4.text">
+        Välj dag och måltid och få en tydlig sammanställning: normalkost, specialkost och summeringar. Perfekt för utskrift och prepp.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-tag" data-i18n="modules.c5.tag">Roadmap</div>
+      <h3 data-i18n="modules.c5.title">Recept & skalning</h3>
+      <p data-i18n="modules.c5.text">
+        Koppla recept till menyrader, skala portioner och få preppunderlag med stabila komponenter – utan att behöva uppfinna flödet varje vecka.
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="card-tag" data-i18n="modules.c6.tag">Roadmap</div>
+      <h3 data-i18n="modules.c6.title">Inköp & integrationer</h3>
+      <p data-i18n="modules.c6.text">
+        “Kom ihåg att beställa”-listor och export till inköpssystem. Yuplan blir navet mellan planering och beställning – med mänsklig kontroll kvar.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="malgrupper">
+  <h2 data-i18n="targets.title">För vem?</h2>
+  <p class="section-lead" data-i18n="targets.lead">
+    Samma grund – olika verkligheter. Yuplan byggs med rötter i kommunal drift och offshore-logik, men fungerar lika bra i storkök där tydlighet och kontroll är avgörande.
+  </p>
+
+  <div class="cols-2">
+    <div class="card">
+      <div class="card-tag" data-i18n="targets.c1.tag">Kommun & omsorg</div>
+      <h3 data-i18n="targets.c1.title">Äldreboenden, LSS och kommun</h3>
+      <p data-i18n="targets.c1.text">
+        Specialkost, tydlighet och iPad-first. Personalen ska kunna använda det direkt – utan utbildningsprojekt.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-tag" data-i18n="targets.c2.tag">Offshore & industri</div>
+      <h3 data-i18n="targets.c2.title">Rigg, fartyg och skift</h3>
+      <p data-i18n="targets.c2.text">
+        Stabil drift och planering i skiftmiljö. Yuplan kan växa med turnus, lagerlogik och rapportering när piloten sitter.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-tag" data-i18n="targets.c3.tag">Storkök</div>
+      <h3 data-i18n="targets.c3.title">Hotell, catering och produktion</h3>
+      <p data-i18n="targets.c3.text">
+        Menystruktur, prepp och skalning – med tydliga underlag. En plattform som hjälper er standardisera utan att bli tungrodd.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-tag" data-i18n="targets.c4.tag">Ledning</div>
+      <h3 data-i18n="targets.c4.title">Kostchef och verksamhetsledning</h3>
+      <p data-i18n="targets.c4.text">
+        En datakälla för uppföljning: veckobild, avdelningsdata och export. Mindre “gissning”, mer beslutsunderlag.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="workflow">
+  <h2 data-i18n="flow.title">Så rullar man ut Yuplan</h2>
+  <p class="section-lead" data-i18n="flow.lead">
+    Yuplan är byggt för att införas utan kaos. Ni startar med pilotkärnan och låser ett fungerande flöde – sedan bygger vi vidare modul för modul.
+  </p>
+
+  <ol class="steps">
+    <li class="step">
+      <span class="step-label">Steg 1</span>
+      <strong data-i18n="flow.s1.title">Sätt grunden</strong>
+      <span data-i18n="flow.s1.text">Avdelningar, boendeantal, specialkoster och faktarutor.</span>
+    </li>
+    <li class="step">
+      <span class="step-label">Steg 2</span>
+      <strong data-i18n="flow.s2.title">Meny → veckovy</strong>
+      <span data-i18n="flow.s2.text">Importera och publicera veckomeny. Den syns direkt där den ska användas.</span>
+    </li>
+    <li class="step">
+      <span class="step-label">Steg 3</span>
+      <strong data-i18n="flow.s3.title">Alt2 & daglig status</strong>
+      <span data-i18n="flow.s3.text">Sätt Alt2 per avdelning. Markera specialkost som behövt anpassas med ett klick.</span>
+    </li>
+    <li class="step">
+      <span class="step-label">Steg 4</span>
+      <strong data-i18n="flow.s4.title">Planering & utskrift</strong>
+      <span data-i18n="flow.s4.text">Välj dag + måltid och få sammanställning för prepp, kök och kommunikation.</span>
+    </li>
+    <li class="step">
+      <span class="step-label">Steg 5</span>
+      <strong data-i18n="flow.s5.title">Rapport & export</strong>
+      <span data-i18n="flow.s5.text">Veckobilder och export (PDF/Excel) för dialog med ledning och kvalitet.</span>
+    </li>
+    <li class="step">
+      <span class="step-label">Steg 6</span>
+      <strong data-i18n="flow.s6.title">Roadmap-moduler</strong>
+      <span data-i18n="flow.s6.text">Recept, skalning, inköp och integrationer – när kärnflödet sitter.</span>
+    </li>
+  </ol>
+
+  <p style="font-size:.85rem;opacity:.8;" data-i18n="flow.foot">
+    Fokus är alltid: tydlig vy, enkel registrering och en datakälla. Det ska kännas lätt – även när systemet blir kraftfullt.
+  </p>
+</section>
+
+<section class="section" id="roadmap">
+  <h2 data-i18n="roadmap.title">Den stora planen</h2>
+  <p class="section-lead" data-i18n="roadmap.lead">
+    Yuplan blir ett nav för köksdrift – från meny till inköp – utan att tappa enkelheten. Här är vad som byggs vidare på:
+  </p>
+
+  <ul class="roadmap-list">
+    <li class="roadmap-item">
+      <strong data-i18n="roadmap.c1.title">Receptbank & skalning</strong>
+      <span data-i18n="roadmap.c1.text">Koppla recept till menyrader, skala portioner, och få preppunderlag som stämmer – även vid snabba ändringar.</span>
+    </li>
+    <li class="roadmap-item">
+      <strong data-i18n="roadmap.c2.title">Publik portal</strong>
+      <span data-i18n="roadmap.c2.text">Anhörig-/crew-portal: se meny, läsa köksinfo och anmäla specialkost via wizard – som matar tillbaka till köket.</span>
+    </li>
+    <li class="roadmap-item">
+      <strong data-i18n="roadmap.c3.title">Inköp & beställningsstöd</strong>
+      <span data-i18n="roadmap.c3.text">“Kom ihåg att beställa”-listor och export till inköpssystem – med kontroll kvar i köket.</span>
+    </li>
+    <li class="roadmap-item">
+      <strong data-i18n="roadmap.c4.title">Fördjupad uppföljning</strong>
+      <span data-i18n="roadmap.c4.text">Svinn, service och trendbilder per period som hjälper er minska svinn och justera portionsnivåer utan gissning.</span>
+    </li>
+  </ul>
+</section>
+
+<section class="cta-wrap" id="kontakt">
+  <div class="cta">
+    <h2 data-i18n="cta.title">Vill du se Yuplan i en pilot?</h2>
+    <p data-i18n="cta.text">
+      Vi sätter upp en site med era avdelningar, menyer och specialkost – och visar veckovy + köksvy på iPad. Målet är ett flöde som känns självklart i vardagen.
+    </p>
+
+    <div class="cta-actions">
+      <a class="btn btn-primary" href="mailto:Info@yuplan.se?subject=Yuplan%20Pilot" data-i18n="cta.primary">
+        Boka pilotdialog
+      </a>
+      <a class="btn btn-ghost" href="/auth/login" data-i18n="cta.secondary">
+        Logga in
+      </a>
+    </div>
+
+    <div class="cta-meta" data-i18n="cta.meta">
+      Kontakt: <a href="mailto:Info@yuplan.se" style="text-decoration:underline;">Info@yuplan.se</a><br>
+      Vi är hellre konkreta än “pitchiga” – men vi lovar att visa något som faktiskt fungerar.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span data-i18n="footer.text">
+    © 2026 Yuplan • Modern köksdrift, samlad i en vy.
+  </span>
+</footer>
+
+<script>
+  (function(){
+    const btn = document.getElementById('themeToggle');
+    const icon = document.getElementById('themeIcon');
+    const label = document.getElementById('themeLabel');
+
+    function setTheme(mode){
+      if(mode === 'dark'){
+        document.body.classList.add('dark');
+        icon.textContent = '☀️';
+        label.textContent = 'Ljust läge';
+      }else{
+        document.body.classList.remove('dark');
+        icon.textContent = '🌙';
+        label.textContent = 'Mörkt läge';
+      }
+      localStorage.setItem('yuplan_theme', mode);
+    }
+
+    const stored = localStorage.getItem('yuplan_theme');
+    if(stored){
+      setTheme(stored);
+    }else if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
+      setTheme('dark');
+    }else{
+      setTheme('light');
+    }
+
+    btn.addEventListener('click',()=>{
+      const isDark = document.body.classList.contains('dark');
+      setTheme(isDark ? 'light' : 'dark');
+    });
+  })();
+
+  const I18N = {
+    sv:{
+      'nav.home':'Hem',
+      'nav.features':'Funktioner',
+      'nav.roadmap':'Roadmap',
+      'nav.demo':'Boka demo',
+      'nav.login':'Logga in',
+
+      'hero.badge':'Plattform för modern köksdrift',
+      'hero.title':'Kökets plan – samlad i en vy.',
+      'hero.sub':'Yuplan gör det enkelt att se vad som ska serveras, hur många portioner som behövs och vilka specialkoster som måste anpassas – per dag, per måltid och per avdelning. Byggt för iPad och verklig drift.',
+      'hero.quoteTitle':'“Som ett kalkylark – men utan missar.”',
+      'hero.quoteText':'Tydliga rader och kolumner. Smart logik som håller koll på boendeantal, specialkost och val – i bakgrunden.',
+      'hero.cta1':'Boka demo',
+      'hero.cta2':'Intresse för pilot',
+      'hero.meta':'Snabbt svar, inga utskick. Vi tar en kort dialog och visar ett konkret flöde.',
+
+      'hero.card.tag':'Vad ni får',
+      'hero.card.title':'En driftvy som alla förstår',
+      'hero.card.text':'Yuplan samlar meny, boendeantal, specialkost och status i en gemensam plan. Köket ser läget direkt – och ledningen får renare data utan extra administration.',
+      'hero.card.li1':'Veckovy per avdelning: lunch + kväll med tydliga symboler',
+      'hero.card.li2':'Specialkost per avdelning med antal – och klickmarkering när det anpassats',
+      'hero.card.li3':'Alt2-planering som syns tydligt i veckan',
+      'hero.card.li4':'Menyvisning direkt i vyn (modal)',
+      'hero.card.li5':'Planering & utskrift av dag-/måltidssammanställning (på väg i pilot)',
+      'hero.card.foot':'Börja smått på en site – skala upp när flödet sitter.',
+
+      'about.title':'Yuplan – byggt för vardag, skapat för kontroll',
+      'about.lead':'Yuplan är en Unified-plattform för kök som behöver enkelhet i fronten, men stabil logik bakom. Det är ett verktyg för drift: menyer, avdelningar, boendeantal, specialkost och planering – med tydliga vyer för kök och admin.',
+      'about.k1':'iPad-first',
+      'about.k2':'En datakälla',
+      'about.k3':'Tydliga vyer',
+      'about.k4':'Mindre missar',
+      'about.k5':'Bättre uppföljning',
+      'about.c1.tag':'För köket',
+      'about.c1.title':'Rätt portionsbild – utan extra jobb',
+      'about.c1.text':'Boendeantal och specialkost per avdelning syns direkt. Klicka när specialkost behövt anpassas – så får ni spårbarhet utan att skriva listor.',
+      'about.c2.tag':'För admin',
+      'about.c2.title':'Meny, specialkost och val – på ett ställe',
+      'about.c2.text':'Importera menyer, publicera vecka, sätt Alt2 per avdelning, och håll koll på avdelningsinfo. Det som planeras syns i kökets vy direkt.',
+      'about.c3.tag':'För kvalitet',
+      'about.c3.title':'Tydlighet som minskar fel',
+      'about.c3.text':'När systemet visar rätt bild blir det enklare att göra rätt. Yuplan fokuserar på tydliga tomlägen, begripliga symboler och trygg logik.',
+      'about.c4.tag':'För ledning',
+      'about.c4.title':'Ren data för rapport och beslut',
+      'about.c4.text':'När planering och status registreras enkelt i vardagen blir rapportering och uppföljning plötsligt realistiskt – utan “excel-sanningar”.',
+
+      'modules.title':'Moduler – börja där ni får effekt direkt',
+      'modules.lead':'Yuplan byggs modulärt. Ni kan börja med driftvyn (weekview + specialkost) och lägga på planering, prepp och rapport när ni är redo.',
+      'modules.c1.tag':'Pilotkärna',
+      'modules.c1.title':'Veckovy & meny',
+      'modules.c1.text':'Tydlig veckovy per avdelning: lunch/kväll, boendeantal, specialkost och status. Meny kan visas direkt i vyn.',
+      'modules.c2.tag':'Pilotkärna',
+      'modules.c2.title':'Specialkost med antal',
+      'modules.c2.text':'Koppla antal per specialkost och avdelning. Markera när specialkost behövt anpassas – snabbt, spårbart och begripligt.',
+      'modules.c3.tag':'Pilotkärna',
+      'modules.c3.title':'Alt2-planering',
+      'modules.c3.text':'Sätt Alt2 per avdelning och dag. Syns tydligt i veckan som visuell hjälp – utan att störa statistik.',
+      'modules.c4.tag':'Nästa steg',
+      'modules.c4.title':'Planering & utskrift',
+      'modules.c4.text':'Välj dag och måltid och få en tydlig sammanställning: normalkost, specialkost och summeringar. Perfekt för utskrift och prepp.',
+      'modules.c5.tag':'Roadmap',
+      'modules.c5.title':'Recept & skalning',
+      'modules.c5.text':'Koppla recept till menyrader, skala portioner och få preppunderlag med stabila komponenter – utan att behöva uppfinna flödet varje vecka.',
+      'modules.c6.tag':'Roadmap',
+      'modules.c6.title':'Inköp & integrationer',
+      'modules.c6.text':'“Kom ihåg att beställa”-listor och export till inköpssystem. Yuplan blir navet mellan planering och beställning – med mänsklig kontroll kvar.',
+
+      'targets.title':'För vem?',
+      'targets.lead':'Samma grund – olika verkligheter. Yuplan byggs med rötter i kommunal drift och offshore-logik, men fungerar lika bra i storkök där tydlighet och kontroll är avgörande.',
+      'targets.c1.tag':'Kommun & omsorg',
+      'targets.c1.title':'Äldreboenden, LSS och kommun',
+      'targets.c1.text':'Specialkost, tydlighet och iPad-first. Personalen ska kunna använda det direkt – utan utbildningsprojekt.',
+      'targets.c2.tag':'Offshore & industri',
+      'targets.c2.title':'Rigg, fartyg och skift',
+      'targets.c2.text':'Stabil drift och planering i skiftmiljö. Yuplan kan växa med turnus, lagerlogik och rapportering när piloten sitter.',
+      'targets.c3.tag':'Storkök',
+      'targets.c3.title':'Hotell, catering och produktion',
+      'targets.c3.text':'Menystruktur, prepp och skalning – med tydliga underlag. En plattform som hjälper er standardisera utan att bli tungrodd.',
+      'targets.c4.tag':'Ledning',
+      'targets.c4.title':'Kostchef och verksamhetsledning',
+      'targets.c4.text':'En datakälla för uppföljning: veckobild, avdelningsdata och export. Mindre “gissning”, mer beslutsunderlag.',
+
+      'flow.title':'Så rullar man ut Yuplan',
+      'flow.lead':'Yuplan är byggt för att införas utan kaos. Ni startar med pilotkärnan och låser ett fungerande flöde – sedan bygger vi vidare modul för modul.',
+      'flow.s1.title':'Sätt grunden',
+      'flow.s1.text':'Avdelningar, boendeantal, specialkoster och faktarutor.',
+      'flow.s2.title':'Meny → veckovy',
+      'flow.s2.text':'Importera och publicera veckomeny. Den syns direkt där den ska användas.',
+      'flow.s3.title':'Alt2 & daglig status',
+      'flow.s3.text':'Sätt Alt2 per avdelning. Markera specialkost som behövt anpassas med ett klick.',
+      'flow.s4.title':'Planering & utskrift',
+      'flow.s4.text':'Välj dag + måltid och få sammanställning för prepp, kök och kommunikation.',
+      'flow.s5.title':'Rapport & export',
+      'flow.s5.text':'Veckobilder och export (PDF/Excel) för dialog med ledning och kvalitet.',
+      'flow.s6.title':'Roadmap-moduler',
+      'flow.s6.text':'Recept, skalning, inköp och integrationer – när kärnflödet sitter.',
+      'flow.foot':'Fokus är alltid: tydlig vy, enkel registrering och en datakälla. Det ska kännas lätt – även när systemet blir kraftfullt.',
+
+      'roadmap.title':'Den stora planen',
+      'roadmap.lead':'Yuplan blir ett nav för köksdrift – från meny till inköp – utan att tappa enkelheten. Här är vad som byggs vidare på:',
+      'roadmap.c1.title':'Receptbank & skalning',
+      'roadmap.c1.text':'Koppla recept till menyrader, skala portioner, och få preppunderlag som stämmer – även vid snabba ändringar.',
+      'roadmap.c2.title':'Publik portal',
+      'roadmap.c2.text':'Anhörig-/crew-portal: se meny, läsa köksinfo och anmäla specialkost via wizard – som matar tillbaka till köket.',
+      'roadmap.c3.title':'Inköp & beställningsstöd',
+      'roadmap.c3.text':'“Kom ihåg att beställa”-listor och export till inköpssystem – med kontroll kvar i köket.',
+      'roadmap.c4.title':'Fördjupad uppföljning',
+      'roadmap.c4.text':'Svinn, service och trendbilder per period som hjälper er minska svinn och justera portionsnivåer utan gissning.',
+
+      'cta.title':'Vill du se Yuplan i en pilot?',
+      'cta.text':'Vi sätter upp en site med era avdelningar, menyer och specialkost – och visar veckovy + köksvy på iPad. Målet är ett flöde som känns självklart i vardagen.',
+      'cta.primary':'Boka pilotdialog',
+      'cta.secondary':'Logga in',
+      'cta.meta':'Kontakt: <a href="mailto:Info@yuplan.se" style="text-decoration:underline;">Info@yuplan.se</a><br>Vi är hellre konkreta än “pitchiga” – men vi lovar att visa något som faktiskt fungerar.',
+
+      'footer.text':'© 2026 Yuplan • Modern köksdrift, samlad i en vy.'
+    },
+    no:{
+      'nav.home':'Hjem',
+      'nav.features':'Funksjoner',
+      'nav.roadmap':'Roadmap',
+      'nav.demo':'Book demo',
+      'nav.login':'Logg inn',
+
+      'hero.badge':'Plattform for moderne kjøkkendrift',
+      'hero.title':'Kjøkkenets plan – samlet i én visning.',
+      'hero.sub':'Yuplan gjør det enkelt å se hva som skal serveres, hvor mange porsjoner som trengs og hvilke spesialkoster som må tilpasses – per dag, per måltid og per avdeling. Bygget for iPad og reell drift.',
+      'hero.quoteTitle':'“Som et regneark – men uten bom.”',
+      'hero.quoteText':'Tydelige rader og kolonner. Smart logikk som holder styr på beboertall, spesialkost og valg – i bakgrunnen.',
+      'hero.cta1':'Book demo',
+      'hero.cta2':'Pilotinteresse',
+      'hero.meta':'Raskt svar, ingen utsendelser. Vi viser et konkret flyt.',
+
+      'hero.card.tag':'Dette får dere',
+      'hero.card.title':'En driftsvisning alle forstår',
+      'hero.card.text':'Yuplan samler meny, beboertall, spesialkost og status i én plan. Kjøkkenet ser situasjonen direkte – og ledelsen får renere data uten ekstra administrasjon.',
+      'hero.card.li1':'Ukevisning per avdeling: lunsj + kveld med tydelige symboler',
+      'hero.card.li2':'Spesialkost per avdeling med antall – og klikkmarkering når det er tilpasset',
+      'hero.card.li3':'Alt2-planlegging som vises tydelig i uka',
+      'hero.card.li4':'Menyvisning direkte i visningen (modal)',
+      'hero.card.li5':'Planlegging & utskrift av dag-/måltidssammendrag (på vei i pilot)',
+      'hero.card.foot':'Start smått på én site – skaler når flyten sitter.',
+
+      'about.title':'Yuplan – bygget for hverdagen, laget for kontroll',
+      'about.lead':'Yuplan er en Unified-plattform for kjøkken som trenger enkelhet i fronten og stabil logikk bak. Et verktøy for drift: menyer, avdelinger, beboertall, spesialkost og planlegging – med tydelige visninger for kjøkken og admin.',
+      'about.k1':'iPad-first','about.k2':'Én datakilde','about.k3':'Tydelige visninger','about.k4':'Færre feil','about.k5':'Bedre oppfølging',
+      'about.c1.tag':'For kjøkkenet',
+      'about.c1.title':'Riktig porsjonsbilde – uten ekstra jobb',
+      'about.c1.text':'Beboertall og spesialkost per avdeling vises direkte. Klikk når spesialkost må tilpasses – så får dere sporbarhet uten lister.',
+      'about.c2.tag':'For admin',
+      'about.c2.title':'Meny, spesialkost og valg – på ett sted',
+      'about.c2.text':'Importer menyer, publiser uke, sett Alt2 per avdeling og hold oversikt over avdelingsinfo. Det som planlegges vises direkte i kjøkkenvisningen.',
+      'about.c3.tag':'For kvalitet',
+      'about.c3.title':'Tydelighet som reduserer feil',
+      'about.c3.text':'Når systemet viser riktig bilde blir det enklere å gjøre riktig. Yuplan fokuserer på tydelige tomtilstander, forståelige symboler og trygg logikk.',
+      'about.c4.tag':'For ledelse',
+      'about.c4.title':'Ren data for rapport og beslutning',
+      'about.c4.text':'Når planlegging og status registreres enkelt blir oppfølging realistisk – uten “excel-sannheter”.',
+
+      'modules.title':'Moduler – start der dere får effekt',
+      'modules.lead':'Yuplan bygges modulært. Start med kjerne (ukevisning + spesialkost) og legg på planlegging, prepp og rapport når dere er klare.',
+      'modules.c1.tag':'Pilotkjerne',
+      'modules.c1.title':'Ukevisning & meny',
+      'modules.c1.text':'Tydelig ukevisning per avdeling: lunsj/kveld, beboertall, spesialkost og status. Meny kan vises direkte i visningen.',
+      'modules.c2.tag':'Pilotkjerne',
+      'modules.c2.title':'Spesialkost med antall',
+      'modules.c2.text':'Knytt antall per spesialkost og avdeling. Marker når spesialkost er tilpasset – raskt og forståelig.',
+      'modules.c3.tag':'Pilotkjerne',
+      'modules.c3.title':'Alt2-planlegging',
+      'modules.c3.text':'Sett Alt2 per avdeling og dag. Visuell hjelp i uka – uten å forstyrre statistikk.',
+      'modules.c4.tag':'Neste steg',
+      'modules.c4.title':'Planlegging & utskrift',
+      'modules.c4.text':'Velg dag og måltid og få sammendrag: normalkost, spesialkost og summeringer. Perfekt for utskrift og prepp.',
+      'modules.c5.tag':'Roadmap',
+      'modules.c5.title':'Oppskrifter & skalering',
+      'modules.c5.text':'Koble oppskrifter til menylinjer, skaler porsjoner og få preppgrunnlag med stabile komponenter.',
+      'modules.c6.tag':'Roadmap',
+      'modules.c6.title':'Innkjøp & integrasjoner',
+      'modules.c6.text':'“Husk å bestille”-lister og eksport til innkjøpssystem. Yuplan blir navet mellom planlegging og bestilling.',
+
+      'targets.title':'For hvem?',
+      'targets.lead':'Samme grunn – ulike virkeligheter. Yuplan har røtter i kommunal drift og offshore-logikk, og fungerer i storkjøkken der tydelighet og kontroll er avgjørende.',
+      'targets.c1.tag':'Kommune & omsorg',
+      'targets.c1.title':'Sykehjem, bolig og kommune',
+      'targets.c1.text':'Spesialkost, tydelighet og iPad-first. Skal fungere direkte uten opplæringsprosjekt.',
+      'targets.c2.tag':'Offshore & industri',
+      'targets.c2.title':'Rigg, fartøy og skift',
+      'targets.c2.text':'Stabil drift og planlegging i skiftmiljø. Kan vokse med turnus, lagerlogikk og rapport når piloten sitter.',
+      'targets.c3.tag':'Storkjøkken',
+      'targets.c3.title':'Hotell, catering og produksjon',
+      'targets.c3.text':'Menystruktur, prepp og skalering – med tydelige underlag.',
+      'targets.c4.tag':'Ledelse',
+      'targets.c4.title':'Kostsjef og ledelse',
+      'targets.c4.text':'Én datakilde for oppfølging: ukevisning, avdelingsdata og eksport.',
+
+      'flow.title':'Slik ruller man ut Yuplan',
+      'flow.lead':'Yuplan kan innføres uten kaos. Start med pilotkjerne og lås et flyt – så bygger vi videre modul for modul.',
+      'flow.s1.title':'Sett grunnlaget',
+      'flow.s1.text':'Avdelinger, beboertall, spesialkoster og faktabokser.',
+      'flow.s2.title':'Meny → ukevisning',
+      'flow.s2.text':'Importer og publiser ukemeny. Den vises der den brukes.',
+      'flow.s3.title':'Alt2 & daglig status',
+      'flow.s3.text':'Sett Alt2 per avdeling. Marker spesialkost som må tilpasses med ett klikk.',
+      'flow.s4.title':'Planlegging & utskrift',
+      'flow.s4.text':'Velg dag + måltid og få sammendrag for prepp og kommunikasjon.',
+      'flow.s5.title':'Rapport & eksport',
+      'flow.s5.text':'Ukevisninger og eksport (PDF/Excel) for dialog med ledelse og kvalitet.',
+      'flow.s6.title':'Roadmap-moduler',
+      'flow.s6.text':'Oppskrifter, skalering, innkjøp og integrasjoner – når kjernen sitter.',
+      'flow.foot':'Fokus: tydelig visning, enkel registrering og én datakilde. Lett å bruke – selv når systemet blir kraftig.',
+
+      'roadmap.title':'Den store planen',
+      'roadmap.lead':'Yuplan blir et nav for kjøkkendrift – fra meny til innkjøp – uten å miste enkelheten.',
+      'roadmap.c1.title':'Oppskriftsbank & skalering',
+      'roadmap.c1.text':'Koble oppskrifter til menylinjer, skaler porsjoner og få preppunderlag som stemmer.',
+      'roadmap.c2.title':'Publik portal',
+      'roadmap.c2.text':'Pårørende-/crew-portal: se meny, lese info og melde inn spesialkost – som går tilbake til kjøkkenet.',
+      'roadmap.c3.title':'Innkjøp & bestillingsstøtte',
+      'roadmap.c3.text':'“Husk å bestille”-lister og eksport til innkjøpssystem – med kontroll i kjøkkenet.',
+      'roadmap.c4.title':'Dypere oppfølging',
+      'roadmap.c4.text':'Svinn, service og trender per periode som hjelper å redusere svinn og justere porsjoner.',
+
+      'cta.title':'Vil du se Yuplan i en pilot?',
+      'cta.text':'Vi setter opp en site med deres avdelinger, menyer og spesialkost – og viser ukevisning + kjøkkenvisning på iPad.',
+      'cta.primary':'Book pilotdialog',
+      'cta.secondary':'Logg inn',
+      'cta.meta':'Kontakt: <a href="mailto:Info@yuplan.se" style="text-decoration:underline;">Info@yuplan.se</a><br>Vi er heller konkrete enn “pitchy” – men vi viser noe som faktisk fungerer.',
+
+      'footer.text':'© 2026 Yuplan • Moderne kjøkkendrift, samlet i én visning.'
+    },
+    en:{
+      'nav.home':'Home',
+      'nav.features':'Features',
+      'nav.roadmap':'Roadmap',
+      'nav.demo':'Book demo',
+      'nav.login':'Log in',
+
+      'hero.badge':'Platform for modern kitchen operations',
+      'hero.title':'The kitchen plan – in one view.',
+      'hero.sub':'Yuplan makes it easy to see what’s served, how many portions you need and which dietary needs must be adapted – per day, per meal and per unit. Built for iPad and real operations.',
+      'hero.quoteTitle':'“Like a spreadsheet – without the mistakes.”',
+      'hero.quoteText':'Clear rows and columns. Smart logic that tracks headcount, dietary needs and choices – behind the scenes.',
+      'hero.cta1':'Book a demo',
+      'hero.cta2':'Pilot interest',
+      'hero.meta':'Fast replies, no campaigns. We show a concrete workflow.',
+
+      'hero.card.tag':'What you get',
+      'hero.card.title':'An operations view everyone understands',
+      'hero.card.text':'Yuplan brings menu, headcount, dietary needs and status into one plan. The kitchen sees the situation instantly – and management gets cleaner data without extra admin.',
+      'hero.card.li1':'Week view per unit: lunch + dinner with clear icons',
+      'hero.card.li2':'Dietary needs per unit with counts – and click-to-mark when adapted',
+      'hero.card.li3':'Alt2 planning clearly highlighted in the week',
+      'hero.card.li4':'Menu shown directly in the view (modal)',
+      'hero.card.li5':'Planning & printable meal/day summary (in the pilot build)',
+      'hero.card.foot':'Start small on one site – scale when the workflow is locked.',
+
+      'about.title':'Yuplan – built for everyday work, designed for control',
+      'about.lead':'Yuplan is a Unified platform for kitchens that need simplicity in the front and stable logic behind. It’s an operations tool: menus, units, headcount, dietary needs and planning – with clear views for kitchen and admin.',
+      'about.k1':'iPad-first','about.k2':'One data source','about.k3':'Clear views','about.k4':'Fewer mistakes','about.k5':'Better follow-up',
+      'about.c1.tag':'For the kitchen',
+      'about.c1.title':'Accurate portion picture – without extra work',
+      'about.c1.text':'Headcount and dietary needs per unit are visible instantly. Click to mark when a dietary meal had to be adapted – simple and traceable.',
+      'about.c2.tag':'For admin',
+      'about.c2.title':'Menu, dietary needs and choices – in one place',
+      'about.c2.text':'Import menus, publish weeks, set Alt2 per unit and keep unit notes. What’s planned shows up in the kitchen view immediately.',
+      'about.c3.tag':'For safety',
+      'about.c3.title':'Clarity that reduces errors',
+      'about.c3.text':'When the system shows the right picture, it’s easier to do the right thing. Yuplan focuses on clear empty states and safe logic.',
+      'about.c4.tag':'For leadership',
+      'about.c4.title':'Clean data for reporting and decisions',
+      'about.c4.text':'When planning and status are captured in daily work, reporting becomes realistic – without “spreadsheet truths”.',
+
+      'modules.title':'Modules – start where you get immediate value',
+      'modules.lead':'Yuplan is modular. Start with the core (week view + dietary needs), then add planning, prep and reporting when you’re ready.',
+      'modules.c1.tag':'Pilot core',
+      'modules.c1.title':'Week view & menu',
+      'modules.c1.text':'Clear week view per unit: lunch/dinner, headcount, dietary needs and status. Menu can be shown directly in the view.',
+      'modules.c2.tag':'Pilot core',
+      'modules.c2.title':'Dietary needs with counts',
+      'modules.c2.text':'Connect counts per diet and unit. Mark when a dietary meal had to be adapted – fast and understandable.',
+      'modules.c3.tag':'Pilot core',
+      'modules.c3.title':'Alt2 planning',
+      'modules.c3.text':'Set Alt2 per unit and day. Clear visual guidance – without polluting reports.',
+      'modules.c4.tag':'Next step',
+      'modules.c4.title':'Planning & printing',
+      'modules.c4.text':'Pick day and meal and get a summary: normal meals, dietary meals and totals – perfect for prep and printing.',
+      'modules.c5.tag':'Roadmap',
+      'modules.c5.title':'Recipes & scaling',
+      'modules.c5.text':'Link recipes to menu lines, scale portions and generate prep guidance with stable components.',
+      'modules.c6.tag':'Roadmap',
+      'modules.c6.title':'Ordering & integrations',
+      'modules.c6.text':'“Remember to order” lists and export to purchasing systems. Yuplan becomes the hub between planning and ordering.',
+
+      'targets.title':'Who it’s for',
+      'targets.lead':'Same foundation – different realities. Yuplan has roots in municipal operations and offshore logic, and fits large kitchens where clarity and control are critical.',
+      'targets.c1.tag':'Municipal & care',
+      'targets.c1.title':'Care homes and municipal kitchens',
+      'targets.c1.text':'Dietary needs, clarity and iPad-first. Works without a big training project.',
+      'targets.c2.tag':'Offshore & industrial',
+      'targets.c2.title':'Rigs, vessels and shift operations',
+      'targets.c2.text':'Stable operation and planning. Can grow into rotation logic, inventory and reporting when the pilot is locked.',
+      'targets.c3.tag':'Large kitchens',
+      'targets.c3.title':'Hotels, catering and production',
+      'targets.c3.text':'Menu structure, prep and scaling – with clean printable outputs.',
+      'targets.c4.tag':'Leadership',
+      'targets.c4.title':'Dietary leads and management',
+      'targets.c4.text':'One data source for follow-up: week picture, unit data and exports.',
+
+      'flow.title':'How Yuplan is rolled out',
+      'flow.lead':'Yuplan can be adopted without chaos. Start with the pilot core and lock a working flow – then build module by module.',
+      'flow.s1.title':'Set the foundation',
+      'flow.s1.text':'Units, headcount, diet types and unit notes.',
+      'flow.s2.title':'Menu → week view',
+      'flow.s2.text':'Import and publish weekly menus. It shows where it’s used.',
+      'flow.s3.title':'Alt2 & daily status',
+      'flow.s3.text':'Set Alt2 per unit. Click-to-mark when dietary meals needed adaptation.',
+      'flow.s4.title':'Planning & printing',
+      'flow.s4.text':'Pick day + meal and get a summary for prep and communication.',
+      'flow.s5.title':'Reports & exports',
+      'flow.s5.text':'Weekly views and exports (PDF/Excel) for quality and leadership.',
+      'flow.s6.title':'Roadmap modules',
+      'flow.s6.text':'Recipes, scaling, ordering and integrations – once the core is stable.',
+      'flow.foot':'Focus: clear views, simple capture and one data source. Easy to use – even as it becomes powerful.',
+
+      'roadmap.title':'The big plan',
+      'roadmap.lead':'Yuplan becomes a hub for kitchen operations – from menu to ordering – without losing simplicity.',
+      'roadmap.c1.title':'Recipe bank & scaling',
+      'roadmap.c1.text':'Link recipes to menu lines, scale portions and generate prep guidance that stays correct.',
+      'roadmap.c2.title':'Public portal',
+      'roadmap.c2.text':'Family/crew portal: view menus, read kitchen info and submit dietary needs via a wizard that feeds the kitchen.',
+      'roadmap.c3.title':'Ordering support',
+      'roadmap.c3.text':'“Remember to order” lists and exports to purchasing systems – with human control preserved.',
+      'roadmap.c4.title':'Deeper follow-up',
+      'roadmap.c4.text':'Waste, service and period trends to reduce waste and tune portions with less guessing.',
+
+      'cta.title':'Want to see Yuplan in a pilot?',
+      'cta.text':'We set up one site with your units, menus and dietary needs – then show week view + kitchen view on iPad.',
+      'cta.primary':'Book a pilot call',
+      'cta.secondary':'Log in',
+      'cta.meta':'Contact: <a href="mailto:Info@yuplan.se" style="text-decoration:underline;">Info@yuplan.se</a><br>We prefer being concrete over being “pitchy” — and we show what actually works.',
+
+      'footer.text':'© 2026 Yuplan • Modern kitchen operations, in one view.'
+    }
+  };
+
+  function applyLang(lang){
+    const dict = I18N[lang] || I18N.sv;
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(el=>{
+      const key = el.getAttribute('data-i18n');
+      const val = dict[key];
+      if(!val) return;
+      el.innerHTML = val;
+    });
+    document.querySelectorAll('.lang-btn').forEach(btn=>{
+      btn.classList.toggle('active', btn.dataset.lang === lang);
+    });
+    localStorage.setItem('yuplan_lang', lang);
+  }
+
+  document.querySelectorAll('.lang-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>applyLang(btn.dataset.lang));
+  });
+
+  applyLang(localStorage.getItem('yuplan_lang') || 'sv');
+</script>
+
+</body>
+</html>

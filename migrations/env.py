@@ -10,6 +10,7 @@ from sqlalchemy import engine_from_config, pool
 # Include core models
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from core.config import Config
+from core.db import ensure_sqlite_file_ready
 from core.models import Base
 
 # this is the Alembic Config object
@@ -43,6 +44,11 @@ def run_migrations_offline():
 
 
 def run_migrations_online():
+    try:
+        ensure_sqlite_file_ready(config.get_main_option("sqlalchemy.url"))
+    except Exception:
+        # Keep existing Alembic behavior for non-sqlite or invalid URLs.
+        pass
     connectable = engine_from_config(
         config.get_section(config.config_ini_section),
         prefix="sqlalchemy.",

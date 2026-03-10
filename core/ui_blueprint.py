@@ -702,7 +702,7 @@ def landing_root():
         pass
 
     # Public landing page otherwise
-    return render_template("landing_public.html")
+    return render_template("pitch.html")
 # ============================================================================
 # Systemadmin (Superuser) – Sites + Departments (Phase 1)
 # ============================================================================
