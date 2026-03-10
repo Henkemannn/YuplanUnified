@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision = "0002_add_site_id_to_menus"
@@ -17,21 +18,26 @@ depends_on = None
 
 
 def upgrade() -> None:
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    table_names = set(inspector.get_table_names())
+
     op.add_column("menus", sa.Column("site_id", sa.Text(), nullable=True))
     op.create_index(
         "ix_menus_tenant_site_week",
         "menus",
         ["tenant_id", "site_id", "year", "week"],
     )
-    op.execute(
-        """
-        UPDATE menus
-        SET site_id = (
-          SELECT MIN(s.id) FROM sites s WHERE s.tenant_id = menus.tenant_id
+    if "sites" in table_names:
+        op.execute(
+            """
+            UPDATE menus
+            SET site_id = (
+              SELECT MIN(s.id) FROM sites s WHERE s.tenant_id = menus.tenant_id
+            )
+            WHERE site_id IS NULL;
+            """
         )
-        WHERE site_id IS NULL;
-        """
-    )
 
 
 def downgrade() -> None:

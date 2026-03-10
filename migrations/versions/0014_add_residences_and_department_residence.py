@@ -1,7 +1,7 @@
 """Add residences table and nullable departments.residence_id
 
 Revision ID: 0014_add_residences_and_department_residence
-Revises: 0013_add_remember_to_order_items, 778407d29f47_add_users_updated_at
+Revises: 0013_add_remember_to_order_items, 778407d29f47
 Create Date: 2026-03-10
 """
 
@@ -13,7 +13,7 @@ from sqlalchemy import inspect
 
 
 revision = "0014_add_residences_and_department_residence"
-down_revision = ("0013_add_remember_to_order_items", "778407d29f47_add_users_updated_at")
+down_revision = ("0013_add_remember_to_order_items", "778407d29f47")
 branch_labels = None
 depends_on = None
 
