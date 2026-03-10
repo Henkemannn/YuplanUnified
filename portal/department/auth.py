@@ -3,6 +3,22 @@ from __future__ import annotations
 from flask import request, abort, g, current_app, session
 
 
+def _allow_dev_claim_fallback() -> bool:
+    if current_app.config.get("TESTING"):
+        return False
+    env = (
+        current_app.config.get("DEPLOY_ENV")
+        or current_app.config.get("APP_ENV")
+        or current_app.config.get("FLASK_ENV")
+        or ""
+    ).lower()
+    if not env:
+        import os
+
+        env = (os.getenv("DEPLOY_ENV") or os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+    return env in ("dev", "development", "local")
+
+
 def get_department_id_from_claims() -> str:
     """Extract department_id from authenticated token claims.
 
@@ -28,7 +44,7 @@ def get_department_id_from_claims() -> str:
             claims = getattr(user, "claims", None)
     if not isinstance(claims, dict):
         # Development fallback: allow both UI HTML and JSON endpoints when not testing
-        if not current_app.config.get("TESTING") and (
+        if _allow_dev_claim_fallback() and (
             request.path.startswith("/ui/portal/department/") or request.path.startswith("/portal/department/")
         ):
             dev_dept = current_app.config.get("DEV_DEPARTMENT_ID") or session.get("department_id")
@@ -37,7 +53,7 @@ def get_department_id_from_claims() -> str:
         abort(403)
     dept_id = claims.get("department_id") or claims.get("dept_id")
     if not dept_id or not isinstance(dept_id, str):
-        if not current_app.config.get("TESTING") and (
+        if _allow_dev_claim_fallback() and (
             request.path.startswith("/ui/portal/department/") or request.path.startswith("/portal/department/")
         ):
             dev_dept = current_app.config.get("DEV_DEPARTMENT_ID") or session.get("department_id")

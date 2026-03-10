@@ -99,6 +99,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     except Exception:
         pass
     # --- Configuration ---
+    runtime_env = (os.getenv("DEPLOY_ENV") or os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+    is_pilot_or_prod = runtime_env in ("pilot", "prod", "production")
     cfg = Config.from_env()
     if config_override:
         known = {k: v for k, v in config_override.items() if hasattr(cfg, k)}
@@ -110,6 +112,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     # Tests should use isolated sqlite memory DB unless explicitly overridden.
     if (config_override and config_override.get("TESTING")) and not os.getenv("DATABASE_URL"):
         cfg.database_url = "sqlite:///:memory:"
+    if is_pilot_or_prod and not os.getenv("DATABASE_URL"):
+        raise RuntimeError("DATABASE_URL is required in pilot/prod")
     # Resolve stable absolute dev DB path when DATABASE_URL not provided
     try:
         if not os.getenv("DATABASE_URL"):
@@ -121,6 +125,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     except Exception:
         pass
     app.config.update(cfg.to_flask_dict())
+    jwt_secret_env = (os.getenv("JWT_SECRET") or "").strip()
+    if jwt_secret_env:
+        app.config["JWT_SECRET"] = jwt_secret_env
     # Development convenience: map DEV_DEPARTMENT_ID env into app.config for portal fallback.
     dev_dept = os.getenv("DEV_DEPARTMENT_ID")
     if dev_dept:
@@ -137,6 +144,14 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     env_deploy = os.getenv("DEPLOY_ENV") or ""
     env_lower = (env_flask or env_app or env_deploy or "").lower()
     emit_startup_log = (env_lower == "development") and (not testing_flag)
+
+    if testing_flag and not (app.config.get("JWT_SECRET") or "").strip():
+        app.config["JWT_SECRET"] = "test-jwt-secret-0123456789abcdef0123456789abcdef"
+
+    if is_pilot_or_prod:
+        jwt_secret = (app.config.get("JWT_SECRET") or "").strip()
+        if len(jwt_secret) < 32:
+            raise RuntimeError("JWT_SECRET missing/weak in pilot/prod")
 
     secret_env = os.getenv("SECRET_KEY") or ""
     if secret_env:
@@ -949,7 +964,9 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
                 from .jwt_utils import decode as _jwt_decode, JWTError as _JWTError
                 token = auth_header.split(None, 1)[1].strip()
                 import os as _os
-                primary = app.config.get("JWT_SECRET", _os.getenv("JWT_SECRET", "dev-secret"))
+                primary = app.config.get("JWT_SECRET") or _os.getenv("JWT_SECRET")
+                if not primary:
+                    return
                 secrets_list = app.config.get("JWT_SECRETS") or []
                 try:
                     # Loosen validation for UI bearer handling: do not require issuer/audience
@@ -3447,19 +3464,21 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
 
     # --- Bootstrap superuser if env provides credentials ---
     with app.app_context():  # pragma: no cover (simple bootstrap)
-        ensure_bootstrap_superuser()
-        try:
-            ensure_dev_superuser_henrik()
-        except Exception:
-            pass
-        try:
-            ensure_dev_sync_superuser_from_env()
-        except Exception:
-            pass
-        try:
-            dev_repair_null_site_tenant_ids()
-        except Exception:
-            pass
+        startup_mutations_opt_in = os.getenv("YUPLAN_ENABLE_STARTUP_MUTATIONS", "0").lower() in ("1", "true", "yes")
+        if (not is_pilot_or_prod) or startup_mutations_opt_in:
+            ensure_bootstrap_superuser()
+            try:
+                ensure_dev_superuser_henrik()
+            except Exception:
+                pass
+            try:
+                ensure_dev_sync_superuser_from_env()
+            except Exception:
+                pass
+            try:
+                dev_repair_null_site_tenant_ids()
+            except Exception:
+                pass
         _log_sqlite_fingerprint("after_bootstrap_superuser")
 
     # --- Guard test endpoints (P6.2) ---

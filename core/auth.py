@@ -47,6 +47,11 @@ def _json_error(msg: str, code: int = 400):
     return jsonify({"error": normalized, "message": normalized}), code
 
 
+def _jwt_primary_secret() -> str | None:
+    secret = (current_app.config.get("JWT_SECRET") or os.getenv("JWT_SECRET") or "").strip()
+    return secret or None
+
+
 def set_csrf_cookie(resp, token: str):
     """Set CSRF cookie with flags differing for test/dev vs prod.
 
@@ -78,10 +83,12 @@ def require_roles(*roles: str):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             auth_header = request.headers.get("Authorization", "")
-            primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
+            primary = _jwt_primary_secret()
             secrets_list = current_app.config.get("JWT_SECRETS") or []
             # Always prefer bearer header if present (stateless override of session)
             if auth_header.lower().startswith("bearer "):
+                if not primary:
+                    return _json_error("auth required", 401)
                 token = auth_header.split(None, 1)[1].strip()
                 cfg = current_app.config
                 try:
@@ -235,7 +242,9 @@ def login():
             set_csrf_cookie(resp, csrf_token)
             return resp
         secrets_list = current_app.config.get("JWT_SECRETS") or []
-        primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
+        primary = _jwt_primary_secret()
+        if not primary:
+            return _json_error("server auth config missing", 500)
         signing_secret = select_signing_secret(primary, secrets_list)
         access, refresh, refresh_jti = issue_token_pair(
             user_id=user.id,
@@ -347,6 +356,8 @@ def login():
                         return resp
                     else:
                         target = url_for("ui.admin_dashboard")
+                elif r in ("unit_portal", "staff", "department"):
+                    target = url_for("ui.portal_week")
                 else:
                     target = url_for("ui.admin_dashboard")
             except Exception:
@@ -411,7 +422,9 @@ def logout():
         resp.delete_cookie("yp_demo")
         return resp
     # Accept refresh token or Authorization header, invalidate stored jti
-    primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
+    primary = _jwt_primary_secret()
+    if not primary:
+        return _json_error("server auth config missing", 500)
     secrets_list = current_app.config.get("JWT_SECRETS") or []
     token = None
     auth = request.headers.get("Authorization", "")
@@ -446,7 +459,9 @@ def refresh():
         and not current_app.config.get("TESTING")
     ):
         return _json_error("refresh not supported in demo", 400)
-    primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
+    primary = _jwt_primary_secret()
+    if not primary:
+        return _json_error("server auth config missing", 500)
     secrets_list = current_app.config.get("JWT_SECRETS") or []
     data = request.get_json(silent=True) or {}
     token = data.get("refresh_token")
@@ -494,7 +509,9 @@ def refresh():
 @bp.get("/me")
 def me():
     # Prefer bearer token if supplied (stateless); fallback to session.
-    primary = current_app.config.get("JWT_SECRET", os.getenv("JWT_SECRET", "dev-secret"))
+    primary = _jwt_primary_secret()
+    if not primary:
+        return _json_error("server auth config missing", 500)
     secrets_list = current_app.config.get("JWT_SECRETS") or []
     auth = request.headers.get("Authorization", "")
     user_id = None

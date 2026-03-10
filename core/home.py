@@ -102,6 +102,8 @@ def ui_login():  # Simple HTML login that sets session directly or redirects to 
                 target = "/ui/kitchen"
             elif user.role == "admin":
                 target = "/ui/admin"
+            elif user.role in ("unit_portal", "staff", "department"):
+                target = "/ui/portal/week"
             else:
                 target = "/ui/admin"
             resp = make_response(redirect(target))

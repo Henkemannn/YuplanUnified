@@ -22,6 +22,11 @@ import uuid
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
 
 
+def _is_pilot_or_prod() -> bool:
+    env = (os.getenv("DEPLOY_ENV") or os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+    return env in ("pilot", "prod", "production")
+
+
 @ui_bp.before_app_request
 def _redirect_kitchen_from_admin_ui():
     """Pilot guard: kitchen users are redirected away from admin UI."""
@@ -1255,6 +1260,8 @@ def admin_system_diet_create():
     return redirect(url_for("ui.admin_system_page"))
 @ui_bp.get("/ui/demo")
 def demo_landing():
+    if _is_pilot_or_prod():
+        abort(404)
     # Simple landing with one-click links using demo IDs
     today = _date.today()
     iso = today.isocalendar()
@@ -1279,6 +1286,8 @@ def test_login():
     Development-only test login page.
     Allows choosing a role and destination without real authentication.
     """
+    if _is_pilot_or_prod():
+        abort(404)
     if request.method == "GET":
         return render_template("test_login.html")
     
@@ -1747,14 +1756,30 @@ def portal_week():
         NOTE: Menu texts are resolved from `MenuServiceDB.get_week_view` (A4/portal-friendly names).
         NOTE: Alt2-lunch flags for badges are derived from WeekviewService enrichment (repo-backed alt2).
     """
-    site_id = (request.args.get("site_id") or "").strip()
-    department_id = (request.args.get("department_id") or "").strip()
+    req_site_id = (request.args.get("site_id") or "").strip()
+    req_department_id = (request.args.get("department_id") or "").strip()
+    site_id = req_site_id
+    department_id = req_department_id
+    role = (session.get("role") or "").strip().lower()
+    is_portal_role = role in ("unit_portal", "staff", "department")
+    if is_portal_role:
+        bound_site = (session.get("site_id") or "").strip()
+        bound_department = (session.get("department_id") or "").strip()
+        if _is_pilot_or_prod():
+            if req_site_id and bound_site and req_site_id != bound_site:
+                return jsonify({"error": "forbidden", "message": "site_param_override_forbidden"}), 403
+            if req_department_id and bound_department and req_department_id != bound_department:
+                return jsonify({"error": "forbidden", "message": "department_param_override_forbidden"}), 403
+        if bound_site:
+            site_id = bound_site
+        if bound_department:
+            department_id = bound_department
 
     # If all query params present → redirect to canonical path route
     try:
         q_year = request.args.get("year")
         q_week = request.args.get("week")
-        q_dep = request.args.get("department_id")
+        q_dep = department_id or request.args.get("department_id")
         if q_year is not None and q_week is not None and q_dep is not None:
             year_q = int(q_year)
             week_q = int(q_week)
@@ -1982,7 +2007,19 @@ def portal_week_unified_path(year: int, week: int, department_id: int):
     tid = session.get("tenant_id") or getattr(g, "tenant_id", None)
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    site_id = (request.args.get("site_id") or "").strip() or None
+    role = (session.get("role") or "").strip().lower()
+    is_portal_role = role in ("unit_portal", "staff", "department")
+    req_site_id = (request.args.get("site_id") or "").strip() or None
+    site_id = req_site_id
+    if is_portal_role:
+        bound_department = (session.get("department_id") or "").strip()
+        bound_site = (session.get("site_id") or "").strip() or None
+        if _is_pilot_or_prod() and bound_department and str(department_id) != bound_department:
+            return jsonify({"error": "forbidden", "message": "department_path_override_forbidden"}), 403
+        if bound_site:
+            if _is_pilot_or_prod() and req_site_id and req_site_id != bound_site:
+                return jsonify({"error": "forbidden", "message": "site_param_override_forbidden"}), 403
+            site_id = bound_site
     try:
         from views.portal_department_week import build_department_week_vm
         vm = build_department_week_vm(int(tid), year, week, str(department_id), site_id)
@@ -2006,8 +2043,19 @@ def portal_department_day_view(year: int, week: int, department_id: int, day_ind
     tid = session.get("tenant_id")
     if not tid:
         return jsonify({"error": "bad_request", "message": "Missing tenant"}), 400
-    # Prefer explicit query param, else fall back to session site context
-    site_id = (request.args.get("site_id") or "").strip() or (session.get("site_id") if "site_id" in session else None)
+    role = (session.get("role") or "").strip().lower()
+    is_portal_role = role in ("unit_portal", "staff", "department")
+    req_site_id = (request.args.get("site_id") or "").strip() or None
+    site_id = req_site_id or (session.get("site_id") if "site_id" in session else None)
+    if is_portal_role:
+        bound_department = (session.get("department_id") or "").strip()
+        bound_site = (session.get("site_id") or "").strip() or None
+        if _is_pilot_or_prod() and bound_department and str(department_id) != bound_department:
+            return jsonify({"error": "forbidden", "message": "department_path_override_forbidden"}), 403
+        if bound_site:
+            if _is_pilot_or_prod() and req_site_id and req_site_id != bound_site:
+                return jsonify({"error": "forbidden", "message": "site_param_override_forbidden"}), 403
+            site_id = bound_site
     if request.method == "POST":
         selected_alt = (request.form.get("selected_alt") or "").strip()
         alt2_selected = (selected_alt == "2")

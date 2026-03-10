@@ -9,6 +9,15 @@ from portal.department.service import build_department_week_payload
 portal_dept_ui_bp = Blueprint("portal_dept_ui", __name__)
 
 
+def _is_pilot_or_prod() -> bool:
+    env = (current_app.config.get("DEPLOY_ENV") or current_app.config.get("APP_ENV") or "").lower()
+    if not env:
+        import os
+
+        env = (os.getenv("DEPLOY_ENV") or os.getenv("APP_ENV") or os.getenv("FLASK_ENV") or "").lower()
+    return env in ("pilot", "prod", "production")
+
+
 def _resolve_year_week(year_raw: str | None, week_raw: str | None) -> tuple[int, int]:
     if not year_raw or not week_raw:
         today = _date.today()
@@ -29,6 +38,10 @@ def portal_department_week_ui():  # type: ignore[override]
     year_raw = request.args.get("year")
     week_raw = request.args.get("week")
     demo_mode = request.args.get("demo") == "1"
+    if demo_mode and _is_pilot_or_prod():
+        from flask import abort
+
+        abort(404)
     try:
         year, week = _resolve_year_week(year_raw, week_raw)
     except ValueError:

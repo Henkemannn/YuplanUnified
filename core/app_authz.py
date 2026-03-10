@@ -59,9 +59,13 @@ def require_roles(*roles: RoleLike) -> Callable[[Callable[P, R]], Callable[P, R]
                 auth_header = request.headers.get("Authorization", "")
                 if (sess is None or not sess.get("user_id")) and auth_header.lower().startswith("bearer "):
                     token = auth_header.split(None, 1)[1].strip()
-                    # Fall back to env default when config not set
+                    # Require configured secret; do not use weak fallback defaults.
                     import os as _os
-                    primary = current_app.config.get("JWT_SECRET", _os.getenv("JWT_SECRET", "dev-secret"))
+                    primary = current_app.config.get("JWT_SECRET") or _os.getenv("JWT_SECRET")
+                    if not primary:
+                        from .app_sessions import SessionError
+
+                        raise SessionError("authentication required")
                     secrets_list = current_app.config.get("JWT_SECRETS") or []
                     # Loosen validation for UI routes: skip issuer/audience checks
                     payload = jwt_decode(
