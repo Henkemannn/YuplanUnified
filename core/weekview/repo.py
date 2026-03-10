@@ -9,6 +9,7 @@ except Exception:  # pragma: no cover
     flask_current_app = None
 
 from sqlalchemy import text
+from sqlalchemy import inspect
 
 from ..db import allow_destructive_db, get_session
 
@@ -209,18 +210,58 @@ class WeekviewRepo:
                     {"dep": department_id},
                 ).fetchone()
                 site_id_val = str(row_site[0]) if row_site and row_site[0] is not None else None
-            rows_a = db.execute(
-                text(
-                    """
-                    SELECT day_of_week
-                    FROM weekview_alt2_flags
-                    WHERE site_id=:site_id AND department_id=:dep AND year=:yy AND week=:ww AND enabled=1
-                    ORDER BY day_of_week
-                    """
-                ),
-                {"site_id": site_id_val, "dep": department_id, "yy": year, "ww": week},
-            ).fetchall()
-            alt2_days = [int(r[0]) for r in rows_a]
+            # Read alt2 flags defensively to support legacy schemas on fresh/staging dbs.
+            alt2_days: list[int] = []
+            try:
+                cols = {
+                    str(c.get("name"))
+                    for c in (inspect(db.bind).get_columns("weekview_alt2_flags") or [])
+                }
+                has_site_scope = "site_id" in cols
+                has_enabled = "enabled" in cols
+                has_is_alt2 = "is_alt2" in cols
+
+                if has_site_scope:
+                    rows_a = db.execute(
+                        text(
+                            """
+                            SELECT day_of_week
+                            FROM weekview_alt2_flags
+                            WHERE site_id=:site_id AND department_id=:dep AND year=:yy AND week=:ww AND enabled=1
+                            ORDER BY day_of_week
+                            """
+                        ),
+                        {"site_id": site_id_val, "dep": department_id, "yy": year, "ww": week},
+                    ).fetchall()
+                elif has_enabled:
+                    rows_a = db.execute(
+                        text(
+                            """
+                            SELECT day_of_week
+                            FROM weekview_alt2_flags
+                            WHERE department_id=:dep AND year=:yy AND week=:ww AND enabled=1
+                            ORDER BY day_of_week
+                            """
+                        ),
+                        {"dep": department_id, "yy": year, "ww": week},
+                    ).fetchall()
+                elif has_is_alt2:
+                    rows_a = db.execute(
+                        text(
+                            """
+                            SELECT day_of_week
+                            FROM weekview_alt2_flags
+                            WHERE department_id=:dep AND year=:yy AND week=:ww AND COALESCE(is_alt2, 0)=1
+                            ORDER BY day_of_week
+                            """
+                        ),
+                        {"dep": department_id, "yy": year, "ww": week},
+                    ).fetchall()
+                else:
+                    rows_a = []
+                alt2_days = [int(r[0]) for r in rows_a]
+            except Exception:
+                alt2_days = []
             payload["department_summaries"].append(
                 {
                     "department_id": department_id,
