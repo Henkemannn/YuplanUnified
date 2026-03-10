@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bgGradExp" cx="50%" cy="35%" r="80%">
+      <stop offset="0%" stop-color="#3BA9E5"/>
+      <stop offset="70%" stop-color="#12B7A5"/>
+      <stop offset="100%" stop-color="#0AA090"/>
+    </radialGradient>
+
+    <linearGradient id="glossExp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <clipPath id="circleClipExp">
+      <circle cx="256" cy="256" r="240"/>
+    </clipPath>
+  </defs>
+
+  <circle cx="256" cy="256" r="240" fill="url(#bgGradExp)"/>
+
+  <g clip-path="url(#circleClipExp)" opacity="0.24" fill="none" stroke="#FFFFFF" stroke-width="8">
+    <ellipse cx="256" cy="256" rx="220" ry="220"/>
+    <ellipse cx="256" cy="256" rx="165" ry="220"/>
+    <ellipse cx="256" cy="256" rx="100" ry="220"/>
+    <ellipse cx="256" cy="256" rx="45" ry="220"/>
+  </g>
+
+  <g clip-path="url(#circleClipExp)" opacity="0.22" fill="none" stroke="#FFFFFF" stroke-width="8">
+    <ellipse cx="256" cy="256" rx="220" ry="165"/>
+    <ellipse cx="256" cy="256" rx="220" ry="100"/>
+    <ellipse cx="256" cy="256" rx="220" ry="45"/>
+  </g>
+
+  <g clip-path="url(#circleClipExp)">
+    <path d="M 512 0 L 512 190 L 320 0 Z" fill="#FFD166" opacity="0.95"/>
+  </g>
+
+  <ellipse cx="230" cy="180" rx="185" ry="130" fill="url(#glossExp)" opacity="0.85"/>
+
+  <g fill="none" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 170 140 L 256 230"/>
+    <path d="M 342 140 L 256 230"/>
+    <path d="M 256 230 L 256 360"/>
+  </g>
+
+  <circle cx="256" cy="256" r="238" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="6"/>
+</svg>

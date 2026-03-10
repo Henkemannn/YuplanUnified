@@ -83,7 +83,7 @@ def ui_proto_app_shell():
     return render_template("ui/_proto/app_shell_preview.html")
 # Weekview special diets mark toggle API (ETag-safe), aligned with report marks
 @ui_bp.route("/api/weekview/specialdiets/mark", methods=["POST"])
-@require_roles("cook", "admin", "superuser")
+@require_roles("cook", "admin", "superuser", "kitchen")
 def api_weekview_specialdiets_mark():
     data = request.get_json(force=True) or {}
     try:
@@ -269,7 +269,7 @@ def api_planering_mark_produced_special():
     return jsonify({"ok": True, "marked_count": total_ops}), 200
 
 @ui_bp.get("/api/weekview/etag")
-@require_roles("superuser", "admin", "cook", "unit_portal")
+@require_roles("superuser", "admin", "cook", "unit_portal", "kitchen")
 def api_weekview_get_etag():
     """Return current ETag for a department/week to support UI retry after 412.
 
@@ -4444,7 +4444,7 @@ def remember_to_order_add_api():
 
 
 @ui_bp.post("/ui/api/remember-to-order/check")
-@require_roles(*ADMIN_ROLES)
+@require_roles(*KITCHEN_UI_ROLES)
 def remember_to_order_check_api():
     data = request.get_json(silent=True) or {}
     if not data:

@@ -33,6 +33,7 @@
 .admin-detail-site-chip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 2px 10px;
   border: 1px solid var(--border);
@@ -42,6 +43,12 @@
   font-size: 0.85rem;
   font-weight: 600;
   line-height: 1.4;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: center;
 }
 
 .u-visually-hidden {
@@ -253,7 +260,14 @@
   color: var(--text);
   font-weight: 650;
   min-height: 34px;
-  padding: 0 12px;
+  padding: 4px 12px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .admin-alt2-modal .alt2-day.is-selected {
@@ -441,6 +455,12 @@
   padding: 1px 8px;
   font-size: 0.78rem;
   opacity: 0.92;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: center;
 }
 
 .admin-variation-modal__body {
@@ -664,7 +684,13 @@
   color: var(--text);
   font-size: 0.85rem;
   font-weight: 600;
-  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .admin-department-detail__weeknav {
@@ -1118,6 +1144,36 @@
   color: var(--muted);
   font-size: 0.85rem;
   font-weight: 600;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.2;
+  text-align: center;
+}
+
+@media (max-width: 820px) and (orientation: portrait) {
+  .admin-alt2-modal .alt2-day,
+  .admin-report-week__chip,
+  .sk-pill,
+  .admin-detail-site-chip,
+  .admin-variation-modal__dept-chip {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .admin-alt2-modal .alt2-day,
+  .admin-report-week__chip,
+  .sk-pill {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: 0.82rem;
+  }
 }
 
 .admin-report-week__details-list {

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="oceanV2" cx="34%" cy="28%" r="78%">
+      <stop offset="0%" stop-color="#81D7FF"/>
+      <stop offset="38%" stop-color="#2FA6E4"/>
+      <stop offset="75%" stop-color="#179EAF"/>
+      <stop offset="100%" stop-color="#0D6D86"/>
+    </radialGradient>
+
+    <radialGradient id="shadowV2" cx="74%" cy="74%" r="66%">
+      <stop offset="0%" stop-color="#001E32" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#001E32" stop-opacity="0.42"/>
+    </radialGradient>
+
+    <linearGradient id="specularV2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.62"/>
+      <stop offset="42%" stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <clipPath id="globeClipV2">
+      <circle cx="256" cy="256" r="236"/>
+    </clipPath>
+  </defs>
+
+  <circle cx="256" cy="256" r="236" fill="url(#oceanV2)"/>
+
+  <g clip-path="url(#globeClipV2)" fill="none" stroke="#FFFFFF" stroke-opacity="0.33" stroke-width="7">
+    <ellipse cx="256" cy="256" rx="205" ry="236"/>
+    <ellipse cx="256" cy="256" rx="150" ry="236"/>
+    <ellipse cx="256" cy="256" rx="94" ry="236"/>
+    <ellipse cx="256" cy="256" rx="40" ry="236"/>
+  </g>
+
+  <g clip-path="url(#globeClipV2)" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="7">
+    <ellipse cx="256" cy="256" rx="236" ry="172"/>
+    <ellipse cx="256" cy="256" rx="236" ry="106"/>
+    <ellipse cx="256" cy="256" rx="236" ry="48"/>
+  </g>
+
+  <g clip-path="url(#globeClipV2)">
+    <path d="M 512 0 L 512 190 L 320 0 Z" fill="#FFD166" opacity="0.94"/>
+  </g>
+
+  <ellipse cx="204" cy="170" rx="188" ry="132" fill="url(#specularV2)"/>
+  <circle cx="256" cy="256" r="236" fill="url(#shadowV2)"/>
+
+  <g fill="none" stroke="#FFFFFF" stroke-width="40" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 170 140 L 256 230"/>
+    <path d="M 342 140 L 256 230"/>
+    <path d="M 256 230 L 256 360"/>
+  </g>
+
+  <circle cx="256" cy="256" r="236" fill="none" stroke="#FFFFFF" stroke-opacity="0.26" stroke-width="6"/>
+</svg>

@@ -254,7 +254,16 @@
     font-size: 14px;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 32px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-align: center;
+    line-height: 1.2;
 }
 .diet-chip.active{
     background: #d1fae5;   /* mild grön */
@@ -267,6 +276,10 @@
 }
 .diet-chip .kp-chip-label{
     font-weight: 600;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 .diet-chip .kp-chip-badge{
     font-size: 12px;
