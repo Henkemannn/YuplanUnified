@@ -1,4 +1,5 @@
 from datetime import date as _date
+import re
 from sqlalchemy import text
 
 
@@ -49,4 +50,11 @@ def test_kitchen_dashboard_shows_remember_to_order_card(client_cook):
         "Tomater",
     ]:
         assert item in html
-    assert "Spara" not in html
+    remember_form_match = re.search(
+        r'<form[^>]*data-testid="remember-to-order-add-form"[^>]*>(.*?)</form>',
+        html,
+        flags=re.DOTALL,
+    )
+    assert remember_form_match is not None
+    remember_form_html = remember_form_match.group(1)
+    assert ">Lägg till<" in remember_form_html

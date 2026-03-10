@@ -18,11 +18,6 @@
       <a class="sa-nav-item sa-active" href="{{ url_for('admin_ui.systemadmin_customers') }}">
         <span class="sa-icon">🏢</span> Kunder
       </a>
-      <a class="sa-nav-item" href="#"><span class="sa-icon">👥</span> Användare</a>
-      <a class="sa-nav-item" href="#"><span class="sa-icon">🧩</span> Moduler</a>
-      <a class="sa-nav-item" href="#"><span class="sa-icon">📑</span> Kontrakt</a>
-      <a class="sa-nav-item" href="#"><span class="sa-icon">📉</span> Loggar & Health</a>
-      <a class="sa-nav-item" href="#"><span class="sa-icon">⚙️</span> Inställningar</a>
     </nav>
     <div class="sa-sidebar-footer"><span>v1.0 · Dev</span></div>
   </aside>
@@ -44,6 +39,7 @@
       <article class="sa-card sa-card-wide">
         <h2>Aktiva kunder</h2>
         <p class="sa-card-sub">Lista över tenants (kunder). Hantera sites per kund via "Visa sites".</p>
+        <p class="sa-note">Användare hanteras per kund/site via Kundadmin efter "Öppna admin".</p>
 
         {% if vm.customers %}
         <div class="sa-table-wrap">

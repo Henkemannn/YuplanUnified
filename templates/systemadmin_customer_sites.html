@@ -45,6 +45,7 @@
     <section class="sa-grid">
       <article class="sa-card sa-card-wide">
         <h2>Befintliga sites</h2>
+        <p class="sa-note">Använd "Öppna admin" för att gå in i vald kunds Kundadmin och hantera användare samt daglig drift.</p>
         {% if vm.sites %}
         <div class="sa-table-wrap">
           <table class="sa-table">
@@ -83,17 +84,19 @@
             <input type="password" id="admin_password" name="admin_password" placeholder="Minst 8 tecken" required>
           </div>
           <h3>Moduler för site</h3>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_weekview"> Weekview</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_planera"> Planera</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_portal"> Portal</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_report"> Rapport</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_menu_import"> Menyimport</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_specialkost"> Specialkost</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_recipes"> Recept</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_prep"> Prep</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_freeze"> Frys</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_husk_bestill"> Husk Bestill</label></div>
-          <div class="admin-form-row"><label><input type="checkbox" name="sf_integrations"> Integrationer</label></div>
+          <div class="sa-module-grid">
+            <label class="sa-check"><input type="checkbox" name="sf_weekview"> Weekview</label>
+            <label class="sa-check"><input type="checkbox" name="sf_planera"> Planera</label>
+            <label class="sa-check"><input type="checkbox" name="sf_portal"> Portal</label>
+            <label class="sa-check"><input type="checkbox" name="sf_report"> Rapport</label>
+            <label class="sa-check"><input type="checkbox" name="sf_menu_import"> Menyimport</label>
+            <label class="sa-check"><input type="checkbox" name="sf_specialkost"> Specialkost</label>
+            <label class="sa-check"><input type="checkbox" name="sf_recipes"> Recept</label>
+            <label class="sa-check"><input type="checkbox" name="sf_prep"> Prep</label>
+            <label class="sa-check"><input type="checkbox" name="sf_freeze"> Frys</label>
+            <label class="sa-check"><input type="checkbox" name="sf_husk_bestill"> Husk Bestill</label>
+            <label class="sa-check"><input type="checkbox" name="sf_integrations"> Integrationer</label>
+          </div>
           <button type="submit" class="sa-btn sa-btn-primary">Skapa site och admin</button>
         </form>
       </article>

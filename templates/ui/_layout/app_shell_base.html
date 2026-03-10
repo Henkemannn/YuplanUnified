@@ -4,7 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block page_title %}Yuplan{% endblock %}</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo-proposal.svg') }}" />
+  {% set icon_version = asset_version|default('icon-20260310') %}
+  <link rel="manifest" href="/manifest.webmanifest?v={{ icon_version }}">
+  <link rel="icon" href="/favicon.ico?v={{ icon_version }}">
+  <link rel="shortcut icon" href="/favicon.ico?v={{ icon_version }}">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
+  <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/yuplan_print.css') }}" media="print" />
   {% block unified_ui_css %}
@@ -96,17 +101,9 @@
           {% if nav_context == 'systemadmin' %}
             {% set sa_overview_url = url_for('ui.systemadmin_dashboard') %}
             {% set sa_customers_url = url_for('admin_ui.systemadmin_customers') %}
-            {% set sa_sites_url = url_for('ui.systemadmin_coming_soon', feature='sites') %}
-            {% set sa_users_url = url_for('ui.systemadmin_coming_soon', feature='users') %}
-            {% set sa_settings_url = url_for('ui.systemadmin_coming_soon', feature='settings') %}
-            {% set sa_logs_url = url_for('ui.systemadmin_coming_soon', feature='logs') %}
             <nav class="app-shell__nav">
               <a class="app-shell__nav-item {% if current_path.startswith(sa_overview_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_overview_url }}">Översikt</a>
               <a class="app-shell__nav-item {% if current_path.startswith(sa_customers_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_customers_url }}">Kunder</a>
-              <a class="app-shell__nav-item {% if current_path.startswith(sa_sites_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_sites_url }}">Sites</a>
-              <a class="app-shell__nav-item {% if current_path.startswith(sa_users_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_users_url }}">Users</a>
-              <a class="app-shell__nav-item {% if current_path.startswith(sa_settings_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_settings_url }}">Inställningar</a>
-              <a class="app-shell__nav-item {% if current_path.startswith(sa_logs_url) %}app-shell__nav-item--active{% endif %}" href="{{ sa_logs_url }}">Loggar</a>
             </nav>
           {% elif nav_context == 'admin' %}
             <nav class="app-shell__nav">

@@ -24,6 +24,7 @@
       <div>
         <h1>Steg 2 · Avtal</h1>
         <p class="sa-subtitle">Detaljer om kontrakt och avtal.</p>
+        <p class="sa-subtitle">Pilotflöde: Steg 3 (moduler) utgår här och hanteras per site efter skapande.</p>
       </div>
     </header>
 
@@ -57,7 +58,7 @@
             <label for="internal_notes">Interna anteckningar</label>
             <textarea id="internal_notes" name="internal_notes">{{ vm.data.internal_notes or '' }}</textarea>
           </div>
-          <button type="submit" class="sa-btn sa-btn-primary">Nästa steg</button>
+          <button type="submit" class="sa-btn sa-btn-primary">Fortsätt till steg 4</button>
           <a class="sa-btn sa-btn-secondary" href="{{ url_for('admin_ui.systemadmin_customer_new_step1') }}">Tillbaka</a>
         </form>
       </article>

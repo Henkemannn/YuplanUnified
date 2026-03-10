@@ -1,7 +1,275 @@
 .sa-root{
 	display:flex;
+	gap:20px;
+	align-items:stretch;
+}
+
+.sa-theme-dark{
+	max-width:1360px;
+	margin:16px auto;
+	padding:0 12px;
+}
+
+.sa-sidebar{
+	width:240px;
+	background:#0f172a;
+	color:#e2e8f0;
+	border-radius:12px;
+	padding:14px;
+	height:fit-content;
+	box-shadow:0 2px 10px rgba(2, 6, 23, 0.18);
+	position:sticky;
+	top:12px;
+}
+
+.sa-sidebar-header{
+	display:flex;
+	align-items:center;
+	gap:10px;
+	margin-bottom:12px;
+}
+
+.sa-logo-mark{
+	border-radius:999px;
+	background:#111827;
+}
+
+.sa-logo-sub{
+	font-weight:600;
+	font-size:0.95rem;
+}
+
+.sa-nav{
+	display:flex;
 	flex-direction:column;
-	gap:24px;
+	gap:6px;
+}
+
+.sa-nav-item{
+	display:block;
+	padding:8px 10px;
+	border-radius:8px;
+	color:#cbd5e1;
+	text-decoration:none;
+	font-weight:500;
+}
+
+.sa-nav-item:hover{
+	background:#1e293b;
+	color:#f8fafc;
+}
+
+.sa-nav-item.sa-active{
+	background:#1d4ed8;
+	color:#ffffff;
+}
+
+.sa-sidebar-footer{
+	margin-top:12px;
+	font-size:0.8rem;
+	color:#94a3b8;
+}
+
+.sa-main{
+	flex:1;
+	min-width:0;
+}
+
+.sa-grid{
+	display:grid;
+	grid-template-columns:1fr;
+	gap:14px;
+}
+
+.sa-header{
+	margin-bottom:10px;
+}
+
+.sa-header h1{
+	margin:0;
+	font-size:2rem;
+}
+
+.sa-subtitle{
+	margin:6px 0 0;
+	color:#475569;
+}
+
+.sa-header-actions{
+	display:flex;
+	gap:10px;
+	flex-wrap:wrap;
+}
+
+.sa-btn{
+	display:inline-flex;
+	align-items:center;
+	gap:6px;
+	padding:8px 12px;
+	border-radius:8px;
+	text-decoration:none;
+	border:1px solid transparent;
+	font-weight:600;
+	line-height:1.2;
+}
+
+.sa-btn-primary{
+	background:#1d4ed8;
+	color:#ffffff;
+}
+
+.sa-btn-secondary{
+	background:#ffffff;
+	color:#1e293b;
+	border-color:#cbd5e1;
+}
+
+.sa-btn-small{
+	padding:6px 10px;
+	font-size:0.9rem;
+}
+
+.sa-card{
+	background:#ffffff;
+	border:1px solid #e2e8f0;
+	border-radius:12px;
+	padding:14px;
+	box-shadow:0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.sa-card h2{
+	margin:0 0 6px;
+	font-size:1.3rem;
+}
+
+.sa-note{
+	margin:10px 0 0;
+	padding:10px 12px;
+	border:1px solid #dbeafe;
+	background:#eff6ff;
+	color:#1e3a8a;
+	border-radius:10px;
+	font-size:0.95rem;
+}
+
+.sa-table-wrap{
+	overflow-x:auto;
+	margin-top:10px;
+}
+
+.sa-table{
+	width:100%;
+	border-collapse:collapse;
+	font-size:0.96rem;
+}
+
+.sa-table th,
+.sa-table td{
+	padding:9px 10px;
+	border-bottom:1px solid #e2e8f0;
+	text-align:left;
+	vertical-align:middle;
+}
+
+.sa-table th{
+	font-weight:700;
+	color:#0f172a;
+	background:#f8fafc;
+}
+
+.sa-table tr:hover td{
+	background:#f8fafc;
+}
+
+.sa-form{
+	display:grid;
+	gap:12px;
+	max-width:860px;
+}
+
+.admin-form-row{
+	display:grid;
+	gap:6px;
+}
+
+.admin-form-row label{
+	font-weight:600;
+	color:#0f172a;
+}
+
+.admin-form-row input,
+.admin-form-row textarea,
+.admin-form-row select{
+	width:100%;
+	padding:9px 10px;
+	border:1px solid #cbd5e1;
+	border-radius:8px;
+	font:inherit;
+	background:#ffffff;
+	color:#0f172a;
+}
+
+.admin-form-row input:focus,
+.admin-form-row textarea:focus,
+.admin-form-row select:focus{
+	outline:2px solid #bfdbfe;
+	border-color:#3b82f6;
+}
+
+.sa-module-grid{
+	display:grid;
+	grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+	gap:8px 14px;
+	padding:6px 0 4px;
+}
+
+.sa-check{
+	display:flex;
+	align-items:center;
+	gap:8px;
+	font-weight:500;
+	color:#1e293b;
+}
+
+.sa-check input[type="checkbox"]{
+	width:16px;
+	height:16px;
+}
+
+.sa-flashes{
+	display:grid;
+	gap:8px;
+	margin-bottom:12px;
+}
+
+.sa-flash{
+	padding:10px 12px;
+	border-radius:10px;
+	font-weight:500;
+	border:1px solid transparent;
+}
+
+.sa-flash-success{
+	background:#ecfdf5;
+	color:#065f46;
+	border-color:#a7f3d0;
+}
+
+.sa-flash-danger,
+.sa-flash-error{
+	background:#fef2f2;
+	color:#991b1b;
+	border-color:#fecaca;
+}
+
+.sa-flash-warning{
+	background:#fffbeb;
+	color:#92400e;
+	border-color:#fde68a;
+}
+
+body > footer{
+	display:none;
 }
 
 .app-page__header{
@@ -78,6 +346,23 @@
 }
 
 @media (max-width:720px){
+	.sa-root{
+		flex-direction:column;
+	}
+
+	.sa-sidebar{
+		width:100%;
+		position:static;
+	}
+
+	.sa-header-actions{
+		width:100%;
+	}
+
+	.sa-btn{
+		justify-content:center;
+	}
+
 	.app-page__header{
 		flex-direction:column;
 		align-items:flex-start;
