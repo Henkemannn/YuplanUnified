@@ -1584,7 +1584,11 @@ def systemadmin_customers():
             pass
     finally:
         db.close()
-    vm = {"customers": customers}
+    vm = {
+        "customers": customers,
+        "nav_context": "systemadmin",
+        "allow_site_switch": True,
+    }
     return render_template("systemadmin_customers.html", vm=vm)
 
 @admin_ui_bp.get("/ui/systemadmin/customers/<int:tenant_id>/sites")
@@ -1602,7 +1606,13 @@ def systemadmin_customer_sites(tenant_id: int):
         sites = [{"id": str(r[0]), "name": str(r[1] or "")} for r in rows]
     finally:
         db.close()
-    vm = {"tenant_id": tenant_id, "tenant_name": tenant_name, "sites": sites}
+    vm = {
+        "tenant_id": tenant_id,
+        "tenant_name": tenant_name,
+        "sites": sites,
+        "nav_context": "systemadmin",
+        "allow_site_switch": True,
+    }
     return render_template("systemadmin_customer_sites.html", vm=vm)
 
 @admin_ui_bp.post("/ui/systemadmin/customers/<int:tenant_id>/sites/create")

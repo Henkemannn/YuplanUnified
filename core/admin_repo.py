@@ -34,6 +34,38 @@ def _sites_has_tenant_col(db) -> bool:
             return False
 
 
+def _table_has_column(db, table_name: str, column_name: str) -> bool:
+    try:
+        cols = db.execute(text(f"PRAGMA table_info('{table_name}')")).fetchall()
+        return any(str(c[1]) == column_name for c in cols)
+    except Exception:
+        try:
+            chk = db.execute(
+                text(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name=:table_name AND column_name=:column_name"
+                ),
+                {"table_name": table_name, "column_name": column_name},
+            )
+            return chk.fetchone() is not None
+        except Exception:
+            return False
+
+
+def _ensure_departments_residence_id_column(db) -> None:
+    if _table_has_column(db, "departments", "residence_id"):
+        return
+    try:
+        if _is_sqlite(db):
+            db.execute(text("ALTER TABLE departments ADD COLUMN residence_id TEXT NULL"))
+        else:
+            db.execute(text("ALTER TABLE departments ADD COLUMN residence_id VARCHAR(64) NULL"))
+    except Exception:
+        # Another worker/request may have added it concurrently.
+        if not _table_has_column(db, "departments", "residence_id"):
+            raise
+
+
 def _resolve_default_tenant_id(db) -> int | None:
     try:
         row = db.execute(text("SELECT id FROM tenants WHERE id=1")).fetchone()
@@ -269,6 +301,7 @@ class DepartmentsRepo:
         name: str,
         resident_count_mode: str,
         resident_count_fixed: int | None,
+        residence_id: str | None = None,
         notes: str | None = None,
     ) -> tuple[dict, int]:
         db = get_session()
@@ -276,6 +309,7 @@ class DepartmentsRepo:
             did = str(uuid.uuid4())
             rc_fixed = int(resident_count_fixed or 0)
             notes_value = notes if notes is not None else None
+            residence_value = str(residence_id).strip() if residence_id else None
             if _is_sqlite(db):
                 # Ensure departments table exists (sqlite test/dev)
                 db.execute(
@@ -287,6 +321,7 @@ class DepartmentsRepo:
                             name TEXT NOT NULL,
                             resident_count_mode TEXT NOT NULL,
                             resident_count_fixed INTEGER NOT NULL DEFAULT 0,
+                            residence_id TEXT NULL,
                             notes TEXT NULL,
                             version INTEGER NOT NULL DEFAULT 0,
                             updated_at TEXT
@@ -294,11 +329,14 @@ class DepartmentsRepo:
                         """
                     )
                 )
+                _ensure_departments_residence_id_column(db)
                 db.execute(
                     text(
                         """
-                        INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes, version)
-                        VALUES(:id, :site_id, :name, :mode, :fixed, :notes, 0)
+                        INSERT INTO departments(
+                            id, site_id, name, resident_count_mode, resident_count_fixed, residence_id, notes, version
+                        )
+                        VALUES(:id, :site_id, :name, :mode, :fixed, :residence_id, :notes, 0)
                         """
                     ),
                     {
@@ -307,15 +345,19 @@ class DepartmentsRepo:
                         "name": name,
                         "mode": resident_count_mode,
                         "fixed": rc_fixed,
+                        "residence_id": residence_value,
                         "notes": notes_value,
                     },
                 )
             else:
+                _ensure_departments_residence_id_column(db)
                 db.execute(
                     text(
                         """
-                        INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes)
-                        VALUES(:id, :site_id, :name, :mode, :fixed, :notes)
+                        INSERT INTO departments(
+                            id, site_id, name, resident_count_mode, resident_count_fixed, residence_id, notes
+                        )
+                        VALUES(:id, :site_id, :name, :mode, :fixed, :residence_id, :notes)
                         """
                     ),
                     {
@@ -324,6 +366,7 @@ class DepartmentsRepo:
                         "name": name,
                         "mode": resident_count_mode,
                         "fixed": rc_fixed,
+                        "residence_id": residence_value,
                         "notes": notes_value,
                     },
                 )
@@ -334,6 +377,7 @@ class DepartmentsRepo:
                 "name": name,
                 "resident_count_mode": resident_count_mode,
                 "resident_count_fixed": rc_fixed,
+                "residence_id": residence_value,
                 "notes": notes_value,
             }, 0
         except Exception as exc:
@@ -375,6 +419,9 @@ class DepartmentsRepo:
             if "resident_count_fixed" in fields and fields["resident_count_fixed"] is not None:
                 sets.append("resident_count_fixed=:fixed")
                 params["fixed"] = int(fields["resident_count_fixed"])
+            if "residence_id" in fields:
+                sets.append("residence_id=:residence_id")
+                params["residence_id"] = str(fields["residence_id"]).strip() if fields["residence_id"] else None
             if "notes" in fields and fields["notes"] is not None:
                 sets.append("notes=:notes")
                 params["notes"] = str(fields["notes"]).strip()
@@ -433,6 +480,7 @@ class DepartmentsRepo:
                             name TEXT NOT NULL,
                             resident_count_mode TEXT NOT NULL,
                             resident_count_fixed INTEGER NOT NULL DEFAULT 0,
+                            residence_id TEXT NULL,
                             notes TEXT NULL,
                             version INTEGER NOT NULL DEFAULT 0,
                             updated_at TEXT
@@ -440,10 +488,11 @@ class DepartmentsRepo:
                         """
                     )
                 )
+                _ensure_departments_residence_id_column(db)
             rows = db.execute(
                 text(
                     """
-                    SELECT id, site_id, name, resident_count_mode, resident_count_fixed, COALESCE(version,0)
+                    SELECT id, site_id, name, resident_count_mode, resident_count_fixed, residence_id, COALESCE(version,0)
                     FROM departments WHERE site_id=:s ORDER BY name
                     """
                 ),
@@ -456,7 +505,8 @@ class DepartmentsRepo:
                     "name": r[2],
                     "resident_count_mode": r[3],
                     "resident_count_fixed": int(r[4] or 0),
-                    "version": int(r[5] or 0),
+                    "residence_id": r[5],
+                    "version": int(r[6] or 0),
                 }
                 for r in rows
             ]
@@ -565,6 +615,85 @@ class DepartmentsRepo:
         finally:
             db.close()
 
+
+class ResidencesRepo:
+    def _ensure_table(self, db) -> None:
+        if _is_sqlite(db):
+            db.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS residences (
+                        id TEXT PRIMARY KEY,
+                        site_id TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(site_id, name)
+                    )
+                    """
+                )
+            )
+
+    def list_for_site(self, site_id: str) -> list[dict]:
+        db = get_session()
+        try:
+            self._ensure_table(db)
+            rows = db.execute(
+                text("SELECT id, site_id, name FROM residences WHERE site_id=:sid ORDER BY name"),
+                {"sid": str(site_id)},
+            ).fetchall()
+            return [{"id": r[0], "site_id": r[1], "name": r[2]} for r in rows]
+        finally:
+            db.close()
+
+    def get_for_site(self, site_id: str, residence_id: str) -> dict | None:
+        db = get_session()
+        try:
+            self._ensure_table(db)
+            row = db.execute(
+                text("SELECT id, site_id, name FROM residences WHERE id=:id AND site_id=:sid"),
+                {"id": str(residence_id), "sid": str(site_id)},
+            ).fetchone()
+            if not row:
+                return None
+            return {"id": row[0], "site_id": row[1], "name": row[2]}
+        finally:
+            db.close()
+
+    def create_for_site(self, site_id: str, name: str) -> dict:
+        db = get_session()
+        try:
+            self._ensure_table(db)
+            residence_id = str(uuid.uuid4())
+            name_value = str(name).strip()
+            if _is_sqlite(db):
+                db.execute(
+                    text("INSERT INTO residences(id, site_id, name) VALUES(:id, :sid, :name)"),
+                    {"id": residence_id, "sid": str(site_id), "name": name_value},
+                )
+            else:
+                db.execute(
+                    text("INSERT INTO residences(id, site_id, name) VALUES(:id, :sid, :name)"),
+                    {"id": residence_id, "sid": str(site_id), "name": name_value},
+                )
+            db.commit()
+            return {"id": residence_id, "site_id": str(site_id), "name": name_value}
+        except Exception as exc:
+            db.rollback()
+            msg = str(exc)
+            is_unique = (
+                "UNIQUE constraint failed: residences.site_id, residences.name" in msg
+                or "duplicate key value violates unique constraint" in msg
+            )
+            if is_unique:
+                row = db.execute(
+                    text("SELECT id, site_id, name FROM residences WHERE site_id=:sid AND name=:name"),
+                    {"sid": str(site_id), "name": str(name).strip()},
+                ).fetchone()
+                if row:
+                    return {"id": row[0], "site_id": row[1], "name": row[2]}
+            raise
+        finally:
+            db.close()
 
 class NotesRepo:
     """Generic notes version bump helper (if needed in future)."""

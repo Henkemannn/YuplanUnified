@@ -113,6 +113,7 @@ def test_departments_new_form_happy_path(client_admin):
     assert resp.status_code == 200
     assert "Ny avdelning" in html
     assert 'name="name"' in html
+    assert 'name="residence_id"' in html
     assert 'name="resident_count"' in html
     assert 'name="csrf_token"' in html
 
@@ -135,6 +136,7 @@ def test_departments_create_happy_path(client_admin):
     """Test creating a new department."""
     app = client_admin.application
     site_id = str(uuid.uuid4())
+    residence_id = str(uuid.uuid4())
     user_id = 1
     notes_text = "Skapad med anteckning"
     
@@ -147,6 +149,10 @@ def test_departments_create_happy_path(client_admin):
         db = get_session()
         try:
             db.execute(text(f"INSERT INTO sites (id, name, version) VALUES ('{site_id}', 'TestSite', 0)"))
+            db.execute(
+                text("INSERT INTO residences (id, site_id, name) VALUES(:id, :sid, :name)"),
+                {"id": residence_id, "sid": site_id, "name": "Boende A"},
+            )
             # Update test user to have this site
             
             db.commit()
@@ -162,6 +168,7 @@ def test_departments_create_happy_path(client_admin):
         headers=_h("admin"),
         data={
             "name": "New Test Department",
+            "residence_id": residence_id,
             "resident_count": "30",
             "notes": notes_text,
         },
@@ -178,15 +185,16 @@ def test_departments_create_happy_path(client_admin):
         db = get_session()
         try:
             dept_row = db.execute(
-                text("SELECT id, notes FROM departments WHERE name = :name AND site_id = :sid"),
+                text("SELECT id, notes, residence_id FROM departments WHERE name = :name AND site_id = :sid"),
                 {"name": "New Test Department", "sid": site_id},
             ).fetchone()
         finally:
             db.close()
 
     assert dept_row is not None
-    dept_id, saved_notes = dept_row[0], dept_row[1]
+    dept_id, saved_notes, saved_residence_id = dept_row[0], dept_row[1], dept_row[2]
     assert saved_notes == notes_text
+    assert saved_residence_id == residence_id
 
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site_id
@@ -214,6 +222,9 @@ def test_departments_create_validation_empty_name(client_admin):
             db.commit()
         finally:
             db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     
     # Try to create with empty name
     resp = client_admin.post(
@@ -236,6 +247,7 @@ def test_departments_create_validation_negative_residents(client_admin):
     """Test creating department with negative residents fails."""
     app = client_admin.application
     site_id = str(uuid.uuid4())
+    residence_id = str(uuid.uuid4())
     user_id = 1
     
     # Seed site
@@ -247,10 +259,17 @@ def test_departments_create_validation_negative_residents(client_admin):
         db = get_session()
         try:
             db.execute(text(f"INSERT INTO sites (id, name, version) VALUES ('{site_id}', 'TestSite', 0)"))
+            db.execute(
+                text("INSERT INTO residences (id, site_id, name) VALUES(:id, :sid, :name)"),
+                {"id": residence_id, "sid": site_id, "name": "Boende A"},
+            )
             
             db.commit()
         finally:
             db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     
     # Try to create with negative residents
     resp = client_admin.post(
@@ -258,6 +277,7 @@ def test_departments_create_validation_negative_residents(client_admin):
         headers=_h("admin"),
         data={
             "name": "Test Dept",
+            "residence_id": residence_id,
             "resident_count": "-5",
         },
         follow_redirects=True

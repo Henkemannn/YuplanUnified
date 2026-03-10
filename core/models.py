@@ -67,12 +67,21 @@ class Department(Base):
     __tablename__ = "departments"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     site_id: Mapped[str] = mapped_column(String(64))
+    residence_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(120))
     resident_count_mode: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
     resident_count_fixed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Residence(Base):
+    __tablename__ = "residences"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    site_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 # --- Menus & Dishes ---

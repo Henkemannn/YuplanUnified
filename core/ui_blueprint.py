@@ -5361,8 +5361,19 @@ def admin_departments_new_form():
     """
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
-    tid = ctx.get("tenant_id")
+    active_site_id = ctx.get("site_id")
     role = session.get("role")
+    from core.admin_repo import ResidencesRepo
+
+    residences = []
+    selected_residence_id = (request.args.get("residence_id") or "").strip() or None
+    if active_site_id:
+        try:
+            residences = ResidencesRepo().list_for_site(str(active_site_id))
+        except Exception:
+            residences = []
+        if selected_residence_id and not any(str(r.get("id")) == selected_residence_id for r in residences):
+            selected_residence_id = None
     
     # Get current week for header
     today = _date.today()
@@ -5375,6 +5386,8 @@ def admin_departments_new_form():
         "user_role": role,
         "mode": "new",
         "department": None,
+        "residences": residences,
+        "selected_residence_id": selected_residence_id,
     }
     
     return render_template("ui/unified_admin_departments_form.html", vm=vm)
@@ -5387,7 +5400,7 @@ def admin_departments_create():
     Create a new department.
     """
     from flask import flash, redirect, url_for
-    from core.admin_repo import DepartmentsRepo
+    from core.admin_repo import DepartmentsRepo, ResidencesRepo
     
     # Resolve active site strictly from context; no guessing
     from .context import get_active_context as _get_ctx
@@ -5400,11 +5413,21 @@ def admin_departments_create():
     # Get form data
     name = request.form.get("name", "").strip()
     resident_count = request.form.get("resident_count", "0").strip()
+    residence_id = request.form.get("residence_id", "").strip()
     notes = request.form.get("notes")
     
     # Validate
     if not name:
         flash("Namn måste anges.", "error")
+        return redirect(url_for("ui.admin_departments_new_form"))
+
+    if not residence_id:
+        flash("Boende måste väljas.", "error")
+        return redirect(url_for("ui.admin_departments_new_form"))
+
+    residence = ResidencesRepo().get_for_site(str(site_id), str(residence_id))
+    if not residence:
+        flash("Valt boende hittades inte för vald site.", "error")
         return redirect(url_for("ui.admin_departments_new_form"))
     
     try:
@@ -5424,6 +5447,7 @@ def admin_departments_create():
             name=name,
             resident_count_mode="fixed",
             resident_count_fixed=resident_count_int,
+            residence_id=str(residence_id),
             notes=notes,
         )
         flash(f"Avdelning '{name}' skapad.", "success")
@@ -5431,6 +5455,34 @@ def admin_departments_create():
         flash(f"Kunde inte skapa avdelning: {str(e)}", "error")
     
     return redirect(url_for("ui.admin_departments_list"))
+
+
+@ui_bp.post("/ui/admin/residences/new")
+@require_roles(*ADMIN_ROLES)
+def admin_residences_create():
+    """Create a residence for the active site and return to department form."""
+    from core.admin_repo import ResidencesRepo
+
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    site_id = ctx.get("site_id")
+    if not site_id:
+        flash("Ingen site vald. Välj site först.", "error")
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_new_form")))
+
+    name = (request.form.get("name") or "").strip()
+    if not name:
+        flash("Namn på boende måste anges.", "error")
+        return redirect(url_for("ui.admin_departments_new_form"))
+
+    try:
+        residence = ResidencesRepo().create_for_site(str(site_id), name)
+        flash(f"Boende '{residence['name']}' sparat.", "success")
+        return redirect(url_for("ui.admin_departments_new_form", residence_id=residence["id"]))
+    except Exception as exc:
+        flash(f"Kunde inte skapa boende: {str(exc)}", "error")
+        return redirect(url_for("ui.admin_departments_new_form"))
 
 
 @ui_bp.get("/ui/admin/departments/<dept_id>/edit")

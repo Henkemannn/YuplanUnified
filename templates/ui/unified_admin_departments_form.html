@@ -189,6 +189,38 @@
                     <p class="yp-form-help">Namnet på avdelningen (synligt för personal)</p>
                 </div>
 
+                {% if vm.mode == 'new' %}
+                <div class="yp-form-field">
+                    <label for="residence_id" class="yp-label">
+                        🏠 Boende <span class="required">*</span>
+                    </label>
+                    <div class="admin-inline-actions">
+                        <select
+                            id="residence_id"
+                            name="residence_id"
+                            class="yp-input"
+                            required
+                            aria-required="true"
+                        >
+                            <option value="">Välj boende...</option>
+                            {% for residence in vm.residences or [] %}
+                            <option
+                                value="{{ residence.id }}"
+                                {% if vm.selected_residence_id and vm.selected_residence_id == residence.id %}selected{% endif %}
+                            >{{ residence.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button
+                            type="button"
+                            class="yp-button yp-button-secondary"
+                            data-modal-target="#residence-create-modal"
+                            aria-label="Lägg till boende"
+                        >+ Lägg till</button>
+                    </div>
+                    <p class="yp-form-help">Välj boende för avdelningen eller skapa ett nytt direkt.</p>
+                </div>
+                {% endif %}
+
                 <div class="yp-form-field">
                     <label for="resident_count" class="yp-label">
                         🔢 Antal boende <span class="required">*</span>
@@ -268,6 +300,28 @@
     <button type="submit" class="yp-button yp-button-primary" form="department-form">Spara ändringar</button>
     <a href="{{ url_for('ui.admin_departments_list') }}" class="yp-button yp-button-secondary">Avbryt</a>
 </div>
+{% endif %}
+
+{% if vm.mode == 'new' %}
+<dialog id="residence-create-modal" class="ua-modal">
+    <div class="ua-modal-inner">
+        <header class="ua-modal-header">
+            <h2>Lägg till boende</h2>
+            <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">×</button>
+        </header>
+        <form method="POST" action="{{ url_for('ui.admin_residences_create') }}" class="yp-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="yp-form-field">
+                <label for="residence_name" class="yp-label">Namn <span class="required">*</span></label>
+                <input id="residence_name" name="name" class="yp-input" type="text" required aria-required="true" placeholder="T.ex. Boende Solrosen">
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="yp-button yp-button-primary">Spara boende</button>
+                <button type="button" class="yp-button yp-button-secondary" data-modal-close>Avbryt</button>
+            </div>
+        </form>
+    </div>
+</dialog>
 {% endif %}
 
 <!-- Modal: Varierat boendeantal (edit form) -->

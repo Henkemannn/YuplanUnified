@@ -164,6 +164,13 @@
   margin: 0;
 }
 
+.admin-inline-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .admin-alt2-modal::backdrop {
   background: rgba(15, 23, 42, 0.56);
 }
