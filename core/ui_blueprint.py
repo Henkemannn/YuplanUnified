@@ -331,6 +331,102 @@ ACCOUNT_ALLOWED_ROLES = ("admin", "superuser", "kitchen")
 KITCHEN_UI_ROLES = ("kitchen", "cook", "admin", "superuser")
 
 
+@ui_bp.post("/api/production-lists")
+@require_roles(*KITCHEN_UI_ROLES)
+def api_create_production_list_snapshot():
+    from .production_lists_repo import ProductionListsRepo
+
+    data = request.get_json(silent=True) or {}
+    site_id = str(data.get("site_id") or "").strip()
+    date_iso = str(data.get("date") or "").strip()
+    meal_type = str(data.get("meal_type") or "").strip().lower()
+    payload = data.get("payload") or {}
+
+    if not site_id or not date_iso or meal_type not in ("lunch", "dinner"):
+        return jsonify({"error": "bad_request", "message": "site_id/date/meal_type required"}), 400
+
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = str(ctx.get("site_id") or "").strip()
+    if active_site_id and active_site_id != site_id:
+        return jsonify({"error": "forbidden"}), 403
+
+    if not isinstance(payload, dict):
+        return jsonify({"error": "bad_request", "message": "payload must be object"}), 400
+
+    created = ProductionListsRepo().create_snapshot(
+        site_id=site_id,
+        date_iso=date_iso,
+        meal_type=meal_type,
+        payload=payload,
+    )
+    return jsonify({"ok": True, "item": created}), 201
+
+
+@ui_bp.get("/ui/production-lists")
+@require_roles(*KITCHEN_UI_ROLES)
+def ui_production_lists_index():
+    from .production_lists_repo import ProductionListsRepo
+
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = (request.args.get("site_id") or "").strip() or (ctx.get("site_id") or "")
+    if not site_id:
+        return redirect(url_for("ui.select_site", next="/ui/production-lists"))
+
+    db = get_session()
+    try:
+        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = str(row_s[0]) if row_s else ""
+    finally:
+        db.close()
+
+    items = ProductionListsRepo().list_for_site(site_id=site_id)
+    vm = {
+        "title": "Produktionslistor",
+        "site_id": site_id,
+        "site_name": site_name,
+        "items": items,
+        "allow_site_switch": False,
+        "nav_context": "kitchen",
+    }
+    return render_template("ui/production_lists_index.html", vm=vm)
+
+
+@ui_bp.get("/ui/production-lists/<list_id>")
+@require_roles(*KITCHEN_UI_ROLES)
+def ui_production_lists_detail(list_id: str):
+    from .production_lists_repo import ProductionListsRepo
+
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    site_id = (request.args.get("site_id") or "").strip() or (ctx.get("site_id") or "")
+    if not site_id:
+        return redirect(url_for("ui.select_site", next=f"/ui/production-lists/{list_id}"))
+
+    db = get_session()
+    try:
+        row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        site_name = str(row_s[0]) if row_s else ""
+    finally:
+        db.close()
+
+    item = ProductionListsRepo().get_for_site(list_id=list_id, site_id=site_id)
+    if not item:
+        return redirect(url_for("ui.ui_production_lists_index", site_id=site_id))
+
+    vm = {
+        "title": "Produktionslista",
+        "site_id": site_id,
+        "site_name": site_name,
+        "item": item,
+        "payload": item.get("payload") or {},
+        "allow_site_switch": False,
+        "nav_context": "kitchen",
+    }
+    return render_template("ui/production_lists_detail.html", vm=vm)
+
+
 @ui_bp.get("/ui/account")
 @require_roles(*ACCOUNT_ALLOWED_ROLES)
 def account_page():
@@ -3126,6 +3222,12 @@ def kitchen_planering_v1():
             selected_service_addon_id = None
 
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
+    selected_date_iso = None
+    if selected_day is not None:
+        try:
+            selected_date_iso = _date.fromisocalendar(year, week, int(selected_day) + 1).isoformat()
+        except Exception:
+            selected_date_iso = None
     print_preview_mode = None
     try:
         from flask import current_app
@@ -3150,6 +3252,7 @@ def kitchen_planering_v1():
         "selected_day": selected_day,
         "selected_meal": selected_meal,
         "day_labels": day_labels,
+        "selected_date_iso": selected_date_iso,
         "summary": summary,
         "special_summary": special_summary,
         "diet_options": diet_options,

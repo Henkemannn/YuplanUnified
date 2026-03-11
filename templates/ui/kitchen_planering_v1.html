@@ -96,6 +96,11 @@
           <div class="kitchen-planering-row kitchen-planering-row--actions">
             <div class="kp-action-row">
               <button type="button" class="kp-button js-print">🖨️ Skriv ut</button>
+              {% if vm.selected_day is not none and vm.selected_meal in ['lunch', 'dinner'] %}
+                <button type="button" class="kp-button kp-button-primary js-open-production-list-modal">💾 Spara produktionslista</button>
+              {% else %}
+                <button type="button" class="kp-button kp-button-primary js-open-production-list-modal" disabled>💾 Spara produktionslista</button>
+              {% endif %}
               {% if vm.selected_day is not none %}
                 <button type="button"
                         class="yp-button"
@@ -128,7 +133,7 @@
               <p class="empty-text">Planeringen visas här när du gjort ett val.</p>
             </div>
           {% else %}
-            <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-service-addons-summary='{{ (vm.service_addons_summary or [])|tojson }}' data-selected-service-addon-id="{{ vm.selected_service_addon_id or '' }}" data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}' data-current-dish-label="{{ (vm.current_dish_label or '')|e }}" data-dev-mode="{{ '1' if vm.dev_mode else '0' }}">
+            <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-date-iso="{{ vm.selected_date_iso or '' }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-service-addons-summary='{{ (vm.service_addons_summary or [])|tojson }}' data-selected-service-addon-id="{{ vm.selected_service_addon_id or '' }}" data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}' data-current-dish-label="{{ (vm.current_dish_label or '')|e }}" data-dev-mode="{{ '1' if vm.dev_mode else '0' }}">
               <div class="kp-card kp-mb-12">
                 <div class="kp-context-row">
                   <span>Vecka <strong>{{ vm.week }}</strong></span>
@@ -429,6 +434,22 @@
       <div class="kp-modal-body" id="dept-summary-body">
         <div class="empty-text">Välj specialkoster för att se sammanfattning.</div>
       </div>
+    </div>
+
+    <div id="production-list-modal" class="kp-modal" aria-hidden="true">
+    <div class="kp-modal-card" role="dialog" aria-modal="true" aria-labelledby="production-list-title">
+      <div class="kp-modal-header">
+        <h3 id="production-list-title">Spara produktionslista</h3>
+        <div class="kp-modal-actions">
+          <button type="button" class="kp-button js-save-production-list">Spara</button>
+          <button type="button" class="kp-button js-close-production-list-modal">Stäng</button>
+        </div>
+      </div>
+      <div class="kp-modal-body">
+        <p class="kitchen-planering-help">Snapshot sparas exakt som underlag för utskrift just nu.</p>
+        <div id="production-list-status" class="empty-text" aria-live="polite"></div>
+      </div>
+    </div>
     </div>
     </div>
 

@@ -1588,6 +1588,181 @@
     }
   }
 
+  function buildProductionListPayload(){
+    var ctx = qs('#kp-context');
+    if(!ctx){ return null; }
+    var meal = String(ctx.getAttribute('data-meal') || '').trim();
+    if(meal !== 'lunch' && meal !== 'dinner'){ return null; }
+    var mealLabel = String(ctx.getAttribute('data-meal-label') || '');
+    var dayLabel = String(ctx.getAttribute('data-day-label') || '');
+    var week = parseInt(ctx.getAttribute('data-week') || '0', 10) || 0;
+    var year = parseInt(ctx.getAttribute('data-year') || '0', 10) || 0;
+    var dateIso = String(ctx.getAttribute('data-date-iso') || '').trim();
+    var dishes = getPrintDishNames(meal);
+
+    var alt2Set = new Set((altGroups && altGroups.alt2_dept_ids) || []);
+    var normalRowsRaw = parseNormalkostRows();
+    var normalRows = [];
+    var alt1Total = 0;
+    var alt2Total = 0;
+    for(var i=0; i<normalRowsRaw.length; i++){
+      var row = normalRowsRaw[i] || {};
+      var depId = String(row.department_id || '');
+      var depName = String(row.department_name || depId);
+      var altChoice = (meal === 'lunch' && alt2Set.has(depId)) ? 'alt2' : 'alt1';
+      var count = 0;
+      if(meal === 'lunch'){
+        count = altChoice === 'alt2' ? (parseInt(row.alt2 || 0, 10) || 0) : (parseInt(row.alt1 || 0, 10) || 0);
+      } else {
+        count = parseInt(row.total || 0, 10) || 0;
+      }
+      if(altChoice === 'alt1'){ alt1Total += count; } else { alt2Total += count; }
+      normalRows.push({
+        department_id: depId,
+        department_name: depName,
+        alt_choice: altChoice,
+        count: count
+      });
+    }
+
+    var worklist = (lastSpecialWorklist && lastSpecialWorklist.length > 0) ? lastSpecialWorklist : buildSpecialWorklistFromSummary();
+    var specialWorklist = worklist.map(function(group){
+      var rows = (group.rows || []).map(function(r){
+        var isAlt2 = (meal === 'lunch' && alt2Set.has(String(r.department_id || '')));
+        return {
+          department_id: String(r.department_id || ''),
+          department_name: String(r.department_name || ''),
+          count: parseInt(r.count || 0, 10) || 0,
+          alt_label: isAlt2 ? 'Alt2' : 'Alt1'
+        };
+      });
+      return {
+        diet_type_id: String(group.diet_type_id || ''),
+        diet_type_name: String(group.diet_type_name || ''),
+        total: parseInt(group.total || 0, 10) || 0,
+        rows: rows
+      };
+    });
+
+    var selectedAddon = null;
+    for(var sa=0; sa<serviceAddonsSummary.length; sa++){
+      var cand = serviceAddonsSummary[sa] || {};
+      if(String(cand.addon_id || '') === String(selectedServiceAddonId || '')){
+        selectedAddon = cand;
+        break;
+      }
+    }
+    var addonPayload = null;
+    if(selectedAddon){
+      addonPayload = {
+        addon_id: String(selectedAddon.addon_id || ''),
+        addon_name: String(selectedAddon.addon_name || ''),
+        total_count: parseInt(selectedAddon.total_count || 0, 10) || 0,
+        departments: (selectedAddon.departments || []).map(function(dep){
+          return {
+            department_id: String(dep.department_id || ''),
+            department_name: String(dep.department_name || ''),
+            count: parseInt(dep.count || 0, 10) || 0,
+            note: String(dep.note || '')
+          };
+        })
+      };
+    }
+
+    return {
+      date: dateIso,
+      meal_type: meal,
+      payload: {
+        year: year,
+        week: week,
+        day_label: dayLabel,
+        date_iso: dateIso,
+        meal: meal,
+        meal_label: mealLabel,
+        dishes: {
+          alt1: dishes.alt1 || '',
+          alt2: dishes.alt2 || ''
+        },
+        normal: {
+          rows: normalRows,
+          alt1_total: alt1Total,
+          alt2_total: alt2Total,
+          total: alt1Total + alt2Total
+        },
+        special: {
+          selected_diet_ids: Array.from(selectedChipsSpecial),
+          worklist: specialWorklist
+        },
+        service_addon: addonPayload
+      }
+    };
+  }
+
+  function initProductionListModal(){
+    var openBtn = qs('.js-open-production-list-modal');
+    var modal = qs('#production-list-modal');
+    var closeBtn = qs('.js-close-production-list-modal');
+    var saveBtn = qs('.js-save-production-list');
+    var status = qs('#production-list-status');
+    if(!openBtn || !modal || !saveBtn){ return; }
+
+    function setStatus(msg){ if(status){ status.textContent = msg || ''; } }
+    function openModal(){ modal.classList.add('is-open'); setStatus(''); }
+    function closeModal(){ modal.classList.remove('is-open'); }
+
+    openBtn.addEventListener('click', function(){
+      if(openBtn.disabled){ return; }
+      openModal();
+    });
+    if(closeBtn){ closeBtn.addEventListener('click', closeModal); }
+    modal.addEventListener('click', function(ev){ if(ev.target === modal){ closeModal(); } });
+
+    saveBtn.addEventListener('click', function(){
+      var ctx = qs('#kp-context');
+      if(!ctx){ return; }
+      var siteId = String(ctx.getAttribute('data-site-id') || '').trim();
+      var built = buildProductionListPayload();
+      if(!siteId || !built || !built.date){
+        setStatus('Välj dag och måltid (lunch/kvällsmat) först.');
+        return;
+      }
+      saveBtn.disabled = true;
+      setStatus('Sparar...');
+      var csrf = getCsrfToken();
+      fetch('/api/production-lists', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrf,
+          'X-CSRF-Token': csrf
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          site_id: siteId,
+          date: built.date,
+          meal_type: built.meal_type,
+          payload: built.payload
+        })
+      })
+      .then(function(r){
+        if(!r.ok){ throw new Error('save_failed:' + r.status); }
+        return r.json();
+      })
+      .then(function(resp){
+        var item = (resp && resp.item) || {};
+        setStatus('Sparad. Omdirigerar...');
+        var target = '/ui/production-lists/' + encodeURIComponent(String(item.id || '')) + '?site_id=' + encodeURIComponent(siteId);
+        window.location.href = target;
+      })
+      .catch(function(){
+        setStatus('Kunde inte spara produktionslistan. Försök igen.');
+      })
+      .finally(function(){
+        saveBtn.disabled = false;
+      });
+    });
+  }
+
   function init(){
     var qsParams = new URLSearchParams(window.location.search);
     var initialMode = (qsParams.get('mode') || 'special').toLowerCase();
@@ -1596,6 +1771,7 @@
     initMenuAndTitle();
     initPrintButton();
     initDeptSummaryModal();
+    initProductionListModal();
     // Parse CSP-safe data attributes for alt groups and per-department diet counts
     var ctxData = qs('#kp-context');
     if(ctxData){
