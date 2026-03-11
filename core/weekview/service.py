@@ -4,7 +4,7 @@ import re
 from datetime import date
 from typing import Sequence, Any
 from flask import current_app
-from ..admin_repo import DietDefaultsRepo
+from ..admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo
 from sqlalchemy import text
 from ..residents_weekly_repo import ResidentsWeeklyRepo
 from ..residents_schedule_repo import ResidentsScheduleRepo
@@ -264,6 +264,12 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                     diet_defaults = {str(it["diet_type_id"]): int(it.get("default_count", 0)) for it in items}
             except Exception:
                 diet_defaults = {}
+            diet_override_counts: dict[tuple[int, str, str], int] = {}
+            try:
+                if dept_id:
+                    diet_override_counts = DepartmentDietOverridesRepo().get_map_for_department(dept_id)
+            except Exception:
+                diet_override_counts = {}
 
             # Build mark index from raw marks list if present
             marks = summary.get("marks", []) or []
@@ -325,11 +331,15 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                 def _build_diets(meal_name: str) -> list[dict[str, Any]]:
                     out: list[dict[str, Any]] = []
                     for dt_id, default_cnt in sorted(diet_defaults.items()):
+                        planned_cnt = int(diet_override_counts.get((dow, meal_name, dt_id), int(default_cnt)))
                         out.append(
                             {
                                 "diet_type_id": dt_id,
                                 "diet_name": dt_id,  # TODO: map id->human name via diet types registry
-                                "resident_count": int(default_cnt),
+                                "resident_count": planned_cnt,
+                                "planned_count": planned_cnt,
+                                "base_count": int(default_cnt),
+                                "has_override": planned_cnt != int(default_cnt),
                                 "marked": (dow, meal_name, dt_id) in marked_idx,
                             }
                         )

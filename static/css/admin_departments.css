@@ -100,6 +100,18 @@
   padding: 6px 12px;
 }
 
+.specialkost-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.specialkost-edit-override {
+  min-height: 34px;
+  padding: 4px 10px;
+}
+
 .sk-input::-webkit-outer-spin-button,
 .sk-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -294,6 +306,60 @@
 .admin-alt2-modal__footer .yp-button {
   min-height: 30px;
   padding: 4px 9px;
+}
+
+.admin-diet-override-modal::backdrop {
+  background: rgba(15, 23, 42, 0.56);
+}
+
+.admin-diet-override-modal__inner {
+  width: min(760px, calc(100vw - 24px));
+  max-height: min(90vh, 760px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text);
+}
+
+.admin-diet-override-modal__header {
+  align-items: flex-start;
+  padding: 8px 10px;
+}
+
+.admin-diet-override-modal__title-wrap {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-diet-override-modal__title {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.admin-diet-override-modal__subtitle,
+.admin-diet-override-modal__diet {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.admin-diet-override-modal__body {
+  overflow-y: auto;
+  padding: 6px 10px 8px;
+}
+
+.admin-diet-override-table .admin-diet-override-input {
+  min-width: 84px;
+  width: 84px;
+  text-align: right;
+}
+
+.admin-diet-override-modal__footer {
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface-elevated);
+  padding: 6px 8px;
 }
 
 @media (max-width: 720px) {

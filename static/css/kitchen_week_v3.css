@@ -222,6 +222,15 @@
   pointer-events: none;
 }
 
+.kitchen-week .kw-cell.override-count {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+}
+
+.kitchen-week .kostcell-btn.override-count {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 10px;
+}
+
 .app-shell--dark .kitchen-week {
   --kw-alt2-bg: #c89a15;
   --kw-alt2-fg: #241500;
