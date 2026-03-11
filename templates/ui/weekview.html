@@ -145,6 +145,14 @@
     }
     function currentETag(){ return root.getAttribute('data-etag') || ''; }
     function setETag(val){ if(val) root.setAttribute('data-etag', val); }
+    function csrfToken(){
+      const meta = document.querySelector('meta[name="csrf-token"]');
+      if(meta && meta.getAttribute('content')) return meta.getAttribute('content');
+      const cookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrf_token='));
+      return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
+    }
     async function toggleDiet(el){
       const siteId = root.getAttribute('data-site-id');
       const depId = root.getAttribute('data-department-id');
@@ -154,10 +162,16 @@
       const markedNow = (el.getAttribute('data-marked') === 'true');
       const nextMarked = !markedNow;
       const payload = { site_id: siteId, department_id: depId, local_date: localDate, meal: meal, diet_type_id: dietTypeId, marked: nextMarked };
+      const csrf = csrfToken();
       try{
         const res = await fetch('/api/weekview/specialdiets/mark', {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'If-Match': currentETag() },
+          credentials: 'same-origin',
+          headers: {
+            'Content-Type': 'application/json',
+            'If-Match': currentETag(),
+            ...(csrf ? { 'X-CSRF-Token': csrf } : {})
+          },
           body: JSON.stringify(payload)
         });
         if(res.status === 412){

@@ -314,6 +314,7 @@ def create_all() -> (
                         id TEXT PRIMARY KEY,
                         site_id TEXT NOT NULL,
                         name TEXT NOT NULL,
+                        display_order INTEGER NULL,
                         resident_count_mode TEXT NOT NULL,
                         resident_count_fixed INTEGER NOT NULL DEFAULT 0,
                         notes TEXT NULL,
@@ -321,6 +322,13 @@ def create_all() -> (
                         updated_at TEXT
                     )
                 """))
+                try:
+                    cols = conn.execute(text("PRAGMA table_info('departments')")).fetchall()
+                    has_display_order = any(str(c[1]) == "display_order" for c in cols)
+                    if not has_display_order:
+                        conn.execute(text("ALTER TABLE departments ADD COLUMN display_order INTEGER NULL"))
+                except Exception:
+                    pass
                 # Diet defaults table
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS department_diet_defaults (
@@ -328,6 +336,17 @@ def create_all() -> (
                         diet_type_id TEXT NOT NULL,
                         default_count INTEGER NOT NULL DEFAULT 0,
                         PRIMARY KEY (department_id, diet_type_id)
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS department_diet_overrides (
+                        department_id TEXT NOT NULL,
+                        diet_type_id TEXT NOT NULL,
+                        day INTEGER NOT NULL,
+                        meal TEXT NOT NULL,
+                        count INTEGER NOT NULL DEFAULT 0,
+                        updated_at TEXT,
+                        PRIMARY KEY (department_id, diet_type_id, day, meal)
                     )
                 """))
                 # Alt2 flags table

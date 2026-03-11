@@ -66,6 +66,38 @@ def _ensure_departments_residence_id_column(db) -> None:
             raise
 
 
+def _ensure_departments_display_order_column(db) -> None:
+    if _table_has_column(db, "departments", "display_order"):
+        return
+    try:
+        if _is_sqlite(db):
+            db.execute(text("ALTER TABLE departments ADD COLUMN display_order INTEGER NULL"))
+        else:
+            db.execute(text("ALTER TABLE departments ADD COLUMN display_order INTEGER NULL"))
+    except Exception:
+        if not _table_has_column(db, "departments", "display_order"):
+            raise
+
+
+def _ensure_department_diet_overrides_table(db) -> None:
+    if _is_sqlite(db):
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS department_diet_overrides (
+                    department_id TEXT NOT NULL,
+                    diet_type_id TEXT NOT NULL,
+                    day INTEGER NOT NULL,
+                    meal TEXT NOT NULL,
+                    count INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT,
+                    PRIMARY KEY (department_id, diet_type_id, day, meal)
+                )
+                """
+            )
+        )
+
+
 def _resolve_default_tenant_id(db) -> int | None:
     try:
         row = db.execute(text("SELECT id FROM tenants WHERE id=1")).fetchone()
@@ -322,6 +354,7 @@ class DepartmentsRepo:
                             resident_count_mode TEXT NOT NULL,
                             resident_count_fixed INTEGER NOT NULL DEFAULT 0,
                             residence_id TEXT NULL,
+                            display_order INTEGER NULL,
                             notes TEXT NULL,
                             version INTEGER NOT NULL DEFAULT 0,
                             updated_at TEXT
@@ -330,6 +363,7 @@ class DepartmentsRepo:
                     )
                 )
                 _ensure_departments_residence_id_column(db)
+                _ensure_departments_display_order_column(db)
                 db.execute(
                     text(
                         """
@@ -351,6 +385,7 @@ class DepartmentsRepo:
                 )
             else:
                 _ensure_departments_residence_id_column(db)
+                _ensure_departments_display_order_column(db)
                 db.execute(
                     text(
                         """
@@ -378,6 +413,7 @@ class DepartmentsRepo:
                 "resident_count_mode": resident_count_mode,
                 "resident_count_fixed": rc_fixed,
                 "residence_id": residence_value,
+                "display_order": None,
                 "notes": notes_value,
             }, 0
         except Exception as exc:
@@ -422,6 +458,9 @@ class DepartmentsRepo:
             if "residence_id" in fields:
                 sets.append("residence_id=:residence_id")
                 params["residence_id"] = str(fields["residence_id"]).strip() if fields["residence_id"] else None
+            if "display_order" in fields:
+                sets.append("display_order=:display_order")
+                params["display_order"] = int(fields["display_order"]) if fields["display_order"] is not None else None
             if "notes" in fields and fields["notes"] is not None:
                 sets.append("notes=:notes")
                 params["notes"] = str(fields["notes"]).strip()
@@ -429,6 +468,7 @@ class DepartmentsRepo:
                 # No-op: still bump version to reflect write intent
                 sets.append("version=version")  # sqlite path bumps separately; postgres will still increment
             if _is_sqlite(db):
+                _ensure_departments_display_order_column(db)
                 sql = f"UPDATE departments SET {', '.join(sets)}, version=version+1, updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v"
             else:
                 # Always bump version for postgres as part of update to maintain optimistic concurrency & collection ETag semantics.
@@ -481,6 +521,7 @@ class DepartmentsRepo:
                             resident_count_mode TEXT NOT NULL,
                             resident_count_fixed INTEGER NOT NULL DEFAULT 0,
                             residence_id TEXT NULL,
+                            display_order INTEGER NULL,
                             notes TEXT NULL,
                             version INTEGER NOT NULL DEFAULT 0,
                             updated_at TEXT
@@ -489,11 +530,14 @@ class DepartmentsRepo:
                     )
                 )
                 _ensure_departments_residence_id_column(db)
+                _ensure_departments_display_order_column(db)
             rows = db.execute(
                 text(
                     """
-                    SELECT id, site_id, name, resident_count_mode, resident_count_fixed, residence_id, COALESCE(version,0)
-                    FROM departments WHERE site_id=:s ORDER BY name
+                    SELECT id, site_id, name, resident_count_mode, resident_count_fixed, residence_id, display_order, COALESCE(version,0)
+                    FROM departments
+                    WHERE site_id=:s
+                    ORDER BY COALESCE(display_order, 2147483647), name
                     """
                 ),
                 {"s": site_id},
@@ -506,7 +550,8 @@ class DepartmentsRepo:
                     "resident_count_mode": r[3],
                     "resident_count_fixed": int(r[4] or 0),
                     "residence_id": r[5],
-                    "version": int(r[6] or 0),
+                    "display_order": (int(r[6]) if r[6] is not None else None),
+                    "version": int(r[7] or 0),
                 }
                 for r in rows
             ]
@@ -776,6 +821,108 @@ class DietDefaultsRepo:
                     {"d": dept_id},
                 ).fetchall()
                 return [{"diet_type_id": r[0], "default_count": int(r[1]), "always_mark": False} for r in rows]
+        finally:
+            db.close()
+
+
+class DepartmentDietOverridesRepo:
+    def list_for_department(self, dept_id: str) -> list[dict]:
+        db = get_session()
+        try:
+            _ensure_department_diet_overrides_table(db)
+            rows = db.execute(
+                text(
+                    """
+                    SELECT diet_type_id, day, meal, count
+                    FROM department_diet_overrides
+                    WHERE department_id=:d
+                    ORDER BY diet_type_id, day, meal
+                    """
+                ),
+                {"d": str(dept_id)},
+            ).fetchall()
+            return [
+                {
+                    "diet_type_id": str(r[0]),
+                    "day": int(r[1]),
+                    "meal": str(r[2]),
+                    "count": int(r[3] or 0),
+                }
+                for r in rows
+            ]
+        finally:
+            db.close()
+
+    def list_for_department_diet(self, dept_id: str, diet_type_id: str | int) -> list[dict]:
+        db = get_session()
+        try:
+            _ensure_department_diet_overrides_table(db)
+            rows = db.execute(
+                text(
+                    """
+                    SELECT day, meal, count
+                    FROM department_diet_overrides
+                    WHERE department_id=:d AND diet_type_id=:t
+                    ORDER BY day, meal
+                    """
+                ),
+                {"d": str(dept_id), "t": str(diet_type_id)},
+            ).fetchall()
+            return [
+                {
+                    "day": int(r[0]),
+                    "meal": str(r[1]),
+                    "count": int(r[2] or 0),
+                }
+                for r in rows
+            ]
+        finally:
+            db.close()
+
+    def get_map_for_department(self, dept_id: str) -> dict[tuple[int, str, str], int]:
+        out: dict[tuple[int, str, str], int] = {}
+        for row in self.list_for_department(dept_id):
+            out[(int(row["day"]), str(row["meal"]), str(row["diet_type_id"]))] = int(row["count"])
+        return out
+
+    def replace_for_department_diet(self, dept_id: str, diet_type_id: str | int, items: Iterable[dict]) -> None:
+        db = get_session()
+        try:
+            _ensure_department_diet_overrides_table(db)
+            db.execute(
+                text(
+                    """
+                    DELETE FROM department_diet_overrides
+                    WHERE department_id=:d AND diet_type_id=:t
+                    """
+                ),
+                {"d": str(dept_id), "t": str(diet_type_id)},
+            )
+            for it in items:
+                day = int(it.get("day") or 0)
+                meal = str(it.get("meal") or "").strip().lower()
+                count = int(it.get("count") or 0)
+                if day < 1 or day > 7 or meal not in ("lunch", "dinner"):
+                    continue
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO department_diet_overrides(department_id, diet_type_id, day, meal, count, updated_at)
+                        VALUES(:d, :t, :day, :meal, :count, CURRENT_TIMESTAMP)
+                        """
+                    ),
+                    {
+                        "d": str(dept_id),
+                        "t": str(diet_type_id),
+                        "day": day,
+                        "meal": meal,
+                        "count": count,
+                    },
+                )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 

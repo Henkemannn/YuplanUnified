@@ -60,6 +60,13 @@
                                 {% endif %}
                             </div>
                             <div class="app-shell__list-actions">
+                                <form method="POST" action="{{ url_for('ui.admin_departments_update_order', dept_id=dept.id) }}" class="admin-departments__order-form">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="hidden" name="version" value="{{ dept.version }}">
+                                    <label for="display_order_{{ dept.id }}" class="u-visually-hidden">Visningsordning för {{ dept.name }}</label>
+                                    <input id="display_order_{{ dept.id }}" name="display_order" type="number" min="0" step="1" value="{{ '' if dept.display_order is none else dept.display_order }}" class="yp-input" placeholder="Ordning" aria-label="Visningsordning">
+                                    <button type="submit" class="app-shell__btn app-shell__btn--ghost">Spara ordning</button>
+                                </form>
                                 <a class="app-shell__btn app-shell__btn--ghost" href="{{ url_for('ui.admin_departments_edit_form', dept_id=dept.id) }}">Redigera</a>
                                 <form method="POST" action="{{ url_for('ui.admin_departments_delete', dept_id=dept.id) }}" data-confirm="Är du säker på att du vill ta bort avdelningen {{ dept.name }}?">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

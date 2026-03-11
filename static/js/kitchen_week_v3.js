@@ -1,4 +1,23 @@
 (function(){
+  function getCookie(name){
+    try {
+      const cookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith(name + '='));
+      return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
+    } catch(e){
+      return '';
+    }
+  }
+
+  function getCsrfToken(){
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if(meta && meta.getAttribute('content')){
+      return meta.getAttribute('content');
+    }
+    return getCookie('csrf_token');
+  }
+
   function abbrFor(dayIdx){
     switch(dayIdx){
       case 1: return "Mån";
@@ -45,13 +64,16 @@
       marked: marked,
       site_id: siteId
     };
+    const csrf = getCsrfToken();
     console.debug("[K3] If-Match on first POST:", etag);
     const resp = await fetch('/api/weekview/specialdiets/mark',{
       method:'POST',
+      credentials:'same-origin',
       headers:{
         'Content-Type':'application/json',
         'If-Match': etag,
-        'X-User-Role':'cook'
+        'X-User-Role':'cook',
+        ...(csrf ? { 'X-CSRF-Token': csrf } : {})
       },
       body: JSON.stringify(payload)
     });
@@ -70,10 +92,12 @@
       console.debug("[K3] If-Match on retry POST:", etag2);
       const resp2 = await fetch('/api/weekview/specialdiets/mark',{
         method:'POST',
+        credentials:'same-origin',
         headers:{
           'Content-Type':'application/json',
           'If-Match': etag2,
-          'X-User-Role':'cook'
+          'X-User-Role':'cook',
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {})
         },
         body: JSON.stringify(payload)
       });

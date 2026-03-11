@@ -68,6 +68,7 @@ class Department(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     site_id: Mapped[str] = mapped_column(String(64))
     residence_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    display_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     name: Mapped[str] = mapped_column(String(120))
     resident_count_mode: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
     resident_count_fixed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

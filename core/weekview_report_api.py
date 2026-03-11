@@ -40,7 +40,14 @@ def weekview_report_api():  # TODO Phase 2.E.1: implement real aggregation per d
                 return jsonify({"error": "not_found", "message": "Department not found"}), 404
             departments = [(str(r[0]), str(r[1]))]
         else:
-            rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            rows = db.execute(
+                text(
+                    "SELECT id, name FROM departments "
+                    "WHERE site_id=:s "
+                    "ORDER BY COALESCE(display_order, 2147483647), name"
+                ),
+                {"s": site_id},
+            ).fetchall()
             departments = [(str(r[0]), str(r[1])) for r in rows]
     finally:
         db.close()

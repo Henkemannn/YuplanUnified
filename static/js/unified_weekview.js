@@ -92,9 +92,15 @@
           const etag = etagData && etagData.etag ? etagData.etag : '';
           if (!etag) throw new Error('etag');
 
-          // CSRF token from meta, if available
+          // CSRF token from meta or cookie fallback.
           const meta = document.querySelector('meta[name="csrf-token"]');
-          const csrfToken = meta ? meta.getAttribute('content') : null;
+          let csrfToken = meta ? meta.getAttribute('content') : null;
+          if (!csrfToken) {
+            const cookie = document.cookie
+              .split('; ')
+              .find(row => row.startsWith('csrf_token='));
+            csrfToken = cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : null;
+          }
 
           const body = {
             year: year,
@@ -108,6 +114,7 @@
 
           const resp = await fetch('/api/weekview/specialdiets/mark', {
             method: 'POST',
+            credentials: 'same-origin',
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',

@@ -759,7 +759,14 @@ def admin_system_page():
                 selected_site = {"id": str(row[0]), "name": str(row[1] or "")}
             else:
                 selected_site = {"id": str(site_id), "name": ""}
-            deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            deps = db.execute(
+                text(
+                    "SELECT id, name FROM departments "
+                    "WHERE site_id=:s "
+                    "ORDER BY COALESCE(display_order, 2147483647), name"
+                ),
+                {"s": site_id},
+            ).fetchall()
             departments = [{"id": str(d[0]), "name": str(d[1] or "")} for d in deps]
     finally:
         db.close()
@@ -2650,7 +2657,12 @@ def kitchen_planering_v1():
         db = get_session()
         try:
             rows = db.execute(
-                text("SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments WHERE site_id=:s ORDER BY name"),
+                text(
+                    "SELECT id, name, COALESCE(resident_count_fixed,0) "
+                    "FROM departments "
+                    "WHERE site_id=:s "
+                    "ORDER BY COALESCE(display_order, 2147483647), name"
+                ),
                 {"s": site_id},
             ).fetchall()
             departments = [{"id": str(r[0]), "name": str(r[1] or ""), "resident_count": int(r[2] or 0)} for r in rows]
@@ -3172,7 +3184,15 @@ def kitchen_veckovy_week():
                         return redirect(url_for("ui.select_site", next="/ui/kitchen/week"))
             row_s = db.execute(text("SELECT name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
             site_name = str(row_s[0]) if row_s else ""
-            rows = db.execute(text("SELECT id, name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            rows = db.execute(
+                text(
+                    "SELECT id, name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') "
+                    "FROM departments "
+                    "WHERE site_id=:s "
+                    "ORDER BY COALESCE(display_order, 2147483647), name"
+                ),
+                {"s": site_id},
+            ).fetchall()
             departments = [{"id": str(r[0]), "name": str(r[1] or ""), "resident_count": int(r[2] or 0), "info_text": (str(r[3] or "").strip())} for r in rows]
         finally:
             db.close()
@@ -3951,7 +3971,11 @@ def weekview_overview_ui():
         else:
             site_name = ""
         deps = db.execute(
-            text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"),
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:s "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
             {"s": site_id},
         ).fetchall()
         departments = [(str(r[0]), str(r[1])) for r in deps]
@@ -4108,7 +4132,14 @@ def weekview_report_ui():  # TODO Phase 2.E.1: real aggregation; currently place
             else:
                 departments = [(str(r[0]), str(r[1]))]
         else:
-            rows = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            rows = db.execute(
+                text(
+                    "SELECT id, name FROM departments "
+                    "WHERE site_id=:s "
+                    "ORDER BY COALESCE(display_order, 2147483647), name"
+                ),
+                {"s": site_id},
+            ).fetchall()
             departments = [(str(r[0]), str(r[1])) for r in rows]
     finally:
         db.close()
@@ -4240,7 +4271,11 @@ def reports_weekly():
     db2 = get_session()
     try:
         all_dept_rows = db2.execute(
-            text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"),
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:s "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
             {"s": site_id},
         ).fetchall()
         dept_items = [{"id": str(r[0]), "name": str(r[1] or "")} for r in all_dept_rows]
@@ -4292,7 +4327,11 @@ def admin_report_week():
         row_site = db.execute(text("SELECT name FROM sites WHERE id=:s"), {"s": site_id}).fetchone()
         site_name = row_site[0] if row_site else None
         deps_rows = db.execute(
-            text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"),
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:s "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
             {"s": site_id},
         ).fetchall()
         all_deps = [{"id": str(r[0]), "name": str(r[1] or "")} for r in deps_rows]
@@ -4402,7 +4441,14 @@ def reports_weekly_csv():
         site_name = row[0] if row else None
         if not site_name:
             return jsonify({"error": "not_found", "message": "Site not found"}), 404
-        deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+        deps = db.execute(
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:s "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
+            {"s": site_id},
+        ).fetchall()
         departments = [(str(r[0]), str(r[1])) for r in deps]
     finally:
         db.close()
@@ -4568,7 +4614,14 @@ def reports_weekly_xlsx():
         site_name = row[0] if row else None
         if not site_name:
             return jsonify({"error": "not_found", "message": "Site not found"}), 404
-        deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+        deps = db.execute(
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:s "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
+            {"s": site_id},
+        ).fetchall()
         departments = [(str(r[0]), str(r[1])) for r in deps]
     finally:
         db.close()
@@ -4964,7 +5017,12 @@ def cook_dashboard():
         departments = []
         try:
             dept_rows = db.execute(
-                text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name LIMIT 20"),
+                text(
+                    "SELECT id, name FROM departments "
+                    "WHERE site_id=:s "
+                    "ORDER BY COALESCE(display_order, 2147483647), name "
+                    "LIMIT 20"
+                ),
                 {"s": site_id},
             ).fetchall()
         except Exception:
@@ -5115,7 +5173,9 @@ def admin_dashboard():
             try:
                 rows = db.execute(
                     text(
-                        "SELECT d.id, d.name FROM departments d WHERE d.site_id = :sid ORDER BY d.name"
+                        "SELECT d.id, d.name FROM departments d "
+                        "WHERE d.site_id = :sid "
+                        "ORDER BY COALESCE(d.display_order, 2147483647), d.name"
                     ),
                     {"sid": active_site_id2},
                 ).fetchall()
@@ -5336,12 +5396,12 @@ def admin_departments_list():
             rows = db.execute(
                 text(
                     """
-                    SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name, COALESCE(d.notes,'') AS notes, COALESCE(r.name, 'Ej valt') AS residence_name
+                    SELECT d.id, d.site_id, d.name, COALESCE(d.resident_count_fixed, 0) AS rc_fixed, s.name AS site_name, COALESCE(d.notes,'') AS notes, COALESCE(r.name, 'Ej valt') AS residence_name, d.display_order, COALESCE(d.version, 0)
                     FROM departments d
                     LEFT JOIN sites s ON s.id = d.site_id
                     LEFT JOIN residences r ON r.id = d.residence_id
                     WHERE d.site_id = :sid
-                    ORDER BY d.name
+                    ORDER BY COALESCE(d.display_order, 2147483647), d.name
                     """
                 ),
                 {"sid": active_site_id},
@@ -5359,6 +5419,8 @@ def admin_departments_list():
                     "site_name": r[4] or None,
                     "notes": r[5] or "",
                     "residence_name": r[6] or "Ej valt",
+                    "display_order": (int(r[7]) if r[7] is not None else None),
+                    "version": int(r[8] or 0),
                 }
             )
         # Site header: strictly resolve from active site
@@ -5406,6 +5468,61 @@ def admin_departments_list():
     }
     
     return render_template("ui/unified_admin_departments_list.html", vm=vm, nav_context="admin")
+
+
+@ui_bp.post("/ui/admin/departments/<dept_id>/order")
+@require_roles(*ADMIN_ROLES)
+def admin_departments_update_order(dept_id: str):
+    from core.admin_repo import DepartmentsRepo, ConcurrencyError
+
+    from .context import get_active_context as _get_ctx
+
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        flash("Ingen site vald.", "error")
+        return redirect(url_for("ui.admin_departments_list"))
+
+    raw_order = (request.form.get("display_order") or "").strip()
+    raw_version = (request.form.get("version") or "").strip()
+
+    if raw_order == "":
+        display_order = None
+    else:
+        try:
+            display_order = int(raw_order)
+            if display_order < 0:
+                raise ValueError("negative")
+        except Exception:
+            flash("Ogiltig ordning. Ange ett heltal >= 0 eller lämna tomt.", "error")
+            return redirect(url_for("ui.admin_departments_list"))
+
+    try:
+        expected_version = int(raw_version)
+    except Exception:
+        flash("Kunde inte uppdatera ordning (saknar version).", "error")
+        return redirect(url_for("ui.admin_departments_list"))
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
+            {"id": dept_id, "sid": active_site_id},
+        ).fetchone()
+        if not row:
+            flash("Avdelning hittades inte för vald site.", "error")
+            return redirect(url_for("ui.admin_departments_list"))
+    finally:
+        db.close()
+
+    try:
+        DepartmentsRepo().update_department(dept_id, expected_version, display_order=display_order)
+        flash("Sorteringsordning sparad.", "success")
+    except ConcurrencyError:
+        flash("Avdelningen uppdaterades i en annan flik. Ladda om och försök igen.", "error")
+    except Exception:
+        flash("Kunde inte spara sorteringsordning.", "error")
+    return redirect(url_for("ui.admin_departments_list"))
 
 
 @ui_bp.get("/ui/admin/departments/new")
@@ -5952,6 +6069,146 @@ def admin_departments_edit_save_diets(dept_id: str):
         except Exception as e:
             flash(f"Kunde inte spara specialkost: {str(e)}", "error")
     return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+
+@ui_bp.get("/ui/admin/departments/<dept_id>/diet-overrides")
+@require_roles(*ADMIN_ROLES)
+def admin_departments_get_diet_overrides(dept_id: str):
+    from flask import jsonify
+    from core.admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo
+
+    diet_type_id = str(request.args.get("diet_type_id") or "").strip()
+    if not diet_type_id:
+        return jsonify({"error": "bad_request", "message": "diet_type_id required"}), 400
+
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        return jsonify({"error": "site_required", "message": "Select active site"}), 400
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
+            {"id": dept_id, "sid": active_site_id},
+        ).fetchone()
+    finally:
+        db.close()
+    if not row:
+        return jsonify({"error": "not_found"}), 404
+
+    base_count = 0
+    try:
+        defaults = DietDefaultsRepo().list_for_department(dept_id)
+        by_diet = {str(it.get("diet_type_id")): int(it.get("default_count", 0) or 0) for it in defaults}
+        base_count = int(by_diet.get(diet_type_id, 0))
+    except Exception:
+        base_count = 0
+
+    rows = DepartmentDietOverridesRepo().list_for_department_diet(dept_id=dept_id, diet_type_id=diet_type_id)
+    return jsonify(
+        {
+            "department_id": str(dept_id),
+            "diet_type_id": diet_type_id,
+            "base_count": base_count,
+            "overrides": rows,
+        }
+    )
+
+
+@ui_bp.post("/ui/admin/departments/<dept_id>/diet-overrides")
+@require_roles(*ADMIN_ROLES)
+def admin_departments_save_diet_overrides(dept_id: str):
+    from flask import jsonify
+    from core.admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo
+
+    data = request.get_json(silent=True) or {}
+    diet_type_id = str(data.get("diet_type_id") or "").strip()
+    if not diet_type_id:
+        return jsonify({"error": "bad_request", "message": "diet_type_id required"}), 400
+
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        return jsonify({"error": "site_required", "message": "Select active site"}), 400
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
+            {"id": dept_id, "sid": active_site_id},
+        ).fetchone()
+    finally:
+        db.close()
+    if not row:
+        return jsonify({"error": "not_found"}), 404
+
+    base_count = 0
+    try:
+        defaults = DietDefaultsRepo().list_for_department(dept_id)
+        by_diet = {str(it.get("diet_type_id")): int(it.get("default_count", 0) or 0) for it in defaults}
+        base_count = int(by_diet.get(diet_type_id, 0))
+    except Exception:
+        base_count = 0
+
+    entries = data.get("entries") or []
+    save_rows: list[dict] = []
+    try:
+        for it in entries:
+            day = int(it.get("day") or 0)
+            meal = str(it.get("meal") or "").strip().lower()
+            count = int(it.get("count") or 0)
+            if day < 1 or day > 7 or meal not in ("lunch", "dinner") or count < 0:
+                continue
+            if count != base_count:
+                save_rows.append({"day": day, "meal": meal, "count": count})
+    except Exception:
+        save_rows = []
+
+    DepartmentDietOverridesRepo().replace_for_department_diet(
+        dept_id=dept_id,
+        diet_type_id=diet_type_id,
+        items=save_rows,
+    )
+    return jsonify({"ok": True, "saved": len(save_rows), "base_count": base_count})
+
+
+@ui_bp.post("/ui/admin/departments/<dept_id>/diet-overrides/reset")
+@require_roles(*ADMIN_ROLES)
+def admin_departments_reset_diet_overrides(dept_id: str):
+    from flask import jsonify
+    from core.admin_repo import DepartmentDietOverridesRepo
+
+    data = request.get_json(silent=True) or {}
+    diet_type_id = str(data.get("diet_type_id") or "").strip()
+    if not diet_type_id:
+        return jsonify({"error": "bad_request", "message": "diet_type_id required"}), 400
+
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        return jsonify({"error": "site_required", "message": "Select active site"}), 400
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
+            {"id": dept_id, "sid": active_site_id},
+        ).fetchone()
+    finally:
+        db.close()
+    if not row:
+        return jsonify({"error": "not_found"}), 404
+
+    DepartmentDietOverridesRepo().replace_for_department_diet(
+        dept_id=dept_id,
+        diet_type_id=diet_type_id,
+        items=[],
+    )
+    return jsonify({"ok": True})
 
 
 @ui_bp.post("/ui/admin/departments/<dept_id>/delete")
@@ -6661,7 +6918,11 @@ def admin_menu_planning_view(year: int, week: int):
     db = get_session()
     try:
         dept_rows = db.execute(
-            text("SELECT id, name FROM departments WHERE site_id=:sid ORDER BY name"),
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:sid "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
             {"sid": active_site_id},
         ).fetchall()
         departments = [{"id": str(r[0]), "name": str(r[1])} for r in dept_rows]
@@ -6744,7 +7005,11 @@ def admin_menu_planning_edit(year: int, week: int):
     db = get_session()
     try:
         dept_rows = db.execute(
-            text("SELECT id, name FROM departments WHERE site_id=:sid ORDER BY name"),
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:sid "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
             {"sid": active_site_id},
         ).fetchall()
         departments = [{"id": str(r[0]), "name": str(r[1])} for r in dept_rows]
@@ -7013,7 +7278,11 @@ def admin_residents_week_get(year: int, week: int):
         site_id = str(row_site[0]) if row_site else None
         site_name = str(row_site[1] or "") if row_site else ""
         dept_rows = db.execute(
-            text("SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments WHERE site_id=:sid ORDER BY name"),
+            text(
+                "SELECT id, name, COALESCE(resident_count_fixed,0) FROM departments "
+                "WHERE site_id=:sid "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
             {"sid": active_site_id},
         ).fetchall()
         departments = [

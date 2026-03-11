@@ -22,7 +22,9 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
         rows = db.execute(
             text(
                 "SELECT id, name, COALESCE(resident_count_fixed,0), COALESCE(notes,'') "
-                "FROM departments WHERE site_id=:s ORDER BY name"
+                "FROM departments "
+                "WHERE site_id=:s "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
             ),
             {"s": site_id},
         ).fetchall()
@@ -114,16 +116,20 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                     diets_d = ((day_obj.get("diets") or {}).get("dinner") if day_obj else []) or []
                     rl = 0
                     rd = 0
+                    ol = False
+                    od = False
                     if diets_l:
                         for it in diets_l:
                             if str(it.get("diet_type_id")) == str(dtid):
                                 rl = int(it.get("resident_count") or 0)
+                                ol = bool(it.get("has_override"))
                                 break
                     else:
                         rl = int(default_count_by_id.get(str(dtid), 0) or 0)
                     for it in diets_d:
                         if str(it.get("diet_type_id")) == str(dtid):
                             rd = int(it.get("resident_count") or 0)
+                            od = bool(it.get("has_override"))
                             break
                     ml = ((dow, "lunch", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rl > 0)
                     md = ((dow, "dinner", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rd > 0)
@@ -139,6 +145,7 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                             "day_index": dow,
                             "meal": "lunch",
                             "count": rl,
+                            "is_override": ol,
                             "is_done": ml,
                             "is_alt2": is_alt2,
                             "diet_type_id": str(dtid),
@@ -149,6 +156,7 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                             "day_index": dow,
                             "meal": "dinner",
                             "count": rd,
+                            "is_override": od,
                             "is_done": md,
                             "is_alt2": False,
                             "diet_type_id": str(dtid),

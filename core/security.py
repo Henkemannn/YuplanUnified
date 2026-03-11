@@ -238,11 +238,22 @@ def init_security(app: Flask):
             resp.headers.setdefault(
                 "Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload"
             )
-        # Basic CSP if absent (leave original if already set by main app)
-        resp.headers.setdefault(
-            "Content-Security-Policy",
-            "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
-        )
+        # Basic CSP if absent. Landing page uses inline CSS/JS and Google Fonts,
+        # so allow that only for the public root HTML route.
+        if request.path == "/" and (resp.mimetype or "").startswith("text/html"):
+            resp.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "script-src 'self' 'unsafe-inline'; "
+                "font-src 'self' https://fonts.gstatic.com data:; "
+                "img-src 'self' data:; "
+                "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+            )
+        else:
+            resp.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+            )
         # Secure cookie flags: rely on Flask's session cookie config; set CSRF cookie if new
         if hasattr(g, "_new_csrf_token"):
             from .cookies import set_secure_cookie

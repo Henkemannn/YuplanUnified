@@ -1,12 +1,40 @@
 (function () {
   "use strict";
 
-  function postJson(url, payload) {
+  function readCookie(name) {
+    var parts = (document.cookie || "").split(";");
+    for (var i = 0; i < parts.length; i += 1) {
+      var part = parts[i].trim();
+      if (part.indexOf(name + "=") === 0) {
+        return decodeURIComponent(part.substring(name.length + 1));
+      }
+    }
+    return "";
+  }
+
+  function getCsrfToken() {
+    var token = readCookie("csrf_token");
+    if (token) {
+      return token;
+    }
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.content) {
+      return meta.content;
+    }
+    var input = document.querySelector("input[name='csrf_token']");
+    return input && input.value ? input.value : "";
+  }
+
+  function postJson(url, payload, csrfToken) {
+    var headers = {
+      "Content-Type": "application/json",
+    };
+    if (csrfToken) {
+      headers["X-CSRF-Token"] = csrfToken;
+    }
     return fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: headers,
       body: JSON.stringify(payload),
       credentials: "same-origin",
     });
@@ -21,11 +49,12 @@
     if (!itemId) {
       return;
     }
+    var csrfToken = getCsrfToken();
 
     postJson("/ui/api/remember-to-order/check", {
       id: itemId,
       checked: target.checked,
-    })
+    }, csrfToken)
       .then(function () {
         window.location.reload();
       })
@@ -62,11 +91,12 @@
       weekKey = weekInput ? weekInput.value : "";
     }
 
+    var csrfToken = getCsrfToken();
     postJson("/ui/api/remember-to-order/add", {
       site_id: siteId,
       week_key: weekKey,
       text: textValue,
-    })
+    }, csrfToken)
       .then(function () {
         window.location.reload();
       })

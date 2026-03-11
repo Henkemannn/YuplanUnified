@@ -298,9 +298,9 @@ def login():
                 except Exception:
                     bound_site = None
                 if (not bound_site) and user.tenant_id is not None:
-                    # Pilot fallback: use kitchen_user_sites binding when users.site_id is unavailable.
+                    # Pilot fallback: use explicit user-site binding when users.site_id is unavailable.
                     try:
-                        if role_norm == "kitchen":
+                        if role_norm in ("kitchen", "admin"):
                             from sqlalchemy import text as _t
 
                             row_k = db.execute(

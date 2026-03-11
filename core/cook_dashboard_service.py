@@ -73,7 +73,14 @@ class CookDashboardService:
         # Departments for site
         db = get_session()
         try:
-            deps = db.execute(text("SELECT id, name FROM departments WHERE site_id=:s ORDER BY name"), {"s": site_id}).fetchall()
+            deps = db.execute(
+                text(
+                    "SELECT id, name FROM departments "
+                    "WHERE site_id=:s "
+                    "ORDER BY COALESCE(display_order, 2147483647), name"
+                ),
+                {"s": site_id},
+            ).fetchall()
             departments = [{"id": str(d[0]), "name": str(d[1] or "")} for d in deps]
             site_name_row = db.execute(text("SELECT name FROM sites WHERE id=:s"), {"s": site_id}).fetchone()
             site_name = str(site_name_row[0] or "") if site_name_row else ""

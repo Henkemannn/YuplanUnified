@@ -106,6 +106,7 @@
               data-site-id="{{ vm.site_id }}"
               data-week-key="{{ vm.remember_to_order_week_key }}"
             >
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
               <input type="hidden" name="site_id" value="{{ vm.site_id }}" />
               <input type="hidden" name="week_key" value="{{ vm.remember_to_order_week_key }}" />
               <label class="remember-to-order__label" for="remember-to-order-text">Lägg till rad</label>

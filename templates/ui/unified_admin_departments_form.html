@@ -127,25 +127,34 @@
             {% set totals = namespace(value=0) %}
             {% for t in vm.diet_types %}
                 {% set dtid = t.id %}
-                {% set val = (vm.diet_defaults[dtid|string] if vm.diet_defaults else 0)|int %}
+                {% set val = (vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0)|int %}
                 {% set totals.value = totals.value + val %}
             {% endfor %}
             <p class="app-shell__card-text specialkost-edit-total"><strong>Totalt:</strong> {{ totals.value }} personer</p>
             <div class="specialkost-edit-grid" role="group" aria-label="Specialkost antal per typ">
                 {% for t in vm.diet_types %}
                     {% set dtid = t.id %}
-                    {% set val = vm.diet_defaults[dtid|string] if vm.diet_defaults else 0 %}
+                    {% set val = vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0 %}
                     <div class="specialkost-edit-row">
                         <label class="specialkost-edit-label" for="diet_default_{{ dtid }}">{{ t.name }}</label>
-                        <input
-                            type="number"
-                            id="diet_default_{{ dtid }}"
-                            name="diet_default_{{ dtid }}"
-                            class="yp-input specialkost-edit-input sk-input"
-                            form="department-form"
-                            min="0"
-                            value="{{ val }}"
-                        >
+                        <div class="specialkost-edit-actions">
+                            <input
+                                type="number"
+                                id="diet_default_{{ dtid }}"
+                                name="diet_default_{{ dtid }}"
+                                class="yp-input specialkost-edit-input sk-input"
+                                form="department-form"
+                                min="0"
+                                value="{{ val }}"
+                            >
+                            <button
+                                type="button"
+                                class="yp-button yp-button-secondary specialkost-edit-override js-open-diet-override"
+                                data-department-id="{{ vm.department.id }}"
+                                data-diet-type-id="{{ dtid }}"
+                                data-diet-name="{{ t.name }}"
+                            >Avvikande schema</button>
+                        </div>
                     </div>
                 {% endfor %}
             </div>
@@ -320,6 +329,44 @@
                 <button type="button" class="yp-button yp-button-secondary" data-modal-close>Avbryt</button>
             </div>
         </form>
+    </div>
+</dialog>
+
+<dialog id="dietOverrideModal" class="ua-modal admin-diet-override-modal">
+    <div class="ua-modal-inner admin-diet-override-modal__inner">
+        <header class="ua-modal-header admin-diet-override-modal__header">
+            <div class="admin-diet-override-modal__title-wrap">
+                <h2 class="admin-diet-override-modal__title">Avvikande schema</h2>
+                <p class="admin-diet-override-modal__subtitle">Mån-Sön · Lunch/Kväll</p>
+                <span class="admin-detail-site-chip admin-diet-override-modal__dept-chip">{{ vm.department.name }}</span>
+                <p class="ua-muted admin-diet-override-modal__diet" id="dietOverrideName"></p>
+            </div>
+            <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
+        </header>
+        <div class="ua-modal-body admin-diet-override-modal__body">
+            <table class="ua-table admin-diet-override-table">
+                <tr>
+                    <th>Dag</th>
+                    <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span></th>
+                    <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
+                </tr>
+                {% set day_names = ['Mån','Tis','Ons','Tors','Fre','Lör','Sön'] %}
+                {% for dow in range(1,8) %}
+                <tr>
+                    <td>{{ day_names[dow-1] }}</td>
+                    <td><input type="number" min="0" class="yp-input admin-diet-override-input" data-day="{{ dow }}" data-meal="lunch"></td>
+                    <td><input type="number" min="0" class="yp-input admin-diet-override-input" data-day="{{ dow }}" data-meal="dinner"></td>
+                </tr>
+                {% endfor %}
+            </table>
+            <p class="yp-form-help">Endast värden som avviker från grundvärdet sparas.</p>
+        </div>
+        <footer class="ua-modal-footer admin-diet-override-modal__footer">
+            <span class="ua-muted" id="dietOverrideStatus" aria-live="polite"></span>
+            <button type="button" class="yp-button yp-button-secondary js-diet-override-reset">Återställ till standard</button>
+            <button type="button" class="yp-button yp-button-primary js-diet-override-save">Spara</button>
+            <button type="button" class="yp-button yp-button-secondary" data-modal-close>Stäng</button>
+        </footer>
     </div>
 </dialog>
 {% endif %}
@@ -583,4 +630,5 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/admin_alt2.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_diet_overrides.js') }}" defer></script>
 {% endblock %}

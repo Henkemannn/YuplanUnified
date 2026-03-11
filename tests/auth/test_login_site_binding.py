@@ -67,3 +67,44 @@ def test_login_admin_form_forbidden_without_site_binding(monkeypatch):
         assert r.status_code == 403
         body = r.data.decode("utf-8")
         assert "Åtkomst nekad" in body
+
+
+def test_login_admin_json_ok_with_kitchen_user_sites_binding(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        from sqlalchemy import text
+
+        db = get_session()
+        email = _seed_tenant_and_user(db, role="admin")
+        _seed_sites(db, count=2)  # multiple sites -> explicit mapping is required
+
+        sid_row = db.execute(text("SELECT id FROM sites ORDER BY id LIMIT 1")).fetchone()
+        user_row = db.execute(text("SELECT id, tenant_id FROM users WHERE email=:e LIMIT 1"), {"e": email}).fetchone()
+        db.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                "user_id INTEGER NOT NULL, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, "
+                "PRIMARY KEY (user_id, site_id))"
+            )
+        )
+        db.execute(
+            text(
+                "INSERT OR IGNORE INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                "VALUES (:uid, :tid, :sid)"
+            ),
+            {"uid": int(user_row[0]), "tid": int(user_row[1]), "sid": str(sid_row[0])},
+        )
+        db.commit()
+
+        c = app.test_client()
+        r = c.post(
+            "/auth/login",
+            json={"email": email, "password": "Passw0rd!"},
+            headers={"Accept": "application/json"},
+        )
+        assert r.status_code == 200
+        j = r.get_json() or {}
+        assert j.get("ok") is True
+        with c.session_transaction() as sess:
+            assert (sess.get("site_id") or "").strip() == str(sid_row[0])

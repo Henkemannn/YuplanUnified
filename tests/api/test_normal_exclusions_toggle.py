@@ -75,3 +75,49 @@ def test_toggle_normal_exclusion_insert_then_remove(app_session):
         assert int(row2[0]) == 0
     finally:
         db.close()
+
+
+def test_toggle_normal_exclusion_allows_kitchen_role(app_session):
+    client = app_session.test_client()
+    site_id = "site-normal-exc-kitchen"
+    diet_id = _ensure_site_and_diet(site_id)
+    from core.db import get_session
+    db = get_session()
+    try:
+        db.execute(text(
+            """
+            CREATE TABLE IF NOT EXISTS normal_exclusions (
+              tenant_id TEXT NOT NULL,
+              site_id TEXT NOT NULL,
+              year INTEGER NOT NULL,
+              week INTEGER NOT NULL,
+              day_index INTEGER NOT NULL,
+              meal TEXT NOT NULL,
+              alt TEXT NOT NULL,
+              diet_type_id TEXT NOT NULL,
+              UNIQUE (tenant_id, site_id, year, week, day_index, meal, alt, diet_type_id)
+            );
+            """
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    payload = {
+        "site_id": site_id,
+        "year": 2026,
+        "week": 7,
+        "day_index": 1,
+        "meal": "lunch",
+        "alt": "1",
+        "diet_type_id": diet_id,
+    }
+
+    rv = client.post(
+        "/api/kitchen/planering/normal_exclusions/toggle",
+        json=payload,
+        headers={"X-User-Role": "kitchen", "X-Tenant-Id": "1", "X-User-Id": "8"},
+    )
+    assert rv.status_code == 200
+    data = rv.get_json() or {}
+    assert data.get("excluded") is True

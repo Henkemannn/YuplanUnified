@@ -54,3 +54,35 @@ def test_edit_post_saves_default_and_reads_back(client_admin):
     items = DietDefaultsRepo().list_for_department(dep_id)
     found = {int(it["diet_type_id"]): int(it.get("default_count", 0)) for it in items}
     assert found.get(1) == 3
+
+
+def test_edit_form_allows_missing_diet_default_keys(client_admin):
+    dep_id = str(uuid.uuid4())
+    db = get_session()
+    try:
+        from core.db import create_all
+
+        create_all()
+        db.execute(
+            text(
+                "INSERT INTO departments (id, site_id, name, resident_count_fixed, resident_count_mode, version) "
+                "VALUES (:id, 1, 'Test Missing Defaults', 5, 'fixed', 0)"
+            ),
+            {"id": dep_id},
+        )
+        try:
+            db.execute(text("INSERT INTO diet_types (id, tenant_id, name, default_select) VALUES (1, 1, 'Laktos', 0)"))
+            db.execute(text("INSERT INTO diet_types (id, tenant_id, name, default_select) VALUES (7, 1, 'Gluten', 0)"))
+        except Exception:
+            pytest.skip("Diet types table not available")
+        db.commit()
+    finally:
+        db.close()
+
+    r = client_admin.get(f"/ui/admin/departments/{dep_id}/edit")
+    if r.status_code == 401:
+        pytest.skip("Admin UI not enabled in test environment")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert "Laktos" in html
+    assert "Gluten" in html

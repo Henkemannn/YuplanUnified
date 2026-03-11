@@ -322,7 +322,7 @@ def get_planera_week_csv():  # CSV export for week aggregation
 
 
 @bp.post("/kitchen/planering/normal_exclusions/toggle")
-@require_roles("superuser", "admin", "cook")
+@require_roles("superuser", "admin", "cook", "kitchen")
 @csrf_protect
 def toggle_normal_exclusion():
     """Toggle a normal-mode exclusion chip for a specific day/meal/alt.

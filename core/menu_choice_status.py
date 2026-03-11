@@ -141,7 +141,11 @@ def get_department_completion_status(site_id: str | None, week_keys: Iterable[st
         _ensure_departments_schema(db)
         _ensure_menu_choice_completion_schema(db)
         dep_rows = db.execute(
-            text("SELECT id, name FROM departments WHERE site_id=:sid ORDER BY name"),
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:sid "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
             {"sid": site_id},
         ).fetchall()
         departments = [(str(r[0]), str(r[1] or "")) for r in dep_rows]
@@ -193,7 +197,11 @@ def get_menu_choice_overview(site_id: str | None, from_week_key: str | None, n: 
         _ensure_departments_schema(db)
         _ensure_menu_choice_completion_schema(db)
         dep_rows = db.execute(
-            text("SELECT id, name FROM departments WHERE site_id=:sid ORDER BY name"),
+            text(
+                "SELECT id, name FROM departments "
+                "WHERE site_id=:sid "
+                "ORDER BY COALESCE(display_order, 2147483647), name"
+            ),
             {"sid": site_id},
         ).fetchall()
         departments = [(str(r[0]), str(r[1] or "")) for r in dep_rows]
