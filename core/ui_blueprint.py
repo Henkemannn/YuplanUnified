@@ -2652,6 +2652,8 @@ def kitchen_planering_v1():
     header_menu: dict[str, str | None] = {"alt1": None, "alt2": None, "dessert": None, "dinner": None}
     current_dish_label: str | None = None
     normal_exclusions: dict[str, list[str]] = {"1": [], "2": []}
+    service_addons_summary: list[dict] = []
+    selected_service_addon_id: str | None = None
     if selected_day is not None and selected_meal is not None:
         # Departments for site
         db = get_session()
@@ -3104,6 +3106,25 @@ def kitchen_planering_v1():
         except Exception:
             normal_exclusions = {"1": [], "2": []}
 
+        # Serveringstillägg per valt mål (återkommande per avdelning)
+        try:
+            from .admin_repo import DepartmentServiceAddonsRepo
+
+            service_addons_summary = DepartmentServiceAddonsRepo().list_totals_for_site_meal(
+                site_id=site_id,
+                meal=effective_planera_meal,
+            )
+            selected_service_addon_id = str(request.args.get("addon_id") or "").strip() or None
+            if selected_service_addon_id and not any(
+                str(it.get("addon_id")) == selected_service_addon_id for it in service_addons_summary
+            ):
+                selected_service_addon_id = None
+            if not selected_service_addon_id and service_addons_summary:
+                selected_service_addon_id = str(service_addons_summary[0].get("addon_id"))
+        except Exception:
+            service_addons_summary = []
+            selected_service_addon_id = None
+
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
     print_preview_mode = None
     try:
@@ -3144,6 +3165,8 @@ def kitchen_planering_v1():
         "alt_groups": {"alt1_dept_ids": alt1_dept_ids, "alt2_dept_ids": alt2_dept_ids},
         "diet_counts_by_dept": per_dept_defaults,
         "print_preview_mode": print_preview_mode,
+        "service_addons_summary": service_addons_summary,
+        "selected_service_addon_id": selected_service_addon_id,
         "allow_site_switch": False,
         "nav_context": "kitchen",
     }
@@ -5743,6 +5766,8 @@ def admin_departments_edit_form(dept_id: str):
         "weekly_table": weekly_table,
         "diet_types": [],
         "diet_defaults": {},
+        "service_addons_master": [],
+        "department_service_addons": [],
     }
     # Load diet types and existing defaults for this department
     try:
@@ -5755,6 +5780,14 @@ def admin_departments_edit_form(dept_id: str):
     except Exception:
         vm["diet_types"] = []
         vm["diet_defaults"] = {}
+    try:
+        from core.admin_repo import ServiceAddonsRepo, DepartmentServiceAddonsRepo
+
+        vm["service_addons_master"] = ServiceAddonsRepo().list_active()
+        vm["department_service_addons"] = DepartmentServiceAddonsRepo().list_for_department(dept_id)
+    except Exception:
+        vm["service_addons_master"] = []
+        vm["department_service_addons"] = []
     
     return render_template("ui/unified_admin_departments_form.html", vm=vm)
 
@@ -6068,6 +6101,82 @@ def admin_departments_edit_save_diets(dept_id: str):
             flash("Specialkost sparad.", "success")
         except Exception as e:
             flash(f"Kunde inte spara specialkost: {str(e)}", "error")
+    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+
+@ui_bp.post("/ui/admin/departments/<dept_id>/edit/service-addons")
+@require_roles(*ADMIN_ROLES)
+def admin_departments_edit_save_service_addons(dept_id: str):
+    from flask import flash, redirect, url_for
+    from core.admin_repo import ServiceAddonsRepo, DepartmentServiceAddonsRepo
+
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        flash("Välj site först.", "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
+            {"id": dept_id, "sid": active_site_id},
+        ).fetchone()
+    finally:
+        db.close()
+    if not row:
+        flash("Avdelning hittades inte för vald site.", "error")
+        return redirect(url_for("ui.admin_departments_list"))
+
+    addon_ids = request.form.getlist("service_addon_id[]")
+    lunches = request.form.getlist("service_addon_lunch_count[]")
+    dinners = request.form.getlist("service_addon_dinner_count[]")
+    notes = request.form.getlist("service_addon_note[]")
+    new_names = request.form.getlist("service_addon_new_name[]")
+
+    max_len = max(len(addon_ids), len(lunches), len(dinners), len(notes), len(new_names), 0)
+    master_repo = ServiceAddonsRepo()
+    out_rows: list[dict] = []
+    for i in range(max_len):
+        addon_id = str(addon_ids[i]).strip() if i < len(addon_ids) else ""
+        new_name = str(new_names[i]).strip() if i < len(new_names) else ""
+        if not addon_id and new_name:
+            try:
+                addon_id = master_repo.create_if_missing(new_name)
+            except Exception:
+                addon_id = ""
+        raw_l = str(lunches[i]).strip() if i < len(lunches) else ""
+        raw_d = str(dinners[i]).strip() if i < len(dinners) else ""
+        note = str(notes[i]).strip() if i < len(notes) else ""
+        lunch_count = None
+        dinner_count = None
+        try:
+            if raw_l != "":
+                lunch_count = int(raw_l)
+        except Exception:
+            lunch_count = None
+        try:
+            if raw_d != "":
+                dinner_count = int(raw_d)
+        except Exception:
+            dinner_count = None
+        if not addon_id:
+            continue
+        out_rows.append(
+            {
+                "addon_id": addon_id,
+                "lunch_count": lunch_count,
+                "dinner_count": dinner_count,
+                "note": note,
+            }
+        )
+
+    try:
+        DepartmentServiceAddonsRepo().replace_for_department(dept_id=dept_id, rows=out_rows)
+        flash("Serveringstillägg sparade.", "success")
+    except Exception as e:
+        flash(f"Kunde inte spara serveringstillägg: {str(e)}", "error")
     return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
 

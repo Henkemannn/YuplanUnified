@@ -128,7 +128,7 @@
               <p class="empty-text">Planeringen visas här när du gjort ett val.</p>
             </div>
           {% else %}
-            <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}' data-current-dish-label="{{ (vm.current_dish_label or '')|e }}" data-dev-mode="{{ '1' if vm.dev_mode else '0' }}">
+            <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-service-addons-summary='{{ (vm.service_addons_summary or [])|tojson }}' data-selected-service-addon-id="{{ vm.selected_service_addon_id or '' }}" data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}' data-current-dish-label="{{ (vm.current_dish_label or '')|e }}" data-dev-mode="{{ '1' if vm.dev_mode else '0' }}">
               <div class="kp-card kp-mb-12">
                 <div class="kp-context-row">
                   <span>Vecka <strong>{{ vm.week }}</strong></span>
@@ -367,6 +367,45 @@
             {% else %}
               <p class="empty-text">Inga data för normalkost.</p>
             {% endif %}
+            </div>
+          {% endif %}
+
+          {% if vm.service_addons_summary and vm.service_addons_summary|length > 0 %}
+            <div class="kp-card kp-mb-12 service-addons-view">
+              <div class="kp-worklist-header">
+                <h3>Serveringstillägg</h3>
+              </div>
+              <form method="get" action="" class="kp-form-row">
+                <input type="hidden" name="site_id" value="{{ vm.site_id }}">
+                <input type="hidden" name="mode" value="{{ cur_mode }}">
+                <input type="hidden" name="year" value="{{ vm.year }}">
+                <input type="hidden" name="week" value="{{ vm.week }}">
+                <input type="hidden" name="day" value="{{ vm.selected_day if vm.selected_day is not none else '' }}">
+                <input type="hidden" name="meal" value="{{ vm.selected_meal or '' }}">
+                <label for="service-addon-select">Valt tillägg</label>
+                <select id="service-addon-select" name="addon_id" onchange="this.form.submit()">
+                  {% for addon in vm.service_addons_summary %}
+                  <option value="{{ addon.addon_id }}" {% if vm.selected_service_addon_id and addon.addon_id == vm.selected_service_addon_id %}selected{% endif %}>{{ addon.addon_name }}</option>
+                  {% endfor %}
+                </select>
+              </form>
+
+              {% for addon in vm.service_addons_summary %}
+                {% if addon.addon_id == vm.selected_service_addon_id %}
+                  <div class="kp-worklist-group" data-addon-id="{{ addon.addon_id }}">
+                    <div class="kp-worklist-title">{{ addon.addon_name }} totalt <span class="kp-worklist-total">{{ addon.total_count }}</span></div>
+                    <div class="kp-worklist-rows">
+                      {% for dep in addon.departments %}
+                        <div class="kp-worklist-row">
+                          <span class="kp-row-name">{{ dep.department_name }}</span>
+                          <span class="kp-row-count">{{ dep.count }}</span>
+                          {% if dep.note %}<span class="kp-row-note">({{ dep.note }})</span>{% endif %}
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% endif %}
+              {% endfor %}
             </div>
           {% endif %}
             </div>

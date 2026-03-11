@@ -41,6 +41,8 @@
   var specialSummary = { totals: [], per_department: [] };
   var specialById = {};
   var specialPerDept = [];
+  var serviceAddonsSummary = [];
+  var selectedServiceAddonId = '';
   var lastPrintMode = 'special';
   var lastSpecialWorklist = [];
 
@@ -790,6 +792,14 @@
     var normRows = parseNormalkostRows();
     var alt2Set = new Set((altGroups && altGroups.alt2_dept_ids) || []);
     var worklist = (lastSpecialWorklist && lastSpecialWorklist.length > 0) ? lastSpecialWorklist : buildSpecialWorklistFromSummary();
+    var selectedAddon = null;
+    for(var sa=0; sa<serviceAddonsSummary.length; sa++){
+      var cand = serviceAddonsSummary[sa] || {};
+      if(String(cand.addon_id || '') === String(selectedServiceAddonId || '')){
+        selectedAddon = cand;
+        break;
+      }
+    }
 
     var alt1Rows = [];
     var alt2Rows = [];
@@ -999,6 +1009,40 @@
         }
       }
       sheet.appendChild(special);
+    }
+
+    if(selectedAddon && selectedAddon.total_count > 0){
+      var addonSection = document.createElement('div');
+      addonSection.className = 'kp-print-special';
+      var addonHead = document.createElement('div');
+      addonHead.className = 'kp-print-section-title';
+      addonHead.textContent = 'Serveringstillägg';
+      addonSection.appendChild(addonHead);
+
+      var addonTitle = document.createElement('div');
+      addonTitle.className = 'kp-print-special-name';
+      addonTitle.textContent = String(selectedAddon.addon_name || '') + ' — Totalt ' + String(selectedAddon.total_count || 0);
+      addonSection.appendChild(addonTitle);
+
+      var addonList = document.createElement('div');
+      addonList.className = 'kp-print-list';
+      var depRows = selectedAddon.departments || [];
+      for(var ai=0; ai<depRows.length; ai++){
+        var depRow = depRows[ai] || {};
+        var row = document.createElement('div');
+        row.className = 'kp-print-row sk-row kp-zebra';
+        var note = String(depRow.note || '').trim();
+        var label = String(depRow.department_name || '');
+        if(note){
+          label += ' (' + note + ')';
+        }
+        row.innerHTML = '<span class="kp-dept-name">' + label + '</span>'
+          + '<span class="kp-altpill-slot" aria-hidden="true"></span>'
+          + '<span class="count">' + String(depRow.count || 0) + '</span>';
+        addonList.appendChild(row);
+      }
+      addonSection.appendChild(addonList);
+      sheet.appendChild(addonSection);
     }
 
     printEl.appendChild(sheet);
@@ -1577,6 +1621,11 @@
         var dc = ctxData.getAttribute('data-diet-counts-by-dept');
         if(dc){ dietCountsByDept = JSON.parse(dc); }
       } catch(e){ dietCountsByDept = {}; }
+      try {
+        var sas = ctxData.getAttribute('data-service-addons-summary');
+        if(sas){ serviceAddonsSummary = JSON.parse(sas); }
+      } catch(e){ serviceAddonsSummary = []; }
+      selectedServiceAddonId = String(ctxData.getAttribute('data-selected-service-addon-id') || '');
     }
     if(initialMode === 'normal'){
       var normalView = qs('.normalkost-view');

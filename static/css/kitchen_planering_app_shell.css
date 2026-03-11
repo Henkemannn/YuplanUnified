@@ -232,6 +232,11 @@
   box-shadow: none !important;
 }
 
+.service-addons-view .kp-row-note {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
 .app-shell--dark .kitchen-planering-card--intro {
   background: var(--surface);
   color: var(--text);

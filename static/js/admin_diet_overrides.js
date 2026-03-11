@@ -12,7 +12,9 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', function(){
+  function init(){
+    if(document.documentElement.hasAttribute('data-diet-overrides-init')) return;
+    document.documentElement.setAttribute('data-diet-overrides-init', '1');
     var dlg = document.getElementById('dietOverrideModal');
     if(!dlg) return;
 
@@ -152,5 +154,11 @@
     closeEls.forEach(function(el){
       el.addEventListener('click', function(){ closeDialog(dlg); });
     });
-  });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();

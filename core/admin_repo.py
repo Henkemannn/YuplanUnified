@@ -98,6 +98,38 @@ def _ensure_department_diet_overrides_table(db) -> None:
         )
 
 
+def _ensure_service_addons_tables(db) -> None:
+    if _is_sqlite(db):
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS service_addons (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT,
+                    UNIQUE(name)
+                )
+                """
+            )
+        )
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS department_service_addons (
+                    id TEXT PRIMARY KEY,
+                    department_id TEXT NOT NULL,
+                    addon_id TEXT NOT NULL,
+                    lunch_count INTEGER NULL,
+                    dinner_count INTEGER NULL,
+                    note TEXT NULL,
+                    created_at TEXT
+                )
+                """
+            )
+        )
+
+
 def _resolve_default_tenant_id(db) -> int | None:
     try:
         row = db.execute(text("SELECT id FROM tenants WHERE id=1")).fetchone()
@@ -850,6 +882,196 @@ class DepartmentDietOverridesRepo:
                 }
                 for r in rows
             ]
+        finally:
+            db.close()
+
+
+class ServiceAddonsRepo:
+    def list_active(self) -> list[dict]:
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            rows = db.execute(
+                text(
+                    """
+                    SELECT id, name, is_active
+                    FROM service_addons
+                    WHERE COALESCE(is_active, 1) = 1
+                    ORDER BY name
+                    """
+                )
+            ).fetchall()
+            return [
+                {"id": str(r[0]), "name": str(r[1]), "is_active": bool(r[2] or 0)}
+                for r in rows
+            ]
+        finally:
+            db.close()
+
+    def create_if_missing(self, name: str) -> str:
+        clean = str(name or "").strip()
+        if not clean:
+            raise ValueError("name required")
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            row = db.execute(
+                text("SELECT id FROM service_addons WHERE lower(name)=lower(:n) LIMIT 1"),
+                {"n": clean},
+            ).fetchone()
+            if row:
+                return str(row[0])
+            sid = str(uuid.uuid4())
+            db.execute(
+                text(
+                    """
+                    INSERT INTO service_addons(id, name, is_active, created_at)
+                    VALUES(:id, :name, 1, CURRENT_TIMESTAMP)
+                    """
+                ),
+                {"id": sid, "name": clean},
+            )
+            db.commit()
+            return sid
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+
+class DepartmentServiceAddonsRepo:
+    def list_for_department(self, dept_id: str) -> list[dict]:
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            rows = db.execute(
+                text(
+                    """
+                    SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
+                           dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                    FROM department_service_addons dsa
+                    JOIN service_addons sa ON sa.id = dsa.addon_id
+                    WHERE dsa.department_id=:d
+                    ORDER BY sa.name
+                    """
+                ),
+                {"d": str(dept_id)},
+            ).fetchall()
+            out: list[dict] = []
+            for r in rows:
+                out.append(
+                    {
+                        "id": str(r[0]),
+                        "department_id": str(r[1]),
+                        "addon_id": str(r[2]),
+                        "addon_name": str(r[3]),
+                        "lunch_count": (int(r[4]) if r[4] is not None else None),
+                        "dinner_count": (int(r[5]) if r[5] is not None else None),
+                        "note": str(r[6] or ""),
+                    }
+                )
+            return out
+        finally:
+            db.close()
+
+    def replace_for_department(self, dept_id: str, rows: Iterable[dict]) -> None:
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            db.execute(
+                text("DELETE FROM department_service_addons WHERE department_id=:d"),
+                {"d": str(dept_id)},
+            )
+            for row in rows:
+                addon_id = str(row.get("addon_id") or "").strip()
+                if not addon_id:
+                    continue
+                lunch = row.get("lunch_count")
+                dinner = row.get("dinner_count")
+                note = str(row.get("note") or "").strip() or None
+                lunch_i = int(lunch) if lunch is not None else None
+                dinner_i = int(dinner) if dinner is not None else None
+                # Only persist rows that have at least one shown count (>0)
+                if not ((lunch_i is not None and lunch_i > 0) or (dinner_i is not None and dinner_i > 0)):
+                    continue
+                rid = str(uuid.uuid4())
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO department_service_addons(
+                            id, department_id, addon_id, lunch_count, dinner_count, note, created_at
+                        ) VALUES(:id, :department_id, :addon_id, :lunch_count, :dinner_count, :note, CURRENT_TIMESTAMP)
+                        """
+                    ),
+                    {
+                        "id": rid,
+                        "department_id": str(dept_id),
+                        "addon_id": addon_id,
+                        "lunch_count": lunch_i,
+                        "dinner_count": dinner_i,
+                        "note": note,
+                    },
+                )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def list_totals_for_site_meal(self, site_id: str, meal: str) -> list[dict]:
+        meal_key = str(meal or "").strip().lower()
+        col = "lunch_count" if meal_key == "lunch" else "dinner_count"
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            rows = db.execute(
+                text(
+                    f"""
+                    SELECT sa.id, sa.name, d.id, d.name,
+                           dsa.{col} as count,
+                           COALESCE(dsa.note, '')
+                    FROM department_service_addons dsa
+                    JOIN service_addons sa ON sa.id = dsa.addon_id
+                    JOIN departments d ON d.id = dsa.department_id
+                    WHERE d.site_id = :site_id
+                      AND dsa.{col} IS NOT NULL
+                      AND dsa.{col} > 0
+                    ORDER BY sa.name, d.name
+                    """
+                ),
+                {"site_id": str(site_id)},
+            ).fetchall()
+            by_addon: dict[str, dict] = {}
+            for r in rows:
+                addon_id = str(r[0])
+                addon_name = str(r[1])
+                dept_id = str(r[2])
+                dept_name = str(r[3])
+                count = int(r[4] or 0)
+                note = str(r[5] or "").strip()
+                if count <= 0:
+                    continue
+                if addon_id not in by_addon:
+                    by_addon[addon_id] = {
+                        "addon_id": addon_id,
+                        "addon_name": addon_name,
+                        "total_count": 0,
+                        "departments": [],
+                    }
+                by_addon[addon_id]["total_count"] += count
+                by_addon[addon_id]["departments"].append(
+                    {
+                        "department_id": dept_id,
+                        "department_name": dept_name,
+                        "count": count,
+                        "note": note,
+                    }
+                )
+            out = list(by_addon.values())
+            out.sort(key=lambda x: (-(int(x.get("total_count") or 0)), str(x.get("addon_name") or "")))
+            return out
         finally:
             db.close()
 

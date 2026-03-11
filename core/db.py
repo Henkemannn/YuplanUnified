@@ -349,6 +349,26 @@ def create_all() -> (
                         PRIMARY KEY (department_id, diet_type_id, day, meal)
                     )
                 """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS service_addons (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        is_active INTEGER NOT NULL DEFAULT 1,
+                        created_at TEXT,
+                        UNIQUE(name)
+                    )
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS department_service_addons (
+                        id TEXT PRIMARY KEY,
+                        department_id TEXT NOT NULL,
+                        addon_id TEXT NOT NULL,
+                        lunch_count INTEGER NULL,
+                        dinner_count INTEGER NULL,
+                        note TEXT NULL,
+                        created_at TEXT
+                    )
+                """))
                 # Alt2 flags table
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS alt2_flags (

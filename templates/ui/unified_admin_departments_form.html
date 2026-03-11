@@ -122,6 +122,7 @@
         </article>
         <article class="app-shell__card">
         <h2 class="app-shell__card-title">Specialkost</h2>
+        <p class="yp-form-help">Använd avvikande schema här när avvikelsen beror på en viss specialkost. Detta ändrar inte boendeantalet automatiskt.</p>
         <div class="yp-form">
             {% if vm.diet_types and vm.diet_types|length > 0 %}
             {% set totals = namespace(value=0) %}
@@ -150,6 +151,7 @@
                             <button
                                 type="button"
                                 class="yp-button yp-button-secondary specialkost-edit-override js-open-diet-override"
+                                data-modal-target="#dietOverrideModal"
                                 data-department-id="{{ vm.department.id }}"
                                 data-diet-type-id="{{ dtid }}"
                                 data-diet-name="{{ t.name }}"
@@ -162,6 +164,66 @@
             <p class="ua-muted">Inga specialkosttyper finns på denna site – skapa under <a href="{{ url_for('ui.admin_specialkost_list') }}">Specialkost</a>.</p>
             {% endif %}
         </div>
+        </article>
+
+        <article class="app-shell__card">
+        <h2 class="app-shell__card-title">Serveringstillägg</h2>
+        <p class="yp-form-help">Återkommande tillägg per avdelning (t.ex. Mos, Sallad, Sås separat).</p>
+        <form id="service-addons-form" method="POST" action="{{ url_for('ui.admin_departments_edit_save_service_addons', dept_id=vm.department.id) }}" class="yp-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <table class="ua-table service-addon-table" id="service-addon-table">
+                <thead>
+                    <tr>
+                        <th>Tillägg</th>
+                        <th>Lunch</th>
+                        <th>Kväll</th>
+                        <th>Notering</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="service-addon-body">
+                    {% if vm.department_service_addons and vm.department_service_addons|length > 0 %}
+                        {% for row in vm.department_service_addons %}
+                        <tr class="service-addon-row">
+                            <td>
+                                <select name="service_addon_id[]" class="yp-input">
+                                    <option value="">Välj tillägg</option>
+                                    {% for opt in vm.service_addons_master %}
+                                    <option value="{{ opt.id }}" {% if opt.id|string == row.addon_id|string %}selected{% endif %}>{{ opt.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="...eller nytt namn">
+                            </td>
+                            <td><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value="{{ row.lunch_count if row.lunch_count is not none else '' }}"></td>
+                            <td><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value="{{ row.dinner_count if row.dinner_count is not none else '' }}"></td>
+                            <td><input type="text" name="service_addon_note[]" class="yp-input" value="{{ row.note or '' }}" placeholder="Valfri notering"></td>
+                            <td><button type="button" class="yp-button yp-button-secondary js-service-addon-remove">Ta bort</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr class="service-addon-row">
+                            <td>
+                                <select name="service_addon_id[]" class="yp-input">
+                                    <option value="">Välj tillägg</option>
+                                    {% for opt in vm.service_addons_master %}
+                                    <option value="{{ opt.id }}">{{ opt.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="...eller nytt namn">
+                            </td>
+                            <td><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value=""></td>
+                            <td><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value=""></td>
+                            <td><input type="text" name="service_addon_note[]" class="yp-input" value="" placeholder="Valfri notering"></td>
+                            <td><button type="button" class="yp-button yp-button-secondary js-service-addon-remove">Ta bort</button></td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+            <div class="service-addon-actions">
+                <button type="button" class="yp-button yp-button-secondary" id="service-addon-add-row">+ Lägg till rad</button>
+                <button type="submit" class="yp-button yp-button-primary">Spara serveringstillägg</button>
+            </div>
+        </form>
         </article>
     {% else %}
     <article class="app-shell__card">
@@ -331,7 +393,9 @@
         </form>
     </div>
 </dialog>
+{% endif %}
 
+{% if vm.mode == 'edit' and vm.department %}
 <dialog id="dietOverrideModal" class="ua-modal admin-diet-override-modal">
     <div class="ua-modal-inner admin-diet-override-modal__inner">
         <header class="ua-modal-header admin-diet-override-modal__header">
@@ -359,7 +423,7 @@
                 </tr>
                 {% endfor %}
             </table>
-            <p class="yp-form-help">Endast värden som avviker från grundvärdet sparas.</p>
+            <p class="yp-form-help">Endast värden som avviker från grundvärdet sparas. Boendeantal (totalt) ändras inte här.</p>
         </div>
         <footer class="ua-modal-footer admin-diet-override-modal__footer">
             <span class="ua-muted" id="dietOverrideStatus" aria-live="polite"></span>
@@ -631,4 +695,5 @@
 {{ super() }}
 <script src="{{ url_for('static', filename='js/admin_alt2.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_diet_overrides.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/admin_service_addons.js') }}" defer></script>
 {% endblock %}

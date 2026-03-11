@@ -362,6 +362,18 @@
   padding: 6px 8px;
 }
 
+.service-addon-table .service-addon-new {
+  margin-top: 6px;
+}
+
+.service-addon-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 720px) {
   .admin-alt2-modal__inner {
     width: min(720px, calc(100vw - 16px));
