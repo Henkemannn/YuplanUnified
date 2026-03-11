@@ -1,0 +1,103 @@
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Produktionslista{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="/static/css/kitchen_planering_print.css">
+{% endblock %}
+
+{% block content %}
+<div class="app-page">
+  <section class="app-shell__page-header">
+    <div>
+      <h1 class="app-shell__title">Produktionslista</h1>
+      <p class="app-shell__subtitle">{{ vm.site_name }} • {{ vm.item.date }} • {{ 'Lunch' if vm.item.meal_type == 'lunch' else 'Kvällsmat' }}</p>
+    </div>
+    <div class="app-shell__page-actions">
+      <a class="yp-button" href="{{ url_for('ui.ui_production_lists_index', site_id=vm.site_id) }}">Tillbaka</a>
+      <button type="button" class="yp-button yp-button-primary js-print-snapshot">Skriv ut</button>
+    </div>
+  </section>
+
+  <div id="snapshot-print-root" class="kp-print">
+    <div class="kp-print-sheet">
+      {% set p = vm.payload or {} %}
+      <div class="kp-print-header">
+        <div class="kp-print-title">Tillagningslista</div>
+        <div class="kp-print-chip-row">
+          <span class="kp-print-chip">Vecka {{ p.week or '—' }}</span>
+          <span class="kp-print-chip">{{ p.day_label or '—' }}</span>
+          <span class="kp-print-chip">{{ p.meal_label or '—' }}</span>
+        </div>
+      </div>
+
+      {% if p.normal and p.normal.rows %}
+      <div class="kp-print-section-title">Normalkost</div>
+      <div class="kp-print-grid">
+        <div class="kp-print-col">
+          <div class="kp-print-col-title">Alt 1 — Totalt {{ p.normal.alt1_total or 0 }}</div>
+          <div class="kp-print-dish">{{ p.dishes.alt1 if p.dishes else '—' }}</div>
+          <div class="kp-print-list">
+            {% for r in p.normal.rows %}
+              {% if (r.alt_choice or 'alt1') == 'alt1' %}
+              <div class="kp-print-row nk-row kp-zebra"><span class="kp-dept-name">{{ r.department_name }}</span><span class="count">{{ r.count }}</span></div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+        <div class="kp-print-col nk-alt2-card">
+          <div class="kp-print-col-title">Alt 2 — Totalt {{ p.normal.alt2_total or 0 }}</div>
+          <div class="kp-print-dish">{{ (p.dishes and p.dishes.alt2) or 'Ej planerad' }}</div>
+          <div class="kp-print-list">
+            {% for r in p.normal.rows %}
+              {% if (r.alt_choice or '') == 'alt2' %}
+              <div class="kp-print-row nk-row kp-zebra"><span class="kp-dept-name">{{ r.department_name }}</span><span class="count">{{ r.count }}</span></div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if p.special and p.special.worklist %}
+      <div class="kp-print-section-title">Specialkost</div>
+      <div class="kp-print-plan">
+        <div class="kp-print-plan-list">
+          <div class="kp-print-plan-pill">Alt1: {{ (p.dishes and p.dishes.alt1) or '—' }}</div>
+          {% if p.meal == 'lunch' %}
+          <div class="kp-print-plan-pill">Alt2: {{ (p.dishes and p.dishes.alt2) or 'Ej planerad' }}</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="kp-print-special-title">Vald specialkost</div>
+      {% for grp in p.special.worklist %}
+      <div class="kp-print-special-group sk-card">
+        <div class="kp-print-special-name">{{ grp.diet_type_name }} — Totalt {{ grp.total }}</div>
+        <div class="kp-print-list">
+          {% for r in grp.rows %}
+          <div class="kp-print-row sk-row kp-zebra"><span class="kp-dept-name">{{ r.department_name }}</span><span class="kp-altpill">{{ r.alt_label or 'Alt1' }}</span><span class="count">{{ r.count }}</span></div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if p.service_addon and p.service_addon.total_count %}
+      <div class="kp-print-section-title">Serveringstillägg</div>
+      <div class="kp-print-special-group sk-card">
+        <div class="kp-print-special-name">{{ p.service_addon.addon_name }} — Totalt {{ p.service_addon.total_count }}</div>
+        <div class="kp-print-list">
+          {% for dep in p.service_addon.departments or [] %}
+          <div class="kp-print-row sk-row kp-zebra"><span class="kp-dept-name">{{ dep.department_name }}{% if dep.note %} ({{ dep.note }}){% endif %}</span><span class="count">{{ dep.count }}</span></div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/production_lists_detail.js" defer></script>
+{% endblock %}

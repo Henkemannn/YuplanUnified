@@ -1,0 +1,47 @@
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Produktionslistor{% endblock %}
+
+{% block content %}
+<div class="app-page">
+  <section class="app-shell__page-header">
+    <div>
+      <h1 class="app-shell__title">Produktionslistor</h1>
+      {% if vm.site_name %}
+        <p class="app-shell__subtitle">{{ vm.site_name }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <article class="app-shell__card">
+    <div class="app-shell__card-body">
+      {% if vm.items and vm.items|length > 0 %}
+        <table class="grid-table">
+          <thead>
+            <tr>
+              <th>Skapad</th>
+              <th>Datum</th>
+              <th>Måltid</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for it in vm.items %}
+              <tr>
+                <td>{{ it.created_at }}</td>
+                <td>{{ it.date }}</td>
+                <td>{{ 'Lunch' if it.meal_type == 'lunch' else 'Kvällsmat' }}</td>
+                <td>
+                  <a class="yp-button" href="{{ url_for('ui.ui_production_lists_detail', list_id=it.id, site_id=vm.site_id) }}">Visa</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="empty-text">Inga sparade produktionslistor ännu.</p>
+      {% endif %}
+    </div>
+  </article>
+</div>
+{% endblock %}
