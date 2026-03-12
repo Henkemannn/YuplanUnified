@@ -1162,6 +1162,34 @@ class DietTypeDeleteBlockedError(Exception):
 class DietTypesRepo:
     """Repository for managing dietary types (specialkost), now scoped per site."""
 
+    def _name_exists(
+        self,
+        db,
+        *,
+        name: str,
+        site_id: str | None,
+        exclude_id: int | None = None,
+    ) -> bool:
+        params: dict[str, object] = {"name": str(name).strip()}
+        if site_id:
+            sql = (
+                "SELECT 1 FROM dietary_types "
+                "WHERE lower(trim(name)) = lower(trim(:name)) "
+                "AND site_id = :site_id"
+            )
+            params["site_id"] = str(site_id)
+        else:
+            sql = (
+                "SELECT 1 FROM dietary_types "
+                "WHERE lower(trim(name)) = lower(trim(:name)) "
+                "AND (site_id IS NULL OR site_id='')"
+            )
+        if exclude_id is not None:
+            sql += " AND id <> :exclude_id"
+            params["exclude_id"] = int(exclude_id)
+        row = db.execute(text(sql), params).fetchone()
+        return row is not None
+
     def _ensure_table(self, db) -> None:
         if _is_sqlite(db):
             db.execute(
@@ -1285,6 +1313,7 @@ class DietTypesRepo:
             default_select = bool(args[1]) if len(args) >= 2 else default_select
         if not name:
             raise ValueError("name is required")
+        name = str(name).strip()
         # Hard guard: name must not be purely numeric
         try:
             if str(name).strip().isdigit():
@@ -1294,6 +1323,8 @@ class DietTypesRepo:
         db = get_session()
         try:
             self._ensure_table(db)
+            if self._name_exists(db, name=name, site_id=(str(site_id) if site_id else None)):
+                raise ValueError("duplicate_name")
             if _is_sqlite(db):
                 cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
                 if "tenant_id" in cols:
@@ -1343,13 +1374,28 @@ class DietTypesRepo:
         """Update dietary type name and/or default_select. TODO: Add ETag concurrency."""
         db = get_session()
         try:
+            current = db.execute(
+                text("SELECT site_id FROM dietary_types WHERE id=:id"),
+                {"id": int(diet_type_id)},
+            ).fetchone()
+            if not current:
+                return
+            current_site_id = str(current[0]) if current[0] is not None else None
             sets = []
             params: dict = {"id": diet_type_id}
             if name is not None:
-                if str(name).strip().isdigit():
+                clean_name = str(name).strip()
+                if clean_name.isdigit():
                     raise ValueError("invalid name: purely numeric")
+                if self._name_exists(
+                    db,
+                    name=clean_name,
+                    site_id=current_site_id,
+                    exclude_id=int(diet_type_id),
+                ):
+                    raise ValueError("duplicate_name")
                 sets.append("name=:name")
-                params["name"] = name
+                params["name"] = clean_name
             if default_select is not None:
                 sets.append("default_select=:ds")
                 params["ds"] = 1 if default_select else 0

@@ -3769,7 +3769,13 @@ def admin_specialkost_create():
     site_id = session.get("site_id")
     if not site_id:
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_new_form")))
-    DietTypesRepo().create(site_id=site_id, name=name, default_select=default_select)
+    try:
+        DietTypesRepo().create(site_id=site_id, name=name, default_select=default_select)
+    except ValueError as exc:
+        if str(exc) == "duplicate_name":
+            flash("Kosttyp med samma namn finns redan.", "error")
+            return redirect(url_for("ui.admin_specialkost_new_form"))
+        raise
     flash("Kosttyp skapad.", "success")
     return redirect(url_for("ui.admin_specialkost_list"))
 
@@ -3808,7 +3814,13 @@ def admin_specialkost_update(kosttyp_id: int):
     if not item or str(item.get("site_id") or "") != str(active_site_id):
         from flask import abort
         abort(404)
-    DietTypesRepo().update(kosttyp_id, name=name, default_select=default_select)
+    try:
+        DietTypesRepo().update(kosttyp_id, name=name, default_select=default_select)
+    except ValueError as exc:
+        if str(exc) == "duplicate_name":
+            flash("Kosttyp med samma namn finns redan.", "error")
+            return redirect(url_for("ui.admin_specialkost_edit_form", kosttyp_id=kosttyp_id))
+        raise
     flash("Kosttyp uppdaterad.", "success")
     return redirect(url_for("ui.admin_specialkost_list"))
 

@@ -105,6 +105,32 @@ def test_admin_specialkost_new_with_default_select(client_admin: FlaskClient):
     # Would need to query DB or check edit form to verify default_select=1
 
 
+def test_admin_specialkost_new_rejects_case_insensitive_duplicate(client_admin: FlaskClient):
+    """Create route should block duplicate names regardless of casing."""
+    response = client_admin.post(
+        "/ui/admin/specialkost/new",
+        data={"name": "vegetarisk", "default_select": ""},
+        headers=ADMIN_HEADERS,
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    html = response.data.decode()
+    assert "Kosttyp med samma namn finns redan." in html
+
+
+def test_admin_specialkost_edit_rejects_case_insensitive_duplicate(client_admin: FlaskClient):
+    """Update route should block duplicate names regardless of casing."""
+    response = client_admin.post(
+        "/ui/admin/specialkost/2/edit",
+        data={"name": "VEGETARISK", "default_select": ""},
+        headers=ADMIN_HEADERS,
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    html = response.data.decode()
+    assert "Kosttyp med samma namn finns redan." in html
+
+
 def test_admin_specialkost_edit_updates_diet_type(client_admin: FlaskClient):
     """Edit route updates dietary type name and formarkeras status."""
     # Get ID of "Glutenfri" (id=2 from seed)
@@ -136,12 +162,12 @@ def test_admin_specialkost_edit_updates_diet_type(client_admin: FlaskClient):
 
 def test_admin_specialkost_delete_removes_diet_type(client_admin: FlaskClient):
     """Delete route removes dietary type and shows confirmation."""
-    # Verify delete trigger uses direct confirm fallback (no JS modal dependency)
+    # Verify delete trigger uses CSP-safe confirmation hook
     list_response = client_admin.get("/ui/admin/specialkost", headers=ADMIN_HEADERS)
     assert list_response.status_code == 200
     list_html = list_response.data.decode()
     assert "specialkost-delete-trigger" in list_html
-    assert "return confirm(" in list_html
+    assert "data-specialkost-delete-form=\"1\"" in list_html
 
     # Delete "Vegetarisk" (id=1)
     diet_id = 1

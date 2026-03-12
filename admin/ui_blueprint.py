@@ -485,6 +485,11 @@ def admin_specialkost_new() -> str:  # type: ignore[override]
         try:
             repo.create(tenant_id=1, name=name, default_select=default_select)
             flash(f"Kosttyp '{name}' skapad.", "success")
+        except ValueError as e:
+            if str(e) == "duplicate_name":
+                flash("Kosttyp med samma namn finns redan.", "danger")
+            else:
+                flash(f"Fel vid skapande: {e}", "danger")
         except Exception as e:
             flash(f"Fel vid skapande: {e}", "danger")
         
@@ -511,6 +516,11 @@ def admin_specialkost_edit(kosttyp_id: int) -> str:  # type: ignore[override]
         try:
             repo.update(kosttyp_id, name=new_name, default_select=new_default_select)
             flash(f"Kosttyp '{new_name}' uppdaterad.", "success")
+        except ValueError as e:
+            if str(e) == "duplicate_name":
+                flash("Kosttyp med samma namn finns redan.", "danger")
+            else:
+                flash(f"Fel vid uppdatering: {e}", "danger")
         except Exception as e:
             flash(f"Fel vid uppdatering: {e}", "danger")
         

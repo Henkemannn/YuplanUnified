@@ -48,13 +48,13 @@
                             </div>
                             <div class="app-shell__list-actions admin-specialkost-list__actions">
                                 <a class="yp-btn yp-btn-secondary admin-specialkost-list__edit-btn" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}">Redigera</a>
-                                <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" onsubmit="return confirm('Varning: Om kosttypen har kopplingar till avdelningar tas de bort. Vill du fortsätta?')">
+                                <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" data-specialkost-delete-form="1" data-confirm-message="Varning: Om kosttypen har kopplingar till avdelningar tas de bort. Vill du fortsätta?">
                                     {{ csrf_token_input()|safe }}
                                     <button
                                         type="submit"
                                         class="app-shell__icon-btn app-shell__icon-btn--danger"
                                         data-testid="specialkost-delete-trigger"
-                                        onclick="return confirm('Varning: Om kosttypen har kopplingar till avdelningar tas de bort. Vill du fortsätta?')"
+                                        data-specialkost-delete-trigger="1"
                                         aria-label="Ta bort kosttyp {{ row.name }}"
                                         title="Ta bort"
                                     >🗑️</button>
@@ -73,4 +73,9 @@
             </article>
         </section>
     </div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='js/specialkost_delete_confirm.js') }}" defer></script>
 {% endblock %}
