@@ -90,6 +90,83 @@ def test_production_list_renders(app_session, client_admin):
     assert "Serveringstillägg" in html
 
 
+def test_production_list_shows_production_group_with_subtypes_and_departments(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Prod list grouped site {uuid.uuid4()}")
+    _set_active_site(client_admin, site["id"])
+
+    item = ProductionListsRepo().create_snapshot(
+        site_id=site["id"],
+        date_iso="2026-02-13",
+        meal_type="lunch",
+        payload={
+            "week": 7,
+            "day_label": "Fre",
+            "meal": "lunch",
+            "meal_label": "Lunch",
+            "dishes": {"alt1": "Köttfärssås", "alt2": "Fisk"},
+            "normal": {
+                "rows": [
+                    {"department_name": "Lindgården A", "alt_choice": "alt1", "count": 12},
+                ],
+                "alt1_total": 12,
+                "alt2_total": 0,
+            },
+            "special": {
+                "worklist": [
+                    {
+                        "diet_type_id": "production:timbal",
+                        "production_group_name": "Timbal",
+                        "diet_type_name": "Timbal totalt",
+                        "total": 12,
+                        "subtype_breakdown": [
+                            {"diet_type_id": "101", "diet_type_name": "Timbal", "count": 11},
+                            {"diet_type_id": "102", "diet_type_name": "Timbal-Fisk", "count": 1},
+                        ],
+                        "department_breakdown": [
+                            {
+                                "department_id": "dep-1",
+                                "department_name": "Lindgården A",
+                                "total": 2,
+                                "alt_label": "Alt1",
+                                "subtype_counts": [
+                                    {"diet_type_name": "Timbal", "count": 2},
+                                ],
+                            },
+                            {
+                                "department_id": "dep-2",
+                                "department_name": "Boende A",
+                                "total": 1,
+                                "alt_label": "Alt1",
+                                "subtype_counts": [
+                                    {"diet_type_name": "Timbal-Fisk", "count": 1},
+                                ],
+                            },
+                        ],
+                        "rows": [
+                            {"department_name": "Lindgården A", "count": 2, "alt_label": "Alt1"},
+                            {"department_name": "Boende A", "count": 1, "alt_label": "Alt1"},
+                        ],
+                    }
+                ]
+            },
+        },
+    )
+
+    rv = client_admin.get(f"/ui/production-lists/{item['id']}?site_id={site['id']}", headers=_h())
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Timbal — Totalt 12" in html
+    assert "Timbal: 11 st" in html
+    assert "Timbal-Fisk: 1 st" in html
+    assert "Till avdelningar" in html
+    assert "Lindgården A" in html
+    assert "Boende A" in html
+    assert "kp-print-variant-list" in html
+    assert "kp-print-subheading" in html
+    assert "kp-print-row-subtypes" in html
+    assert "Textur totalt" not in html
+
+
 def test_old_lists_cleanup(app_session):
     site, _ = SitesRepo().create_site(f"Prod list cleanup site {uuid.uuid4()}")
     repo = ProductionListsRepo()

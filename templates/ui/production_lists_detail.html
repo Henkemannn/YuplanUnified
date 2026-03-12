@@ -72,10 +72,31 @@
       <div class="kp-print-special-title">Vald specialkost</div>
       {% for grp in p.special.worklist %}
       <div class="kp-print-special-group sk-card">
-        <div class="kp-print-special-name">{{ grp.diet_type_name }} — Totalt {{ grp.total }}</div>
+        {% set grp_name = grp.production_group_name or grp.diet_type_name %}
+        <div class="kp-print-special-name">{{ grp_name }} — Totalt {{ grp.total }}</div>
+        {% if grp.subtype_breakdown %}
+        <div class="kp-print-variant-list">
+          {% for sub in grp.subtype_breakdown %}
+          <div class="kp-print-variant-row">{{ sub.diet_type_name }}: {{ sub.count }} st</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="kp-print-subheading">Till avdelningar</div>
         <div class="kp-print-list">
-          {% for r in grp.rows %}
-          <div class="kp-print-row sk-row kp-zebra"><span class="kp-dept-name">{{ r.department_name }}</span><span class="kp-altpill">{{ r.alt_label or 'Alt1' }}</span><span class="count">{{ r.count }}</span></div>
+          {% set dept_rows = grp.department_breakdown or grp.rows or [] %}
+          {% for r in dept_rows %}
+          <div class="kp-print-row sk-row kp-zebra">
+            <span class="kp-dept-name">{{ r.department_name }}</span>
+            <span class="kp-altpill">{{ r.alt_label or 'Alt1' }}</span>
+            <span class="count">{{ r.total if r.total is defined else r.count }}</span>
+            {% if r.subtype_counts %}
+            <span class="kp-print-row-subtypes">
+              {% for sub in r.subtype_counts %}
+                {{ sub.diet_type_name }}: {{ sub.count }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            </span>
+            {% endif %}
+          </div>
           {% endfor %}
         </div>
       </div>

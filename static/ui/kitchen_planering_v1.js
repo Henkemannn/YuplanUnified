@@ -64,6 +64,154 @@
     return fam || 'Övrigt';
   }
 
+  function deriveProductionGroupName(dietName){
+    var clean = String(dietName || '').trim();
+    if(!clean){ return ''; }
+    var low = clean.toLowerCase();
+    if(low.indexOf('timbal') !== -1){ return 'Timbal'; }
+    if(low.indexOf('grovpat') !== -1 || low.indexOf('grov pat') !== -1){ return 'Grovpaté'; }
+    var lead = String((clean.split(/[-–(]/)[0] || '')).trim();
+    if(lead && lead.length >= 4 && lead.length < clean.length){
+      return lead;
+    }
+    return clean;
+  }
+
+  function buildProductionSpecialGroups(selectedIds){
+    var selectedSet = new Set((selectedIds || []).map(String));
+    if(selectedSet.size === 0 || !specialPerDept || specialPerDept.length === 0){
+      return [];
+    }
+
+    var byDiet = {};
+    var totalsByDiet = {};
+    for(var i=0; i<specialPerDept.length; i++){
+      var dep = specialPerDept[i] || {};
+      var depItems = dep.items || [];
+      for(var j=0; j<depItems.length; j++){
+        var row = depItems[j] || {};
+        var dietId = String(row.diet_type_id || '');
+        if(!dietId || !selectedSet.has(dietId) || !specialById[dietId]){ continue; }
+        if(!byDiet[dietId]){ byDiet[dietId] = []; }
+        var cnt = parseInt(row.count || 0, 10) || 0;
+        byDiet[dietId].push({
+          department_id: String(dep.department_id || ''),
+          department_name: String(dep.department_name || ''),
+          count: cnt
+        });
+        totalsByDiet[dietId] = (totalsByDiet[dietId] || 0) + cnt;
+      }
+    }
+
+    var dietIds = Object.keys(byDiet).sort(function(a, b){
+      var ta = totalsByDiet[a] || 0;
+      var tb = totalsByDiet[b] || 0;
+      if(tb !== ta){ return tb - ta; }
+      var na = (specialById[a] && specialById[a].name) || a;
+      var nb = (specialById[b] && specialById[b].name) || b;
+      return String(na).localeCompare(String(nb));
+    });
+
+    var groupsByKey = {};
+    var groupOrder = [];
+    for(var g=0; g<dietIds.length; g++){
+      var did = dietIds[g];
+      var variantName = (specialById[did] && specialById[did].name) || did;
+      var productionGroupName = deriveProductionGroupName(variantName) || variantName;
+      var groupKey = 'production:' + String(productionGroupName).toLowerCase();
+      if(!groupsByKey[groupKey]){
+        groupsByKey[groupKey] = {
+          group_id: groupKey,
+          production_group_name: productionGroupName,
+          group_title: productionGroupName + ' totalt',
+          total: 0,
+          variants: [],
+          departments: {}
+        };
+        groupOrder.push(groupKey);
+      }
+      var rows = byDiet[did] || [];
+      var variantTotal = totalsByDiet[did] || 0;
+      groupsByKey[groupKey].total += variantTotal;
+      groupsByKey[groupKey].variants.push({
+        diet_type_id: did,
+        diet_type_name: variantName,
+        count: variantTotal,
+        rows: rows
+      });
+      for(var r=0; r<rows.length; r++){
+        var depRow = rows[r] || {};
+        var depKey = String(depRow.department_id || '');
+        if(!groupsByKey[groupKey].departments[depKey]){
+          groupsByKey[groupKey].departments[depKey] = {
+            department_id: depKey,
+            department_name: String(depRow.department_name || ''),
+            total: 0,
+            subtype_counts: {}
+          };
+        }
+        groupsByKey[groupKey].departments[depKey].total += (parseInt(depRow.count || 0, 10) || 0);
+        groupsByKey[groupKey].departments[depKey].subtype_counts[variantName] =
+          (groupsByKey[groupKey].departments[depKey].subtype_counts[variantName] || 0) + (parseInt(depRow.count || 0, 10) || 0);
+      }
+    }
+
+    var groups = groupOrder.map(function(key){
+      var groupDef = groupsByKey[key];
+      var variants = (groupDef.variants || []).slice().sort(function(a, b){
+        if((b.count || 0) !== (a.count || 0)){ return (b.count || 0) - (a.count || 0); }
+        return String(a.diet_type_name || '').localeCompare(String(b.diet_type_name || ''));
+      });
+      var departments = Object.keys(groupDef.departments || {}).map(function(depKey){
+        var dep = groupDef.departments[depKey] || {};
+        var subtypeCounts = Object.keys(dep.subtype_counts || {}).map(function(name){
+          return {
+            diet_type_name: name,
+            count: parseInt(dep.subtype_counts[name] || 0, 10) || 0
+          };
+        }).sort(function(a, b){
+          if((b.count || 0) !== (a.count || 0)){ return (b.count || 0) - (a.count || 0); }
+          return String(a.diet_type_name || '').localeCompare(String(b.diet_type_name || ''));
+        });
+        return {
+          department_id: String(dep.department_id || ''),
+          department_name: String(dep.department_name || ''),
+          total: parseInt(dep.total || 0, 10) || 0,
+          subtype_counts: subtypeCounts
+        };
+      }).sort(function(a, b){
+        return String(a.department_name || '').localeCompare(String(b.department_name || ''));
+      });
+      return {
+        group_id: groupDef.group_id,
+        production_group_name: groupDef.production_group_name,
+        group_title: groupDef.group_title,
+        total: parseInt(groupDef.total || 0, 10) || 0,
+        subtype_breakdown: variants.map(function(v){
+          return {
+            diet_type_id: String(v.diet_type_id || ''),
+            diet_type_name: String(v.diet_type_name || ''),
+            count: parseInt(v.count || 0, 10) || 0
+          };
+        }),
+        department_breakdown: departments,
+        rows: departments.map(function(dep){
+          return {
+            department_id: dep.department_id,
+            department_name: dep.department_name,
+            count: dep.total
+          };
+        })
+      };
+    });
+
+    groups.sort(function(a, b){
+      if((b.total || 0) !== (a.total || 0)){ return (b.total || 0) - (a.total || 0); }
+      return String(a.production_group_name || '').localeCompare(String(b.production_group_name || ''));
+    });
+    return groups;
+  }
+
   function setSpecialChipState(dietId, isActive){
     qsa('.specialkost-view .js-special-chip[data-diet-id="' + String(dietId || '') + '"]').forEach(function(btn){
       if(isActive){
@@ -457,35 +605,33 @@
       return String(na).localeCompare(String(nb));
     });
 
-    var grouped = {};
-    var groupOrder = [];
-    for(var g=0; g<dietIds.length; g++){
-      var dietId = dietIds[g];
-      var dietName = (specialById[dietId] && specialById[dietId].name) || dietId;
-      var family = getDietFamily(specialById[dietId] || { name: dietName });
-      var groupKey = family ? ('family:' + family) : ('diet:' + dietId);
-      if(!grouped[groupKey]){
-        grouped[groupKey] = {
-          key: groupKey,
-          family: family,
-          title: family ? (getDietFamilyLabel(family) + ' totalt') : dietName,
-          total: 0,
-          rows: [],
-          variants: {}
-        };
-        groupOrder.push(groupKey);
-      }
-      grouped[groupKey].total += (totalsByDiet[dietId] || 0);
-      grouped[groupKey].rows = grouped[groupKey].rows.concat(byDiet[dietId] || []);
-      grouped[groupKey].variants[dietName] = (grouped[groupKey].variants[dietName] || 0) + (totalsByDiet[dietId] || 0);
-    }
-
-    lastSpecialWorklist = groupOrder.map(function(groupKey){
-      var groupDef = grouped[groupKey];
+    var groups = buildProductionSpecialGroups(selected);
+    lastSpecialWorklist = groups.map(function(groupDef){
       return {
-        diet_type_id: groupKey,
-        diet_type_name: groupDef.title,
-        total: groupDef.total || 0,
+        diet_type_id: String(groupDef.group_id || ''),
+        production_group_name: String(groupDef.production_group_name || ''),
+        diet_type_name: String(groupDef.group_title || ''),
+        total: parseInt(groupDef.total || 0, 10) || 0,
+        subtype_breakdown: (groupDef.subtype_breakdown || []).map(function(sub){
+          return {
+            diet_type_id: String(sub.diet_type_id || ''),
+            diet_type_name: String(sub.diet_type_name || ''),
+            count: parseInt(sub.count || 0, 10) || 0
+          };
+        }),
+        department_breakdown: (groupDef.department_breakdown || []).map(function(dep){
+          return {
+            department_id: String(dep.department_id || ''),
+            department_name: String(dep.department_name || ''),
+            total: parseInt(dep.total || 0, 10) || 0,
+            subtype_counts: (dep.subtype_counts || []).map(function(sub){
+              return {
+                diet_type_name: String(sub.diet_type_name || ''),
+                count: parseInt(sub.count || 0, 10) || 0
+              };
+            })
+          };
+        }),
         rows: (groupDef.rows || []).map(function(r){
           return {
             department_id: r.department_id,
@@ -496,35 +642,42 @@
       };
     });
 
-    for(var d=0; d<groupOrder.length; d++){
-      var groupDef = grouped[groupOrder[d]];
+    for(var d=0; d<groups.length; d++){
+      var groupDef = groups[d] || {};
       var group = document.createElement('div');
       group.className = 'kp-worklist-group';
-      group.setAttribute('data-diet-id', groupDef.key);
+      group.setAttribute('data-diet-id', String(groupDef.group_id || ''));
       var title = document.createElement('div');
       title.className = 'kp-worklist-title';
-      title.textContent = groupDef.title + ' ';
+      title.textContent = String(groupDef.group_title || '') + ' ';
       var totalSpan = document.createElement('span');
       totalSpan.className = 'kp-worklist-total';
       totalSpan.textContent = String(groupDef.total || 0);
       title.appendChild(totalSpan);
       group.appendChild(title);
-      if(groupDef.family){
-        var breakdown = document.createElement('div');
-        breakdown.className = 'kp-family-breakdown';
-        Object.keys(groupDef.variants)
-          .sort(function(a, b){ return String(a).localeCompare(String(b)); })
-          .forEach(function(variantName){
-            var pill = document.createElement('span');
-            pill.className = 'kp-family-pill';
-            pill.textContent = variantName + ': ' + String(groupDef.variants[variantName]);
-            breakdown.appendChild(pill);
-          });
-        group.appendChild(breakdown);
+
+      var subtypes = groupDef.subtype_breakdown || [];
+      if(subtypes.length > 0){
+        var subtypeWrap = document.createElement('div');
+        subtypeWrap.className = 'kp-production-subtypes';
+        for(var s=0; s<subtypes.length; s++){
+          var sub = subtypes[s] || {};
+          var subRow = document.createElement('div');
+          subRow.className = 'kp-production-subtype-row';
+          subRow.textContent = String(sub.diet_type_name || '') + ': ' + String(sub.count || 0) + ' st';
+          subtypeWrap.appendChild(subRow);
+        }
+        group.appendChild(subtypeWrap);
       }
+
+      var depHeading = document.createElement('div');
+      depHeading.className = 'kp-worklist-subheading';
+      depHeading.textContent = 'Till avdelningar';
+      group.appendChild(depHeading);
+
       var rowsWrap = document.createElement('div');
       rowsWrap.className = 'kp-worklist-rows';
-      var rows = groupDef.rows || [];
+      var rows = groupDef.department_breakdown || groupDef.rows || [];
       for(var r=0; r<rows.length; r++){
         var row = rows[r];
         var rowEl = document.createElement('div');
@@ -535,9 +688,17 @@
         nameEl.textContent = row.department_name;
         var countEl = document.createElement('span');
         countEl.className = 'kp-row-count';
-        countEl.textContent = String(row.count);
+        countEl.textContent = String((row.total != null ? row.total : row.count) || 0);
         rowEl.appendChild(nameEl);
         rowEl.appendChild(countEl);
+        if(row.subtype_counts && row.subtype_counts.length){
+          var subtypeText = document.createElement('span');
+          subtypeText.className = 'kp-row-subtypes';
+          subtypeText.textContent = row.subtype_counts.map(function(sc){
+            return String(sc.diet_type_name || '') + ' ' + String(sc.count || 0);
+          }).join(', ');
+          rowEl.appendChild(subtypeText);
+        }
         if(isAlt2){
           var altBadge = document.createElement('span');
           altBadge.className = 'kp-row-alt2';
@@ -814,35 +975,44 @@
   }
 
   function buildSpecialWorklistFromSummary(){
-    var byDiet = {};
-    for(var p=0; p<specialPerDept.length; p++){
-      var dep = specialPerDept[p];
-      for(var j=0; j<dep.items.length; j++){
-        var row = dep.items[j];
-        var dietId = String(row.diet_type_id);
-        if(!specialById[dietId]){ continue; }
-        if(!byDiet[dietId]){
-          byDiet[dietId] = {
-            diet_type_id: dietId,
-            diet_type_name: specialById[dietId].name,
-            total: 0,
-            rows: []
+    var allIds = Object.keys(specialById || {});
+    if(allIds.length === 0){ return []; }
+    var groups = buildProductionSpecialGroups(allIds);
+    return groups.map(function(groupDef){
+      return {
+        diet_type_id: String(groupDef.group_id || ''),
+        production_group_name: String(groupDef.production_group_name || ''),
+        diet_type_name: String(groupDef.group_title || ''),
+        total: parseInt(groupDef.total || 0, 10) || 0,
+        subtype_breakdown: (groupDef.subtype_breakdown || []).map(function(sub){
+          return {
+            diet_type_id: String(sub.diet_type_id || ''),
+            diet_type_name: String(sub.diet_type_name || ''),
+            count: parseInt(sub.count || 0, 10) || 0
           };
-        }
-        byDiet[dietId].total += row.count;
-        byDiet[dietId].rows.push({
-          department_id: dep.department_id,
-          department_name: dep.department_name,
-          count: row.count
-        });
-      }
-    }
-    var list = Object.keys(byDiet).map(function(id){ return byDiet[id]; });
-    list.sort(function(a, b){
-      if(b.total !== a.total){ return b.total - a.total; }
-      return String(a.diet_type_name).localeCompare(String(b.diet_type_name));
+        }),
+        department_breakdown: (groupDef.department_breakdown || []).map(function(dep){
+          return {
+            department_id: String(dep.department_id || ''),
+            department_name: String(dep.department_name || ''),
+            total: parseInt(dep.total || 0, 10) || 0,
+            subtype_counts: (dep.subtype_counts || []).map(function(sub){
+              return {
+                diet_type_name: String(sub.diet_type_name || ''),
+                count: parseInt(sub.count || 0, 10) || 0
+              };
+            })
+          };
+        }),
+        rows: (groupDef.rows || []).map(function(r){
+          return {
+            department_id: r.department_id,
+            department_name: r.department_name,
+            count: r.count
+          };
+        })
+      };
     });
-    return list;
   }
 
   function renderPrintContainer(){
@@ -1060,16 +1230,45 @@
           title.className = 'kp-print-special-name';
           title.textContent = block.diet_type_name + ' — Totalt ' + (block.total || 0);
           group.appendChild(title);
+
+          var subtypeBreakdown = block.subtype_breakdown || [];
+          if(subtypeBreakdown.length > 0){
+            var variantWrap = document.createElement('div');
+            variantWrap.className = 'kp-print-variant-list';
+            for(var v=0; v<subtypeBreakdown.length; v++){
+              var variant = subtypeBreakdown[v] || {};
+              var variantRow = document.createElement('div');
+              variantRow.className = 'kp-print-variant-row';
+              variantRow.textContent = String(variant.diet_type_name || '') + ': ' + String(variant.count || 0) + ' st';
+              variantWrap.appendChild(variantRow);
+            }
+            group.appendChild(variantWrap);
+          }
+
+          var depSubhead = document.createElement('div');
+          depSubhead.className = 'kp-print-subheading';
+          depSubhead.textContent = 'Till avdelningar';
+          group.appendChild(depSubhead);
+
           var list = document.createElement('div');
           list.className = 'kp-print-list';
-          var rows = block.rows || [];
+          var rows = block.department_breakdown || block.rows || [];
           if(rows.length === 0){
             list.appendChild(buildPrintRow('sk-row kp-zebra', 'Inga avdelningar', 0, 'Alt1'));
           } else {
             for(var r=0; r<rows.length; r++){
               var item = rows[r];
               var isAlt2 = (meal === 'lunch' && alt2Set.has(String(item.department_id)));
-              list.appendChild(buildPrintRow('sk-row kp-zebra', item.department_name, item.count, isAlt2 ? 'Alt2' : 'Alt1'));
+              var rowEl = buildPrintRow('sk-row kp-zebra', item.department_name, (item.total != null ? item.total : item.count), isAlt2 ? 'Alt2' : 'Alt1');
+              if(item.subtype_counts && item.subtype_counts.length){
+                var detail = document.createElement('span');
+                detail.className = 'kp-print-row-subtypes';
+                detail.textContent = item.subtype_counts.map(function(sc){
+                  return String(sc.diet_type_name || '') + ': ' + String(sc.count || 0);
+                }).join(', ');
+                rowEl.appendChild(detail);
+              }
+              list.appendChild(rowEl);
             }
           }
           group.appendChild(list);
@@ -1703,10 +1902,35 @@
           alt_label: isAlt2 ? 'Alt2' : 'Alt1'
         };
       });
+      var subtypeBreakdown = (group.subtype_breakdown || []).map(function(sub){
+        return {
+          diet_type_id: String(sub.diet_type_id || ''),
+          diet_type_name: String(sub.diet_type_name || ''),
+          count: parseInt(sub.count || 0, 10) || 0
+        };
+      });
+      var deptBreakdown = (group.department_breakdown || []).map(function(dep){
+        var isAlt2 = (meal === 'lunch' && alt2Set.has(String(dep.department_id || '')));
+        return {
+          department_id: String(dep.department_id || ''),
+          department_name: String(dep.department_name || ''),
+          total: parseInt(dep.total || 0, 10) || 0,
+          alt_label: isAlt2 ? 'Alt2' : 'Alt1',
+          subtype_counts: (dep.subtype_counts || []).map(function(sub){
+            return {
+              diet_type_name: String(sub.diet_type_name || ''),
+              count: parseInt(sub.count || 0, 10) || 0
+            };
+          })
+        };
+      });
       return {
         diet_type_id: String(group.diet_type_id || ''),
+        production_group_name: String(group.production_group_name || ''),
         diet_type_name: String(group.diet_type_name || ''),
         total: parseInt(group.total || 0, 10) || 0,
+        subtype_breakdown: subtypeBreakdown,
+        department_breakdown: deptBreakdown,
         rows: rows
       };
     });
