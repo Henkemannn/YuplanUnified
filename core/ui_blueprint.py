@@ -3748,43 +3748,41 @@ def admin_specialkost_list():
     dep_counts: dict[str, int] = {}
     db = get_session()
     try:
-        ddd_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
-        if ddd_cols and {"department_id", "diet_type_id"}.issubset(ddd_cols):
-            dep_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('departments')")).fetchall()}
-            if dep_cols and {"id", "site_id"}.issubset(dep_cols):
+        dept_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('departments')")).fetchall()}
+        dept_ids: list[str] = []
+        if dept_cols and {"id", "site_id"}.issubset(dept_cols):
+            drows = db.execute(
+                text("SELECT id FROM departments WHERE site_id=:s"),
+                {"s": str(site_id)},
+            ).fetchall()
+            dept_ids = [str(r[0]) for r in drows if r and r[0] is not None]
+        if dept_ids:
+            ddd_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
+            if ddd_cols and {"department_id", "diet_type_id"}.issubset(ddd_cols):
+                placeholders = ", ".join(f":dep_{i}" for i in range(len(dept_ids)))
+                params = {f"dep_{i}": dept_ids[i] for i in range(len(dept_ids))}
                 rows = db.execute(
                     text(
-                        """
-                        SELECT CAST(ddd.diet_type_id AS TEXT) AS diet_type_id,
-                               COUNT(DISTINCT ddd.department_id) AS dept_count
-                        FROM department_diet_defaults ddd
-                        JOIN departments d ON d.id = ddd.department_id
-                        WHERE d.site_id = :site_id
-                        GROUP BY CAST(ddd.diet_type_id AS TEXT)
-                        """
-                    ),
-                    {"site_id": str(site_id)},
-                ).fetchall()
-            else:
-                rows = db.execute(
-                    text(
-                        """
+                        f"""
                         SELECT CAST(diet_type_id AS TEXT) AS diet_type_id,
                                COUNT(DISTINCT department_id) AS dept_count
                         FROM department_diet_defaults
+                        WHERE CAST(department_id AS TEXT) IN ({placeholders})
                         GROUP BY CAST(diet_type_id AS TEXT)
                         """
-                    )
+                    ),
+                    params,
                 ).fetchall()
-            dep_counts = {str(r[0]): int(r[1] or 0) for r in rows if r and r[0] is not None}
+                dep_counts = {str(r[0]).strip(): int(r[1] or 0) for r in rows if r and r[0] is not None}
     except Exception:
         dep_counts = {}
     finally:
         db.close()
 
     for item in items:
-        did = str(item.get("id") or "")
-        item["department_links"] = int(dep_counts.get(did, 0))
+        did = str(item.get("id") or "").strip()
+        name_key = str(item.get("name") or "").strip()
+        item["department_links"] = int(dep_counts.get(did, 0) or dep_counts.get(name_key, 0) or 0)
 
     vm = {"diet_types": items, "user_role": role, "site_id": site_id}
     return render_template("ui/unified_admin_specialkost_list.html", vm=vm, nav_context="admin")

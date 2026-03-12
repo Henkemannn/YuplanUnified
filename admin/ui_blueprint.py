@@ -468,27 +468,42 @@ def admin_specialkost_list() -> str:  # type: ignore[override]
     dep_counts: dict[str, int] = {}
     db = get_session()
     try:
-        ddd_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
-        if ddd_cols and {"department_id", "diet_type_id"}.issubset(ddd_cols):
-            rows = db.execute(
-                text(
-                    """
-                    SELECT CAST(diet_type_id AS TEXT) AS diet_type_id,
-                           COUNT(DISTINCT department_id) AS dept_count
-                    FROM department_diet_defaults
-                    GROUP BY CAST(diet_type_id AS TEXT)
-                    """
-                )
+        active_site = session.get("site_id")
+        dept_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('departments')")).fetchall()}
+        dept_ids: list[str] = []
+        if active_site and dept_cols and {"id", "site_id"}.issubset(dept_cols):
+            drows = db.execute(
+                text("SELECT id FROM departments WHERE site_id=:s"),
+                {"s": str(active_site)},
             ).fetchall()
-            dep_counts = {str(r[0]): int(r[1] or 0) for r in rows if r and r[0] is not None}
+            dept_ids = [str(r[0]) for r in drows if r and r[0] is not None]
+        if dept_ids:
+            ddd_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
+            if ddd_cols and {"department_id", "diet_type_id"}.issubset(ddd_cols):
+                placeholders = ", ".join(f":dep_{i}" for i in range(len(dept_ids)))
+                params = {f"dep_{i}": dept_ids[i] for i in range(len(dept_ids))}
+                rows = db.execute(
+                    text(
+                        f"""
+                        SELECT CAST(diet_type_id AS TEXT) AS diet_type_id,
+                               COUNT(DISTINCT department_id) AS dept_count
+                        FROM department_diet_defaults
+                        WHERE CAST(department_id AS TEXT) IN ({placeholders})
+                        GROUP BY CAST(diet_type_id AS TEXT)
+                        """
+                    ),
+                    params,
+                ).fetchall()
+                dep_counts = {str(r[0]).strip(): int(r[1] or 0) for r in rows if r and r[0] is not None}
     except Exception:
         dep_counts = {}
     finally:
         db.close()
 
     for item in diet_types:
-        did = str(item.get("id") or "")
-        item["department_links"] = int(dep_counts.get(did, 0))
+        did = str(item.get("id") or "").strip()
+        name_key = str(item.get("name") or "").strip()
+        item["department_links"] = int(dep_counts.get(did, 0) or dep_counts.get(name_key, 0) or 0)
 
     vm = {"diet_types": diet_types}
     return render_template("admin_specialkost.html", vm=vm)

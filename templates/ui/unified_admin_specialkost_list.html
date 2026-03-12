@@ -51,7 +51,7 @@
                             </div>
                             <div class="app-shell__list-actions admin-specialkost-list__actions">
                                 <a class="yp-btn yp-btn-secondary admin-specialkost-list__edit-btn" href="{{ url_for('ui.admin_specialkost_edit_form', kosttyp_id=row.id) }}">Redigera</a>
-                                <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" onsubmit="return confirm('{% if row.department_links %}Varning: Kosttypen används av {{ row.department_links }} avdelning{% if row.department_links != 1 %}ar{% endif %}. Kopplingarna tas bort. Fortsätt?{% else %}Ta bort kosttyp {{ row.name }}?{% endif %}');">
+                                <form method="POST" action="{{ url_for('ui.admin_specialkost_delete', kosttyp_id=row.id) }}" onsubmit="return confirm('{% if row.department_links %}Varning: Kosttypen används av {{ row.department_links }} avdelning{% if row.department_links != 1 %}ar{% endif %}. Kopplingarna tas bort. Fortsätt?{% else %}Varning: Om kosttypen har kopplingar till avdelningar tas de bort. Ta bort kosttyp {{ row.name }}?{% endif %}');">
                                     {{ csrf_token_input()|safe }}
                                     <button
                                         type="submit"
