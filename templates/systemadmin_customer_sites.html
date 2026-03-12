@@ -56,6 +56,66 @@
       </article>
 
       <article class="app-shell__card sa-card sa-card-wide">
+        <h2 class="app-shell__card-title">Admins per site</h2>
+        {% if vm.sites %}
+          {% for s in vm.sites %}
+            <div class="sa-subsection" style="margin-bottom:1.25rem; padding-bottom:1rem; border-bottom:1px solid #e6e6e6;">
+              <h3>{{ s.name }}</h3>
+              {% if s.admins %}
+                <div class="sa-table-wrap">
+                  <table class="sa-table">
+                    <thead>
+                      <tr><th>Namn</th><th>E-post</th><th>Status</th><th>Åtgärder</th></tr>
+                    </thead>
+                    <tbody>
+                      {% for a in s.admins %}
+                        <tr>
+                          <td>{{ a.full_name or '—' }}</td>
+                          <td>{{ a.email }}</td>
+                          <td>{% if a.is_active %}Aktiv{% else %}Inaktiv{% endif %}</td>
+                          <td>
+                            <form method="post" action="{{ url_for('admin_ui.systemadmin_site_admin_reset_password', tenant_id=vm.tenant_id, site_id=s.id, user_id=a.id) }}" style="display:inline-block; margin-right:.4rem;">
+                              {{ csrf_token_input()|safe }}
+                              <input type="password" name="new_password" placeholder="Nytt lösenord" required>
+                              <button class="sa-btn sa-btn-secondary sa-btn-small" type="submit">Sätt lösen</button>
+                            </form>
+                            <form method="post" action="{{ url_for('admin_ui.systemadmin_site_admin_delete', tenant_id=vm.tenant_id, site_id=s.id, user_id=a.id) }}" style="display:inline-block;" onsubmit="return confirm('Inaktivera admin {{ a.email }}?');">
+                              {{ csrf_token_input()|safe }}
+                              <button class="sa-btn sa-btn-secondary sa-btn-small" type="submit">Inaktivera</button>
+                            </form>
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <p class="app-shell__card-text">Inga admin-konton kopplade till denna site ännu.</p>
+              {% endif %}
+
+              <h4>Lägg till admin för {{ s.name }}</h4>
+              <form method="post" action="{{ url_for('admin_ui.systemadmin_site_admin_create', tenant_id=vm.tenant_id, site_id=s.id) }}" class="sa-form">
+                {{ csrf_token_input()|safe }}
+                <div class="admin-form-row">
+                  <label for="admin_full_name_{{ loop.index }}">Namn</label>
+                  <input type="text" id="admin_full_name_{{ loop.index }}" name="admin_full_name" placeholder="För- och efternamn">
+                </div>
+                <div class="admin-form-row">
+                  <label for="admin_email_{{ loop.index }}">E-post</label>
+                  <input type="email" id="admin_email_{{ loop.index }}" name="admin_email" placeholder="namn@example.com" required>
+                </div>
+                <div class="admin-form-row">
+                  <label for="admin_password_{{ loop.index }}">Lösenord</label>
+                  <input type="password" id="admin_password_{{ loop.index }}" name="admin_password" placeholder="Minst 8 tecken" required>
+                </div>
+                <button type="submit" class="sa-btn sa-btn-primary sa-btn-small">Lägg till admin</button>
+              </form>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </article>
+
+      <article class="app-shell__card sa-card sa-card-wide">
         <h2 class="app-shell__card-title">Skapa ny site + admin</h2>
         <form method="post" action="{{ url_for('admin_ui.systemadmin_customer_sites_create', tenant_id=vm.tenant_id) }}" class="sa-form">
           {{ csrf_token_input()|safe }}

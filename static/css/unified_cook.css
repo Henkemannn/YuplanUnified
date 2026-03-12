@@ -810,6 +810,33 @@ body.menu-modal-open {
     gap: 8px;
 }
 
+.kp-production-save-meta {
+    border: 1px solid #dbe4f0;
+    border-radius: 10px;
+    background: #f8fbff;
+    padding: 8px 10px;
+    display: grid;
+    gap: 4px;
+}
+
+.kp-production-save-meta-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+}
+
+.kp-production-save-meta-label {
+    color: #475569;
+    font-size: 0.86rem;
+}
+
+.kp-production-save-meta-value {
+    color: #0f172a;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
 body.kp-dept-summary-open {
     overflow: hidden;
 }

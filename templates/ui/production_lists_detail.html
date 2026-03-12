@@ -4,6 +4,7 @@
 
 {% block head_extra %}
   <link rel="stylesheet" href="/static/css/kitchen_planering_print.css">
+  <link rel="stylesheet" href="/static/css/production_lists_detail.css">
 {% endblock %}
 
 {% block content %}
@@ -22,16 +23,25 @@
   <div id="snapshot-print-root" class="snapshot-screen-root">
     <div class="kp-print-sheet">
       {% set p = vm.payload or {} %}
+      {% set inferred_mode = (p.mode or '')|lower %}
+      {% if inferred_mode not in ['normal', 'special'] %}
+        {% set inferred_mode = '' %}
+      {% endif %}
       <div class="kp-print-header">
         <div class="kp-print-title">Tillagningslista</div>
         <div class="kp-print-chip-row">
           <span class="kp-print-chip">Vecka {{ p.week or '—' }}</span>
           <span class="kp-print-chip">{{ p.day_label or '—' }}</span>
           <span class="kp-print-chip">{{ p.meal_label or '—' }}</span>
+          {% if inferred_mode == 'normal' %}
+          <span class="kp-print-chip">Normalkost</span>
+          {% elif inferred_mode == 'special' %}
+          <span class="kp-print-chip">Specialkost</span>
+          {% endif %}
         </div>
       </div>
 
-      {% if p.normal and p.normal.rows %}
+      {% if inferred_mode != 'special' and p.normal and p.normal.rows %}
       <div class="kp-print-section-title">Normalkost</div>
       <div class="kp-print-grid">
         <div class="kp-print-col">
@@ -59,7 +69,7 @@
       </div>
       {% endif %}
 
-      {% if p.special and p.special.worklist %}
+      {% if inferred_mode != 'normal' and p.special and p.special.worklist %}
       <div class="kp-print-section-title">Specialkost</div>
       <div class="kp-print-plan">
         <div class="kp-print-plan-list">
@@ -114,7 +124,7 @@
       {% endfor %}
       {% endif %}
 
-      {% if p.service_addon and p.service_addon.total_count %}
+      {% if inferred_mode != 'normal' and p.service_addon and p.service_addon.total_count %}
       <div class="kp-print-section-title">Serveringstillägg</div>
       <div class="kp-print-special-group sk-card">
         <div class="kp-print-special-name">{{ p.service_addon.addon_name }} — Totalt {{ p.service_addon.total_count }}</div>

@@ -15,7 +15,8 @@
 
   <article class="app-shell__card">
     <div class="app-shell__card-body">
-      {% if vm.items and vm.items|length > 0 %}
+      {% set prod_items = vm['items'] if vm is mapping and 'items' in vm else [] %}
+      {% if prod_items and prod_items|length > 0 %}
         <table class="grid-table">
           <thead>
             <tr>
@@ -26,7 +27,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for it in vm.items %}
+            {% for it in prod_items %}
               <tr>
                 <td>{{ it.created_at }}</td>
                 <td>{{ it.date }}</td>

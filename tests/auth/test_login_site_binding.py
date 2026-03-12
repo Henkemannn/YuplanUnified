@@ -108,3 +108,29 @@ def test_login_admin_json_ok_with_kitchen_user_sites_binding(monkeypatch):
         assert j.get("ok") is True
         with c.session_transaction() as sess:
             assert (sess.get("site_id") or "").strip() == str(sid_row[0])
+
+
+def test_login_admin_ignores_stale_session_site_from_previous_user(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        email = _seed_tenant_and_user(db, role="admin")
+        _seed_sites(db, count=2)
+
+        c = app.test_client()
+        with c.session_transaction() as sess:
+            sess["site_id"] = "stale-site-id"
+            sess["site_lock"] = True
+
+        r = c.post(
+            "/auth/login",
+            json={"email": email, "password": "Passw0rd!"},
+            headers={"Accept": "application/json"},
+        )
+        assert r.status_code == 403
+        j = r.get_json() or {}
+        assert j.get("error") == "forbidden"
+        assert j.get("message") == "site_binding_required"
+        with c.session_transaction() as sess:
+            assert not (sess.get("site_id") or "").strip()

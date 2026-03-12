@@ -127,6 +127,17 @@ def test_save_api_creates_row_and_detail_not_empty(app_session, client_admin):
     assert 'id="snapshot-print-root" class="snapshot-screen-root"' in html
 
 
+def test_production_lists_index_renders_and_keeps_site_id(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Prod list index site {uuid.uuid4()}")
+    _set_active_site(client_admin, site["id"])
+
+    rv = client_admin.get(f"/ui/production-lists?site_id={site['id']}", headers=_h())
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Produktionslistor" in html
+    assert f"/ui/production-lists?site_id={site['id']}" in html
+
+
 def test_production_list_shows_production_group_with_subtypes_and_departments(app_session, client_admin):
     site, _ = SitesRepo().create_site(f"Prod list grouped site {uuid.uuid4()}")
     _set_active_site(client_admin, site["id"])
@@ -244,3 +255,59 @@ def test_old_lists_cleanup(app_session):
     ids = {it["id"] for it in items}
     assert fresh["id"] in ids
     assert len(items) == 1
+
+
+def test_production_detail_mode_normal_hides_special_section(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Prod list mode normal {uuid.uuid4()}")
+    _set_active_site(client_admin, site["id"])
+
+    item = ProductionListsRepo().create_snapshot(
+        site_id=site["id"],
+        date_iso="2026-02-15",
+        meal_type="lunch",
+        payload={
+            "mode": "normal",
+            "week": 7,
+            "day_label": "Sön",
+            "meal": "lunch",
+            "meal_label": "Lunch",
+            "dishes": {"alt1": "Pasta", "alt2": "Fisk"},
+            "normal": {"rows": [{"department_name": "Avd A", "alt_choice": "alt1", "count": 3}], "alt1_total": 3, "alt2_total": 0},
+            "special": {"worklist": [{"diet_type_name": "Glutenfri", "total": 1, "rows": [{"department_name": "Avd A", "count": 1, "alt_label": "Alt1"}]}]},
+        },
+    )
+
+    rv = client_admin.get(f"/ui/production-lists/{item['id']}?site_id={site['id']}", headers=_h())
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Normalkost" in html
+    assert "Specialkost" not in html
+    assert "Glutenfri" not in html
+
+
+def test_production_detail_mode_special_hides_normal_section(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Prod list mode special {uuid.uuid4()}")
+    _set_active_site(client_admin, site["id"])
+
+    item = ProductionListsRepo().create_snapshot(
+        site_id=site["id"],
+        date_iso="2026-02-16",
+        meal_type="lunch",
+        payload={
+            "mode": "special",
+            "week": 8,
+            "day_label": "Mån",
+            "meal": "lunch",
+            "meal_label": "Lunch",
+            "dishes": {"alt1": "Pasta", "alt2": "Fisk"},
+            "normal": {"rows": [{"department_name": "Avd A", "alt_choice": "alt1", "count": 3}], "alt1_total": 3, "alt2_total": 0},
+            "special": {"worklist": [{"diet_type_name": "Glutenfri", "total": 1, "rows": [{"department_name": "Avd A", "count": 1, "alt_label": "Alt1"}]}]},
+        },
+    )
+
+    rv = client_admin.get(f"/ui/production-lists/{item['id']}?site_id={site['id']}", headers=_h())
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Specialkost" in html
+    assert "Glutenfri" in html
+    assert "Normalkost" not in html

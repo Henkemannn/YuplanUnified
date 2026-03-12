@@ -1879,6 +1879,11 @@
   function buildProductionListPayload(){
     var ctx = qs('#kp-context');
     if(!ctx){ return null; }
+    var qsParams = new URLSearchParams(window.location.search || '');
+    var mode = String(qsParams.get('mode') || 'special').toLowerCase();
+    if(mode !== 'normal' && mode !== 'special'){
+      mode = 'special';
+    }
     var meal = String(ctx.getAttribute('data-meal') || '').trim();
     if(meal !== 'lunch' && meal !== 'dinner'){ return null; }
     var mealLabel = String(ctx.getAttribute('data-meal-label') || '');
@@ -1986,6 +1991,7 @@
       date: dateIso,
       meal_type: meal,
       payload: {
+        mode: mode,
         year: year,
         week: week,
         day_label: dayLabel,
@@ -2017,10 +2023,29 @@
     var closeBtn = qs('.js-close-production-list-modal');
     var saveBtn = qs('.js-save-production-list');
     var status = qs('#production-list-status');
+    var metaMode = qs('#production-list-meta-mode');
+    var metaMeal = qs('#production-list-meta-meal');
+    var metaDay = qs('#production-list-meta-day');
+    var metaWeek = qs('#production-list-meta-week');
     if(!openBtn || !modal || !saveBtn){ return; }
 
     function setStatus(msg){ if(status){ status.textContent = msg || ''; } }
-    function openModal(){ modal.classList.add('is-open'); setStatus(''); }
+    function setMeta(el, val){ if(el){ el.textContent = String(val || '-'); } }
+    function refreshMeta(){
+      var ctx = qs('#kp-context');
+      var qsParams = new URLSearchParams(window.location.search || '');
+      var modeRaw = String(qsParams.get('mode') || 'special').toLowerCase();
+      var modeLabel = modeRaw === 'normal' ? 'Normal' : 'Specialkost';
+      var mealRaw = String((ctx && ctx.getAttribute('data-meal')) || '');
+      var mealLabel = mealRaw === 'lunch' ? 'Lunch' : (mealRaw === 'dinner' ? 'Kvällsmat' : (mealRaw === 'dessert' ? 'Dessert' : '-'));
+      var dayLabel = String((ctx && ctx.getAttribute('data-day-label')) || '').trim() || '-';
+      var weekVal = String((ctx && ctx.getAttribute('data-week')) || '').trim();
+      setMeta(metaMode, modeLabel);
+      setMeta(metaMeal, mealLabel);
+      setMeta(metaDay, dayLabel);
+      setMeta(metaWeek, weekVal ? ('Vecka ' + weekVal) : '-');
+    }
+    function openModal(){ refreshMeta(); modal.classList.add('is-open'); setStatus(''); }
     function closeModal(){ modal.classList.remove('is-open'); }
 
     openBtn.addEventListener('click', function(){

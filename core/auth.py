@@ -276,6 +276,14 @@ def login():
         session["user_id"] = user.id
         session["role"] = _normalize_role(user.role)
         session["tenant_id"] = user.tenant_id
+        # Reset active site context on each successful login to avoid leaking
+        # a previous user's site binding in the same browser session.
+        try:
+            session.pop("site_id", None)
+            session.pop("site_lock", None)
+            session.pop("site_context_version", None)
+        except Exception:
+            pass
         # Keep display identity in session for app-shell badges/greetings.
         try:
             if getattr(user, "email", None):
