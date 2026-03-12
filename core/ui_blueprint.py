@@ -354,12 +354,15 @@ def api_create_production_list_snapshot():
     if not isinstance(payload, dict):
         return jsonify({"error": "bad_request", "message": "payload must be object"}), 400
 
-    created = ProductionListsRepo().create_snapshot(
-        site_id=site_id,
-        date_iso=date_iso,
-        meal_type=meal_type,
-        payload=payload,
-    )
+    try:
+        created = ProductionListsRepo().create_snapshot(
+            site_id=site_id,
+            date_iso=date_iso,
+            meal_type=meal_type,
+            payload=payload,
+        )
+    except Exception:
+        return jsonify({"error": "schema_not_ready", "message": "Produktionslistor ar inte redo i databasen annu."}), 503
     return jsonify({"ok": True, "item": created}), 201
 
 
@@ -381,7 +384,11 @@ def ui_production_lists_index():
     finally:
         db.close()
 
-    items = ProductionListsRepo().list_for_site(site_id=site_id)
+    try:
+        items = ProductionListsRepo().list_for_site(site_id=site_id)
+    except Exception:
+        items = []
+        flash("Kunde inte lasa produktionslistor just nu.", "error")
     vm = {
         "title": "Produktionslistor",
         "site_id": site_id,
@@ -411,7 +418,11 @@ def ui_production_lists_detail(list_id: str):
     finally:
         db.close()
 
-    item = ProductionListsRepo().get_for_site(list_id=list_id, site_id=site_id)
+    try:
+        item = ProductionListsRepo().get_for_site(list_id=list_id, site_id=site_id)
+    except Exception:
+        flash("Kunde inte lasa produktionslista just nu.", "error")
+        return redirect(url_for("ui.ui_production_lists_index", site_id=site_id))
     if not item:
         return redirect(url_for("ui.ui_production_lists_index", site_id=site_id))
 
@@ -3804,9 +3815,25 @@ def admin_specialkost_update(kosttyp_id: int):
 @require_roles(*ADMIN_ROLES)
 def admin_specialkost_delete(kosttyp_id: int):
     from flask import flash, redirect, url_for
-    from core.admin_repo import DietTypesRepo
-    DietTypesRepo().delete(kosttyp_id)
-    flash("Kosttypen har raderats.", "success")
+    from core.admin_repo import DietTypeDeleteBlockedError, DietTypesRepo
+
+    repo = DietTypesRepo()
+    active_site_id = session.get("site_id")
+    if not active_site_id:
+        return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_list")))
+
+    item = repo.get_by_id(kosttyp_id)
+    if not item or str(item.get("site_id") or "") != str(active_site_id):
+        from flask import abort
+        abort(404)
+
+    try:
+        repo.delete(kosttyp_id)
+        flash("Kosttypen har raderats.", "success")
+    except DietTypeDeleteBlockedError:
+        flash("Kosttypen kan inte tas bort eftersom den används i andra inställningar.", "error")
+    except Exception:
+        flash("Kunde inte ta bort kosttypen just nu.", "error")
     return redirect(url_for("ui.admin_specialkost_list"))
 
 

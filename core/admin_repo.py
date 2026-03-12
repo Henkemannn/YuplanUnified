@@ -5,6 +5,7 @@ import uuid
 from typing import Iterable
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from flask import current_app, has_app_context
 
 from .db import get_session
@@ -1149,6 +1150,15 @@ class DepartmentServiceAddonsRepo:
             db.close()
 
 
+class DietTypeDeleteBlockedError(Exception):
+    """Raised when a diet type is still referenced by other records."""
+
+    def __init__(self, references: dict[str, int]):
+        self.references = references
+        parts = [f"{table}: {count}" for table, count in references.items() if count > 0]
+        super().__init__(", ".join(parts) if parts else "in use")
+
+
 class DietTypesRepo:
     """Repository for managing dietary types (specialkost), now scoped per site."""
 
@@ -1340,11 +1350,45 @@ class DietTypesRepo:
             db.close()
 
     def delete(self, diet_type_id: int) -> None:
-        """Delete a dietary type by ID."""
+        """Delete a dietary type by ID.
+
+        Blocks deletion when references exist in known dependent tables and
+        raises `DietTypeDeleteBlockedError` with per-table counts.
+        """
         db = get_session()
         try:
-            db.execute(text("DELETE FROM dietary_types WHERE id=:id"), {"id": diet_type_id})
+            self._ensure_table(db)
+            did_txt = str(int(diet_type_id))
+
+            refs: dict[str, int] = {}
+            dependency_tables = (
+                ("department_diet_defaults", "diet_type_id"),
+                ("normal_exclusions", "diet_type_id"),
+                ("weekview_registrations", "diet_type"),
+            )
+
+            for table_name, column_name in dependency_tables:
+                if not _table_has_column(db, table_name, column_name):
+                    continue
+                row = db.execute(
+                    text(
+                        f"SELECT COUNT(1) FROM {table_name} "
+                        f"WHERE CAST({column_name} AS TEXT)=:diet_type_id"
+                    ),
+                    {"diet_type_id": did_txt},
+                ).fetchone()
+                count = int(row[0] or 0) if row else 0
+                if count > 0:
+                    refs[table_name] = count
+
+            if refs:
+                raise DietTypeDeleteBlockedError(refs)
+
+            db.execute(text("DELETE FROM dietary_types WHERE id=:id"), {"id": int(diet_type_id)})
             db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise DietTypeDeleteBlockedError({"foreign_key_dependency": 1}) from exc
         except Exception:
             db.rollback()
             raise
