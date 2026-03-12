@@ -658,16 +658,12 @@
 
       var subtypes = groupDef.subtype_breakdown || [];
       if(subtypes.length > 0){
-        var subtypeWrap = document.createElement('div');
-        subtypeWrap.className = 'kp-production-subtypes';
-        for(var s=0; s<subtypes.length; s++){
-          var sub = subtypes[s] || {};
-          var subRow = document.createElement('div');
-          subRow.className = 'kp-production-subtype-row';
-          subRow.textContent = String(sub.diet_type_name || '') + ': ' + String(sub.count || 0) + ' st';
-          subtypeWrap.appendChild(subRow);
-        }
-        group.appendChild(subtypeWrap);
+        var subtypeLine = document.createElement('div');
+        subtypeLine.className = 'kp-production-subtypes-line';
+        subtypeLine.textContent = subtypes.map(function(sub){
+          return String((sub && sub.diet_type_name) || '') + ' ' + String((sub && sub.count) || 0);
+        }).join(' \u2022 ');
+        group.appendChild(subtypeLine);
       }
 
       var depHeading = document.createElement('div');
@@ -696,7 +692,7 @@
           subtypeText.className = 'kp-row-subtypes';
           subtypeText.textContent = row.subtype_counts.map(function(sc){
             return String(sc.diet_type_name || '') + ' ' + String(sc.count || 0);
-          }).join(', ');
+          }).join(' \u2022 ');
           rowEl.appendChild(subtypeText);
         }
         if(isAlt2){
@@ -1233,16 +1229,12 @@
 
           var subtypeBreakdown = block.subtype_breakdown || [];
           if(subtypeBreakdown.length > 0){
-            var variantWrap = document.createElement('div');
-            variantWrap.className = 'kp-print-variant-list';
-            for(var v=0; v<subtypeBreakdown.length; v++){
-              var variant = subtypeBreakdown[v] || {};
-              var variantRow = document.createElement('div');
-              variantRow.className = 'kp-print-variant-row';
-              variantRow.textContent = String(variant.diet_type_name || '') + ': ' + String(variant.count || 0) + ' st';
-              variantWrap.appendChild(variantRow);
-            }
-            group.appendChild(variantWrap);
+            var variantLine = document.createElement('div');
+            variantLine.className = 'kp-print-variant-line';
+            variantLine.textContent = subtypeBreakdown.map(function(variant){
+              return String((variant && variant.diet_type_name) || '') + ' ' + String((variant && variant.count) || 0);
+            }).join(' \u2022 ');
+            group.appendChild(variantLine);
           }
 
           var depSubhead = document.createElement('div');

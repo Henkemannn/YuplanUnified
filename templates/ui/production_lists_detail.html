@@ -75,9 +75,9 @@
         {% set grp_name = grp.production_group_name or grp.diet_type_name %}
         <div class="kp-print-special-name">{{ grp_name }} — Totalt {{ grp.total }}</div>
         {% if grp.subtype_breakdown %}
-        <div class="kp-print-variant-list">
+        <div class="kp-print-variant-line">
           {% for sub in grp.subtype_breakdown %}
-          <div class="kp-print-variant-row">{{ sub.diet_type_name }}: {{ sub.count }} st</div>
+            {{ sub.diet_type_name }} {{ sub.count }}{% if not loop.last %} • {% endif %}
           {% endfor %}
         </div>
         {% endif %}

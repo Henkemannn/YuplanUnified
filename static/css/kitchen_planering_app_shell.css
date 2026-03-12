@@ -626,15 +626,15 @@
   border: 1px solid #dbe4f0;
   background: #f8fbff;
   border-radius: 12px;
-  padding: 10px;
-  margin-bottom: 10px;
+  padding: 8px 9px;
+  margin-bottom: 8px;
 }
 
 .kitchen-planering-page .kp-worklist-title {
   font-weight: 700;
   color: #0f172a;
-  font-size: 0.98rem;
-  margin-bottom: 6px;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
 }
 
 .kitchen-planering-page .kp-worklist-total {
@@ -649,46 +649,42 @@
   font-weight: 700;
 }
 
-.kitchen-planering-page .kp-production-subtypes {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-
-.kitchen-planering-page .kp-production-subtype-row {
-  font-size: 0.9rem;
-  color: #1f2937;
-  padding-left: 2px;
+.kitchen-planering-page .kp-production-subtypes-line {
+  font-size: 0.86rem;
+  color: #334155;
+  margin-bottom: 6px;
+  line-height: 1.2;
 }
 
 .kitchen-planering-page .kp-worklist-subheading {
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: #475569;
-  margin: 8px 0 6px;
+  margin: 5px 0 4px;
   font-weight: 700;
 }
 
 .kitchen-planering-page .kp-worklist-rows {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .kitchen-planering-page .kp-worklist-row {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 6px 10px;
+  gap: 2px 10px;
   align-items: center;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 7px 9px;
+  padding: 5px 8px;
 }
 
 .kitchen-planering-page .kp-row-name {
   color: #0f172a;
   font-weight: 600;
+  line-height: 1.2;
 }
 
 .kitchen-planering-page .kp-row-count {
@@ -699,8 +695,8 @@
 .kitchen-planering-page .kp-row-subtypes {
   grid-column: 1 / -1;
   color: #475569;
-  font-size: 0.82rem;
-  line-height: 1.25;
+  font-size: 0.76rem;
+  line-height: 1.15;
 }
 
 .kitchen-planering-page .diet-chip .kp-chip-label {
@@ -761,16 +757,16 @@
   }
 
   .kitchen-planering-page .kp-worklist-group {
-    padding: 9px;
+    padding: 7px 8px;
   }
 
   .kitchen-planering-page .kp-worklist-row {
     grid-template-columns: 1fr auto;
-    padding: 8px;
+    padding: 5px 7px;
   }
 
   .kitchen-planering-page .kp-row-subtypes {
-    font-size: 0.8rem;
+    font-size: 0.74rem;
   }
 }
 
@@ -913,9 +909,9 @@
 }
 
 .app-shell--dark .kitchen-planering-card--planering .kp-worklist-group {
-  background: #111b2e;
-  border-color: #334155;
-  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15);
+  background: #1a2638;
+  border-color: #3b4f67;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.2);
 }
 
 .app-shell--dark .kitchen-planering-card--planering .kp-worklist-title {
@@ -923,11 +919,11 @@
 }
 
 .app-shell--dark .kitchen-planering-card--planering .kp-worklist-total {
-  background: #1e3a8a;
-  color: #dbeafe;
+  background: #274b9f;
+  color: #eff6ff;
 }
 
-.app-shell--dark .kitchen-planering-card--planering .kp-production-subtype-row {
+.app-shell--dark .kitchen-planering-card--planering .kp-production-subtypes-line {
   color: #dbeafe;
 }
 
@@ -936,8 +932,8 @@
 }
 
 .app-shell--dark .kitchen-planering-card--planering .kp-worklist-row {
-  background: #162238;
-  border-color: #334155;
+  background: #202f45;
+  border-color: #3b4f67;
 }
 
 .app-shell--dark .kitchen-planering-card--planering .kp-row-name,
@@ -947,4 +943,40 @@
 
 .app-shell--dark .kitchen-planering-card--planering .kp-row-subtypes {
   color: #cbd5e1;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-family-group {
+  background: #243247;
+  border-color: #3f5570;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-family-group > summary {
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.25);
+}
+
+.app-shell--dark .kitchen-planering-page .kp-family-group-count {
+  background: #2f4f86;
+  border-color: #4f74ae;
+  color: #eff6ff;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-chip-grid--family {
+  background: rgba(15, 23, 42, 0.14);
+}
+
+.app-shell--dark .kitchen-planering-page .kp-chip-grid--family .diet-chip {
+  background: #2a3950;
+  border-color: #4b607f;
+  color: #e2e8f0;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-chip-grid--family .diet-chip .kp-chip-count {
+  color: #bfdbfe;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-chip-grid--family .diet-chip.active {
+  background: #1f4c8f;
+  border-color: #60a5fa;
+  color: #f8fafc;
 }

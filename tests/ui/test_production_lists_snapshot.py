@@ -156,12 +156,12 @@ def test_production_list_shows_production_group_with_subtypes_and_departments(ap
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert "Timbal — Totalt 12" in html
-    assert "Timbal: 11 st" in html
-    assert "Timbal-Fisk: 1 st" in html
+    assert "Timbal 11" in html
+    assert "Timbal-Fisk 1" in html
     assert "Till avdelningar" in html
     assert "Lindgården A" in html
     assert "Boende A" in html
-    assert "kp-print-variant-list" in html
+    assert "kp-print-variant-line" in html
     assert "kp-print-subheading" in html
     assert "kp-print-row-subtypes" in html
     assert "Textur totalt" not in html
