@@ -88,6 +88,43 @@ def test_production_list_renders(app_session, client_admin):
     assert "Tillagningslista" in html
     assert "Glutenfri" in html
     assert "Serveringstillägg" in html
+    assert 'id="snapshot-print-root" class="snapshot-screen-root"' in html
+    assert 'id="snapshot-print-root" class="kp-print"' not in html
+
+
+def test_save_api_creates_row_and_detail_not_empty(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Prod list api save site {uuid.uuid4()}")
+    _set_active_site(client_admin, site["id"])
+
+    payload = {
+        "site_id": site["id"],
+        "date": "2026-02-14",
+        "meal_type": "lunch",
+        "payload": {
+            "week": 7,
+            "day_label": "Lör",
+            "meal": "lunch",
+            "meal_label": "Lunch",
+            "dishes": {"alt1": "Pasta", "alt2": "Fisk"},
+            "normal": {"rows": [{"department_name": "Avd A", "alt_choice": "alt1", "count": 3}], "alt1_total": 3, "alt2_total": 0, "total": 3},
+            "special": {"worklist": [{"diet_type_name": "Glutenfri", "total": 1, "rows": [{"department_name": "Avd A", "count": 1, "alt_label": "Alt1"}]}]},
+        },
+    }
+    save = client_admin.post("/api/production-lists", headers=_h(), json=payload)
+    assert save.status_code == 201
+    body = save.get_json() or {}
+    item_id = (body.get("item") or {}).get("id")
+    assert item_id
+
+    listed = ProductionListsRepo().list_for_site(site["id"])
+    assert any(str(it.get("id")) == str(item_id) for it in listed)
+
+    detail = client_admin.get(f"/ui/production-lists/{item_id}?site_id={site['id']}", headers=_h())
+    assert detail.status_code == 200
+    html = detail.get_data(as_text=True)
+    assert "Tillagningslista" in html
+    assert "Glutenfri" in html
+    assert 'id="snapshot-print-root" class="snapshot-screen-root"' in html
 
 
 def test_production_list_shows_production_group_with_subtypes_and_departments(app_session, client_admin):

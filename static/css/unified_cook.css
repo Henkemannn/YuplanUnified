@@ -767,6 +767,21 @@ body.menu-modal-open {
     display: flex;
 }
 
+#production-list-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 2000;
+}
+
+#production-list-modal.is-open {
+    display: flex;
+}
+
 .kp-modal-card{
     width: min(560px, 92vw);
     background: #fff;

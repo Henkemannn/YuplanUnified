@@ -1,7 +1,27 @@
 import pytest
 from sqlalchemy import text
+from html.parser import HTMLParser
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+
+
+class _IdParentParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self._stack = []
+        self.parents = {}
+
+    def handle_starttag(self, tag, attrs):
+        attrs_d = {k: v for k, v in attrs}
+        node_id = attrs_d.get("id")
+        parent_ids = [sid for sid in self._stack if sid]
+        if node_id:
+            self.parents[node_id] = list(parent_ids)
+        self._stack.append(node_id)
+
+    def handle_endtag(self, tag):
+        if self._stack:
+            self._stack.pop()
 
 
 def _seed_basics():
@@ -80,7 +100,7 @@ def test_planering_v1_selected_state(app_session):
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert "Rätt:" not in html
-    assert "Header" in html
+    assert "Header" not in html
     assert "Specialkoster" in html
     assert "Resultatsammanfattning" in html
     assert 'id="kp-what-alt1"' in html
@@ -89,6 +109,7 @@ def test_planering_v1_selected_state(app_session):
     assert "js-special-chip" in html
     assert "data-diet-id" in html
     assert "Välj specialkoster ovan för att bygga arbetslistan." in html
+    assert f"/ui/production-lists?site_id={site_id}" in html
 
     # Second request: with a selected diet, adaptation list should render
     rv2 = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch&selected_diets={dt_id}", headers=HEADERS)
@@ -106,3 +127,33 @@ def test_planering_v1_selected_state(app_session):
     assert "Avdelning" in html3
     assert 'id="kp-total-alt1"' in html3
     assert 'id="kp-total-alt2"' in html3
+
+
+def test_planering_modals_are_separate_and_controls_present(app_session):
+    client = app_session.test_client()
+    _seed_basics()
+    site_id = "00000000-0000-0000-0000-000000000000"
+
+    rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch", headers=HEADERS)
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+
+    assert 'class="kp-button kp-button-primary js-open-production-list-modal"' in html
+    assert 'class="kp-button js-open-dept-summary"' in html
+    assert 'id="production-list-modal"' in html
+    assert 'id="dept-summary-modal"' in html
+
+    parser = _IdParentParser()
+    parser.feed(html)
+    prod_parents = parser.parents.get("production-list-modal", [])
+    assert "dept-summary-modal" not in prod_parents
+
+
+def test_planering_js_modal_wiring_contract():
+    from pathlib import Path
+
+    js = Path("static/ui/kitchen_planering_v1.js").read_text(encoding="utf-8")
+    assert "var btn = qs('.js-open-dept-summary');" in js
+    assert "var modal = qs('#dept-summary-modal');" in js
+    assert "var openBtn = qs('.js-open-production-list-modal');" in js
+    assert "var modal = qs('#production-list-modal');" in js

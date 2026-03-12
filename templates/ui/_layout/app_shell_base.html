@@ -122,7 +122,12 @@
             {% set kitchen_week_url = url_for('ui.kitchen_veckovy_week') %}
             {% set kitchen_plan_url = url_for('ui.kitchen_planering_v1') %}
             {% set kitchen_menu_url = url_for('ui.kitchen_menu_overview') %}
-            {% set kitchen_prod_lists_url = url_for('ui.ui_production_lists_index') %}
+            {% set active_site_for_nav = (request.args.get('site_id') or (vm.site_id if vm is defined and vm.site_id is defined else '') or (session.get('site_id') if session is defined else '')) %}
+            {% if active_site_for_nav %}
+              {% set kitchen_prod_lists_url = url_for('ui.ui_production_lists_index', site_id=active_site_for_nav) %}
+            {% else %}
+              {% set kitchen_prod_lists_url = url_for('ui.ui_production_lists_index') %}
+            {% endif %}
             <nav class="app-shell__nav">
               <a class="app-shell__nav-item {% if current_path == '/ui/kitchen' %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_home_url }}">Översikt</a>
               <a class="app-shell__nav-item {% if current_path.startswith('/ui/kitchen/week') %}app-shell__nav-item--active{% endif %}" href="{{ kitchen_week_url }}">Veckovy</a>
