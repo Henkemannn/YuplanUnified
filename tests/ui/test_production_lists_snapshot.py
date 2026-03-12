@@ -161,9 +161,12 @@ def test_production_list_shows_production_group_with_subtypes_and_departments(ap
     assert "Till avdelningar" in html
     assert "Lindgården A" in html
     assert "Boende A" in html
+    assert html.count("Boende A") == 1
     assert "kp-print-variant-line" in html
     assert "kp-print-subheading" in html
     assert "kp-print-row-subtypes" in html
+    assert "Timbal: 2" not in html
+    assert "(Timbal-Fisk)" in html
     assert "Textur totalt" not in html
 
 

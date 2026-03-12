@@ -84,17 +84,28 @@
         <div class="kp-print-subheading">Till avdelningar</div>
         <div class="kp-print-list">
           {% set dept_rows = grp.department_breakdown or grp.rows or [] %}
+          {% set grp_base = (grp.production_group_name or grp_name or '')|lower %}
           {% for r in dept_rows %}
+          {% set row_total = r.total if r.total is defined else r.count %}
           <div class="kp-print-row sk-row kp-zebra">
             <span class="kp-dept-name">{{ r.department_name }}</span>
             <span class="kp-altpill">{{ r.alt_label or 'Alt1' }}</span>
-            <span class="count">{{ r.total if r.total is defined else r.count }}</span>
+            <span class="count">{{ row_total }}</span>
             {% if r.subtype_counts %}
-            <span class="kp-print-row-subtypes">
-              {% for sub in r.subtype_counts %}
-                {{ sub.diet_type_name }}: {{ sub.count }}{% if not loop.last %}, {% endif %}
-              {% endfor %}
-            </span>
+              {% if r.subtype_counts|length == 1 %}
+                {% set sub = r.subtype_counts[0] %}
+                {% set single_name = (sub.diet_type_name or '') %}
+                {% set single_count = sub.count or 0 %}
+                {% if (single_name|lower != grp_base) or (single_count != row_total) %}
+                <span class="kp-print-row-subtypes">({{ single_name }})</span>
+                {% endif %}
+              {% else %}
+                <span class="kp-print-row-subtypes">(
+                  {% for sub in r.subtype_counts %}
+                    {{ sub.diet_type_name }}{% if not loop.last %}, {% endif %}
+                  {% endfor %}
+                )</span>
+              {% endif %}
             {% endif %}
           </div>
           {% endfor %}

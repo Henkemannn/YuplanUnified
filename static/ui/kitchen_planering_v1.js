@@ -212,6 +212,26 @@
     return groups;
   }
 
+  function buildDepartmentSubtypeNote(subtypeCounts, productionGroupName, rowTotal){
+    var list = Array.isArray(subtypeCounts) ? subtypeCounts : [];
+    if(!list.length){ return ''; }
+    var base = String(productionGroupName || '').trim().toLowerCase();
+    var total = parseInt(rowTotal || 0, 10) || 0;
+    if(list.length === 1){
+      var one = list[0] || {};
+      var oneName = String(one.diet_type_name || '').trim();
+      var oneCount = parseInt(one.count || 0, 10) || 0;
+      if(base && oneName.toLowerCase() === base && oneCount === total){
+        return '';
+      }
+      return oneName;
+    }
+    return list
+      .map(function(item){ return String((item && item.diet_type_name) || '').trim(); })
+      .filter(function(name){ return !!name; })
+      .join(', ');
+  }
+
   function setSpecialChipState(dietId, isActive){
     qsa('.specialkost-view .js-special-chip[data-diet-id="' + String(dietId || '') + '"]').forEach(function(btn){
       if(isActive){
@@ -688,12 +708,17 @@
         rowEl.appendChild(nameEl);
         rowEl.appendChild(countEl);
         if(row.subtype_counts && row.subtype_counts.length){
-          var subtypeText = document.createElement('span');
-          subtypeText.className = 'kp-row-subtypes';
-          subtypeText.textContent = row.subtype_counts.map(function(sc){
-            return String(sc.diet_type_name || '') + ' ' + String(sc.count || 0);
-          }).join(' \u2022 ');
-          rowEl.appendChild(subtypeText);
+          var subtypeNote = buildDepartmentSubtypeNote(
+            row.subtype_counts,
+            groupDef.production_group_name,
+            (row.total != null ? row.total : row.count)
+          );
+          if(subtypeNote){
+            var subtypeText = document.createElement('span');
+            subtypeText.className = 'kp-row-subtypes';
+            subtypeText.textContent = '(' + subtypeNote + ')';
+            rowEl.appendChild(subtypeText);
+          }
         }
         if(isAlt2){
           var altBadge = document.createElement('span');
@@ -1253,12 +1278,17 @@
               var isAlt2 = (meal === 'lunch' && alt2Set.has(String(item.department_id)));
               var rowEl = buildPrintRow('sk-row kp-zebra', item.department_name, (item.total != null ? item.total : item.count), isAlt2 ? 'Alt2' : 'Alt1');
               if(item.subtype_counts && item.subtype_counts.length){
-                var detail = document.createElement('span');
-                detail.className = 'kp-print-row-subtypes';
-                detail.textContent = item.subtype_counts.map(function(sc){
-                  return String(sc.diet_type_name || '') + ': ' + String(sc.count || 0);
-                }).join(', ');
-                rowEl.appendChild(detail);
+                var detailNote = buildDepartmentSubtypeNote(
+                  item.subtype_counts,
+                  block.production_group_name || block.diet_type_name,
+                  (item.total != null ? item.total : item.count)
+                );
+                if(detailNote){
+                  var detail = document.createElement('span');
+                  detail.className = 'kp-print-row-subtypes';
+                  detail.textContent = '(' + detailNote + ')';
+                  rowEl.appendChild(detail);
+                }
               }
               list.appendChild(rowEl);
             }
