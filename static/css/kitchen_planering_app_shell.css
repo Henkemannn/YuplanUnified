@@ -437,6 +437,37 @@
   margin-bottom: 8px;
 }
 
+.kitchen-planering-card--planering .kp-section {
+  margin-bottom: 12px;
+}
+
+.kitchen-planering-card--planering .kp-section-title {
+  margin: 0 0 8px;
+  font-size: 0.98rem;
+  letter-spacing: 0.01em;
+  color: #0f172a;
+}
+
+.kitchen-planering-card--planering .kp-section-subtitle {
+  margin: 0 0 8px;
+  color: #64748b;
+  font-size: 0.88rem;
+}
+
+.kitchen-planering-card--planering .kp-subsection-card {
+  border: 1px solid #e2e8f0;
+  background: #fbfdff;
+}
+
+.kitchen-planering-card--planering .kp-alt-card-heading {
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #334155;
+  margin-bottom: 2px;
+}
+
 .kitchen-planering-card--planering .menu-alternatives {
   gap: 10px;
   margin-top: 0;
@@ -475,6 +506,69 @@
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.2;
+}
+
+.kitchen-planering-page .kp-chip-grid--compact .diet-chip,
+.kitchen-planering-page .kp-chip-grid--all .diet-chip {
+  border-radius: 999px;
+  padding: 0.22rem 0.52rem;
+  font-size: 0.82rem;
+  gap: 0.3rem;
+}
+
+.kitchen-planering-page .kp-chip-count {
+  color: #475569;
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.kitchen-planering-page .diet-chip.is-muted {
+  opacity: 0.58;
+  border-style: dashed;
+}
+
+.kitchen-planering-page .kp-all-diets-toggle {
+  margin-top: 8px;
+}
+
+.kitchen-planering-page .kp-all-diets-toggle > summary {
+  cursor: pointer;
+  color: #1d4ed8;
+  font-size: 0.86rem;
+  user-select: none;
+}
+
+.kitchen-planering-page .kp-all-diets-toggle[open] > summary {
+  margin-bottom: 6px;
+}
+
+.kitchen-planering-page .kp-family-summary {
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.kitchen-planering-page .kp-family-title {
+  font-size: 0.9rem;
+  color: #1e3a8a;
+  margin-bottom: 4px;
+}
+
+.kitchen-planering-page .kp-family-breakdown {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kitchen-planering-page .kp-family-pill {
+  font-size: 0.8rem;
+  color: #334155;
+  background: #e8f1ff;
+  border: 1px solid #c7dbff;
+  border-radius: 999px;
+  padding: 2px 7px;
 }
 
 .kitchen-planering-page .diet-chip .kp-chip-label {
@@ -519,6 +613,16 @@
 }
 
 @media (max-width: 768px) {
+  .kitchen-planering-card--planering .kp-section {
+    margin-bottom: 10px;
+  }
+
+  .kitchen-planering-page .kp-chip-grid--compact .diet-chip,
+  .kitchen-planering-page .kp-chip-grid--all .diet-chip {
+    font-size: 0.78rem;
+    padding: 0.2rem 0.45rem;
+  }
+
   .kitchen-planering-page .diet-chip {
     font-size: 0.9rem;
     padding: 4px 8px;

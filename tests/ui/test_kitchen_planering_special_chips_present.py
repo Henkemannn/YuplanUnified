@@ -63,6 +63,8 @@ def test_special_chips_present(app_session):
     assert "diet-chip" in html
     assert "js-special-chip" in html
     assert "data-diet-id" in html
+    assert "kp-chip-count" in html
+    assert "Visa alla specialkoster" in html
     assert "kp-chip-meta" not in html
     assert "Klart" not in html
     assert "Återstår" not in html

@@ -46,6 +46,29 @@
   var lastPrintMode = 'special';
   var lastSpecialWorklist = [];
 
+  function getDietFamily(name){
+    var low = String(name || '').toLowerCase();
+    if(low.indexOf('timbal') !== -1) return 'timbal';
+    return '';
+  }
+
+  function getDietFamilyLabel(family){
+    if(family === 'timbal') return 'Timbal';
+    return '';
+  }
+
+  function setSpecialChipState(dietId, isActive){
+    qsa('.specialkost-view .js-special-chip[data-diet-id="' + String(dietId || '') + '"]').forEach(function(btn){
+      if(isActive){
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+      } else {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-pressed', 'false');
+      }
+    });
+  }
+
   function clamp(n, min, max){
     n = Number(n||0);
     if(isNaN(n)) n = 0;
@@ -426,12 +449,37 @@
       var nb = (specialById[b] && specialById[b].name) || b;
       return String(na).localeCompare(String(nb));
     });
-    lastSpecialWorklist = dietIds.map(function(id){
+
+    var grouped = {};
+    var groupOrder = [];
+    for(var g=0; g<dietIds.length; g++){
+      var dietId = dietIds[g];
+      var dietName = (specialById[dietId] && specialById[dietId].name) || dietId;
+      var family = getDietFamily(dietName);
+      var groupKey = family ? ('family:' + family) : ('diet:' + dietId);
+      if(!grouped[groupKey]){
+        grouped[groupKey] = {
+          key: groupKey,
+          family: family,
+          title: family ? (getDietFamilyLabel(family) + ' totalt') : dietName,
+          total: 0,
+          rows: [],
+          variants: {}
+        };
+        groupOrder.push(groupKey);
+      }
+      grouped[groupKey].total += (totalsByDiet[dietId] || 0);
+      grouped[groupKey].rows = grouped[groupKey].rows.concat(byDiet[dietId] || []);
+      grouped[groupKey].variants[dietName] = (grouped[groupKey].variants[dietName] || 0) + (totalsByDiet[dietId] || 0);
+    }
+
+    lastSpecialWorklist = groupOrder.map(function(groupKey){
+      var groupDef = grouped[groupKey];
       return {
-        diet_type_id: id,
-        diet_type_name: (specialById[id] && specialById[id].name) || id,
-        total: totalsByDiet[id] || 0,
-        rows: (byDiet[id] || []).map(function(r){
+        diet_type_id: groupKey,
+        diet_type_name: groupDef.title,
+        total: groupDef.total || 0,
+        rows: (groupDef.rows || []).map(function(r){
           return {
             department_id: r.department_id,
             department_name: r.department_name,
@@ -440,23 +488,36 @@
         })
       };
     });
-    for(var d=0; d<dietIds.length; d++){
-      var id = dietIds[d];
+
+    for(var d=0; d<groupOrder.length; d++){
+      var groupDef = grouped[groupOrder[d]];
       var group = document.createElement('div');
       group.className = 'kp-worklist-group';
-      group.setAttribute('data-diet-id', id);
+      group.setAttribute('data-diet-id', groupDef.key);
       var title = document.createElement('div');
       title.className = 'kp-worklist-title';
-      var name = (specialById[id] && specialById[id].name) || id;
-      title.textContent = name + ' ';
+      title.textContent = groupDef.title + ' ';
       var totalSpan = document.createElement('span');
       totalSpan.className = 'kp-worklist-total';
-      totalSpan.textContent = String(totalsByDiet[id] || 0);
+      totalSpan.textContent = String(groupDef.total || 0);
       title.appendChild(totalSpan);
       group.appendChild(title);
+      if(groupDef.family){
+        var breakdown = document.createElement('div');
+        breakdown.className = 'kp-family-breakdown';
+        Object.keys(groupDef.variants)
+          .sort(function(a, b){ return String(a).localeCompare(String(b)); })
+          .forEach(function(variantName){
+            var pill = document.createElement('span');
+            pill.className = 'kp-family-pill';
+            pill.textContent = variantName + ': ' + String(groupDef.variants[variantName]);
+            breakdown.appendChild(pill);
+          });
+        group.appendChild(breakdown);
+      }
       var rowsWrap = document.createElement('div');
       rowsWrap.className = 'kp-worklist-rows';
-      var rows = byDiet[id] || [];
+      var rows = groupDef.rows || [];
       for(var r=0; r<rows.length; r++){
         var row = rows[r];
         var rowEl = document.createElement('div');
@@ -1142,8 +1203,7 @@
     chips.forEach(function(btn){
       var id = String(btn.getAttribute('data-diet-id') || '');
       var isActive = selectedChipsSpecial.has(id);
-      if(isActive){ btn.classList.add('active'); }
-      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      setSpecialChipState(id, isActive);
     });
     if(!isSpecialChipHandlerBound){
       chipGrid.addEventListener('click', function(e){
@@ -1154,12 +1214,10 @@
         if(!id) return;
         if(selectedChipsSpecial.has(id)){
           selectedChipsSpecial.delete(id);
-          btn.classList.remove('active');
-          btn.setAttribute('aria-pressed', 'false');
+          setSpecialChipState(id, false);
         } else {
           selectedChipsSpecial.add(id);
-          btn.classList.add('active');
-          btn.setAttribute('aria-pressed', 'true');
+          setSpecialChipState(id, true);
         }
         renderSpecialSelectedList();
       });
@@ -1745,8 +1803,16 @@
         })
       })
       .then(function(r){
-        if(!r.ok){ throw new Error('save_failed:' + r.status); }
-        return r.json();
+        return r.json().then(function(data){
+          if(!r.ok){
+            var msg = (data && data.message) ? String(data.message) : ('save_failed:' + r.status);
+            throw new Error(msg);
+          }
+          return data;
+        }).catch(function(){
+          if(!r.ok){ throw new Error('save_failed:' + r.status); }
+          return {};
+        });
       })
       .then(function(resp){
         var item = (resp && resp.item) || {};
@@ -1754,8 +1820,9 @@
         var target = '/ui/production-lists/' + encodeURIComponent(String(item.id || '')) + '?site_id=' + encodeURIComponent(siteId);
         window.location.href = target;
       })
-      .catch(function(){
-        setStatus('Kunde inte spara produktionslistan. Försök igen.');
+      .catch(function(err){
+        var msg = (err && err.message) ? String(err.message) : 'Kunde inte spara produktionslistan. Försok igen.';
+        setStatus(msg);
       })
       .finally(function(){
         saveBtn.disabled = false;

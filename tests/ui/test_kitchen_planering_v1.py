@@ -79,6 +79,12 @@ def test_planering_v1_selected_state(app_session):
     rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch", headers=HEADERS)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
+    assert "Rätt:" not in html
+    assert "Header" in html
+    assert "Specialkoster" in html
+    assert "Resultatsammanfattning" in html
+    assert 'id="kp-what-alt1"' in html
+    assert 'id="kp-what-alt2"' in html
     assert "Specialkost – arbetslista" in html
     assert "js-special-chip" in html
     assert "data-diet-id" in html
@@ -90,3 +96,13 @@ def test_planering_v1_selected_state(app_session):
     html2 = rv2.data.decode("utf-8")
     assert "Specialkost – arbetslista" in html2
     assert "Avd 1" in html2
+
+    # Normal mode still presents result totals and department table.
+    rv3 = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch&mode=normal", headers=HEADERS)
+    assert rv3.status_code == 200
+    html3 = rv3.data.decode("utf-8")
+    assert "Resultat" in html3
+    assert "Visa per avdelning" in html3
+    assert "Avdelning" in html3
+    assert 'id="kp-total-alt1"' in html3
+    assert 'id="kp-total-alt2"' in html3

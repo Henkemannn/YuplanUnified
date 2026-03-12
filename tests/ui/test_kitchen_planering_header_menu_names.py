@@ -64,15 +64,16 @@ def test_header_shows_dish_names_for_lunch_and_dinner(app_session):
     html_d = rv_din.data.decode("utf-8")
     assert "Pannkakor" in html_d
 
-    # Dinner in normal mode uses the same resolved dish label in "Rätt:"
+    # Dinner in normal mode still resolves dish label, but without redundant "Rätt:" line.
     rv_din_normal = client.get(
         f"/ui/kitchen/planering?site_id={site_id}&mode=normal&year={year}&week={week}&day=0&meal=dinner",
         headers=HEADERS,
     )
     assert rv_din_normal.status_code == 200
     html_dn = rv_din_normal.data.decode("utf-8")
-    assert "Rätt:" in html_dn
-    assert 'id="kp-planering-title">Pannkakor<' in html_dn
+    assert "Rätt:" not in html_dn
+    assert 'id="kp-planering-title"' in html_dn
+    assert "Pannkakor" in html_dn
 
     # Dessert in normal mode should use resolved dessert dish label
     rv_des_normal = client.get(
@@ -81,8 +82,9 @@ def test_header_shows_dish_names_for_lunch_and_dinner(app_session):
     )
     assert rv_des_normal.status_code == 200
     html_ds = rv_des_normal.data.decode("utf-8")
-    assert "Rätt:" in html_ds
-    assert 'id="kp-planering-title">Äppelpaj<' in html_ds
+    assert "Rätt:" not in html_ds
+    assert 'id="kp-planering-title"' in html_ds
+    assert "Äppelpaj" in html_ds
 
     # Tuesday dessert should not reuse Monday dessert
     rv_des_tue = client.get(
@@ -91,4 +93,5 @@ def test_header_shows_dish_names_for_lunch_and_dinner(app_session):
     )
     assert rv_des_tue.status_code == 200
     html_tue = rv_des_tue.data.decode("utf-8")
-    assert 'id="kp-planering-title">Chokladmousse<' in html_tue
+    assert 'id="kp-planering-title"' in html_tue
+    assert "Chokladmousse" in html_tue
