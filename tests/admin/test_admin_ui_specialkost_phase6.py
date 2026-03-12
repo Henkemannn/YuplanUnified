@@ -164,123 +164,12 @@ def test_admin_specialkost_delete_removes_diet_type(client_admin: FlaskClient):
     # Count occurrences or check table structure instead
 
 
-def test_admin_specialkost_list_shows_dependency_warning_for_departments(client_admin: FlaskClient):
-    """List route shows warning when a diet type is linked to departments."""
-    from core.db import get_session
-    from sqlalchemy import text
-
-    conn = get_session()
-    try:
-        conn.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS departments (
-                  id TEXT PRIMARY KEY,
-                  site_id TEXT NULL,
-                                    name TEXT NULL,
-                                    resident_count_mode TEXT NOT NULL DEFAULT 'fixed',
-                                    resident_count_fixed INTEGER NOT NULL DEFAULT 0,
-                                    residence_id TEXT NULL,
-                                    display_order INTEGER NULL,
-                                    notes TEXT NULL,
-                                    version INTEGER NOT NULL DEFAULT 0,
-                                    updated_at TEXT NULL
-                )
-                """
-            )
-        )
-        conn.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS department_diet_defaults (
-                  department_id TEXT NOT NULL,
-                  diet_type_id TEXT NOT NULL,
-                  default_count INTEGER NOT NULL DEFAULT 0,
-                  PRIMARY KEY (department_id, diet_type_id)
-                )
-                """
-            )
-        )
-        conn.execute(
-            text("INSERT OR REPLACE INTO departments(id, site_id, name) VALUES('dep-warn-1', 'site-1', 'Avd Warn')")
-        )
-        conn.execute(
-            text("INSERT OR REPLACE INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES('dep-warn-1', '1', 2)")
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
+def test_admin_specialkost_delete_confirm_uses_generic_warning(client_admin: FlaskClient):
+    """Delete confirm text should always show generic dependency warning."""
     response = client_admin.get("/ui/admin/specialkost", headers=ADMIN_HEADERS)
     assert response.status_code == 200
     html = response.data.decode()
-    assert "Används av 1 avdelning" in html
-    assert "Kopplingarna tas bort" in html
-
-
-def test_admin_specialkost_dependency_count_is_site_scoped(client_admin: FlaskClient):
-    """List dependency badge should count only departments in active site."""
-    from core.admin_repo import DietTypesRepo
-    from core.db import get_session
-    from sqlalchemy import text
-
-    repo = DietTypesRepo()
-    did = repo.create(site_id="site-1", name="ScopeTestDiet", default_select=False)
-    diet_type_id = str(did)
-
-    conn = get_session()
-    try:
-        conn.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL)"))
-        conn.execute(text("INSERT OR IGNORE INTO sites(id,name) VALUES('site-2','Annan site')"))
-        conn.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS departments (
-                  id TEXT PRIMARY KEY,
-                  site_id TEXT NULL,
-                  name TEXT NULL
-                )
-                """
-            )
-        )
-        conn.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS department_diet_defaults (
-                  department_id TEXT NOT NULL,
-                  diet_type_id TEXT NOT NULL,
-                  default_count INTEGER NOT NULL DEFAULT 0,
-                  PRIMARY KEY (department_id, diet_type_id)
-                )
-                """
-            )
-        )
-        conn.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name) VALUES('dep-site1', 'site-1', 'Avd Site1')"))
-        conn.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name) VALUES('dep-site2', 'site-2', 'Avd Site2')"))
-        # Seed same diet_type_id in two different sites; active site is site-1
-        conn.execute(
-            text(
-                "INSERT OR REPLACE INTO department_diet_defaults(department_id, diet_type_id, default_count) "
-                "VALUES('dep-site1', :diet_type_id, 2)"
-            ),
-            {"diet_type_id": diet_type_id},
-        )
-        conn.execute(
-            text(
-                "INSERT OR REPLACE INTO department_diet_defaults(department_id, diet_type_id, default_count) "
-                "VALUES('dep-site2', :diet_type_id, 2)"
-            ),
-            {"diet_type_id": diet_type_id},
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    response = client_admin.get("/ui/admin/specialkost", headers=ADMIN_HEADERS)
-    assert response.status_code == 200
-    html = response.data.decode()
-    assert "Används av 1 avdelning" in html
-    assert "Används av 2 avdelningar" not in html
+    assert "Varning: Om kosttypen har kopplingar till avdelningar tas de bort." in html
 
 
 def test_admin_specialkost_delete_cascades_known_dependencies(client_admin: FlaskClient):

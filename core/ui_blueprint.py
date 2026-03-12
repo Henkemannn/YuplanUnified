@@ -3734,7 +3734,6 @@ def _render_portal_weeks(is_enhetsportal: bool):
 @require_roles(*ADMIN_ROLES)
 def admin_specialkost_list():
     from core.admin_repo import DietTypesRepo
-    from sqlalchemy import text
 
     role = session.get("role")
     repo = DietTypesRepo()
@@ -3744,45 +3743,6 @@ def admin_specialkost_list():
         # Strict site isolation: require site selection
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_list")))
     items = repo.list_all(site_id=site_id)
-
-    dep_counts: dict[str, int] = {}
-    db = get_session()
-    try:
-        dept_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('departments')")).fetchall()}
-        dept_ids: list[str] = []
-        if dept_cols and {"id", "site_id"}.issubset(dept_cols):
-            drows = db.execute(
-                text("SELECT id FROM departments WHERE site_id=:s"),
-                {"s": str(site_id)},
-            ).fetchall()
-            dept_ids = [str(r[0]) for r in drows if r and r[0] is not None]
-        if dept_ids:
-            ddd_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
-            if ddd_cols and {"department_id", "diet_type_id"}.issubset(ddd_cols):
-                placeholders = ", ".join(f":dep_{i}" for i in range(len(dept_ids)))
-                params = {f"dep_{i}": dept_ids[i] for i in range(len(dept_ids))}
-                rows = db.execute(
-                    text(
-                        f"""
-                        SELECT CAST(diet_type_id AS TEXT) AS diet_type_id,
-                               COUNT(DISTINCT department_id) AS dept_count
-                        FROM department_diet_defaults
-                        WHERE CAST(department_id AS TEXT) IN ({placeholders})
-                        GROUP BY CAST(diet_type_id AS TEXT)
-                        """
-                    ),
-                    params,
-                ).fetchall()
-                dep_counts = {str(r[0]).strip(): int(r[1] or 0) for r in rows if r and r[0] is not None}
-    except Exception:
-        dep_counts = {}
-    finally:
-        db.close()
-
-    for item in items:
-        did = str(item.get("id") or "").strip()
-        name_key = str(item.get("name") or "").strip()
-        item["department_links"] = int(dep_counts.get(did, 0) or dep_counts.get(name_key, 0) or 0)
 
     vm = {"diet_types": items, "user_role": role, "site_id": site_id}
     return render_template("ui/unified_admin_specialkost_list.html", vm=vm, nav_context="admin")
