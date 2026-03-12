@@ -166,6 +166,49 @@ def test_admin_specialkost_delete_removes_diet_type(client_admin: FlaskClient):
     # Count occurrences or check table structure instead
 
 
+def test_admin_specialkost_delete_cascades_known_dependencies(client_admin: FlaskClient):
+    """Delete route removes known dependency rows and then deletes the diet type."""
+    from core.admin_repo import DietTypesRepo
+    from core.db import get_session
+    from sqlalchemy import text
+
+    repo = DietTypesRepo()
+    diet_id = repo.create(site_id="site-1", name="Fiskfri", default_select=False)
+
+    conn = get_session()
+    try:
+        conn.execute(text("CREATE TABLE IF NOT EXISTS normal_exclusions (diet_type_id TEXT)"))
+        conn.execute(
+            text("INSERT INTO normal_exclusions(diet_type_id) VALUES(:diet_type_id)"),
+            {"diet_type_id": str(diet_id)},
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client_admin.post(
+        f"/ui/admin/specialkost/{diet_id}/delete",
+        headers=ADMIN_HEADERS,
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    html = response.data.decode()
+    assert "raderats" in html.lower() or "borttagen" in html.lower()
+
+    still_there = repo.get_by_id(diet_id)
+    assert still_there is None
+
+    conn = get_session()
+    try:
+        row = conn.execute(
+            text("SELECT COUNT(1) FROM normal_exclusions WHERE diet_type_id=:diet_type_id"),
+            {"diet_type_id": str(diet_id)},
+        ).fetchone()
+        assert int(row[0] or 0) == 0 if row else True
+    finally:
+        conn.close()
+
+
 def test_admin_specialkost_list_empty_when_none(app_session: Flask):
     """List shows appropriate message when no dietary types exist."""
     from core.db import get_session

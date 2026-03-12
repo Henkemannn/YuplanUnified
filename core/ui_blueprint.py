@@ -3823,15 +3823,25 @@ def admin_specialkost_delete(kosttyp_id: int):
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_list")))
 
     item = repo.get_by_id(kosttyp_id)
-    if not item or str(item.get("site_id") or "") != str(active_site_id):
+    if not item:
+        from flask import abort
+        abort(404)
+    item_site_id = (item.get("site_id") or "")
+    # Backward compatibility: allow delete of legacy rows with NULL site_id.
+    if item_site_id and str(item_site_id) != str(active_site_id):
         from flask import abort
         abort(404)
 
     try:
         repo.delete(kosttyp_id)
         flash("Kosttypen har raderats.", "success")
-    except DietTypeDeleteBlockedError:
-        flash("Kosttypen kan inte tas bort eftersom den används i andra inställningar.", "error")
+    except DietTypeDeleteBlockedError as exc:
+        refs = ", ".join(f"{k}: {v}" for k, v in exc.references.items() if v > 0)
+        detail = f" ({refs})" if refs else ""
+        flash(
+            f"Kosttypen kan inte tas bort på grund av databasberoenden{detail}.",
+            "error",
+        )
     except Exception:
         flash("Kunde inte ta bort kosttypen just nu.", "error")
     return redirect(url_for("ui.admin_specialkost_list"))

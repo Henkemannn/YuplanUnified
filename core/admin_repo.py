@@ -1191,8 +1191,13 @@ class DietTypesRepo:
             except Exception:
                 pass
 
-    def list_all(self, site_id: str) -> list[dict]:
-        """List all dietary types for a given site."""
+    def list_all(self, site_id: str | None = None, tenant_id: int | None = None) -> list[dict]:
+        """List dietary types.
+
+        Preferred usage is site-scoped via `site_id`.
+        Legacy callers may pass `tenant_id`; in that case this method returns
+        all dietary types (best-effort backward compatibility).
+        """
         db = get_session()
         try:
             self._ensure_table(db)
@@ -1203,18 +1208,28 @@ class DietTypesRepo:
                     # Schema missing site_id: return empty to force isolation (devs should reset DB)
                     rows = []
                 else:
-                    if not site_id:
-                        # Strict isolation: require site_id; routes should redirect to select-site
-                        rows = []
-                    else:
+                    if site_id:
                         rows = db.execute(
-                            text("SELECT id, name, default_select FROM dietary_types WHERE site_id=:s ORDER BY name"),
+                            text("SELECT id, site_id, name, default_select FROM dietary_types WHERE site_id=:s ORDER BY name"),
                             {"s": site_id},
                         ).fetchall()
+                    elif tenant_id is not None:
+                        # Legacy admin-ui compatibility path: tenant was historically used.
+                        rows = db.execute(
+                            text("SELECT id, site_id, name, default_select FROM dietary_types ORDER BY name")
+                        ).fetchall()
+                    else:
+                        # Strict isolation for modern callers with no explicit scope
+                        rows = []
             except Exception:
                 rows = []
             return [
-                {"id": int(r[0]), "name": str(r[1]), "default_select": bool(r[2])}
+                {
+                    "id": int(r[0]),
+                    "site_id": (str(r[1]) if r[1] is not None else None),
+                    "name": str(r[2]),
+                    "default_select": bool(r[3]),
+                }
                 for r in rows
             ]
         finally:
@@ -1352,15 +1367,14 @@ class DietTypesRepo:
     def delete(self, diet_type_id: int) -> None:
         """Delete a dietary type by ID.
 
-        Blocks deletion when references exist in known dependent tables and
-        raises `DietTypeDeleteBlockedError` with per-table counts.
+        Performs safe cleanup of known dependent rows before deleting the diet type.
+        Raises `DietTypeDeleteBlockedError` only for unknown FK constraints.
         """
         db = get_session()
         try:
             self._ensure_table(db)
             did_txt = str(int(diet_type_id))
 
-            refs: dict[str, int] = {}
             dependency_tables = (
                 ("department_diet_defaults", "diet_type_id"),
                 ("normal_exclusions", "diet_type_id"),
@@ -1370,19 +1384,13 @@ class DietTypesRepo:
             for table_name, column_name in dependency_tables:
                 if not _table_has_column(db, table_name, column_name):
                     continue
-                row = db.execute(
+                db.execute(
                     text(
-                        f"SELECT COUNT(1) FROM {table_name} "
+                        f"DELETE FROM {table_name} "
                         f"WHERE CAST({column_name} AS TEXT)=:diet_type_id"
                     ),
                     {"diet_type_id": did_txt},
-                ).fetchone()
-                count = int(row[0] or 0) if row else 0
-                if count > 0:
-                    refs[table_name] = count
-
-            if refs:
-                raise DietTypeDeleteBlockedError(refs)
+                )
 
             db.execute(text("DELETE FROM dietary_types WHERE id=:id"), {"id": int(diet_type_id)})
             db.commit()
