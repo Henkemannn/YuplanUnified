@@ -136,14 +136,12 @@ def test_admin_specialkost_edit_updates_diet_type(client_admin: FlaskClient):
 
 def test_admin_specialkost_delete_removes_diet_type(client_admin: FlaskClient):
     """Delete route removes dietary type and shows confirmation."""
-    # Verify delete is guarded by confirm modal trigger in list UI
+    # Verify delete trigger uses direct confirm fallback (no JS modal dependency)
     list_response = client_admin.get("/ui/admin/specialkost", headers=ADMIN_HEADERS)
     assert list_response.status_code == 200
     list_html = list_response.data.decode()
     assert "specialkost-delete-trigger" in list_html
-    assert "Ta bort kosttyp?" in list_html
-    assert "Kosttypen tas bort och kan påverka avdelningar som använder den." in list_html
-    assert "return confirm(" not in list_html
+    assert "return confirm(" in list_html
 
     # Delete "Vegetarisk" (id=1)
     diet_id = 1

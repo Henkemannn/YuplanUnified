@@ -28,34 +28,17 @@
               </div>
               <div class="app-shell__list-actions admin-specialkost__actions">
                 <a href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" class="yp-btn yp-btn-secondary admin-specialkost__edit-btn">Redigera</a>
-                <button
-                  type="button"
-                  class="yp-btn yp-btn-secondary app-shell__icon-btn--danger admin-specialkost__delete-btn"
-                  data-testid="specialkost-delete-trigger"
-                  data-modal-target="#delete-diet-modal-{{ dt.id }}"
-                  aria-label="Ta bort {{ dt.name }}"
-                >🗑</button>
+                <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" class="admin-specialkost__inline-form" onsubmit="return confirm('Ta bort kosttyp {{ dt.name }}?');">
+                  {{ csrf_token_input() | safe }}
+                  <button
+                    type="submit"
+                    class="yp-btn yp-btn-secondary app-shell__icon-btn--danger admin-specialkost__delete-btn"
+                    data-testid="specialkost-delete-trigger"
+                    aria-label="Ta bort {{ dt.name }}"
+                  >🗑</button>
+                </form>
               </div>
             </div>
-
-            <dialog id="delete-diet-modal-{{ dt.id }}" class="ua-modal admin-specialkost__modal" data-testid="specialkost-delete-modal">
-              <div class="ua-modal-inner">
-                <header class="ua-modal-header">
-                  <h3>Ta bort kosttyp?</h3>
-                  <button type="button" class="ua-modal-close" data-modal-close aria-label="Stäng">&times;</button>
-                </header>
-                <div class="ua-modal-body">
-                  <p>Kosttypen tas bort och kan påverka avdelningar som använder den.</p>
-                </div>
-                <footer class="ua-modal-footer">
-                  <button type="button" class="yp-btn yp-btn-secondary" data-modal-close>Avbryt</button>
-                  <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" class="admin-specialkost__inline-form">
-                    {{ csrf_token_input() | safe }}
-                    <button type="submit" class="yp-btn btn-danger">Ta bort</button>
-                  </form>
-                </footer>
-              </div>
-            </dialog>
           {% endfor %}
         </div>
       {% else %}
