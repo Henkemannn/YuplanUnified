@@ -56,6 +56,7 @@
                                         data-testid="specialkost-delete-trigger"
                                         aria-label="Ta bort kosttyp {{ row.name }}"
                                         title="Ta bort"
+                                        onclick="return confirm('Varning: Om kosttypen har kopplingar till avdelningar tas de bort. Ta bort kosttyp {{ row.name }}?');"
                                     >🗑️</button>
                                 </form>
                             </div>

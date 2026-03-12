@@ -35,6 +35,7 @@
                     class="yp-btn yp-btn-secondary app-shell__icon-btn--danger admin-specialkost__delete-btn"
                     data-testid="specialkost-delete-trigger"
                     aria-label="Ta bort {{ dt.name }}"
+                    onclick="return confirm('Varning: Om kosttypen har kopplingar till avdelningar tas de bort. Ta bort kosttyp {{ dt.name }}?');"
                   >🗑</button>
                 </form>
               </div>
