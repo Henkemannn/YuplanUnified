@@ -41,6 +41,7 @@
                             <div class="app-shell__list-main">
                                 <span class="app-shell__list-title">{{ row.name }}</span>
                                 <div class="app-shell__list-meta">
+                                    <span class="app-shell__badge">{{ row.diet_family or 'Övrigt' }}</span>
                                     {% if row.default_select %}
                                         <span class="app-shell__badge">✓ Förmarkeras</span>
                                     {% endif %}

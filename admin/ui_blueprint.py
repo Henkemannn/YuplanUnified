@@ -473,8 +473,11 @@ def admin_specialkost_list() -> str:  # type: ignore[override]
 @require_roles("admin", "superuser")
 def admin_specialkost_new() -> str:  # type: ignore[override]
     """Create a new dietary type."""
+    from core.diet_family import DIET_FAMILY_OPTIONS, normalize_diet_family
+
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()
+        diet_family = normalize_diet_family(request.form.get("diet_family"))
         default_select = request.form.get("default_select") == "on"
         
         if not name:
@@ -483,7 +486,7 @@ def admin_specialkost_new() -> str:  # type: ignore[override]
         
         repo = DietTypesRepo()
         try:
-            repo.create(tenant_id=1, name=name, default_select=default_select)
+            repo.create(tenant_id=1, name=name, diet_family=diet_family, default_select=default_select)
             flash(f"Kosttyp '{name}' skapad.", "success")
         except ValueError as e:
             if str(e) == "duplicate_name":
@@ -495,7 +498,7 @@ def admin_specialkost_new() -> str:  # type: ignore[override]
         
         return redirect(url_for("admin_ui.admin_specialkost_list"))
     
-    vm = {}
+    vm = {"diet_family_options": DIET_FAMILY_OPTIONS}
     return render_template("admin_specialkost_new.html", vm=vm)
 
 
@@ -503,10 +506,13 @@ def admin_specialkost_new() -> str:  # type: ignore[override]
 @require_roles("admin", "superuser")
 def admin_specialkost_edit(kosttyp_id: int) -> str:  # type: ignore[override]
     """Edit a dietary type. TODO: Add ETag concurrency control."""
+    from core.diet_family import DIET_FAMILY_OPTIONS, normalize_diet_family
+
     repo = DietTypesRepo()
     
     if request.method == "POST":
         new_name = (request.form.get("name") or "").strip()
+        diet_family = normalize_diet_family(request.form.get("diet_family"))
         new_default_select = request.form.get("default_select") == "on"
         
         if not new_name:
@@ -514,7 +520,7 @@ def admin_specialkost_edit(kosttyp_id: int) -> str:  # type: ignore[override]
             return redirect(url_for("admin_ui.admin_specialkost_edit", kosttyp_id=kosttyp_id))
         
         try:
-            repo.update(kosttyp_id, name=new_name, default_select=new_default_select)
+            repo.update(kosttyp_id, name=new_name, diet_family=diet_family, default_select=new_default_select)
             flash(f"Kosttyp '{new_name}' uppdaterad.", "success")
         except ValueError as e:
             if str(e) == "duplicate_name":
@@ -532,7 +538,7 @@ def admin_specialkost_edit(kosttyp_id: int) -> str:  # type: ignore[override]
         flash("Kosttyp hittades inte.", "danger")
         return redirect(url_for("admin_ui.admin_specialkost_list"))
     
-    vm = {"diet_type": diet_type}
+    vm = {"diet_type": diet_type, "diet_family_options": DIET_FAMILY_OPTIONS}
     return render_template("admin_specialkost_edit.html", vm=vm)
 
 

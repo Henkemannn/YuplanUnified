@@ -2783,10 +2783,12 @@ def kitchen_planering_v1():
             from .admin_repo import DietTypesRepo as _TypesRepo
             types = _TypesRepo().list_all(site_id=site_id)
             diet_name_by_id = {str(it["id"]): str(it["name"]) for it in types}
+            diet_family_by_id = {str(it["id"]): str(it.get("diet_family") or "Övrigt") for it in types}
             name_to_id = {str(it["name"]): str(it["id"]) for it in types}
             preselected_diet_ids = {str(it["id"]) for it in types if bool(it.get("default_select"))}
         except Exception:
             diet_name_by_id = {}
+            diet_family_by_id = {}
             name_to_id = {}
             preselected_diet_ids = set()
 
@@ -2819,6 +2821,7 @@ def kitchen_planering_v1():
             {
                 "diet_type_id": dtid,
                 "diet_type_name": diet_name_by_id.get(dtid, dtid),
+                "diet_family": diet_family_by_id.get(dtid, "Övrigt"),
                 "total_count": totals_by_diet.get(dtid, 0),
             }
             for dtid in sorted(totals_by_diet.keys(), key=lambda k: (-(totals_by_diet[k]), diet_name_by_id.get(k, k)))
@@ -2868,6 +2871,7 @@ def kitchen_planering_v1():
             adaptation.append({
                 "diet_type_id": dtid,
                 "diet_type_name": diet_name_by_id.get(dtid, dtid),
+                "diet_family": diet_family_by_id.get(dtid, "Övrigt"),
                 "total_count": total,
                 "per_department": per_dept,
             })
@@ -2957,6 +2961,7 @@ def kitchen_planering_v1():
                         dep_items.append({
                             "diet_type_id": dtid,
                             "diet_type_name": diet_name_by_id.get(dtid, dtid),
+                            "diet_family": diet_family_by_id.get(dtid, "Övrigt"),
                             "count": cnt,
                             "done": marked,
                         })
@@ -2971,6 +2976,7 @@ def kitchen_planering_v1():
                 {
                     "diet_type_id": dtid,
                     "diet_type_name": diet_name_by_id.get(dtid, dtid),
+                    "diet_family": diet_family_by_id.get(dtid, "Övrigt"),
                     "count": int(totals_by_diet.get(dtid, 0) or 0),
                     "done": int(done_by_diet.get(dtid, 0) or 0),
                 }
@@ -3751,8 +3757,12 @@ def admin_specialkost_list():
 @ui_bp.get("/ui/admin/specialkost/new")
 @require_roles(*ADMIN_ROLES)
 def admin_specialkost_new_form():
+    from core.diet_family import DIET_FAMILY_OPTIONS
     role = session.get("role")
-    return render_template("ui/unified_admin_specialkost_new.html", vm={"user_role": role})
+    return render_template(
+        "ui/unified_admin_specialkost_new.html",
+        vm={"user_role": role, "diet_family_options": DIET_FAMILY_OPTIONS},
+    )
 
 
 @ui_bp.post("/ui/admin/specialkost/new")
@@ -3760,7 +3770,9 @@ def admin_specialkost_new_form():
 def admin_specialkost_create():
     from flask import flash, redirect, url_for
     from core.admin_repo import DietTypesRepo
+    from core.diet_family import normalize_diet_family
     name = (request.form.get("name") or "").strip()
+    diet_family = normalize_diet_family(request.form.get("diet_family"))
     default_select = bool(request.form.get("default_select"))
     if not name:
         flash("Namn måste anges.", "error")
@@ -3770,7 +3782,12 @@ def admin_specialkost_create():
     if not site_id:
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_new_form")))
     try:
-        DietTypesRepo().create(site_id=site_id, name=name, default_select=default_select)
+        DietTypesRepo().create(
+            site_id=site_id,
+            name=name,
+            diet_family=diet_family,
+            default_select=default_select,
+        )
     except ValueError as exc:
         if str(exc) == "duplicate_name":
             flash("Kosttyp med samma namn finns redan.", "error")
@@ -3784,6 +3801,7 @@ def admin_specialkost_create():
 @require_roles(*ADMIN_ROLES)
 def admin_specialkost_edit_form(kosttyp_id: int):
     from core.admin_repo import DietTypesRepo
+    from core.diet_family import DIET_FAMILY_OPTIONS
     role = session.get("role")
     item = DietTypesRepo().get_by_id(kosttyp_id)
     if not item:
@@ -3796,7 +3814,10 @@ def admin_specialkost_edit_form(kosttyp_id: int):
     if str(item.get("site_id") or "") != str(active_site_id):
         from flask import abort
         abort(404)
-    return render_template("ui/unified_admin_specialkost_edit.html", vm={"diet_type": item, "user_role": role})
+    return render_template(
+        "ui/unified_admin_specialkost_edit.html",
+        vm={"diet_type": item, "user_role": role, "diet_family_options": DIET_FAMILY_OPTIONS},
+    )
 
 
 @ui_bp.post("/ui/admin/specialkost/<int:kosttyp_id>/edit")
@@ -3804,7 +3825,9 @@ def admin_specialkost_edit_form(kosttyp_id: int):
 def admin_specialkost_update(kosttyp_id: int):
     from flask import flash, redirect, url_for
     from core.admin_repo import DietTypesRepo
+    from core.diet_family import normalize_diet_family
     name = (request.form.get("name") or "").strip()
+    diet_family = normalize_diet_family(request.form.get("diet_family"))
     default_select = bool(request.form.get("default_select"))
     # Verify site match
     active_site_id = session.get("site_id")
@@ -3815,7 +3838,12 @@ def admin_specialkost_update(kosttyp_id: int):
         from flask import abort
         abort(404)
     try:
-        DietTypesRepo().update(kosttyp_id, name=name, default_select=default_select)
+        DietTypesRepo().update(
+            kosttyp_id,
+            name=name,
+            diet_family=diet_family,
+            default_select=default_select,
+        )
     except ValueError as exc:
         if str(exc) == "duplicate_name":
             flash("Kosttyp med samma namn finns redan.", "error")

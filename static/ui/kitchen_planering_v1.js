@@ -46,15 +46,22 @@
   var lastPrintMode = 'special';
   var lastSpecialWorklist = [];
 
-  function getDietFamily(name){
-    var low = String(name || '').toLowerCase();
-    if(low.indexOf('timbal') !== -1) return 'timbal';
-    return '';
+  function getDietFamily(item){
+    if(item && typeof item === 'object'){
+      var fam = String(item.family || '').trim();
+      if(fam){ return fam; }
+      var nm = String(item.name || '').trim().toLowerCase();
+      if(nm.indexOf('timbal') !== -1){ return 'Textur'; }
+      return 'Övrigt';
+    }
+    var low = String(item || '').toLowerCase();
+    if(low.indexOf('timbal') !== -1){ return 'Textur'; }
+    return 'Övrigt';
   }
 
   function getDietFamilyLabel(family){
-    if(family === 'timbal') return 'Timbal';
-    return '';
+    var fam = String(family || '').trim();
+    return fam || 'Övrigt';
   }
 
   function setSpecialChipState(dietId, isActive){
@@ -455,7 +462,7 @@
     for(var g=0; g<dietIds.length; g++){
       var dietId = dietIds[g];
       var dietName = (specialById[dietId] && specialById[dietId].name) || dietId;
-      var family = getDietFamily(dietName);
+      var family = getDietFamily(specialById[dietId] || { name: dietName });
       var groupKey = family ? ('family:' + family) : ('diet:' + dietId);
       if(!grouped[groupKey]){
         grouped[groupKey] = {
@@ -1149,7 +1156,7 @@
     if(!ctx) return;
     var specialView = qs('.specialkost-view');
     if(!specialView) return;
-    var chipGrid = specialView.querySelector('.kp-chip-grid[data-mode="special"]');
+    var chipGrid = specialView.querySelector('[data-mode="special"]');
     var chips = Array.prototype.slice.call(specialView.querySelectorAll('.js-special-chip'));
     if(!chipGrid || !chips.length) return;
     // Build special summary maps
@@ -1168,7 +1175,8 @@
         specialById[id] = {
           total: parseInt(it.count || 0, 10) || 0,
           done: parseInt(it.done || 0, 10) || 0,
-          name: nm
+          name: nm,
+          family: String(it.diet_family || it.family || 'Övrigt')
         };
       }
       var per = specialSummary.per_department || [];
@@ -1186,6 +1194,7 @@
           items.push({
             diet_type_id: dietId,
             diet_type_name: dietName,
+            diet_family: String(row.diet_family || specialById[dietId].family || 'Övrigt'),
             count: parseInt(row.count || 0, 10) || 0,
             done: !!row.done
           });
@@ -1206,7 +1215,7 @@
       setSpecialChipState(id, isActive);
     });
     if(!isSpecialChipHandlerBound){
-      chipGrid.addEventListener('click', function(e){
+      specialView.addEventListener('click', function(e){
         var btn = e.target && e.target.closest && e.target.closest('.js-special-chip');
         if(!btn) return;
         if(!btn.closest('.specialkost-view')) return;

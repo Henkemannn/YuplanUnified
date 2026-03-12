@@ -23,6 +23,7 @@
               <div class="app-shell__list-main">
                 <span class="app-shell__list-title">{{ dt.name }}</span>
                 <div class="app-shell__list-meta">
+                  <span>Familj: {{ dt.diet_family or 'Övrigt' }}</span>
                   <span>{% if dt.default_select %}Förinställd: Ja{% else %}Förinställd: Nej{% endif %}</span>
                 </div>
               </div>

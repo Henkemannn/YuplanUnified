@@ -516,6 +516,57 @@
   gap: 0.3rem;
 }
 
+.kitchen-planering-page .kp-family-groups {
+  display: grid;
+  gap: 8px;
+}
+
+.kitchen-planering-page .kp-family-group {
+  border: 1px solid #dbe4f0;
+  border-radius: 10px;
+  background: #f8fbff;
+  overflow: hidden;
+}
+
+.kitchen-planering-page .kp-family-group > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  font-weight: 600;
+  color: #1e3a8a;
+}
+
+.kitchen-planering-page .kp-family-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.kitchen-planering-page .kp-family-group-title {
+  font-size: 0.9rem;
+}
+
+.kitchen-planering-page .kp-family-group-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.8rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  border: 1px solid #c7dbff;
+  background: #e8f1ff;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.kitchen-planering-page .kp-chip-grid--family {
+  padding: 8px 10px 10px;
+  gap: 6px;
+}
+
 .kitchen-planering-page .kp-chip-count {
   color: #475569;
   font-weight: 600;

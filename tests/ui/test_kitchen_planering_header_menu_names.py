@@ -55,6 +55,7 @@ def test_header_shows_dish_names_for_lunch_and_dinner(app_session):
     rv_lunch = client.get(f"/ui/kitchen/planering?site_id={site_id}&year={year}&week={week}&day=0&meal=lunch", headers=HEADERS)
     assert rv_lunch.status_code == 200
     html_l = rv_lunch.data.decode("utf-8")
+    assert "Header" not in html_l
     assert "Fiskgryta" in html_l
     assert "Veg Lasagne" in html_l
 

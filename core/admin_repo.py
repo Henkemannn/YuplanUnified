@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from flask import current_app, has_app_context
 
 from .db import get_session
+from .diet_family import DIET_FAMILY_OTHER, infer_diet_family, normalize_diet_family
 from .etag import ConcurrencyError
 
 
@@ -251,7 +252,6 @@ class SitesRepo:
             db.close()
 
     def list_sites(self) -> list[dict]:
-        """List all sites (id, name, version)."""
         db = get_session()
         try:
             if _is_sqlite(db):
@@ -1162,6 +1162,22 @@ class DietTypeDeleteBlockedError(Exception):
 class DietTypesRepo:
     """Repository for managing dietary types (specialkost), now scoped per site."""
 
+    def _backfill_missing_families(self, db) -> None:
+        rows = db.execute(
+            text(
+                "SELECT id, name FROM dietary_types "
+                "WHERE diet_family IS NULL OR trim(CAST(diet_family AS TEXT))=''"
+            )
+        ).fetchall()
+        for row in rows:
+            did = int(row[0])
+            nm = str(row[1] or "")
+            fam = infer_diet_family(nm)
+            db.execute(
+                text("UPDATE dietary_types SET diet_family=:f WHERE id=:id"),
+                {"f": fam, "id": did},
+            )
+
     def _name_exists(
         self,
         db,
@@ -1201,6 +1217,7 @@ class DietTypesRepo:
                         tenant_id INTEGER NULL,
                         site_id TEXT NULL,
                         name TEXT NOT NULL,
+                        diet_family TEXT NOT NULL DEFAULT 'Övrigt',
                         default_select INTEGER NOT NULL DEFAULT 0
                     )
                     """
@@ -1211,6 +1228,19 @@ class DietTypesRepo:
                 cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
                 if "site_id" not in cols:
                     db.execute(text("ALTER TABLE dietary_types ADD COLUMN site_id TEXT"))
+                if "diet_family" not in cols:
+                    db.execute(text("ALTER TABLE dietary_types ADD COLUMN diet_family TEXT"))
+            except Exception:
+                pass
+            try:
+                self._backfill_missing_families(db)
+                db.execute(
+                    text(
+                        "UPDATE dietary_types SET diet_family=:fallback "
+                        "WHERE diet_family IS NULL OR trim(CAST(diet_family AS TEXT))=''"
+                    ),
+                    {"fallback": DIET_FAMILY_OTHER},
+                )
             except Exception:
                 pass
             # Helpful index for lookups
@@ -1238,13 +1268,24 @@ class DietTypesRepo:
                 else:
                     if site_id:
                         rows = db.execute(
-                            text("SELECT id, site_id, name, default_select FROM dietary_types WHERE site_id=:s ORDER BY name"),
-                            {"s": site_id},
+                            text(
+                                "SELECT id, site_id, name, "
+                                "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
+                                "default_select "
+                                "FROM dietary_types WHERE site_id=:s ORDER BY name"
+                            ),
+                            {"s": site_id, "fallback": DIET_FAMILY_OTHER},
                         ).fetchall()
                     elif tenant_id is not None:
                         # Legacy admin-ui compatibility path: tenant was historically used.
                         rows = db.execute(
-                            text("SELECT id, site_id, name, default_select FROM dietary_types ORDER BY name")
+                            text(
+                                "SELECT id, site_id, name, "
+                                "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
+                                "default_select "
+                                "FROM dietary_types ORDER BY name"
+                            ),
+                            {"fallback": DIET_FAMILY_OTHER},
                         ).fetchall()
                     else:
                         # Strict isolation for modern callers with no explicit scope
@@ -1256,7 +1297,8 @@ class DietTypesRepo:
                     "id": int(r[0]),
                     "site_id": (str(r[1]) if r[1] is not None else None),
                     "name": str(r[2]),
-                    "default_select": bool(r[3]),
+                    "diet_family": normalize_diet_family(str(r[3] or "")),
+                    "default_select": bool(r[4]),
                 }
                 for r in rows
             ]
@@ -1269,8 +1311,13 @@ class DietTypesRepo:
         try:
             self._ensure_table(db)
             row = db.execute(
-                text("SELECT id, site_id, name, default_select FROM dietary_types WHERE id=:id"),
-                {"id": diet_type_id},
+                text(
+                    "SELECT id, site_id, name, "
+                    "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
+                    "default_select "
+                    "FROM dietary_types WHERE id=:id"
+                ),
+                {"id": diet_type_id, "fallback": DIET_FAMILY_OTHER},
             ).fetchone()
             if not row:
                 return None
@@ -1278,7 +1325,8 @@ class DietTypesRepo:
                 "id": int(row[0]),
                 "site_id": (str(row[1]) if row[1] is not None else None),
                 "name": str(row[2]),
-                "default_select": bool(row[3]),
+                "diet_family": normalize_diet_family(str(row[3] or "")),
+                "default_select": bool(row[4]),
             }
         finally:
             db.close()
@@ -1295,6 +1343,7 @@ class DietTypesRepo:
         site_id = kwargs.get("site_id")
         tenant_id = kwargs.get("tenant_id")
         name = kwargs.get("name")
+        diet_family = normalize_diet_family(kwargs.get("diet_family"))
         default_select = bool(kwargs.get("default_select", False))
         # Allow positional pattern (site_id, name, default_select)
         if not name and len(args) >= 2 and isinstance(args[1], str):
@@ -1334,31 +1383,31 @@ class DietTypesRepo:
                     if needs_tenant:
                         tval = int(tenant_id) if tenant_id is not None else 1
                         db.execute(
-                            text("INSERT INTO dietary_types(tenant_id, site_id, name, default_select) VALUES(:t, :s, :n, :d)"),
-                            {"t": tval, "s": site_id, "n": name, "d": 1 if default_select else 0},
+                            text("INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, default_select) VALUES(:t, :s, :n, :f, :d)"),
+                            {"t": tval, "s": site_id, "n": name, "f": diet_family, "d": 1 if default_select else 0},
                         )
                     else:
                         db.execute(
-                            text("INSERT INTO dietary_types(site_id, name, default_select) VALUES(:s, :n, :d)"),
-                            {"s": site_id, "n": name, "d": 1 if default_select else 0},
+                            text("INSERT INTO dietary_types(site_id, name, diet_family, default_select) VALUES(:s, :n, :f, :d)"),
+                            {"s": site_id, "n": name, "f": diet_family, "d": 1 if default_select else 0},
                         )
                 else:
                     db.execute(
-                        text("INSERT INTO dietary_types(site_id, name, default_select) VALUES(:s, :n, :d)"),
-                        {"s": site_id, "n": name, "d": 1 if default_select else 0},
+                        text("INSERT INTO dietary_types(site_id, name, diet_family, default_select) VALUES(:s, :n, :f, :d)"),
+                        {"s": site_id, "n": name, "f": diet_family, "d": 1 if default_select else 0},
                     )
                 row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
                 new_id = int(row[0]) if row else 0
             else:
                 if tenant_id is not None:
                     res = db.execute(
-                        text("INSERT INTO dietary_types(tenant_id, site_id, name, default_select) VALUES(:t, :s, :n, :d) RETURNING id"),
-                        {"t": int(tenant_id), "s": site_id, "n": name, "d": default_select},
+                        text("INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, default_select) VALUES(:t, :s, :n, :f, :d) RETURNING id"),
+                        {"t": int(tenant_id), "s": site_id, "n": name, "f": diet_family, "d": default_select},
                     )
                 else:
                     res = db.execute(
-                        text("INSERT INTO dietary_types(site_id, name, default_select) VALUES(:s, :n, :d) RETURNING id"),
-                        {"s": site_id, "n": name, "d": default_select},
+                        text("INSERT INTO dietary_types(site_id, name, diet_family, default_select) VALUES(:s, :n, :f, :d) RETURNING id"),
+                        {"s": site_id, "n": name, "f": diet_family, "d": default_select},
                     )
                 row = res.fetchone()
                 new_id = int(row[0]) if row else 0
@@ -1370,8 +1419,14 @@ class DietTypesRepo:
         finally:
             db.close()
 
-    def update(self, diet_type_id: int, name: str | None = None, default_select: bool | None = None) -> None:
-        """Update dietary type name and/or default_select. TODO: Add ETag concurrency."""
+    def update(
+        self,
+        diet_type_id: int,
+        name: str | None = None,
+        default_select: bool | None = None,
+        diet_family: str | None = None,
+    ) -> None:
+        """Update dietary type name/family and/or default_select. TODO: Add ETag concurrency."""
         db = get_session()
         try:
             current = db.execute(
@@ -1399,6 +1454,9 @@ class DietTypesRepo:
             if default_select is not None:
                 sets.append("default_select=:ds")
                 params["ds"] = 1 if default_select else 0
+            if diet_family is not None:
+                sets.append("diet_family=:diet_family")
+                params["diet_family"] = normalize_diet_family(diet_family)
             if not sets:
                 return
             sql = f"UPDATE dietary_types SET {', '.join(sets)} WHERE id=:id"

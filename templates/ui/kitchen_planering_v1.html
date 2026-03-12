@@ -137,7 +137,6 @@
             <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-date-iso="{{ vm.selected_date_iso or '' }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-service-addons-summary='{{ (vm.service_addons_summary or [])|tojson }}' data-selected-service-addon-id="{{ vm.selected_service_addon_id or '' }}" data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}' data-current-dish-label="{{ (vm.current_dish_label or '')|e }}" data-dev-mode="{{ '1' if vm.dev_mode else '0' }}">
               <section class="kp-section kp-section--header">
               <div class="kp-card kp-mb-12 normalkost-view">
-                <h3 class="kp-section-title">Header</h3>
                 <div class="kp-context-row">
                   <span>Vecka <strong>{{ vm.week }}</strong></span>
                   <span>·</span>
@@ -184,62 +183,42 @@
             <section class="kp-section kp-section--special specialkost-view">
             <div class="kp-card kp-mb-12 specialkost-view">
               <h3 class="kp-section-title">Specialkoster</h3>
-              <p class="kp-section-subtitle">Aktiva specialkoster visas först. Visa full lista vid behov.</p>
+              <p class="kp-section-subtitle">Välj specialkoster i familjegrupper för tydligare arbetsflöde.</p>
               {% if vm.special_summary and vm.special_summary.totals and vm.special_summary.totals|length > 0 %}
-                {% set timbal = namespace(total=0, rows=[]) %}
-                {% for item in vm.special_summary.totals %}
-                  {% if item.count > 0 and item.diet_type_name and (not (item.diet_type_name|string).isdigit()) and ('timbal' in (item.diet_type_name|string|lower)) %}
-                    {% set timbal.total = timbal.total + item.count %}
-                    {% set _ = timbal.rows.append(item) %}
-                  {% endif %}
-                {% endfor %}
-                {% if timbal.total > 0 %}
-                  <div class="kp-family-summary" aria-label="Timbalgrupp">
-                    <div class="kp-family-title">Timbal totalt: <strong>{{ timbal.total }}</strong></div>
-                    <div class="kp-family-breakdown">
-                      {% for item in timbal.rows %}
-                        <span class="kp-family-pill">{{ item.diet_type_name }} ({{ item.count }})</span>
-                      {% endfor %}
-                    </div>
-                  </div>
-                {% endif %}
-
-                <div class="kp-chip-grid kp-chip-grid--compact" data-mode="special" role="group" aria-label="Aktiva specialkoster">
-                  {% for item in vm.special_summary.totals %}
-                    {% if item.count > 0 and item.diet_type_name and (not (item.diet_type_name|string).isdigit()) %}
-                      <button type="button"
-                              class="diet-chip js-special-chip {% if item.diet_type_id in (vm.selected_diets or []) %}active{% endif %}"
-                              data-diet-id="{{ item.diet_type_id }}"
-                              data-total="{{ item.count }}"
-                              data-done="{{ item.done }}"
-                              data-name="{{ item.diet_type_name }}"
-                              aria-pressed="{% if item.diet_type_id in (vm.selected_diets or []) %}true{% else %}false{% endif %}">
-                        <span class="kp-chip-label">{{ item.diet_type_name }}</span>
-                        <span class="kp-chip-count">({{ item.count }})</span>
-                      </button>
+                {% set known_families = ['Textur', 'Allergi / Exkludering', 'Kostval', 'Anpassning', 'Övrigt'] %}
+                <div class="kp-family-groups" data-mode="special" role="group" aria-label="Specialkoster per familj">
+                  {% for fam in known_families %}
+                    {% set fam_rows = [] %}
+                    {% for item in vm.special_summary.totals %}
+                      {% if item.diet_type_name and (not (item.diet_type_name|string).isdigit()) and (item.diet_family or 'Övrigt') == fam %}
+                        {% set _ = fam_rows.append(item) %}
+                      {% endif %}
+                    {% endfor %}
+                    {% if fam_rows|length > 0 %}
+                      <details class="kp-family-group" open>
+                        <summary>
+                          <span class="kp-family-group-title">{{ fam }}</span>
+                          <span class="kp-family-group-count">{{ fam_rows|length }}</span>
+                        </summary>
+                        <div class="kp-chip-grid kp-chip-grid--family" role="group" aria-label="{{ fam }}">
+                          {% for item in fam_rows %}
+                            <button type="button"
+                                    class="diet-chip js-special-chip {% if item.count == 0 %}is-muted{% endif %} {% if item.diet_type_id in (vm.selected_diets or []) %}active{% endif %}"
+                                    data-diet-id="{{ item.diet_type_id }}"
+                                    data-total="{{ item.count }}"
+                                    data-done="{{ item.done }}"
+                                    data-family="{{ item.diet_family or 'Övrigt' }}"
+                                    data-name="{{ item.diet_type_name }}"
+                                    aria-pressed="{% if item.diet_type_id in (vm.selected_diets or []) %}true{% else %}false{% endif %}">
+                              <span class="kp-chip-label">{{ item.diet_type_name }}</span>
+                              <span class="kp-chip-count">({{ item.count }})</span>
+                            </button>
+                          {% endfor %}
+                        </div>
+                      </details>
                     {% endif %}
                   {% endfor %}
                 </div>
-
-                <details class="kp-all-diets-toggle">
-                  <summary>Visa alla specialkoster</summary>
-                  <div class="kp-chip-grid kp-chip-grid--all" role="group" aria-label="Alla specialkoster">
-                    {% for item in vm.special_summary.totals %}
-                      {% if item.diet_type_name and (not (item.diet_type_name|string).isdigit()) %}
-                        <button type="button"
-                                class="diet-chip js-special-chip {% if item.count == 0 %}is-muted{% endif %} {% if item.diet_type_id in (vm.selected_diets or []) %}active{% endif %}"
-                                data-diet-id="{{ item.diet_type_id }}"
-                                data-total="{{ item.count }}"
-                                data-done="{{ item.done }}"
-                                data-name="{{ item.diet_type_name }}"
-                                aria-pressed="{% if item.diet_type_id in (vm.selected_diets or []) %}true{% else %}false{% endif %}">
-                          <span class="kp-chip-label">{{ item.diet_type_name }}</span>
-                          <span class="kp-chip-count">({{ item.count }})</span>
-                        </button>
-                      {% endif %}
-                    {% endfor %}
-                  </div>
-                </details>
               {% else %}
                 <p class="empty-text">Inga specialkoster för vald dag.</p>
               {% endif %}

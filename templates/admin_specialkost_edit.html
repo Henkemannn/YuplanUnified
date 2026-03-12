@@ -32,6 +32,15 @@
       </div>
 
       <div class="admin-form-row">
+        <label for="diet_family">Familj / Grupp</label>
+        <select id="diet_family" name="diet_family">
+          {% for fam in vm.diet_family_options or [] %}
+            <option value="{{ fam }}" {% if fam == vm.diet_type.diet_family %}selected{% endif %}>{{ fam }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="admin-form-row">
         <label for="default_select">Förinställd</label>
         <input type="checkbox" id="default_select" name="default_select" {% if vm.diet_type.default_select %}checked{% endif %}>
       </div>

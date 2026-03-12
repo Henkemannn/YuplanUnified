@@ -58,6 +58,7 @@ def test_admin_specialkost_list_shows_diet_types(client_admin: FlaskClient):
     # Check seeded diet types appear
     assert "Vegetarisk" in html
     assert "Glutenfri" in html
+    assert "Övrigt" in html
     
     # Check default_select indicator (✓ for Vegetarisk, blank for Glutenfri)
     # Template uses: {{ "✓" if row.default_select else "" }}
@@ -71,13 +72,14 @@ def test_admin_specialkost_new_creates_diet_type(client_admin: FlaskClient):
     assert response.status_code == 200
     new_html = response.data.decode()
     assert "Lägg till kosttyp" in new_html
+    assert "Familj / Grupp" in new_html
     assert "Förmarkera i veckolistorna" in new_html
     assert "veckolistorna för statistiken" in new_html
     
     # POST new diet type (not pre-selected)
     response = client_admin.post(
         "/ui/admin/specialkost/new",
-        data={"name": "Laktosfri", "default_select": ""},
+        data={"name": "Laktosfri", "diet_family": "Allergi / Exkludering", "default_select": ""},
         headers=ADMIN_HEADERS,
         follow_redirects=True
     )
@@ -86,6 +88,7 @@ def test_admin_specialkost_new_creates_diet_type(client_admin: FlaskClient):
     
     # Should redirect to list and show new type
     assert "Laktosfri" in html
+    assert "Allergi / Exkludering" in html
     assert "Specialkost" in html
 
 
@@ -93,7 +96,7 @@ def test_admin_specialkost_new_with_default_select(client_admin: FlaskClient):
     """New route creates dietary type with formarkeras checkbox enabled."""
     response = client_admin.post(
         "/ui/admin/specialkost/new",
-        data={"name": "Vegansk", "default_select": "on"},
+        data={"name": "Vegansk", "diet_family": "Kostval", "default_select": "on"},
         headers=ADMIN_HEADERS,
         follow_redirects=True
     )
@@ -120,9 +123,15 @@ def test_admin_specialkost_new_rejects_case_insensitive_duplicate(client_admin: 
 
 def test_admin_specialkost_edit_rejects_case_insensitive_duplicate(client_admin: FlaskClient):
     """Update route should block duplicate names regardless of casing."""
+    from core.admin_repo import DietTypesRepo
+
+    rows = DietTypesRepo().list_all(site_id="site-1")
+    by_name = {str(r.get("name")): int(r.get("id")) for r in rows}
+    glutenfri_id = by_name["Glutenfri"]
+
     response = client_admin.post(
-        "/ui/admin/specialkost/2/edit",
-        data={"name": "VEGETARISK", "default_select": ""},
+        f"/ui/admin/specialkost/{glutenfri_id}/edit",
+        data={"name": "VEGETARISK", "diet_family": "Allergi / Exkludering", "default_select": ""},
         headers=ADMIN_HEADERS,
         follow_redirects=True,
     )
@@ -133,8 +142,11 @@ def test_admin_specialkost_edit_rejects_case_insensitive_duplicate(client_admin:
 
 def test_admin_specialkost_edit_updates_diet_type(client_admin: FlaskClient):
     """Edit route updates dietary type name and formarkeras status."""
-    # Get ID of "Glutenfri" (id=2 from seed)
-    diet_id = 2
+    from core.admin_repo import DietTypesRepo
+
+    rows = DietTypesRepo().list_all(site_id="site-1")
+    by_name = {str(r.get("name")): int(r.get("id")) for r in rows}
+    diet_id = by_name["Glutenfri"]
     
     # GET edit form
     response = client_admin.get(f"/ui/admin/specialkost/{diet_id}/edit", headers=ADMIN_HEADERS)
@@ -142,13 +154,14 @@ def test_admin_specialkost_edit_updates_diet_type(client_admin: FlaskClient):
     html = response.data.decode()
     assert "Redigera kosttyp" in html
     assert "Glutenfri" in html
+    assert "Familj / Grupp" in html
     assert "Förmarkera i veckolistorna" in html
     assert "veckolistorna för statistiken" in html
     
     # POST update (change name, enable default_select)
     response = client_admin.post(
         f"/ui/admin/specialkost/{diet_id}/edit",
-        data={"name": "Glutenfri (uppdaterad)", "default_select": "on"},
+        data={"name": "Glutenfri (uppdaterad)", "diet_family": "Allergi / Exkludering", "default_select": "on"},
         headers=ADMIN_HEADERS,
         follow_redirects=True
     )
@@ -157,6 +170,7 @@ def test_admin_specialkost_edit_updates_diet_type(client_admin: FlaskClient):
     
     # Should redirect to list with updated name
     assert "Glutenfri (uppdaterad)" in html
+    assert "Allergi / Exkludering" in html
     assert "Glutenfri" in html  # old name still in updated name, so both match
 
 
@@ -169,8 +183,11 @@ def test_admin_specialkost_delete_removes_diet_type(client_admin: FlaskClient):
     assert "specialkost-delete-trigger" in list_html
     assert "data-specialkost-delete-form=\"1\"" in list_html
 
-    # Delete "Vegetarisk" (id=1)
-    diet_id = 1
+    from core.admin_repo import DietTypesRepo
+
+    rows = DietTypesRepo().list_all(site_id="site-1")
+    by_name = {str(r.get("name")): int(r.get("id")) for r in rows}
+    diet_id = by_name["Vegetarisk"]
     
     response = client_admin.post(
         f"/ui/admin/specialkost/{diet_id}/delete",
