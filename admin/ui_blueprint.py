@@ -464,6 +464,32 @@ def admin_specialkost_list() -> str:  # type: ignore[override]
     """List all dietary types (specialkost)."""
     repo = DietTypesRepo()
     diet_types = repo.list_all(tenant_id=1)
+
+    dep_counts: dict[str, int] = {}
+    db = get_session()
+    try:
+        ddd_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
+        if ddd_cols and {"department_id", "diet_type_id"}.issubset(ddd_cols):
+            rows = db.execute(
+                text(
+                    """
+                    SELECT CAST(diet_type_id AS TEXT) AS diet_type_id,
+                           COUNT(DISTINCT department_id) AS dept_count
+                    FROM department_diet_defaults
+                    GROUP BY CAST(diet_type_id AS TEXT)
+                    """
+                )
+            ).fetchall()
+            dep_counts = {str(r[0]): int(r[1] or 0) for r in rows if r and r[0] is not None}
+    except Exception:
+        dep_counts = {}
+    finally:
+        db.close()
+
+    for item in diet_types:
+        did = str(item.get("id") or "")
+        item["department_links"] = int(dep_counts.get(did, 0))
+
     vm = {"diet_types": diet_types}
     return render_template("admin_specialkost.html", vm=vm)
 
@@ -529,12 +555,16 @@ def admin_specialkost_edit(kosttyp_id: int) -> str:  # type: ignore[override]
 @require_roles("admin", "superuser")
 def admin_specialkost_delete(kosttyp_id: int) -> str:  # type: ignore[override]
     """Delete a dietary type."""
+    from core.admin_repo import DietTypeDeleteBlockedError
+
     repo = DietTypesRepo()
     try:
         diet_type = repo.get_by_id(kosttyp_id)
         name = diet_type["name"] if diet_type else "okänd"
         repo.delete(kosttyp_id)
         flash(f"Kosttyp '{name}' borttagen.", "success")
+    except DietTypeDeleteBlockedError:
+        flash("Kosttypen kan inte tas bort eftersom den används i andra inställningar.", "danger")
     except Exception as e:
         flash(f"Fel vid borttagning: {e}", "danger")
     
@@ -1604,6 +1634,82 @@ def systemadmin_customer_sites(tenant_id: int):
         except Exception:
             rows = []
         sites = [{"id": str(r[0]), "name": str(r[1] or "")} for r in rows]
+        site_ids = {s["id"] for s in sites}
+
+        def _users_has_site_id() -> bool:
+            try:
+                cols = db.execute(text("PRAGMA table_info('users')")).fetchall()
+                return any(str(c[1]) == "site_id" for c in cols)
+            except Exception:
+                return False
+
+        def _ensure_kitchen_user_sites_table() -> None:
+            db.execute(
+                text(
+                    "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                    "user_id INTEGER PRIMARY KEY, "
+                    "tenant_id INTEGER NOT NULL, "
+                    "site_id TEXT NOT NULL"
+                    ")"
+                )
+            )
+
+        has_site_id = _users_has_site_id()
+        if not has_site_id:
+            try:
+                _ensure_kitchen_user_sites_table()
+            except Exception:
+                pass
+
+        admins_by_site: dict[str, list[dict[str, object]]] = {sid: [] for sid in site_ids}
+        if has_site_id:
+            arows = db.execute(
+                text(
+                    "SELECT u.id, u.email, u.username, u.full_name, COALESCE(u.is_active,1), u.site_id "
+                    "FROM users u "
+                    "WHERE u.tenant_id=:tid AND u.role='admin' "
+                    "ORDER BY COALESCE(u.full_name, u.email), u.email"
+                ),
+                {"tid": int(tenant_id)},
+            ).fetchall()
+            for r in arows:
+                sid = str(r[5] or "")
+                if sid in admins_by_site:
+                    admins_by_site[sid].append(
+                        {
+                            "id": int(r[0]),
+                            "email": str(r[1] or ""),
+                            "username": str(r[2] or ""),
+                            "full_name": str(r[3] or ""),
+                            "is_active": bool(r[4]) if r[4] is not None else True,
+                        }
+                    )
+        else:
+            arows = db.execute(
+                text(
+                    "SELECT u.id, u.email, u.username, u.full_name, COALESCE(u.is_active,1), k.site_id "
+                    "FROM users u "
+                    "LEFT JOIN kitchen_user_sites k ON k.user_id=u.id AND k.tenant_id=u.tenant_id "
+                    "WHERE u.tenant_id=:tid AND u.role='admin' "
+                    "ORDER BY COALESCE(u.full_name, u.email), u.email"
+                ),
+                {"tid": int(tenant_id)},
+            ).fetchall()
+            for r in arows:
+                sid = str(r[5] or "")
+                if sid in admins_by_site:
+                    admins_by_site[sid].append(
+                        {
+                            "id": int(r[0]),
+                            "email": str(r[1] or ""),
+                            "username": str(r[2] or ""),
+                            "full_name": str(r[3] or ""),
+                            "is_active": bool(r[4]) if r[4] is not None else True,
+                        }
+                    )
+
+        for s in sites:
+            s["admins"] = admins_by_site.get(s["id"], [])
     finally:
         db.close()
     vm = {
@@ -1614,6 +1720,162 @@ def systemadmin_customer_sites(tenant_id: int):
         "allow_site_switch": True,
     }
     return render_template("systemadmin_customer_sites.html", vm=vm)
+
+
+def _bind_admin_to_site(db, *, user_id: int, tenant_id: int, site_id: str) -> None:
+    try:
+        cols = db.execute(text("PRAGMA table_info('users')")).fetchall()
+        has_user_site_id = any(str(c[1]) == "site_id" for c in cols)
+    except Exception:
+        has_user_site_id = False
+    if has_user_site_id:
+        db.execute(
+            text("UPDATE users SET site_id=:sid WHERE id=:uid"),
+            {"sid": str(site_id), "uid": int(user_id)},
+        )
+        return
+    db.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+            "user_id INTEGER PRIMARY KEY, "
+            "tenant_id INTEGER NOT NULL, "
+            "site_id TEXT NOT NULL"
+            ")"
+        )
+    )
+    db.execute(
+        text(
+            "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+            "VALUES (:uid, :tid, :sid) "
+            "ON CONFLICT(user_id) DO UPDATE SET tenant_id=excluded.tenant_id, site_id=excluded.site_id"
+        ),
+        {"uid": int(user_id), "tid": int(tenant_id), "sid": str(site_id)},
+    )
+
+
+@admin_ui_bp.post("/ui/systemadmin/customers/<int:tenant_id>/sites/<site_id>/admins/create")
+@require_roles("superuser")
+def systemadmin_site_admin_create(tenant_id: int, site_id: str):
+    admin_email = (request.form.get("admin_email") or "").strip().lower()
+    admin_password = (request.form.get("admin_password") or "").strip()
+    admin_full_name = (request.form.get("admin_full_name") or "").strip()
+
+    if not admin_email or not admin_password:
+        flash("Ange admin e-post och lösenord.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+
+    db = get_session()
+    try:
+        srow = db.execute(
+            text("SELECT id FROM sites WHERE id=:sid AND tenant_id=:tid LIMIT 1"),
+            {"sid": str(site_id), "tid": int(tenant_id)},
+        ).fetchone()
+        if not srow:
+            flash("Siten hittades inte för vald kund.", "danger")
+            return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+
+        existing = db.execute(
+            text("SELECT id FROM users WHERE lower(email)=:e LIMIT 1"),
+            {"e": admin_email},
+        ).fetchone()
+        if existing:
+            flash("E-postadressen används redan.", "danger")
+            return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+
+        user = User(
+            tenant_id=int(tenant_id),
+            email=admin_email,
+            username=admin_email,
+            password_hash=generate_password_hash(admin_password),
+            role="admin",
+            full_name=admin_full_name or None,
+            unit_id=None,
+            is_active=True,
+        )
+        db.add(user)
+        db.flush()
+        _bind_admin_to_site(
+            db,
+            user_id=int(user.id),
+            tenant_id=int(tenant_id),
+            site_id=str(site_id),
+        )
+        db.commit()
+        flash("Admin skapad.", "success")
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        flash(f"Kunde inte skapa admin: {e}", "danger")
+    finally:
+        db.close()
+    return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+
+
+@admin_ui_bp.post("/ui/systemadmin/customers/<int:tenant_id>/sites/<site_id>/admins/<int:user_id>/delete")
+@require_roles("superuser")
+def systemadmin_site_admin_delete(tenant_id: int, site_id: str, user_id: int):
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM users WHERE id=:uid AND tenant_id=:tid AND role='admin' LIMIT 1"),
+            {"uid": int(user_id), "tid": int(tenant_id)},
+        ).fetchone()
+        if not row:
+            flash("Admin hittades inte.", "danger")
+            return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+
+        db.execute(
+            text("UPDATE users SET is_active=0 WHERE id=:uid"),
+            {"uid": int(user_id)},
+        )
+        db.commit()
+        flash("Admin inaktiverad.", "success")
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        flash(f"Kunde inte inaktivera admin: {e}", "danger")
+    finally:
+        db.close()
+    return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+
+
+@admin_ui_bp.post("/ui/systemadmin/customers/<int:tenant_id>/sites/<site_id>/admins/<int:user_id>/reset-password")
+@require_roles("superuser")
+def systemadmin_site_admin_reset_password(tenant_id: int, site_id: str, user_id: int):
+    new_password = (request.form.get("new_password") or "").strip()
+    if not new_password:
+        flash("Ange nytt lösenord.", "danger")
+        return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM users WHERE id=:uid AND tenant_id=:tid AND role='admin' LIMIT 1"),
+            {"uid": int(user_id), "tid": int(tenant_id)},
+        ).fetchone()
+        if not row:
+            flash("Admin hittades inte.", "danger")
+            return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
+
+        db.execute(
+            text("UPDATE users SET password_hash=:ph, is_active=1 WHERE id=:uid"),
+            {"ph": generate_password_hash(new_password), "uid": int(user_id)},
+        )
+        db.commit()
+        flash("Lösenord uppdaterat.", "success")
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        flash(f"Kunde inte uppdatera lösenord: {e}", "danger")
+    finally:
+        db.close()
+    return redirect(url_for("admin_ui.systemadmin_customer_sites", tenant_id=tenant_id))
 
 @admin_ui_bp.post("/ui/systemadmin/customers/<int:tenant_id>/sites/create")
 @require_roles("superuser")
@@ -1689,6 +1951,43 @@ def systemadmin_customer_sites_create(tenant_id: int):
             unit_id=None,
         )
         db.add(user)
+        db.flush()
+        # Ensure the new admin is explicitly bound to the created site.
+        try:
+            user_cols = db.execute(text("PRAGMA table_info('users')")).fetchall()
+            has_user_site_id = any(str(c[1]) == "site_id" for c in user_cols)
+        except Exception:
+            has_user_site_id = False
+        if has_user_site_id:
+            try:
+                db.execute(
+                    text("UPDATE users SET site_id=:sid WHERE id=:uid"),
+                    {"sid": site_id, "uid": int(user.id)},
+                )
+            except Exception:
+                pass
+        else:
+            try:
+                db.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                        "user_id INTEGER PRIMARY KEY, "
+                        "tenant_id INTEGER NOT NULL, "
+                        "site_id TEXT NOT NULL"
+                        ")"
+                    )
+                )
+                db.execute(
+                    text(
+                        "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                        "VALUES (:uid, :tid, :sid) "
+                        "ON CONFLICT(user_id) DO UPDATE SET "
+                        "tenant_id=excluded.tenant_id, site_id=excluded.site_id"
+                    ),
+                    {"uid": int(user.id), "tid": int(tenant_id), "sid": str(site_id)},
+                )
+            except Exception:
+                pass
         db.commit()
         try:
             open_admin_url = url_for("admin_ui.systemadmin_switch_site", site_id=site_id)
@@ -1815,6 +2114,43 @@ def systemadmin_customer_create():
             unit_id=None,
         )
         db.add(user)
+        db.flush()
+        # Ensure the first tenant admin is bound to the newly created site.
+        try:
+            user_cols = db.execute(text("PRAGMA table_info('users')")).fetchall()
+            has_user_site_id = any(str(c[1]) == "site_id" for c in user_cols)
+        except Exception:
+            has_user_site_id = False
+        if has_user_site_id:
+            try:
+                db.execute(
+                    text("UPDATE users SET site_id=:sid WHERE id=:uid"),
+                    {"sid": site_id, "uid": int(user.id)},
+                )
+            except Exception:
+                pass
+        else:
+            try:
+                db.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS kitchen_user_sites ("
+                        "user_id INTEGER PRIMARY KEY, "
+                        "tenant_id INTEGER NOT NULL, "
+                        "site_id TEXT NOT NULL"
+                        ")"
+                    )
+                )
+                db.execute(
+                    text(
+                        "INSERT INTO kitchen_user_sites (user_id, tenant_id, site_id) "
+                        "VALUES (:uid, :tid, :sid) "
+                        "ON CONFLICT(user_id) DO UPDATE SET "
+                        "tenant_id=excluded.tenant_id, site_id=excluded.site_id"
+                    ),
+                    {"uid": int(user.id), "tid": int(tenant_id), "sid": str(site_id)},
+                )
+            except Exception:
+                pass
         db.commit()
         # Clear wizard state
         try:

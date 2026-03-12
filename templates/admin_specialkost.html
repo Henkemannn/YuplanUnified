@@ -24,11 +24,14 @@
                 <span class="app-shell__list-title">{{ dt.name }}</span>
                 <div class="app-shell__list-meta">
                   <span>{% if dt.default_select %}Förinställd: Ja{% else %}Förinställd: Nej{% endif %}</span>
+                  {% if dt.department_links %}
+                    <span>• Används av {{ dt.department_links }} avdelning{% if dt.department_links != 1 %}ar{% endif %}</span>
+                  {% endif %}
                 </div>
               </div>
               <div class="app-shell__list-actions admin-specialkost__actions">
                 <a href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" class="yp-btn yp-btn-secondary admin-specialkost__edit-btn">Redigera</a>
-                <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" class="admin-specialkost__inline-form" onsubmit="return confirm('Ta bort kosttyp {{ dt.name }}?');">
+                <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" class="admin-specialkost__inline-form" onsubmit="return confirm('{% if dt.department_links %}Varning: Kosttypen används av {{ dt.department_links }} avdelning{% if dt.department_links != 1 %}ar{% endif %}. Kopplingarna tas bort. Fortsätt?{% else %}Ta bort kosttyp {{ dt.name }}?{% endif %}');">
                   {{ csrf_token_input() | safe }}
                   <button
                     type="submit"

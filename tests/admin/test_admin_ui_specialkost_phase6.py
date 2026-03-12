@@ -164,6 +164,53 @@ def test_admin_specialkost_delete_removes_diet_type(client_admin: FlaskClient):
     # Count occurrences or check table structure instead
 
 
+def test_admin_specialkost_list_shows_dependency_warning_for_departments(client_admin: FlaskClient):
+    """List route shows warning when a diet type is linked to departments."""
+    from core.db import get_session
+    from sqlalchemy import text
+
+    conn = get_session()
+    try:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS departments (
+                  id TEXT PRIMARY KEY,
+                  site_id TEXT NULL,
+                  name TEXT NULL
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS department_diet_defaults (
+                  department_id TEXT NOT NULL,
+                  diet_type_id TEXT NOT NULL,
+                  default_count INTEGER NOT NULL DEFAULT 0,
+                  PRIMARY KEY (department_id, diet_type_id)
+                )
+                """
+            )
+        )
+        conn.execute(
+            text("INSERT OR REPLACE INTO departments(id, site_id, name) VALUES('dep-warn-1', 'site-1', 'Avd Warn')")
+        )
+        conn.execute(
+            text("INSERT OR REPLACE INTO department_diet_defaults(department_id, diet_type_id, default_count) VALUES('dep-warn-1', '1', 2)")
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    response = client_admin.get("/ui/admin/specialkost", headers=ADMIN_HEADERS)
+    assert response.status_code == 200
+    html = response.data.decode()
+    assert "Används av 1 avdelning" in html
+    assert "Kopplingarna tas bort" in html
+
+
 def test_admin_specialkost_delete_cascades_known_dependencies(client_admin: FlaskClient):
     """Delete route removes known dependency rows and then deletes the diet type."""
     from core.admin_repo import DietTypesRepo

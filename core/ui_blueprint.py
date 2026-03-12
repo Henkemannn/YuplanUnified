@@ -3734,6 +3734,8 @@ def _render_portal_weeks(is_enhetsportal: bool):
 @require_roles(*ADMIN_ROLES)
 def admin_specialkost_list():
     from core.admin_repo import DietTypesRepo
+    from sqlalchemy import text
+
     role = session.get("role")
     repo = DietTypesRepo()
     # Resolve active site strictly from session; do not accept request args override
@@ -3742,6 +3744,48 @@ def admin_specialkost_list():
         # Strict site isolation: require site selection
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_specialkost_list")))
     items = repo.list_all(site_id=site_id)
+
+    dep_counts: dict[str, int] = {}
+    db = get_session()
+    try:
+        ddd_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
+        if ddd_cols and {"department_id", "diet_type_id"}.issubset(ddd_cols):
+            dep_cols = {str(c[1]) for c in db.execute(text("PRAGMA table_info('departments')")).fetchall()}
+            if dep_cols and {"id", "site_id"}.issubset(dep_cols):
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT CAST(ddd.diet_type_id AS TEXT) AS diet_type_id,
+                               COUNT(DISTINCT ddd.department_id) AS dept_count
+                        FROM department_diet_defaults ddd
+                        JOIN departments d ON d.id = ddd.department_id
+                        WHERE d.site_id = :site_id
+                        GROUP BY CAST(ddd.diet_type_id AS TEXT)
+                        """
+                    ),
+                    {"site_id": str(site_id)},
+                ).fetchall()
+            else:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT CAST(diet_type_id AS TEXT) AS diet_type_id,
+                               COUNT(DISTINCT department_id) AS dept_count
+                        FROM department_diet_defaults
+                        GROUP BY CAST(diet_type_id AS TEXT)
+                        """
+                    )
+                ).fetchall()
+            dep_counts = {str(r[0]): int(r[1] or 0) for r in rows if r and r[0] is not None}
+    except Exception:
+        dep_counts = {}
+    finally:
+        db.close()
+
+    for item in items:
+        did = str(item.get("id") or "")
+        item["department_links"] = int(dep_counts.get(did, 0))
+
     vm = {"diet_types": items, "user_role": role, "site_id": site_id}
     return render_template("ui/unified_admin_specialkost_list.html", vm=vm, nav_context="admin")
 
