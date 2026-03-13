@@ -290,6 +290,7 @@ def _resolve_or_create_diet_type_id(
     dry_run: bool,
     summary: Summary,
     diet_family_by_name: dict[str, str],
+    known_diet_ids_by_name: dict[str, str],
 ) -> str | None:
     clean = _normalize_diet_name(str(diet_name or ""))
     if not clean:
@@ -297,7 +298,14 @@ def _resolve_or_create_diet_type_id(
     if clean.lower() in IGNORED_DIET_NAMES:
         summary.ignored_diets += 1
         return None
+    cache_key = clean.lower()
     diet_family = _canonical_family_name(diet_family_by_name.get(clean) or DEFAULT_DIET_FAMILY_MAP.get(clean) or "Övrigt")
+
+    # For dry-run, reuse pseudo-created diet ids within this run so repeated names
+    # across departments count as reused instead of re-created.
+    if cache_key in known_diet_ids_by_name:
+        summary.diets_reused += 1
+        return known_diet_ids_by_name[cache_key]
 
     row = db.execute(
         text(
@@ -311,6 +319,7 @@ def _resolve_or_create_diet_type_id(
         {"s": site_id, "n": clean},
     ).fetchone()
     if row:
+        known_diet_ids_by_name[cache_key] = str(row[0])
         current_family = str(row[1] or "Övrigt")
         if current_family != diet_family:
             summary.diet_family_updates += 1
@@ -324,7 +333,9 @@ def _resolve_or_create_diet_type_id(
 
     if dry_run:
         summary.diets_created += 1
-        return f"dry-run::{clean}"
+        pseudo_id = f"dry-run::{clean}"
+        known_diet_ids_by_name[cache_key] = pseudo_id
+        return pseudo_id
 
     if _is_sqlite(db):
         db.execute(
@@ -354,6 +365,7 @@ def _resolve_or_create_diet_type_id(
     if not new_id:
         raise RuntimeError(f"Could not create diet type id for '{clean}'")
 
+    known_diet_ids_by_name[cache_key] = new_id
     summary.diets_created += 1
     return new_id
 
@@ -476,6 +488,17 @@ def run(input_path: str, dry_run: bool) -> int:
             _ensure_defaults_table_shape(db)
 
             site_id = _resolve_site_id(db, SITE_NAME_REQUIRED)
+            known_diet_ids_by_name: dict[str, str] = {}
+
+            # Prime cache with existing site-scoped diet types to improve reuse accounting.
+            for row in db.execute(
+                text("SELECT id, name FROM dietary_types WHERE site_id=:s"),
+                {"s": site_id},
+            ).fetchall():
+                did = str(row[0])
+                dname = _normalize_diet_name(str(row[1] or ""))
+                if dname:
+                    known_diet_ids_by_name[dname.lower()] = did
 
             for dep in departments:
                 dep_name = dep["name"]
@@ -513,6 +536,7 @@ def run(input_path: str, dry_run: bool) -> int:
                         dry_run=dry_run,
                         summary=summary,
                         diet_family_by_name=diet_family_by_name,
+                        known_diet_ids_by_name=known_diet_ids_by_name,
                     )
                     if not dt_id:
                         continue
