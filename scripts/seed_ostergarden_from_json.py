@@ -198,14 +198,25 @@ def _ensure_defaults_table_shape(db) -> None:
     )
 
 
-def _resolve_site_id(db, site_name: str) -> str:
-    row = db.execute(
+def _resolve_site_context(db, site_name: str) -> tuple[str, int | None]:
+    # Resolve site first; tenant_id is best-effort (some schemas may not have the column).
+    site_id_row = db.execute(
         text("SELECT id FROM sites WHERE lower(trim(name)) = lower(trim(:n)) ORDER BY id LIMIT 1"),
         {"n": site_name},
     ).fetchone()
-    if not row:
+    if not site_id_row:
         raise RuntimeError(f"Site '{site_name}' not found. This script never creates sites.")
-    return str(row[0])
+    site_id = str(site_id_row[0])
+
+    tenant_id: int | None = None
+    try:
+        row_t = db.execute(text("SELECT tenant_id FROM sites WHERE id=:id"), {"id": site_id}).fetchone()
+        if row_t and row_t[0] is not None:
+            tenant_id = int(row_t[0])
+    except Exception:
+        tenant_id = None
+
+    return site_id, tenant_id
 
 
 def _get_dept_by_name(db, site_id: str, name: str):
@@ -291,6 +302,7 @@ def _resolve_or_create_diet_type_id(
     summary: Summary,
     diet_family_by_name: dict[str, str],
     known_diet_ids_by_name: dict[str, str],
+    site_tenant_id: int | None,
 ) -> str | None:
     clean = _normalize_diet_name(str(diet_name or ""))
     if not clean:
@@ -338,28 +350,56 @@ def _resolve_or_create_diet_type_id(
         return pseudo_id
 
     if _is_sqlite(db):
-        db.execute(
-            text(
-                """
-                INSERT INTO dietary_types(site_id, name, diet_family, default_select)
-                VALUES(:s, :n, :f, 0)
-                """
-            ),
-            {"s": site_id, "n": clean, "f": diet_family},
-        )
+        cols = {str(r[1]) for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+        notnull_map = {str(r[1]): int(r[3] or 0) for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+        needs_tenant = "tenant_id" in cols and bool(notnull_map.get("tenant_id", 0))
+        if "tenant_id" in cols and (site_tenant_id is not None or needs_tenant):
+            if site_tenant_id is None and needs_tenant:
+                raise RuntimeError("Could not resolve tenant_id for site; dietary_types.tenant_id is required")
+            db.execute(
+                text(
+                    """
+                    INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, default_select)
+                    VALUES(:t, :s, :n, :f, 0)
+                    """
+                ),
+                {"t": site_tenant_id, "s": site_id, "n": clean, "f": diet_family},
+            )
+        else:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO dietary_types(site_id, name, diet_family, default_select)
+                    VALUES(:s, :n, :f, 0)
+                    """
+                ),
+                {"s": site_id, "n": clean, "f": diet_family},
+            )
         created = db.execute(text("SELECT last_insert_rowid()")).fetchone()
         new_id = str(created[0]) if created else ""
     else:
-        created = db.execute(
-            text(
-                """
-                INSERT INTO dietary_types(site_id, name, diet_family, default_select)
-                VALUES(:s, :n, :f, false)
-                RETURNING id
-                """
-            ),
-            {"s": site_id, "n": clean, "f": diet_family},
-        ).fetchone()
+        if site_tenant_id is not None:
+            created = db.execute(
+                text(
+                    """
+                    INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, default_select)
+                    VALUES(:t, :s, :n, :f, false)
+                    RETURNING id
+                    """
+                ),
+                {"t": site_tenant_id, "s": site_id, "n": clean, "f": diet_family},
+            ).fetchone()
+        else:
+            created = db.execute(
+                text(
+                    """
+                    INSERT INTO dietary_types(site_id, name, diet_family, default_select)
+                    VALUES(:s, :n, :f, false)
+                    RETURNING id
+                    """
+                ),
+                {"s": site_id, "n": clean, "f": diet_family},
+            ).fetchone()
         new_id = str(created[0]) if created else ""
 
     if not new_id:
@@ -487,7 +527,7 @@ def run(input_path: str, dry_run: bool) -> int:
             _ensure_dietary_types_table_shape(db)
             _ensure_defaults_table_shape(db)
 
-            site_id = _resolve_site_id(db, SITE_NAME_REQUIRED)
+            site_id, site_tenant_id = _resolve_site_context(db, SITE_NAME_REQUIRED)
             known_diet_ids_by_name: dict[str, str] = {}
 
             # Prime cache with existing site-scoped diet types to improve reuse accounting.
@@ -537,6 +577,7 @@ def run(input_path: str, dry_run: bool) -> int:
                         summary=summary,
                         diet_family_by_name=diet_family_by_name,
                         known_diet_ids_by_name=known_diet_ids_by_name,
+                        site_tenant_id=site_tenant_id,
                     )
                     if not dt_id:
                         continue
