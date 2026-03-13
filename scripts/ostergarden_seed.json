@@ -1,0 +1,230 @@
+{
+  "site_name": "Östergården",
+  "diet_types": [
+    {
+      "name": "Flytande",
+      "diet_family": "Textur"
+    },
+    {
+      "name": "Grovpaté",
+      "diet_family": "Textur"
+    },
+    {
+      "name": "Timbal",
+      "diet_family": "Textur"
+    },
+    {
+      "name": "Ej fisk",
+      "diet_family": "Allergi / Exkludering"
+    },
+    {
+      "name": "Ej sill",
+      "diet_family": "Allergi / Exkludering"
+    },
+    {
+      "name": "Ej kyckling",
+      "diet_family": "Allergi / Exkludering"
+    },
+    {
+      "name": "Ej lax",
+      "diet_family": "Allergi / Exkludering"
+    },
+    {
+      "name": "Ej ärtsoppa",
+      "diet_family": "Allergi / Exkludering"
+    },
+    {
+      "name": "Ej dillkött",
+      "diet_family": "Allergi / Exkludering"
+    },
+    {
+      "name": "Ej lever",
+      "diet_family": "Allergi / Exkludering"
+    },
+    {
+      "name": "Ej skaldjur",
+      "diet_family": "Allergi / Exkludering"
+    },
+    {
+      "name": "Vegetariskt",
+      "diet_family": "Kostval"
+    },
+    {
+      "name": "Energireducerad",
+      "diet_family": "Anpassning"
+    }
+  ],
+  "departments": [
+    {
+      "name": "23 A",
+      "resident_count": 8,
+      "clear_special_diets": {
+        "Flytande": 1
+      }
+    },
+    {
+      "name": "23 B",
+      "resident_count": 8,
+      "clear_special_diets": {
+        "Ej lax": 1,
+        "Flytande": 1,
+        "Timbal": 3
+      }
+    },
+    {
+      "name": "23 C",
+      "resident_count": 7,
+      "clear_special_diets": {}
+    },
+    {
+      "name": "23 D",
+      "resident_count": 8,
+      "clear_special_diets": {
+        "Flytande": 1,
+        "Grovpaté": 1,
+        "Timbal": 2
+      }
+    },
+    {
+      "name": "23 E",
+      "resident_count": 7,
+      "clear_special_diets": {
+        "Ej sill": 1,
+        "Grovpaté": 1,
+        "Timbal": 1
+      }
+    },
+    {
+      "name": "23 F",
+      "resident_count": 8,
+      "clear_special_diets": {
+        "Ej fisk": 1,
+        "Ej ärtsoppa": 1,
+        "Grovpaté": 7,
+        "Timbal": 1
+      }
+    },
+    {
+      "name": "23 G",
+      "resident_count": 6,
+      "clear_special_diets": {
+        "Ej fisk": 1,
+        "Ej lever": 2,
+        "Ej skaldjur": 1,
+        "Flytande": 1,
+        "Grovpaté": 2,
+        "Timbal": 1
+      }
+    },
+    {
+      "name": "23 H",
+      "resident_count": 7,
+      "clear_special_diets": {
+        "Ej fisk": 2,
+        "Ej ärtsoppa": 2,
+        "Flytande": 1,
+        "Timbal": 2
+      }
+    },
+    {
+      "name": "23 L",
+      "resident_count": 7,
+      "clear_special_diets": {
+        "Ej fisk": 2,
+        "Ej sill": 6
+      }
+    },
+    {
+      "name": "24 A",
+      "resident_count": 7,
+      "clear_special_diets": {}
+    },
+    {
+      "name": "24 B",
+      "resident_count": 7,
+      "clear_special_diets": {
+        "Vegetariskt": 1
+      }
+    },
+    {
+      "name": "24 C",
+      "resident_count": 8,
+      "clear_special_diets": {
+        "Flytande": 1
+      }
+    },
+    {
+      "name": "24 D",
+      "resident_count": 8,
+      "clear_special_diets": {
+        "Ej fisk": 1,
+        "Ej kyckling": 1,
+        "Timbal": 1
+      }
+    },
+    {
+      "name": "24 E",
+      "resident_count": 7,
+      "clear_special_diets": {
+        "Timbal": 2
+      }
+    },
+    {
+      "name": "24 F",
+      "resident_count": 6,
+      "clear_special_diets": {
+        "Ej fisk": 1,
+        "Ej kyckling": 1,
+        "Grovpaté": 1,
+        "Timbal": 1
+      }
+    },
+    {
+      "name": "27 A",
+      "resident_count": 8,
+      "clear_special_diets": {
+        "Ej fisk": 1,
+        "Timbal": 1
+      }
+    },
+    {
+      "name": "27 B",
+      "resident_count": 7,
+      "clear_special_diets": {
+        "Ej ärtsoppa": 1,
+        "Energireducerad": 1
+      }
+    },
+    {
+      "name": "27 C",
+      "resident_count": 7,
+      "clear_special_diets": {
+        "Ej dillkött": 1,
+        "Ej fisk": 2,
+        "Ej sill": 1
+      }
+    },
+    {
+      "name": "27 D",
+      "resident_count": 6,
+      "clear_special_diets": {
+        "Ej fisk": 1
+      }
+    },
+    {
+      "name": "27 E",
+      "resident_count": 8,
+      "clear_special_diets": {
+        "Grovpaté": 1
+      }
+    },
+    {
+      "name": "27 F",
+      "resident_count": 5,
+      "clear_special_diets": {
+        "Grovpaté": 1,
+        "Timbal": 1
+      }
+    }
+  ]
+}
