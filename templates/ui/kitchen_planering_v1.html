@@ -135,6 +135,12 @@
             </div>
           {% else %}
             <div class="planning-result" id="kp-context" aria-live="polite" data-site-id="{{ vm.site_id }}" data-year="{{ vm.year }}" data-week="{{ vm.week }}" data-day-index="{{ vm.selected_day }}" data-day-label="{{ vm.day_labels[vm.selected_day] }}" data-date-iso="{{ vm.selected_date_iso or '' }}" data-meal="{{ vm.selected_meal }}" data-meal-label="{{ 'Lunch' if vm.selected_meal=='lunch' else ( 'Kvällsmat' if vm.selected_meal=='dinner' else 'Dessert') }}" data-normal-remaining="{{ (vm.summary and vm.summary.normal_remaining) or 0 }}" data-selected-diets='{{ (vm.selected_diets or [])|tojson }}' data-alt-groups='{{ (vm.alt_groups or {})|tojson }}' data-diet-counts-by-dept='{{ (vm.diet_counts_by_dept or {})|tojson }}' data-special-summary='{{ (vm.special_summary or {})|tojson }}' data-service-addons-summary='{{ (vm.service_addons_summary or [])|tojson }}' data-selected-service-addon-id="{{ vm.selected_service_addon_id or '' }}" data-special-total="{{ (vm.special_summary and vm.special_summary.special_total) or 0 }}" data-special-done="{{ (vm.special_summary and vm.special_summary.done_total) or 0 }}" data-special-remaining="{{ (vm.special_summary and vm.special_summary.remaining_total) or 0 }}" data-normalkost-rows='{{ (vm.normalkost_rows or [])|tojson }}' data-current-dish-label="{{ (vm.current_dish_label or '')|e }}" data-dev-mode="{{ '1' if vm.dev_mode else '0' }}">
+              <div class="kp-plan-tabs" role="tablist" aria-label="Planeringsvyer">
+                <button type="button" class="kp-button is-active" role="tab" id="kp-tab-planera" aria-controls="kp-plan-tab-panel-planera" aria-selected="true" tabindex="0" data-plan-tab="planera">Planera</button>
+                <button type="button" class="kp-button" role="tab" id="kp-tab-service-addons" aria-controls="kp-plan-tab-panel-service-addons" aria-selected="false" tabindex="-1" data-plan-tab="service-addons">Serveringstillbehör</button>
+              </div>
+
+              <div class="kp-plan-tab-panel is-active" id="kp-plan-tab-panel-planera" role="tabpanel" aria-labelledby="kp-tab-planera" data-plan-panel="planera">
               <section class="kp-section kp-section--header">
               <div class="kp-card kp-mb-12 normalkost-view">
                 <div class="kp-context-row">
@@ -414,47 +420,77 @@
             </section>
           {% endif %}
 
-          {% if vm.service_addons_summary and vm.service_addons_summary|length > 0 %}
+          </div>
+
+          <div class="kp-plan-tab-panel" id="kp-plan-tab-panel-service-addons" role="tabpanel" aria-labelledby="kp-tab-service-addons" data-plan-panel="service-addons" hidden>
             <section class="kp-section kp-section--addons service-addons-view">
             <div class="kp-card kp-mb-12">
-              <h3 class="kp-section-title">Serveringstillägg</h3>
+              <h3 class="kp-section-title">Serveringstillbehör</h3>
               <div class="kp-worklist-header">
-                <h3>Serveringstillägg</h3>
+                <h3>Serveringstillbehör</h3>
               </div>
-              <form method="get" action="" class="kp-form-row">
-                <input type="hidden" name="site_id" value="{{ vm.site_id }}">
-                <input type="hidden" name="mode" value="{{ cur_mode }}">
-                <input type="hidden" name="year" value="{{ vm.year }}">
-                <input type="hidden" name="week" value="{{ vm.week }}">
-                <input type="hidden" name="day" value="{{ vm.selected_day if vm.selected_day is not none else '' }}">
-                <input type="hidden" name="meal" value="{{ vm.selected_meal or '' }}">
-                <label for="service-addon-select">Valt tillägg</label>
-                <select id="service-addon-select" name="addon_id" onchange="this.form.submit()">
-                  {% for addon in vm.service_addons_summary %}
-                  <option value="{{ addon.addon_id }}" {% if vm.selected_service_addon_id and addon.addon_id == vm.selected_service_addon_id %}selected{% endif %}>{{ addon.addon_name }}</option>
-                  {% endfor %}
-                </select>
-              </form>
+              {% if vm.service_addons_summary and vm.service_addons_summary|length > 0 %}
+                {% set mos = namespace(item=None) %}
+                {% set sallad = namespace(item=None) %}
+                {% for addon in vm.service_addons_summary %}
+                  {% set addon_name_lower = (addon.addon_name or '')|lower %}
+                  {% if mos.item is none and 'mos' in addon_name_lower %}
+                    {% set mos.item = addon %}
+                  {% endif %}
+                  {% if sallad.item is none and 'sallad' in addon_name_lower %}
+                    {% set sallad.item = addon %}
+                  {% endif %}
+                {% endfor %}
 
-              {% for addon in vm.service_addons_summary %}
-                {% if addon.addon_id == vm.selected_service_addon_id %}
-                  <div class="kp-worklist-group" data-addon-id="{{ addon.addon_id }}">
-                    <div class="kp-worklist-title">{{ addon.addon_name }} totalt <span class="kp-worklist-total">{{ addon.total_count }}</span></div>
-                    <div class="kp-worklist-rows">
-                      {% for dep in addon.departments %}
-                        <div class="kp-worklist-row">
-                          <span class="kp-row-name">{{ dep.department_name }}</span>
-                          <span class="kp-row-count">{{ dep.count }}</span>
-                          {% if dep.note %}<span class="kp-row-note">({{ dep.note }})</span>{% endif %}
+                <div class="kp-addon-panel-grid">
+                  <div class="kp-addon-panel">
+                    <h4 class="kp-addon-heading">Moslista</h4>
+                    {% if mos.item %}
+                      <div class="kp-worklist-group" data-addon-id="{{ mos.item.addon_id }}">
+                        <div class="kp-worklist-title">{{ mos.item.addon_name }}</div>
+                        <div class="kp-addon-total">Totalt: <span class="kp-worklist-total">{{ mos.item.total_count }}</span></div>
+                        <div class="kp-worklist-rows">
+                          {% for dep in mos.item.departments %}
+                            <div class="kp-worklist-row">
+                              <span class="kp-row-name">{{ dep.department_name }}</span>
+                              <span class="kp-row-count">{{ dep.count }}</span>
+                              {% if dep.note %}<span class="kp-row-note">({{ dep.note }})</span>{% endif %}
+                            </div>
+                          {% endfor %}
                         </div>
-                      {% endfor %}
-                    </div>
+                      </div>
+                    {% else %}
+                      <p class="empty-text">Ingen Mosdata för vald vy.</p>
+                    {% endif %}
                   </div>
-                {% endif %}
-              {% endfor %}
+
+                  <div class="kp-addon-panel">
+                    <h4 class="kp-addon-heading">Salladslista</h4>
+                    {% if sallad.item %}
+                      <div class="kp-worklist-group" data-addon-id="{{ sallad.item.addon_id }}">
+                        <div class="kp-worklist-title">{{ sallad.item.addon_name }}</div>
+                        <div class="kp-addon-total">Totalt: <span class="kp-worklist-total">{{ sallad.item.total_count }}</span></div>
+                        <div class="kp-worklist-rows">
+                          {% for dep in sallad.item.departments %}
+                            <div class="kp-worklist-row">
+                              <span class="kp-row-name">{{ dep.department_name }}</span>
+                              <span class="kp-row-count">{{ dep.count }}</span>
+                              {% if dep.note %}<span class="kp-row-note">({{ dep.note }})</span>{% endif %}
+                            </div>
+                          {% endfor %}
+                        </div>
+                      </div>
+                    {% else %}
+                      <p class="empty-text">Ingen Salladsdata för vald vy.</p>
+                    {% endif %}
+                  </div>
+                </div>
+              {% else %}
+                <p class="empty-text">Inga serveringstillbehör för vald vy.</p>
+              {% endif %}
             </div>
             </section>
-          {% endif %}
+          </div>
             </div>
           {% endif %}
         </div>

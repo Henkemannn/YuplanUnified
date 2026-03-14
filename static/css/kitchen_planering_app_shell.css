@@ -187,6 +187,40 @@
   color: #f8fafc;
 }
 
+.kitchen-planering-page .kp-plan-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.kitchen-planering-page .kp-plan-tabs .kp-button {
+  min-width: 170px;
+  justify-content: center;
+}
+
+.kitchen-planering-page .kp-plan-tab-panel[hidden] {
+  display: none !important;
+}
+
+.kitchen-planering-page .kp-addon-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.kitchen-planering-page .kp-addon-heading {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.kitchen-planering-page .kp-addon-total {
+  margin-bottom: 6px;
+  color: #334155;
+  font-weight: 600;
+}
+
 .kp-day-buttons .kp-button,
 .kp-meal-buttons .kp-button {
   min-width: 64px;
@@ -752,6 +786,15 @@
 }
 
 @media (max-width: 768px) {
+  .kitchen-planering-page .kp-addon-panel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kitchen-planering-page .kp-plan-tabs .kp-button {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
   .kitchen-planering-card--planering .kp-section {
     margin-bottom: 10px;
   }
@@ -992,6 +1035,14 @@
 
 .app-shell--dark .kitchen-planering-card--planering .kp-worklist-row:nth-child(even) {
   background: #24344b;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-addon-heading {
+  color: #f1f5f9;
+}
+
+.app-shell--dark .kitchen-planering-page .kp-addon-total {
+  color: #dbeafe;
 }
 
 .app-shell--dark .kitchen-planering-card--planering .kp-worklist-rows {

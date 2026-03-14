@@ -157,3 +157,16 @@ def test_planering_js_modal_wiring_contract():
     assert "var modal = qs('#dept-summary-modal');" in js
     assert "var openBtn = qs('.js-open-production-list-modal');" in js
     assert "var modal = qs('#production-list-modal');" in js
+
+
+def test_planering_template_has_serveringstillbehor_tab_and_no_addon_dropdown():
+    from pathlib import Path
+
+    tpl = Path("templates/ui/kitchen_planering_v1.html").read_text(encoding="utf-8")
+
+    assert 'data-plan-tab="planera"' in tpl
+    assert 'data-plan-tab="service-addons"' in tpl
+    assert "Serveringstillbehör" in tpl
+    assert "Moslista" in tpl
+    assert "Salladslista" in tpl
+    assert "Valt tillägg" not in tpl

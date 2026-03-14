@@ -1853,6 +1853,34 @@
     }
   }
 
+  function initPlanTabs(){
+    var tabs = qsa('[data-plan-tab]');
+    var panels = qsa('[data-plan-panel]');
+    if(!tabs.length || !panels.length){ return; }
+
+    function activateTab(tabName){
+      tabs.forEach(function(tab){
+        var isActive = String(tab.getAttribute('data-plan-tab') || '') === String(tabName || '');
+        tab.classList.toggle('is-active', isActive);
+        tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        tab.setAttribute('tabindex', isActive ? '0' : '-1');
+      });
+      panels.forEach(function(panel){
+        var isPanelActive = String(panel.getAttribute('data-plan-panel') || '') === String(tabName || '');
+        panel.hidden = !isPanelActive;
+        panel.classList.toggle('is-active', isPanelActive);
+      });
+    }
+
+    tabs.forEach(function(tab){
+      tab.addEventListener('click', function(){
+        activateTab(tab.getAttribute('data-plan-tab') || 'planera');
+      });
+    });
+
+    activateTab('planera');
+  }
+
   function initDeptSummaryModal(){
     var btn = qs('.js-open-dept-summary');
     var modal = qs('#dept-summary-modal');
@@ -2119,6 +2147,7 @@
     initPrintButton();
     initDeptSummaryModal();
     initProductionListModal();
+    initPlanTabs();
     // Parse CSP-safe data attributes for alt groups and per-department diet counts
     var ctxData = qs('#kp-context');
     if(ctxData){
