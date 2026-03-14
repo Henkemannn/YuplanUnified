@@ -1,14 +1,324 @@
 {
   "site_name": "Östergården",
+  "source_note": "Built from scripts/Östergården xlsx extracts. Menyalternativ is present in most departments but not seeded as a service_addon binding here.",
   "departments": [
     {
       "name": "23 A",
       "addons": [
         {
           "name": "Mos",
+          "lunch_count": 5,
+          "dinner_count": 0,
+          "note": "Excel note: -Fläsk - MOS vill ha potatis - Korv- .-Skaldjur - Ärtsoppa; extra candidate addon Potatis=2 not mapped."
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 2,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "23 B",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 5,
+          "dinner_count": 0,
+          "note": ""
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 3,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "23 C",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 2,
+          "dinner_count": 0,
+          "note": ""
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 5,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "23 D",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 2,
+          "dinner_count": 0,
+          "note": "Extra candidate addon Rivna morötter=2 (from 'Morot') not mapped."
+        }
+      ]
+    },
+    {
+      "name": "23 E",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 5,
+          "dinner_count": 0,
+          "note": "Excel note: En port. extra potatis när det är MOS; extra candidate addon Potatis=1 not mapped."
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 7,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "23 F",
+      "addons": [
+        {
+          "name": "Mos",
           "lunch_count": 4,
           "dinner_count": 0,
           "note": ""
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 6,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "23 G",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 7,
+          "dinner_count": 0,
+          "note": ""
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 7,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "23 H",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 7,
+          "dinner_count": 0,
+          "note": "Extra candidate addon Potatis=1 (Alltid kokt potatis) not mapped."
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 3,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "23 L",
+      "addons": [
+        {
+          "name": "Sallad",
+          "lunch_count": 5,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "24 A",
+      "addons": [
+        {
+          "name": "Sallad",
+          "lunch_count": 6,
+          "dinner_count": 0,
+          "note": "Extra candidate addon Potatis=8 not mapped."
+        }
+      ]
+    },
+    {
+      "name": "24 B",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 1,
+          "dinner_count": 0,
+          "note": "Extra candidate addon Potatis=5 not mapped."
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 6,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "24 C",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 1,
+          "dinner_count": 0,
+          "note": ""
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 3,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "24 D",
+      "addons": []
+    },
+    {
+      "name": "24 E",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 5,
+          "dinner_count": 0,
+          "note": ""
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 4,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "24 F",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 6,
+          "dinner_count": 0,
+          "note": "Excel note: Vid ris, klyftpotatis häften mos."
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 4,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "27 A",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 6,
+          "dinner_count": 0,
+          "note": "Excel notes: - Fisk - Rotmos; Äter pasta,pytt,ris,vid Mos."
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 4,
+          "dinner_count": 2,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "27 B",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 7,
+          "dinner_count": 0,
+          "note": "Extra candidate addon Rivna morötter=2 (from 'Morot') not mapped."
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 1,
+          "dinner_count": 2,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "27 C",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 3,
+          "dinner_count": 0,
+          "note": "Extra candidate addon Potatis=3 not mapped."
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 3,
+          "dinner_count": 1,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "27 D",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 4,
+          "dinner_count": 0,
+          "note": "Extra candidate addon Rivna morötter=2 (from 'Morot') not mapped."
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 2,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "27 E",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 3,
+          "dinner_count": 0,
+          "note": ""
+        },
+        {
+          "name": "Sallad",
+          "lunch_count": 3,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    },
+    {
+      "name": "27 F",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 3,
+          "dinner_count": 0,
+          "note": "Extra candidate addon Rivna morötter=2 not mapped."
         }
       ]
     }
