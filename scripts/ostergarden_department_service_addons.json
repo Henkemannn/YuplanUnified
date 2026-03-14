@@ -1,0 +1,16 @@
+{
+  "site_name": "Östergården",
+  "departments": [
+    {
+      "name": "23 A",
+      "addons": [
+        {
+          "name": "Mos",
+          "lunch_count": 4,
+          "dinner_count": 0,
+          "note": ""
+        }
+      ]
+    }
+  ]
+}
