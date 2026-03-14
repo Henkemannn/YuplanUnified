@@ -63,6 +63,16 @@ def test_kitchen_role_can_open_kitchen_dashboard(client_user):
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     assert "Kök" in html or "Översikt" in html
+    assert "← Admin" not in html
+
+
+def test_admin_sees_back_to_admin_link_in_kitchen_portal_header(client_admin):
+    resp = client_admin.get("/ui/kitchen", headers=_h("admin"), follow_redirects=False)
+
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    assert "← Admin" in html
+    assert 'href="/ui/admin"' in html
 
 
 def test_admin_can_create_and_deactivate_kitchen_user(client_admin):

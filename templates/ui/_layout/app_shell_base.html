@@ -35,6 +35,8 @@
     {% set user_display = session.get('full_name') or session.get('user_email') or session.get('username') or 'Inloggad' %}
     {% set user_role = session.get('role') %}
     {% set role_key = (user_role or '') | lower %}
+    {% set current_path_top = request.path or '' %}
+    {% set is_kitchen_portal_context = current_path_top.startswith('/ui/kitchen') or current_path_top.startswith('/ui/production-lists') %}
     {% set allow_site_switch = (vm.allow_site_switch if vm is defined and vm.allow_site_switch is defined else false) %}
     {% if user_role %}
       {% set user_label = user_display ~ ' (' ~ user_role ~ ')' %}
@@ -54,6 +56,9 @@
         <span class="app-shell__env-badge">{{ env_label }}</span>
         {% if role_key in ['systemadmin', 'superuser'] or allow_site_switch %}
           <a class="app-shell__user-pill" href="{{ url_for('ui.select_site', next=request.full_path or request.path) }}">Byt site</a>
+        {% endif %}
+        {% if is_kitchen_portal_context and has_role('admin') %}
+          <a class="app-shell__user-pill" href="{{ url_for('ui.admin_dashboard') }}" aria-label="Tillbaka till adminpanel">← Admin</a>
         {% endif %}
         <button class="app-shell__theme-toggle" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle>
           <span data-theme-icon>🌙</span>
