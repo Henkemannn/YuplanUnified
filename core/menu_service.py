@@ -9,6 +9,7 @@ from sqlalchemy import text
 from .db import get_new_session
 from .models import Dish, Menu, MenuVariant
 from datetime import date, datetime, timezone
+from sqlalchemy.exc import IntegrityError
 
 
 _MISMATCH_LOGGED: set[str] = set()
@@ -298,6 +299,25 @@ class MenuServiceDB:
                             f"menu_tenant_id={existing.tenant_id} site_tenant_id={site_tenant_id}"
                         )
                 return existing
+
+            # Legacy schema compatibility: some environments still enforce
+            # UNIQUE(tenant_id, week, year) without site_id in the constraint.
+            # In that case, reuse the tenant+week+year row and bind it to the
+            # requested site to avoid insert IntegrityError during menu import.
+            legacy_tenant_week: Menu | None = (
+                db.query(Menu)
+                .filter_by(tenant_id=site_tenant_id, week=week, year=year)
+                .first()
+            )
+            if legacy_tenant_week is not None:
+                current_site = str(legacy_tenant_week.site_id or "").strip()
+                if current_site != site_id:
+                    legacy_tenant_week.site_id = site_id
+                    legacy_tenant_week.tenant_id = site_tenant_id
+                    db.commit()
+                    db.refresh(legacy_tenant_week)
+                return legacy_tenant_week
+
             legacy: Menu | None = (
                 db.query(Menu)
                 .filter_by(tenant_id=site_tenant_id, site_id=None, week=week, year=year)
@@ -317,7 +337,24 @@ class MenuServiceDB:
                 updated_at=datetime.now(timezone.utc),
             )
             db.add(new_menu)
-            db.commit()
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+                fallback: Menu | None = (
+                    db.query(Menu)
+                    .filter_by(tenant_id=site_tenant_id, week=week, year=year)
+                    .first()
+                )
+                if fallback is None:
+                    raise
+                current_site = str(fallback.site_id or "").strip()
+                if current_site != site_id:
+                    fallback.site_id = site_id
+                    fallback.tenant_id = site_tenant_id
+                    db.commit()
+                    db.refresh(fallback)
+                return fallback
             db.refresh(new_menu)
             return new_menu
         finally:
