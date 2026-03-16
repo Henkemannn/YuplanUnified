@@ -80,7 +80,7 @@
 
 .kp-print-row {
   display: grid;
-  grid-template-columns: 1fr 42px 28px;
+  grid-template-columns: minmax(0, 1fr) 56px 56px;
   column-gap: 8px;
   align-items: center;
   padding: 1px 2px;
@@ -110,7 +110,7 @@
 }
 
 .kp-print-row.sk-row {
-  grid-template-columns: auto 44px 24px;
+  grid-template-columns: minmax(0, 1fr) 56px 56px;
   column-gap: 5px;
 }
 
@@ -120,37 +120,26 @@
   font-size: 8pt;
 }
 
-.kp-altpill {
-  border: 1px solid #111;
-  border-radius: 999px;
-  padding: 2px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  justify-self: center;
-  width: 44px;
-}
-
-.kp-altpill-slot {
-  display: block;
-  width: 44px;
-  height: 0;
-  justify-self: center;
-}
-
 .kp-print-row .count {
   min-width: 2ch;
   font-weight: 700;
   text-align: right;
   justify-self: end;
-  width: 28px;
+  width: 56px;
+  font-variant-numeric: tabular-nums;
 }
 
 .kp-print-row.sk-row .count {
-  width: 24px;
+  width: 56px;
+}
+
+.kp-print-alt-text {
+  justify-self: start;
+  width: 56px;
+  text-align: left;
+  font-size: 10pt;
+  font-weight: 600;
+  color: #111;
 }
 
 .kp-zebra:nth-child(even) {
@@ -298,7 +287,7 @@
 }
 
 .sk-card .kp-print-row {
-  grid-template-columns: auto 44px 24px;
+  grid-template-columns: minmax(0, 1fr) 56px 56px;
   padding: 1px 2px;
 }
 

@@ -170,3 +170,28 @@ def test_planering_template_has_serveringstillbehor_tab_and_no_addon_dropdown():
     assert "Moslista" in tpl
     assert "Salladslista" in tpl
     assert "Valt tillägg" not in tpl
+
+
+def test_planering_print_is_scoped_to_active_tab_contract():
+    from pathlib import Path
+
+    js = Path("static/ui/kitchen_planering_v1.js").read_text(encoding="utf-8")
+
+    assert "function getActivePlanTabName()" in js
+    assert "if(activePlanTab === 'service-addons')" in js
+    assert "buildAddonPrintSection(mosAddon, 'Moslista')" in js
+    assert "buildAddonPrintSection(salladAddon, 'Salladslista')" in js
+
+
+def test_planering_print_row_order_and_plain_alt_text_contract():
+    from pathlib import Path
+
+    js = Path("static/ui/kitchen_planering_v1.js").read_text(encoding="utf-8")
+    css = Path("static/css/kitchen_planering_print.css").read_text(encoding="utf-8")
+
+    assert '<span class="kp-dept-name">' in js
+    assert '<span class="count">' in js
+    assert '<span class="kp-print-alt-text">' in js
+    assert "Alt 1" in js
+    assert "Alt 2" in js
+    assert "grid-template-columns: minmax(0, 1fr) 56px 56px;" in css

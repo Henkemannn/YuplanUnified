@@ -107,3 +107,6 @@ check_*.py
 fix_kaktusen.py
 tripwire_*.ps1
 legacy/kommun/*.docx
+
+scripts/Östergården/
+*.xlsx

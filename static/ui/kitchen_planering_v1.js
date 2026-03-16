@@ -958,10 +958,12 @@
   function buildPrintRow(rowClass, name, count, altLabel){
     var rowEl = document.createElement('div');
     rowEl.className = 'kp-print-row ' + rowClass;
-    var badge = altLabel
-      ? '<span class="kp-altpill">' + altLabel + '</span>'
-      : '<span class="kp-altpill-slot" aria-hidden="true"></span>';
-    rowEl.innerHTML = '<span class="kp-dept-name">' + name + '</span>' + badge + '<span class="count">' + count + '</span>';
+    var altText = String(altLabel || '').trim();
+    if(altText === 'Alt1'){ altText = 'Alt 1'; }
+    if(altText === 'Alt2'){ altText = 'Alt 2'; }
+    rowEl.innerHTML = '<span class="kp-dept-name">' + name + '</span>'
+      + '<span class="count">' + count + '</span>'
+      + '<span class="kp-print-alt-text">' + (altText || '') + '</span>';
     return rowEl;
   }
 
@@ -1059,6 +1061,50 @@
         break;
       }
     }
+
+    function getActivePlanTabName(){
+      var activeTab = document.querySelector('[data-plan-tab].is-active')
+        || document.querySelector('[data-plan-tab][aria-selected="true"]');
+      if(!activeTab){ return 'planera'; }
+      return String(activeTab.getAttribute('data-plan-tab') || 'planera');
+    }
+
+    function buildAddonPrintSection(addon, headingText){
+      var section = document.createElement('div');
+      section.className = 'kp-print-special';
+
+      var head = document.createElement('div');
+      head.className = 'kp-print-section-title';
+      head.textContent = headingText;
+      section.appendChild(head);
+
+      var title = document.createElement('div');
+      title.className = 'kp-print-special-name';
+      title.textContent = String(addon.addon_name || '') + ' — Totalt ' + String(addon.total_count || 0);
+      section.appendChild(title);
+
+      var list = document.createElement('div');
+      list.className = 'kp-print-list';
+      var depRows = addon.departments || [];
+      for(var i=0; i<depRows.length; i++){
+        var depRow = depRows[i] || {};
+        var row = document.createElement('div');
+        row.className = 'kp-print-row sk-row kp-zebra';
+        var note = String(depRow.note || '').trim();
+        var label = String(depRow.department_name || '');
+        if(note){
+          label += ' (' + note + ')';
+        }
+        row.innerHTML = '<span class="kp-dept-name">' + label + '</span>'
+          + '<span class="count">' + String(depRow.count || 0) + '</span>'
+          + '<span class="kp-print-alt-text"></span>';
+        list.appendChild(row);
+      }
+      section.appendChild(list);
+      return section;
+    }
+
+    var activePlanTab = getActivePlanTabName();
 
     var alt1Rows = [];
     var alt2Rows = [];
@@ -1159,8 +1205,8 @@
           head.textContent = item.department_name;
           if(isAlt2Row){
             var badge = document.createElement('span');
-            badge.className = 'kp-altpill';
-            badge.textContent = 'Alt2';
+            badge.className = 'kp-print-alt-text';
+            badge.textContent = 'Alt 2';
             head.appendChild(badge);
           }
           group.appendChild(head);
@@ -1193,6 +1239,35 @@
     header.innerHTML = '<div class="kp-print-title">Tillagningslista</div>'
       + '<div class="kp-print-chip-row">' + chips + '</div>';
     sheet.appendChild(header);
+
+    if(activePlanTab === 'service-addons'){
+      var mosAddon = null;
+      var salladAddon = null;
+      for(var si=0; si<serviceAddonsSummary.length; si++){
+        var addon = serviceAddonsSummary[si] || {};
+        var low = String(addon.addon_name || '').toLowerCase();
+        if(!mosAddon && low.indexOf('mos') !== -1){
+          mosAddon = addon;
+        }
+        if(!salladAddon && low.indexOf('sallad') !== -1){
+          salladAddon = addon;
+        }
+      }
+      if(mosAddon){
+        sheet.appendChild(buildAddonPrintSection(mosAddon, 'Moslista'));
+      }
+      if(salladAddon){
+        sheet.appendChild(buildAddonPrintSection(salladAddon, 'Salladslista'));
+      }
+      if(!mosAddon && !salladAddon){
+        var emptyAddons = document.createElement('div');
+        emptyAddons.className = 'kp-print-empty';
+        emptyAddons.textContent = 'Inga serveringstillbehör för vald vy.';
+        sheet.appendChild(emptyAddons);
+      }
+      printEl.appendChild(sheet);
+      return;
+    }
 
     if(bodyMode === 'full' || bodyMode === 'normal'){
       var normHead = document.createElement('div');
@@ -1298,40 +1373,6 @@
         }
       }
       sheet.appendChild(special);
-    }
-
-    if(selectedAddon && selectedAddon.total_count > 0){
-      var addonSection = document.createElement('div');
-      addonSection.className = 'kp-print-special';
-      var addonHead = document.createElement('div');
-      addonHead.className = 'kp-print-section-title';
-      addonHead.textContent = 'Serveringstillägg';
-      addonSection.appendChild(addonHead);
-
-      var addonTitle = document.createElement('div');
-      addonTitle.className = 'kp-print-special-name';
-      addonTitle.textContent = String(selectedAddon.addon_name || '') + ' — Totalt ' + String(selectedAddon.total_count || 0);
-      addonSection.appendChild(addonTitle);
-
-      var addonList = document.createElement('div');
-      addonList.className = 'kp-print-list';
-      var depRows = selectedAddon.departments || [];
-      for(var ai=0; ai<depRows.length; ai++){
-        var depRow = depRows[ai] || {};
-        var row = document.createElement('div');
-        row.className = 'kp-print-row sk-row kp-zebra';
-        var note = String(depRow.note || '').trim();
-        var label = String(depRow.department_name || '');
-        if(note){
-          label += ' (' + note + ')';
-        }
-        row.innerHTML = '<span class="kp-dept-name">' + label + '</span>'
-          + '<span class="kp-altpill-slot" aria-hidden="true"></span>'
-          + '<span class="count">' + String(depRow.count || 0) + '</span>';
-        addonList.appendChild(row);
-      }
-      addonSection.appendChild(addonList);
-      sheet.appendChild(addonSection);
     }
 
     printEl.appendChild(sheet);
