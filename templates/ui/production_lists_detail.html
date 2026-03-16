@@ -83,18 +83,29 @@
       {% for grp in p.special.worklist %}
       <div class="kp-print-special-group sk-card">
         {% set grp_name = grp.production_group_name or grp.diet_type_name %}
+        {% set grp_base = (grp.production_group_name or grp_name or '')|lower|replace(' totalt', '')|trim %}
         <div class="kp-print-special-name">{{ grp_name }} — Totalt {{ grp.total }}</div>
         {% if grp.subtype_breakdown %}
-        <div class="kp-print-variant-line">
+          {% set ns = namespace(parts=[]) %}
           {% for sub in grp.subtype_breakdown %}
-            {{ sub.diet_type_name }} {{ sub.count }}{% if not loop.last %} • {% endif %}
+            {% set sub_name = (sub.diet_type_name or '') %}
+            {% set sub_base = sub_name|lower|replace(' totalt', '')|trim %}
+            {% if sub_base and sub_base != grp_base %}
+              {% set ns.parts = ns.parts + [sub_name ~ ' ' ~ (sub.count or 0)] %}
+            {% endif %}
           {% endfor %}
-        </div>
+          {% if not ns.parts and grp.subtype_breakdown|length > 1 %}
+            {% for sub in grp.subtype_breakdown %}
+              {% set ns.parts = ns.parts + [(sub.diet_type_name or '') ~ ' ' ~ (sub.count or 0)] %}
+            {% endfor %}
+          {% endif %}
+          {% if ns.parts %}
+          <div class="kp-print-variant-line">{{ ns.parts|join(' • ') }}</div>
+          {% endif %}
         {% endif %}
         <div class="kp-print-subheading">Till avdelningar</div>
         <div class="kp-print-list">
           {% set dept_rows = grp.department_breakdown or grp.rows or [] %}
-          {% set grp_base = (grp.production_group_name or grp_name or '')|lower %}
           {% for r in dept_rows %}
           {% set row_total = r.total if r.total is defined else r.count %}
           <div class="kp-print-row sk-row kp-zebra">

@@ -235,6 +235,16 @@
 
 .kp-print-special-group {
   margin-bottom: 4px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.kp-print-special-name,
+.kp-print-subheading,
+.kp-print-list,
+.kp-print-row {
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 
 .kp-print-modal-body {

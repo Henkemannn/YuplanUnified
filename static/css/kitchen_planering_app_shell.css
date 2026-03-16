@@ -74,7 +74,6 @@
   font-size: 0.9rem;
   padding: 0.35rem 2rem 0.35rem 0.7rem;
   line-height: 1.2;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.65rem center;
   background-size: 10px 6px;
@@ -923,7 +922,6 @@ html.kp-dept-summary-open {
   background-color: var(--surface);
   border-color: var(--border);
   color: var(--text);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23cbd5f5' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
 .app-shell--dark .kitchen-planering-page .kp-action-row .yp-button {

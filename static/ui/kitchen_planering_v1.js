@@ -232,6 +232,26 @@
       .join(', ');
   }
 
+  function normalizeAddonFamily(value){
+    var key = String(value || '').toLowerCase();
+    if(key === 'ovritgt'){ key = 'ovrigt'; }
+    if(key === 'mos' || key === 'sallad' || key === 'ovrigt'){
+      return key;
+    }
+    return 'ovrigt';
+  }
+
+  function groupAddonsByFamily(addons){
+    var grouped = { mos: [], sallad: [], ovrigt: [] };
+    var rows = addons || [];
+    for(var i=0; i<rows.length; i++){
+      var addon = rows[i] || {};
+      var family = normalizeAddonFamily(addon.addon_family);
+      grouped[family].push(addon);
+    }
+    return grouped;
+  }
+
   function setSpecialChipState(dietId, isActive){
     qsa('.specialkost-view .js-special-chip[data-diet-id="' + String(dietId || '') + '"]').forEach(function(btn){
       if(isActive){
@@ -1054,26 +1074,6 @@
     var alt2Set = new Set((altGroups && altGroups.alt2_dept_ids) || []);
     var worklist = (lastSpecialWorklist && lastSpecialWorklist.length > 0) ? lastSpecialWorklist : buildSpecialWorklistFromSummary();
 
-    function normalizeAddonFamily(value){
-      var key = String(value || '').toLowerCase();
-      if(key === 'ovritgt'){ key = 'ovrigt'; }
-      if(key === 'mos' || key === 'sallad' || key === 'ovrigt'){
-        return key;
-      }
-      return 'ovrigt';
-    }
-
-    function groupAddonsByFamily(addons){
-      var grouped = { mos: [], sallad: [], ovrigt: [] };
-      var rows = addons || [];
-      for(var i=0; i<rows.length; i++){
-        var addon = rows[i] || {};
-        var family = normalizeAddonFamily(addon.addon_family);
-        grouped[family].push(addon);
-      }
-      return grouped;
-    }
-
     function getActivePlanTabName(){
       var activeTab = document.querySelector('[data-plan-tab].is-active')
         || document.querySelector('[data-plan-tab][aria-selected="true"]');
@@ -1369,27 +1369,41 @@
             .trim();
         }
 
+        function isBaseVariantLabel(groupName, variantName){
+          var groupNorm = normalizeGroupLabel(groupName || '');
+          var variantNorm = normalizeGroupLabel(variantName || '');
+          if(!groupNorm || !variantNorm){ return false; }
+          return groupNorm === variantNorm;
+        }
+
         function buildVariantSummaryLine(groupName, variants, total){
           var list = Array.isArray(variants) ? variants : [];
-          if(list.length <= 1){
-            var only = list[0] || {};
-            var onlyName = normalizeGroupLabel(only.diet_type_name || '');
-            var groupNorm = normalizeGroupLabel(groupName || '');
+          var parsed = list
+            .map(function(variant){
+              return {
+                name: String((variant && variant.diet_type_name) || '').trim(),
+                count: parseInt((variant && variant.count) || 0, 10) || 0
+              };
+            })
+            .filter(function(item){ return !!item.name; });
+          if(parsed.length <= 1){
+            var only = parsed[0] || { name: '', count: 0 };
             var onlyCount = parseInt(only.count || 0, 10) || 0;
             var totalCount = parseInt(total || 0, 10) || 0;
-            if(!onlyName || onlyName === groupNorm || onlyCount === totalCount){
+            if(!only.name || isBaseVariantLabel(groupName, only.name) || onlyCount === totalCount){
               return '';
             }
-            return String((only.diet_type_name || '')).trim() + ' ' + String(onlyCount);
+            return only.name + ' ' + String(onlyCount);
           }
-          return list
-            .map(function(variant){
-              var vn = String((variant && variant.diet_type_name) || '').trim();
-              var vc = parseInt((variant && variant.count) || 0, 10) || 0;
-              if(!vn){ return ''; }
-              return vn + ' ' + String(vc);
-            })
-            .filter(function(x){ return !!x; })
+
+          // Keep print summary compact: prefer only non-base variants to avoid repeated information.
+          var nonBase = parsed.filter(function(item){
+            return !isBaseVariantLabel(groupName, item.name);
+          });
+          var display = nonBase.length ? nonBase : parsed;
+
+          return display
+            .map(function(item){ return item.name + ' ' + String(item.count); })
             .join(' · ');
         }
 
@@ -2241,8 +2255,25 @@
       setMeta(metaDay, dayLabel);
       setMeta(metaWeek, weekVal ? ('Vecka ' + weekVal) : '-');
     }
-    function openModal(){ refreshMeta(); modal.classList.add('is-open'); setStatus(''); }
-    function closeModal(){ modal.classList.remove('is-open'); }
+    function openModal(){
+      refreshMeta();
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      setStatus('');
+      if(saveBtn && typeof saveBtn.focus === 'function'){
+        saveBtn.focus();
+      }
+    }
+    function closeModal(){
+      if(document.activeElement && modal.contains(document.activeElement) && typeof document.activeElement.blur === 'function'){
+        document.activeElement.blur();
+      }
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
+      if(openBtn && typeof openBtn.focus === 'function'){
+        openBtn.focus();
+      }
+    }
 
     openBtn.addEventListener('click', function(){
       if(openBtn.disabled){ return; }
