@@ -712,19 +712,6 @@ class ResidencesRepo:
             )
 
 
-def _is_missing_department_diet_overrides_error(exc: Exception) -> bool:
-    msg = str(exc or "").lower()
-    if "department_diet_overrides" not in msg:
-        return False
-    markers = (
-        "no such table",
-        "does not exist",
-        "undefined table",
-        "unknown table",
-        "invalid object name",
-    )
-    return any(m in msg for m in markers)
-
     def list_for_site(self, site_id: str) -> list[dict]:
         db = get_session()
         try:
@@ -786,6 +773,19 @@ def _is_missing_department_diet_overrides_error(exc: Exception) -> bool:
             raise
         finally:
             db.close()
+
+def _is_missing_department_diet_overrides_error(exc: Exception) -> bool:
+    msg = str(exc or "").lower()
+    if "department_diet_overrides" not in msg:
+        return False
+    markers = (
+        "no such table",
+        "does not exist",
+        "undefined table",
+        "unknown table",
+        "invalid object name",
+    )
+    return any(m in msg for m in markers)
 
 class NotesRepo:
     """Generic notes version bump helper (if needed in future)."""
