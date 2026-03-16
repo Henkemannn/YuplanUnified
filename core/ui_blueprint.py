@@ -6425,15 +6425,17 @@ def admin_departments_get_diet_overrides(dept_id: str):
 
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
-    active_site_id = ctx.get("site_id")
-    if not active_site_id:
+    active_site_id = str(ctx.get("site_id") or "").strip() or None
+    explicit_site_id = str(request.args.get("site_id") or "").strip() or None
+    target_site_id = explicit_site_id or active_site_id
+    if not target_site_id:
         return jsonify({"error": "site_required", "message": "Select active site"}), 400
 
     db = get_session()
     try:
         row = db.execute(
             text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
-            {"id": dept_id, "sid": active_site_id},
+            {"id": dept_id, "sid": target_site_id},
         ).fetchone()
     finally:
         db.close()
@@ -6472,15 +6474,17 @@ def admin_departments_save_diet_overrides(dept_id: str):
 
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
-    active_site_id = ctx.get("site_id")
-    if not active_site_id:
+    active_site_id = str(ctx.get("site_id") or "").strip() or None
+    explicit_site_id = str(data.get("site_id") or "").strip() or None
+    target_site_id = explicit_site_id or active_site_id
+    if not target_site_id:
         return jsonify({"error": "site_required", "message": "Select active site"}), 400
 
     db = get_session()
     try:
         row = db.execute(
             text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
-            {"id": dept_id, "sid": active_site_id},
+            {"id": dept_id, "sid": target_site_id},
         ).fetchone()
     finally:
         db.close()
@@ -6530,15 +6534,17 @@ def admin_departments_reset_diet_overrides(dept_id: str):
 
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
-    active_site_id = ctx.get("site_id")
-    if not active_site_id:
+    active_site_id = str(ctx.get("site_id") or "").strip() or None
+    explicit_site_id = str(data.get("site_id") or "").strip() or None
+    target_site_id = explicit_site_id or active_site_id
+    if not target_site_id:
         return jsonify({"error": "site_required", "message": "Select active site"}), 400
 
     db = get_session()
     try:
         row = db.execute(
             text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
-            {"id": dept_id, "sid": active_site_id},
+            {"id": dept_id, "sid": target_site_id},
         ).fetchone()
     finally:
         db.close()

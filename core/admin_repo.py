@@ -711,6 +711,20 @@ class ResidencesRepo:
                 )
             )
 
+
+def _is_missing_department_diet_overrides_error(exc: Exception) -> bool:
+    msg = str(exc or "").lower()
+    if "department_diet_overrides" not in msg:
+        return False
+    markers = (
+        "no such table",
+        "does not exist",
+        "undefined table",
+        "unknown table",
+        "invalid object name",
+    )
+    return any(m in msg for m in markers)
+
     def list_for_site(self, site_id: str) -> list[dict]:
         db = get_session()
         try:
@@ -883,6 +897,96 @@ class DepartmentDietOverridesRepo:
                 }
                 for r in rows
             ]
+        finally:
+            db.close()
+
+    def list_for_department_diet(self, dept_id: str, diet_type_id: str | int) -> list[dict]:
+        db = get_session()
+        try:
+            _ensure_department_diet_overrides_table(db)
+            try:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT day, meal, count
+                        FROM department_diet_overrides
+                        WHERE department_id=:d AND diet_type_id=:t
+                        ORDER BY day, meal
+                        """
+                    ),
+                    {"d": str(dept_id), "t": str(diet_type_id)},
+                ).fetchall()
+            except Exception as exc:
+                if _is_missing_department_diet_overrides_error(exc):
+                    return []
+                raise
+            return [
+                {
+                    "day": int(r[0]),
+                    "meal": str(r[1]),
+                    "count": int(r[2] or 0),
+                }
+                for r in rows
+            ]
+        finally:
+            db.close()
+
+    def get_map_for_department(self, dept_id: str) -> dict[tuple[int, str, str], int]:
+        out: dict[tuple[int, str, str], int] = {}
+        for row in self.list_for_department(dept_id):
+            out[(int(row["day"]), str(row["meal"]), str(row["diet_type_id"]))] = int(row["count"])
+        return out
+
+    def replace_for_department_diet(self, dept_id: str, diet_type_id: str | int, items: Iterable[dict]) -> None:
+        db = get_session()
+        try:
+            _ensure_department_diet_overrides_table(db)
+            try:
+                db.execute(
+                    text(
+                        """
+                        DELETE FROM department_diet_overrides
+                        WHERE department_id=:d AND diet_type_id=:t
+                        """
+                    ),
+                    {"d": str(dept_id), "t": str(diet_type_id)},
+                )
+            except Exception as exc:
+                if _is_missing_department_diet_overrides_error(exc):
+                    db.rollback()
+                    return
+                raise
+            for it in items:
+                day = int(it.get("day") or 0)
+                meal = str(it.get("meal") or "").strip().lower()
+                count = int(it.get("count") or 0)
+                if day < 1 or day > 7 or meal not in ("lunch", "dinner"):
+                    continue
+                try:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO department_diet_overrides(department_id, diet_type_id, day, meal, count, updated_at)
+                            VALUES(:d, :t, :day, :meal, :count, CURRENT_TIMESTAMP)
+                            """
+                        ),
+                        {
+                            "d": str(dept_id),
+                            "t": str(diet_type_id),
+                            "day": day,
+                            "meal": meal,
+                            "count": count,
+                        },
+                    )
+                except Exception as exc:
+                    if _is_missing_department_diet_overrides_error(exc):
+                        db.rollback()
+                        return
+                    raise
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 
@@ -1075,80 +1179,6 @@ class DepartmentServiceAddonsRepo:
             return out
         finally:
             db.close()
-
-    def list_for_department_diet(self, dept_id: str, diet_type_id: str | int) -> list[dict]:
-        db = get_session()
-        try:
-            _ensure_department_diet_overrides_table(db)
-            rows = db.execute(
-                text(
-                    """
-                    SELECT day, meal, count
-                    FROM department_diet_overrides
-                    WHERE department_id=:d AND diet_type_id=:t
-                    ORDER BY day, meal
-                    """
-                ),
-                {"d": str(dept_id), "t": str(diet_type_id)},
-            ).fetchall()
-            return [
-                {
-                    "day": int(r[0]),
-                    "meal": str(r[1]),
-                    "count": int(r[2] or 0),
-                }
-                for r in rows
-            ]
-        finally:
-            db.close()
-
-    def get_map_for_department(self, dept_id: str) -> dict[tuple[int, str, str], int]:
-        out: dict[tuple[int, str, str], int] = {}
-        for row in self.list_for_department(dept_id):
-            out[(int(row["day"]), str(row["meal"]), str(row["diet_type_id"]))] = int(row["count"])
-        return out
-
-    def replace_for_department_diet(self, dept_id: str, diet_type_id: str | int, items: Iterable[dict]) -> None:
-        db = get_session()
-        try:
-            _ensure_department_diet_overrides_table(db)
-            db.execute(
-                text(
-                    """
-                    DELETE FROM department_diet_overrides
-                    WHERE department_id=:d AND diet_type_id=:t
-                    """
-                ),
-                {"d": str(dept_id), "t": str(diet_type_id)},
-            )
-            for it in items:
-                day = int(it.get("day") or 0)
-                meal = str(it.get("meal") or "").strip().lower()
-                count = int(it.get("count") or 0)
-                if day < 1 or day > 7 or meal not in ("lunch", "dinner"):
-                    continue
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO department_diet_overrides(department_id, diet_type_id, day, meal, count, updated_at)
-                        VALUES(:d, :t, :day, :meal, :count, CURRENT_TIMESTAMP)
-                        """
-                    ),
-                    {
-                        "d": str(dept_id),
-                        "t": str(diet_type_id),
-                        "day": day,
-                        "meal": meal,
-                        "count": count,
-                    },
-                )
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            db.close()
-
 
 class DietTypeDeleteBlockedError(Exception):
     """Raised when a diet type is still referenced by other records."""

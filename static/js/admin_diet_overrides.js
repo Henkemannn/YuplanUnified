@@ -29,7 +29,8 @@
       departmentId: null,
       dietTypeId: null,
       baseCount: 0,
-      dietName: ''
+      dietName: '',
+      siteId: null
     };
 
     function setStatus(msg){
@@ -63,15 +64,27 @@
       });
     }
 
+    async function parseErrorMessage(resp, fallback){
+      try {
+        var payload = await resp.json();
+        if(payload && payload.message){
+          return String(payload.message);
+        }
+      } catch(_) {}
+      return fallback;
+    }
+
     async function loadOverrides(){
       if(!state.departmentId || !state.dietTypeId) return;
       setStatus('Hämtar...');
       try {
-        var r = await fetch('/ui/admin/departments/' + state.departmentId + '/diet-overrides?diet_type_id=' + encodeURIComponent(state.dietTypeId), {
+        var query = '?diet_type_id=' + encodeURIComponent(state.dietTypeId);
+        if(state.siteId) query += '&site_id=' + encodeURIComponent(state.siteId);
+        var r = await fetch('/ui/admin/departments/' + state.departmentId + '/diet-overrides' + query, {
           credentials: 'same-origin'
         });
         if(!r.ok){
-          setStatus('Kunde inte hämta.');
+          setStatus(await parseErrorMessage(r, 'Kunde inte hämta.'));
           return;
         }
         var data = await r.json();
@@ -97,11 +110,12 @@
           }, csrf ? { 'X-CSRF-Token': csrf } : {}),
           body: JSON.stringify({
             diet_type_id: state.dietTypeId,
+            site_id: state.siteId,
             entries: readEntries()
           })
         });
         if(!r.ok){
-          setStatus('Kunde inte spara.');
+          setStatus(await parseErrorMessage(r, 'Kunde inte spara.'));
           return;
         }
         setStatus('Sparat.');
@@ -122,10 +136,10 @@
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest'
           }, csrf ? { 'X-CSRF-Token': csrf } : {}),
-          body: JSON.stringify({ diet_type_id: state.dietTypeId })
+          body: JSON.stringify({ diet_type_id: state.dietTypeId, site_id: state.siteId })
         });
         if(!r.ok){
-          setStatus('Kunde inte återställa.');
+          setStatus(await parseErrorMessage(r, 'Kunde inte återställa.'));
           return;
         }
         setInputsToBase();
@@ -142,6 +156,7 @@
       state.departmentId = trigger.getAttribute('data-department-id');
       state.dietTypeId = trigger.getAttribute('data-diet-type-id');
       state.dietName = trigger.getAttribute('data-diet-name') || '';
+      state.siteId = trigger.getAttribute('data-site-id') || '';
       if(nameEl) nameEl.textContent = state.dietName;
       setInputsToBase();
       setStatus('');
