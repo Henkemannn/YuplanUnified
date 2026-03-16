@@ -5849,16 +5849,24 @@ def admin_residences_create():
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_new_form")))
 
     name = (request.form.get("name") or "").strip()
+    return_to = (request.form.get("return_to") or "new").strip().lower()
+    dept_id = (request.form.get("dept_id") or "").strip()
     if not name:
         flash("Namn på boende måste anges.", "error")
+        if return_to == "edit" and dept_id:
+            return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
         return redirect(url_for("ui.admin_departments_new_form"))
 
     try:
         residence = ResidencesRepo().create_for_site(str(site_id), name)
         flash(f"Boende '{residence['name']}' sparat.", "success")
+        if return_to == "edit" and dept_id:
+            return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id, residence_id=residence["id"]))
         return redirect(url_for("ui.admin_departments_new_form", residence_id=residence["id"]))
     except Exception as exc:
         flash(f"Kunde inte skapa boende: {str(exc)}", "error")
+        if return_to == "edit" and dept_id:
+            return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
         return redirect(url_for("ui.admin_departments_new_form"))
 
 
@@ -5876,12 +5884,14 @@ def admin_departments_edit_form(dept_id: str):
     # Require active site; redirect to selector when missing
     if not active_site_id:
         return redirect(url_for("ui.select_site", next=url_for("ui.admin_departments_edit_form", dept_id=dept_id)))
+    from core.admin_repo import ResidencesRepo
+
     db = get_session()
     try:
         # Get department strictly within active site (include notes)
         dept_row = db.execute(
             text(
-                "SELECT d.id, d.site_id, d.name, d.resident_count_mode, d.resident_count_fixed, d.notes, d.version "
+                "SELECT d.id, d.site_id, d.name, d.resident_count_mode, d.resident_count_fixed, d.residence_id, d.notes, d.version "
                 "FROM departments d "
                 "WHERE d.id = :id AND d.site_id = :sid"
             ),
@@ -5898,11 +5908,23 @@ def admin_departments_edit_form(dept_id: str):
             "name": dept_row[2],
             "resident_count_mode": dept_row[3],
             "resident_count_fixed": int(dept_row[4] or 0),
-            "notes": dept_row[5] or "",
-            "version": int(dept_row[6] or 0),
+            "residence_id": (str(dept_row[5]).strip() if dept_row[5] else None),
+            "notes": dept_row[6] or "",
+            "version": int(dept_row[7] or 0),
         }
     finally:
         db.close()
+
+    residences = []
+    selected_residence_id = (request.args.get("residence_id") or "").strip() or None
+    try:
+        residences = ResidencesRepo().list_for_site(str(active_site_id))
+    except Exception:
+        residences = []
+    if selected_residence_id and not any(str(r.get("id")) == selected_residence_id for r in residences):
+        selected_residence_id = None
+    if not selected_residence_id:
+        selected_residence_id = department.get("residence_id")
     
     # Get current week for header
     today = _date.today()
@@ -5944,6 +5966,8 @@ def admin_departments_edit_form(dept_id: str):
         "user_role": role,
         "mode": "edit",
         "department": department,
+        "residences": residences,
+        "selected_residence_id": selected_residence_id,
         "selected_week": selected_week,
         "weekly_table": weekly_table,
         "diet_types": [],
@@ -6013,8 +6037,7 @@ def admin_department_alt2_get(dept_id: str):
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
     active_site_id = ctx.get("site_id")
-    if not active_site_id:
-        return jsonify({"error": "site_required", "message": "Select active site"}), 400
+    explicit_site_id = (request.args.get("site_id") or "").strip() or None
 
     # Verify department belongs to active site
     db = get_session()
@@ -6028,13 +6051,24 @@ def admin_department_alt2_get(dept_id: str):
 
     if not row:
         return jsonify({"error": "not_found"}), 404
-    if str(row[0]) != str(active_site_id):
-        return jsonify({"error": "forbidden"}), 403
+    dept_site_id = str(row[0])
+
+    if explicit_site_id:
+        if str(explicit_site_id) != dept_site_id:
+            return jsonify({"error": "forbidden"}), 403
+        effective_site_id = str(explicit_site_id)
+    elif active_site_id:
+        if str(active_site_id) != dept_site_id:
+            return jsonify({"error": "forbidden"}), 403
+        effective_site_id = str(active_site_id)
+    else:
+        # Fallback for stale/missing session context while editing a concrete department.
+        effective_site_id = dept_site_id
 
     # Fetch Alt2 flags via repo (site-scoped)
     tid = session.get("tenant_id")
     repo = MenuPlanningRepo()
-    alt2_map = repo.get_alt2_for_week(tid, year, week, active_site_id)
+    alt2_map = repo.get_alt2_for_week(tid, year, week, effective_site_id)
     dept_days = alt2_map.get(str(dept_id), {})
 
     # Collect enabled days as short codes
@@ -6082,8 +6116,7 @@ def admin_department_alt2_save(dept_id: str):
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
     active_site_id = ctx.get("site_id")
-    if not active_site_id:
-        return jsonify({"error": "site_required", "message": "Select active site"}), 400
+    explicit_site_id = (str(data.get("site_id") or "").strip() or None)
 
     # Verify department belongs to active site
     db = get_session()
@@ -6093,8 +6126,18 @@ def admin_department_alt2_save(dept_id: str):
         db.close()
     if not row:
         return jsonify({"error": "not_found"}), 404
-    if str(row[0]) != str(active_site_id):
-        return jsonify({"error": "forbidden"}), 403
+    dept_site_id = str(row[0])
+
+    if explicit_site_id:
+        if str(explicit_site_id) != dept_site_id:
+            return jsonify({"error": "forbidden"}), 403
+        effective_site_id = str(explicit_site_id)
+    elif active_site_id:
+        if str(active_site_id) != dept_site_id:
+            return jsonify({"error": "forbidden"}), 403
+        effective_site_id = str(active_site_id)
+    else:
+        effective_site_id = dept_site_id
 
     # Parse days list
     short_to_idx = {"mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6, "sun": 7}
@@ -6113,7 +6156,7 @@ def admin_department_alt2_save(dept_id: str):
     tid = session.get("tenant_id")
     repo = MenuPlanningRepo()
     try:
-        repo.set_alt2_for_week(tid, year, week, alt2_map, str(active_site_id))
+        repo.set_alt2_for_week(tid, year, week, alt2_map, str(effective_site_id))
     except Exception as e:
         return jsonify({"error": "server_error", "message": str(e)}), 500
 
@@ -6135,7 +6178,7 @@ def admin_departments_update(dept_id: str):
     Update a department.
     """
     from flask import flash, redirect, url_for
-    from core.admin_repo import DepartmentsRepo, DietTypesRepo
+    from core.admin_repo import DepartmentsRepo, DietTypesRepo, ResidencesRepo
     from core.etag import ConcurrencyError
     
     # Verify department exists
@@ -6162,6 +6205,7 @@ def admin_departments_update(dept_id: str):
     name = request.form.get("name", "").strip()
     # Accept either resident_count (our form) or resident_count_fixed (tests)
     resident_count = (request.form.get("resident_count") or request.form.get("resident_count_fixed") or "0").strip()
+    residence_id = (request.form.get("residence_id") or "").strip() or None
     notes = request.form.get("notes")
     version_str = request.form.get("version", "0").strip()
     
@@ -6178,6 +6222,12 @@ def admin_departments_update(dept_id: str):
     except ValueError:
         flash("Antal boende måste vara ett heltal.", "error")
         return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+    if residence_id:
+        residence = ResidencesRepo().get_for_site(str(active_site_id), str(residence_id))
+        if not residence:
+            flash("Valt boende hittades inte för vald site.", "error")
+            return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
     
     try:
         expected_version = int(version_str)
@@ -6192,6 +6242,7 @@ def admin_departments_update(dept_id: str):
             expected_version=expected_version,
             name=name,
             resident_count_fixed=resident_count_int,
+            residence_id=residence_id,
             notes=notes,
         )
         # Persist specialkost defaults from form

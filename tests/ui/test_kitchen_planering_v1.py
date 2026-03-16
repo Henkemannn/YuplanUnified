@@ -194,4 +194,15 @@ def test_planering_print_row_order_and_plain_alt_text_contract():
     assert '<span class="kp-print-alt-text">' in js
     assert "Alt 1" in js
     assert "Alt 2" in js
-    assert "grid-template-columns: minmax(0, 1fr) 56px 56px;" in css
+    assert "grid-template-columns: minmax(0, 1fr) 64px 64px;" in css
+    assert "border-left: 1px solid #dbe4f0;" in css
+
+
+def test_planering_print_reduces_specialkost_duplicate_variant_lines_contract():
+    from pathlib import Path
+
+    js = Path("static/ui/kitchen_planering_v1.js").read_text(encoding="utf-8")
+
+    assert "function buildVariantSummaryLine(groupName, variants, total)" in js
+    assert "function displayGroupLabel(name)" in js
+    assert "variantSummary" in js

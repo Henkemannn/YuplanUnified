@@ -22,6 +22,7 @@
     let selected = [];
     let selectedDays = new Set();
     let departmentId = null;
+    let siteId = null;
     const hiddenInput = $('#alt2-days', dlg);
 
     // Apply selection classes to existing day buttons
@@ -58,12 +59,21 @@
       if(!departmentId) return;
       const y = parseInt(yearEl && yearEl.value || (new Date()).getFullYear(), 10);
       const w = parseInt(weekEl && weekEl.value || 1, 10);
+      const siteQ = siteId ? ('&site_id=' + encodeURIComponent(siteId)) : '';
       // Keep existing buttons; just show loading state subtly
       const old = bodyEl.innerHTML;
       bodyEl.setAttribute('data-loading', '1');
       try{
-        const r = await fetch(`/ui/admin/departments/${departmentId}/alt2?year=${y}&week=${w}`, { credentials: 'same-origin' });
-        if(!r.ok){ bodyEl.innerHTML = '<p class="ua-error">Kunde inte hämta Alt2.</p>'; return; }
+        const r = await fetch(`/ui/admin/departments/${departmentId}/alt2?year=${y}&week=${w}${siteQ}`, { credentials: 'same-origin' });
+        if(!r.ok){
+          var msg = 'Kunde inte hämta Alt2.';
+          try {
+            const err = await r.json();
+            if(err && err.message){ msg += ' ' + String(err.message); }
+          } catch(_) {}
+          bodyEl.innerHTML = '<p class="ua-error">' + msg + '</p>';
+          return;
+        }
         const data = await r.json();
         selected = Array.isArray(data.alt2_days) ? data.alt2_days.slice() : [];
         selectedDays = new Set(selected);
@@ -87,7 +97,7 @@
             ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
             'X-Requested-With': 'XMLHttpRequest',
           },
-          body: JSON.stringify({ year: y, week: w, alt2_days: selected })
+          body: JSON.stringify({ year: y, week: w, alt2_days: selected, site_id: siteId || '' })
         , credentials: 'same-origin' });
         if(!r.ok){ if(statusEl) statusEl.textContent = 'Kunde inte spara.'; return; }
         const data = await r.json();
@@ -104,6 +114,7 @@
       if(!t) return;
       ev.preventDefault();
       departmentId = t.getAttribute('data-department-id');
+      siteId = t.getAttribute('data-site-id');
       openDialog(dlg);
       load();
     });

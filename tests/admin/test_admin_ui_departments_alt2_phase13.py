@@ -121,3 +121,144 @@ def test_admin_department_alt2_get_cross_site_forbidden(app_session: Flask, clie
     # Attempt to fetch dept-a (belongs to site-a) should be forbidden
     r = client_admin.get("/ui/admin/departments/dept-a/alt2?year=2024&week=1", headers=ADMIN_HEADERS)
     assert r.status_code == 403
+
+
+def test_admin_department_alt2_get_missing_table_returns_empty(app_session: Flask, client_admin: FlaskClient) -> None:
+    from core.db import get_session
+    from sqlalchemy import text
+
+    db = get_session()
+    try:
+        db.execute(text(
+            """
+            CREATE TABLE IF NOT EXISTS sites (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL
+            )
+            """
+        ))
+        db.execute(text(
+            """
+            CREATE TABLE IF NOT EXISTS departments (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              resident_count_mode TEXT NOT NULL DEFAULT 'fixed',
+              resident_count_fixed INTEGER NOT NULL DEFAULT 0,
+              notes TEXT NULL,
+              version INTEGER NOT NULL DEFAULT 0,
+              updated_at TEXT
+            )
+            """
+        ))
+        db.execute(text("DROP TABLE IF EXISTS weekview_alt2_flags"))
+        db.execute(text("INSERT OR IGNORE INTO sites(id, name) VALUES ('site-missing-alt2','Missing Alt2 Site')"))
+        db.execute(text(
+            """
+            INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes, version)
+            VALUES ('dept-missing-alt2','site-missing-alt2','Dept Missing Alt2','fixed', 4, NULL, 0)
+            """
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = "site-missing-alt2"
+
+    r = client_admin.get(
+        "/ui/admin/departments/dept-missing-alt2/alt2?year=2026&week=12",
+        headers=ADMIN_HEADERS,
+    )
+    assert r.status_code == 200
+    data = r.get_json() or {}
+    assert data.get("department_id") == "dept-missing-alt2"
+    assert data.get("year") == 2026
+    assert data.get("week") == 12
+    assert data.get("alt2_days") == []
+
+
+def test_admin_department_alt2_get_allows_explicit_site_when_session_site_differs(app_with_alt2: Flask, client_admin: FlaskClient) -> None:
+    # Simulate stale tab/session drift: active site differs from department site.
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = "other-site"
+
+    r = client_admin.get(
+        "/ui/admin/departments/dept-alt2-1/alt2?year=2024&week=1&site_id=site-alt2-1",
+        headers=ADMIN_HEADERS,
+    )
+    assert r.status_code == 200
+    data = r.get_json() or {}
+    assert data.get("department_id") == "dept-alt2-1"
+    assert "mon" in (data.get("alt2_days") or [])
+
+
+def test_admin_department_alt2_get_legacy_schema_is_alt2_supported(app_session: Flask, client_admin: FlaskClient) -> None:
+    from core.db import get_session
+    from sqlalchemy import text
+
+    db = get_session()
+    try:
+        db.execute(text(
+            """
+            CREATE TABLE IF NOT EXISTS sites (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL
+            )
+            """
+        ))
+        db.execute(text(
+            """
+            CREATE TABLE IF NOT EXISTS departments (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              resident_count_mode TEXT NOT NULL DEFAULT 'fixed',
+              resident_count_fixed INTEGER NOT NULL DEFAULT 0,
+              notes TEXT NULL,
+              version INTEGER NOT NULL DEFAULT 0,
+              updated_at TEXT
+            )
+            """
+        ))
+        db.execute(text("DROP TABLE IF EXISTS weekview_alt2_flags"))
+        db.execute(text(
+            """
+            CREATE TABLE weekview_alt2_flags (
+              tenant_id TEXT,
+              department_id TEXT,
+              year INTEGER,
+              week INTEGER,
+              day_of_week INTEGER,
+              is_alt2 INTEGER,
+              UNIQUE(tenant_id, department_id, year, week, day_of_week)
+            )
+            """
+        ))
+        db.execute(text("INSERT OR IGNORE INTO sites(id, name) VALUES ('site-legacy-alt2','Legacy Alt2 Site')"))
+        db.execute(text(
+            """
+            INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, notes, version)
+            VALUES ('dept-legacy-alt2','site-legacy-alt2','Dept Legacy Alt2','fixed', 4, NULL, 0)
+            """
+        ))
+        db.execute(text(
+            """
+            INSERT OR REPLACE INTO weekview_alt2_flags(tenant_id, department_id, year, week, day_of_week, is_alt2)
+            VALUES ('1', 'dept-legacy-alt2', 2026, 12, 1, 1)
+            """
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = "site-legacy-alt2"
+
+    r = client_admin.get(
+        "/ui/admin/departments/dept-legacy-alt2/alt2?year=2026&week=12",
+        headers=ADMIN_HEADERS,
+    )
+    assert r.status_code == 200
+    data = r.get_json() or {}
+    assert "mon" in (data.get("alt2_days") or [])

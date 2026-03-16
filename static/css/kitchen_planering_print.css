@@ -80,10 +80,10 @@
 
 .kp-print-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 56px 56px;
-  column-gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 64px 64px;
+  column-gap: 10px;
   align-items: center;
-  padding: 1px 2px;
+  padding: 2px 4px;
   border-radius: 0;
 }
 
@@ -110,8 +110,8 @@
 }
 
 .kp-print-row.sk-row {
-  grid-template-columns: minmax(0, 1fr) 56px 56px;
-  column-gap: 5px;
+  grid-template-columns: minmax(0, 1fr) 64px 64px;
+  column-gap: 10px;
 }
 
 .kp-print-row-subtypes {
@@ -125,21 +125,25 @@
   font-weight: 700;
   text-align: right;
   justify-self: end;
-  width: 56px;
+  width: 64px;
   font-variant-numeric: tabular-nums;
+  border-left: 1px solid #dbe4f0;
+  padding-left: 8px;
 }
 
 .kp-print-row.sk-row .count {
-  width: 56px;
+  width: 64px;
 }
 
 .kp-print-alt-text {
   justify-self: start;
-  width: 56px;
+  width: 64px;
   text-align: left;
   font-size: 10pt;
   font-weight: 600;
   color: #111;
+  border-left: 1px solid #dbe4f0;
+  padding-left: 8px;
 }
 
 .kp-zebra:nth-child(even) {
@@ -287,7 +291,7 @@
 }
 
 .sk-card .kp-print-row {
-  grid-template-columns: minmax(0, 1fr) 56px 56px;
+  grid-template-columns: minmax(0, 1fr) 64px 64px;
   padding: 1px 2px;
 }
 

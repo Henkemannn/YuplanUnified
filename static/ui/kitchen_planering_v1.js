@@ -1318,22 +1318,65 @@
         specialListTitle.className = 'kp-print-special-title';
         specialListTitle.textContent = 'Vald specialkost';
         special.appendChild(specialListTitle);
+
+        function normalizeGroupLabel(name){
+          return String(name || '')
+            .toLowerCase()
+            .replace(/\s*[-–—]\s*totalt\s*$/i, '')
+            .replace(/\s+totalt\s*$/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        }
+
+        function displayGroupLabel(name){
+          var raw = String(name || '').trim();
+          if(!raw){ return ''; }
+          return raw
+            .replace(/\s*[-–—]\s*totalt\s*$/i, '')
+            .replace(/\s+totalt\s*$/i, '')
+            .trim();
+        }
+
+        function buildVariantSummaryLine(groupName, variants, total){
+          var list = Array.isArray(variants) ? variants : [];
+          if(list.length <= 1){
+            var only = list[0] || {};
+            var onlyName = normalizeGroupLabel(only.diet_type_name || '');
+            var groupNorm = normalizeGroupLabel(groupName || '');
+            var onlyCount = parseInt(only.count || 0, 10) || 0;
+            var totalCount = parseInt(total || 0, 10) || 0;
+            if(!onlyName || onlyName === groupNorm || onlyCount === totalCount){
+              return '';
+            }
+            return String((only.diet_type_name || '')).trim() + ' ' + String(onlyCount);
+          }
+          return list
+            .map(function(variant){
+              var vn = String((variant && variant.diet_type_name) || '').trim();
+              var vc = parseInt((variant && variant.count) || 0, 10) || 0;
+              if(!vn){ return ''; }
+              return vn + ' ' + String(vc);
+            })
+            .filter(function(x){ return !!x; })
+            .join(' · ');
+        }
+
         for(var d=0; d<worklist.length; d++){
           var block = worklist[d];
           var group = document.createElement('div');
           group.className = 'kp-print-special-group sk-card';
+          var groupLabel = displayGroupLabel(block.diet_type_name || '') || String(block.diet_type_name || '');
           var title = document.createElement('div');
           title.className = 'kp-print-special-name';
-          title.textContent = block.diet_type_name + ' — Totalt ' + (block.total || 0);
+          title.textContent = groupLabel + ' — Totalt ' + (block.total || 0);
           group.appendChild(title);
 
           var subtypeBreakdown = block.subtype_breakdown || [];
-          if(subtypeBreakdown.length > 0){
+          var variantSummary = buildVariantSummaryLine(groupLabel, subtypeBreakdown, block.total || 0);
+          if(variantSummary){
             var variantLine = document.createElement('div');
             variantLine.className = 'kp-print-variant-line';
-            variantLine.textContent = subtypeBreakdown.map(function(variant){
-              return String((variant && variant.diet_type_name) || '') + ' ' + String((variant && variant.count) || 0);
-            }).join(' \u2022 ');
+            variantLine.textContent = variantSummary;
             group.appendChild(variantLine);
           }
 

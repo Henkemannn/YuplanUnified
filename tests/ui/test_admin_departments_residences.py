@@ -149,3 +149,134 @@ def test_edit_form_old_department_without_residence_still_renders(client_admin):
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
     assert "Legacy Dept" in html
+
+
+def test_edit_form_shows_residence_controls(client_admin):
+    app = client_admin.application
+    site_id = str(uuid.uuid4())
+    dept_id = str(uuid.uuid4())
+
+    from core.db import create_all, get_session
+
+    with app.app_context():
+        create_all()
+        db = get_session()
+        try:
+            db.execute(text("INSERT INTO sites (id, name, version) VALUES (:id, :name, 0)"), {"id": site_id, "name": "TestSite"})
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES(:id, :sid, :name, 'fixed', 15, 0)"
+                ),
+                {"id": dept_id, "sid": site_id, "name": "Dept Edit Residence"},
+            )
+            db.execute(
+                text("INSERT INTO residences (id, site_id, name) VALUES(:id, :sid, :name)"),
+                {"id": str(uuid.uuid4()), "sid": site_id, "name": "Boende Edit"},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+    resp = client_admin.get(f"/ui/admin/departments/{dept_id}/edit", headers=_h("admin"))
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    assert 'name="residence_id"' in html
+    assert "Lägg till boende" in html
+    assert "residence-create-modal" in html
+
+
+def test_edit_department_persists_residence_id(client_admin):
+    app = client_admin.application
+    site_id = str(uuid.uuid4())
+    dept_id = str(uuid.uuid4())
+    residence_id = str(uuid.uuid4())
+
+    from core.db import create_all, get_session
+
+    with app.app_context():
+        create_all()
+        db = get_session()
+        try:
+            db.execute(text("INSERT INTO sites (id, name, version) VALUES (:id, :name, 0)"), {"id": site_id, "name": "TestSite"})
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES(:id, :sid, :name, 'fixed', 10, 0)"
+                ),
+                {"id": dept_id, "sid": site_id, "name": "Dept Residence Save"},
+            )
+            db.execute(
+                text("INSERT INTO residences (id, site_id, name) VALUES(:id, :sid, :name)"),
+                {"id": residence_id, "sid": site_id, "name": "Boende Save"},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+    resp = client_admin.post(
+        f"/ui/admin/departments/{dept_id}/edit",
+        headers=_h("admin"),
+        data={
+            "name": "Dept Residence Save",
+            "resident_count": "10",
+            "residence_id": residence_id,
+            "notes": "",
+            "version": "0",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+
+    with app.app_context():
+        db = get_session()
+        try:
+            row = db.execute(text("SELECT residence_id FROM departments WHERE id=:id"), {"id": dept_id}).fetchone()
+        finally:
+            db.close()
+
+    assert row is not None
+    assert row[0] == residence_id
+
+
+def test_create_residence_from_edit_modal_redirects_back_to_edit(client_admin):
+    app = client_admin.application
+    site_id = str(uuid.uuid4())
+    dept_id = str(uuid.uuid4())
+
+    from core.db import create_all, get_session
+
+    with app.app_context():
+        create_all()
+        db = get_session()
+        try:
+            db.execute(text("INSERT INTO sites (id, name, version) VALUES (:id, :name, 0)"), {"id": site_id, "name": "TestSite"})
+            db.execute(
+                text(
+                    "INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) "
+                    "VALUES(:id, :sid, :name, 'fixed', 12, 0)"
+                ),
+                {"id": dept_id, "sid": site_id, "name": "Dept Residence Redirect"},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
+
+    resp = client_admin.post(
+        "/ui/admin/residences/new",
+        headers=_h("admin"),
+        data={"name": "Boende Från Edit", "return_to": "edit", "dept_id": dept_id},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    location = resp.headers.get("Location") or ""
+    assert f"/ui/admin/departments/{dept_id}/edit?residence_id=" in location

@@ -64,6 +64,35 @@
                 <textarea id="notes" name="notes" class="yp-input" rows="4" placeholder="Valfri beskrivning" form="department-form">{{ vm.department.notes }}</textarea>
                 <p class="yp-form-help">Intern faktaruta/anteckningar för avdelningen</p>
             </div>
+
+            <div class="yp-form-field">
+                <label for="residence_id" class="yp-label">
+                    Boende
+                </label>
+                <div class="admin-inline-actions">
+                    <select
+                        id="residence_id"
+                        name="residence_id"
+                        class="yp-input"
+                        form="department-form"
+                    >
+                        <option value="">Välj boende...</option>
+                        {% for residence in vm.residences or [] %}
+                        <option
+                            value="{{ residence.id }}"
+                            {% if vm.selected_residence_id and vm.selected_residence_id == residence.id %}selected{% endif %}
+                        >{{ residence.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button
+                        type="button"
+                        class="yp-button yp-button-secondary"
+                        data-modal-target="#residence-create-modal"
+                        aria-label="Lägg till boende"
+                    >+ Lägg till</button>
+                </div>
+                <p class="yp-form-help">Koppla avdelningen till ett boende eller skapa ett nytt.</p>
+            </div>
         </article>
 
         <article class="app-shell__card">
@@ -115,7 +144,7 @@
             <h2 class="app-shell__card-title">Menyval</h2>
             <div class="admin-menuval-group">
                 <div>
-                    <button type="button" id="openAlt2Modal" class="yp-button yp-button-secondary js-open-alt2" data-department-id="{{ vm.department.id }}">Ändra menyval</button>
+                    <button type="button" id="openAlt2Modal" class="yp-button yp-button-secondary js-open-alt2" data-department-id="{{ vm.department.id }}" data-site-id="{{ vm.department.site_id }}">Ändra menyval</button>
                 </div>
                 <p class="yp-form-help">Här kan du ändra avdelningens menyval.</p>
             </div>
@@ -344,7 +373,7 @@
                 <div class="yp-form-field">
                     <label class="yp-label">🍽️ Menyval (Alt1/Alt2)</label>
                     <div>
-                        <button type="button" id="openAlt2Modal" class="yp-button yp-button-secondary js-open-alt2" data-department-id="{{ vm.department.id }}">Visa veckans Alt2</button>
+                        <button type="button" id="openAlt2Modal" class="yp-button yp-button-secondary js-open-alt2" data-department-id="{{ vm.department.id }}" data-site-id="{{ vm.department.site_id }}">Visa veckans Alt2</button>
                     </div>
                     <p class="yp-form-help">Läs-läge (Slice 1). Uppdatering kommer i nästa steg.</p>
                 </div>
@@ -373,7 +402,7 @@
 </div>
 {% endif %}
 
-{% if vm.mode == 'new' %}
+{% if vm.mode in ['new', 'edit'] %}
 <dialog id="residence-create-modal" class="ua-modal">
     <div class="ua-modal-inner">
         <header class="ua-modal-header">
@@ -382,6 +411,12 @@
         </header>
         <form method="POST" action="{{ url_for('ui.admin_residences_create') }}" class="yp-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            {% if vm.mode == 'edit' and vm.department %}
+            <input type="hidden" name="return_to" value="edit">
+            <input type="hidden" name="dept_id" value="{{ vm.department.id }}">
+            {% else %}
+            <input type="hidden" name="return_to" value="new">
+            {% endif %}
             <div class="yp-form-field">
                 <label for="residence_name" class="yp-label">Namn <span class="required">*</span></label>
                 <input id="residence_name" name="name" class="yp-input" type="text" required aria-required="true" placeholder="T.ex. Boende Solrosen">
