@@ -5972,6 +5972,7 @@ def admin_departments_edit_form(dept_id: str):
         "weekly_table": weekly_table,
         "diet_types": [],
         "diet_defaults": {},
+        "diet_overrides_present": {},
         "service_addons_master": [],
         "department_service_addons": [],
     }
@@ -5986,6 +5987,18 @@ def admin_departments_edit_form(dept_id: str):
     except Exception:
         vm["diet_types"] = []
         vm["diet_defaults"] = {}
+    try:
+        from core.admin_repo import DepartmentDietOverridesRepo
+
+        override_rows = DepartmentDietOverridesRepo().list_for_department(dept_id)
+        present: dict[str, bool] = {}
+        for row in override_rows:
+            diet_id = str(row.get("diet_type_id") or "").strip()
+            if diet_id:
+                present[diet_id] = True
+        vm["diet_overrides_present"] = present
+    except Exception:
+        vm["diet_overrides_present"] = {}
     try:
         from core.admin_repo import ServiceAddonsRepo, DepartmentServiceAddonsRepo
 

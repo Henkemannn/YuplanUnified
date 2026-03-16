@@ -30,7 +30,8 @@
       dietTypeId: null,
       baseCount: 0,
       dietName: '',
-      siteId: null
+      siteId: null,
+      triggerEl: null
     };
 
     function setStatus(msg){
@@ -64,6 +65,15 @@
       });
     }
 
+    function setTriggerState(hasOverrides){
+      if(!state.triggerEl) return;
+      state.triggerEl.classList.toggle('is-active', !!hasOverrides);
+      state.triggerEl.setAttribute(
+        'aria-label',
+        'Avvikande schema' + (hasOverrides ? ' (aktivt)' : '')
+      );
+    }
+
     async function parseErrorMessage(resp, fallback){
       try {
         var payload = await resp.json();
@@ -90,6 +100,7 @@
         var data = await r.json();
         state.baseCount = parseInt(data.base_count || 0, 10) || 0;
         applyOverrides(data.overrides || []);
+        setTriggerState((data.overrides || []).length > 0);
         setStatus('');
       } catch(_) {
         setStatus('Fel vid hämtning.');
@@ -118,6 +129,12 @@
           setStatus(await parseErrorMessage(r, 'Kunde inte spara.'));
           return;
         }
+        try {
+          var savedData = await r.json();
+          setTriggerState(parseInt(savedData.saved || 0, 10) > 0);
+        } catch(_) {
+          setTriggerState(true);
+        }
         setStatus('Sparat.');
       } catch(_) {
         setStatus('Fel vid sparande.');
@@ -143,6 +160,7 @@
           return;
         }
         setInputsToBase();
+        setTriggerState(false);
         setStatus('Återställd.');
       } catch(_) {
         setStatus('Fel vid återställning.');
@@ -157,6 +175,7 @@
       state.dietTypeId = trigger.getAttribute('data-diet-type-id');
       state.dietName = trigger.getAttribute('data-diet-name') || '';
       state.siteId = trigger.getAttribute('data-site-id') || '';
+      state.triggerEl = trigger;
       if(nameEl) nameEl.textContent = state.dietName;
       setInputsToBase();
       setStatus('');

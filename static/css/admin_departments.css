@@ -112,6 +112,14 @@
   padding: 4px 10px;
 }
 
+.specialkost-edit-override.is-active {
+  border-color: #0d7a3a;
+  background: #e7f6eb;
+  color: #0d5d2c;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(13, 122, 58, 0.22);
+}
+
 .sk-input::-webkit-outer-spin-button,
 .sk-input::-webkit-inner-spin-button {
   -webkit-appearance: none;

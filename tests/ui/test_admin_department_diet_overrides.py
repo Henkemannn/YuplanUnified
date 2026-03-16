@@ -119,3 +119,37 @@ def test_department_diet_overrides_repo_tolerates_missing_table(app_session, mon
         diet_type_id="35",
         items=[{"day": 1, "meal": "lunch", "count": 3}],
     )
+
+
+def test_edit_form_marks_diet_override_button_when_overrides_exist(app_session, client_admin):
+    site, _ = SitesRepo().create_site(f"Diet override highlight site {uuid.uuid4()}")
+    dep, dep_v = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Diet Override Highlight",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    diet_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False)
+    DepartmentsRepo().upsert_department_diet_defaults(
+        dept_id=dep["id"],
+        expected_version=dep_v,
+        items=[{"diet_type_id": str(diet_id), "default_count": 2}],
+    )
+    DepartmentDietOverridesRepo().replace_for_department_diet(
+        dept_id=dep["id"],
+        diet_type_id=str(diet_id),
+        items=[{"day": 1, "meal": "lunch", "count": 3}],
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    resp = client_admin.get(
+        f"/ui/admin/departments/{dep['id']}/edit",
+        headers=_h("admin"),
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert f'data-diet-type-id="{diet_id}"' in html
+    assert "specialkost-edit-override is-active js-open-diet-override" in html
+    assert "Avvikande schema (aktivt)" in html

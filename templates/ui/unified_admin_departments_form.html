@@ -179,12 +179,13 @@
                             >
                             <button
                                 type="button"
-                                class="yp-button yp-button-secondary specialkost-edit-override js-open-diet-override"
+                                class="yp-button yp-button-secondary specialkost-edit-override{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} is-active{% endif %} js-open-diet-override"
                                 data-modal-target="#dietOverrideModal"
                                 data-department-id="{{ vm.department.id }}"
                                 data-site-id="{{ vm.department.site_id }}"
                                 data-diet-type-id="{{ dtid }}"
                                 data-diet-name="{{ t.name }}"
+                                aria-label="Avvikande schema{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} (aktivt){% endif %}"
                             >Avvikande schema</button>
                         </div>
                     </div>
