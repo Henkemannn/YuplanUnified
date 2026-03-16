@@ -6354,7 +6354,7 @@ def admin_departments_edit_save_diets(dept_id: str):
 @require_roles(*ADMIN_ROLES)
 def admin_departments_edit_save_service_addons(dept_id: str):
     from flask import flash, redirect, url_for
-    from core.admin_repo import ServiceAddonsRepo, DepartmentServiceAddonsRepo
+    from core.admin_repo import ServiceAddonsRepo, DepartmentServiceAddonsRepo, normalize_addon_family
 
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
@@ -6380,18 +6380,25 @@ def admin_departments_edit_save_service_addons(dept_id: str):
     dinners = request.form.getlist("service_addon_dinner_count[]")
     notes = request.form.getlist("service_addon_note[]")
     new_names = request.form.getlist("service_addon_new_name[]")
+    families = request.form.getlist("service_addon_family[]")
 
-    max_len = max(len(addon_ids), len(lunches), len(dinners), len(notes), len(new_names), 0)
+    max_len = max(len(addon_ids), len(lunches), len(dinners), len(notes), len(new_names), len(families), 0)
     master_repo = ServiceAddonsRepo()
     out_rows: list[dict] = []
     for i in range(max_len):
         addon_id = str(addon_ids[i]).strip() if i < len(addon_ids) else ""
         new_name = str(new_names[i]).strip() if i < len(new_names) else ""
+        addon_family = normalize_addon_family(families[i] if i < len(families) else "ovrigt")
         if not addon_id and new_name:
             try:
-                addon_id = master_repo.create_if_missing(new_name)
+                addon_id = master_repo.create_if_missing(new_name, addon_family=addon_family)
             except Exception:
                 addon_id = ""
+        elif addon_id:
+            try:
+                master_repo.set_family(addon_id, addon_family)
+            except Exception:
+                pass
         raw_l = str(lunches[i]).strip() if i < len(lunches) else ""
         raw_d = str(dinners[i]).strip() if i < len(dinners) else ""
         note = str(notes[i]).strip() if i < len(notes) else ""

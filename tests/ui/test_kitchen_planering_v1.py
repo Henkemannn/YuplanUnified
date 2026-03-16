@@ -167,8 +167,9 @@ def test_planering_template_has_serveringstillbehor_tab_and_no_addon_dropdown():
     assert 'data-plan-tab="planera"' in tpl
     assert 'data-plan-tab="service-addons"' in tpl
     assert "Serveringstillbehör" in tpl
-    assert "Moslista" in tpl
-    assert "Salladslista" in tpl
+    assert "('mos', 'MOS')" in tpl
+    assert "('sallad', 'SALLAD')" in tpl
+    assert "('ovrigt', 'ÖVRIGT')" in tpl
     assert "Valt tillägg" not in tpl
 
 
@@ -179,8 +180,10 @@ def test_planering_print_is_scoped_to_active_tab_contract():
 
     assert "function getActivePlanTabName()" in js
     assert "if(activePlanTab === 'service-addons')" in js
-    assert "buildAddonPrintSection(mosAddon, 'Moslista')" in js
-    assert "buildAddonPrintSection(salladAddon, 'Salladslista')" in js
+    assert "function groupAddonsByFamily(addons)" in js
+    assert "{ key: 'mos', title: 'MOS' }" in js
+    assert "{ key: 'sallad', title: 'SALLAD' }" in js
+    assert "{ key: 'ovrigt', title: 'ÖVRIGT' }" in js
 
 
 def test_planering_print_row_order_and_plain_alt_text_contract():

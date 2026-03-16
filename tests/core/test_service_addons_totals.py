@@ -26,8 +26,8 @@ def test_service_addons_totals_aggregate_and_hide_zero_and_include_note(app_sess
     )
 
     addon_repo = ServiceAddonsRepo()
-    mos_id = addon_repo.create_if_missing("Mos")
-    sallad_id = addon_repo.create_if_missing("Sallad")
+    mos_id = addon_repo.create_if_missing("Mos", addon_family="mos")
+    sallad_id = addon_repo.create_if_missing("Sallad", addon_family="sallad")
 
     dep_repo = DepartmentServiceAddonsRepo()
     dep_repo.replace_for_department(
@@ -48,6 +48,7 @@ def test_service_addons_totals_aggregate_and_hide_zero_and_include_note(app_sess
     lunch = dep_repo.list_totals_for_site_meal(site["id"], "lunch")
     assert len(lunch) == 1
     assert lunch[0]["addon_name"] == "Mos"
+    assert lunch[0]["addon_family"] == "mos"
     assert int(lunch[0]["total_count"]) == 7
     notes = {d["department_name"]: d.get("note") for d in lunch[0]["departments"]}
     assert notes.get("Lindgarden A") == "Aldrig tomat"
@@ -55,6 +56,7 @@ def test_service_addons_totals_aggregate_and_hide_zero_and_include_note(app_sess
     dinner = dep_repo.list_totals_for_site_meal(site["id"], "dinner")
     assert len(dinner) == 1
     assert dinner[0]["addon_name"] == "Sallad"
+    assert dinner[0]["addon_family"] == "sallad"
     assert int(dinner[0]["total_count"]) == 3
     dep_names = {d["department_name"] for d in dinner[0]["departments"]}
     assert dep_names == {"Lindgarden A"}

@@ -206,6 +206,7 @@
                 <thead>
                     <tr>
                         <th>Tillägg</th>
+                        <th>Familj</th>
                         <th>Lunch</th>
                         <th>Kväll</th>
                         <th>Notering</th>
@@ -225,6 +226,14 @@
                                 </select>
                                 <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="...eller nytt namn">
                             </td>
+                            <td>
+                                {% set row_family = (row.addon_family or 'ovrigt')|lower %}
+                                <select name="service_addon_family[]" class="yp-input">
+                                    <option value="mos" {% if row_family == 'mos' %}selected{% endif %}>Mos</option>
+                                    <option value="sallad" {% if row_family == 'sallad' %}selected{% endif %}>Sallad</option>
+                                    <option value="ovrigt" {% if row_family == 'ovrigt' %}selected{% endif %}>Övrigt</option>
+                                </select>
+                            </td>
                             <td><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value="{{ row.lunch_count if row.lunch_count is not none else '' }}"></td>
                             <td><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value="{{ row.dinner_count if row.dinner_count is not none else '' }}"></td>
                             <td><input type="text" name="service_addon_note[]" class="yp-input" value="{{ row.note or '' }}" placeholder="Valfri notering"></td>
@@ -241,6 +250,13 @@
                                     {% endfor %}
                                 </select>
                                 <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="...eller nytt namn">
+                            </td>
+                            <td>
+                                <select name="service_addon_family[]" class="yp-input">
+                                    <option value="mos">Mos</option>
+                                    <option value="sallad">Sallad</option>
+                                    <option value="ovrigt" selected>Övrigt</option>
+                                </select>
                             </td>
                             <td><input type="number" min="0" name="service_addon_lunch_count[]" class="yp-input" value=""></td>
                             <td><input type="number" min="0" name="service_addon_dinner_count[]" class="yp-input" value=""></td>

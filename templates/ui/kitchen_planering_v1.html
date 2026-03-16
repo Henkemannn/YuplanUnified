@@ -430,60 +430,37 @@
                 <h3>Serveringstillbehör</h3>
               </div>
               {% if vm.service_addons_summary and vm.service_addons_summary|length > 0 %}
-                {% set mos = namespace(item=None) %}
-                {% set sallad = namespace(item=None) %}
-                {% for addon in vm.service_addons_summary %}
-                  {% set addon_name_lower = (addon.addon_name or '')|lower %}
-                  {% if mos.item is none and 'mos' in addon_name_lower %}
-                    {% set mos.item = addon %}
-                  {% endif %}
-                  {% if sallad.item is none and 'sallad' in addon_name_lower %}
-                    {% set sallad.item = addon %}
-                  {% endif %}
-                {% endfor %}
-
                 <div class="kp-addon-panel-grid">
-                  <div class="kp-addon-panel">
-                    <h4 class="kp-addon-heading">Moslista</h4>
-                    {% if mos.item %}
-                      <div class="kp-worklist-group" data-addon-id="{{ mos.item.addon_id }}">
-                        <div class="kp-worklist-title">{{ mos.item.addon_name }}</div>
-                        <div class="kp-addon-total">Totalt: <span class="kp-worklist-total">{{ mos.item.total_count }}</span></div>
-                        <div class="kp-worklist-rows">
-                          {% for dep in mos.item.departments %}
-                            <div class="kp-worklist-row">
-                              <span class="kp-row-name">{{ dep.department_name }}</span>
-                              <span class="kp-row-count">{{ dep.count }}</span>
-                              {% if dep.note %}<span class="kp-row-note">({{ dep.note }})</span>{% endif %}
+                    {% for family_key, family_label in [('mos', 'MOS'), ('sallad', 'SALLAD'), ('ovrigt', 'ÖVRIGT')] %}
+                    {% set family_rows = [] %}
+                    {% for addon in vm.service_addons_summary %}
+                      {% if (addon.addon_family or 'ovrigt')|lower == family_key %}
+                        {% set _ = family_rows.append(addon) %}
+                      {% endif %}
+                    {% endfor %}
+                    <div class="kp-addon-panel">
+                      <h4 class="kp-addon-heading">{{ family_label }}</h4>
+                      {% if family_rows %}
+                        {% for addon in family_rows %}
+                          <div class="kp-worklist-group" data-addon-id="{{ addon.addon_id }}">
+                            <div class="kp-worklist-title">{{ addon.addon_name }}</div>
+                            <div class="kp-addon-total">Totalt: <span class="kp-worklist-total">{{ addon.total_count }}</span></div>
+                            <div class="kp-worklist-rows">
+                              {% for dep in addon.departments %}
+                                <div class="kp-worklist-row">
+                                  <span class="kp-row-name">{{ dep.department_name }}</span>
+                                  <span class="kp-row-count">{{ dep.count }}</span>
+                                  {% if dep.note %}<span class="kp-row-note">({{ dep.note }})</span>{% endif %}
+                                </div>
+                              {% endfor %}
                             </div>
-                          {% endfor %}
                         </div>
-                      </div>
+                        {% endfor %}
                     {% else %}
-                      <p class="empty-text">Ingen Mosdata för vald vy.</p>
+                        <p class="empty-text">Ingen data för {{ family_label }}.</p>
                     {% endif %}
                   </div>
-
-                  <div class="kp-addon-panel">
-                    <h4 class="kp-addon-heading">Salladslista</h4>
-                    {% if sallad.item %}
-                      <div class="kp-worklist-group" data-addon-id="{{ sallad.item.addon_id }}">
-                        <div class="kp-worklist-title">{{ sallad.item.addon_name }}</div>
-                        <div class="kp-addon-total">Totalt: <span class="kp-worklist-total">{{ sallad.item.total_count }}</span></div>
-                        <div class="kp-worklist-rows">
-                          {% for dep in sallad.item.departments %}
-                            <div class="kp-worklist-row">
-                              <span class="kp-row-name">{{ dep.department_name }}</span>
-                              <span class="kp-row-count">{{ dep.count }}</span>
-                              {% if dep.note %}<span class="kp-row-note">({{ dep.note }})</span>{% endif %}
-                            </div>
-                          {% endfor %}
-                        </div>
-                      </div>
-                    {% else %}
-                      <p class="empty-text">Ingen Salladsdata för vald vy.</p>
-                    {% endif %}
-                  </div>
+                    {% endfor %}
                 </div>
               {% else %}
                 <p class="empty-text">Inga serveringstillbehör för vald vy.</p>

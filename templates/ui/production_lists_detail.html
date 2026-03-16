@@ -124,8 +124,32 @@
       {% endfor %}
       {% endif %}
 
-      {% if inferred_mode != 'normal' and p.service_addon and p.service_addon.total_count %}
+      {% set grouped_addons = p.service_addons_grouped or {} %}
+      {% if inferred_mode != 'normal' and (
+            (grouped_addons.mos and grouped_addons.mos|length > 0)
+            or (grouped_addons.sallad and grouped_addons.sallad|length > 0)
+            or (grouped_addons.ovrigt and grouped_addons.ovrigt|length > 0)
+            or (p.service_addon and p.service_addon.total_count)
+          ) %}
       <div class="kp-print-section-title">Serveringstillägg</div>
+      {% if grouped_addons.mos or grouped_addons.sallad or grouped_addons.ovrigt %}
+        {% for fam_key, fam_label in [('mos', 'MOS'), ('sallad', 'SALLAD'), ('ovrigt', 'ÖVRIGT')] %}
+          {% set fam_rows = grouped_addons.get(fam_key, []) %}
+          {% if fam_rows %}
+          <div class="kp-print-special-title">{{ fam_label }}</div>
+            {% for addon in fam_rows %}
+            <div class="kp-print-special-group sk-card">
+              <div class="kp-print-special-name">{{ addon.addon_name }} — Totalt {{ addon.total_count }}</div>
+              <div class="kp-print-list">
+                {% for dep in addon.departments or [] %}
+                <div class="kp-print-row sk-row kp-zebra"><span class="kp-dept-name">{{ dep.department_name }}{% if dep.note %} ({{ dep.note }}){% endif %}</span><span class="count">{{ dep.count }}</span></div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          {% endif %}
+        {% endfor %}
+      {% else %}
       <div class="kp-print-special-group sk-card">
         <div class="kp-print-special-name">{{ p.service_addon.addon_name }} — Totalt {{ p.service_addon.total_count }}</div>
         <div class="kp-print-list">
@@ -134,6 +158,7 @@
           {% endfor %}
         </div>
       </div>
+      {% endif %}
       {% endif %}
     </div>
   </div>

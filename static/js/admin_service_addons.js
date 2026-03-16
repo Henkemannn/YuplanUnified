@@ -29,7 +29,21 @@
       if(!first) return;
       var clone = first.cloneNode(true);
       clone.querySelectorAll('input').forEach(function(input){ input.value = ''; });
-      clone.querySelectorAll('select').forEach(function(select){ select.selectedIndex = 0; });
+      clone.querySelectorAll('select').forEach(function(select){
+        if(select.name === 'service_addon_family[]'){
+          var found = false;
+          for(var i=0; i<select.options.length; i++){
+            if(String(select.options[i].value || '') === 'ovrigt'){
+              select.selectedIndex = i;
+              found = true;
+              break;
+            }
+          }
+          if(!found){ select.selectedIndex = 0; }
+          return;
+        }
+        select.selectedIndex = 0;
+      });
       body.appendChild(clone);
       bindRemove(clone);
     });

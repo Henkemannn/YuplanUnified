@@ -24,8 +24,8 @@ def test_admin_department_service_addons_save_load_remove(app_session, client_ad
     )
 
     addon_repo = ServiceAddonsRepo()
-    mos_id = addon_repo.create_if_missing("Mos")
-    sallad_id = addon_repo.create_if_missing("Sallad")
+    mos_id = addon_repo.create_if_missing("Mos", addon_family="mos")
+    sallad_id = addon_repo.create_if_missing("Sallad", addon_family="sallad")
 
     with client_admin.session_transaction() as sess:
         sess["site_id"] = site["id"]
@@ -36,6 +36,7 @@ def test_admin_department_service_addons_save_load_remove(app_session, client_ad
         data={
             "service_addon_id[]": [mos_id, sallad_id],
             "service_addon_new_name[]": ["", ""],
+            "service_addon_family[]": ["mos", "sallad"],
             "service_addon_lunch_count[]": ["4", "0"],
             "service_addon_dinner_count[]": ["", "2"],
             "service_addon_note[]": ["Aldrig tomat", ""],
@@ -50,6 +51,7 @@ def test_admin_department_service_addons_save_load_remove(app_session, client_ad
     assert r_get.status_code == 200
     html = r_get.get_data(as_text=True)
     assert "Serveringstillägg" in html
+    assert "Familj" in html
     assert "Aldrig tomat" in html
     assert "value=\"4\"" in html
 
@@ -59,6 +61,7 @@ def test_admin_department_service_addons_save_load_remove(app_session, client_ad
         data={
             "service_addon_id[]": [mos_id],
             "service_addon_new_name[]": [""],
+            "service_addon_family[]": ["mos"],
             "service_addon_lunch_count[]": ["0"],
             "service_addon_dinner_count[]": ["0"],
             "service_addon_note[]": [""],

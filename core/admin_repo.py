@@ -13,6 +13,24 @@ from .diet_family import DIET_FAMILY_OTHER, infer_diet_family, normalize_diet_fa
 from .etag import ConcurrencyError
 
 
+SERVICE_ADDON_FAMILIES: tuple[str, str, str] = ("mos", "sallad", "ovrigt")
+
+
+def normalize_addon_family(value: str | None) -> str:
+    raw = str(value or "").strip().lower()
+    if raw == "ovritgt":
+        raw = "ovrigt"
+    if raw in SERVICE_ADDON_FAMILIES:
+        return raw
+    return "ovrigt"
+
+
+def _addon_family_rank(value: str | None) -> int:
+    key = normalize_addon_family(value)
+    order = {"mos": 0, "sallad": 1, "ovrigt": 2}
+    return int(order.get(key, 2))
+
+
 def _is_sqlite(db) -> bool:
     try:
         return (db.bind and db.bind.dialect and db.bind.dialect.name == "sqlite")
@@ -108,6 +126,7 @@ def _ensure_service_addons_tables(db) -> None:
                 CREATE TABLE IF NOT EXISTS service_addons (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
+                    addon_family TEXT NOT NULL DEFAULT 'ovrigt',
                     is_active INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT,
                     UNIQUE(name)
@@ -115,6 +134,21 @@ def _ensure_service_addons_tables(db) -> None:
                 """
             )
         )
+        try:
+            cols = {r[1] for r in db.execute(text("PRAGMA table_info('service_addons')")).fetchall()}
+            if "addon_family" not in cols:
+                db.execute(text("ALTER TABLE service_addons ADD COLUMN addon_family TEXT"))
+            db.execute(
+                text(
+                    """
+                    UPDATE service_addons
+                    SET addon_family='ovrigt'
+                    WHERE addon_family IS NULL OR trim(CAST(addon_family AS TEXT))=''
+                    """
+                )
+            )
+        except Exception:
+            pass
         db.execute(
             text(
                 """
@@ -996,27 +1030,46 @@ class ServiceAddonsRepo:
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
-            rows = db.execute(
-                text(
-                    """
-                    SELECT id, name, is_active
-                    FROM service_addons
-                    WHERE COALESCE(is_active, 1) = 1
-                    ORDER BY name
-                    """
-                )
-            ).fetchall()
+            has_family_col = _table_has_column(db, "service_addons", "addon_family")
+            if has_family_col:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT id, name, COALESCE(addon_family, 'ovrigt') AS addon_family, is_active
+                        FROM service_addons
+                        WHERE COALESCE(is_active, 1) = 1
+                        ORDER BY name
+                        """
+                    )
+                ).fetchall()
+            else:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT id, name, is_active
+                        FROM service_addons
+                        WHERE COALESCE(is_active, 1) = 1
+                        ORDER BY name
+                        """
+                    )
+                ).fetchall()
             return [
-                {"id": str(r[0]), "name": str(r[1]), "is_active": bool(r[2] or 0)}
+                {
+                    "id": str(r[0]),
+                    "name": str(r[1]),
+                    "addon_family": normalize_addon_family((r[2] if has_family_col else "ovrigt")),
+                    "is_active": bool((r[3] if has_family_col else r[2]) or 0),
+                }
                 for r in rows
             ]
         finally:
             db.close()
 
-    def create_if_missing(self, name: str) -> str:
+    def create_if_missing(self, name: str, addon_family: str | None = None) -> str:
         clean = str(name or "").strip()
         if not clean:
             raise ValueError("name required")
+        family = normalize_addon_family(addon_family)
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
@@ -1025,19 +1078,52 @@ class ServiceAddonsRepo:
                 {"n": clean},
             ).fetchone()
             if row:
+                try:
+                    self.set_family(str(row[0]), family)
+                except Exception:
+                    pass
                 return str(row[0])
             sid = str(uuid.uuid4())
-            db.execute(
-                text(
-                    """
-                    INSERT INTO service_addons(id, name, is_active, created_at)
-                    VALUES(:id, :name, 1, CURRENT_TIMESTAMP)
-                    """
-                ),
-                {"id": sid, "name": clean},
-            )
+            has_family_col = _table_has_column(db, "service_addons", "addon_family")
+            if has_family_col:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO service_addons(id, name, addon_family, is_active, created_at)
+                        VALUES(:id, :name, :addon_family, 1, CURRENT_TIMESTAMP)
+                        """
+                    ),
+                    {"id": sid, "name": clean, "addon_family": family},
+                )
+            else:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO service_addons(id, name, is_active, created_at)
+                        VALUES(:id, :name, 1, CURRENT_TIMESTAMP)
+                        """
+                    ),
+                    {"id": sid, "name": clean},
+                )
             db.commit()
             return sid
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def set_family(self, addon_id: str, addon_family: str | None) -> None:
+        db = get_session()
+        try:
+            _ensure_service_addons_tables(db)
+            if not _table_has_column(db, "service_addons", "addon_family"):
+                return
+            db.execute(
+                text("UPDATE service_addons SET addon_family=:f WHERE id=:id"),
+                {"f": normalize_addon_family(addon_family), "id": str(addon_id)},
+            )
+            db.commit()
         except Exception:
             db.rollback()
             raise
@@ -1050,19 +1136,36 @@ class DepartmentServiceAddonsRepo:
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
-            rows = db.execute(
-                text(
-                    """
-                    SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
-                           dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
-                    FROM department_service_addons dsa
-                    JOIN service_addons sa ON sa.id = dsa.addon_id
-                    WHERE dsa.department_id=:d
-                    ORDER BY sa.name
-                    """
-                ),
-                {"d": str(dept_id)},
-            ).fetchall()
+            has_family_col = _table_has_column(db, "service_addons", "addon_family")
+            if has_family_col:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
+                               COALESCE(sa.addon_family, 'ovrigt') AS addon_family,
+                               dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                        FROM department_service_addons dsa
+                        JOIN service_addons sa ON sa.id = dsa.addon_id
+                        WHERE dsa.department_id=:d
+                        ORDER BY sa.name
+                        """
+                    ),
+                    {"d": str(dept_id)},
+                ).fetchall()
+            else:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
+                               dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                        FROM department_service_addons dsa
+                        JOIN service_addons sa ON sa.id = dsa.addon_id
+                        WHERE dsa.department_id=:d
+                        ORDER BY sa.name
+                        """
+                    ),
+                    {"d": str(dept_id)},
+                ).fetchall()
             out: list[dict] = []
             for r in rows:
                 out.append(
@@ -1071,9 +1174,10 @@ class DepartmentServiceAddonsRepo:
                         "department_id": str(r[1]),
                         "addon_id": str(r[2]),
                         "addon_name": str(r[3]),
-                        "lunch_count": (int(r[4]) if r[4] is not None else None),
-                        "dinner_count": (int(r[5]) if r[5] is not None else None),
-                        "note": str(r[6] or ""),
+                        "addon_family": normalize_addon_family((r[4] if has_family_col else "ovrigt")),
+                        "lunch_count": (int((r[5] if has_family_col else r[4])) if (r[5] if has_family_col else r[4]) is not None else None),
+                        "dinner_count": (int((r[6] if has_family_col else r[5])) if (r[6] if has_family_col else r[5]) is not None else None),
+                        "note": str((r[7] if has_family_col else r[6]) or ""),
                     }
                 )
             return out
@@ -1131,37 +1235,59 @@ class DepartmentServiceAddonsRepo:
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
-            rows = db.execute(
-                text(
-                    f"""
-                    SELECT sa.id, sa.name, d.id, d.name,
-                           dsa.{col} as count,
-                           COALESCE(dsa.note, '')
-                    FROM department_service_addons dsa
-                    JOIN service_addons sa ON sa.id = dsa.addon_id
-                    JOIN departments d ON d.id = dsa.department_id
-                    WHERE d.site_id = :site_id
-                      AND dsa.{col} IS NOT NULL
-                      AND dsa.{col} > 0
-                    ORDER BY sa.name, d.name
-                    """
-                ),
-                {"site_id": str(site_id)},
-            ).fetchall()
+            has_family_col = _table_has_column(db, "service_addons", "addon_family")
+            if has_family_col:
+                rows = db.execute(
+                    text(
+                        f"""
+                        SELECT sa.id, sa.name, COALESCE(sa.addon_family, 'ovrigt') AS addon_family, d.id, d.name,
+                               dsa.{col} as count,
+                               COALESCE(dsa.note, '')
+                        FROM department_service_addons dsa
+                        JOIN service_addons sa ON sa.id = dsa.addon_id
+                        JOIN departments d ON d.id = dsa.department_id
+                        WHERE d.site_id = :site_id
+                          AND dsa.{col} IS NOT NULL
+                          AND dsa.{col} > 0
+                        ORDER BY sa.name, d.name
+                        """
+                    ),
+                    {"site_id": str(site_id)},
+                ).fetchall()
+            else:
+                rows = db.execute(
+                    text(
+                        f"""
+                        SELECT sa.id, sa.name, d.id, d.name,
+                               dsa.{col} as count,
+                               COALESCE(dsa.note, '')
+                        FROM department_service_addons dsa
+                        JOIN service_addons sa ON sa.id = dsa.addon_id
+                        JOIN departments d ON d.id = dsa.department_id
+                        WHERE d.site_id = :site_id
+                          AND dsa.{col} IS NOT NULL
+                          AND dsa.{col} > 0
+                        ORDER BY sa.name, d.name
+                        """
+                    ),
+                    {"site_id": str(site_id)},
+                ).fetchall()
             by_addon: dict[str, dict] = {}
             for r in rows:
                 addon_id = str(r[0])
                 addon_name = str(r[1])
-                dept_id = str(r[2])
-                dept_name = str(r[3])
-                count = int(r[4] or 0)
-                note = str(r[5] or "").strip()
+                addon_family = normalize_addon_family((r[2] if has_family_col else "ovrigt"))
+                dept_id = str(r[3] if has_family_col else r[2])
+                dept_name = str(r[4] if has_family_col else r[3])
+                count = int((r[5] if has_family_col else r[4]) or 0)
+                note = str((r[6] if has_family_col else r[5]) or "").strip()
                 if count <= 0:
                     continue
                 if addon_id not in by_addon:
                     by_addon[addon_id] = {
                         "addon_id": addon_id,
                         "addon_name": addon_name,
+                        "addon_family": addon_family,
                         "total_count": 0,
                         "departments": [],
                     }
@@ -1175,7 +1301,13 @@ class DepartmentServiceAddonsRepo:
                     }
                 )
             out = list(by_addon.values())
-            out.sort(key=lambda x: (-(int(x.get("total_count") or 0)), str(x.get("addon_name") or "")))
+            out.sort(
+                key=lambda x: (
+                    _addon_family_rank(str(x.get("addon_family") or "ovrigt")),
+                    -(int(x.get("total_count") or 0)),
+                    str(x.get("addon_name") or ""),
+                )
+            )
             return out
         finally:
             db.close()

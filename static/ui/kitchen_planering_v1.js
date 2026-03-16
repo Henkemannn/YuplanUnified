@@ -1053,13 +1053,25 @@
     var normRows = parseNormalkostRows();
     var alt2Set = new Set((altGroups && altGroups.alt2_dept_ids) || []);
     var worklist = (lastSpecialWorklist && lastSpecialWorklist.length > 0) ? lastSpecialWorklist : buildSpecialWorklistFromSummary();
-    var selectedAddon = null;
-    for(var sa=0; sa<serviceAddonsSummary.length; sa++){
-      var cand = serviceAddonsSummary[sa] || {};
-      if(String(cand.addon_id || '') === String(selectedServiceAddonId || '')){
-        selectedAddon = cand;
-        break;
+
+    function normalizeAddonFamily(value){
+      var key = String(value || '').toLowerCase();
+      if(key === 'ovritgt'){ key = 'ovrigt'; }
+      if(key === 'mos' || key === 'sallad' || key === 'ovrigt'){
+        return key;
       }
+      return 'ovrigt';
+    }
+
+    function groupAddonsByFamily(addons){
+      var grouped = { mos: [], sallad: [], ovrigt: [] };
+      var rows = addons || [];
+      for(var i=0; i<rows.length; i++){
+        var addon = rows[i] || {};
+        var family = normalizeAddonFamily(addon.addon_family);
+        grouped[family].push(addon);
+      }
+      return grouped;
     }
 
     function getActivePlanTabName(){
@@ -1104,7 +1116,30 @@
       return section;
     }
 
+    function buildAddonFamilyPrintSection(addons, headingText){
+      var section = document.createElement('div');
+      section.className = 'kp-print-special';
+
+      var head = document.createElement('div');
+      head.className = 'kp-print-section-title';
+      head.textContent = headingText;
+      section.appendChild(head);
+
+      var rows = addons || [];
+      for(var i=0; i<rows.length; i++){
+        var addon = rows[i] || {};
+        var card = buildAddonPrintSection(addon, '');
+        var innerHead = card.querySelector('.kp-print-section-title');
+        if(innerHead){
+          innerHead.remove();
+        }
+        section.appendChild(card);
+      }
+      return section;
+    }
+
     var activePlanTab = getActivePlanTabName();
+    var groupedAddons = groupAddonsByFamily(serviceAddonsSummary);
 
     var alt1Rows = [];
     var alt2Rows = [];
@@ -1241,25 +1276,22 @@
     sheet.appendChild(header);
 
     if(activePlanTab === 'service-addons'){
-      var mosAddon = null;
-      var salladAddon = null;
-      for(var si=0; si<serviceAddonsSummary.length; si++){
-        var addon = serviceAddonsSummary[si] || {};
-        var low = String(addon.addon_name || '').toLowerCase();
-        if(!mosAddon && low.indexOf('mos') !== -1){
-          mosAddon = addon;
+      var familyDefs = [
+        { key: 'mos', title: 'MOS' },
+        { key: 'sallad', title: 'SALLAD' },
+        { key: 'ovrigt', title: 'ÖVRIGT' }
+      ];
+      var hasAnyAddon = false;
+      for(var f=0; f<familyDefs.length; f++){
+        var def = familyDefs[f] || {};
+        var famAddons = groupedAddons[String(def.key || '')] || [];
+        if(!famAddons.length){
+          continue;
         }
-        if(!salladAddon && low.indexOf('sallad') !== -1){
-          salladAddon = addon;
-        }
+        hasAnyAddon = true;
+        sheet.appendChild(buildAddonFamilyPrintSection(famAddons, String(def.title || '')));
       }
-      if(mosAddon){
-        sheet.appendChild(buildAddonPrintSection(mosAddon, 'Moslista'));
-      }
-      if(salladAddon){
-        sheet.appendChild(buildAddonPrintSection(salladAddon, 'Salladslista'));
-      }
-      if(!mosAddon && !salladAddon){
+      if(!hasAnyAddon){
         var emptyAddons = document.createElement('div');
         emptyAddons.className = 'kp-print-empty';
         emptyAddons.textContent = 'Inga serveringstillbehör för vald vy.';
@@ -2087,6 +2119,7 @@
       addonPayload = {
         addon_id: String(selectedAddon.addon_id || ''),
         addon_name: String(selectedAddon.addon_name || ''),
+        addon_family: normalizeAddonFamily(selectedAddon.addon_family),
         total_count: parseInt(selectedAddon.total_count || 0, 10) || 0,
         departments: (selectedAddon.departments || []).map(function(dep){
           return {
@@ -2097,6 +2130,34 @@
           };
         })
       };
+    }
+    var groupedPayload = {
+      mos: [],
+      sallad: [],
+      ovrigt: []
+    };
+    var grouped = groupAddonsByFamily(serviceAddonsSummary);
+    var payloadFamilyKeys = ['mos', 'sallad', 'ovrigt'];
+    for(var fk=0; fk<payloadFamilyKeys.length; fk++){
+      var familyKey = payloadFamilyKeys[fk];
+      var familyRows = grouped[familyKey] || [];
+      groupedPayload[familyKey] = familyRows.map(function(addon){
+        var item = addon || {};
+        return {
+          addon_id: String(item.addon_id || ''),
+          addon_name: String(item.addon_name || ''),
+          addon_family: normalizeAddonFamily(item.addon_family),
+          total_count: parseInt(item.total_count || 0, 10) || 0,
+          departments: (item.departments || []).map(function(dep){
+            return {
+              department_id: String(dep.department_id || ''),
+              department_name: String(dep.department_name || ''),
+              count: parseInt(dep.count || 0, 10) || 0,
+              note: String(dep.note || '')
+            };
+          })
+        };
+      });
     }
 
     return {
@@ -2124,7 +2185,8 @@
           selected_diet_ids: Array.from(selectedChipsSpecial),
           worklist: specialWorklist
         },
-        service_addon: addonPayload
+        service_addon: addonPayload,
+        service_addons_grouped: groupedPayload
       }
     };
   }
