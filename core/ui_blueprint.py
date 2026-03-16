@@ -3219,24 +3219,29 @@ def kitchen_planering_v1():
         except Exception:
             normal_exclusions = {"1": [], "2": []}
 
-        # Serveringstillägg per valt mål (återkommande per avdelning)
-        try:
-            from .admin_repo import DepartmentServiceAddonsRepo
-
-            service_addons_summary = DepartmentServiceAddonsRepo().list_totals_for_site_meal(
-                site_id=site_id,
-                meal=effective_planera_meal,
-            )
-            selected_service_addon_id = str(request.args.get("addon_id") or "").strip() or None
-            if selected_service_addon_id and not any(
-                str(it.get("addon_id")) == selected_service_addon_id for it in service_addons_summary
-            ):
-                selected_service_addon_id = None
-            if not selected_service_addon_id and service_addons_summary:
-                selected_service_addon_id = str(service_addons_summary[0].get("addon_id"))
-        except Exception:
+        # Serveringstillägg per valt mål (återkommande per avdelning).
+        # Dessert ska aldrig visa serveringstillbehör från lunch.
+        if selected_meal == "dessert":
             service_addons_summary = []
             selected_service_addon_id = None
+        else:
+            try:
+                from .admin_repo import DepartmentServiceAddonsRepo
+
+                service_addons_summary = DepartmentServiceAddonsRepo().list_totals_for_site_meal(
+                    site_id=site_id,
+                    meal=effective_planera_meal,
+                )
+                selected_service_addon_id = str(request.args.get("addon_id") or "").strip() or None
+                if selected_service_addon_id and not any(
+                    str(it.get("addon_id")) == selected_service_addon_id for it in service_addons_summary
+                ):
+                    selected_service_addon_id = None
+                if not selected_service_addon_id and service_addons_summary:
+                    selected_service_addon_id = str(service_addons_summary[0].get("addon_id"))
+            except Exception:
+                service_addons_summary = []
+                selected_service_addon_id = None
 
     day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
     selected_date_iso = None

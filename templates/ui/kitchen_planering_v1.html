@@ -241,15 +241,33 @@
                     <input type="text" class="alt-dish-input" data-alt="1" value="{{ vm.header_menu.alt1 or '' }}">
                     <div class="cannot-eat">
                       <span>Kan INTE äta:</span>
-                      <div class="diet-chips" role="group" aria-label="Specialkoster – Alt 1">
-                        {% for opt in vm.diet_options %}
-                          {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
-                          {% if not is_unknown %}
-                                <button type="button"
-                                  class="diet-chip js-normal-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
-                                    data-alt="1"
-                                    data-diet-id="{{ opt.diet_type_id }}"
-                                    data-total-count="{{ opt.total_count }}">{{ opt.diet_type_name }}</button>
+                      {% set known_families = ['Textur', 'Allergi / Exkludering', 'Kostval', 'Anpassning', 'Övrigt'] %}
+                      <div class="kp-family-groups" data-mode="normal-alt1" role="group" aria-label="Specialkoster per familj – Alt 1">
+                        {% for fam in known_families %}
+                          {% set fam_rows = [] %}
+                          {% for opt in vm.diet_options %}
+                            {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
+                            {% if (not is_unknown) and (opt.diet_family or 'Övrigt') == fam %}
+                              {% set _ = fam_rows.append(opt) %}
+                            {% endif %}
+                          {% endfor %}
+                          {% if fam_rows|length > 0 %}
+                            <details class="kp-family-group" open>
+                              <summary>
+                                <span class="kp-family-group-title">{{ fam }}</span>
+                                <span class="kp-family-group-count">{{ fam_rows|length }}</span>
+                              </summary>
+                              <div class="kp-chip-grid kp-chip-grid--family" role="group" aria-label="{{ fam }} – Alt 1">
+                                {% for opt in fam_rows %}
+                                  <button type="button"
+                                          class="diet-chip js-normal-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
+                                          data-alt="1"
+                                          data-diet-id="{{ opt.diet_type_id }}"
+                                          data-total-count="{{ opt.total_count }}"
+                                          data-family="{{ opt.diet_family or 'Övrigt' }}">{{ opt.diet_type_name }}</button>
+                                {% endfor %}
+                              </div>
+                            </details>
                           {% endif %}
                         {% endfor %}
                       </div>
@@ -260,15 +278,33 @@
                     <input type="text" class="alt-dish-input" data-alt="2" value="{{ vm.header_menu.alt2 or '' }}">
                     <div class="cannot-eat">
                       <span>Kan INTE äta:</span>
-                      <div class="diet-chips" role="group" aria-label="Specialkoster – Alt 2">
-                        {% for opt in vm.diet_options %}
-                          {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
-                          {% if not is_unknown %}
-                                <button type="button"
-                                  class="diet-chip js-normal-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('2') or [])) %}active{% endif %}"
-                                    data-alt="2"
-                                    data-diet-id="{{ opt.diet_type_id }}"
-                                    data-total-count="{{ opt.total_count }}">{{ opt.diet_type_name }}</button>
+                      {% set known_families = ['Textur', 'Allergi / Exkludering', 'Kostval', 'Anpassning', 'Övrigt'] %}
+                      <div class="kp-family-groups" data-mode="normal-alt2" role="group" aria-label="Specialkoster per familj – Alt 2">
+                        {% for fam in known_families %}
+                          {% set fam_rows = [] %}
+                          {% for opt in vm.diet_options %}
+                            {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
+                            {% if (not is_unknown) and (opt.diet_family or 'Övrigt') == fam %}
+                              {% set _ = fam_rows.append(opt) %}
+                            {% endif %}
+                          {% endfor %}
+                          {% if fam_rows|length > 0 %}
+                            <details class="kp-family-group" open>
+                              <summary>
+                                <span class="kp-family-group-title">{{ fam }}</span>
+                                <span class="kp-family-group-count">{{ fam_rows|length }}</span>
+                              </summary>
+                              <div class="kp-chip-grid kp-chip-grid--family" role="group" aria-label="{{ fam }} – Alt 2">
+                                {% for opt in fam_rows %}
+                                  <button type="button"
+                                          class="diet-chip js-normal-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('2') or [])) %}active{% endif %}"
+                                          data-alt="2"
+                                          data-diet-id="{{ opt.diet_type_id }}"
+                                          data-total-count="{{ opt.total_count }}"
+                                          data-family="{{ opt.diet_family or 'Övrigt' }}">{{ opt.diet_type_name }}</button>
+                                {% endfor %}
+                              </div>
+                            </details>
                           {% endif %}
                         {% endfor %}
                       </div>
@@ -294,15 +330,33 @@
                   <input type="text" class="alt-dish-input" value="{{ vm.selected_meal == 'dinner' and (vm.header_menu.dinner or '') or (vm.header_menu.dessert or '') }}">
                   <div class="cannot-eat">
                     <span>Kan INTE äta:</span>
-                    <div class="diet-buttons" role="group" aria-label="Specialkoster">
-                      {% for opt in vm.diet_options %}
-                        {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
-                        {% if not is_unknown %}
-                            <button type="button"
-                              class="kp-button diet-btn diet-chip js-normal-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
-                                  data-alt="1"
-                                  data-diet-id="{{ opt.diet_type_id }}"
-                                  data-diet-type-id="{{ opt.diet_type_id }}">{{ opt.diet_type_name }}</button>
+                    {% set known_families = ['Textur', 'Allergi / Exkludering', 'Kostval', 'Anpassning', 'Övrigt'] %}
+                    <div class="kp-family-groups" data-mode="normal-single" role="group" aria-label="Specialkoster per familj">
+                      {% for fam in known_families %}
+                        {% set fam_rows = [] %}
+                        {% for opt in vm.diet_options %}
+                          {% set is_unknown = (not opt.diet_type_name) or (opt.diet_type_name == opt.diet_type_id) %}
+                          {% if (not is_unknown) and (opt.diet_family or 'Övrigt') == fam %}
+                            {% set _ = fam_rows.append(opt) %}
+                          {% endif %}
+                        {% endfor %}
+                        {% if fam_rows|length > 0 %}
+                          <details class="kp-family-group" open>
+                            <summary>
+                              <span class="kp-family-group-title">{{ fam }}</span>
+                              <span class="kp-family-group-count">{{ fam_rows|length }}</span>
+                            </summary>
+                            <div class="kp-chip-grid kp-chip-grid--family" role="group" aria-label="{{ fam }}">
+                              {% for opt in fam_rows %}
+                                  <button type="button"
+                                    class="kp-button diet-btn diet-chip js-normal-chip {% if vm.normal_exclusions and (opt.diet_type_id in (vm.normal_exclusions.get('1') or [])) %}active{% endif %}"
+                                        data-alt="1"
+                                        data-diet-id="{{ opt.diet_type_id }}"
+                                        data-diet-type-id="{{ opt.diet_type_id }}"
+                                        data-family="{{ opt.diet_family or 'Övrigt' }}">{{ opt.diet_type_name }}</button>
+                              {% endfor %}
+                            </div>
+                          </details>
                         {% endif %}
                       {% endfor %}
                     </div>

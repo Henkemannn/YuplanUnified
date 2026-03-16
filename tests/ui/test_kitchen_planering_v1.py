@@ -2,6 +2,8 @@ import pytest
 from sqlalchemy import text
 from html.parser import HTMLParser
 
+from core.admin_repo import DepartmentServiceAddonsRepo, DepartmentsRepo, ServiceAddonsRepo
+
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
@@ -170,6 +172,9 @@ def test_planering_template_has_serveringstillbehor_tab_and_no_addon_dropdown():
     assert "('mos', 'MOS')" in tpl
     assert "('sallad', 'SALLAD')" in tpl
     assert "('ovrigt', 'ÖVRIGT')" in tpl
+    assert 'data-mode="normal-alt1"' in tpl
+    assert 'data-mode="normal-alt2"' in tpl
+    assert 'data-mode="normal-single"' in tpl
     assert "Valt tillägg" not in tpl
 
 
@@ -209,3 +214,30 @@ def test_planering_print_reduces_specialkost_duplicate_variant_lines_contract():
     assert "function buildVariantSummaryLine(groupName, variants, total)" in js
     assert "function displayGroupLabel(name)" in js
     assert "variantSummary" in js
+
+
+def test_planering_dessert_hides_service_addons_summary(app_session):
+    client = app_session.test_client()
+    _seed_basics()
+    site_id = "00000000-0000-0000-0000-000000000000"
+
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site_id,
+        name="Avd Dessert",
+        resident_count_mode="fixed",
+        resident_count_fixed=8,
+    )
+
+    addon_id = ServiceAddonsRepo().create_if_missing("Mos", addon_family="mos")
+    DepartmentServiceAddonsRepo().replace_for_department(
+        dep["id"],
+        [{"addon_id": addon_id, "lunch_count": 5, "dinner_count": 0, "note": ""}],
+    )
+
+    rv = client.get(
+        f"/ui/kitchen/planering?site_id={site_id}&mode=normal&day=0&meal=dessert",
+        headers=HEADERS,
+    )
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+    assert "data-service-addons-summary='[]'" in html
