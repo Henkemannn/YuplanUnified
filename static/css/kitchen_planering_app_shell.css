@@ -847,6 +847,55 @@
   }
 }
 
+/* Dept summary modal: keep shell fixed and scroll only body for long content. */
+.kitchen-planering-page #dept-summary-modal {
+  overflow: hidden;
+}
+
+.kitchen-planering-page #dept-summary-modal .kp-modal-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.kitchen-planering-page #dept-summary-modal .kp-modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: inherit;
+  border-bottom: 1px solid #dbe4f0;
+  margin-bottom: 0;
+  padding-bottom: 10px;
+}
+
+.kitchen-planering-page #dept-summary-modal .kp-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-top: 10px;
+}
+
+body.kp-dept-summary-open,
+html.kp-dept-summary-open {
+  overflow: hidden;
+}
+
+@media (max-width: 1024px) {
+  .kitchen-planering-page #dept-summary-modal {
+    padding: 12px;
+  }
+
+  .kitchen-planering-page #dept-summary-modal .kp-modal-card {
+    width: min(760px, 96vw);
+    max-height: 90vh;
+  }
+}
+
 @media (min-width: 901px) {
   .kitchen-planering-grid {
     grid-template-columns: repeat(10, minmax(0, 1fr));

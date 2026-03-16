@@ -2002,9 +2002,31 @@
     var modal = qs('#dept-summary-modal');
     var closeBtn = qs('#close-dept-summary');
     var printBtn = qs('.js-print-modal');
-    if(btn && modal){ btn.addEventListener('click', function(){ modal.classList.add('is-open'); document.body.classList.add('kp-dept-summary-open'); }); }
-    if(closeBtn && modal){ closeBtn.addEventListener('click', function(){ modal.classList.remove('is-open'); document.body.classList.remove('kp-dept-summary-open'); }); }
-    if(modal){ modal.addEventListener('click', function(ev){ if(ev.target === modal){ modal.classList.remove('is-open'); document.body.classList.remove('kp-dept-summary-open'); } }); }
+    function openModal(){
+      if(!modal){ return; }
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      if(document.body){
+        document.body.classList.add('kp-dept-summary-open');
+      }
+      if(document.documentElement){
+        document.documentElement.classList.add('kp-dept-summary-open');
+      }
+    }
+    function closeModal(){
+      if(!modal){ return; }
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
+      if(document.body){
+        document.body.classList.remove('kp-dept-summary-open');
+      }
+      if(document.documentElement){
+        document.documentElement.classList.remove('kp-dept-summary-open');
+      }
+    }
+    if(btn && modal){ btn.addEventListener('click', function(){ openModal(); }); }
+    if(closeBtn && modal){ closeBtn.addEventListener('click', function(){ closeModal(); }); }
+    if(modal){ modal.addEventListener('click', function(ev){ if(ev.target === modal){ closeModal(); } }); }
     if(printBtn){
       printBtn.addEventListener('click', function(){
         setPrintMode('modal');
