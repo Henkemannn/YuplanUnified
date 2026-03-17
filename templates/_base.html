@@ -2,7 +2,12 @@
 <html lang="sv">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="application-name" content="Yuplan">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Yuplan">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>{% block title %}Yuplan{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/main.css?v={{ asset_version|default('') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}">

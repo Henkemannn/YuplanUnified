@@ -59,6 +59,8 @@ body {
   --sh-1: var(--yp-shadow);
   --sh-2: var(--yp-shadow-md);
   --topbar-height: 66px;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --topbar-offset: calc(var(--topbar-height) + var(--safe-area-top));
   --sidebar-width: 240px;
 
   font-family: var(--yp-font-family);
@@ -141,14 +143,14 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: var(--topbar-height);
+  height: var(--topbar-offset);
   background: linear-gradient(90deg, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0.04) 40%, rgba(255, 255, 255, 0) 78%),
     var(--surface);
   box-shadow: var(--yp-shadow-sm);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
+  padding: var(--safe-area-top) 28px 0;
   z-index: 20;
 }
 
@@ -503,17 +505,17 @@ body {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   gap: 24px;
-  padding: calc(var(--topbar-height) + 24px) 24px 32px;
+  padding: calc(var(--topbar-offset) + 24px) 24px 32px;
   min-width: 0;
 }
 
 .app-shell__sidebar {
   position: sticky;
-  top: calc(var(--topbar-height) + 24px);
+  top: calc(var(--topbar-offset) + 24px);
   align-self: stretch;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - var(--topbar-height) - 48px);
+  min-height: calc(100vh - var(--topbar-offset) - 48px);
 }
 
 .app-shell__sidebar-panel {
