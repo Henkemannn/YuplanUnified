@@ -343,6 +343,17 @@ def login():
             pass
         # CSRF token issuance (double submit). Provide if not present already.
         # csrf_token already prepared above
+        try:
+            from .pilot_activity import track_activity as _track_activity
+
+            _track_activity(
+                event_type="login",
+                user_id=session.get("user_id"),
+                site_id=(session.get("site_id") or "").strip() or None,
+            )
+        except Exception:
+            pass
+
         # Decide response based on request type: HTML form vs JSON client
         wants_html = False
         try:

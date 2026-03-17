@@ -19,6 +19,8 @@ from datetime import time as _time
 from datetime import timedelta
 import uuid
 
+from .pilot_activity import get_latest_site_activity, track_activity
+
 ui_bp = Blueprint("ui", __name__, template_folder="templates", static_folder="static")
 
 
@@ -35,6 +37,34 @@ def _redirect_kitchen_from_admin_ui():
         path = request.path or ""
         if role == "kitchen" and path.startswith("/ui/admin"):
             return redirect(url_for("ui.kitchen_dashboard"))
+    except Exception:
+        return None
+    return None
+
+
+def _track_ui_activity_event(event_type: str, site_id: str | None = None) -> None:
+    try:
+        user_id = session.get("user_id")
+        if not user_id:
+            return
+        resolved_site = (site_id or request.args.get("site_id") or session.get("site_id") or "").strip() or None
+        track_activity(event_type=event_type, user_id=user_id, site_id=resolved_site)
+    except Exception:
+        return
+
+
+@ui_bp.before_app_request
+def _track_pilot_ui_usage():
+    try:
+        if (request.method or "").upper() != "GET":
+            return None
+        path = request.path or ""
+        if path == "/ui/kitchen/planering":
+            _track_ui_activity_event("open_planera")
+        elif path in ("/ui/weekview", "/ui/kitchen/week"):
+            _track_ui_activity_event("open_weekview")
+        elif path == "/ui/admin":
+            _track_ui_activity_event("open_admin")
     except Exception:
         return None
     return None
@@ -834,7 +864,14 @@ def systemadmin_dashboard():
         tenants_vm = []
     finally:
         db.close()
-    vm = {"user_name": user_name, "tenants": tenants_vm, "nav_context": "systemadmin", "allow_site_switch": True}
+    pilot_activity = get_latest_site_activity(limit=300)
+    vm = {
+        "user_name": user_name,
+        "tenants": tenants_vm,
+        "pilot_activity": pilot_activity,
+        "nav_context": "systemadmin",
+        "allow_site_switch": True,
+    }
     return render_template("systemadmin_dashboard.html", vm=vm)
 
 

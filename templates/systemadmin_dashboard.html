@@ -64,6 +64,37 @@
         <p class="sa-card-sub">Senaste händelser</p>
         <p class="sa-placeholder">Kommer i v2.0</p>
       </article>
+
+      <article class="app-card app-shell__card app-card--wide">
+        <h2>Pilot Activity</h2>
+        <p class="sa-card-sub">Senaste aktivitet per site (intern pilotuppföljning)</p>
+        <div class="sa-table-wrap">
+          <table class="sa-table">
+            <thead>
+              <tr>
+                <th>Site</th>
+                <th>Last activity time</th>
+                <th>Last user</th>
+                <th>Last event</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in vm.pilot_activity or [] %}
+              <tr>
+                <td>{{ row.site_name }}</td>
+                <td>{{ row.last_activity_time or '—' }}</td>
+                <td>{{ row.last_user or '—' }}</td>
+                <td>{{ row.last_event or '—' }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="4" class="sa-placeholder">Ingen pilotaktivitet ännu.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </article>
     </section>
   </div>
 {% endblock %}

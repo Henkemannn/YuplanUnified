@@ -109,6 +109,16 @@ def ui_login():  # Simple HTML login that sets session directly or redirects to 
             resp = make_response(redirect(target))
             _set_csrf_cookie(resp, tok)
             try:
+                from .pilot_activity import track_activity as _track_activity
+
+                _track_activity(
+                    event_type="login",
+                    user_id=session.get("user_id"),
+                    site_id=(session.get("site_id") or "").strip() or None,
+                )
+            except Exception:
+                pass
+            try:
                 logger = current_app.config.get("DEV_AUTH_FINGERPRINT_LOGGER")
                 if callable(logger):
                     logger("login_ok")
