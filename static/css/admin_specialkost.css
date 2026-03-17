@@ -60,6 +60,50 @@
   justify-content: flex-end;
 }
 
+.admin-specialkost__groups {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-specialkost__search-row {
+  margin: 4px 0 2px;
+}
+
+.admin-specialkost__search {
+  width: min(420px, 100%);
+}
+
+.admin-specialkost__group {
+  border: 1px solid var(--yp-border-color, var(--border));
+  border-radius: 12px;
+  background: var(--surface, #ffffff);
+}
+
+.admin-specialkost__group-summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.admin-specialkost__group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-specialkost__group-summary::before {
+  content: '▾';
+  margin-right: 8px;
+  font-size: 0.9rem;
+}
+
+.admin-specialkost__group:not([open]) .admin-specialkost__group-summary::before {
+  content: '▸';
+}
+
+.admin-specialkost__group-list {
+  padding: 0 10px 10px;
+}
+
 @media (max-width: 760px) {
   .admin-specialkost__header-row {
     flex-direction: column;

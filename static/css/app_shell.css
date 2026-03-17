@@ -59,7 +59,8 @@ body {
   --sh-1: var(--yp-shadow);
   --sh-2: var(--yp-shadow-md);
   --topbar-height: 66px;
-  --safe-area-top: env(safe-area-inset-top, 0px);
+  --browser-top-gap: 8px;
+  --safe-area-top: calc(env(safe-area-inset-top, 0px) + var(--browser-top-gap));
   --topbar-offset: calc(var(--topbar-height) + var(--safe-area-top));
   --sidebar-width: 240px;
 
@@ -72,6 +73,12 @@ body {
   overflow-x: clip;
   opacity: 0;
   transform: translateY(4px);
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+  .app-shell {
+    --browser-top-gap: 0px;
+  }
 }
 
 .app-shell:not(.app-shell--dark) {

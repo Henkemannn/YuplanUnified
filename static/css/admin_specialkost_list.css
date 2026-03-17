@@ -21,6 +21,50 @@
   font-size: 0.86rem;
 }
 
+.admin-specialkost-list__search-row {
+  margin: 4px 0 2px;
+}
+
+.admin-specialkost-list__search {
+  width: min(420px, 100%);
+}
+
+.admin-specialkost-list__groups {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-specialkost-list__group {
+  border: 1px solid var(--yp-border-color, var(--border));
+  border-radius: 12px;
+  background: var(--surface, #ffffff);
+}
+
+.admin-specialkost-list__group-summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  font-weight: 700;
+}
+
+.admin-specialkost-list__group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-specialkost-list__group-summary::before {
+  content: '▾';
+  margin-right: 8px;
+  font-size: 0.9rem;
+}
+
+.admin-specialkost-list__group:not([open]) .admin-specialkost-list__group-summary::before {
+  content: '▸';
+}
+
+.admin-specialkost-list__group-list {
+  padding: 0 10px 10px;
+}
+
 @media (max-width: 760px) {
   .admin-specialkost-list__header-row {
     flex-direction: column;

@@ -111,6 +111,21 @@
   line-height: 1.2;
 }
 
+.kitchen-week .boende-row .diet-name {
+  font-weight: 700;
+}
+
+.kitchen-week .boende-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kitchen-week .boende-icon {
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
 .kitchen-week .grid-table td.is-alt2,
 .kitchen-week .grid-table th.is-alt2,
 .kitchen-week .kw-cell.is-alt2 {

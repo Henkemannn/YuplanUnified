@@ -154,6 +154,16 @@
         <p class="yp-form-help">Använd avvikande schema här när avvikelsen beror på en viss specialkost. Detta ändrar inte boendeantalet automatiskt.</p>
         <div class="yp-form">
             {% if vm.diet_types and vm.diet_types|length > 0 %}
+            <div class="specialkost-edit-search-row" data-specialkost-filter-root>
+                <input
+                    type="search"
+                    class="yp-input specialkost-edit-search"
+                    placeholder="Sök specialkost..."
+                    aria-label="Sök specialkost"
+                    data-specialkost-filter-input
+                >
+            </div>
+            {% set diet_categories = ['Textur', 'Allergi / Exkludering', 'Anpassning', 'Kostval', 'Övrigt'] %}
             {% set totals = namespace(value=0) %}
             {% for t in vm.diet_types %}
                 {% set dtid = t.id %}
@@ -161,34 +171,50 @@
                 {% set totals.value = totals.value + val %}
             {% endfor %}
             <p class="app-shell__card-text specialkost-edit-total"><strong>Totalt:</strong> {{ totals.value }} personer</p>
-            <div class="specialkost-edit-grid" role="group" aria-label="Specialkost antal per typ">
-                {% for t in vm.diet_types %}
-                    {% set dtid = t.id %}
-                    {% set val = vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0 %}
-                    <div class="specialkost-edit-row">
-                        <label class="specialkost-edit-label" for="diet_default_{{ dtid }}">{{ t.name }}</label>
-                        <div class="specialkost-edit-actions">
-                            <input
-                                type="number"
-                                id="diet_default_{{ dtid }}"
-                                name="diet_default_{{ dtid }}"
-                                class="yp-input specialkost-edit-input sk-input"
-                                form="department-form"
-                                min="0"
-                                value="{{ val }}"
-                            >
-                            <button
-                                type="button"
-                                class="yp-button yp-button-secondary specialkost-edit-override{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} is-active{% endif %} js-open-diet-override"
-                                data-modal-target="#dietOverrideModal"
-                                data-department-id="{{ vm.department.id }}"
-                                data-site-id="{{ vm.department.site_id }}"
-                                data-diet-type-id="{{ dtid }}"
-                                data-diet-name="{{ t.name }}"
-                                aria-label="Avvikande schema{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} (aktivt){% endif %}"
-                            >Avvikande schema</button>
+            <div class="specialkost-edit-groups" role="group" aria-label="Specialkost antal per kategori">
+                {% for category in diet_categories %}
+                    {% set ns = namespace(rows=[]) %}
+                    {% for t in vm.diet_types %}
+                        {% set t_family = t.diet_family if t.diet_family in diet_categories else 'Övrigt' %}
+                        {% if t_family == category %}
+                            {% set ns.rows = ns.rows + [t] %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if ns.rows %}
+                    <details class="specialkost-edit-group" data-specialkost-group open>
+                        <summary class="specialkost-edit-group__summary">{{ category }}</summary>
+                        <div class="specialkost-edit-grid" role="group" aria-label="Specialkost antal {{ category }}">
+                            {% for t in ns.rows %}
+                                {% set dtid = t.id %}
+                                {% set val = vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0 %}
+                                <div class="specialkost-edit-row" data-specialkost-item>
+                                    <label class="specialkost-edit-label" data-specialkost-name for="diet_default_{{ dtid }}">{{ t.name }}</label>
+                                    <div class="specialkost-edit-actions">
+                                        <input
+                                            type="number"
+                                            id="diet_default_{{ dtid }}"
+                                            name="diet_default_{{ dtid }}"
+                                            class="yp-input specialkost-edit-input sk-input"
+                                            form="department-form"
+                                            min="0"
+                                            value="{{ val }}"
+                                        >
+                                        <button
+                                            type="button"
+                                            class="yp-button yp-button-secondary specialkost-edit-override{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} is-active{% endif %} js-open-diet-override"
+                                            data-modal-target="#dietOverrideModal"
+                                            data-department-id="{{ vm.department.id }}"
+                                            data-site-id="{{ vm.department.site_id }}"
+                                            data-diet-type-id="{{ dtid }}"
+                                            data-diet-name="{{ t.name }}"
+                                            aria-label="Avvikande schema{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} (aktivt){% endif %}"
+                                        >Avvikande schema</button>
+                                    </div>
+                                </div>
+                            {% endfor %}
                         </div>
-                    </div>
+                    </details>
+                    {% endif %}
                 {% endfor %}
             </div>
             {% else %}
@@ -210,21 +236,26 @@
                         <th>Lunch</th>
                         <th>Kväll</th>
                         <th>Notering</th>
-                        <th></th>
+                        <th>Ta bort</th>
                     </tr>
                 </thead>
                 <tbody id="service-addon-body">
                     {% if vm.department_service_addons and vm.department_service_addons|length > 0 %}
                         {% for row in vm.department_service_addons %}
                         <tr class="service-addon-row">
-                            <td>
-                                <select name="service_addon_id[]" class="yp-input">
+                            <td class="service-addon-col-addon">
+                                <select name="service_addon_id[]" class="yp-input service-addon-select">
                                     <option value="">Välj tillägg</option>
                                     {% for opt in vm.service_addons_master %}
                                     <option value="{{ opt.id }}" {% if opt.id|string == row.addon_id|string %}selected{% endif %}>{{ opt.name }}</option>
                                     {% endfor %}
                                 </select>
-                                <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="...eller nytt namn">
+                                <div class="service-addon-create">
+                                    <button type="button" class="yp-button yp-button-secondary service-addon-create-toggle js-service-addon-create-toggle">+ Skapa nytt tillägg</button>
+                                    <div class="service-addon-new-wrap">
+                                        <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="Namn på nytt tillägg">
+                                    </div>
+                                </div>
                             </td>
                             <td>
                                 {% set row_family = (row.addon_family or 'ovrigt')|lower %}
@@ -242,14 +273,19 @@
                         {% endfor %}
                     {% else %}
                         <tr class="service-addon-row">
-                            <td>
-                                <select name="service_addon_id[]" class="yp-input">
+                            <td class="service-addon-col-addon">
+                                <select name="service_addon_id[]" class="yp-input service-addon-select">
                                     <option value="">Välj tillägg</option>
                                     {% for opt in vm.service_addons_master %}
                                     <option value="{{ opt.id }}">{{ opt.name }}</option>
                                     {% endfor %}
                                 </select>
-                                <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="...eller nytt namn">
+                                <div class="service-addon-create">
+                                    <button type="button" class="yp-button yp-button-secondary service-addon-create-toggle js-service-addon-create-toggle">+ Skapa nytt tillägg</button>
+                                    <div class="service-addon-new-wrap">
+                                        <input type="text" name="service_addon_new_name[]" class="yp-input service-addon-new" placeholder="Namn på nytt tillägg">
+                                    </div>
+                                </div>
                             </td>
                             <td>
                                 <select name="service_addon_family[]" class="yp-input">
@@ -749,4 +785,5 @@
 <script src="{{ url_for('static', filename='js/admin_alt2.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_diet_overrides.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/admin_service_addons.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/specialkost_live_filter.js') }}" defer></script>
 {% endblock %}

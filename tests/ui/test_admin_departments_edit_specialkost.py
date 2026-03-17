@@ -2,6 +2,7 @@ import uuid
 import pytest
 
 from core.db import get_session
+from core.admin_repo import DietTypesRepo
 from sqlalchemy import text
 
 def test_edit_form_shows_specialkost_heading(client_admin):
@@ -86,3 +87,38 @@ def test_edit_form_allows_missing_diet_default_keys(client_admin):
     html = r.get_data(as_text=True)
     assert "Laktos" in html
     assert "Gluten" in html
+
+
+def test_edit_form_groups_specialkost_by_category(client_admin):
+    dep_id = str(uuid.uuid4())
+    db = get_session()
+    try:
+        from core.db import create_all
+
+        create_all()
+        db.execute(
+            text(
+                "INSERT INTO departments (id, site_id, name, resident_count_fixed, resident_count_mode, version) "
+                "VALUES (:id, 1, 'Test Grouped Specialkost', 5, 'fixed', 0)"
+            ),
+            {"id": dep_id},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    repo = DietTypesRepo()
+    repo.create(site_id="1", name="Timbal Grupp Dep", diet_family="Textur", default_select=False)
+    repo.create(site_id="1", name="Ej Fisk Grupp Dep", diet_family="Allergi / Exkludering", default_select=False)
+
+    r = client_admin.get(f"/ui/admin/departments/{dep_id}/edit")
+    if r.status_code == 401:
+        pytest.skip("Admin UI not enabled in test environment")
+    assert r.status_code == 200
+    html = r.get_data(as_text=True)
+    assert "specialkost-edit-group" in html
+    assert "<details class=\"specialkost-edit-group\" open>" in html
+    assert "Textur" in html
+    assert "Allergi / Exkludering" in html
+    assert "Timbal Grupp Dep" in html
+    assert "Ej Fisk Grupp Dep" in html

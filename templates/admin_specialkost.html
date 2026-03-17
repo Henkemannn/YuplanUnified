@@ -16,31 +16,57 @@
       <p class="app-shell__card-text">Här kan du redigera eller ta bort kosttyper.</p>
 
       {% if vm.diet_types %}
-        <div class="app-shell__list" aria-label="Kosttyper">
-          {% for dt in vm.diet_types %}
-            <div class="app-shell__list-item admin-specialkost__item">
-              <a class="app-shell__list-link" href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" aria-label="Redigera {{ dt.name }}"></a>
-              <div class="app-shell__list-main">
-                <span class="app-shell__list-title">{{ dt.name }}</span>
-                <div class="app-shell__list-meta">
-                  <span>Familj: {{ dt.diet_family or 'Övrigt' }}</span>
-                  <span>{% if dt.default_select %}Förinställd: Ja{% else %}Förinställd: Nej{% endif %}</span>
+        <div class="admin-specialkost__search-row" data-specialkost-filter-root>
+          <input
+            type="search"
+            class="yp-input admin-specialkost__search"
+            placeholder="Sök specialkost..."
+            aria-label="Sök specialkost"
+            data-specialkost-filter-input
+          >
+        </div>
+        {% set diet_categories = ['Textur', 'Allergi / Exkludering', 'Anpassning', 'Kostval', 'Övrigt'] %}
+        <div class="admin-specialkost__groups" aria-label="Kosttyper grupperade per kategori">
+          {% for category in diet_categories %}
+            {% set ns = namespace(rows=[]) %}
+            {% for dt in vm.diet_types %}
+              {% set dt_family = dt.diet_family if dt.diet_family in diet_categories else 'Övrigt' %}
+              {% if dt_family == category %}
+                {% set ns.rows = ns.rows + [dt] %}
+              {% endif %}
+            {% endfor %}
+            {% if ns.rows %}
+              <details class="admin-specialkost__group" data-specialkost-group open>
+                <summary class="admin-specialkost__group-summary">{{ category }}</summary>
+                <div class="app-shell__list admin-specialkost__group-list" aria-label="Kosttyper {{ category }}">
+                  {% for dt in ns.rows %}
+                    <div class="app-shell__list-item admin-specialkost__item" data-specialkost-item>
+                      <a class="app-shell__list-link" href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" aria-label="Redigera {{ dt.name }}"></a>
+                      <div class="app-shell__list-main">
+                        <span class="app-shell__list-title" data-specialkost-name>{{ dt.name }}</span>
+                        <div class="app-shell__list-meta">
+                          <span>Familj: {{ dt.diet_family or 'Övrigt' }}</span>
+                          <span>{% if dt.default_select %}Förinställd: Ja{% else %}Förinställd: Nej{% endif %}</span>
+                        </div>
+                      </div>
+                      <div class="app-shell__list-actions admin-specialkost__actions">
+                        <a href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" class="yp-btn yp-btn-secondary admin-specialkost__edit-btn">Redigera</a>
+                        <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" class="admin-specialkost__inline-form" data-specialkost-delete-form="1" data-confirm-message="Varning: Om kosttypen har kopplingar till avdelningar tas de bort. Vill du fortsätta?">
+                          {{ csrf_token_input() | safe }}
+                          <button
+                            type="submit"
+                            class="yp-btn yp-btn-secondary app-shell__icon-btn--danger admin-specialkost__delete-btn"
+                            data-testid="specialkost-delete-trigger"
+                            data-specialkost-delete-trigger="1"
+                            aria-label="Ta bort {{ dt.name }}"
+                          >🗑</button>
+                        </form>
+                      </div>
+                    </div>
+                  {% endfor %}
                 </div>
-              </div>
-              <div class="app-shell__list-actions admin-specialkost__actions">
-                <a href="{{ url_for('admin_ui.admin_specialkost_edit', kosttyp_id=dt.id) }}" class="yp-btn yp-btn-secondary admin-specialkost__edit-btn">Redigera</a>
-                <form method="POST" action="{{ url_for('admin_ui.admin_specialkost_delete', kosttyp_id=dt.id) }}" class="admin-specialkost__inline-form" data-specialkost-delete-form="1" data-confirm-message="Varning: Om kosttypen har kopplingar till avdelningar tas de bort. Vill du fortsätta?">
-                  {{ csrf_token_input() | safe }}
-                  <button
-                    type="submit"
-                    class="yp-btn yp-btn-secondary app-shell__icon-btn--danger admin-specialkost__delete-btn"
-                    data-testid="specialkost-delete-trigger"
-                    data-specialkost-delete-trigger="1"
-                    aria-label="Ta bort {{ dt.name }}"
-                  >🗑</button>
-                </form>
-              </div>
-            </div>
+              </details>
+            {% endif %}
           {% endfor %}
         </div>
       {% else %}
@@ -60,4 +86,5 @@
 {% block scripts %}
   {{ super() }}
   <script src="{{ url_for('static', filename='js/specialkost_delete_confirm.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/specialkost_live_filter.js') }}" defer></script>
 {% endblock %}

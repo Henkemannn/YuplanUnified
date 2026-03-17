@@ -65,6 +65,26 @@ def test_admin_specialkost_list_shows_diet_types(client_admin: FlaskClient):
     assert "✓" in html  # at least one checkmark present
 
 
+def test_admin_specialkost_list_groups_by_category_with_open_details(client_admin: FlaskClient):
+    from core.admin_repo import DietTypesRepo
+
+    repo = DietTypesRepo()
+    repo.create(site_id="site-1", name="Timbal Grupp", diet_family="Textur", default_select=False)
+    repo.create(site_id="site-1", name="Ej Fisk Grupp", diet_family="Allergi / Exkludering", default_select=False)
+
+    response = client_admin.get("/ui/admin/specialkost", headers=ADMIN_HEADERS)
+    assert response.status_code == 200
+    html = response.data.decode()
+
+    assert ("admin-specialkost__group" in html) or ("admin-specialkost-list__group" in html)
+    assert "<details" in html
+    assert " open>" in html
+    assert "Textur" in html
+    assert "Allergi / Exkludering" in html
+    assert "Timbal Grupp" in html
+    assert "Ej Fisk Grupp" in html
+
+
 def test_admin_specialkost_new_creates_diet_type(client_admin: FlaskClient):
     """New route creates dietary type and redirects to list."""
     # GET new form

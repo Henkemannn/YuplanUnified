@@ -30,7 +30,7 @@
   </thead>
   <tbody>
     <tr class="boende-row">
-      <td class="diet-name">Boende</td>
+      <td class="diet-name boende-label"><span class="boende-icon" aria-hidden="true">👥</span><span>Boende</span></td>
       {% for dow in range(1,8) %}
         {% set d = dep.days[dow-1] %}
         <td class="kw-cell day-start{% if dow > 1 %} day-sep{% endif %}{% if d.alt2_lunch %} is-alt2{% endif %}">{% if d.alt2_lunch %}<span class="is-alt2" aria-hidden="true"></span>{% endif %}{{ d.residents.lunch if d and d.residents else 0 }}</td>

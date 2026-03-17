@@ -6,6 +6,42 @@
     var body = document.getElementById('service-addon-body');
     if(!addBtn || !body) return;
 
+    function syncCreateState(row){
+      if(!row) return;
+      var wrap = row.querySelector('.service-addon-new-wrap');
+      var input = row.querySelector('.service-addon-new');
+      var toggle = row.querySelector('.js-service-addon-create-toggle');
+      if(!wrap || !toggle) return;
+      var visible = wrap.classList.contains('is-visible') || !!(input && String(input.value || '').trim());
+      wrap.classList.toggle('is-visible', visible);
+      toggle.textContent = visible ? 'Dolj nytt tillagg' : '+ Skapa nytt tillagg';
+    }
+
+    function bindCreateToggle(scope){
+      var buttons = (scope || document).querySelectorAll('.js-service-addon-create-toggle');
+      buttons.forEach(function(btn){
+        if(btn.dataset.createBound === '1') return;
+        btn.dataset.createBound = '1';
+        btn.addEventListener('click', function(){
+          var row = btn.closest('.service-addon-row');
+          if(!row) return;
+          var wrap = row.querySelector('.service-addon-new-wrap');
+          if(!wrap) return;
+          var willShow = !wrap.classList.contains('is-visible');
+          wrap.classList.toggle('is-visible', willShow);
+          syncCreateState(row);
+          if(willShow){
+            var input = row.querySelector('.service-addon-new');
+            if(input && typeof input.focus === 'function'){
+              input.focus();
+            }
+          }
+        });
+      });
+      var rows = (scope || document).querySelectorAll('.service-addon-row');
+      rows.forEach(syncCreateState);
+    }
+
     function bindRemove(scope){
       var buttons = (scope || document).querySelectorAll('.js-service-addon-remove');
       buttons.forEach(function(btn){
@@ -23,6 +59,7 @@
     }
 
     bindRemove(body);
+    bindCreateToggle(body);
 
     addBtn.addEventListener('click', function(){
       var first = body.querySelector('.service-addon-row');
@@ -44,8 +81,11 @@
         }
         select.selectedIndex = 0;
       });
+      var wrap = clone.querySelector('.service-addon-new-wrap');
+      if(wrap){ wrap.classList.remove('is-visible'); }
       body.appendChild(clone);
       bindRemove(clone);
+      bindCreateToggle(clone);
     });
   }
 

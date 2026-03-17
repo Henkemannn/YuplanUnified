@@ -50,3 +50,38 @@ def test_weekly_report_requires_site_selection_when_missing(client):
     assert resp.status_code in (301, 302)
     loc = resp.headers.get("Location", "")
     assert "/ui/select-site" in loc
+
+
+def test_admin_specialkost_list_groups_categories_expanded_by_default(client):
+    from core.admin_repo import DietTypesRepo
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        db.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL)"))
+        db.execute(text("INSERT OR IGNORE INTO sites(id,name) VALUES('group-site','Group Site')"))
+        db.commit()
+    finally:
+        db.close()
+
+    repo = DietTypesRepo()
+    repo.create(site_id="group-site", name="Timbal Grupp UI", diet_family="Textur", default_select=False)
+    repo.create(site_id="group-site", name="Ej Fisk Grupp UI", diet_family="Allergi / Exkludering", default_select=False)
+
+    with client.session_transaction() as s:
+        s["role"] = "admin"
+        s["user_id"] = "tester"
+        s["tenant_id"] = 1
+        s["site_id"] = "group-site"
+
+    resp = client.get("/ui/admin/specialkost")
+    if resp.status_code == 401:
+        pytest.skip("Admin UI not enabled in test environment")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "<details" in html
+    assert " open>" in html
+    assert "Textur" in html
+    assert "Allergi / Exkludering" in html
+    assert "Timbal Grupp UI" in html
+    assert "Ej Fisk Grupp UI" in html
