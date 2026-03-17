@@ -18,6 +18,7 @@ body {
   --yp-color-secondary-light: #f1f5f9;
   --yp-alt2-bg: #fde68a;
   --yp-alt2-fg: #5c3b00;
+  --yp-alt2-text: #9a6700;
   --yp-color-bg: #ffffff;
   --yp-bg: #eef3f8;
   --yp-color-bg-alt: var(--yp-bg);
@@ -102,6 +103,7 @@ body {
   --yp-shadow-md: 0 6px 12px -4px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.35);
   --yp-alt2-bg: #fbbf24;
   --yp-alt2-fg: #2c1a00;
+  --yp-alt2-text: #facc15;
 }
 
 .app-shell--dark .yp-input,
@@ -122,6 +124,7 @@ body {
 [data-theme="dark"] .app-shell {
   --yp-alt2-bg: #fbbf24;
   --yp-alt2-fg: #2c1a00;
+  --yp-alt2-text: #facc15;
 }
 
 .app-shell.is-ready {
@@ -816,7 +819,7 @@ body {
 }
 
 .kitchen-dash__menu-alt {
-  color: var(--yp-alt2-fg);
+  color: var(--yp-alt2-text);
   padding-left: 0;
   font-weight: 600;
 }
