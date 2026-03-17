@@ -48,7 +48,7 @@
                     {% endif %}
                   {% endfor %}
                   {% for family_name in families.names %}
-                    <details class="admin-specialkost__family" data-specialkost-subgroup open>
+                    <details class="admin-specialkost__family" data-specialkost-subgroup>
                       <summary class="admin-specialkost__family-summary">{{ family_name }}</summary>
                       <div class="app-shell__list admin-specialkost__family-list">
                         {% for dt in ns.rows %}
