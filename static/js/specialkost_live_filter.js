@@ -98,7 +98,9 @@
           subgroup.style.display = subgroupVisible ? '' : 'none';
           if(subgroupVisible){
             groupVisibleCount += subgroupVisibleCount;
-            setOpenIfClosed(subgroup);
+            if(query){
+              setOpenIfClosed(subgroup);
+            }
           }
         });
       } else {
@@ -114,7 +116,9 @@
       group.style.display = groupVisible ? '' : 'none';
       if(groupVisible){
         anyVisible = true;
-        setOpenIfClosed(group);
+        if(query){
+          setOpenIfClosed(group);
+        }
       }
     });
 
