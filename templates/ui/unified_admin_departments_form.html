@@ -184,33 +184,52 @@
                     <details class="specialkost-edit-group" data-specialkost-group open>
                         <summary class="specialkost-edit-group__summary">{{ category }}</summary>
                         <div class="specialkost-edit-grid" role="group" aria-label="Specialkost antal {{ category }}">
+                            {% set families = namespace(names=[]) %}
                             {% for t in ns.rows %}
-                                {% set dtid = t.id %}
-                                {% set val = vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0 %}
-                                <div class="specialkost-edit-row" data-specialkost-item>
-                                    <label class="specialkost-edit-label" data-specialkost-name for="diet_default_{{ dtid }}">{{ t.name }}</label>
-                                    <div class="specialkost-edit-actions">
-                                        <input
-                                            type="number"
-                                            id="diet_default_{{ dtid }}"
-                                            name="diet_default_{{ dtid }}"
-                                            class="yp-input specialkost-edit-input sk-input"
-                                            form="department-form"
-                                            min="0"
-                                            value="{{ val }}"
-                                        >
-                                        <button
-                                            type="button"
-                                            class="yp-button yp-button-secondary specialkost-edit-override{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} is-active{% endif %} js-open-diet-override"
-                                            data-modal-target="#dietOverrideModal"
-                                            data-department-id="{{ vm.department.id }}"
-                                            data-site-id="{{ vm.department.site_id }}"
-                                            data-diet-type-id="{{ dtid }}"
-                                            data-diet-name="{{ t.name }}"
-                                            aria-label="Avvikande schema{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} (aktivt){% endif %}"
-                                        >Avvikande schema</button>
-                                    </div>
+                                {% set family_base = t.name.replace('–', '-').split('-')[0].strip() %}
+                                {% set family_base = family_base if family_base else (t.name or 'Övrigt') %}
+                                {% if family_base not in families.names %}
+                                    {% set families.names = families.names + [family_base] %}
+                                {% endif %}
+                            {% endfor %}
+                            {% for family_name in families.names %}
+                            <details class="specialkost-edit-family" data-specialkost-subgroup open>
+                                <summary class="specialkost-edit-family__summary">{{ family_name }}</summary>
+                                <div class="specialkost-edit-family__list">
+                                    {% for t in ns.rows %}
+                                        {% set row_family_base = t.name.replace('–', '-').split('-')[0].strip() %}
+                                        {% set row_family_base = row_family_base if row_family_base else (t.name or 'Övrigt') %}
+                                        {% if row_family_base == family_name %}
+                                            {% set dtid = t.id %}
+                                            {% set val = vm.diet_defaults.get(dtid|string, 0) if vm.diet_defaults else 0 %}
+                                            <div class="specialkost-edit-row" data-specialkost-item>
+                                                <label class="specialkost-edit-label" data-specialkost-name for="diet_default_{{ dtid }}">{{ t.name }}</label>
+                                                <div class="specialkost-edit-actions">
+                                                    <input
+                                                        type="number"
+                                                        id="diet_default_{{ dtid }}"
+                                                        name="diet_default_{{ dtid }}"
+                                                        class="yp-input specialkost-edit-input sk-input"
+                                                        form="department-form"
+                                                        min="0"
+                                                        value="{{ val }}"
+                                                    >
+                                                    <button
+                                                        type="button"
+                                                        class="yp-button yp-button-secondary specialkost-edit-override{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} is-active{% endif %} js-open-diet-override"
+                                                        data-modal-target="#dietOverrideModal"
+                                                        data-department-id="{{ vm.department.id }}"
+                                                        data-site-id="{{ vm.department.site_id }}"
+                                                        data-diet-type-id="{{ dtid }}"
+                                                        data-diet-name="{{ t.name }}"
+                                                        aria-label="Avvikande schema{% if vm.diet_overrides_present and vm.diet_overrides_present.get(dtid|string) %} (aktivt){% endif %}"
+                                                    >Avvikande schema</button>
+                                                </div>
+                                            </div>
+                                        {% endif %}
+                                    {% endfor %}
                                 </div>
+                            </details>
                             {% endfor %}
                         </div>
                     </details>

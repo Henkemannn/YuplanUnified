@@ -69,6 +69,39 @@
   margin-top: 3px;
 }
 
+.specialkost-edit-family {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 90%, var(--chip-bg));
+  padding: 0 8px 8px;
+}
+
+.specialkost-edit-family__summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 2px;
+  font-weight: 650;
+}
+
+.specialkost-edit-family__summary::-webkit-details-marker {
+  display: none;
+}
+
+.specialkost-edit-family__summary::before {
+  content: '▾';
+  margin-right: 8px;
+  font-size: 0.86rem;
+}
+
+.specialkost-edit-family:not([open]) .specialkost-edit-family__summary::before {
+  content: '▸';
+}
+
+.specialkost-edit-family__list {
+  display: grid;
+  gap: 8px;
+}
+
 .specialkost-edit-groups {
   display: grid;
   gap: 10px;

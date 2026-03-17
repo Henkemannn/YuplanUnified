@@ -85,6 +85,24 @@ def test_admin_specialkost_list_groups_by_category_with_open_details(client_admi
     assert "Ej Fisk Grupp" in html
 
 
+def test_admin_specialkost_list_groups_by_family_inside_category(client_admin: FlaskClient):
+    from core.admin_repo import DietTypesRepo
+
+    repo = DietTypesRepo()
+    repo.create(site_id="site-1", name="Timbal", diet_family="Textur", default_select=False)
+    repo.create(site_id="site-1", name="Timbal -Fisk", diet_family="Textur", default_select=False)
+    repo.create(site_id="site-1", name="Grovpaté", diet_family="Textur", default_select=False)
+
+    response = client_admin.get("/ui/admin/specialkost", headers=ADMIN_HEADERS)
+    assert response.status_code == 200
+    html = response.data.decode()
+
+    # Second-level family groups should be present and expanded by default.
+    assert "data-specialkost-subgroup" in html
+    assert ">Timbal<" in html
+    assert ">Grovpaté<" in html
+
+
 def test_admin_specialkost_new_creates_diet_type(client_admin: FlaskClient):
     """New route creates dietary type and redirects to list."""
     # GET new form

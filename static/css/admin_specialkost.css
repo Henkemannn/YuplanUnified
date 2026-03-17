@@ -102,6 +102,39 @@
 
 .admin-specialkost__group-list {
   padding: 0 10px 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-specialkost__family {
+  border: 1px solid var(--yp-border-color, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface, #ffffff) 90%, var(--chip-bg, #f8fafc));
+}
+
+.admin-specialkost__family-summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 10px;
+  font-weight: 650;
+}
+
+.admin-specialkost__family-summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-specialkost__family-summary::before {
+  content: '▾';
+  margin-right: 8px;
+  font-size: 0.86rem;
+}
+
+.admin-specialkost__family:not([open]) .admin-specialkost__family-summary::before {
+  content: '▸';
+}
+
+.admin-specialkost__family-list {
+  padding: 0 8px 8px;
 }
 
 @media (max-width: 760px) {

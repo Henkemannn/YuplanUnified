@@ -15,26 +15,106 @@
     return normalize(item.textContent || '');
   }
 
+  function resolveFilterScope(root){
+    if(qsa('[data-specialkost-group]', root).length){
+      return root;
+    }
+    var node = root.parentElement;
+    while(node){
+      if(qsa('[data-specialkost-group]', node).length){
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return root;
+  }
+
+  function setOpenIfClosed(detailsEl){
+    if(detailsEl && detailsEl.tagName === 'DETAILS' && !detailsEl.hasAttribute('open')){
+      detailsEl.setAttribute('open', 'open');
+    }
+  }
+
+  function isOpen(detailsEl){
+    return detailsEl && detailsEl.tagName === 'DETAILS' && detailsEl.hasAttribute('open');
+  }
+
+  function setOpenState(detailsEl, open){
+    if(!detailsEl || detailsEl.tagName !== 'DETAILS'){
+      return;
+    }
+    if(open){
+      detailsEl.setAttribute('open', 'open');
+    } else {
+      detailsEl.removeAttribute('open');
+    }
+  }
+
+  function getDetailsNodes(scope){
+    var groups = qsa('[data-specialkost-group]', scope);
+    var subgroups = qsa('[data-specialkost-subgroup]', scope);
+    return groups.concat(subgroups);
+  }
+
+  function captureDetailsState(scope){
+    var state = [];
+    getDetailsNodes(scope).forEach(function(detailsEl){
+      state.push({
+        node: detailsEl,
+        open: isOpen(detailsEl)
+      });
+    });
+    return state;
+  }
+
+  function restoreDetailsState(snapshot){
+    (snapshot || []).forEach(function(entry){
+      if(!entry || !entry.node){
+        return;
+      }
+      setOpenState(entry.node, !!entry.open);
+    });
+  }
+
   function applyFilter(root, query){
     var groups = qsa('[data-specialkost-group]', root);
     var anyVisible = false;
     groups.forEach(function(group){
-      var items = qsa('[data-specialkost-item]', group);
       var groupVisibleCount = 0;
 
-      items.forEach(function(item){
-        var visible = !query || itemLabel(item).indexOf(query) !== -1;
-        item.style.display = visible ? '' : 'none';
-        if(visible){ groupVisibleCount += 1; }
-      });
+      var subgroups = qsa('[data-specialkost-subgroup]', group);
+      if(subgroups.length){
+        subgroups.forEach(function(subgroup){
+          var subgroupVisibleCount = 0;
+          var subgroupItems = qsa('[data-specialkost-item]', subgroup);
+
+          subgroupItems.forEach(function(item){
+            var visible = !query || itemLabel(item).indexOf(query) !== -1;
+            item.style.display = visible ? '' : 'none';
+            if(visible){ subgroupVisibleCount += 1; }
+          });
+
+          var subgroupVisible = subgroupVisibleCount > 0;
+          subgroup.style.display = subgroupVisible ? '' : 'none';
+          if(subgroupVisible){
+            groupVisibleCount += subgroupVisibleCount;
+            setOpenIfClosed(subgroup);
+          }
+        });
+      } else {
+        var items = qsa('[data-specialkost-item]', group);
+        items.forEach(function(item){
+          var visible = !query || itemLabel(item).indexOf(query) !== -1;
+          item.style.display = visible ? '' : 'none';
+          if(visible){ groupVisibleCount += 1; }
+        });
+      }
 
       var groupVisible = groupVisibleCount > 0;
       group.style.display = groupVisible ? '' : 'none';
       if(groupVisible){
         anyVisible = true;
-        if(!group.hasAttribute('open')){
-          group.setAttribute('open', 'open');
-        }
+        setOpenIfClosed(group);
       }
     });
 
@@ -45,10 +125,30 @@
     var input = root.querySelector('[data-specialkost-filter-input]');
     if(!input){ return; }
 
-    applyFilter(root, normalize(input.value));
+    var scope = resolveFilterScope(root);
+    var searchState = {
+      active: false,
+      snapshot: null
+    };
+
+    applyFilter(scope, normalize(input.value));
 
     input.addEventListener('input', function(){
-      applyFilter(root, normalize(input.value));
+      var query = normalize(input.value);
+      var hasQuery = !!query;
+
+      if(hasQuery && !searchState.active){
+        searchState.snapshot = captureDetailsState(scope);
+        searchState.active = true;
+      }
+
+      applyFilter(scope, query);
+
+      if(!hasQuery && searchState.active){
+        restoreDetailsState(searchState.snapshot);
+        searchState.snapshot = null;
+        searchState.active = false;
+      }
     });
   }
 
