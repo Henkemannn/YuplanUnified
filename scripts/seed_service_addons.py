@@ -108,61 +108,36 @@ def _validate_payload(payload: dict) -> tuple[str, list[str]]:
     return site_name, out
 
 
-def _find_existing_addon(db, *, name: str, site_id: str, has_site_id_col: bool):
-    if has_site_id_col:
-        return db.execute(
-            text(
-                """
-                SELECT id
-                FROM service_addons
-                WHERE site_id=:sid AND lower(trim(name)) = lower(trim(:n))
-                LIMIT 1
-                """
-            ),
-            {"sid": site_id, "n": name},
-        ).fetchone()
-
-    # Legacy schema (global unique name)
+def _find_existing_addon(db, *, name: str, site_id: str):
     return db.execute(
         text(
             """
             SELECT id
             FROM service_addons
-            WHERE lower(trim(name)) = lower(trim(:n))
+            WHERE site_id=:sid AND lower(trim(name)) = lower(trim(:n))
             LIMIT 1
             """
         ),
-        {"n": name},
+        {"sid": site_id, "n": name},
     ).fetchone()
 
 
-def _create_addon(db, *, name: str, site_id: str, has_site_id_col: bool, dry_run: bool) -> None:
+def _create_addon(db, *, name: str, site_id: str, dry_run: bool) -> None:
     if dry_run:
         return
 
     import uuid
 
     new_id = str(uuid.uuid4())
-    if has_site_id_col:
-        db.execute(
-            text(
-                """
-                INSERT INTO service_addons(id, site_id, name, is_active, created_at)
-                VALUES(:id, :sid, :n, 1, CURRENT_TIMESTAMP)
-                """
-            ),
-            {"id": new_id, "sid": site_id, "n": name},
-        )
-    else:
-        db.execute(
-            text(
-                """
-                INSERT INTO service_addons(id, name, is_active, created_at)
-                VALUES(:id, :n, 1, CURRENT_TIMESTAMP)
-                """
-            ),
-            {"id": new_id, "n": name},
-        )
+    db.execute(
+        text(
+            """
+            INSERT INTO service_addons(id, site_id, name, is_active, created_at)
+            VALUES(:id, :sid, :n, 1, CURRENT_TIMESTAMP)
+            """
+        ),
+        {"id": new_id, "sid": site_id, "n": name},
+    )
 
 
 def run(input_path: str, dry_run: bool) -> int:
@@ -205,6 +180,8 @@ def run(input_path: str, dry_run: bool) -> int:
 
             site_id = _resolve_site_id(db, site_name)
             has_site_id_col = _table_has_column(db, "service_addons", "site_id")
+            if not has_site_id_col:
+                raise RuntimeError("service_addons.site_id column is required before seeding")
 
             seen_in_payload: set[str] = set()
             for raw_name in service_addons:
@@ -219,7 +196,6 @@ def run(input_path: str, dry_run: bool) -> int:
                     db,
                     name=name,
                     site_id=site_id,
-                    has_site_id_col=has_site_id_col,
                 )
                 if existing is not None:
                     summary.reused += 1
@@ -229,7 +205,6 @@ def run(input_path: str, dry_run: bool) -> int:
                     db,
                     name=name,
                     site_id=site_id,
-                    has_site_id_col=has_site_id_col,
                     dry_run=dry_run,
                 )
                 summary.created += 1

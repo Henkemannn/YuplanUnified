@@ -6044,8 +6044,11 @@ def admin_departments_edit_form(dept_id: str):
     try:
         from core.admin_repo import ServiceAddonsRepo, DepartmentServiceAddonsRepo
 
-        vm["service_addons_master"] = ServiceAddonsRepo().list_active()
-        vm["department_service_addons"] = DepartmentServiceAddonsRepo().list_for_department(dept_id)
+        vm["service_addons_master"] = ServiceAddonsRepo().list_active(str(active_site_id))
+        vm["department_service_addons"] = DepartmentServiceAddonsRepo().list_for_department(
+            dept_id,
+            site_id=str(active_site_id),
+        )
     except Exception:
         vm["service_addons_master"] = []
         vm["department_service_addons"] = []
@@ -6433,12 +6436,16 @@ def admin_departments_edit_save_service_addons(dept_id: str):
         addon_family = normalize_addon_family(families[i] if i < len(families) else "ovrigt")
         if not addon_id and new_name:
             try:
-                addon_id = master_repo.create_if_missing(new_name, addon_family=addon_family)
+                addon_id = master_repo.create_if_missing(
+                    new_name,
+                    site_id=str(active_site_id),
+                    addon_family=addon_family,
+                )
             except Exception:
                 addon_id = ""
         elif addon_id:
             try:
-                master_repo.set_family(addon_id, addon_family)
+                master_repo.set_family(addon_id, str(active_site_id), addon_family)
             except Exception:
                 pass
         raw_l = str(lunches[i]).strip() if i < len(lunches) else ""
@@ -6468,7 +6475,11 @@ def admin_departments_edit_save_service_addons(dept_id: str):
         )
 
     try:
-        DepartmentServiceAddonsRepo().replace_for_department(dept_id=dept_id, rows=out_rows)
+        DepartmentServiceAddonsRepo().replace_for_department(
+            dept_id=dept_id,
+            rows=out_rows,
+            site_id=str(active_site_id),
+        )
         flash("Serveringstillägg sparade.", "success")
     except Exception as e:
         flash(f"Kunde inte spara serveringstillägg: {str(e)}", "error")

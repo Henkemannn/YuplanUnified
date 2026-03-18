@@ -194,33 +194,23 @@ def _resolve_department_id(db, site_id: str, department_name: str) -> str:
 
 
 def _resolve_addon_id(db, site_id: str, addon_name: str, has_site_id_col: bool) -> str:
-    if has_site_id_col:
-        row = db.execute(
-            text(
-                """
-                SELECT id
-                FROM service_addons
-                WHERE site_id=:sid AND lower(trim(name)) = lower(trim(:n))
-                LIMIT 1
-                """
-            ),
-            {"sid": site_id, "n": addon_name},
-        ).fetchone()
-    else:
-        row = db.execute(
-            text(
-                """
-                SELECT id
-                FROM service_addons
-                WHERE lower(trim(name)) = lower(trim(:n))
-                LIMIT 1
-                """
-            ),
-            {"n": addon_name},
-        ).fetchone()
+    if not has_site_id_col:
+        raise RuntimeError("service_addons.site_id column is required")
+
+    row = db.execute(
+        text(
+            """
+            SELECT id
+            FROM service_addons
+            WHERE site_id=:sid AND lower(trim(name)) = lower(trim(:n))
+            LIMIT 1
+            """
+        ),
+        {"sid": site_id, "n": addon_name},
+    ).fetchone()
 
     if not row:
-        scope_txt = f"site_id={site_id}" if has_site_id_col else "global service_addons"
+        scope_txt = f"site_id={site_id}"
         raise RuntimeError(f"Service addon '{addon_name}' not found in {scope_txt}")
     return str(row[0])
 
@@ -327,6 +317,8 @@ def run(input_path: str, dry_run: bool) -> int:
 
             site_id = _resolve_site_id(db, site_name)
             has_service_addons_site_id = _table_has_column(db, "service_addons", "site_id")
+            if not has_service_addons_site_id:
+                raise RuntimeError("service_addons.site_id column is required before seeding")
             has_dsa_created_at = _table_has_column(db, "department_service_addons", "created_at")
 
             touched_departments: set[str] = set()

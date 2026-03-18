@@ -26,8 +26,8 @@ def test_service_addons_totals_aggregate_and_hide_zero_and_include_note(app_sess
     )
 
     addon_repo = ServiceAddonsRepo()
-    mos_id = addon_repo.create_if_missing("Mos", addon_family="mos")
-    sallad_id = addon_repo.create_if_missing("Sallad", addon_family="sallad")
+    mos_id = addon_repo.create_if_missing("Mos", site_id=site["id"], addon_family="mos")
+    sallad_id = addon_repo.create_if_missing("Sallad", site_id=site["id"], addon_family="sallad")
 
     dep_repo = DepartmentServiceAddonsRepo()
     dep_repo.replace_for_department(
@@ -36,6 +36,7 @@ def test_service_addons_totals_aggregate_and_hide_zero_and_include_note(app_sess
             {"addon_id": mos_id, "lunch_count": 4, "dinner_count": None, "note": "Aldrig tomat"},
             {"addon_id": sallad_id, "lunch_count": 0, "dinner_count": 3, "note": ""},
         ],
+        site_id=site["id"],
     )
     dep_repo.replace_for_department(
         dep_b["id"],
@@ -43,6 +44,7 @@ def test_service_addons_totals_aggregate_and_hide_zero_and_include_note(app_sess
             {"addon_id": mos_id, "lunch_count": 3, "dinner_count": 0, "note": ""},
             {"addon_id": sallad_id, "lunch_count": 0, "dinner_count": 0, "note": ""},
         ],
+        site_id=site["id"],
     )
 
     lunch = dep_repo.list_totals_for_site_meal(site["id"], "lunch")

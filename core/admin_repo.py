@@ -125,17 +125,20 @@ def _ensure_service_addons_tables(db) -> None:
                 """
                 CREATE TABLE IF NOT EXISTS service_addons (
                     id TEXT PRIMARY KEY,
+                    site_id TEXT NULL REFERENCES sites(id),
                     name TEXT NOT NULL,
                     addon_family TEXT NOT NULL DEFAULT 'ovrigt',
                     is_active INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT,
-                    UNIQUE(name)
+                    UNIQUE(site_id, name)
                 )
                 """
             )
         )
         try:
             cols = {r[1] for r in db.execute(text("PRAGMA table_info('service_addons')")).fetchall()}
+            if "site_id" not in cols:
+                db.execute(text("ALTER TABLE service_addons ADD COLUMN site_id TEXT"))
             if "addon_family" not in cols:
                 db.execute(text("ALTER TABLE service_addons ADD COLUMN addon_family TEXT"))
             db.execute(
@@ -144,6 +147,17 @@ def _ensure_service_addons_tables(db) -> None:
                     UPDATE service_addons
                     SET addon_family='ovrigt'
                     WHERE addon_family IS NULL OR trim(CAST(addon_family AS TEXT))=''
+                    """
+                )
+            )
+        except Exception:
+            pass
+        try:
+            db.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_service_addons_site_name
+                    ON service_addons(site_id, name)
                     """
                 )
             )
@@ -163,6 +177,153 @@ def _ensure_service_addons_tables(db) -> None:
                 )
                 """
             )
+        )
+    _backfill_service_addons_site_scope(db)
+
+
+def _site_id_for_department(db, dept_id: str) -> str | None:
+    row = db.execute(
+        text("SELECT site_id FROM departments WHERE id=:id LIMIT 1"),
+        {"id": str(dept_id)},
+    ).fetchone()
+    if not row:
+        return None
+    return str(row[0]) if row[0] is not None else None
+
+
+def _backfill_service_addons_site_scope(db) -> None:
+    if not _table_has_column(db, "service_addons", "site_id"):
+        return
+
+    has_family_col = _table_has_column(db, "service_addons", "addon_family")
+
+    addon_rows = db.execute(
+        text(
+            """
+            SELECT id, name,
+                   COALESCE(addon_family, 'ovrigt') AS addon_family,
+                   COALESCE(is_active, 1) AS is_active,
+                   created_at,
+                   site_id
+            FROM service_addons
+            """
+        )
+    ).fetchall()
+
+    for row in addon_rows:
+        addon_id = str(row[0])
+        addon_name = str(row[1])
+        addon_family = normalize_addon_family(row[2] if has_family_col else "ovrigt")
+        addon_active = 1 if bool(row[3]) else 0
+        addon_created_at = row[4]
+        addon_site_id = (str(row[5]).strip() if row[5] is not None else "")
+
+        if addon_site_id:
+            continue
+
+        site_rows = db.execute(
+            text(
+                """
+                SELECT DISTINCT d.site_id
+                FROM department_service_addons dsa
+                JOIN departments d ON d.id = dsa.department_id
+                WHERE dsa.addon_id=:addon_id AND d.site_id IS NOT NULL
+                ORDER BY d.site_id
+                """
+            ),
+            {"addon_id": addon_id},
+        ).fetchall()
+        site_ids = [str(r[0]) for r in site_rows if r and r[0] is not None]
+
+        if len(site_ids) == 1:
+            db.execute(
+                text("UPDATE service_addons SET site_id=:sid WHERE id=:id"),
+                {"sid": site_ids[0], "id": addon_id},
+            )
+            continue
+
+        if len(site_ids) > 1:
+            primary_site_id = site_ids[0]
+            db.execute(
+                text("UPDATE service_addons SET site_id=:sid WHERE id=:id"),
+                {"sid": primary_site_id, "id": addon_id},
+            )
+
+            for sid in site_ids[1:]:
+                existing = db.execute(
+                    text(
+                        """
+                        SELECT id FROM service_addons
+                        WHERE site_id=:sid AND lower(name)=lower(:name)
+                        LIMIT 1
+                        """
+                    ),
+                    {"sid": sid, "name": addon_name},
+                ).fetchone()
+                if existing:
+                    target_addon_id = str(existing[0])
+                else:
+                    target_addon_id = str(uuid.uuid4())
+                    if has_family_col:
+                        db.execute(
+                            text(
+                                """
+                                INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at)
+                                VALUES(:id, :sid, :name, :addon_family, :is_active, :created_at)
+                                """
+                            ),
+                            {
+                                "id": target_addon_id,
+                                "sid": sid,
+                                "name": addon_name,
+                                "addon_family": addon_family,
+                                "is_active": addon_active,
+                                "created_at": addon_created_at,
+                            },
+                        )
+                    else:
+                        db.execute(
+                            text(
+                                """
+                                INSERT INTO service_addons(id, site_id, name, is_active, created_at)
+                                VALUES(:id, :sid, :name, :is_active, :created_at)
+                                """
+                            ),
+                            {
+                                "id": target_addon_id,
+                                "sid": sid,
+                                "name": addon_name,
+                                "is_active": addon_active,
+                                "created_at": addon_created_at,
+                            },
+                        )
+
+                db.execute(
+                    text(
+                        """
+                        UPDATE department_service_addons
+                        SET addon_id=:new_addon_id
+                        WHERE addon_id=:old_addon_id
+                          AND department_id IN (
+                              SELECT id FROM departments WHERE site_id=:sid
+                          )
+                        """
+                    ),
+                    {
+                        "new_addon_id": target_addon_id,
+                        "old_addon_id": addon_id,
+                        "sid": sid,
+                    },
+                )
+
+    # Any remaining NULL site rows are anchored to the first available site to avoid global leakage.
+    default_site = db.execute(
+        text("SELECT id FROM sites WHERE id IS NOT NULL ORDER BY id LIMIT 1")
+    ).fetchone()
+    if default_site and default_site[0] is not None:
+        db.execute(
+            text("UPDATE service_addons SET site_id=:sid WHERE site_id IS NULL"),
+            {"sid": str(default_site[0])},
         )
 
 
@@ -1026,33 +1187,40 @@ class DepartmentDietOverridesRepo:
 
 
 class ServiceAddonsRepo:
-    def list_active(self) -> list[dict]:
+    def list_active(self, site_id: str) -> list[dict]:
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
+            has_site_col = _table_has_column(db, "service_addons", "site_id")
             if has_family_col:
-                rows = db.execute(
-                    text(
-                        """
-                        SELECT id, name, COALESCE(addon_family, 'ovrigt') AS addon_family, is_active
-                        FROM service_addons
-                        WHERE COALESCE(is_active, 1) = 1
-                        ORDER BY name
-                        """
-                    )
-                ).fetchall()
+                sql = (
+                    """
+                    SELECT id, name, COALESCE(addon_family, 'ovrigt') AS addon_family, is_active
+                    FROM service_addons
+                    WHERE COALESCE(is_active, 1) = 1
+                    """
+                )
+                params: dict[str, str] = {}
+                if has_site_col:
+                    sql += " AND site_id=:site_id"
+                    params["site_id"] = str(site_id)
+                sql += " ORDER BY name"
+                rows = db.execute(text(sql), params).fetchall()
             else:
-                rows = db.execute(
-                    text(
-                        """
-                        SELECT id, name, is_active
-                        FROM service_addons
-                        WHERE COALESCE(is_active, 1) = 1
-                        ORDER BY name
-                        """
-                    )
-                ).fetchall()
+                sql = (
+                    """
+                    SELECT id, name, is_active
+                    FROM service_addons
+                    WHERE COALESCE(is_active, 1) = 1
+                    """
+                )
+                params = {}
+                if has_site_col:
+                    sql += " AND site_id=:site_id"
+                    params["site_id"] = str(site_id)
+                sql += " ORDER BY name"
+                rows = db.execute(text(sql), params).fetchall()
             return [
                 {
                     "id": str(r[0]),
@@ -1065,7 +1233,7 @@ class ServiceAddonsRepo:
         finally:
             db.close()
 
-    def create_if_missing(self, name: str, addon_family: str | None = None) -> str:
+    def create_if_missing(self, name: str, site_id: str, addon_family: str | None = None) -> str:
         clean = str(name or "").strip()
         if not clean:
             raise ValueError("name required")
@@ -1073,19 +1241,42 @@ class ServiceAddonsRepo:
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
-            row = db.execute(
-                text("SELECT id FROM service_addons WHERE lower(name)=lower(:n) LIMIT 1"),
-                {"n": clean},
-            ).fetchone()
+            has_site_col = _table_has_column(db, "service_addons", "site_id")
+            if has_site_col:
+                row = db.execute(
+                    text(
+                        """
+                        SELECT id FROM service_addons
+                        WHERE site_id=:site_id AND lower(name)=lower(:n)
+                        LIMIT 1
+                        """
+                    ),
+                    {"n": clean, "site_id": str(site_id)},
+                ).fetchone()
+            else:
+                row = db.execute(
+                    text("SELECT id FROM service_addons WHERE lower(name)=lower(:n) LIMIT 1"),
+                    {"n": clean},
+                ).fetchone()
             if row:
                 try:
-                    self.set_family(str(row[0]), family)
+                    self.set_family(str(row[0]), str(site_id), family)
                 except Exception:
                     pass
                 return str(row[0])
             sid = str(uuid.uuid4())
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
-            if has_family_col:
+            if has_family_col and has_site_col:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at)
+                        VALUES(:id, :site_id, :name, :addon_family, 1, CURRENT_TIMESTAMP)
+                        """
+                    ),
+                    {"id": sid, "site_id": str(site_id), "name": clean, "addon_family": family},
+                )
+            elif has_family_col:
                 db.execute(
                     text(
                         """
@@ -1094,6 +1285,16 @@ class ServiceAddonsRepo:
                         """
                     ),
                     {"id": sid, "name": clean, "addon_family": family},
+                )
+            elif has_site_col:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO service_addons(id, site_id, name, is_active, created_at)
+                        VALUES(:id, :site_id, :name, 1, CURRENT_TIMESTAMP)
+                        """
+                    ),
+                    {"id": sid, "site_id": str(site_id), "name": clean},
                 )
             else:
                 db.execute(
@@ -1113,12 +1314,21 @@ class ServiceAddonsRepo:
         finally:
             db.close()
 
-    def set_family(self, addon_id: str, addon_family: str | None) -> None:
+    def set_family(self, addon_id: str, site_id: str, addon_family: str | None) -> None:
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
             if not _table_has_column(db, "service_addons", "addon_family"):
                 return
+            if _table_has_column(db, "service_addons", "site_id"):
+                row = db.execute(
+                    text("SELECT site_id FROM service_addons WHERE id=:id LIMIT 1"),
+                    {"id": str(addon_id)},
+                ).fetchone()
+                if not row:
+                    return
+                addon_site_id = str(row[0] or "")
+                assert addon_site_id == str(site_id), "service_addon_site_mismatch"
             db.execute(
                 text("UPDATE service_addons SET addon_family=:f WHERE id=:id"),
                 {"f": normalize_addon_family(addon_family), "id": str(addon_id)},
@@ -1132,26 +1342,33 @@ class ServiceAddonsRepo:
 
 
 class DepartmentServiceAddonsRepo:
-    def list_for_department(self, dept_id: str) -> list[dict]:
+    def list_for_department(self, dept_id: str, site_id: str | None = None) -> list[dict]:
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
+            has_site_col = _table_has_column(db, "service_addons", "site_id")
             if has_family_col:
-                rows = db.execute(
-                    text(
-                        """
-                        SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
-                               COALESCE(sa.addon_family, 'ovrigt') AS addon_family,
-                               dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
-                        FROM department_service_addons dsa
-                        JOIN service_addons sa ON sa.id = dsa.addon_id
-                        WHERE dsa.department_id=:d
-                        ORDER BY sa.name
-                        """
-                    ),
-                    {"d": str(dept_id)},
-                ).fetchall()
+                sql = (
+                    """
+                    SELECT dsa.id, dsa.department_id, dsa.addon_id, sa.name,
+                           COALESCE(sa.addon_family, 'ovrigt') AS addon_family,
+                           dsa.lunch_count, dsa.dinner_count, COALESCE(dsa.note, '')
+                    FROM department_service_addons dsa
+                    JOIN service_addons sa ON sa.id = dsa.addon_id
+                    JOIN departments d ON d.id = dsa.department_id
+                    WHERE dsa.department_id=:d
+                    """
+                )
+                params: dict[str, str] = {"d": str(dept_id)}
+                if has_site_col:
+                    if site_id:
+                        sql += " AND d.site_id=:site_id AND sa.site_id=:site_id"
+                        params["site_id"] = str(site_id)
+                    else:
+                        sql += " AND d.site_id = sa.site_id"
+                sql += " ORDER BY sa.name"
+                rows = db.execute(text(sql), params).fetchall()
             else:
                 rows = db.execute(
                     text(
@@ -1184,10 +1401,17 @@ class DepartmentServiceAddonsRepo:
         finally:
             db.close()
 
-    def replace_for_department(self, dept_id: str, rows: Iterable[dict]) -> None:
+    def replace_for_department(self, dept_id: str, rows: Iterable[dict], site_id: str | None = None) -> None:
         db = get_session()
         try:
             _ensure_service_addons_tables(db)
+            dept_site_id = _site_id_for_department(db, str(dept_id))
+            if not dept_site_id:
+                raise ValueError("department_not_found")
+            if site_id is not None and str(site_id) != str(dept_site_id):
+                raise AssertionError("department_site_mismatch")
+
+            has_site_col = _table_has_column(db, "service_addons", "site_id")
             db.execute(
                 text("DELETE FROM department_service_addons WHERE department_id=:d"),
                 {"d": str(dept_id)},
@@ -1196,6 +1420,17 @@ class DepartmentServiceAddonsRepo:
                 addon_id = str(row.get("addon_id") or "").strip()
                 if not addon_id:
                     continue
+
+                if has_site_col:
+                    addon_row = db.execute(
+                        text("SELECT site_id FROM service_addons WHERE id=:id LIMIT 1"),
+                        {"id": addon_id},
+                    ).fetchone()
+                    if not addon_row:
+                        continue
+                    addon_site_id = str(addon_row[0] or "")
+                    assert addon_site_id == str(dept_site_id), "service_addon_site_mismatch"
+
                 lunch = row.get("lunch_count")
                 dinner = row.get("dinner_count")
                 note = str(row.get("note") or "").strip() or None
@@ -1236,7 +1471,9 @@ class DepartmentServiceAddonsRepo:
         try:
             _ensure_service_addons_tables(db)
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
+            has_site_col = _table_has_column(db, "service_addons", "site_id")
             if has_family_col:
+                where_site = " AND sa.site_id = :site_id" if has_site_col else ""
                 rows = db.execute(
                     text(
                         f"""
@@ -1247,6 +1484,7 @@ class DepartmentServiceAddonsRepo:
                         JOIN service_addons sa ON sa.id = dsa.addon_id
                         JOIN departments d ON d.id = dsa.department_id
                         WHERE d.site_id = :site_id
+                                                    {where_site}
                           AND dsa.{col} IS NOT NULL
                           AND dsa.{col} > 0
                         ORDER BY sa.name, d.name

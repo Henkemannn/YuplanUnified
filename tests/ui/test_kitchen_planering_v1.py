@@ -228,10 +228,11 @@ def test_planering_dessert_hides_service_addons_summary(app_session):
         resident_count_fixed=8,
     )
 
-    addon_id = ServiceAddonsRepo().create_if_missing("Mos", addon_family="mos")
+    addon_id = ServiceAddonsRepo().create_if_missing("Mos", site_id=site_id, addon_family="mos")
     DepartmentServiceAddonsRepo().replace_for_department(
         dep["id"],
         [{"addon_id": addon_id, "lunch_count": 5, "dinner_count": 0, "note": ""}],
+        site_id=site_id,
     )
 
     rv = client.get(
