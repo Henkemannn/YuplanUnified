@@ -1187,6 +1187,36 @@ class DepartmentDietOverridesRepo:
 
 
 class ServiceAddonsRepo:
+    def _find_any_by_name(self, db, name: str):
+        return db.execute(
+            text(
+                """
+                SELECT id, site_id
+                FROM service_addons
+                WHERE lower(name)=lower(:n)
+                LIMIT 1
+                """
+            ),
+            {"n": str(name)},
+        ).fetchone()
+
+    def _is_bound_to_other_site(self, db, addon_id: str, site_id: str) -> bool:
+        row = db.execute(
+            text(
+                """
+                SELECT 1
+                FROM department_service_addons dsa
+                JOIN departments d ON d.id = dsa.department_id
+                WHERE dsa.addon_id=:addon_id
+                  AND d.site_id IS NOT NULL
+                  AND d.site_id <> :site_id
+                LIMIT 1
+                """
+            ),
+            {"addon_id": str(addon_id), "site_id": str(site_id)},
+        ).fetchone()
+        return row is not None
+
     def list_active(self, site_id: str) -> list[dict]:
         db = get_session()
         try:
@@ -1264,48 +1294,93 @@ class ServiceAddonsRepo:
                 except Exception:
                     pass
                 return str(row[0])
+
+            # Legacy bridge: if an addon with same name exists without site binding, claim it for this site.
+            any_row = self._find_any_by_name(db, clean) if has_site_col else None
+            if any_row and has_site_col:
+                any_id = str(any_row[0])
+                any_site = str(any_row[1] or "").strip()
+                if not any_site:
+                    db.execute(
+                        text("UPDATE service_addons SET site_id=:site_id WHERE id=:id"),
+                        {"site_id": str(site_id), "id": any_id},
+                    )
+                    try:
+                        self.set_family(any_id, str(site_id), family)
+                    except Exception:
+                        pass
+                    db.commit()
+                    return any_id
+
             sid = str(uuid.uuid4())
             has_family_col = _table_has_column(db, "service_addons", "addon_family")
-            if has_family_col and has_site_col:
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at)
-                        VALUES(:id, :site_id, :name, :addon_family, 1, CURRENT_TIMESTAMP)
-                        """
-                    ),
-                    {"id": sid, "site_id": str(site_id), "name": clean, "addon_family": family},
-                )
-            elif has_family_col:
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO service_addons(id, name, addon_family, is_active, created_at)
-                        VALUES(:id, :name, :addon_family, 1, CURRENT_TIMESTAMP)
-                        """
-                    ),
-                    {"id": sid, "name": clean, "addon_family": family},
-                )
-            elif has_site_col:
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO service_addons(id, site_id, name, is_active, created_at)
-                        VALUES(:id, :site_id, :name, 1, CURRENT_TIMESTAMP)
-                        """
-                    ),
-                    {"id": sid, "site_id": str(site_id), "name": clean},
-                )
-            else:
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO service_addons(id, name, is_active, created_at)
-                        VALUES(:id, :name, 1, CURRENT_TIMESTAMP)
-                        """
-                    ),
-                    {"id": sid, "name": clean},
-                )
+            try:
+                if has_family_col and has_site_col:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at)
+                            VALUES(:id, :site_id, :name, :addon_family, 1, CURRENT_TIMESTAMP)
+                            """
+                        ),
+                        {"id": sid, "site_id": str(site_id), "name": clean, "addon_family": family},
+                    )
+                elif has_family_col:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO service_addons(id, name, addon_family, is_active, created_at)
+                            VALUES(:id, :name, :addon_family, 1, CURRENT_TIMESTAMP)
+                            """
+                        ),
+                        {"id": sid, "name": clean, "addon_family": family},
+                    )
+                elif has_site_col:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO service_addons(id, site_id, name, is_active, created_at)
+                            VALUES(:id, :site_id, :name, 1, CURRENT_TIMESTAMP)
+                            """
+                        ),
+                        {"id": sid, "site_id": str(site_id), "name": clean},
+                    )
+                else:
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO service_addons(id, name, is_active, created_at)
+                            VALUES(:id, :name, 1, CURRENT_TIMESTAMP)
+                            """
+                        ),
+                        {"id": sid, "name": clean},
+                    )
+            except IntegrityError:
+                # Legacy UNIQUE(name) bridge for old sqlite schemas: reuse existing row when safe.
+                fallback = self._find_any_by_name(db, clean)
+                if not fallback:
+                    raise
+                fallback_id = str(fallback[0])
+                fallback_site = str(fallback[1] or "").strip() if has_site_col else ""
+                if has_site_col:
+                    if not fallback_site:
+                        db.execute(
+                            text("UPDATE service_addons SET site_id=:site_id WHERE id=:id"),
+                            {"site_id": str(site_id), "id": fallback_id},
+                        )
+                    elif fallback_site != str(site_id):
+                        if self._is_bound_to_other_site(db, fallback_id, str(site_id)):
+                            raise ValueError("service_addon_name_conflict_cross_site")
+                        db.execute(
+                            text("UPDATE service_addons SET site_id=:site_id WHERE id=:id"),
+                            {"site_id": str(site_id), "id": fallback_id},
+                        )
+                try:
+                    self.set_family(fallback_id, str(site_id), family)
+                except Exception:
+                    pass
+                db.commit()
+                return fallback_id
             db.commit()
             return sid
         except Exception:
