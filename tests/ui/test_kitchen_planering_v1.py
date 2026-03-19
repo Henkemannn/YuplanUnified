@@ -172,6 +172,10 @@ def test_planering_template_has_serveringstillbehor_tab_and_no_addon_dropdown():
     assert "('mos', 'MOS')" in tpl
     assert "('sallad', 'SALLAD')" in tpl
     assert "('ovrigt', 'ÖVRIGT')" in tpl
+    assert '<h2 class="kp-section-title">Serveringstillbehör</h2>' in tpl
+    assert '<h3>Serveringstillbehör</h3>' not in tpl
+    assert 'Ingen data för {{ family_label }}.' not in tpl
+    assert 'Inga serveringstillbehör registrerade.' in tpl
     assert 'data-mode="normal-alt1"' in tpl
     assert 'data-mode="normal-alt2"' in tpl
     assert 'data-mode="normal-single"' in tpl

@@ -479,12 +479,10 @@
           <div class="kp-plan-tab-panel" id="kp-plan-tab-panel-service-addons" role="tabpanel" aria-labelledby="kp-tab-service-addons" data-plan-panel="service-addons" hidden>
             <section class="kp-section kp-section--addons service-addons-view">
             <div class="kp-card kp-mb-12">
-              <h3 class="kp-section-title">Serveringstillbehör</h3>
-              <div class="kp-worklist-header">
-                <h3>Serveringstillbehör</h3>
-              </div>
+              <h2 class="kp-section-title">Serveringstillbehör</h2>
               {% if vm.service_addons_summary and vm.service_addons_summary|length > 0 %}
                 <div class="kp-addon-panel-grid">
+                    {% set ns = namespace(rendered=0) %}
                     {% for family_key, family_label in [('mos', 'MOS'), ('sallad', 'SALLAD'), ('ovrigt', 'ÖVRIGT')] %}
                     {% set family_rows = [] %}
                     {% for addon in vm.service_addons_summary %}
@@ -492,9 +490,10 @@
                         {% set _ = family_rows.append(addon) %}
                       {% endif %}
                     {% endfor %}
+                    {% if family_rows %}
+                    {% set ns.rendered = ns.rendered + 1 %}
                     <div class="kp-addon-panel">
                       <h4 class="kp-addon-heading">{{ family_label }}</h4>
-                      {% if family_rows %}
                         {% for addon in family_rows %}
                           <div class="kp-worklist-group" data-addon-id="{{ addon.addon_id }}">
                             <div class="kp-worklist-title">{{ addon.addon_name }}</div>
@@ -510,14 +509,15 @@
                             </div>
                         </div>
                         {% endfor %}
-                    {% else %}
-                        <p class="empty-text">Ingen data för {{ family_label }}.</p>
+                    </div>
                     {% endif %}
-                  </div>
                     {% endfor %}
                 </div>
+                {% if ns.rendered == 0 %}
+                <p class="empty-text">Inga serveringstillbehör registrerade.</p>
+                {% endif %}
               {% else %}
-                <p class="empty-text">Inga serveringstillbehör för vald vy.</p>
+                <p class="empty-text">Inga serveringstillbehör registrerade.</p>
               {% endif %}
             </div>
             </section>
