@@ -120,6 +120,7 @@ def _ensure_department_diet_overrides_table(db) -> None:
 
 def _ensure_service_addons_tables(db) -> None:
     if _is_sqlite(db):
+        _ensure_service_addons_sqlite_scoped_uniqueness(db)
         db.execute(
             text(
                 """
@@ -179,6 +180,79 @@ def _ensure_service_addons_tables(db) -> None:
             )
         )
     _backfill_service_addons_site_scope(db)
+
+
+def _ensure_service_addons_sqlite_scoped_uniqueness(db) -> None:
+    if not _is_sqlite(db):
+        return
+
+    table_row = db.execute(
+        text("SELECT sql FROM sqlite_master WHERE type='table' AND name='service_addons'")
+    ).fetchone()
+    if not table_row:
+        return
+
+    table_sql = str(table_row[0] or "")
+    has_site_unique = "UNIQUE(site_id, name)" in table_sql or "UNIQUE (site_id, name)" in table_sql
+    has_legacy_unique = "UNIQUE(name)" in table_sql or "UNIQUE (name)" in table_sql
+
+    if has_site_unique and not has_legacy_unique:
+        return
+
+    cols = {str(r[1]) for r in db.execute(text("PRAGMA table_info('service_addons')")).fetchall()}
+    has_site_col = "site_id" in cols
+    has_family_col = "addon_family" in cols
+    has_created_col = "created_at" in cols
+
+    # Rebuild table in SQLite to change uniqueness semantics.
+    db.execute(text("ALTER TABLE service_addons RENAME TO service_addons__old"))
+    db.execute(
+        text(
+            """
+            CREATE TABLE service_addons (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NULL REFERENCES sites(id),
+                name TEXT NOT NULL,
+                addon_family TEXT NOT NULL DEFAULT 'ovrigt',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT,
+                UNIQUE(site_id, name)
+            )
+            """
+        )
+    )
+
+    select_site = "site_id" if has_site_col else "NULL"
+    select_family = "COALESCE(addon_family, 'ovrigt')" if has_family_col else "'ovrigt'"
+    select_created = "created_at" if has_created_col else "CURRENT_TIMESTAMP"
+
+    db.execute(
+        text(
+            f"""
+            INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at)
+            SELECT id,
+                   {select_site} AS site_id,
+                   name,
+                   {select_family} AS addon_family,
+                   COALESCE(is_active, 1) AS is_active,
+                   {select_created} AS created_at
+            FROM service_addons__old
+            """
+        )
+    )
+    db.execute(text("DROP TABLE service_addons__old"))
+
+    try:
+        db.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS idx_service_addons_site_name
+                ON service_addons(site_id, name)
+                """
+            )
+        )
+    except Exception:
+        pass
 
 
 def _site_id_for_department(db, dept_id: str) -> str | None:

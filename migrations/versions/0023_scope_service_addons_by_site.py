@@ -26,11 +26,73 @@ def _column_names(inspector) -> set[str]:
         return set()
 
 
+def _sqlite_rebuild_service_addons(conn) -> None:
+    cols = {str(r[1]) for r in conn.execute(sa.text("PRAGMA table_info('service_addons')")).fetchall()}
+    has_site_col = "site_id" in cols
+    has_family_col = "addon_family" in cols
+    has_created_col = "created_at" in cols
+
+    conn.execute(sa.text("ALTER TABLE service_addons RENAME TO service_addons__old"))
+    conn.execute(
+        sa.text(
+            """
+            CREATE TABLE service_addons (
+                id TEXT PRIMARY KEY,
+                site_id TEXT NULL,
+                name TEXT NOT NULL,
+                addon_family TEXT NOT NULL DEFAULT 'ovrigt',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT,
+                UNIQUE(site_id, name)
+            )
+            """
+        )
+    )
+
+    select_site = "site_id" if has_site_col else "NULL"
+    select_family = "COALESCE(addon_family, 'ovrigt')" if has_family_col else "'ovrigt'"
+    select_created = "created_at" if has_created_col else "CURRENT_TIMESTAMP"
+
+    conn.execute(
+        sa.text(
+            f"""
+            INSERT INTO service_addons(id, site_id, name, addon_family, is_active, created_at)
+            SELECT id,
+                   {select_site} AS site_id,
+                   name,
+                   {select_family} AS addon_family,
+                   COALESCE(is_active, 1) AS is_active,
+                   {select_created} AS created_at
+            FROM service_addons__old
+            """
+        )
+    )
+    conn.execute(sa.text("DROP TABLE service_addons__old"))
+
+
 def upgrade() -> None:
     conn = op.get_bind()
     inspector = inspect(conn)
     table_names = set(inspector.get_table_names())
     if "service_addons" not in table_names:
+        return
+
+    if conn.dialect.name == "sqlite":
+        _sqlite_rebuild_service_addons(conn)
+        _backfill_site_scope(conn)
+        try:
+            conn.execute(
+                sa.text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_service_addons_site_name "
+                    "ON service_addons(site_id, name)"
+                )
+            )
+        except Exception:
+            pass
+        try:
+            op.create_index("idx_service_addons_site_id", "service_addons", ["site_id"], unique=False)
+        except Exception:
+            pass
         return
 
     cols = _column_names(inspector)
