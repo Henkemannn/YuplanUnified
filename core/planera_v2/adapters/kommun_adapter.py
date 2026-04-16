@@ -20,12 +20,21 @@ def build_payload_from_kommun_input(data: dict[str, Any]) -> dict[str, Any]:
         baseline = sum(_to_int(unit.get("baseline"), default=0) for unit in units if isinstance(unit, dict))
 
     deviations: list[dict[str, Any]] = []
+    payload_units: list[dict[str, Any]] = []
     for unit in units:
         if not isinstance(unit, dict):
             continue
 
         unit_id_raw = unit.get("unit_id")
         unit_id = str(unit_id_raw) if unit_id_raw is not None else None
+
+        if unit_id is not None and str(unit_id).strip():
+            payload_units.append(
+                {
+                    "unit_id": str(unit_id).strip(),
+                    "baseline_total": _to_int(unit.get("baseline"), default=0),
+                }
+            )
 
         raw_unit_deviations = unit.get("deviations")
         unit_deviations = raw_unit_deviations if isinstance(raw_unit_deviations, list) else []
@@ -53,6 +62,7 @@ def build_payload_from_kommun_input(data: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "baseline": baseline,
+        "units": payload_units,
         "deviations": deviations,
         "context": context,
     }

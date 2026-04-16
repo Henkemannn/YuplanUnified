@@ -37,6 +37,10 @@ def test_adapter_builds_expected_payload() -> None:
     payload = build_payload_from_kommun_input(_kommun_input())
 
     assert payload["baseline"] == 50
+    assert payload["units"] == [
+        {"unit_id": "avd_a", "baseline_total": 20},
+        {"unit_id": "avd_b", "baseline_total": 30},
+    ]
     assert payload["deviations"] == [
         {"form": "timbal", "category_keys": ["ej_fisk"], "quantity": 2, "unit_id": "avd_a"},
         {"form": "timbal", "category_keys": ["laktosfri"], "quantity": 1, "unit_id": "avd_a"},
@@ -66,4 +70,4 @@ def test_adapter_aggregates_baseline_from_units_when_missing() -> None:
 def test_adapter_handles_empty_units_safely() -> None:
     payload = build_payload_from_kommun_input({"meal_key": "lunch", "units": [], "context": {}})
 
-    assert payload == {"baseline": 0, "deviations": [], "context": {"meal_key": "lunch"}}
+    assert payload == {"baseline": 0, "units": [], "deviations": [], "context": {"meal_key": "lunch"}}

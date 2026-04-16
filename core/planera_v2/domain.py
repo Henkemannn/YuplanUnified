@@ -12,8 +12,15 @@ class Deviation:
 
 
 @dataclass(frozen=True)
+class UnitInput:
+    unit_id: str
+    baseline_total: int = 0
+
+
+@dataclass(frozen=True)
 class PlanRequest:
     baseline: int = 0
+    units: list[UnitInput] = field(default_factory=list)
     deviations: list[Deviation] = field(default_factory=list)
     context: dict[str, object] = field(default_factory=dict)
 

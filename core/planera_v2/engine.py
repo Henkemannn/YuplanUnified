@@ -11,6 +11,24 @@ def compute_plan(request: PlanRequest) -> PlanResult:
     per_unit_breakdown_acc: dict[str, dict[str, object]] = {}
     warnings: list[str] = []
 
+    unit_baselines: dict[str, int] = {}
+    for unit in request.units:
+        unit_key = str(unit.unit_id).strip()
+        if not unit_key:
+            continue
+        unit_baseline = int(unit.baseline_total)
+        if unit_baseline < 0:
+            warnings.append(f"unit[{unit_key}] baseline < 0 clamped to 0")
+            unit_baseline = 0
+        unit_baselines[unit_key] = unit_baseline
+        per_unit_breakdown_acc[unit_key] = {
+            "has_baseline": True,
+            "baseline_total": unit_baseline,
+            "deviation_total": 0,
+            "per_combination": {},
+            "per_form": {},
+        }
+
     baseline = int(request.baseline)
     if baseline < 0:
         warnings.append("baseline < 0 clamped to 0")
@@ -55,6 +73,8 @@ def compute_plan(request: PlanRequest) -> PlanResult:
             unit_bucket = per_unit_breakdown_acc.setdefault(
                 unit_key,
                 {
+                    "has_baseline": unit_key in unit_baselines,
+                    "baseline_total": unit_baselines.get(unit_key, 0),
                     "deviation_total": 0,
                     "per_combination": {},
                     "per_form": {},
@@ -85,12 +105,23 @@ def compute_plan(request: PlanRequest) -> PlanResult:
         if not isinstance(unit_per_form, dict):
             unit_per_form = {}
 
-        # Unit baseline is not in the current PlanRequest shape, so we avoid inferring
-        # baseline/normal and keep them conservative until explicit unit baselines exist.
+        has_baseline = bool(bucket.get("has_baseline", False))
+        baseline_total = int(bucket.get("baseline_total", 0)) if has_baseline else 0
+        deviation_total_for_unit = int(bucket.get("deviation_total", 0))
+
+        if has_baseline:
+            normal_total_for_unit = baseline_total - deviation_total_for_unit
+            if normal_total_for_unit < 0:
+                warnings.append(f"unit[{unit_key}] deviation exceeds baseline; normal_total clamped to 0")
+                normal_total_for_unit = 0
+        else:
+            # No authoritative unit baseline in request.units -> keep conservative values.
+            normal_total_for_unit = 0
+
         per_unit_breakdown[unit_key] = UnitBreakdown(
-            baseline_total=0,
-            deviation_total=int(bucket.get("deviation_total", 0)),
-            normal_total=0,
+            baseline_total=baseline_total,
+            deviation_total=deviation_total_for_unit,
+            normal_total=normal_total_for_unit,
             per_combination=dict(sorted((str(k), int(v)) for k, v in unit_per_combination.items())),
             per_form=dict(sorted((str(k), int(v)) for k, v in unit_per_form.items())),
         )

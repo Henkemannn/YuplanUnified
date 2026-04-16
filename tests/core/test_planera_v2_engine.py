@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.planera_v2.domain import Deviation, PlanRequest, Totals, UnitBreakdown
+from core.planera_v2.domain import Deviation, PlanRequest, Totals, UnitBreakdown, UnitInput
 from core.planera_v2.engine import compute_plan
 
 
@@ -151,3 +151,57 @@ def test_per_unit_breakdown_exact_values_without_inferred_baseline_or_normal() -
             },
         ),
     }
+
+
+def test_per_unit_breakdown_uses_authoritative_unit_baseline_and_computes_normal() -> None:
+    request = PlanRequest(
+        baseline=30,
+        units=[
+            UnitInput(unit_id="avd_a", baseline_total=10),
+            UnitInput(unit_id="avd_b", baseline_total=8),
+        ],
+        deviations=[
+            Deviation(form="Timbal", category_keys=["Ej Fisk"], quantity=3, unit_id="avd_a"),
+            Deviation(form="Flytande", category_keys=["Laktosfri"], quantity=2, unit_id="avd_b"),
+        ],
+    )
+
+    result = compute_plan(request)
+
+    assert result.totals == Totals(baseline_total=30, deviation_total=5, normal_total=25)
+    assert result.per_unit_breakdown["avd_a"] == UnitBreakdown(
+        baseline_total=10,
+        deviation_total=3,
+        normal_total=7,
+        per_combination={"timbal__ej_fisk": 3},
+        per_form={"timbal": 3},
+    )
+    assert result.per_unit_breakdown["avd_b"] == UnitBreakdown(
+        baseline_total=8,
+        deviation_total=2,
+        normal_total=6,
+        per_combination={"flytande__laktosfri": 2},
+        per_form={"flytande": 2},
+    )
+
+
+def test_unit_normal_clamps_to_zero_with_warning_when_unit_deviation_exceeds_baseline() -> None:
+    request = PlanRequest(
+        baseline=10,
+        units=[UnitInput(unit_id="avd_a", baseline_total=2)],
+        deviations=[
+            Deviation(form="Timbal", category_keys=["Ej Fisk"], quantity=3, unit_id="avd_a"),
+            Deviation(form="Flytande", category_keys=["Laktosfri"], quantity=1, unit_id="avd_b"),
+        ],
+    )
+
+    result = compute_plan(request)
+
+    assert result.per_unit_breakdown["avd_a"].baseline_total == 2
+    assert result.per_unit_breakdown["avd_a"].deviation_total == 3
+    assert result.per_unit_breakdown["avd_a"].normal_total == 0
+    assert "unit[avd_a] deviation exceeds baseline; normal_total clamped to 0" in result.warnings
+
+    # Unit with deviations but no authoritative baseline remains conservative.
+    assert result.per_unit_breakdown["avd_b"].baseline_total == 0
+    assert result.per_unit_breakdown["avd_b"].normal_total == 0

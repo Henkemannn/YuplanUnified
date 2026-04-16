@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.planera_v2.domain import Deviation, PlanRequest
+from core.planera_v2.domain import Deviation, PlanRequest, UnitInput
 from core.planera_v2.engine import compute_plan
 from core.planera_v2.formatter import format_plan_result_kitchen_view
 
@@ -68,3 +68,33 @@ def test_kitchen_formatter_uses_exact_unit_breakdown_not_any_proportional_alloca
     assert "      ej_fisk: 1" in output
     assert "      ej_fisk: 4" not in output
     assert "      ej_fisk: 3" not in output
+
+
+def test_kitchen_formatter_shows_exact_unit_normal_when_baseline_available() -> None:
+    request = PlanRequest(
+        baseline=30,
+        units=[
+            UnitInput(unit_id="unit_1", baseline_total=10),
+            UnitInput(unit_id="unit_2", baseline_total=8),
+        ],
+        deviations=[
+            Deviation(form="Timbal", category_keys=["Ej Fisk"], quantity=3, unit_id="unit_1"),
+            Deviation(form="Flytande", category_keys=["Laktosfri"], quantity=2, unit_id="unit_2"),
+            Deviation(form="Timbal", category_keys=["Laktosfri"], quantity=1, unit_id="unit_3"),
+        ],
+    )
+    result = compute_plan(request)
+
+    output = format_plan_result_kitchen_view(result)
+
+    assert "Unit: unit_1" in output
+    assert "Unit: unit_2" in output
+    assert "Unit: unit_3" in output
+
+    assert "    total: 7" in output
+    assert "    total: 6" in output
+    assert "    total: not available yet" in output
+
+    assert "  Total: 10" in output
+    assert "  Total: 8" in output
+    assert "  Total: not available yet" in output

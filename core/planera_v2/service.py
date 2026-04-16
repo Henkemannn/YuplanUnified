@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .domain import Deviation, PlanRequest, PlanResult
+from .domain import Deviation, PlanRequest, PlanResult, UnitInput
 from .engine import compute_plan
 
 
@@ -18,6 +18,23 @@ def build_plan_request_from_adapter_payload(payload: dict[str, Any]) -> PlanRequ
 
     raw_context = payload.get("context")
     context = dict(raw_context) if isinstance(raw_context, dict) else {}
+
+    units: list[UnitInput] = []
+    raw_units = payload.get("units")
+    if isinstance(raw_units, list):
+        for raw_unit in raw_units:
+            if not isinstance(raw_unit, dict):
+                continue
+            unit_id_raw = raw_unit.get("unit_id")
+            unit_id = str(unit_id_raw).strip() if unit_id_raw is not None else ""
+            if not unit_id:
+                continue
+            units.append(
+                UnitInput(
+                    unit_id=unit_id,
+                    baseline_total=_to_int(raw_unit.get("baseline_total"), default=0),
+                )
+            )
 
     deviations: list[Deviation] = []
     raw_deviations = payload.get("deviations")
@@ -47,7 +64,7 @@ def build_plan_request_from_adapter_payload(payload: dict[str, Any]) -> PlanRequ
                 )
             )
 
-    return PlanRequest(baseline=baseline, deviations=deviations, context=context)
+    return PlanRequest(baseline=baseline, units=units, deviations=deviations, context=context)
 
 
 def run_plan(request: PlanRequest) -> PlanResult:
