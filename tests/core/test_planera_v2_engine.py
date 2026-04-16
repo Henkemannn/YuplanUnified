@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.planera_v2.domain import Deviation, PlanRequest, Totals
+from core.planera_v2.domain import Deviation, PlanRequest, Totals, UnitBreakdown
 from core.planera_v2.engine import compute_plan
 
 
@@ -22,6 +22,7 @@ def test_normal_example() -> None:
         "timbal__laktosfri": 2,
     }
     assert result.per_unit == {}
+    assert result.per_unit_breakdown == {}
     assert result.warnings == []
 
 
@@ -104,4 +105,49 @@ def test_missing_category_keys_policy_skips_deviation_with_warning() -> None:
     assert result.totals.deviation_total == 0
     assert result.per_form == {}
     assert result.per_combination == {}
+    assert result.per_unit_breakdown == {}
     assert result.totals.normal_total == 10
+
+
+def test_per_unit_breakdown_exact_values_without_inferred_baseline_or_normal() -> None:
+    request = PlanRequest(
+        baseline=25,
+        deviations=[
+            Deviation(form="Timbal", category_keys=["Ej Fisk"], quantity=2, unit_id="avd_a"),
+            Deviation(form="Flytande", category_keys=["Laktosfri"], quantity=1, unit_id="avd_a"),
+            Deviation(form="Timbal", category_keys=["Laktosfri"], quantity=3, unit_id="avd_b"),
+            Deviation(form="Flytande", category_keys=[], quantity=9, unit_id="avd_b"),
+        ],
+    )
+
+    result = compute_plan(request)
+
+    assert result.totals == Totals(baseline_total=25, deviation_total=6, normal_total=19)
+    assert result.per_unit == {"avd_a": 3, "avd_b": 3}
+
+    assert result.per_unit_breakdown == {
+        "avd_a": UnitBreakdown(
+            baseline_total=0,
+            deviation_total=3,
+            normal_total=0,
+            per_combination={
+                "flytande__laktosfri": 1,
+                "timbal__ej_fisk": 2,
+            },
+            per_form={
+                "flytande": 1,
+                "timbal": 2,
+            },
+        ),
+        "avd_b": UnitBreakdown(
+            baseline_total=0,
+            deviation_total=3,
+            normal_total=0,
+            per_combination={
+                "timbal__laktosfri": 3,
+            },
+            per_form={
+                "timbal": 3,
+            },
+        ),
+    }

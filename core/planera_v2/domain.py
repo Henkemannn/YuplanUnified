@@ -26,9 +26,19 @@ class Totals:
 
 
 @dataclass(frozen=True)
+class UnitBreakdown:
+    baseline_total: int = 0
+    deviation_total: int = 0
+    normal_total: int = 0
+    per_combination: dict[str, int] = field(default_factory=dict)
+    per_form: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class PlanResult:
     totals: Totals
     per_form: dict[str, int] = field(default_factory=dict)
     per_combination: dict[str, int] = field(default_factory=dict)
     per_unit: dict[str, int] = field(default_factory=dict)
+    per_unit_breakdown: dict[str, UnitBreakdown] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)

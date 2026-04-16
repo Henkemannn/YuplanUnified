@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.planera_v2.domain import Deviation, PlanRequest, Totals
+from core.planera_v2.domain import Deviation, PlanRequest, Totals, UnitBreakdown
 from core.planera_v2.engine import compute_plan
 
 
@@ -48,5 +48,46 @@ def test_realistic_fixture_with_mixed_units_forms_categories_and_edges() -> None
         "unit_a": 5,
         "unit_b": 5,
         "unit_c": 5,
+    }
+    assert result.per_unit_breakdown == {
+        "unit_a": UnitBreakdown(
+            baseline_total=0,
+            deviation_total=5,
+            normal_total=0,
+            per_combination={
+                "flytande__ej_fisk__laktosfri": 2,
+                "timbal__ej_fisk": 3,
+            },
+            per_form={
+                "flytande": 2,
+                "timbal": 3,
+            },
+        ),
+        "unit_b": UnitBreakdown(
+            baseline_total=0,
+            deviation_total=5,
+            normal_total=0,
+            per_combination={
+                "grovpate__not_fri": 4,
+                "timbal__ej_fisk__laktosfri": 1,
+            },
+            per_form={
+                "grovpate": 4,
+                "timbal": 1,
+            },
+        ),
+        "unit_c": UnitBreakdown(
+            baseline_total=0,
+            deviation_total=5,
+            normal_total=0,
+            per_combination={
+                "flytande__ej_fisk": 5,
+                "grovpate__diabetes": 0,
+            },
+            per_form={
+                "flytande": 5,
+                "grovpate": 0,
+            },
+        ),
     }
     assert any("missing category_key" in warning for warning in result.warnings)
