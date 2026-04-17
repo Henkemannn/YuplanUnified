@@ -1,4 +1,9 @@
 from .domain import Component
+from .recipe_calculations import (
+	RecipeCostBreakdown,
+	ScaledIngredientLine,
+	calculate_recipe_cost_breakdown,
+)
 from .recipe_domain import Recipe, RecipeIngredientLine
 from .recipe_repository import InMemoryRecipeIngredientLineRepository, InMemoryRecipeRepository
 from .recipe_service import RecipeService
@@ -11,6 +16,9 @@ __all__ = [
 	"ComponentService",
 	"Recipe",
 	"RecipeIngredientLine",
+	"ScaledIngredientLine",
+	"RecipeCostBreakdown",
+	"calculate_recipe_cost_breakdown",
 	"InMemoryRecipeRepository",
 	"InMemoryRecipeIngredientLineRepository",
 	"RecipeService",
