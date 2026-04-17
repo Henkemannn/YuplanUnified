@@ -69,6 +69,10 @@ def _build_request_from_planera_day_payload(
     site_id: str,
     iso_date: str,
     meal_key: str,
+    component_id: str | None = None,
+    component_name: str | None = None,
+    component_role: str | None = None,
+    component_mode: str | None = None,
 ) -> PlanRequest:
     units: list[UnitInput] = []
     deviations: list[Deviation] = []
@@ -149,6 +153,24 @@ def _build_request_from_planera_day_payload(
     if menu_option_by_unit:
         context["menu_option_by_unit"] = menu_option_by_unit
 
+    component_id_value = str(component_id or "").strip()
+    if component_id_value:
+        context["component_id"] = component_id_value
+
+    component_name_value = str(component_name or "").strip()
+    if component_name_value:
+        context["component_name"] = component_name_value
+
+    component_role_value = str(component_role or "").strip()
+    if component_role_value:
+        context["component_role"] = component_role_value
+
+    component_mode_value = str(component_mode or "").strip()
+    if component_mode_value:
+        context["component_mode"] = component_mode_value
+    elif component_id_value:
+        context["component_mode"] = "informational"
+
     return PlanRequest(
         baseline=baseline_total,
         units=units,
@@ -165,6 +187,10 @@ def build_plan_request_from_weekview_day(
     *,
     planera_service: PlaneraService | None = None,
     departments: Iterable[tuple[str, str]] | None = None,
+    component_id: str | None = None,
+    component_name: str | None = None,
+    component_role: str | None = None,
+    component_mode: str | None = None,
 ) -> PlanRequest:
     meal_key = str(meal or "").strip().lower()
     if not meal_key:
@@ -188,4 +214,8 @@ def build_plan_request_from_weekview_day(
         site_id=site_id,
         iso_date=iso_date,
         meal_key=meal_key,
+        component_id=component_id,
+        component_name=component_name,
+        component_role=component_role,
+        component_mode=component_mode,
     )

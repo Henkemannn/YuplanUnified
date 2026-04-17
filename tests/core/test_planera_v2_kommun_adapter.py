@@ -71,3 +71,44 @@ def test_adapter_handles_empty_units_safely() -> None:
     payload = build_payload_from_kommun_input({"meal_key": "lunch", "units": [], "context": {}})
 
     assert payload == {"baseline": 0, "units": [], "deviations": [], "context": {"meal_key": "lunch"}}
+
+
+def test_adapter_carries_optional_component_metadata_into_context() -> None:
+    payload = build_payload_from_kommun_input(
+        {
+            "meal_key": "lunch",
+            "component_id": "meatballs",
+            "component_name": "Kottbullar",
+            "units": [],
+            "context": {},
+        }
+    )
+
+    assert payload["context"] == {
+        "meal_key": "lunch",
+        "component_id": "meatballs",
+        "component_name": "Kottbullar",
+        "component_mode": "informational",
+    }
+
+
+def test_adapter_carries_component_role_and_mode_when_supplied() -> None:
+    payload = build_payload_from_kommun_input(
+        {
+            "meal_key": "lunch",
+            "component_id": "mayonnaise_sauce",
+            "component_name": "Majonnassas",
+            "component_role": "sauce",
+            "component_mode": "informational",
+            "units": [],
+            "context": {},
+        }
+    )
+
+    assert payload["context"] == {
+        "meal_key": "lunch",
+        "component_id": "mayonnaise_sauce",
+        "component_name": "Majonnassas",
+        "component_role": "sauce",
+        "component_mode": "informational",
+    }

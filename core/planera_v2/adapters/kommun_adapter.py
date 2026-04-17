@@ -60,6 +60,24 @@ def build_payload_from_kommun_input(data: dict[str, Any]) -> dict[str, Any]:
     if "meal_key" in data and "meal_key" not in context:
         context["meal_key"] = data.get("meal_key")
 
+    component_id = str(data.get("component_id") or "").strip()
+    if component_id:
+        context["component_id"] = component_id
+
+    component_name = str(data.get("component_name") or "").strip()
+    if component_name:
+        context["component_name"] = component_name
+
+    component_role = str(data.get("component_role") or "").strip()
+    if component_role:
+        context["component_role"] = component_role
+
+    component_mode = str(data.get("component_mode") or "").strip()
+    if component_mode:
+        context["component_mode"] = component_mode
+    elif component_id:
+        context["component_mode"] = "informational"
+
     return {
         "baseline": baseline,
         "units": payload_units,

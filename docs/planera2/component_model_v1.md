@@ -137,6 +137,38 @@ Framåt:
 - engine förblir compute-only
 - komponentlogik byggs ovanpå
 
+### Minimal context-konvention (v1, optional)
+
+För tidig, säker context-bäring används följande valfria nycklar:
+
+```json
+{
+  "component_id": "meatballs",
+  "component_name": "Köttbullar"
+}
+```
+
+Regler:
+- Helt valfritt (kan utelämnas)
+- Ingen beräkningslogik i engine baseras på dessa fält i detta steg
+- Metadata får endast passeras vidare om den uttryckligen finns (ingen gissning)
+
+### Component Context Semantics v1
+
+Utöver `component_id` och `component_name` kan context bära två valfria semantikfält:
+
+- `component_role`
+  - avsedd roll i planeringssammanhang
+  - exempel: `main`, `side`, `sauce`, `dessert_component`, `other`
+
+- `component_mode`
+  - beskriver hur komponentmetadata ska tolkas i detta steg
+  - `informational` betyder att metadata endast är vägledande och inte styr beräkning
+
+Regel i v1:
+- om `component_id` finns men `component_mode` saknas, sätts `component_mode = informational`
+- engine förblir compute-only och opåverkad av komponentsemantik i detta steg
+
 ---
 
 ## 🧭 Migration path

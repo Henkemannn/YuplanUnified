@@ -224,3 +224,96 @@ def test_bridge_supports_kvallsmat_alias_to_dinner_data() -> None:
     assert request.deviations == [
         Deviation(form="specialkost", category_keys=["ej_fisk"], quantity=1, unit_id="unit_a")
     ]
+
+
+def test_bridge_carries_optional_component_metadata_when_supplied() -> None:
+    payload = {
+        "departments": [
+            {
+                "department_id": "unit_a",
+                "meals": {
+                    "lunch": {
+                        "residents_total": 4,
+                        "special_diets": [],
+                    }
+                },
+            }
+        ]
+    }
+
+    request = build_plan_request_from_weekview_day(
+        tenant_id=1,
+        site_id="site_1",
+        iso_date="2026-04-16",
+        meal="lunch",
+        planera_service=_FakePlaneraService(payload),
+        departments=[("unit_a", "Unit A")],
+        component_id="meatballs",
+        component_name="Kottbullar",
+        component_role="main",
+        component_mode="informational",
+    )
+
+    assert request.context["component_id"] == "meatballs"
+    assert request.context["component_name"] == "Kottbullar"
+    assert request.context["component_role"] == "main"
+    assert request.context["component_mode"] == "informational"
+
+
+def test_bridge_defaults_component_mode_to_informational_when_component_id_exists() -> None:
+    payload = {
+        "departments": [
+            {
+                "department_id": "unit_a",
+                "meals": {
+                    "lunch": {
+                        "residents_total": 4,
+                        "special_diets": [],
+                    }
+                },
+            }
+        ]
+    }
+
+    request = build_plan_request_from_weekview_day(
+        tenant_id=1,
+        site_id="site_1",
+        iso_date="2026-04-16",
+        meal="lunch",
+        planera_service=_FakePlaneraService(payload),
+        departments=[("unit_a", "Unit A")],
+        component_id="fish_timbal",
+    )
+
+    assert request.context["component_id"] == "fish_timbal"
+    assert request.context["component_mode"] == "informational"
+
+
+def test_bridge_keeps_component_metadata_absent_when_not_supplied() -> None:
+    payload = {
+        "departments": [
+            {
+                "department_id": "unit_a",
+                "meals": {
+                    "lunch": {
+                        "residents_total": 4,
+                        "special_diets": [],
+                    }
+                },
+            }
+        ]
+    }
+
+    request = build_plan_request_from_weekview_day(
+        tenant_id=1,
+        site_id="site_1",
+        iso_date="2026-04-16",
+        meal="lunch",
+        planera_service=_FakePlaneraService(payload),
+        departments=[("unit_a", "Unit A")],
+    )
+
+    assert "component_id" not in request.context
+    assert "component_name" not in request.context
+    assert "component_role" not in request.context
+    assert "component_mode" not in request.context
