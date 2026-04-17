@@ -4,6 +4,8 @@ from .composition_cost import (
 	calculate_composition_cost,
 )
 from .composition_domain import Composition, CompositionComponent
+from .composition_repository import InMemoryCompositionRepository
+from .composition_service import CompositionService
 from .domain import Component
 from .recipe_calculations import (
 	RecipeCostBreakdown,
@@ -23,6 +25,8 @@ __all__ = [
 	"ComponentCostBreakdown",
 	"CompositionCostBreakdown",
 	"calculate_composition_cost",
+	"InMemoryCompositionRepository",
+	"CompositionService",
 	"InMemoryComponentRepository",
 	"ComponentService",
 	"Recipe",

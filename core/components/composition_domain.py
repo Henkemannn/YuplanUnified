@@ -14,4 +14,5 @@ class CompositionComponent:
 class Composition:
     composition_id: str
     composition_name: str
+    library_group: str | None = None
     components: list[CompositionComponent] = field(default_factory=list)
