@@ -31,6 +31,7 @@ from .admin_api import bp as admin_api_bp
 from .admin_audit_api import bp as admin_audit_bp
 from .admin_repo import dev_repair_null_site_tenant_ids
 from .app_authz import require_roles
+from .builder_api import bp as builder_api_bp
 
 # Legacy JSON error handler removed in ADR-003 sweep
 from .auth import (
@@ -1170,6 +1171,7 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         app.logger.warning("Failed to register admin_ui blueprint", exc_info=True)
     app.register_blueprint(weekview_api_bp)
     app.register_blueprint(planera_api_bp)
+    app.register_blueprint(builder_api_bp)
     app.register_blueprint(report_api_bp)
     app.register_blueprint(weekview_report_bp)
     app.register_blueprint(health_bp)
