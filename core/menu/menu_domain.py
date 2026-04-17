@@ -4,6 +4,15 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class Menu:
+    menu_id: str
+    site_id: str
+    week_key: str
+    version: int = 1
+    status: str = "draft"
+
+
+@dataclass(frozen=True)
 class MenuDetail:
     menu_detail_id: str
     menu_id: str
