@@ -8,6 +8,12 @@ from .composition_resolution import (
 )
 from .menu_cost import MenuDetailCostBreakdown, calculate_menu_detail_cost
 from .menu_domain import Menu, MenuDetail
+from .menu_import_service import (
+    ImportedMenuRow,
+    ImportedMenuRowResult,
+    MenuImportSummary,
+    import_menu_rows,
+)
 from .menu_repository import InMemoryMenuDetailRepository, InMemoryMenuRepository
 from .menu_service import MenuService
 
@@ -20,6 +26,10 @@ __all__ = [
     "create_composition_alias",
     "Menu",
     "MenuDetail",
+    "ImportedMenuRow",
+    "ImportedMenuRowResult",
+    "MenuImportSummary",
+    "import_menu_rows",
     "MenuDetailCostBreakdown",
     "calculate_menu_detail_cost",
     "InMemoryMenuRepository",
