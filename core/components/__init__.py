@@ -1,3 +1,9 @@
+from .composition_cost import (
+	ComponentCostBreakdown,
+	CompositionCostBreakdown,
+	calculate_composition_cost,
+)
+from .composition_domain import Composition, CompositionComponent
 from .domain import Component
 from .recipe_calculations import (
 	RecipeCostBreakdown,
@@ -12,6 +18,11 @@ from .service import ComponentService
 
 __all__ = [
 	"Component",
+	"Composition",
+	"CompositionComponent",
+	"ComponentCostBreakdown",
+	"CompositionCostBreakdown",
+	"calculate_composition_cost",
 	"InMemoryComponentRepository",
 	"ComponentService",
 	"Recipe",
