@@ -30,6 +30,24 @@ def test_create_composition_endpoint() -> None:
     assert body.get("composition", {}).get("composition_name") == "Fish Plate"
 
 
+def test_list_compositions_endpoint() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+
+    rv = client.get("/api/builder/compositions", headers=HEADERS)
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    assert body.get("count") == 1
+    compositions = body.get("compositions") or []
+    assert compositions[0]["composition_id"] == "plate_1"
+
+
 def test_add_component_to_composition_endpoint() -> None:
     client = _client()
     client.post(
@@ -178,3 +196,42 @@ def test_invalid_payload_handling_returns_400() -> None:
     assert rv2.status_code == 400
     body2 = rv2.get_json() or {}
     assert body2.get("error") == "bad_request"
+
+
+def test_resolve_menu_detail_endpoint() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    imported = client.post(
+        "/api/builder/menus/menu_1/import",
+        json={"rows": [{"day": "monday", "meal_slot": "lunch", "raw_text": "No Match"}]},
+        headers=HEADERS,
+    )
+    detail_id = (
+        (imported.get_json() or {})
+        .get("summary", {})
+        .get("row_results", [{}])[0]
+        .get("menu_detail_id")
+    )
+
+    rv = client.post(
+        "/api/builder/menus/menu_1/resolve",
+        json={"menu_detail_id": detail_id, "composition_id": "plate_1"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    detail = body.get("menu_detail") or {}
+    assert body.get("ok") is True
+    assert detail.get("composition_ref_type") == "composition"
+    assert detail.get("composition_id") == "plate_1"
+    assert detail.get("unresolved_text") is None

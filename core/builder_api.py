@@ -215,6 +215,27 @@ def create_composition():
     return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
 
 
+@bp.get("/compositions")
+@require_roles("editor", "admin", "superuser")
+def list_compositions():
+    try:
+        flow = _get_builder_flow()
+        compositions = flow.list_compositions()
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "count": len(compositions),
+            "compositions": [
+                _serialize_composition(composition)
+                for composition in compositions
+            ],
+        }
+    )
+
+
 @bp.post("/compositions/<composition_id>/components")
 @require_roles("editor", "admin", "superuser")
 def add_component_to_composition(composition_id: str):

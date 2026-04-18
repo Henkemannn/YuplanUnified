@@ -92,6 +92,9 @@ class BuilderFlow:
             status=status,
         )
 
+    def list_compositions(self, *, group_name: str | None = None) -> list[Composition]:
+        return self._composition_service.list_compositions(group_name=group_name)
+
     def import_menu_rows(self, menu_id: str, rows: list[ImportedMenuRow]) -> MenuImportSummary:
         return import_menu_rows(
             menu_id=menu_id,
@@ -120,7 +123,7 @@ class BuilderFlow:
             menu_detail_id=menu_detail_id,
             composition_ref_type="composition",
             composition_id=composition_id,
-            unresolved_text=None,
+            unresolved_text="",
         )
 
     def get_menu_cost_overview(

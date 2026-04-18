@@ -116,6 +116,13 @@ def ui_proto_app_shell():
     if env not in ("local", "staging"):
         abort(404)
     return render_template("ui/_proto/app_shell_preview.html")
+
+
+@ui_bp.get("/builder")
+@require_roles("editor", "admin", "superuser")
+def builder_internal_ui():
+    return render_template("builder.html")
+
 # Weekview special diets mark toggle API (ETag-safe), aligned with report marks
 @ui_bp.route("/api/weekview/specialdiets/mark", methods=["POST"])
 @require_roles("cook", "admin", "superuser", "kitchen")

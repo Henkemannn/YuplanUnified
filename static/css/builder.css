@@ -1,0 +1,85 @@
+body {
+  font-family: sans-serif;
+  margin: 16px;
+  max-width: 900px;
+}
+
+section {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+label {
+  display: block;
+  margin-top: 8px;
+}
+
+input,
+textarea,
+button {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+}
+
+textarea {
+  min-height: 110px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+pre {
+  border: 1px solid #ddd;
+  padding: 10px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+ul {
+  margin: 8px 0;
+}
+
+.unresolved-item {
+  cursor: pointer;
+  padding: 4px 6px;
+  border: 1px solid #ddd;
+  margin-bottom: 4px;
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: white;
+  padding: 20px;
+  margin: 100px auto;
+  width: 300px;
+  border-radius: 8px;
+}
+
+.modal-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
