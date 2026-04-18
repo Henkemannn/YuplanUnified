@@ -47,11 +47,112 @@ function parseRows(text) {
 }
 
 let currentResolve = null;
+let currentBuilderComposition = null;
+let currentNewItemRole = "component";
+
+function setNewItemRole(role) {
+  const roleValue = role === "connector" ? "connector" : "component";
+  const componentBtn = document.getElementById("newItemRoleComponent");
+  const connectorBtn = document.getElementById("newItemRoleConnector");
+  currentNewItemRole = roleValue;
+
+  if (componentBtn) {
+    componentBtn.classList.toggle("role-toggle-active", roleValue === "component");
+  }
+  if (connectorBtn) {
+    connectorBtn.classList.toggle("role-toggle-active", roleValue === "connector");
+  }
+}
+
+function renderBuilderPanel(composition) {
+  const title = document.getElementById("builderCompositionTitle");
+  const list = document.getElementById("builderComponentsList");
+
+  if (!title || !list || !composition) {
+    return;
+  }
+
+  currentBuilderComposition = composition;
+  title.textContent = "Composition: " + String(composition.composition_name || "");
+  list.innerHTML = "";
+
+  const components = Array.isArray(composition.components) ? composition.components : [];
+  if (components.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = "(empty list)";
+    list.appendChild(li);
+    return;
+  }
+
+  for (const component of components) {
+    const li = document.createElement("li");
+    const row = document.createElement("div");
+    row.className = "component-row";
+
+    const name = document.createElement("span");
+    name.textContent = String(component.component_id || "");
+
+    const role = document.createElement("span");
+    role.className = "component-role-pill";
+    role.textContent = String(component.role || "component");
+
+    row.appendChild(name);
+    row.appendChild(role);
+    li.appendChild(row);
+    list.appendChild(li);
+  }
+}
+
+function setResolveCreateState() {
+  const createSection = document.querySelector(".create-new-section");
+  const builderSection = document.getElementById("modalBuilderSection");
+  const createAndResolveBtn = document.getElementById("createAndResolve");
+  const resolveCancelBtn = document.getElementById("resolveCancel");
+  const newComponentName = document.getElementById("newComponentName");
+
+  if (createSection) {
+    createSection.classList.remove("hidden");
+  }
+  if (builderSection) {
+    builderSection.classList.add("hidden");
+  }
+  if (createAndResolveBtn) {
+    createAndResolveBtn.classList.remove("hidden");
+  }
+  if (resolveCancelBtn) {
+    resolveCancelBtn.textContent = "Cancel";
+  }
+  if (newComponentName) {
+    newComponentName.value = "";
+  }
+  setNewItemRole("component");
+  showJson("builderOut", { ok: true, message: "Create and link to start building components" });
+}
+
+function setResolveBuildState(composition) {
+  const createSection = document.querySelector(".create-new-section");
+  const builderSection = document.getElementById("modalBuilderSection");
+  const createAndResolveBtn = document.getElementById("createAndResolve");
+  const resolveCancelBtn = document.getElementById("resolveCancel");
+
+  if (createSection) {
+    createSection.classList.add("hidden");
+  }
+  if (builderSection) {
+    builderSection.classList.remove("hidden");
+  }
+  if (createAndResolveBtn) {
+    createAndResolveBtn.classList.add("hidden");
+  }
+  if (resolveCancelBtn) {
+    resolveCancelBtn.textContent = "Done";
+  }
+  renderBuilderPanel(composition);
+}
 
 function openResolveModal(detail, menuId) {
   const modal = document.getElementById("resolveModal");
   const resolveText = document.getElementById("resolveText");
-  const newCompositionId = document.getElementById("newCompositionId");
   const newCompositionName = document.getElementById("newCompositionName");
   if (!modal || !resolveText) {
     return;
@@ -62,12 +163,11 @@ function openResolveModal(detail, menuId) {
     menuDetailId: String(detail.menu_detail_id || ""),
   };
   resolveText.textContent = String(detail.unresolved_text || "");
-  if (newCompositionId) {
-    newCompositionId.value = "";
-  }
   if (newCompositionName) {
     newCompositionName.value = String(detail.unresolved_text || "").trim();
   }
+  currentBuilderComposition = null;
+  setResolveCreateState();
   modal.classList.remove("hidden");
 }
 
@@ -77,38 +177,7 @@ function closeResolveModal() {
     modal.classList.add("hidden");
   }
   currentResolve = null;
-}
-
-async function loadCompositionOptions() {
-  const select = document.getElementById("resolveCompositionSelect");
-  if (!select) {
-    return;
-  }
-  select.innerHTML = "";
-
-  const url = "/api/builder/compositions";
-  console.log("REQUEST:", url, null);
-  const result = await callApi(url, { method: "GET" });
-  const rows = (result.data && result.data.compositions) || [];
-
-  if (!rows.length) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "No compositions available yet";
-    select.appendChild(opt);
-    return;
-  }
-
-  for (const composition of rows) {
-    const opt = document.createElement("option");
-    opt.value = composition.composition_id || "";
-    opt.textContent =
-      (composition.composition_name || composition.composition_id || "") +
-      " (" +
-      (composition.composition_id || "") +
-      ")";
-    select.appendChild(opt);
-  }
+  currentBuilderComposition = null;
 }
 
 async function loadUnresolvedForMenu(menu_id) {
@@ -129,8 +198,7 @@ async function loadUnresolvedForMenu(menu_id) {
       li.className = "unresolved-item";
       li.textContent =
         (item.day || "") + " " + (item.meal_slot || "") + ": " + (item.unresolved_text || "");
-      li.addEventListener("click", async () => {
-        await loadCompositionOptions();
+      li.addEventListener("click", () => {
         openResolveModal(item, resolvedMenuId);
       });
       list.appendChild(li);
@@ -145,9 +213,22 @@ function bindBuilderHandlers() {
   const importRowsBtn = document.getElementById("btnImportRows");
   const loadUnresolvedBtn = document.getElementById("btnLoadUnresolved");
   const loadCostBtn = document.getElementById("btnLoadCost");
-  const resolveConfirmBtn = document.getElementById("resolveConfirm");
   const createAndResolveBtn = document.getElementById("createAndResolve");
   const resolveCancelBtn = document.getElementById("resolveCancel");
+  const addComponentBtn = document.getElementById("btnAddComponent");
+  const newItemRoleComponentBtn = document.getElementById("newItemRoleComponent");
+  const newItemRoleConnectorBtn = document.getElementById("newItemRoleConnector");
+
+  if (newItemRoleComponentBtn) {
+    newItemRoleComponentBtn.addEventListener("click", () => {
+      setNewItemRole("component");
+    });
+  }
+  if (newItemRoleConnectorBtn) {
+    newItemRoleConnectorBtn.addEventListener("click", () => {
+      setNewItemRole("connector");
+    });
+  }
 
   if (createMenuBtn) {
     createMenuBtn.addEventListener("click", async () => {
@@ -235,57 +316,6 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (resolveConfirmBtn) {
-    resolveConfirmBtn.addEventListener("click", async () => {
-      if (!currentResolve) {
-        showJson("unresolvedOut", {
-          status: 0,
-          data: { ok: false, error: "no_menu_detail_selected" },
-        });
-        return;
-      }
-
-      const select = document.getElementById("resolveCompositionSelect");
-      const composition_id = select ? String(select.value || "").trim() : "";
-      if (!composition_id) {
-        showJson("unresolvedOut", {
-          status: 0,
-          data: { ok: false, error: "composition_id is required" },
-        });
-        return;
-      }
-
-      const url =
-        "/api/builder/menus/" + encodeURIComponent(currentResolve.menuId) + "/resolve";
-      const payload = {
-        menu_detail_id: currentResolve.menuDetailId,
-        composition_id,
-      };
-      const refreshMenuId = currentResolve.menuId;
-
-      console.log("REQUEST:", url, payload);
-      showLoading("unresolvedOut");
-      try {
-        const result = await callApi(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: payload,
-        });
-
-        showJson("unresolvedOut", result);
-        closeResolveModal();
-        await loadUnresolvedForMenu(refreshMenuId);
-      } catch (error) {
-        showJson("unresolvedOut", {
-          status: 0,
-          data: { ok: false, error: String(error.message || error) },
-        });
-      }
-    });
-  }
-
   if (createAndResolveBtn) {
     createAndResolveBtn.addEventListener("click", async () => {
       if (!currentResolve) {
@@ -296,19 +326,17 @@ function bindBuilderHandlers() {
         return;
       }
 
-      const newCompositionId = document.getElementById("newCompositionId");
       const newCompositionName = document.getElementById("newCompositionName");
-      const composition_id = newCompositionId ? String(newCompositionId.value || "").trim() : "";
       const composition_name = newCompositionName
         ? String(newCompositionName.value || "").trim()
         : "";
 
-      if (!composition_id || !composition_name) {
+      if (!composition_name) {
         showJson("unresolvedOut", {
           status: 0,
           data: {
             ok: false,
-            error: "composition_id and composition_name are required",
+            error: "composition_name is required",
           },
         });
         return;
@@ -320,7 +348,6 @@ function bindBuilderHandlers() {
         "/create-composition-from-row";
       const payload = {
         menu_detail_id: currentResolve.menuDetailId,
-        composition_id,
         composition_name,
       };
       const refreshMenuId = currentResolve.menuId;
@@ -336,10 +363,70 @@ function bindBuilderHandlers() {
           body: payload,
         });
         showJson("unresolvedOut", result);
-        closeResolveModal();
+
+        if (result && result.data && result.data.ok && result.data.composition) {
+          setResolveBuildState(result.data.composition);
+        }
+
         await loadUnresolvedForMenu(refreshMenuId);
       } catch (error) {
         showJson("unresolvedOut", {
+          status: 0,
+          data: { ok: false, error: String(error.message || error) },
+        });
+      }
+    });
+  }
+
+  if (addComponentBtn) {
+    addComponentBtn.addEventListener("click", async () => {
+      if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
+        showJson("builderOut", {
+          status: 0,
+          data: { ok: false, error: "no_composition_selected" },
+        });
+        return;
+      }
+
+      const newComponentNameEl = document.getElementById("newComponentName");
+      const component_name = newComponentNameEl
+        ? String(newComponentNameEl.value || "").trim()
+        : "";
+      if (!component_name) {
+        showJson("builderOut", {
+          status: 0,
+          data: { ok: false, error: "component_name is required" },
+        });
+        return;
+      }
+
+      const compositionId = String(currentBuilderComposition.composition_id);
+      const url =
+        "/api/builder/compositions/" + encodeURIComponent(compositionId) + "/components";
+      const payload = {
+        component_name,
+        role: currentNewItemRole,
+      };
+
+      console.log("REQUEST:", url, payload);
+      showLoading("builderOut");
+      try {
+        const result = await callApi(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: payload,
+        });
+        showJson("builderOut", result);
+        if (result && result.data && result.data.ok && result.data.composition) {
+          renderBuilderPanel(result.data.composition);
+          if (newComponentNameEl) {
+            newComponentNameEl.value = "";
+          }
+        }
+      } catch (error) {
+        showJson("builderOut", {
           status: 0,
           data: { ok: false, error: String(error.message || error) },
         });

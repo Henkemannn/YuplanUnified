@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import secrets
 
 from ..components import (
     Composition,
@@ -63,16 +64,23 @@ class BuilderFlow:
     def add_component_to_composition(
         self,
         composition_id: str,
-        component_id: str,
+        component_name: str,
         *,
         role: str | None = None,
-        sort_order: int | None = None,
     ) -> Composition:
+        composition = self._composition_service.get_composition(composition_id)
+        if composition is None:
+            raise ValueError(f"composition not found: {composition_id}")
+
+        component_name_value = str(component_name or "").strip()
+        if not component_name_value:
+            raise ValueError("component_name must be non-empty")
+
+        component_id = self._generate_component_id(composition, component_name_value)
         return self._composition_service.add_component_to_composition(
             composition_id=composition_id,
             component_id=component_id,
             role=role,
-            sort_order=sort_order,
         )
 
     def create_menu(
@@ -130,7 +138,6 @@ class BuilderFlow:
         self,
         menu_id: str,
         menu_detail_id: str,
-        composition_id: str,
         composition_name: str,
     ) -> tuple[Composition, MenuDetail]:
         details = self._menu_service.list_menu_details(menu_id)
@@ -144,7 +151,7 @@ class BuilderFlow:
             raise ValueError("unresolved row required")
 
         composition = self.create_composition(
-            composition_id=composition_id,
+            composition_id=self._generate_composition_id(),
             composition_name=composition_name,
         )
         updated = self.resolve_menu_detail(
@@ -153,6 +160,40 @@ class BuilderFlow:
             composition_id=composition.composition_id,
         )
         return composition, updated
+
+    def _generate_composition_id(self) -> str:
+        alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        for _ in range(50):
+            suffix = "".join(secrets.choice(alphabet) for _ in range(6))
+            candidate = f"cmp_{suffix}"
+            if self._composition_repository.get(candidate) is None:
+                return candidate
+        raise ValueError("unable to generate unique composition_id")
+
+    @staticmethod
+    def _slugify_component_name(value: str) -> str:
+        raw = str(value or "").lower().strip()
+        normalized = (
+            raw.replace("å", "a")
+            .replace("ä", "a")
+            .replace("ö", "o")
+        )
+        cleaned = "".join(ch if (ch.isalnum() or ch == " ") else " " for ch in normalized)
+        return "_".join(cleaned.split())
+
+    def _generate_component_id(self, composition: Composition, component_name: str) -> str:
+        base = self._slugify_component_name(component_name)
+        if not base:
+            alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+            base = "cmp_" + "".join(secrets.choice(alphabet) for _ in range(6))
+
+        existing_ids = {item.component_id for item in composition.components}
+        candidate = base
+        suffix = 2
+        while candidate in existing_ids:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        return candidate
 
     def get_menu_cost_overview(
         self,

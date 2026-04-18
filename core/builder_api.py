@@ -247,9 +247,8 @@ def add_component_to_composition(composition_id: str):
         flow = _get_builder_flow()
         composition = flow.add_component_to_composition(
             composition_id=str(composition_id),
-            component_id=_require_str(payload, "component_id"),
+            component_name=_require_str(payload, "component_name"),
             role=_optional_str(payload, "role"),
-            sort_order=_maybe_int(payload.get("sort_order"), field="sort_order"),
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -388,14 +387,12 @@ def create_composition_from_row(menu_id: str):
 
     try:
         menu_detail_id = _require_str(payload, "menu_detail_id")
-        composition_id = _require_str(payload, "composition_id")
         composition_name = _require_str(payload, "composition_name")
 
         flow = _get_builder_flow()
         composition, updated_menu_detail = flow.create_composition_from_unresolved_row(
             menu_id=str(menu_id),
             menu_detail_id=menu_detail_id,
-            composition_id=composition_id,
             composition_name=composition_name,
         )
     except ValueError as exc:

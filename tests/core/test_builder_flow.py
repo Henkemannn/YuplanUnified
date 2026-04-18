@@ -44,9 +44,8 @@ def test_create_composition_and_add_components_through_builder_flow() -> None:
     flow.create_composition(composition_id="plate", composition_name="Plate")
     updated = flow.add_component_to_composition(
         composition_id="plate",
-        component_id="main_component",
+        component_name="Main component",
         role="main",
-        sort_order=10,
     )
 
     assert updated.composition_id == "plate"
@@ -96,9 +95,8 @@ def test_menu_cost_overview_returns_resolved_and_unresolved_honestly() -> None:
     flow.create_composition(composition_id="plate", composition_name="Kottbullar med mos")
     flow.add_component_to_composition(
         composition_id="plate",
-        component_id="plate",
+        component_name="Plate",
         role="main",
-        sort_order=10,
     )
     create_composition_alias(
         alias_repository=flow._alias_repository,
@@ -175,12 +173,12 @@ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
     created, updated = flow.create_composition_from_unresolved_row(
         menu_id="menu_1",
         menu_detail_id=detail_id,
-        composition_id="new_plate",
         composition_name="New Plate",
     )
 
-    assert created.composition_id == "new_plate"
+    assert created.composition_id.startswith("cmp_")
+    assert len(created.composition_id) == 10
     assert updated.menu_detail_id == detail_id
     assert updated.composition_ref_type == "composition"
-    assert updated.composition_id == "new_plate"
+    assert updated.composition_id == created.composition_id
     assert updated.unresolved_text is None

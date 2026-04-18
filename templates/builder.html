@@ -67,22 +67,33 @@ tuesday;lunch;Fiskgratang</textarea>
     <div class="modal-content">
       <h3>Resolve menu row</h3>
       <p id="resolveText"></p>
-
-      <select id="resolveCompositionSelect"></select>
+      <p>The dish is not in the library yet. Create it as a new composition and link this row.</p>
 
       <div class="create-new-section">
-        <p>Or create new composition</p>
-        <label>composition_id
-          <input id="newCompositionId" type="text" placeholder="new_comp_1">
-        </label>
+        <p>Create new composition</p>
         <label>composition_name
           <input id="newCompositionName" type="text" placeholder="New composition name">
         </label>
       </div>
 
+      <div id="modalBuilderSection" class="create-new-section hidden">
+        <p id="builderCompositionTitle"></p>
+        <p>Components:</p>
+        <ul id="builderComponentsList" class="builder-components-list"></ul>
+        <label>new_component_name
+          <input id="newComponentName" type="text" placeholder="Component name">
+        </label>
+        <div class="role-toggle-row">
+          <span>type</span>
+          <button id="newItemRoleComponent" type="button">Component</button>
+          <button id="newItemRoleConnector" type="button">Connector</button>
+        </div>
+        <button id="btnAddComponent" type="button">Add component</button>
+        <pre id="builderOut"></pre>
+      </div>
+
       <div class="modal-actions">
-        <button id="resolveConfirm" type="button">Resolve to selected</button>
-        <button id="createAndResolve" type="button">Create new and resolve</button>
+        <button id="createAndResolve" type="button">Create and link</button>
         <button id="resolveCancel" type="button">Cancel</button>
       </div>
     </div>
