@@ -379,4 +379,35 @@ def resolve_menu_detail(menu_id: str):
     return jsonify({"ok": True, "menu_detail": _serialize_menu_detail(updated)})
 
 
+@bp.post("/menus/<menu_id>/create-composition-from-row")
+@require_roles("editor", "admin", "superuser")
+def create_composition_from_row(menu_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        menu_detail_id = _require_str(payload, "menu_detail_id")
+        composition_id = _require_str(payload, "composition_id")
+        composition_name = _require_str(payload, "composition_name")
+
+        flow = _get_builder_flow()
+        composition, updated_menu_detail = flow.create_composition_from_unresolved_row(
+            menu_id=str(menu_id),
+            menu_detail_id=menu_detail_id,
+            composition_id=composition_id,
+            composition_name=composition_name,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "composition": _serialize_composition(composition),
+            "menu_detail": _serialize_menu_detail(updated_menu_detail),
+        }
+    ), 201
+
+
 __all__ = ["bp", "_get_builder_flow"]

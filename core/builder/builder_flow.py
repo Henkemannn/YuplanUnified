@@ -126,6 +126,34 @@ class BuilderFlow:
             unresolved_text="",
         )
 
+    def create_composition_from_unresolved_row(
+        self,
+        menu_id: str,
+        menu_detail_id: str,
+        composition_id: str,
+        composition_name: str,
+    ) -> tuple[Composition, MenuDetail]:
+        details = self._menu_service.list_menu_details(menu_id)
+        match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
+        if match is None:
+            raise ValueError("menu_detail_id not found for menu")
+        if match.composition_ref_type != "unresolved":
+            raise ValueError("menu detail must be unresolved")
+        unresolved_text = str(match.unresolved_text or "").strip()
+        if not unresolved_text:
+            raise ValueError("unresolved row required")
+
+        composition = self.create_composition(
+            composition_id=composition_id,
+            composition_name=composition_name,
+        )
+        updated = self.resolve_menu_detail(
+            menu_id=menu_id,
+            menu_detail_id=menu_detail_id,
+            composition_id=composition.composition_id,
+        )
+        return composition, updated
+
     def get_menu_cost_overview(
         self,
         menu_id: str,

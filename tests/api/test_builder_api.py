@@ -235,3 +235,125 @@ def test_resolve_menu_detail_endpoint() -> None:
     assert detail.get("composition_ref_type") == "composition"
     assert detail.get("composition_id") == "plate_1"
     assert detail.get("unresolved_text") is None
+
+
+def test_create_composition_from_row_endpoint() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    imported = client.post(
+        "/api/builder/menus/menu_1/import",
+        json={"rows": [{"day": "monday", "meal_slot": "lunch", "raw_text": "No Match"}]},
+        headers=HEADERS,
+    )
+    detail_id = (
+        (imported.get_json() or {})
+        .get("summary", {})
+        .get("row_results", [{}])[0]
+        .get("menu_detail_id")
+    )
+
+    rv = client.post(
+        "/api/builder/menus/menu_1/create-composition-from-row",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_id": "new_plate_1",
+            "composition_name": "New Plate 1",
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    assert body.get("composition", {}).get("composition_id") == "new_plate_1"
+    detail = body.get("menu_detail") or {}
+    assert detail.get("composition_ref_type") == "composition"
+    assert detail.get("composition_id") == "new_plate_1"
+    assert detail.get("unresolved_text") is None
+
+
+def test_create_composition_from_row_requires_detail_belongs_to_menu() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_2", "site_id": "site_1", "week_key": "2026-W17"},
+        headers=HEADERS,
+    )
+    imported = client.post(
+        "/api/builder/menus/menu_2/import",
+        json={"rows": [{"day": "monday", "meal_slot": "lunch", "raw_text": "No Match"}]},
+        headers=HEADERS,
+    )
+    detail_id = (
+        (imported.get_json() or {})
+        .get("summary", {})
+        .get("row_results", [{}])[0]
+        .get("menu_detail_id")
+    )
+
+    rv = client.post(
+        "/api/builder/menus/menu_1/create-composition-from-row",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_id": "new_plate_2",
+            "composition_name": "New Plate 2",
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("error") == "bad_request"
+
+
+def test_create_composition_from_row_requires_unresolved_row() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "existing_plate", "composition_name": "Existing Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    imported = client.post(
+        "/api/builder/menus/menu_1/import",
+        json={"rows": [{"day": "monday", "meal_slot": "lunch", "raw_text": "No Match"}]},
+        headers=HEADERS,
+    )
+    detail_id = (
+        (imported.get_json() or {})
+        .get("summary", {})
+        .get("row_results", [{}])[0]
+        .get("menu_detail_id")
+    )
+    client.post(
+        "/api/builder/menus/menu_1/resolve",
+        json={"menu_detail_id": detail_id, "composition_id": "existing_plate"},
+        headers=HEADERS,
+    )
+
+    rv = client.post(
+        "/api/builder/menus/menu_1/create-composition-from-row",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_id": "new_plate_3",
+            "composition_name": "New Plate 3",
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("error") == "bad_request"

@@ -83,3 +83,9 @@ ul {
   display: flex;
   gap: 8px;
 }
+
+.create-new-section {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #ddd;
+}

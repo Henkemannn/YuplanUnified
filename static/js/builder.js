@@ -51,6 +51,8 @@ let currentResolve = null;
 function openResolveModal(detail, menuId) {
   const modal = document.getElementById("resolveModal");
   const resolveText = document.getElementById("resolveText");
+  const newCompositionId = document.getElementById("newCompositionId");
+  const newCompositionName = document.getElementById("newCompositionName");
   if (!modal || !resolveText) {
     return;
   }
@@ -60,6 +62,12 @@ function openResolveModal(detail, menuId) {
     menuDetailId: String(detail.menu_detail_id || ""),
   };
   resolveText.textContent = String(detail.unresolved_text || "");
+  if (newCompositionId) {
+    newCompositionId.value = "";
+  }
+  if (newCompositionName) {
+    newCompositionName.value = String(detail.unresolved_text || "").trim();
+  }
   modal.classList.remove("hidden");
 }
 
@@ -86,7 +94,7 @@ async function loadCompositionOptions() {
   if (!rows.length) {
     const opt = document.createElement("option");
     opt.value = "";
-    opt.textContent = "No compositions available";
+    opt.textContent = "No compositions available yet";
     select.appendChild(opt);
     return;
   }
@@ -138,6 +146,7 @@ function bindBuilderHandlers() {
   const loadUnresolvedBtn = document.getElementById("btnLoadUnresolved");
   const loadCostBtn = document.getElementById("btnLoadCost");
   const resolveConfirmBtn = document.getElementById("resolveConfirm");
+  const createAndResolveBtn = document.getElementById("createAndResolve");
   const resolveCancelBtn = document.getElementById("resolveCancel");
 
   if (createMenuBtn) {
@@ -265,6 +274,67 @@ function bindBuilderHandlers() {
           body: payload,
         });
 
+        showJson("unresolvedOut", result);
+        closeResolveModal();
+        await loadUnresolvedForMenu(refreshMenuId);
+      } catch (error) {
+        showJson("unresolvedOut", {
+          status: 0,
+          data: { ok: false, error: String(error.message || error) },
+        });
+      }
+    });
+  }
+
+  if (createAndResolveBtn) {
+    createAndResolveBtn.addEventListener("click", async () => {
+      if (!currentResolve) {
+        showJson("unresolvedOut", {
+          status: 0,
+          data: { ok: false, error: "no_menu_detail_selected" },
+        });
+        return;
+      }
+
+      const newCompositionId = document.getElementById("newCompositionId");
+      const newCompositionName = document.getElementById("newCompositionName");
+      const composition_id = newCompositionId ? String(newCompositionId.value || "").trim() : "";
+      const composition_name = newCompositionName
+        ? String(newCompositionName.value || "").trim()
+        : "";
+
+      if (!composition_id || !composition_name) {
+        showJson("unresolvedOut", {
+          status: 0,
+          data: {
+            ok: false,
+            error: "composition_id and composition_name are required",
+          },
+        });
+        return;
+      }
+
+      const url =
+        "/api/builder/menus/" +
+        encodeURIComponent(currentResolve.menuId) +
+        "/create-composition-from-row";
+      const payload = {
+        menu_detail_id: currentResolve.menuDetailId,
+        composition_id,
+        composition_name,
+      };
+      const refreshMenuId = currentResolve.menuId;
+
+      console.log("REQUEST:", url, payload);
+      showLoading("unresolvedOut");
+      try {
+        const result = await callApi(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: payload,
+        });
         showJson("unresolvedOut", result);
         closeResolveModal();
         await loadUnresolvedForMenu(refreshMenuId);

@@ -70,8 +70,19 @@ tuesday;lunch;Fiskgratang</textarea>
 
       <select id="resolveCompositionSelect"></select>
 
+      <div class="create-new-section">
+        <p>Or create new composition</p>
+        <label>composition_id
+          <input id="newCompositionId" type="text" placeholder="new_comp_1">
+        </label>
+        <label>composition_name
+          <input id="newCompositionName" type="text" placeholder="New composition name">
+        </label>
+      </div>
+
       <div class="modal-actions">
-        <button id="resolveConfirm" type="button">Resolve</button>
+        <button id="resolveConfirm" type="button">Resolve to selected</button>
+        <button id="createAndResolve" type="button">Create new and resolve</button>
         <button id="resolveCancel" type="button">Cancel</button>
       </div>
     </div>

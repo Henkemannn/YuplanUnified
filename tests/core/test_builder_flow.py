@@ -161,3 +161,26 @@ def test_builder_flow_is_orchestration_not_logic_duplication() -> None:
     # The import flow should simply reflect existing resolution behavior (unresolved fallback).
     assert summary.unresolved_count == 1
     assert summary.row_results[0].kind == "unresolved"
+
+
+def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
+    flow = _build_flow()
+    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    summary = flow.import_menu_rows(
+        menu_id="menu_1",
+        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="Unknown dish")],
+    )
+    detail_id = summary.row_results[0].menu_detail_id
+
+    created, updated = flow.create_composition_from_unresolved_row(
+        menu_id="menu_1",
+        menu_detail_id=detail_id,
+        composition_id="new_plate",
+        composition_name="New Plate",
+    )
+
+    assert created.composition_id == "new_plate"
+    assert updated.menu_detail_id == detail_id
+    assert updated.composition_ref_type == "composition"
+    assert updated.composition_id == "new_plate"
+    assert updated.unresolved_text is None
