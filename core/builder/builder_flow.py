@@ -105,6 +105,24 @@ class BuilderFlow:
         details = self._menu_service.list_menu_details(menu_id)
         return [detail for detail in details if detail.composition_ref_type == "unresolved"]
 
+    def resolve_menu_detail(
+        self,
+        menu_id: str,
+        menu_detail_id: str,
+        composition_id: str,
+    ) -> MenuDetail:
+        details = self._menu_service.list_menu_details(menu_id)
+        match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
+        if match is None:
+            raise ValueError("menu_detail_id not found for menu")
+
+        return self._menu_service.update_menu_detail(
+            menu_detail_id=menu_detail_id,
+            composition_ref_type="composition",
+            composition_id=composition_id,
+            unresolved_text=None,
+        )
+
     def get_menu_cost_overview(
         self,
         menu_id: str,

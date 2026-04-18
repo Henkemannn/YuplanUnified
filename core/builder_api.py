@@ -335,4 +335,27 @@ def menu_cost_overview(menu_id: str):
     return jsonify({"ok": True, "overview": _serialize_menu_cost_overview(overview)})
 
 
+@bp.post("/menus/<menu_id>/resolve")
+@require_roles("editor", "admin", "superuser")
+def resolve_menu_detail(menu_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        menu_detail_id = _require_str(payload, "menu_detail_id")
+        composition_id = _require_str(payload, "composition_id")
+
+        flow = _get_builder_flow()
+        updated = flow.resolve_menu_detail(
+            menu_id=str(menu_id),
+            menu_detail_id=menu_detail_id,
+            composition_id=composition_id,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "menu_detail": _serialize_menu_detail(updated)})
+
+
 __all__ = ["bp", "_get_builder_flow"]
