@@ -6,6 +6,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Menu:
     menu_id: str
+    title: str | None
     site_id: str
     week_key: str
     version: int = 1

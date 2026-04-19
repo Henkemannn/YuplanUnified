@@ -183,7 +183,7 @@ def test_kitchen_week_v3_default_select_premarked_cells():
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert re.search(
-        rf'class="kostcell-btn is-done"[^>]*data-department-id="{dep[0]}"[^>]*data-diet-type-id="{dt}"[^>]*data-day-index="1"[^>]*data-meal="lunch"',
+        rf'<button[^>]*class="[^"]*kostcell-btn[^"]*is-done[^"]*"(?=[^>]*data-department-id="{dep[0]}")(?=[^>]*data-diet-type-id="{dt}")(?=[^>]*data-day-index="1")(?=[^>]*data-meal="lunch")[^>]*>',
         html,
     )
 
@@ -213,6 +213,6 @@ def test_kitchen_week_v3_default_select_false_not_premarked_cells():
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert not re.search(
-        rf'class="kostcell-btn is-done"[^>]*data-department-id="{dep[0]}"[^>]*data-diet-type-id="{dt}"[^>]*data-day-index="1"[^>]*data-meal="lunch"',
+        rf'<button[^>]*class="[^"]*kostcell-btn[^"]*is-done[^"]*"(?=[^>]*data-department-id="{dep[0]}")(?=[^>]*data-diet-type-id="{dt}")(?=[^>]*data-day-index="1")(?=[^>]*data-meal="lunch")[^>]*>',
         html,
     )

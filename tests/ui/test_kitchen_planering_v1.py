@@ -1,4 +1,5 @@
 import pytest
+import uuid
 from sqlalchemy import text
 from html.parser import HTMLParser
 
@@ -93,7 +94,8 @@ def test_planering_v1_selected_state(app_session):
     drepo = DepartmentsRepo()
     dep = {"id": dep_id_out, "site_id": site_id, "name": "Avd 1"}
     trepo = DietTypesRepo()
-    dt_id = trepo.create(site_id=site_id, name="Glutenfri", default_select=False)
+    dt_name = f"Glutenfri-{uuid.uuid4().hex[:8]}"
+    dt_id = trepo.create(site_id=site_id, name=dt_name, default_select=False)
     ver = drepo.get_version(dep["id"]) or 0
     drepo.upsert_department_diet_defaults(dep["id"], ver, [{"diet_type_id": str(dt_id), "default_count": 3}])
 

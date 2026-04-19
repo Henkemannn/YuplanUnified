@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import text
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -67,7 +69,7 @@ def test_default_select_true_preselects_special_chip_in_weekly_list(app_session)
     html = rv.data.decode("utf-8")
 
     assert f'data-diet-id="{diet_id}"' in html
-    assert "js-special-chip active" in html
+    assert re.search(r'class="[^"]*js-special-chip[^"]*active[^"]*"', html)
 
 
 def test_default_select_false_does_not_preselect_special_chip_in_weekly_list(app_session):
@@ -84,4 +86,4 @@ def test_default_select_false_does_not_preselect_special_chip_in_weekly_list(app
     html = rv.data.decode("utf-8")
 
     assert f'data-diet-id="{diet_id}"' in html
-    assert "js-special-chip active" not in html
+    assert not re.search(r'class="[^"]*js-special-chip[^"]*active[^"]*"', html)

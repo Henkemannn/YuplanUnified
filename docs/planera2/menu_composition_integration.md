@@ -24,6 +24,21 @@ MenuDetail
 Composition
    ↓
 Component[]
+
+🏗️ Ägarskap mellan lager (cleanup 2026-04)
+
+- Builder = Library Layer
+  - Äger endast biblioteket: components, compositions, alias-stöd och bibliotek-import.
+  - Ska inte äga menykontext (day/meal-slot, unresolved-listor, meny-kostnadsöversikt).
+
+- Menu-context module = Menu Context Layer
+  - Äger menyflöden: skapa meny, import av menyrader, resolve/unresolved och meny-orienterad kostnadsöversikt.
+  - Får återanvända Builder-biblioteket, men inte flytta tillbaka ägarskap till Builder.
+
+- Production = separat lager
+  - Produktions-/körlogik hålls utanför både Builder och Menu Context.
+  - Integration sker via tydliga gränser, inte via blandade ansvar i samma modul.
+
 🔑 Grundprinciper
 1. Menyrad = en Composition
 

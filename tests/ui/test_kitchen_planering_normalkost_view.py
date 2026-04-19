@@ -1,4 +1,5 @@
 from datetime import date as _date
+import uuid
 from sqlalchemy import text
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -49,7 +50,7 @@ def _seed_alt2_flag(site_id: str, department_id: str, year: int, week: int, dow:
 
 def test_normalkost_view_table_and_totals(app_session):
     client = app_session.test_client()
-    site_id = "site-plan-1"
+    site_id = f"site-plan-{uuid.uuid4().hex[:8]}"
     seeded = _seed_normals(site_id)
     dt_id = seeded["diet_id"]
     (depA, depB, depC) = seeded["deps"]

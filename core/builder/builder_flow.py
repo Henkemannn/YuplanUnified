@@ -6,33 +6,38 @@ import re
 import secrets
 
 from ..components import (
+    Component,
+    ComponentService,
     Composition,
     CompositionService,
     InMemoryCompositionRepository,
-    InMemoryRecipeIngredientLineRepository,
-    InMemoryRecipeRepository,
 )
 from ..menu import (
-    ImportedMenuRow,
     InMemoryCompositionAliasRepository,
-    MenuDetail,
-    MenuDetailCostBreakdown,
-    MenuImportSummary,
-    MenuService,
-    calculate_menu_detail_cost,
     create_composition_alias,
-    import_menu_rows,
     normalize_menu_import_text,
+    resolve_composition_reference,
 )
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class MenuCostOverview:
-    menu_id: str
-    detail_costs: list[MenuDetailCostBreakdown] = field(default_factory=list)
-    unresolved_count: int = 0
+class LibraryImportRowResult:
+    raw_text: str
+    kind: str
+    composition_id: str
+    composition_name: str
+    matched_via: str
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class LibraryImportSummary:
+    imported_count: int
+    created_count: int
+    reused_count: int
+    row_results: list[LibraryImportRowResult] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -40,19 +45,45 @@ class BuilderFlow:
     def __init__(
         self,
         *,
+        component_service: ComponentService,
         composition_service: CompositionService,
-        menu_service: MenuService,
         composition_repository: InMemoryCompositionRepository,
         alias_repository: InMemoryCompositionAliasRepository,
-        recipe_repository: InMemoryRecipeRepository,
-        ingredient_repository: InMemoryRecipeIngredientLineRepository,
     ) -> None:
+        self._component_service = component_service
         self._composition_service = composition_service
-        self._menu_service = menu_service
         self._composition_repository = composition_repository
         self._alias_repository = alias_repository
-        self._recipe_repository = recipe_repository
-        self._ingredient_repository = ingredient_repository
+
+    def create_standalone_component(self, component_name: str) -> Component:
+        name_value = self._normalize_component_name(component_name)
+        if not name_value:
+            raise ValueError("component_name must be non-empty")
+
+        normalized_key = self._normalize_component_key(name_value)
+        for existing_item in self._component_service.list_components(active_only=False):
+            if self._normalize_component_key(existing_item.canonical_name) == normalized_key:
+                return existing_item
+
+        base = self._slugify_component_name(name_value)
+        if not base:
+            base = self._generate_component_seed()
+
+        component_id = base
+        suffix = 2
+        while True:
+            existing = self._component_service.get_component(component_id)
+            if existing is None:
+                break
+            if existing.canonical_name == name_value:
+                return existing
+            component_id = f"{base}_{suffix}"
+            suffix += 1
+
+        return self._component_service.create_component(
+            component_id=component_id,
+            canonical_name=name_value,
+        )
 
     def create_composition(
         self,
@@ -66,6 +97,21 @@ class BuilderFlow:
             composition_name=composition_name,
             library_group=library_group,
         )
+
+    def create_composition_with_generated_id(
+        self,
+        composition_name: str,
+        *,
+        library_group: str | None = None,
+        seed_components: bool = False,
+    ) -> Composition:
+        composition, _ = self.create_library_composition_from_text(
+            raw_text=composition_name,
+            library_group=library_group,
+            seed_components=seed_components,
+            learn_alias=False,
+        )
+        return composition
 
     def add_component_to_composition(
         self,
@@ -82,11 +128,11 @@ class BuilderFlow:
         if not component_name_value:
             raise ValueError("component_name must be non-empty")
 
-        component_id = self._generate_component_id(composition, component_name_value)
+        component = self.create_standalone_component(component_name_value)
         return self._composition_service.add_component_to_composition(
             composition_id=composition_id,
-            component_id=component_id,
-            component_name=component_name_value,
+            component_id=component.component_id,
+            component_name=component.canonical_name,
             role=role,
         )
 
@@ -130,109 +176,192 @@ class BuilderFlow:
         if updated_composition is None:
             raise ValueError(f"composition not found: {composition_id}")
 
-        new_component_id = self._generate_component_id(updated_composition, new_name_value)
+        resolved_component = self.create_standalone_component(new_name_value)
         return self._composition_service.add_component_to_composition(
             composition_id=composition_id,
-            component_id=new_component_id,
-            component_name=new_name_value,
+            component_id=resolved_component.component_id,
+            component_name=resolved_component.canonical_name,
             role=existing.role,
             sort_order=existing.sort_order,
-        )
-
-    def create_menu(
-        self,
-        menu_id: str,
-        site_id: str,
-        week_key: str,
-        *,
-        version: int = 1,
-        status: str = "draft",
-    ):
-        return self._menu_service.create_menu(
-            menu_id=menu_id,
-            site_id=site_id,
-            week_key=week_key,
-            version=version,
-            status=status,
         )
 
     def list_compositions(self, *, group_name: str | None = None) -> list[Composition]:
         return self._composition_service.list_compositions(group_name=group_name)
 
-    def import_menu_rows(self, menu_id: str, rows: list[ImportedMenuRow]) -> MenuImportSummary:
-        return import_menu_rows(
-            menu_id=menu_id,
-            rows=rows,
-            menu_service=self._menu_service,
-            composition_repository=self._composition_repository,
-            alias_repository=self._alias_repository,
-        )
+    def list_library_components(self) -> list[Component]:
+        items = self._component_service.list_components(active_only=False)
+        return sorted(items, key=lambda item: (item.canonical_name.lower(), item.component_id))
 
-    def list_unresolved_menu_details(self, menu_id: str) -> list[MenuDetail]:
-        details = self._menu_service.list_menu_details(menu_id)
-        return [detail for detail in details if detail.composition_ref_type == "unresolved"]
+    def list_reusable_components_for_builder(self, *, query: str | None = None) -> list[Component]:
+        items = self.list_library_components()
+        query_value = str(query or "").strip().lower()
+        if not query_value:
+            return items
 
-    def resolve_menu_detail(
+        return [
+            item
+            for item in items
+            if query_value in item.canonical_name.lower() or query_value in item.component_id.lower()
+        ]
+
+    def attach_existing_component_to_composition(
         self,
-        menu_id: str,
-        menu_detail_id: str,
+        *,
         composition_id: str,
-    ) -> MenuDetail:
-        details = self._menu_service.list_menu_details(menu_id)
-        match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
-        if match is None:
-            raise ValueError("menu_detail_id not found for menu")
+        component_id: str,
+        role: str | None = None,
+    ) -> Composition:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
 
-        return self._menu_service.update_menu_detail(
-            menu_detail_id=menu_detail_id,
-            composition_ref_type="composition",
-            composition_id=composition_id,
-            unresolved_text="",
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        composition = self._composition_service.get_composition(composition_id_value)
+        if composition is None:
+            raise ValueError(f"composition not found: {composition_id_value}")
+
+        component = self._component_service.get_component(component_id_value)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+
+        if any(item.component_id == component_id_value for item in composition.components):
+            raise ValueError("component already exists in composition")
+
+        return self._composition_service.add_component_to_composition(
+            composition_id=composition_id_value,
+            component_id=component.component_id,
+            component_name=component.canonical_name,
+            role=role,
         )
 
-    def create_composition_from_unresolved_row(
+    def list_library_compositions(self) -> list[Composition]:
+        items = self._composition_service.list_compositions()
+        return sorted(items, key=lambda item: (item.composition_name.lower(), item.composition_id))
+
+    def import_library_text_lines(self, lines: list[str]) -> LibraryImportSummary:
+        normalized_lines = [str(line or "").strip() for line in lines]
+        normalized_lines = [line for line in normalized_lines if line]
+        if not normalized_lines:
+            raise ValueError("lines must contain at least one non-empty text")
+
+        row_results: list[LibraryImportRowResult] = []
+        summary_warnings: list[str] = []
+        created_count = 0
+        reused_count = 0
+
+        for line in normalized_lines:
+            resolution = resolve_composition_reference(
+                import_text=line,
+                composition_repository=self._composition_repository,
+                alias_repository=self._alias_repository,
+            )
+
+            warnings = list(resolution.warnings)
+            matched_via = str(resolution.matched_via or "")
+            composition = None
+
+            if resolution.kind == "composition" and resolution.composition_id:
+                composition = self._composition_repository.get(resolution.composition_id)
+                if composition is not None:
+                    reused_count += 1
+                    matched_via = matched_via or "existing"
+
+            if composition is None:
+                composition, create_warnings = self.create_library_composition_from_text(
+                    raw_text=line,
+                    library_group=None,
+                    seed_components=True,
+                    learn_alias=True,
+                )
+                created_count += 1
+                matched_via = "created"
+                warnings.extend(create_warnings)
+
+            row_results.append(
+                LibraryImportRowResult(
+                    raw_text=line,
+                    kind="composition",
+                    composition_id=composition.composition_id,
+                    composition_name=composition.composition_name,
+                    matched_via=matched_via,
+                    warnings=warnings,
+                )
+            )
+            summary_warnings.extend(warnings)
+
+        return LibraryImportSummary(
+            imported_count=len(normalized_lines),
+            created_count=created_count,
+            reused_count=reused_count,
+            row_results=row_results,
+            warnings=summary_warnings,
+        )
+
+    def create_library_composition_from_text(
         self,
-        menu_id: str,
-        menu_detail_id: str,
-        composition_name: str,
-    ) -> tuple[Composition, MenuDetail, list[str]]:
-        details = self._menu_service.list_menu_details(menu_id)
-        match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
-        if match is None:
-            raise ValueError("menu_detail_id not found for menu")
-        if match.composition_ref_type != "unresolved":
-            raise ValueError("menu detail must be unresolved")
-        unresolved_text = str(match.unresolved_text or "").strip()
-        if not unresolved_text:
-            raise ValueError("unresolved row required")
+        *,
+        raw_text: str,
+        library_group: str | None,
+        seed_components: bool,
+        learn_alias: bool,
+        alias_text: str | None = None,
+        composition_name_override: str | None = None,
+    ) -> tuple[Composition, list[str]]:
+        chosen_name = composition_name_override if composition_name_override is not None else raw_text
+        composition_name = self._normalize_component_name(chosen_name)
+        if not composition_name:
+            raise ValueError("composition_name must be non-empty")
 
         composition = self.create_composition(
             composition_id=self._generate_composition_id(),
             composition_name=composition_name,
+            library_group=library_group,
         )
         warnings: list[str] = []
 
-        for suggestion in self._suggest_components_from_unresolved_text(unresolved_text):
-            composition = self.add_component_to_composition(
+        if seed_components:
+            for suggestion in self._suggest_components_from_unresolved_text(raw_text):
+                composition = self.add_component_to_composition(
+                    composition_id=composition.composition_id,
+                    component_name=suggestion,
+                    role="component",
+                )
+
+        if learn_alias:
+            alias_warning = self._create_manual_alias_for_composition(
                 composition_id=composition.composition_id,
-                component_name=suggestion,
-                role="component",
+                unresolved_text=raw_text,
             )
+            if alias_warning:
+                warnings.append(alias_warning)
+                logger.warning(alias_warning)
+        elif alias_text:
+            alias_warning = self._create_manual_alias_for_composition(
+                composition_id=composition.composition_id,
+                unresolved_text=alias_text,
+            )
+            if alias_warning:
+                warnings.append(alias_warning)
+                logger.warning(alias_warning)
 
-        alias_warning = self._create_manual_alias_for_composition(
-            composition_id=composition.composition_id,
-            unresolved_text=unresolved_text,
-        )
-        if alias_warning:
-            warnings.append(alias_warning)
-            logger.warning(alias_warning)
+        return composition, warnings
 
-        updated = self.resolve_menu_detail(
-            menu_id=menu_id,
-            menu_detail_id=menu_detail_id,
-            composition_id=composition.composition_id,
+    def suggest_components_from_text(self, raw_text: str) -> list[str]:
+        return self._suggest_components_from_unresolved_text(raw_text)
+
+    def create_manual_alias_for_composition(
+        self,
+        *,
+        composition_id: str,
+        source_text: str,
+    ) -> str | None:
+        return self._create_manual_alias_for_composition(
+            composition_id=composition_id,
+            unresolved_text=source_text,
         )
-        return composition, updated, warnings
 
     def _create_manual_alias_for_composition(
         self,
@@ -309,6 +438,23 @@ class BuilderFlow:
         return candidate
 
     @staticmethod
+    def _normalize_component_name(value: str) -> str:
+        return " ".join(str(value or "").strip().split())
+
+    def _generate_component_seed(self) -> str:
+        alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        for _ in range(50):
+            suffix = "".join(secrets.choice(alphabet) for _ in range(6))
+            candidate = f"comp_{suffix}"
+            if self._component_service.get_component(candidate) is None:
+                return candidate
+        raise ValueError("unable to generate unique component_id")
+
+    @staticmethod
+    def _normalize_component_key(value: str) -> str:
+        return " ".join(str(value or "").strip().lower().split())
+
+    @staticmethod
     def _capitalize_first(value: str) -> str:
         text = str(value or "").strip()
         if not text:
@@ -330,39 +476,3 @@ class BuilderFlow:
                 suggestions.append(candidate)
         return suggestions
 
-    def get_menu_cost_overview(
-        self,
-        menu_id: str,
-        *,
-        default_target_portions: int = 1,
-        target_portions_by_detail: dict[str, int] | None = None,
-    ) -> MenuCostOverview:
-        details = self._menu_service.list_menu_details(menu_id)
-        detail_costs: list[MenuDetailCostBreakdown] = []
-        warnings: list[str] = []
-        unresolved_count = 0
-
-        targets = target_portions_by_detail or {}
-        for detail in details:
-            target_portions = int(targets.get(detail.menu_detail_id, default_target_portions))
-            breakdown = calculate_menu_detail_cost(
-                menu_detail=detail,
-                composition_repository=self._composition_repository,
-                recipe_repository=self._recipe_repository,
-                ingredient_repository=self._ingredient_repository,
-                target_portions=target_portions,
-            )
-            detail_costs.append(breakdown)
-            if detail.composition_ref_type == "unresolved":
-                unresolved_count += 1
-            warnings.extend(breakdown.warnings)
-
-        if unresolved_count > 0:
-            warnings.append("menu contains unresolved details")
-
-        return MenuCostOverview(
-            menu_id=menu_id,
-            detail_costs=detail_costs,
-            unresolved_count=unresolved_count,
-            warnings=warnings,
-        )

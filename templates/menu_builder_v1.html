@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Menu Builder v1</title>
+  <link rel="stylesheet" href="/static/css/builder.css">
+  <style>
+    .menu-week-groups {
+      display: grid;
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .menu-group {
+      border: 1px solid #d7dce4;
+      border-radius: 8px;
+      padding: 10px;
+      background: #fafbfd;
+    }
+    .menu-group-header {
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .menu-group-list {
+      display: grid;
+      gap: 8px;
+    }
+    .menu-row-card {
+      border: 1px solid #e2e6ec;
+      border-radius: 6px;
+      padding: 8px;
+      background: #fff;
+    }
+    .menu-row-card.unresolved {
+      border-color: #d59b28;
+      background: #fff8e9;
+    }
+    .menu-row-title {
+      font-weight: 600;
+    }
+    .menu-row-meta {
+      font-size: 12px;
+      color: #525b67;
+      margin-top: 4px;
+    }
+    .menu-row-note {
+      margin-top: 4px;
+      font-size: 13px;
+    }
+    .menu-row-actions {
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Menu Builder v1.2</h1>
+  <p>Menu Context layer UI. Menu rows reference existing library compositions.</p>
+
+  <section>
+    <h2>1. Create Menu</h2>
+    <label>title (optional)
+      <input id="menuTitle" type="text" placeholder="Week 16 menu">
+    </label>
+    <label>menu_id (optional)
+      <input id="menuId" type="text" placeholder="menu_site1_w16">
+    </label>
+    <label>site_id
+      <input id="siteId" type="text" value="site_1">
+    </label>
+    <label>week_key
+      <input id="weekKey" type="text" value="2026-W16">
+    </label>
+    <button id="btnCreateMenu" type="button">Create menu</button>
+    <pre id="createMenuOut"></pre>
+  </section>
+
+  <section>
+    <h2>2. Add Composition Row</h2>
+    <label>active menu_id
+      <input id="activeMenuId" type="text" placeholder="menu id">
+    </label>
+    <label>day
+      <select id="rowDay">
+        <option value="monday">monday</option>
+        <option value="tuesday">tuesday</option>
+        <option value="wednesday">wednesday</option>
+        <option value="thursday">thursday</option>
+        <option value="friday">friday</option>
+        <option value="saturday">saturday</option>
+        <option value="sunday">sunday</option>
+      </select>
+    </label>
+    <label>meal_slot
+      <select id="rowMealSlot">
+        <option value="lunch">lunch</option>
+        <option value="dinner">dinner</option>
+        <option value="breakfast">breakfast</option>
+        <option value="kvallsmat">kvallsmat</option>
+      </select>
+    </label>
+    <label>composition
+      <select id="rowCompositionId"></select>
+    </label>
+    <label>sort_order
+      <input id="rowSortOrder" type="number" value="0">
+    </label>
+    <label>note (optional)
+      <input id="rowNote" type="text" placeholder="optional note">
+    </label>
+    <button id="btnAddMenuRow" type="button">Add row</button>
+    <pre id="addMenuRowOut"></pre>
+  </section>
+
+  <section>
+    <h2>3. Weekly Menu Workspace</h2>
+    <button id="btnRefreshRows" type="button">Refresh rows</button>
+    <label>filter compositions
+      <input id="compositionSearch" type="text" placeholder="search composition by name or id">
+    </label>
+    <div id="menuRowsBody" class="menu-week-groups"></div>
+
+    <div id="editRowPanel" class="hidden" style="border:1px solid #ddd; padding:10px; margin-top:10px;">
+      <h3>Edit selected row</h3>
+      <input id="editRowId" type="hidden">
+      <label>day
+        <select id="editRowDay">
+          <option value="monday">monday</option>
+          <option value="tuesday">tuesday</option>
+          <option value="wednesday">wednesday</option>
+          <option value="thursday">thursday</option>
+          <option value="friday">friday</option>
+          <option value="saturday">saturday</option>
+          <option value="sunday">sunday</option>
+        </select>
+      </label>
+      <label>meal_slot
+        <select id="editRowMealSlot">
+          <option value="lunch">lunch</option>
+          <option value="dinner">dinner</option>
+          <option value="breakfast">breakfast</option>
+          <option value="kvallsmat">kvallsmat</option>
+        </select>
+      </label>
+      <label>composition
+        <select id="editRowCompositionId"></select>
+      </label>
+      <label>sort_order
+        <input id="editRowSortOrder" type="number" value="0">
+      </label>
+      <label>note
+        <input id="editRowNote" type="text" placeholder="optional note">
+      </label>
+      <button id="btnSaveRowEdit" type="button">Save row</button>
+      <button id="btnCancelRowEdit" type="button">Cancel</button>
+      <pre id="editMenuRowOut"></pre>
+    </div>
+
+    <pre id="menuRowsOut"></pre>
+  </section>
+
+  <script src="/static/js/menu_builder_v1.js"></script>
+</body>
+</html>

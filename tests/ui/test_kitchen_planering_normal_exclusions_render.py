@@ -1,3 +1,5 @@
+import re
+
 from sqlalchemy import text
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -61,6 +63,6 @@ def test_planering_renders_active_chips_from_db(app_session):
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     # Ensure Alt 1 group present and at least one active chip rendered
-    assert 'aria-label="Specialkoster – Alt 1"' in html
+    assert 'aria-label="Specialkoster per familj – Alt 1"' in html
     assert 'js-normal-chip' in html
-    assert 'js-normal-chip active' in html
+    assert re.search(r'class="[^"]*js-normal-chip[^"]*active[^"]*"', html)

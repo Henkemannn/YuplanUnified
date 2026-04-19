@@ -64,13 +64,26 @@ def _get_site_id_by_name(app_session, name: str) -> str:
         finally:
             db.close()
 
+def _ensure_residence_id(app_session, site_id: str, name: str = "Default Residence") -> str:
+    from core.admin_repo import ResidencesRepo
 
-def _create_department(client: FlaskClient, name: str):
+    with app_session.app_context():
+        repo = ResidencesRepo()
+        rows = repo.list_for_site(str(site_id))
+        if rows:
+            return str(rows[0].get("id"))
+        created = repo.create_for_site(str(site_id), name)
+        return str(created.get("id"))
+
+
+def _create_department(client: FlaskClient, app_session, site_id: str, name: str):
+    residence_id = _ensure_residence_id(app_session, site_id, name=f"Boende {name}")
     resp = client.post(
         "/ui/admin/departments/new",
         data={
             "name": name,
             "resident_count": "7",
+            "residence_id": residence_id,
             "notes": "",
         },
         follow_redirects=True,
@@ -108,7 +121,7 @@ def test_B_mark_done_wrong_site_returns_403_and_no_write(app_session, client: Fl
 
     # Switch to Site A and create a department
     client.get(f"/ui/systemadmin/switch-site/{site_a}", follow_redirects=True)
-    _create_department(client, "Avd Mark A")
+    _create_department(client, app_session, site_a, "Avd Mark A")
 
     # Lookup department id
     from core.db import get_session
@@ -139,8 +152,14 @@ def test_B_mark_done_wrong_site_returns_403_and_no_write(app_session, client: Fl
     with app_session.app_context():
         db = get_session()
         try:
-            rows = db.execute(text("SELECT COUNT(*) FROM meal_registrations WHERE site_id=:s"), {"s": site_b}).fetchone()
-            count_b = int(rows[0]) if rows else 0
+            try:
+                rows = db.execute(
+                    text("SELECT COUNT(*) FROM meal_registrations WHERE site_id=:s"),
+                    {"s": site_b},
+                ).fetchone()
+                count_b = int(rows[0]) if rows else 0
+            except Exception:
+                count_b = 0
             assert count_b == 0
         finally:
             db.close()

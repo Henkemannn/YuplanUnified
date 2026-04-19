@@ -39,7 +39,7 @@ def test_menu_import_dry_run(monkeypatch, tmp_path):
     core_db._SessionFactory = None  # type: ignore
     db_file = tmp_path / "dryrun.db"
     db_url = f"sqlite:///{db_file}"
-    app = create_app({"database_url": db_url, "secret_key": "x"})
+    app = create_app({"database_url": db_url, "secret_key": "x", "TESTING": True})
     engine = core_db.init_engine(db_url)  # type: ignore
     from core.models import Base
 

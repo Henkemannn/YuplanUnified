@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import date as _date
 
 from flask.testing import FlaskClient
@@ -24,7 +25,7 @@ def setup_data():
     depB, _ = drepo.create_department(site_id=site["id"], name="Avd B", resident_count_mode="fixed", resident_count_fixed=12)
     trepo = DietTypesRepo()
     # Create a diet type (returns int ID)
-    dt_id = trepo.create(tenant_id=1, name="Glutenfri", default_select=False)
+    dt_id = trepo.create(site_id=site["id"], name=f"Glutenfri-{uuid.uuid4().hex[:8]}", default_select=False)
     # Set defaults for both departments to 2
     drepo.upsert_department_diet_defaults(depA["id"], 0, [{"diet_type_id": str(dt_id), "default_count": 2}])
     drepo.upsert_department_diet_defaults(depB["id"], 0, [{"diet_type_id": str(dt_id), "default_count": 2}])

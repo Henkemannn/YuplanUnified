@@ -5,6 +5,7 @@ from flask import Flask
 from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
+from core.admin_repo import SitesRepo
 from core.db import create_all, get_session
 from core.models import Tenant, User
 
@@ -57,21 +58,33 @@ def seeded_users():
         db.commit()
         db.refresh(u1)
         db.refresh(u2)
-        return {"tenant": tenant, "u1": u1, "u2": u2}
+        tenant_id = int(tenant.id)
+        site_rows = SitesRepo().list_sites_for_tenant(tenant_id)
+        if site_rows:
+            site_id = str(site_rows[0].get("id"))
+        else:
+            site, _ = SitesRepo().create_site("Notes Test Site", tenant_id=tenant_id)
+            site_id = str(site.get("id"))
+        return {
+            "tenant_id": tenant_id,
+            "u1_email": "u1@example.com",
+            "u2_email": "u2@example.com",
+            "site_id": site_id,
+        }
     finally:
         db.close()
 
 
-def login(client, email, password="pw"):
+def login(client, email, site_id, password="pw"):
     # Bind session to a test site to satisfy strict site isolation
     with client.session_transaction() as sess:
-        sess["site_id"] = "test-site"
+        sess["site_id"] = str(site_id)
     return client.post("/auth/login", json={"email": email, "password": password})
 
 
 def test_notes_crud_and_privacy(client, seeded_users):
     # login as u1 (admin)
-    rv = login(client, "u1@example.com")
+    rv = login(client, seeded_users["u1_email"], seeded_users["site_id"])
     assert rv.status_code == 200
     # create public note
     rv = client.post("/notes/", json={"content": "Public Note"})
@@ -90,7 +103,7 @@ def test_notes_crud_and_privacy(client, seeded_users):
 
     # logout and login as cook user u2
     client.post("/auth/logout")
-    rv = login(client, "u2@example.com")
+    rv = login(client, seeded_users["u2_email"], seeded_users["site_id"])
     assert rv.status_code == 200
     # list notes as other user (no private)
     rv = client.get("/notes/")
@@ -109,7 +122,7 @@ def test_notes_crud_and_privacy(client, seeded_users):
 
     # login back as admin and update
     client.post("/auth/logout")
-    rv = login(client, "u1@example.com")
+    rv = login(client, seeded_users["u1_email"], seeded_users["site_id"])
     assert rv.status_code == 200
     rv = client.put(f"/notes/{note_public['id']}", json={"content": "Changed"})
     assert rv.status_code == 200

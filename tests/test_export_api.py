@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash
 
 from core.app_factory import create_app
 from core.db import create_all, get_session
+from core.admin_repo import SitesRepo
 from core.models import Note, Task, Tenant, User
 
 
@@ -58,6 +59,9 @@ def seeded(client):
         db.commit()
         db.refresh(admin)
         db.refresh(cook)
+        tenant_id = int(tenant.id)
+        admin_id = int(admin.id)
+        cook_id = int(cook.id)
         # Seed some data
         n1 = Note(tenant_id=tenant.id, user_id=admin.id, content="Public Note", private_flag=False)
         n2 = Note(tenant_id=tenant.id, user_id=admin.id, content="Privat Note", private_flag=True)
@@ -82,28 +86,35 @@ def seeded(client):
         )
         db.add_all([t1, t2])
         db.commit()
+        # Ensure there is at least one valid site binding for login/session policy.
+        site_rows = SitesRepo().list_sites_for_tenant(tenant_id)
+        if site_rows:
+            site_id = str(site_rows[0].get("id"))
+        else:
+            site, _ = SitesRepo().create_site("Export Test Site", tenant_id=tenant_id)
+            site_id = str(site.get("id"))
         # Return primitive IDs to avoid DetachedInstance issues once session closed
-        return {"tenant_id": tenant.id, "admin_id": admin.id, "cook_id": cook.id}
+        return {"tenant_id": tenant_id, "admin_id": admin_id, "cook_id": cook_id, "site_id": site_id}
     finally:
         db.close()
 
 
-def login(client, email):
+def login(client, email, site_id: str = "test-site"):
     # Seed session site binding to satisfy strict site isolation
     with client.session_transaction() as sess:
-        sess["site_id"] = "test-site"
+        sess["site_id"] = site_id
     return client.post("/auth/login", json={"email": email, "password": "pw"})
 
 
 def test_export_requires_admin_role(client, seeded):
     # login as cook (not admin)
-    assert login(client, "exp_cook@example.com").status_code == 200
+    assert login(client, "exp_cook@example.com", seeded["site_id"]).status_code == 200
     rv = client.get("/export/notes.csv")
     assert rv.status_code in (403, 401)
 
 
 def test_export_notes_csv_basic(client, seeded):
-    assert login(client, "exp_admin@example.com").status_code == 200
+    assert login(client, "exp_admin@example.com", seeded["site_id"]).status_code == 200
     rv = client.get("/export/notes.csv")
     assert rv.status_code == 200
     assert rv.headers["Content-Type"].startswith("text/csv")
@@ -114,7 +125,7 @@ def test_export_notes_csv_basic(client, seeded):
 
 
 def test_export_tasks_csv_separator_and_bom(client, seeded):
-    assert login(client, "exp_admin@example.com").status_code == 200
+    assert login(client, "exp_admin@example.com", seeded["site_id"]).status_code == 200
     rv = client.get("/export/tasks.csv?sep=;&bom=1")
     assert rv.status_code == 200
     text = rv.get_data(as_text=True)
@@ -142,7 +153,7 @@ def test_export_streaming_large(client, seeded):
         db.commit()
     finally:
         db.close()
-    assert login(client, "exp_admin@example.com").status_code == 200
+    assert login(client, "exp_admin@example.com", seeded["site_id"]).status_code == 200
     rv = client.get("/export/notes.csv")
     assert rv.status_code == 200
     body = rv.get_data(as_text=True)

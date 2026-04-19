@@ -21,6 +21,7 @@ class MenuService:
         site_id: str,
         week_key: str,
         *,
+        title: str | None = None,
         version: int = 1,
         status: str = "draft",
     ) -> Menu:
@@ -36,6 +37,7 @@ class MenuService:
 
         menu = Menu(
             menu_id=menu_id_value,
+            title=str(title or "").strip() or None,
             site_id=site_id_value,
             week_key=week_key_value,
             version=int(version),

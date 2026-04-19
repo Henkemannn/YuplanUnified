@@ -11,7 +11,7 @@ def make_app(tmp_path, name="test"):
 
     core_db._engine = None  # type: ignore
     core_db._SessionFactory = None  # type: ignore
-    app = create_app({"database_url": db_url, "secret_key": "test"})
+    app = create_app({"database_url": db_url, "secret_key": "test", "TESTING": True})
     # Initialize engine explicitly then create schema
     engine = core_db.init_engine(db_url)  # type: ignore
     Base.metadata.create_all(engine)

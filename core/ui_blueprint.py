@@ -123,6 +123,12 @@ def ui_proto_app_shell():
 def builder_internal_ui():
     return render_template("builder.html")
 
+
+@ui_bp.get("/menu-builder-v1")
+@require_roles("editor", "admin", "superuser")
+def menu_builder_v1_ui():
+    return render_template("menu_builder_v1.html")
+
 # Weekview special diets mark toggle API (ETag-safe), aligned with report marks
 @ui_bp.route("/api/weekview/specialdiets/mark", methods=["POST"])
 @require_roles("cook", "admin", "superuser", "kitchen")
@@ -1387,8 +1393,16 @@ def admin_diets_create():
         if not site_id:
             flash("Ingen arbetsplats vald.", "error")
             return redirect(url_for("ui.select_site", next=url_for("ui.admin_diets_page")))
-    DietTypesRepo().create(site_id=site_id, name=name, default_select=False)
-    flash("Specialkosttyp skapad.", "success")
+    try:
+        DietTypesRepo().create(site_id=site_id, name=name, default_select=False)
+        flash("Specialkosttyp skapad.", "success")
+    except ValueError as exc:
+        if str(exc) == "duplicate_name":
+            flash("Specialkosttypen finns redan.", "error")
+        else:
+            flash("Kunde inte skapa specialkosttyp.", "error")
+    except Exception:
+        flash("Kunde inte skapa specialkosttyp.", "error")
     return redirect(url_for("ui.admin_diets_page", site_id=site_id))
 
 @ui_bp.post("/ui/admin/system/diet/create")

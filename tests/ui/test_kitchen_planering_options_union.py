@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy import text
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -38,7 +40,7 @@ def _seed_union(site_id: str):
 
 def test_options_union_render(app_session):
     client = app_session.test_client()
-    site_id = "site-plan-1"
+    site_id = f"site-plan-{uuid.uuid4().hex[:8]}"
     _seed_union(site_id)
     # Select a day + meal to show checklist
     rv = client.get(f"/ui/kitchen/planering?site_id={site_id}&day=0&meal=lunch", headers=HEADERS)

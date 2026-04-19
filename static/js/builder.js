@@ -15,10 +15,25 @@ function showLoading(targetId) {
 }
 
 async function callApi(url, options) {
+  const headers = Object.assign({}, options.headers || {});
+  let body = undefined;
+
+  if (options.formData) {
+    body = options.formData;
+    if (headers["Content-Type"]) {
+      delete headers["Content-Type"];
+    }
+  } else if (Object.prototype.hasOwnProperty.call(options, "body")) {
+    body = JSON.stringify(options.body);
+    if (!headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+  }
+
   const response = await fetch(url, {
     method: options.method || "GET",
-    headers: options.headers || {},
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    headers,
+    body,
   });
   const data = await response
     .json()
@@ -26,32 +41,11 @@ async function callApi(url, options) {
   return { status: response.status, data };
 }
 
-function parseRows(text) {
-  const lines = String(text || "")
+function parseLibraryLines(text) {
+  return String(text || "")
     .split(/\r?\n/)
     .map((v) => v.trim())
     .filter(Boolean);
-  const rows = [];
-  for (const line of lines) {
-    const parts = line.split(";");
-    if (parts.length < 3) {
-      throw new Error("Each row must be in format day;meal_slot;raw_text");
-    }
-    rows.push({
-      day: parts[0].trim(),
-      meal_slot: parts[1].trim(),
-      raw_text: parts.slice(2).join(";").trim(),
-    });
-  }
-  return rows;
-}
-
-function formatDay(value) {
-  const text = String(value || "").trim();
-  if (!text) {
-    return "";
-  }
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function renderImportSummary(result) {
@@ -77,10 +71,10 @@ function renderImportSummary(result) {
   counts.textContent =
     "Imported: " +
     String(summary.imported_count || 0) +
-    " | Resolved: " +
-    String(summary.resolved_count || 0) +
-    " | Unresolved: " +
-    String(summary.unresolved_count || 0);
+    " | Created: " +
+    String(summary.created_count || 0) +
+    " | Reused: " +
+    String(summary.reused_count || 0);
   host.appendChild(counts);
 
   const summaryWarnings = Array.isArray(summary.warnings) ? summary.warnings : [];
@@ -96,27 +90,26 @@ function renderImportSummary(result) {
     const item = document.createElement("div");
     item.className = "import-row-result";
 
-    const isResolved = String(row.kind || "") === "composition";
     const badge = document.createElement("span");
-    badge.className = isResolved ? "status-resolved" : "status-unresolved";
-    badge.textContent = isResolved ? "Resolved" : "Needs review";
+    badge.className = "status-resolved";
+    const via = String(row.matched_via || "").toLowerCase();
+    badge.textContent = via === "created" ? "Created" : "Reused";
 
     const primary = document.createElement("span");
     primary.className = "import-row-primary";
-    primary.textContent =
-      formatDay(row.day) +
-      " " +
-      String(row.meal_slot || "") +
-      " - " +
-      String(row.raw_text || "");
+    primary.textContent = String(row.raw_text || "");
 
     item.appendChild(badge);
     item.appendChild(primary);
 
-    if (isResolved && row.composition_id) {
+    if (row.composition_id) {
       const secondary = document.createElement("div");
       secondary.className = "import-row-secondary";
-      secondary.textContent = "composition_id: " + String(row.composition_id);
+      secondary.textContent =
+        "composition_id: " +
+        String(row.composition_id) +
+        " | composition_name: " +
+        String(row.composition_name || "");
       item.appendChild(secondary);
     }
 
@@ -132,68 +125,275 @@ function renderImportSummary(result) {
   }
 }
 
-let currentResolve = null;
-let currentBuilderComposition = null;
-let currentNewItemRole = "component";
-let currentSelectedUnresolvedId = null;
+let pendingFileImportLines = [];
 
-function setUnresolvedFeedback(message, type) {
-  const feedback = document.getElementById("unresolvedFeedback");
-  if (!feedback) {
+function setFileImportStatus(message, isError) {
+  const status = document.getElementById("importFileStatus");
+  if (!status) {
     return;
   }
-  feedback.className = "";
-  feedback.textContent = String(message || "");
-  if (type === "success") {
-    feedback.classList.add("unresolved-feedback-success");
+  status.textContent = String(message || "");
+  status.className = isError ? "import-warning-block" : "";
+}
+
+function renderFileImportPreview(result) {
+  const list = document.getElementById("importFilePreviewList");
+  const ignoredList = document.getElementById("importFileIgnoredList");
+  const confirmBtn = document.getElementById("btnImportFileConfirm");
+  if (list) {
+    list.innerHTML = "";
+  }
+  if (ignoredList) {
+    ignoredList.innerHTML = "";
+  }
+
+  pendingFileImportLines = [];
+  if (confirmBtn) {
+    confirmBtn.disabled = true;
+  }
+
+  const data = (result && result.data) || {};
+  const preview = data.preview || {};
+  const lines = Array.isArray(preview.importable_lines)
+    ? preview.importable_lines
+    : (Array.isArray(preview.lines) ? preview.lines : []);
+  const ignored = Array.isArray(preview.ignored_lines) ? preview.ignored_lines : [];
+  if (!result || result.status >= 400 || lines.length === 0) {
+    setFileImportStatus(String(data.message || data.error || "Unable to preview file"), true);
+    return;
+  }
+
+  pendingFileImportLines = lines;
+  if (confirmBtn) {
+    confirmBtn.disabled = false;
+  }
+
+  if (list) {
+    for (const line of lines) {
+      const item = document.createElement("li");
+      item.textContent = String(line || "");
+      list.appendChild(item);
+    }
+  }
+
+  if (ignoredList) {
+    for (const itemData of ignored) {
+      const item = document.createElement("li");
+      const text = String(itemData.normalized_text || itemData.raw_text || "");
+      const reason = String(itemData.reason || "ignored_noise");
+      item.textContent = text + " (" + reason + ")";
+      ignoredList.appendChild(item);
+    }
+  }
+
+  setFileImportStatus(
+    "Preview ready: " +
+      String(preview.line_count || lines.length) +
+      " importable lines, " +
+      String(ignored.length) +
+      " ignored from " +
+      String(preview.file_type || "file"),
+    false,
+  );
+}
+
+async function loadAllCompositions() {
+  return callApi("/api/builder/compositions", { method: "GET" });
+}
+
+function renderLibrary(result) {
+  const componentsList = document.getElementById("libraryComponentsList");
+  const compositionsList = document.getElementById("libraryCompositionsList");
+  if (!componentsList || !compositionsList) {
+    return;
+  }
+
+  componentsList.innerHTML = "";
+  compositionsList.innerHTML = "";
+
+  const data = (result && result.data) || {};
+  const components = Array.isArray(data.components) ? data.components : [];
+  const compositions = Array.isArray(data.compositions) ? data.compositions : [];
+
+  if (components.length === 0) {
+    const li = document.createElement("li");
+    li.className = "library-empty";
+    li.textContent = "No components yet";
+    componentsList.appendChild(li);
+  } else {
+    for (const item of components) {
+      const li = document.createElement("li");
+      li.className = "library-item";
+      li.textContent = String(item.component_name || item.component_id || "");
+      componentsList.appendChild(li);
+    }
+  }
+
+  if (compositions.length === 0) {
+    const li = document.createElement("li");
+    li.className = "library-empty";
+    li.textContent = "No dishes yet";
+    compositionsList.appendChild(li);
+  } else {
+    for (const item of compositions) {
+      const li = document.createElement("li");
+      li.className = "library-item";
+
+      const name = document.createElement("span");
+      name.textContent = String(item.composition_name || item.composition_id || "");
+
+      const open = document.createElement("button");
+      open.className = "library-open-btn";
+      open.type = "button";
+      open.textContent = "Open";
+      open.addEventListener("click", async () => {
+        const all = await loadAllCompositions();
+        const list = (all.data && all.data.compositions) || [];
+        const full = list.find(
+          (candidate) =>
+            String(candidate.composition_id || "") === String(item.composition_id || ""),
+        );
+        if (full) {
+          openBuilderModalForComposition(full);
+        }
+      });
+
+      li.appendChild(name);
+      li.appendChild(open);
+      compositionsList.appendChild(li);
+    }
   }
 }
 
-function renderUnresolvedList(unresolved, menuId) {
-  const list = document.getElementById("unresolvedList");
-  if (!list) {
+async function loadLibrary() {
+  showLoading("libraryOut");
+  const result = await callApi("/api/builder/library", { method: "GET" });
+  renderLibrary(result);
+  showJson("libraryOut", result);
+}
+
+let currentBuilderComposition = null;
+let reusableComponentsCache = [];
+
+function renderExistingComponentSuggestions(components) {
+  const optionsHost = document.getElementById("componentNameSuggestions");
+  if (!optionsHost) {
     return;
   }
 
+  optionsHost.innerHTML = "";
+  const items = Array.isArray(components) ? components : [];
+  for (const item of items) {
+    const option = document.createElement("option");
+    option.value = String(item.component_name || item.component_id || "");
+    optionsHost.appendChild(option);
+  }
+}
+
+async function loadReusableComponents(query) {
+  const queryValue = String(query || "").trim();
+  let url = "/api/builder/components";
+  if (queryValue) {
+    url += "?q=" + encodeURIComponent(queryValue);
+  }
+
+  const result = await callApi(url, { method: "GET" });
+  const items = (result && result.data && result.data.components) || [];
+  reusableComponentsCache = Array.isArray(items) ? items : [];
+  renderExistingComponentSuggestions(reusableComponentsCache);
+}
+
+function renderBuilderPanel(composition) {
+  const title = document.getElementById("builderCompositionTitle");
+  const list = document.getElementById("builderComponentsList");
+
+  if (!title || !list || !composition) {
+    return;
+  }
+
+  currentBuilderComposition = composition;
+  title.textContent = "Dish: " + String(composition.composition_name || "");
   list.innerHTML = "";
-  if (!Array.isArray(unresolved) || unresolved.length === 0) {
+
+  const components = Array.isArray(composition.components) ? composition.components : [];
+  if (components.length === 0) {
     const li = document.createElement("li");
-    li.className = "unresolved-empty-state";
-    li.textContent = "No unresolved rows left";
+    li.textContent = "No parts added yet";
     list.appendChild(li);
     return;
   }
 
-  for (const item of unresolved) {
+  for (const component of components) {
     const li = document.createElement("li");
-    li.className = "unresolved-card";
-    const rowId = String(item.menu_detail_id || "");
-    if (rowId && rowId === currentSelectedUnresolvedId) {
-      li.classList.add("unresolved-card-selected");
-    }
+    const row = document.createElement("div");
+    row.className = "component-row";
 
-    const meta = document.createElement("div");
-    meta.className = "unresolved-meta";
-    meta.textContent = String(item.day || "") + " " + String(item.meal_slot || "");
+    const name = document.createElement("span");
+    name.textContent = String(component.component_name || component.component_id || "");
 
-    const text = document.createElement("div");
-    text.className = "unresolved-text";
-    text.textContent = String(item.unresolved_text || "");
-
-    const action = document.createElement("div");
-    action.className = "unresolved-action";
-    action.textContent = "Create or link this dish";
-
-    li.appendChild(meta);
-    li.appendChild(text);
-    li.appendChild(action);
-    li.addEventListener("click", () => {
-      currentSelectedUnresolvedId = rowId;
-      renderUnresolvedList(unresolved, menuId);
-      openResolveModal(item, menuId);
+    const remove = document.createElement("button");
+    remove.className = "component-remove-btn";
+    remove.type = "button";
+    remove.textContent = "X";
+    remove.title = "Remove component";
+    remove.addEventListener("click", () => {
+      removeComponentFromCurrentComposition(String(component.component_id || ""));
     });
+
+    const rename = document.createElement("button");
+    rename.className = "component-rename-btn";
+    rename.type = "button";
+    rename.textContent = "Rename";
+    rename.title = "Rename component";
+    rename.addEventListener("click", () => {
+      renameComponentInCurrentComposition(
+        String(component.component_id || ""),
+        String(component.component_name || component.component_id || ""),
+      );
+    });
+
+    const right = document.createElement("div");
+    right.className = "component-row-right";
+    right.appendChild(rename);
+    right.appendChild(remove);
+
+    row.appendChild(name);
+    row.appendChild(right);
+    li.appendChild(row);
     list.appendChild(li);
   }
+}
+
+function openBuilderModalForComposition(composition) {
+  const modal = document.getElementById("resolveModal");
+  const modalTitle = document.getElementById("resolveModalTitle");
+  const statusLine = document.getElementById("resolveStatusLine");
+  if (!modal || !composition) {
+    return;
+  }
+  if (modalTitle) {
+    modalTitle.textContent = "Edit dish: " + String(composition.composition_name || "");
+  }
+  if (statusLine) {
+    statusLine.textContent = "Adjust what should be included in this dish.";
+    statusLine.classList.remove("hidden");
+  }
+  renderBuilderPanel(composition);
+  modal.classList.remove("hidden");
+  loadReusableComponents("").catch((error) => {
+    showJson("builderOut", {
+      status: 0,
+      data: { ok: false, error: String(error.message || error) },
+    });
+  });
+}
+
+function closeResolveModal() {
+  const modal = document.getElementById("resolveModal");
+  if (modal) {
+    modal.classList.add("hidden");
+  }
+  currentBuilderComposition = null;
 }
 
 async function removeComponentFromCurrentComposition(componentId) {
@@ -212,7 +412,6 @@ async function removeComponentFromCurrentComposition(componentId) {
     "/components/" +
     encodeURIComponent(String(componentId || ""));
 
-  console.log("REQUEST:", url, null);
   showLoading("builderOut");
   try {
     const result = await callApi(url, { method: "DELETE" });
@@ -252,17 +451,13 @@ async function renameComponentInCurrentComposition(componentId, currentName) {
     encodeURIComponent(compositionId) +
     "/components/" +
     encodeURIComponent(String(componentId || ""));
-  const payload = { component_name: newName };
 
-  console.log("REQUEST:", url, payload);
   showLoading("builderOut");
   try {
     const result = await callApi(url, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: payload,
+      headers: { "Content-Type": "application/json" },
+      body: { component_name: newName },
     });
     showJson("builderOut", result);
     if (result && result.data && result.data.ok && result.data.composition) {
@@ -276,303 +471,166 @@ async function renameComponentInCurrentComposition(componentId, currentName) {
   }
 }
 
-function setNewItemRole(role) {
-  const roleValue = role === "connector" ? "connector" : "component";
-  const componentBtn = document.getElementById("newItemRoleComponent");
-  const connectorBtn = document.getElementById("newItemRoleConnector");
-  currentNewItemRole = roleValue;
-
-  if (componentBtn) {
-    componentBtn.classList.toggle("role-toggle-active", roleValue === "component");
-  }
-  if (connectorBtn) {
-    connectorBtn.classList.toggle("role-toggle-active", roleValue === "connector");
-  }
-}
-
-function renderBuilderPanel(composition) {
-  const title = document.getElementById("builderCompositionTitle");
-  const list = document.getElementById("builderComponentsList");
-
-  if (!title || !list || !composition) {
-    return;
-  }
-
-  currentBuilderComposition = composition;
-  title.textContent = "Composition: " + String(composition.composition_name || "");
-  list.innerHTML = "";
-
-  const components = Array.isArray(composition.components) ? composition.components : [];
-  if (components.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = "No components added yet";
-    list.appendChild(li);
-    return;
-  }
-
-  for (const component of components) {
-    const li = document.createElement("li");
-    const row = document.createElement("div");
-    row.className = "component-row";
-
-    const name = document.createElement("span");
-    name.textContent = String(component.component_name || component.component_id || "");
-
-    const role = document.createElement("span");
-    role.className = "component-role-pill";
-    role.textContent = String(component.role || "component");
-
-    const remove = document.createElement("button");
-    remove.className = "component-remove-btn";
-    remove.type = "button";
-    remove.textContent = "X";
-    remove.title = "Remove component";
-    remove.addEventListener("click", () => {
-      removeComponentFromCurrentComposition(String(component.component_id || ""));
-    });
-
-    const rename = document.createElement("button");
-    rename.className = "component-rename-btn";
-    rename.type = "button";
-    rename.textContent = "Rename";
-    rename.title = "Rename component";
-    rename.addEventListener("click", () => {
-      renameComponentInCurrentComposition(
-        String(component.component_id || ""),
-        String(component.component_name || component.component_id || ""),
-      );
-    });
-
-    const right = document.createElement("div");
-    right.className = "component-row-right";
-    right.appendChild(role);
-    right.appendChild(rename);
-    right.appendChild(remove);
-
-    row.appendChild(name);
-    row.appendChild(right);
-    li.appendChild(row);
-    list.appendChild(li);
-  }
-}
-
-function setResolveCreateState(unresolvedText) {
-  const createSection = document.querySelector(".create-new-section");
-  const builderSection = document.getElementById("modalBuilderSection");
-  const createAndResolveBtn = document.getElementById("createAndResolve");
-  const resolveCancelBtn = document.getElementById("resolveCancel");
-  const newComponentName = document.getElementById("newComponentName");
-  const modalTitle = document.getElementById("resolveModalTitle");
-  const statusLine = document.getElementById("resolveStatusLine");
-
-  if (createSection) {
-    createSection.classList.remove("hidden");
-  }
-  if (builderSection) {
-    builderSection.classList.add("hidden");
-  }
-  if (createAndResolveBtn) {
-    createAndResolveBtn.classList.remove("hidden");
-  }
-  if (resolveCancelBtn) {
-    resolveCancelBtn.textContent = "Cancel";
-  }
-  if (newComponentName) {
-    newComponentName.value = "";
-  }
-  if (modalTitle) {
-    modalTitle.textContent = "Create dish from: " + String(unresolvedText || "");
-  }
-  if (statusLine) {
-    statusLine.textContent = "";
-    statusLine.classList.add("hidden");
-  }
-  setNewItemRole("component");
-  showJson("builderOut", { ok: true, message: "Create and link to start building components" });
-}
-
-function setResolveBuildState(composition) {
-  const createSection = document.querySelector(".create-new-section");
-  const builderSection = document.getElementById("modalBuilderSection");
-  const createAndResolveBtn = document.getElementById("createAndResolve");
-  const resolveCancelBtn = document.getElementById("resolveCancel");
-  const modalTitle = document.getElementById("resolveModalTitle");
-  const statusLine = document.getElementById("resolveStatusLine");
-
-  if (createSection) {
-    createSection.classList.add("hidden");
-  }
-  if (builderSection) {
-    builderSection.classList.remove("hidden");
-  }
-  if (createAndResolveBtn) {
-    createAndResolveBtn.classList.add("hidden");
-  }
-  if (resolveCancelBtn) {
-    resolveCancelBtn.textContent = "Done";
-  }
-  if (modalTitle) {
-    modalTitle.textContent = "Edit dish: " + String(composition.composition_name || "");
-  }
-  if (statusLine) {
-    statusLine.textContent = "Dish created. Add or adjust components below.";
-    statusLine.classList.remove("hidden");
-  }
-  renderBuilderPanel(composition);
-}
-
-function openResolveModal(detail, menuId) {
-  const modal = document.getElementById("resolveModal");
-  const resolveText = document.getElementById("resolveText");
-  const newCompositionName = document.getElementById("newCompositionName");
-  if (!modal || !resolveText) {
-    return;
-  }
-
-  currentResolve = {
-    menuId: String(menuId || ""),
-    menuDetailId: String(detail.menu_detail_id || ""),
-  };
-  resolveText.textContent = String(detail.unresolved_text || "");
-  if (newCompositionName) {
-    newCompositionName.value = String(detail.unresolved_text || "").trim();
-  }
-  currentBuilderComposition = null;
-  setResolveCreateState(String(detail.unresolved_text || ""));
-  modal.classList.remove("hidden");
-}
-
-function closeResolveModal() {
-  const modal = document.getElementById("resolveModal");
-  if (modal) {
-    modal.classList.add("hidden");
-  }
-  currentResolve = null;
-  currentBuilderComposition = null;
-}
-
-async function loadUnresolvedForMenu(menu_id) {
-  const resolvedMenuId = String(menu_id || "").trim();
-  const url = "/api/builder/menus/" + encodeURIComponent(resolvedMenuId) + "/unresolved";
-  renderUnresolvedList([], resolvedMenuId);
-  console.log("REQUEST:", url, null);
-  showLoading("unresolvedOut");
-  const result = await callApi(url, { method: "GET" });
-  const unresolved = (result.data && result.data.unresolved) || [];
-
-  if (!unresolved.some((item) => String(item.menu_detail_id || "") === currentSelectedUnresolvedId)) {
-    currentSelectedUnresolvedId = null;
-  }
-  renderUnresolvedList(unresolved, resolvedMenuId);
-
-  showJson("unresolvedOut", result);
-}
-
 function bindBuilderHandlers() {
-  const createMenuBtn = document.getElementById("btnCreateMenu");
-  const importRowsBtn = document.getElementById("btnImportRows");
-  const loadUnresolvedBtn = document.getElementById("btnLoadUnresolved");
-  const loadCostBtn = document.getElementById("btnLoadCost");
-  const createAndResolveBtn = document.getElementById("createAndResolve");
+  const createDishBtn = document.getElementById("btnCreateDish");
+  const createComponentBtn = document.getElementById("btnCreateComponent");
+  const importLibraryBtn = document.getElementById("btnImportLibrary");
   const resolveCancelBtn = document.getElementById("resolveCancel");
   const addComponentBtn = document.getElementById("btnAddComponent");
-  const newItemRoleComponentBtn = document.getElementById("newItemRoleComponent");
-  const newItemRoleConnectorBtn = document.getElementById("newItemRoleConnector");
+  const newComponentInput = document.getElementById("newComponentName");
+  const importFilePreviewBtn = document.getElementById("btnImportFilePreview");
+  const importFileConfirmBtn = document.getElementById("btnImportFileConfirm");
 
-  if (newItemRoleComponentBtn) {
-    newItemRoleComponentBtn.addEventListener("click", () => {
-      setNewItemRole("component");
-    });
-  }
-  if (newItemRoleConnectorBtn) {
-    newItemRoleConnectorBtn.addEventListener("click", () => {
-      setNewItemRole("connector");
-    });
-  }
+  if (createDishBtn) {
+    createDishBtn.addEventListener("click", async () => {
+      const freeDishNameEl = document.getElementById("freeDishName");
+      const composition_name = freeDishNameEl ? String(freeDishNameEl.value || "").trim() : "";
+      if (!composition_name) {
+        showJson("createDishOut", { status: 0, data: { ok: false, error: "dish name is required" } });
+        return;
+      }
 
-  if (createMenuBtn) {
-    createMenuBtn.addEventListener("click", async () => {
-      console.log("create menu clicked");
-      const createMenuIdEl = document.getElementById("createMenuId");
-      const createSiteIdEl = document.getElementById("createSiteId");
-      const createWeekKeyEl = document.getElementById("createWeekKey");
-      const menu_id = createMenuIdEl ? String(createMenuIdEl.value || "").trim() : "";
-      const site_id = createSiteIdEl ? String(createSiteIdEl.value || "").trim() : "";
-      const week_key = createWeekKeyEl ? String(createWeekKeyEl.value || "").trim() : "";
-      const url = "/api/builder/menus";
-      const payload = { menu_id, site_id, week_key };
-
-      console.log("REQUEST:", url, payload);
-      showLoading("createMenuOut");
+      showLoading("createDishOut");
       try {
-        const result = await callApi(url, {
+        const result = await callApi("/api/builder/compositions", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: payload,
+          headers: { "Content-Type": "application/json" },
+          body: { composition_name },
         });
-        showJson("createMenuOut", result);
+        showJson("createDishOut", result);
+        if (result && result.data && result.data.ok && result.data.composition) {
+          openBuilderModalForComposition(result.data.composition);
+          if (freeDishNameEl) {
+            freeDishNameEl.value = "";
+          }
+          await loadLibrary();
+        }
       } catch (error) {
-        showJson("createMenuOut", {
-          status: 0,
-          data: { ok: false, error: String(error.message || error) },
-        });
+        showJson("createDishOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
       }
     });
   }
 
-  if (importRowsBtn) {
-    importRowsBtn.addEventListener("click", async () => {
-      console.log("import clicked");
-      const importMenuIdEl = document.getElementById("importMenuId");
-      const importRowsEl = document.getElementById("importRows");
+  if (createComponentBtn) {
+    createComponentBtn.addEventListener("click", async () => {
+      const freeComponentNameEl = document.getElementById("freeComponentName");
+      const component_name = freeComponentNameEl ? String(freeComponentNameEl.value || "").trim() : "";
+      if (!component_name) {
+        showJson("createComponentOut", { status: 0, data: { ok: false, error: "component name is required" } });
+        return;
+      }
+
+      showLoading("createComponentOut");
+      try {
+        const result = await callApi("/api/builder/components", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: { component_name },
+        });
+        showJson("createComponentOut", result);
+        if (result && result.data && result.data.ok) {
+          if (freeComponentNameEl) {
+            freeComponentNameEl.value = "";
+          }
+          await loadLibrary();
+        }
+      } catch (error) {
+        showJson("createComponentOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
+      }
+    });
+  }
+
+  if (importLibraryBtn) {
+    importLibraryBtn.addEventListener("click", async () => {
+      const importLinesEl = document.getElementById("importLibraryLines");
       const importSummaryView = document.getElementById("importSummaryView");
-      const menu_id = importMenuIdEl ? String(importMenuIdEl.value || "").trim() : "";
       showLoading("importOut");
       if (importSummaryView) {
         importSummaryView.textContent = "Loading import summary...";
       }
+
       try {
-        const rowsInput = importRowsEl ? String(importRowsEl.value || "") : "";
-        const rows = parseRows(rowsInput);
-        const url = "/api/builder/menus/" + encodeURIComponent(menu_id) + "/import";
-        const payload = { rows };
-
-        console.log("REQUEST:", url, payload);
-
-        const result = await callApi(url, {
+        const linesInput = importLinesEl ? String(importLinesEl.value || "") : "";
+        const result = await callApi("/api/builder/import", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: payload,
+          headers: { "Content-Type": "application/json" },
+          body: { lines: parseLibraryLines(linesInput) },
         });
         renderImportSummary(result);
         showJson("importOut", result);
+        await loadLibrary();
       } catch (error) {
-        const failResult = {
-          status: 0,
-          data: { ok: false, error: String(error.message || error) },
-        };
+        const failResult = { status: 0, data: { ok: false, error: String(error.message || error) } };
         renderImportSummary(failResult);
         showJson("importOut", failResult);
       }
     });
   }
 
-  if (loadUnresolvedBtn) {
-    loadUnresolvedBtn.addEventListener("click", async () => {
-      console.log("load unresolved clicked");
-      const unresolvedMenuIdEl = document.getElementById("unresolvedMenuId");
-      const menu_id = unresolvedMenuIdEl ? String(unresolvedMenuIdEl.value || "").trim() : "";
+  if (importFilePreviewBtn) {
+    importFilePreviewBtn.addEventListener("click", async () => {
+      const fileInput = document.getElementById("importLibraryFile");
+      const csvColumnInput = document.getElementById("importCsvColumn");
+      const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+      if (!file) {
+        setFileImportStatus("Choose a .txt or .csv file first", true);
+        return;
+      }
+
+      setFileImportStatus("Loading file preview...", false);
+      showLoading("importOut");
+
+      const formData = new FormData();
+      formData.append("file", file);
+      const csvColumn = csvColumnInput ? String(csvColumnInput.value || "").trim() : "";
+      if (csvColumn) {
+        formData.append("csv_column", csvColumn);
+      }
+
       try {
-        await loadUnresolvedForMenu(menu_id);
-      } catch (error) {
-        showJson("unresolvedOut", {
-          status: 0,
-          data: { ok: false, error: String(error.message || error) },
+        const result = await callApi("/api/builder/import/file/preview", {
+          method: "POST",
+          formData,
         });
+        renderFileImportPreview(result);
+        showJson("importOut", result);
+      } catch (error) {
+        const fail = { status: 0, data: { ok: false, error: String(error.message || error) } };
+        renderFileImportPreview(fail);
+        showJson("importOut", fail);
+      }
+    });
+  }
+
+  if (importFileConfirmBtn) {
+    importFileConfirmBtn.addEventListener("click", async () => {
+      if (!Array.isArray(pendingFileImportLines) || pendingFileImportLines.length === 0) {
+        setFileImportStatus("No preview lines available. Run preview first.", true);
+        return;
+      }
+
+      showLoading("importOut");
+      setFileImportStatus("Importing previewed lines...", false);
+      try {
+        const result = await callApi("/api/builder/import/file/confirm", {
+          method: "POST",
+          body: { lines: pendingFileImportLines },
+        });
+        renderImportSummary(result);
+        showJson("importOut", result);
+        if (result && result.status < 400) {
+          pendingFileImportLines = [];
+          importFileConfirmBtn.disabled = true;
+          setFileImportStatus("File import completed.", false);
+        } else {
+          setFileImportStatus("File import failed", true);
+        }
+        await loadLibrary();
+      } catch (error) {
+        const failResult = { status: 0, data: { ok: false, error: String(error.message || error) } };
+        renderImportSummary(failResult);
+        showJson("importOut", failResult);
+        setFileImportStatus("File import failed", true);
       }
     });
   }
@@ -583,70 +641,12 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (createAndResolveBtn) {
-    createAndResolveBtn.addEventListener("click", async () => {
-      if (!currentResolve) {
-        showJson("unresolvedOut", {
-          status: 0,
-          data: { ok: false, error: "no_menu_detail_selected" },
-        });
-        return;
-      }
-
-      const newCompositionName = document.getElementById("newCompositionName");
-      const composition_name = newCompositionName
-        ? String(newCompositionName.value || "").trim()
-        : "";
-
-      if (!composition_name) {
-        showJson("unresolvedOut", {
-          status: 0,
-          data: {
-            ok: false,
-            error: "composition_name is required",
-          },
-        });
-        return;
-      }
-
-      const url =
-        "/api/builder/menus/" +
-        encodeURIComponent(currentResolve.menuId) +
-        "/create-composition-from-row";
-      const payload = {
-        menu_detail_id: currentResolve.menuDetailId,
-        composition_name,
-      };
-      const refreshMenuId = currentResolve.menuId;
-
-      console.log("REQUEST:", url, payload);
-      showLoading("unresolvedOut");
+  if (newComponentInput) {
+    newComponentInput.addEventListener("input", async () => {
       try {
-        const result = await callApi(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: payload,
-        });
-        showJson("unresolvedOut", result);
-
-        if (result && result.data && result.data.ok && result.data.composition) {
-          setResolveBuildState(result.data.composition);
-          const name = String(result.data.composition.composition_name || "").trim();
-          setUnresolvedFeedback(
-            "Created composition and linked row successfully" +
-              (name ? ": " + name : ""),
-            "success",
-          );
-        }
-
-        await loadUnresolvedForMenu(refreshMenuId);
+        await loadReusableComponents(String(newComponentInput.value || "").trim());
       } catch (error) {
-        showJson("unresolvedOut", {
-          status: 0,
-          data: { ok: false, error: String(error.message || error) },
-        });
+        showJson("builderOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
       }
     });
   }
@@ -654,43 +654,27 @@ function bindBuilderHandlers() {
   if (addComponentBtn) {
     addComponentBtn.addEventListener("click", async () => {
       if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
-        showJson("builderOut", {
-          status: 0,
-          data: { ok: false, error: "no_composition_selected" },
-        });
+        showJson("builderOut", { status: 0, data: { ok: false, error: "no_composition_selected" } });
         return;
       }
 
       const newComponentNameEl = document.getElementById("newComponentName");
-      const component_name = newComponentNameEl
-        ? String(newComponentNameEl.value || "").trim()
-        : "";
+      const component_name = newComponentNameEl ? String(newComponentNameEl.value || "").trim() : "";
       if (!component_name) {
-        showJson("builderOut", {
-          status: 0,
-          data: { ok: false, error: "component_name is required" },
-        });
+        showJson("builderOut", { status: 0, data: { ok: false, error: "component_name is required" } });
         return;
       }
 
-      const compositionId = String(currentBuilderComposition.composition_id);
-      const url =
-        "/api/builder/compositions/" + encodeURIComponent(compositionId) + "/components";
-      const payload = {
-        component_name,
-        role: currentNewItemRole,
-      };
-
-      console.log("REQUEST:", url, payload);
       showLoading("builderOut");
       try {
-        const result = await callApi(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        const result = await callApi(
+          "/api/builder/compositions/" + encodeURIComponent(String(currentBuilderComposition.composition_id)) + "/components",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: { component_name },
           },
-          body: payload,
-        });
+        );
         showJson("builderOut", result);
         if (result && result.data && result.data.ok && result.data.composition) {
           renderBuilderPanel(result.data.composition);
@@ -699,43 +683,20 @@ function bindBuilderHandlers() {
           }
         }
       } catch (error) {
-        showJson("builderOut", {
-          status: 0,
-          data: { ok: false, error: String(error.message || error) },
-        });
-      }
-    });
-  }
-
-  if (loadCostBtn) {
-    loadCostBtn.addEventListener("click", async () => {
-      console.log("load cost overview clicked");
-      const costMenuIdEl = document.getElementById("costMenuId");
-      const costTargetPortionsEl = document.getElementById("costTargetPortions");
-      const menu_id = costMenuIdEl ? String(costMenuIdEl.value || "").trim() : "";
-      const target_portions = costTargetPortionsEl
-        ? String(costTargetPortionsEl.value || "").trim() || "1"
-        : "1";
-      showLoading("costOut");
-      try {
-        const url =
-          "/api/builder/menus/" +
-          encodeURIComponent(menu_id) +
-          "/cost-overview?target_portions=" +
-          encodeURIComponent(target_portions);
-
-        console.log("REQUEST:", url, null);
-
-        const result = await callApi(url, { method: "GET" });
-        showJson("costOut", result);
-      } catch (error) {
-        showJson("costOut", {
-          status: 0,
-          data: { ok: false, error: String(error.message || error) },
-        });
+        showJson("builderOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
       }
     });
   }
 }
 
-document.addEventListener("DOMContentLoaded", bindBuilderHandlers);
+document.addEventListener("DOMContentLoaded", async () => {
+  bindBuilderHandlers();
+  try {
+    await loadLibrary();
+  } catch (error) {
+    showJson("libraryOut", {
+      status: 0,
+      data: { ok: false, error: String(error.message || error) },
+    });
+  }
+});

@@ -10,95 +10,89 @@
   <h1>Builder Internal UI</h1>
 
   <section>
-    <h2>1. Create Menu</h2>
-    <div class="row">
-      <label>menu_id
-        <input id="createMenuId" type="text" placeholder="menu_1" value="menu_1">
-      </label>
-      <label>site_id
-        <input id="createSiteId" type="text" placeholder="site_1" value="site_1">
-      </label>
-      <label>week_key
-        <input id="createWeekKey" type="text" placeholder="2026-W16" value="2026-W16">
-      </label>
-    </div>
-    <button id="btnCreateMenu" type="button">Create Menu</button>
-    <pre id="createMenuOut"></pre>
+    <h2>1. Create New Dish</h2>
+    <p>Create a dish and build it from components.</p>
+    <label>dish name
+      <input id="freeDishName" type="text" placeholder="Kottbullar med potatis">
+    </label>
+    <button id="btnCreateDish" type="button">Create dish</button>
+    <pre id="createDishOut"></pre>
   </section>
 
   <section>
-    <h2>2. Import Menu Rows</h2>
-    <label>menu_id
-      <input id="importMenuId" type="text" placeholder="menu_1" value="menu_1">
+    <h2>2. Create New Component</h2>
+    <p>Create a reusable component for your library.</p>
+    <label>component name
+      <input id="freeComponentName" type="text" placeholder="Mashed Potatoes">
     </label>
-    <label>rows (day;meal_slot;raw_text, one per line)
-      <textarea id="importRows" placeholder="monday;lunch;Kottbullar med potatis&#10;tuesday;lunch;Fiskgratang">monday;lunch;Kottbullar med potatis
-tuesday;lunch;Fiskgratang</textarea>
+    <button id="btnCreateComponent" type="button">Create component</button>
+    <pre id="createComponentOut"></pre>
+  </section>
+
+  <section>
+    <h2>3. Library</h2>
+    <p>Browse reusable components and dishes in your library.</p>
+
+    <div class="library-block">
+      <h3>Components</h3>
+      <ul id="libraryComponentsList"></ul>
+    </div>
+
+    <div class="library-block">
+      <h3>Dishes</h3>
+      <ul id="libraryCompositionsList"></ul>
+    </div>
+
+    <pre id="libraryOut"></pre>
+  </section>
+
+  <section>
+    <h2>4. Importera ratter till biblioteket</h2>
+    <p>Klistra in en ratt per rad. Builder skapar eller ateranvander bibliotekets ratter och komponenter.</p>
+    <p>Filimport v1: stodjer .txt och .csv for forhandsgranskning innan import.</p>
+    <label>fil (.txt eller .csv)
+      <input id="importLibraryFile" type="file" accept=".txt,.csv,text/plain,text/csv">
     </label>
-    <button id="btnImportRows" type="button">Import</button>
+    <label>csv-kolumn (valfritt, namn eller index)
+      <input id="importCsvColumn" type="text" placeholder="text eller 0">
+    </label>
+    <button id="btnImportFilePreview" type="button">Forhandsgranska fil</button>
+    <button id="btnImportFileConfirm" type="button" disabled>Bekrafta filimport</button>
+    <div id="importFileStatus"></div>
+    <h4>Kommer importeras</h4>
+    <ul id="importFilePreviewList"></ul>
+    <h4>Ignoreras som brus</h4>
+    <ul id="importFileIgnoredList"></ul>
+    <label>ratter (en rad per ratt)
+      <textarea id="importLibraryLines" placeholder="Kottbullar med potatismos&#10;Fiskgratang">Kottbullar med potatismos
+Fiskgratang</textarea>
+    </label>
+    <button id="btnImportLibrary" type="button">Importera till biblioteket</button>
     <div id="importSummaryView"></div>
     <pre id="importOut"></pre>
   </section>
 
-  <section>
-    <h2>3. Unresolved Rows</h2>
-    <label>menu_id
-      <input id="unresolvedMenuId" type="text" placeholder="menu_1" value="menu_1">
-    </label>
-    <button id="btnLoadUnresolved" type="button">Load unresolved</button>
-    <ul id="unresolvedList"></ul>
-    <div id="unresolvedFeedback"></div>
-    <pre id="unresolvedOut"></pre>
-  </section>
-
-  <section>
-    <h2>4. Cost Overview</h2>
-    <div class="row-2">
-      <label>menu_id
-        <input id="costMenuId" type="text" placeholder="menu_1" value="menu_1">
-      </label>
-      <label>target_portions
-        <input id="costTargetPortions" type="number" min="1" value="1">
-      </label>
-    </div>
-    <button id="btnLoadCost" type="button">Load cost overview</button>
-    <pre id="costOut"></pre>
-  </section>
-
   <div id="resolveModal" class="modal hidden">
     <div class="modal-content">
-      <h3 id="resolveModalTitle">Create dish</h3>
+      <h3 id="resolveModalTitle">Edit dish</h3>
       <p id="resolveStatusLine" class="modal-status-line hidden"></p>
 
-      <div class="create-new-section modal-section">
-        <p class="modal-section-title">Dish details</p>
-        <p id="resolveText"></p>
-        <label>composition_name
-          <input id="newCompositionName" type="text" placeholder="New composition name">
-        </label>
-      </div>
-
-      <div id="modalBuilderSection" class="create-new-section modal-section hidden">
+      <div id="modalBuilderSection" class="create-new-section modal-section">
         <p id="builderCompositionTitle"></p>
-        <p class="modal-section-title">Components in this dish</p>
+        <p class="modal-section-title">Included parts</p>
         <ul id="builderComponentsList" class="builder-components-list"></ul>
 
-        <p class="modal-section-title">Add component</p>
-        <label>new_component_name
-          <input id="newComponentName" type="text" placeholder="Component name">
+        <p class="modal-section-title">Add a part to this dish</p>
+        <label>What should be included?
+          <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Type a part, for example Potatis eller Löksås">
+          <datalist id="componentNameSuggestions"></datalist>
         </label>
-        <div class="role-toggle-row">
-          <span>type</span>
-          <button id="newItemRoleComponent" type="button">Component</button>
-          <button id="newItemRoleConnector" type="button">Connector</button>
-        </div>
-        <button id="btnAddComponent" type="button">Add component</button>
+        <button id="btnAddComponent" type="button">Add to dish</button>
         <pre id="builderOut"></pre>
       </div>
 
       <div class="modal-actions">
-        <button id="createAndResolve" type="button">Create and link</button>
-        <button id="resolveCancel" type="button">Cancel</button>
+        <button id="resolveCancel" type="button">Done</button>
       </div>
     </div>
   </div>

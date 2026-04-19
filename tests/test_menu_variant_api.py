@@ -1,6 +1,7 @@
 import uuid
 
 from werkzeug.security import generate_password_hash
+from sqlalchemy import text
 
 from core.app_factory import create_app
 from core.db import get_session
@@ -19,14 +20,24 @@ def _bootstrap(db):
         unit_id=None,
     )
     db.add(u)
+    site_id = f"site-{uuid.uuid4().hex[:8]}"
+    db.execute(
+        text(
+            """
+            INSERT INTO sites (id, name, tenant_id, version)
+            VALUES (:id, :name, :tenant_id, 0)
+            """
+        ),
+        {"id": site_id, "name": "Menu Variant Site", "tenant_id": int(t.id)},
+    )
     db.commit()
-    return t, u
+    return t, u, site_id
 
 
-def _login(client, email):
+def _login(client, email, site_id):
     # Bind session to a test site to satisfy strict policy
     with client.session_transaction() as sess:
-        sess["site_id"] = "test-site"
+        sess["site_id"] = str(site_id)
     r = client.post("/auth/login", json={"email": email, "password": "pw"})
     assert r.status_code == 200
 
@@ -35,11 +46,11 @@ def test_menu_variant_set_and_week_view():
     app = create_app({"TESTING": True, "SECRET_KEY": "x"})
     client = app.test_client()
     db = get_session()
-    t, u = _bootstrap(db)
+    t, u, site_id = _bootstrap(db)
     user_email = u.email
     db.close()
 
-    _login(client, user_email)
+    _login(client, user_email, site_id)
 
     payload = {
         "week": 40,

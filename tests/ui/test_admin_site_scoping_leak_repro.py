@@ -61,13 +61,27 @@ def _get_site_id_by_name(app_session, name: str) -> str:
             db.close()
 
 
-def _create_department(client: FlaskClient, name: str):
+def _ensure_residence_id(app_session, site_id: str, name: str = "Default Residence") -> str:
+    from core.admin_repo import ResidencesRepo
+
+    with app_session.app_context():
+        repo = ResidencesRepo()
+        rows = repo.list_for_site(str(site_id))
+        if rows:
+            return str(rows[0].get("id"))
+        created = repo.create_for_site(str(site_id), name)
+        return str(created.get("id"))
+
+
+def _create_department(client: FlaskClient, app_session, site_id: str, name: str):
     # Create via site-admin route (requires active site)
+    residence_id = _ensure_residence_id(app_session, site_id, name=f"Boende {name}")
     resp = client.post(
         "/ui/admin/departments/new",
         data={
             "name": name,
             "resident_count": "12",
+            "residence_id": residence_id,
             "notes": "",
         },
         follow_redirects=True,
@@ -125,7 +139,7 @@ def test_admin_isolation_leak_repro(app_session, client: FlaskClient):
         sess["site_id"] = site_a
 
     # Create Department A under Site A
-    _create_department(client, "Avd A")
+    _create_department(client, app_session, site_a, "Avd A")
     dept_a = _get_department_id(app_session, site_a, "Avd A")
 
     # Create Diet A via site-admin route (strictly uses active site)
@@ -156,7 +170,7 @@ def test_admin_isolation_leak_repro(app_session, client: FlaskClient):
         sess["site_id"] = site_b
 
     # Create Department B and Diet B
-    _create_department(client, "Avd B")
+    _create_department(client, app_session, site_b, "Avd B")
     dept_b = _get_department_id(app_session, site_b, "Avd B")
     resp = client.post(
         "/ui/admin/specialkost/new",

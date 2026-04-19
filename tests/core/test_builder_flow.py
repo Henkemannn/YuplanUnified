@@ -1,41 +1,33 @@
 from __future__ import annotations
 
-from decimal import Decimal
 import pytest
 
 from core.builder import BuilderFlow
 from core.components import (
+    ComponentService,
+    InMemoryComponentRepository,
     CompositionService,
     InMemoryCompositionRepository,
-    InMemoryRecipeIngredientLineRepository,
-    InMemoryRecipeRepository,
-    Recipe,
-    RecipeIngredientLine,
 )
 from core.menu import (
-    ImportedMenuRow,
     InMemoryCompositionAliasRepository,
-    MenuService,
     create_composition_alias,
 )
 
 
 def _build_flow() -> BuilderFlow:
+    component_repository = InMemoryComponentRepository()
     composition_repository = InMemoryCompositionRepository()
     alias_repository = InMemoryCompositionAliasRepository()
-    recipe_repository = InMemoryRecipeRepository()
-    ingredient_repository = InMemoryRecipeIngredientLineRepository()
 
+    component_service = ComponentService(repository=component_repository)
     composition_service = CompositionService(repository=composition_repository)
-    menu_service = MenuService(composition_repository=composition_repository)
 
     return BuilderFlow(
+        component_service=component_service,
         composition_service=composition_service,
-        menu_service=menu_service,
         composition_repository=composition_repository,
         alias_repository=alias_repository,
-        recipe_repository=recipe_repository,
-        ingredient_repository=ingredient_repository,
     )
 
 
@@ -52,6 +44,282 @@ def test_create_composition_and_add_components_through_builder_flow() -> None:
     assert updated.composition_id == "plate"
     assert len(updated.components) == 1
     assert updated.components[0].component_id == "main_component"
+
+
+def test_create_composition_with_generated_id_without_menu_context() -> None:
+    flow = _build_flow()
+
+    created = flow.create_composition_with_generated_id(composition_name="Free Dish")
+
+    assert created.composition_name == "Free Dish"
+    assert created.composition_id.startswith("cmp_")
+    assert len(created.composition_id) == 10
+    assert created.components == []
+
+
+def test_free_create_seeded_composition_from_name_creates_component_links_and_entities() -> None:
+    flow = _build_flow()
+
+    created = flow.create_composition_with_generated_id(
+        composition_name="Pannbiff med rastrekt potatis och loksas",
+        seed_components=True,
+    )
+
+    assert len(created.components) == 3
+    assert [item.component_name for item in created.components] == [
+        "Pannbiff",
+        "Rastrekt potatis",
+        "Loksas",
+    ]
+    library_components = {item.component_id for item in flow.list_library_components()}
+    assert all(link.component_id in library_components for link in created.components)
+
+
+def test_free_create_seeded_composition_reuses_existing_component_entities() -> None:
+    flow = _build_flow()
+    existing = flow.create_standalone_component("Pannbiff")
+
+    created = flow.create_composition_with_generated_id(
+        composition_name="Pannbiff med potatis",
+        seed_components=True,
+    )
+
+    assert created.components[0].component_id == existing.component_id
+    assert len([item for item in flow.list_library_components() if item.component_id == existing.component_id]) == 1
+
+
+def test_free_create_empty_shell_only_when_seeding_disabled() -> None:
+    flow = _build_flow()
+
+    seeded = flow.create_composition_with_generated_id(
+        composition_name="Fisk med potatis",
+        seed_components=True,
+    )
+    shell = flow.create_composition_with_generated_id(
+        composition_name="Fisk med potatis",
+        seed_components=False,
+    )
+
+    assert len(seeded.components) > 0
+    assert shell.components == []
+
+
+def test_create_standalone_component_without_menu_or_composition_context() -> None:
+    flow = _build_flow()
+
+    created = flow.create_standalone_component("Mashed Potatoes")
+
+    assert created.component_id == "mashed_potatoes"
+    assert created.canonical_name == "Mashed Potatoes"
+    assert flow.list_compositions() == []
+
+
+def test_create_standalone_component_rejects_empty_name() -> None:
+    flow = _build_flow()
+
+    with pytest.raises(ValueError, match="component_name must be non-empty"):
+        flow.create_standalone_component("   ")
+
+
+def test_attach_existing_component_to_composition_reuses_component_id_without_dup_entity() -> None:
+    flow = _build_flow()
+    created_component = flow.create_standalone_component("Mashed Potatoes")
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+
+    updated = flow.attach_existing_component_to_composition(
+        composition_id="plate",
+        component_id=created_component.component_id,
+        role="component",
+    )
+
+    assert len(updated.components) == 1
+    assert updated.components[0].component_id == created_component.component_id
+    assert updated.components[0].component_name == "Mashed Potatoes"
+    listed = flow.list_library_components()
+    assert len([item for item in listed if item.component_id == created_component.component_id]) == 1
+
+
+def test_attach_existing_component_rejects_invalid_or_empty_ids() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+
+    with pytest.raises(ValueError, match="component_id must be non-empty"):
+        flow.attach_existing_component_to_composition(composition_id="plate", component_id="   ")
+
+    with pytest.raises(ValueError, match="component not found"):
+        flow.attach_existing_component_to_composition(composition_id="plate", component_id="unknown")
+
+
+def test_attach_existing_component_is_library_only_and_has_no_menu_linkage_requirement() -> None:
+    flow = _build_flow()
+    created_component = flow.create_standalone_component("Sauce")
+    created_composition = flow.create_composition_with_generated_id(composition_name="Fish")
+
+    updated = flow.attach_existing_component_to_composition(
+        composition_id=created_composition.composition_id,
+        component_id=created_component.component_id,
+        role="component",
+    )
+
+    assert updated.composition_id == created_composition.composition_id
+    assert [item.component_id for item in updated.components] == [created_component.component_id]
+
+
+def test_attach_existing_component_duplicate_behavior_is_deterministic() -> None:
+    flow = _build_flow()
+    created_component = flow.create_standalone_component("Rice")
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    flow.attach_existing_component_to_composition(
+        composition_id="plate",
+        component_id=created_component.component_id,
+        role="component",
+    )
+
+    with pytest.raises(ValueError, match="component already exists in composition"):
+        flow.attach_existing_component_to_composition(
+            composition_id="plate",
+            component_id=created_component.component_id,
+            role="component",
+        )
+
+
+def test_library_listing_returns_separate_sorted_components_and_compositions() -> None:
+    flow = _build_flow()
+    flow.create_standalone_component("zeta")
+    flow.create_standalone_component("Alpha")
+    flow.create_composition_with_generated_id(composition_name="Zulu dish")
+    flow.create_composition_with_generated_id(composition_name="alpha dish")
+
+    components = flow.list_library_components()
+    compositions = flow.list_library_compositions()
+
+    assert [item.canonical_name for item in components] == ["Alpha", "zeta"]
+    assert [item.composition_name for item in compositions] == ["alpha dish", "Zulu dish"]
+
+
+def test_library_listing_includes_standalone_created_entities_without_menu_linkage() -> None:
+    flow = _build_flow()
+    created_component = flow.create_standalone_component("Mashed Potatoes")
+    created_composition = flow.create_composition_with_generated_id(composition_name="Fish Soup")
+
+    components = flow.list_library_components()
+    compositions = flow.list_library_compositions()
+
+    assert any(item.component_id == created_component.component_id for item in components)
+    assert any(item.composition_id == created_composition.composition_id for item in compositions)
+
+
+def test_library_listing_does_not_generate_new_composition_ids() -> None:
+    flow = _build_flow()
+    created_composition = flow.create_composition_with_generated_id(composition_name="Open me")
+    before_ids = {item.composition_id for item in flow.list_compositions()}
+
+    listed = flow.list_library_compositions()
+    after_ids = {item.composition_id for item in flow.list_compositions()}
+
+    assert created_composition.composition_id in {item.composition_id for item in listed}
+    assert after_ids == before_ids
+
+
+def test_library_import_creates_compositions_without_menu_context() -> None:
+    flow = _build_flow()
+
+    summary = flow.import_library_text_lines(["Kottbullar med potatismos", "Fiskgratang"])
+
+    assert summary.imported_count == 2
+    assert summary.created_count == 2
+    assert summary.reused_count == 0
+    assert len(summary.row_results) == 2
+    assert len(flow.list_compositions()) == 2
+    assert not hasattr(flow, "_menu_service")
+
+
+def test_library_import_suggests_components_and_learns_alias() -> None:
+    flow = _build_flow()
+
+    summary = flow.import_library_text_lines(["Kottbullar med graddsas och rodbetor"])
+
+    assert summary.created_count == 1
+    created_id = summary.row_results[0].composition_id
+    created = flow._composition_repository.get(created_id)
+    assert created is not None
+    component_names = [item.component_name for item in created.components]
+    assert component_names == ["Kottbullar", "Graddsas", "Rodbetor"]
+    aliases = flow._alias_repository.find_by_alias_norm("kottbullar graddsas rodbetor")
+    assert len(aliases) == 1
+    assert aliases[0].composition_id == created_id
+
+
+def test_library_import_persists_component_entities_and_links_to_composition() -> None:
+    flow = _build_flow()
+
+    summary = flow.import_library_text_lines(["Kottbullar med potatismos"])
+    created_id = summary.row_results[0].composition_id
+    created = flow._composition_repository.get(created_id)
+
+    assert created is not None
+    assert len(created.components) == 2
+
+    library_components = {item.component_id: item for item in flow.list_library_components()}
+    for linked in created.components:
+        assert linked.component_id in library_components
+        assert library_components[linked.component_id].canonical_name == linked.component_name
+
+
+def test_library_import_reuses_existing_component_entity_when_names_match() -> None:
+    flow = _build_flow()
+    existing = flow.create_standalone_component("Kottbullar")
+
+    summary = flow.import_library_text_lines(["Kottbullar med rodbetor"])
+    created = flow._composition_repository.get(summary.row_results[0].composition_id)
+
+    assert created is not None
+    assert created.components[0].component_id == existing.component_id
+    all_components = [item for item in flow.list_library_components() if item.component_id == existing.component_id]
+    assert len(all_components) == 1
+
+
+def test_library_import_does_not_duplicate_component_entities_across_compositions() -> None:
+    flow = _build_flow()
+
+    flow.import_library_text_lines(["Kottbullar med potatismos"])
+    flow.import_library_text_lines(["Kottbullar med graddsas"])
+
+    kottbullar = [
+        item
+        for item in flow.list_library_components()
+        if item.canonical_name.lower() == "kottbullar"
+    ]
+    assert len(kottbullar) == 1
+
+
+def test_library_import_deterministic_breakdown_does_not_leave_empty_composition() -> None:
+    flow = _build_flow()
+
+    summary = flow.import_library_text_lines(["Fisk med potatis"])
+    created = flow._composition_repository.get(summary.row_results[0].composition_id)
+
+    assert created is not None
+    assert len(created.components) > 0
+
+
+def test_library_import_reuses_existing_alias_and_requires_no_day_or_meal() -> None:
+    flow = _build_flow()
+    first = flow.import_library_text_lines(["No Match"])
+
+    second = flow.import_library_text_lines(["No Match"])
+
+    assert first.created_count == 1
+    assert second.created_count == 0
+    assert second.reused_count == 1
+    assert second.row_results[0].composition_id == first.row_results[0].composition_id
+
+
+def test_library_import_rejects_empty_input_lines() -> None:
+    flow = _build_flow()
+
+    with pytest.raises(ValueError, match="lines must contain at least one non-empty text"):
+        flow.import_library_text_lines(["   ", ""])
 
 
 def test_remove_component_from_composition_through_builder_flow() -> None:
@@ -121,165 +389,6 @@ def test_rename_component_in_composition_rejects_empty_name() -> None:
         )
 
 
-def test_create_menu_and_import_rows_through_builder_flow() -> None:
-    flow = _build_flow()
-    flow.create_composition(composition_id="plate", composition_name="Kottbullar med mos")
-    create_composition_alias(
-        alias_repository=flow._alias_repository,
-        alias_id="a1",
-        composition_id="plate",
-        alias_text="Kottbullar m mos",
-        composition_repository=flow._composition_repository,
-    )
-
-    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
-    summary = flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="Kottbullar m mos")],
-    )
-
-    assert summary.imported_count == 1
-    assert summary.resolved_count == 1
-    assert summary.unresolved_count == 0
-
-
-def test_list_unresolved_menu_details_works() -> None:
-    flow = _build_flow()
-    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
-    flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="Unknown dish")],
-    )
-
-    unresolved = flow.list_unresolved_menu_details("menu_1")
-
-    assert len(unresolved) == 1
-    assert unresolved[0].composition_ref_type == "unresolved"
-    assert unresolved[0].unresolved_text == "Unknown dish"
-
-
-def test_menu_cost_overview_returns_resolved_and_unresolved_honestly() -> None:
-    flow = _build_flow()
-    flow.create_composition(composition_id="plate", composition_name="Kottbullar med mos")
-    flow.add_component_to_composition(
-        composition_id="plate",
-        component_name="Plate",
-        role="main",
-    )
-    create_composition_alias(
-        alias_repository=flow._alias_repository,
-        alias_id="a1",
-        composition_id="plate",
-        alias_text="Kottbullar m mos",
-        composition_repository=flow._composition_repository,
-    )
-
-    flow._recipe_repository.add_recipe(
-        Recipe(
-            recipe_id="r_plate",
-            component_id="plate",
-            recipe_name="Plate recipe",
-            visibility="site",
-            is_default=True,
-            yield_portions=10,
-        )
-    )
-    flow._ingredient_repository.add_ingredient_line(
-        RecipeIngredientLine(
-            recipe_ingredient_line_id="line_plate",
-            recipe_id="r_plate",
-            ingredient_name="Main ingredient",
-            quantity_value=Decimal("100"),
-            quantity_unit="g",
-            unit_price_value=Decimal("0.1"),
-            unit_price_unit="SEK/g",
-            sort_order=10,
-        )
-    )
-
-    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
-    flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[
-            ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="Kottbullar m mos", sort_order=10),
-            ImportedMenuRow(day="monday", meal_slot="dinner", raw_text="Unknown dish", sort_order=20),
-        ],
-    )
-
-    overview = flow.get_menu_cost_overview(menu_id="menu_1", default_target_portions=20)
-
-    assert len(overview.detail_costs) == 2
-    assert overview.unresolved_count == 1
-    assert any(detail.total_cost == Decimal("20.0") for detail in overview.detail_costs)
-    assert any(detail.total_cost is None for detail in overview.detail_costs)
-
-
-def test_builder_flow_is_orchestration_not_logic_duplication() -> None:
-    flow = _build_flow()
-    flow.create_composition(composition_id="plate", composition_name="Simple plate")
-    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
-
-    summary = flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="no match")],
-    )
-
-    # The import flow should simply reflect existing resolution behavior (unresolved fallback).
-    assert summary.unresolved_count == 1
-    assert summary.row_results[0].kind == "unresolved"
-
-
-def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
-    flow = _build_flow()
-    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
-    summary = flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="Unknown dish")],
-    )
-    detail_id = summary.row_results[0].menu_detail_id
-
-    created, updated, warnings = flow.create_composition_from_unresolved_row(
-        menu_id="menu_1",
-        menu_detail_id=detail_id,
-        composition_name="New Plate",
-    )
-
-    assert created.composition_id.startswith("cmp_")
-    assert len(created.composition_id) == 10
-    assert updated.menu_detail_id == detail_id
-    assert updated.composition_ref_type == "composition"
-    assert updated.composition_id == created.composition_id
-    assert updated.unresolved_text is None
-    assert warnings == []
-
-
-def test_create_composition_from_unresolved_row_adds_suggested_components() -> None:
-    flow = _build_flow()
-    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
-    summary = flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[
-            ImportedMenuRow(
-                day="monday",
-                meal_slot="lunch",
-                raw_text="Kokt torsk med äggsås och pressad potatis",
-            )
-        ],
-    )
-    detail_id = summary.row_results[0].menu_detail_id
-
-    created, _, _ = flow.create_composition_from_unresolved_row(
-        menu_id="menu_1",
-        menu_detail_id=detail_id,
-        composition_name="Fiskratt",
-    )
-
-    component_ids = [item.component_id for item in created.components]
-    assert component_ids == ["kokt_torsk", "aggsas", "pressad_potatis"]
-    component_names = [item.component_name for item in created.components]
-    assert component_names == ["Kokt torsk", "Äggsås", "Pressad potatis"]
-
-
 def test_swedish_suggestions_preserve_display_names_and_normalize_ids() -> None:
     flow = _build_flow()
     raw_text = "Köttbullar med gräddsås och rödbetor"
@@ -287,71 +396,15 @@ def test_swedish_suggestions_preserve_display_names_and_normalize_ids() -> None:
     display_names = flow._suggest_components_from_unresolved_text(raw_text)
     assert display_names == ["Köttbullar", "Gräddsås", "Rödbetor"]
 
-    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
-    summary = flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text=raw_text)],
-    )
-    detail_id = summary.row_results[0].menu_detail_id
-
-    created, _, _ = flow.create_composition_from_unresolved_row(
-        menu_id="menu_1",
-        menu_detail_id=detail_id,
-        composition_name="Svensk plate",
-    )
+    summary = flow.import_library_text_lines([raw_text])
+    created_id = summary.row_results[0].composition_id
+    created = flow._composition_repository.get(created_id)
+    assert created is not None
 
     component_ids = [item.component_id for item in created.components]
     assert component_ids == ["kottbullar", "graddsas", "rodbetor"]
     component_names = [item.component_name for item in created.components]
     assert component_names == ["Köttbullar", "Gräddsås", "Rödbetor"]
-
-
-def test_create_from_unresolved_row_creates_manual_alias() -> None:
-    flow = _build_flow()
-    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
-    summary = flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="No Match")],
-    )
-    detail_id = summary.row_results[0].menu_detail_id
-
-    created, _, warnings = flow.create_composition_from_unresolved_row(
-        menu_id="menu_1",
-        menu_detail_id=detail_id,
-        composition_name="No Match Plate",
-    )
-
-    assert warnings == []
-    aliases = flow._alias_repository.find_by_alias_norm("no match")
-    assert len(aliases) == 1
-    assert aliases[0].composition_id == created.composition_id
-    assert aliases[0].alias_text == "No Match"
-    assert aliases[0].source == "manual"
-    assert float(aliases[0].confidence) == 1.0
-
-
-def test_reimport_same_text_resolves_via_auto_created_alias() -> None:
-    flow = _build_flow()
-    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
-    first = flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="No Match")],
-    )
-    first_detail_id = first.row_results[0].menu_detail_id
-    created, _, _ = flow.create_composition_from_unresolved_row(
-        menu_id="menu_1",
-        menu_detail_id=first_detail_id,
-        composition_name="No Match Plate",
-    )
-
-    second = flow.import_menu_rows(
-        menu_id="menu_1",
-        rows=[ImportedMenuRow(day="tuesday", meal_slot="lunch", raw_text="No Match")],
-    )
-
-    assert second.resolved_count == 1
-    assert second.unresolved_count == 0
-    assert second.row_results[0].composition_id == created.composition_id
 
 
 def test_conflicting_alias_norm_does_not_overwrite_existing_mapping() -> None:
