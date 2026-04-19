@@ -426,7 +426,7 @@ def create_composition_from_row(menu_id: str):
         composition_name = _require_str(payload, "composition_name")
 
         flow = _get_builder_flow()
-        composition, updated_menu_detail = flow.create_composition_from_unresolved_row(
+        composition, updated_menu_detail, warnings = flow.create_composition_from_unresolved_row(
             menu_id=str(menu_id),
             menu_detail_id=menu_detail_id,
             composition_name=composition_name,
@@ -439,6 +439,7 @@ def create_composition_from_row(menu_id: str):
             "ok": True,
             "composition": _serialize_composition(composition),
             "menu_detail": _serialize_menu_detail(updated_menu_detail),
+            "warnings": warnings,
         }
     ), 201
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 import re
 import secrets
 
@@ -19,8 +20,12 @@ from ..menu import (
     MenuImportSummary,
     MenuService,
     calculate_menu_detail_cost,
+    create_composition_alias,
     import_menu_rows,
+    normalize_menu_import_text,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -190,7 +195,7 @@ class BuilderFlow:
         menu_id: str,
         menu_detail_id: str,
         composition_name: str,
-    ) -> tuple[Composition, MenuDetail]:
+    ) -> tuple[Composition, MenuDetail, list[str]]:
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
         if match is None:
@@ -205,6 +210,7 @@ class BuilderFlow:
             composition_id=self._generate_composition_id(),
             composition_name=composition_name,
         )
+        warnings: list[str] = []
 
         for suggestion in self._suggest_components_from_unresolved_text(unresolved_text):
             composition = self.add_component_to_composition(
@@ -213,12 +219,60 @@ class BuilderFlow:
                 role="component",
             )
 
+        alias_warning = self._create_manual_alias_for_composition(
+            composition_id=composition.composition_id,
+            unresolved_text=unresolved_text,
+        )
+        if alias_warning:
+            warnings.append(alias_warning)
+            logger.warning(alias_warning)
+
         updated = self.resolve_menu_detail(
             menu_id=menu_id,
             menu_detail_id=menu_detail_id,
             composition_id=composition.composition_id,
         )
-        return composition, updated
+        return composition, updated, warnings
+
+    def _create_manual_alias_for_composition(
+        self,
+        *,
+        composition_id: str,
+        unresolved_text: str,
+    ) -> str | None:
+        alias_text = str(unresolved_text or "").strip()
+        alias_norm = normalize_menu_import_text(alias_text)
+        if not alias_norm:
+            return None
+
+        existing = self._alias_repository.find_by_alias_norm(alias_norm)
+        if any(item.composition_id == composition_id for item in existing):
+            return None
+        if any(item.composition_id != composition_id for item in existing):
+            return (
+                "alias conflict: normalized unresolved text already mapped to another composition"
+            )
+
+        create_composition_alias(
+            alias_repository=self._alias_repository,
+            alias_id=self._generate_alias_id(),
+            composition_id=composition_id,
+            alias_text=alias_text,
+            source="manual",
+            confidence=1.0,
+            composition_repository=self._composition_repository,
+        )
+        return None
+
+    def _generate_alias_id(self) -> str:
+        alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        existing_ids = {alias.alias_id for alias in self._alias_repository.list_all()}
+        for _ in range(50):
+            suffix = "".join(secrets.choice(alphabet) for _ in range(6))
+            candidate = f"alias_{suffix}"
+            if candidate not in existing_ids:
+                return candidate
+        raise ValueError("unable to generate unique alias_id")
 
     def _generate_composition_id(self) -> str:
         alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"

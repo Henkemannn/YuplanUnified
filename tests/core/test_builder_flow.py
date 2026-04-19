@@ -238,7 +238,7 @@ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
     )
     detail_id = summary.row_results[0].menu_detail_id
 
-    created, updated = flow.create_composition_from_unresolved_row(
+    created, updated, warnings = flow.create_composition_from_unresolved_row(
         menu_id="menu_1",
         menu_detail_id=detail_id,
         composition_name="New Plate",
@@ -250,6 +250,7 @@ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
     assert updated.composition_ref_type == "composition"
     assert updated.composition_id == created.composition_id
     assert updated.unresolved_text is None
+    assert warnings == []
 
 
 def test_create_composition_from_unresolved_row_adds_suggested_components() -> None:
@@ -267,7 +268,7 @@ def test_create_composition_from_unresolved_row_adds_suggested_components() -> N
     )
     detail_id = summary.row_results[0].menu_detail_id
 
-    created, _ = flow.create_composition_from_unresolved_row(
+    created, _, _ = flow.create_composition_from_unresolved_row(
         menu_id="menu_1",
         menu_detail_id=detail_id,
         composition_name="Fiskratt",
@@ -293,7 +294,7 @@ def test_swedish_suggestions_preserve_display_names_and_normalize_ids() -> None:
     )
     detail_id = summary.row_results[0].menu_detail_id
 
-    created, _ = flow.create_composition_from_unresolved_row(
+    created, _, _ = flow.create_composition_from_unresolved_row(
         menu_id="menu_1",
         menu_detail_id=detail_id,
         composition_name="Svensk plate",
@@ -303,6 +304,80 @@ def test_swedish_suggestions_preserve_display_names_and_normalize_ids() -> None:
     assert component_ids == ["kottbullar", "graddsas", "rodbetor"]
     component_names = [item.component_name for item in created.components]
     assert component_names == ["Köttbullar", "Gräddsås", "Rödbetor"]
+
+
+def test_create_from_unresolved_row_creates_manual_alias() -> None:
+    flow = _build_flow()
+    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    summary = flow.import_menu_rows(
+        menu_id="menu_1",
+        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="No Match")],
+    )
+    detail_id = summary.row_results[0].menu_detail_id
+
+    created, _, warnings = flow.create_composition_from_unresolved_row(
+        menu_id="menu_1",
+        menu_detail_id=detail_id,
+        composition_name="No Match Plate",
+    )
+
+    assert warnings == []
+    aliases = flow._alias_repository.find_by_alias_norm("no match")
+    assert len(aliases) == 1
+    assert aliases[0].composition_id == created.composition_id
+    assert aliases[0].alias_text == "No Match"
+    assert aliases[0].source == "manual"
+    assert float(aliases[0].confidence) == 1.0
+
+
+def test_reimport_same_text_resolves_via_auto_created_alias() -> None:
+    flow = _build_flow()
+    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    first = flow.import_menu_rows(
+        menu_id="menu_1",
+        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="No Match")],
+    )
+    first_detail_id = first.row_results[0].menu_detail_id
+    created, _, _ = flow.create_composition_from_unresolved_row(
+        menu_id="menu_1",
+        menu_detail_id=first_detail_id,
+        composition_name="No Match Plate",
+    )
+
+    second = flow.import_menu_rows(
+        menu_id="menu_1",
+        rows=[ImportedMenuRow(day="tuesday", meal_slot="lunch", raw_text="No Match")],
+    )
+
+    assert second.resolved_count == 1
+    assert second.unresolved_count == 0
+    assert second.row_results[0].composition_id == created.composition_id
+
+
+def test_conflicting_alias_norm_does_not_overwrite_existing_mapping() -> None:
+    flow = _build_flow()
+    existing = flow.create_composition(composition_id="plate_existing", composition_name="Existing")
+    create_composition_alias(
+        alias_repository=flow._alias_repository,
+        alias_id="a-existing",
+        composition_id=existing.composition_id,
+        alias_text="No Match",
+        composition_repository=flow._composition_repository,
+        source="manual",
+        confidence=1.0,
+    )
+
+    new_comp = flow.create_composition(composition_id="plate_new", composition_name="New")
+
+    warning = flow._create_manual_alias_for_composition(
+        composition_id=new_comp.composition_id,
+        unresolved_text="No Match",
+    )
+
+    same_norm_aliases = flow._alias_repository.find_by_alias_norm("no match")
+    assert len(same_norm_aliases) == 1
+    assert same_norm_aliases[0].composition_id == "plate_existing"
+    assert warning is not None
 
 
 def test_rename_component_in_composition_updates_component_name() -> None:
