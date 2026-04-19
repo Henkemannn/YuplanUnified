@@ -46,6 +46,92 @@ function parseRows(text) {
   return rows;
 }
 
+function formatDay(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function renderImportSummary(result) {
+  const host = document.getElementById("importSummaryView");
+  if (!host) {
+    return;
+  }
+
+  host.innerHTML = "";
+
+  const data = (result && result.data) || {};
+  const summary = data.summary;
+  if (!summary || typeof summary !== "object") {
+    const msg = document.createElement("div");
+    msg.className = "import-warning-block";
+    msg.textContent = String(data.message || data.error || "Import failed");
+    host.appendChild(msg);
+    return;
+  }
+
+  const counts = document.createElement("div");
+  counts.className = "import-counts";
+  counts.textContent =
+    "Imported: " +
+    String(summary.imported_count || 0) +
+    " | Resolved: " +
+    String(summary.resolved_count || 0) +
+    " | Unresolved: " +
+    String(summary.unresolved_count || 0);
+  host.appendChild(counts);
+
+  const summaryWarnings = Array.isArray(summary.warnings) ? summary.warnings : [];
+  if (summaryWarnings.length > 0) {
+    const warningBlock = document.createElement("div");
+    warningBlock.className = "import-warning-block";
+    warningBlock.textContent = "Warnings: " + summaryWarnings.join(" | ");
+    host.appendChild(warningBlock);
+  }
+
+  const rows = Array.isArray(summary.row_results) ? summary.row_results : [];
+  for (const row of rows) {
+    const item = document.createElement("div");
+    item.className = "import-row-result";
+
+    const isResolved = String(row.kind || "") === "composition";
+    const badge = document.createElement("span");
+    badge.className = isResolved ? "status-resolved" : "status-unresolved";
+    badge.textContent = isResolved ? "Resolved" : "Needs review";
+
+    const primary = document.createElement("span");
+    primary.className = "import-row-primary";
+    primary.textContent =
+      formatDay(row.day) +
+      " " +
+      String(row.meal_slot || "") +
+      " - " +
+      String(row.raw_text || "");
+
+    item.appendChild(badge);
+    item.appendChild(primary);
+
+    if (isResolved && row.composition_id) {
+      const secondary = document.createElement("div");
+      secondary.className = "import-row-secondary";
+      secondary.textContent = "composition_id: " + String(row.composition_id);
+      item.appendChild(secondary);
+    }
+
+    const rowWarnings = Array.isArray(row.warnings) ? row.warnings : [];
+    for (const warning of rowWarnings) {
+      const w = document.createElement("div");
+      w.className = "import-row-warning";
+      w.textContent = String(warning || "");
+      item.appendChild(w);
+    }
+
+    host.appendChild(item);
+  }
+}
+
 let currentResolve = null;
 let currentBuilderComposition = null;
 let currentNewItemRole = "component";
@@ -374,8 +460,12 @@ function bindBuilderHandlers() {
       console.log("import clicked");
       const importMenuIdEl = document.getElementById("importMenuId");
       const importRowsEl = document.getElementById("importRows");
+      const importSummaryView = document.getElementById("importSummaryView");
       const menu_id = importMenuIdEl ? String(importMenuIdEl.value || "").trim() : "";
       showLoading("importOut");
+      if (importSummaryView) {
+        importSummaryView.textContent = "Loading import summary...";
+      }
       try {
         const rowsInput = importRowsEl ? String(importRowsEl.value || "") : "";
         const rows = parseRows(rowsInput);
@@ -391,12 +481,15 @@ function bindBuilderHandlers() {
           },
           body: payload,
         });
+        renderImportSummary(result);
         showJson("importOut", result);
       } catch (error) {
-        showJson("importOut", {
+        const failResult = {
           status: 0,
           data: { ok: false, error: String(error.message || error) },
-        });
+        };
+        renderImportSummary(failResult);
+        showJson("importOut", failResult);
       }
     });
   }

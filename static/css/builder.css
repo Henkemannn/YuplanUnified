@@ -145,3 +145,62 @@ ul {
 .role-toggle-active {
   border: 2px solid #333;
 }
+
+#importSummaryView {
+  margin-top: 10px;
+}
+
+.import-counts {
+  border: 1px solid #ddd;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: #fafafa;
+}
+
+.import-warning-block {
+  border: 1px solid #e0b200;
+  background: #fff8db;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.import-row-result {
+  border: 1px solid #ddd;
+  padding: 8px;
+  margin-bottom: 6px;
+}
+
+.status-resolved,
+.status-unresolved {
+  display: inline-block;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
+  margin-right: 8px;
+}
+
+.status-resolved {
+  background: #e5f6ea;
+  border: 1px solid #9bd3aa;
+}
+
+.status-unresolved {
+  background: #fff2e0;
+  border: 1px solid #f0bd7a;
+}
+
+.import-row-primary {
+  font-weight: 600;
+}
+
+.import-row-secondary {
+  color: #555;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.import-row-warning {
+  color: #7a4e00;
+  font-size: 12px;
+  margin-top: 4px;
+}
