@@ -305,7 +305,7 @@ function renderBuilderPanel(composition) {
   const components = Array.isArray(composition.components) ? composition.components : [];
   if (components.length === 0) {
     const li = document.createElement("li");
-    li.textContent = "(empty list)";
+    li.textContent = "No components added yet";
     list.appendChild(li);
     return;
   }
@@ -356,12 +356,14 @@ function renderBuilderPanel(composition) {
   }
 }
 
-function setResolveCreateState() {
+function setResolveCreateState(unresolvedText) {
   const createSection = document.querySelector(".create-new-section");
   const builderSection = document.getElementById("modalBuilderSection");
   const createAndResolveBtn = document.getElementById("createAndResolve");
   const resolveCancelBtn = document.getElementById("resolveCancel");
   const newComponentName = document.getElementById("newComponentName");
+  const modalTitle = document.getElementById("resolveModalTitle");
+  const statusLine = document.getElementById("resolveStatusLine");
 
   if (createSection) {
     createSection.classList.remove("hidden");
@@ -378,6 +380,13 @@ function setResolveCreateState() {
   if (newComponentName) {
     newComponentName.value = "";
   }
+  if (modalTitle) {
+    modalTitle.textContent = "Create dish from: " + String(unresolvedText || "");
+  }
+  if (statusLine) {
+    statusLine.textContent = "";
+    statusLine.classList.add("hidden");
+  }
   setNewItemRole("component");
   showJson("builderOut", { ok: true, message: "Create and link to start building components" });
 }
@@ -387,6 +396,8 @@ function setResolveBuildState(composition) {
   const builderSection = document.getElementById("modalBuilderSection");
   const createAndResolveBtn = document.getElementById("createAndResolve");
   const resolveCancelBtn = document.getElementById("resolveCancel");
+  const modalTitle = document.getElementById("resolveModalTitle");
+  const statusLine = document.getElementById("resolveStatusLine");
 
   if (createSection) {
     createSection.classList.add("hidden");
@@ -399,6 +410,13 @@ function setResolveBuildState(composition) {
   }
   if (resolveCancelBtn) {
     resolveCancelBtn.textContent = "Done";
+  }
+  if (modalTitle) {
+    modalTitle.textContent = "Edit dish: " + String(composition.composition_name || "");
+  }
+  if (statusLine) {
+    statusLine.textContent = "Dish created. Add or adjust components below.";
+    statusLine.classList.remove("hidden");
   }
   renderBuilderPanel(composition);
 }
@@ -420,7 +438,7 @@ function openResolveModal(detail, menuId) {
     newCompositionName.value = String(detail.unresolved_text || "").trim();
   }
   currentBuilderComposition = null;
-  setResolveCreateState();
+  setResolveCreateState(String(detail.unresolved_text || ""));
   modal.classList.remove("hidden");
 }
 

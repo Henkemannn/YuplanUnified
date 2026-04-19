@@ -67,21 +67,23 @@ tuesday;lunch;Fiskgratang</textarea>
 
   <div id="resolveModal" class="modal hidden">
     <div class="modal-content">
-      <h3>Resolve menu row</h3>
-      <p id="resolveText"></p>
-      <p>The dish is not in the library yet. Create it as a new composition and link this row.</p>
+      <h3 id="resolveModalTitle">Create dish</h3>
+      <p id="resolveStatusLine" class="modal-status-line hidden"></p>
 
-      <div class="create-new-section">
-        <p>Create new composition</p>
+      <div class="create-new-section modal-section">
+        <p class="modal-section-title">Dish details</p>
+        <p id="resolveText"></p>
         <label>composition_name
           <input id="newCompositionName" type="text" placeholder="New composition name">
         </label>
       </div>
 
-      <div id="modalBuilderSection" class="create-new-section hidden">
+      <div id="modalBuilderSection" class="create-new-section modal-section hidden">
         <p id="builderCompositionTitle"></p>
-        <p>Components:</p>
+        <p class="modal-section-title">Components in this dish</p>
         <ul id="builderComponentsList" class="builder-components-list"></ul>
+
+        <p class="modal-section-title">Add component</p>
         <label>new_component_name
           <input id="newComponentName" type="text" placeholder="Component name">
         </label>
