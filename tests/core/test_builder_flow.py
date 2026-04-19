@@ -275,6 +275,8 @@ def test_create_composition_from_unresolved_row_adds_suggested_components() -> N
 
     component_ids = [item.component_id for item in created.components]
     assert component_ids == ["kokt_torsk", "aggsas", "pressad_potatis"]
+    component_names = [item.component_name for item in created.components]
+    assert component_names == ["Kokt torsk", "Äggsås", "Pressad potatis"]
 
 
 def test_swedish_suggestions_preserve_display_names_and_normalize_ids() -> None:
@@ -299,3 +301,25 @@ def test_swedish_suggestions_preserve_display_names_and_normalize_ids() -> None:
 
     component_ids = [item.component_id for item in created.components]
     assert component_ids == ["kottbullar", "graddsas", "rodbetor"]
+    component_names = [item.component_name for item in created.components]
+    assert component_names == ["Köttbullar", "Gräddsås", "Rödbetor"]
+
+
+def test_rename_component_in_composition_updates_component_name() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Fisk",
+        role="component",
+    )
+
+    updated = flow.rename_component_in_composition(
+        composition_id="plate",
+        component_id="fisk",
+        new_component_name="Köttbullar",
+    )
+
+    assert len(updated.components) == 1
+    assert updated.components[0].component_name == "Köttbullar"
+    assert updated.components[0].component_id == "kottbullar"

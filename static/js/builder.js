@@ -170,7 +170,7 @@ function renderBuilderPanel(composition) {
     row.className = "component-row";
 
     const name = document.createElement("span");
-    name.textContent = String(component.component_id || "");
+    name.textContent = String(component.component_name || component.component_id || "");
 
     const role = document.createElement("span");
     role.className = "component-role-pill";
@@ -193,7 +193,7 @@ function renderBuilderPanel(composition) {
     rename.addEventListener("click", () => {
       renameComponentInCurrentComposition(
         String(component.component_id || ""),
-        String(component.component_id || ""),
+        String(component.component_name || component.component_id || ""),
       );
     });
 

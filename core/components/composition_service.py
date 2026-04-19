@@ -46,6 +46,7 @@ class CompositionService:
         composition_id: str,
         component_id: str,
         *,
+        component_name: str | None = None,
         role: str | None = None,
         sort_order: int | None = None,
     ) -> Composition:
@@ -54,6 +55,12 @@ class CompositionService:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
+
+        component_name_value = str(
+            component_name if component_name is not None else component_id_value
+        ).strip()
+        if not component_name_value:
+            component_name_value = component_id_value
 
         resolved_sort_order = self._resolve_sort_order(composition, sort_order)
         for existing in composition.components:
@@ -66,6 +73,7 @@ class CompositionService:
         updated_components.append(
             CompositionComponent(
                 component_id=component_id_value,
+                component_name=component_name_value,
                 role=str(role).strip() if role is not None else None,
                 sort_order=resolved_sort_order,
             )

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class CompositionComponent:
     component_id: str
+    component_name: str | None = None
     role: str | None = None
     sort_order: int = 0
 

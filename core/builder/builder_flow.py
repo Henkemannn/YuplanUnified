@@ -81,6 +81,7 @@ class BuilderFlow:
         return self._composition_service.add_component_to_composition(
             composition_id=composition_id,
             component_id=component_id,
+            component_name=component_name_value,
             role=role,
         )
 
@@ -128,6 +129,7 @@ class BuilderFlow:
         return self._composition_service.add_component_to_composition(
             composition_id=composition_id,
             component_id=new_component_id,
+            component_name=new_name_value,
             role=existing.role,
             sort_order=existing.sort_order,
         )

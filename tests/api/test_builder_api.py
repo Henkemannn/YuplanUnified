@@ -67,6 +67,7 @@ def test_add_component_to_composition_endpoint() -> None:
     assert body.get("ok") is True
     components = body.get("composition", {}).get("components") or []
     assert len(components) == 1
+    assert components[0]["component_name"] == "Fisk"
     assert components[0]["component_id"] == "fisk"
     assert components[0]["role"] == "component"
 
@@ -154,7 +155,35 @@ def test_rename_component_in_composition_endpoint() -> None:
     assert body.get("ok") is True
     components = body.get("composition", {}).get("components") or []
     assert [item["component_id"] for item in components] == ["lax", "potatis"]
+    assert [item["component_name"] for item in components] == ["Lax", "Potatis"]
     assert components[0]["role"] == "connector"
+
+
+def test_rename_component_in_composition_endpoint_preserves_swedish_component_name() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_6", "composition_name": "Fish Plate 6"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_6/components",
+        json={"component_name": "Fisk", "role": "component"},
+        headers=HEADERS,
+    )
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_6/components/fisk",
+        json={"component_name": "Köttbullar"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    components = body.get("composition", {}).get("components") or []
+    assert len(components) == 1
+    assert components[0]["component_name"] == "Köttbullar"
+    assert components[0]["component_id"] == "kottbullar"
 
 
 def test_rename_component_in_composition_endpoint_rejects_empty_name() -> None:
@@ -427,7 +456,9 @@ def test_create_composition_from_row_populates_suggested_components() -> None:
     assert rv.status_code == 201
     body = rv.get_json() or {}
     components = body.get("composition", {}).get("components") or []
+    component_names = [item.get("component_name") for item in components]
     component_ids = [item.get("component_id") for item in components]
+    assert component_names == ["Kokt torsk", "Äggsås", "Pressad potatis"]
     assert component_ids == ["kokt_torsk", "aggsas", "pressad_potatis"]
 
 

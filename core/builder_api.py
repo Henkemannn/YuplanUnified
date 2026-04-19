@@ -62,6 +62,7 @@ def _decimal_to_json(value: Decimal | None) -> str | None:
 def _serialize_composition_component(component) -> dict[str, Any]:
     return {
         "component_id": component.component_id,
+        "component_name": component.component_name or component.component_id,
         "role": component.role,
         "sort_order": component.sort_order,
     }
