@@ -135,6 +135,66 @@ function renderImportSummary(result) {
 let currentResolve = null;
 let currentBuilderComposition = null;
 let currentNewItemRole = "component";
+let currentSelectedUnresolvedId = null;
+
+function setUnresolvedFeedback(message, type) {
+  const feedback = document.getElementById("unresolvedFeedback");
+  if (!feedback) {
+    return;
+  }
+  feedback.className = "";
+  feedback.textContent = String(message || "");
+  if (type === "success") {
+    feedback.classList.add("unresolved-feedback-success");
+  }
+}
+
+function renderUnresolvedList(unresolved, menuId) {
+  const list = document.getElementById("unresolvedList");
+  if (!list) {
+    return;
+  }
+
+  list.innerHTML = "";
+  if (!Array.isArray(unresolved) || unresolved.length === 0) {
+    const li = document.createElement("li");
+    li.className = "unresolved-empty-state";
+    li.textContent = "No unresolved rows left";
+    list.appendChild(li);
+    return;
+  }
+
+  for (const item of unresolved) {
+    const li = document.createElement("li");
+    li.className = "unresolved-card";
+    const rowId = String(item.menu_detail_id || "");
+    if (rowId && rowId === currentSelectedUnresolvedId) {
+      li.classList.add("unresolved-card-selected");
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "unresolved-meta";
+    meta.textContent = String(item.day || "") + " " + String(item.meal_slot || "");
+
+    const text = document.createElement("div");
+    text.className = "unresolved-text";
+    text.textContent = String(item.unresolved_text || "");
+
+    const action = document.createElement("div");
+    action.className = "unresolved-action";
+    action.textContent = "Create or link this dish";
+
+    li.appendChild(meta);
+    li.appendChild(text);
+    li.appendChild(action);
+    li.addEventListener("click", () => {
+      currentSelectedUnresolvedId = rowId;
+      renderUnresolvedList(unresolved, menuId);
+      openResolveModal(item, menuId);
+    });
+    list.appendChild(li);
+  }
+}
 
 async function removeComponentFromCurrentComposition(componentId) {
   if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
@@ -376,27 +436,16 @@ function closeResolveModal() {
 async function loadUnresolvedForMenu(menu_id) {
   const resolvedMenuId = String(menu_id || "").trim();
   const url = "/api/builder/menus/" + encodeURIComponent(resolvedMenuId) + "/unresolved";
-  const list = document.getElementById("unresolvedList");
-  if (list) {
-    list.innerHTML = "";
-  }
+  renderUnresolvedList([], resolvedMenuId);
   console.log("REQUEST:", url, null);
   showLoading("unresolvedOut");
   const result = await callApi(url, { method: "GET" });
   const unresolved = (result.data && result.data.unresolved) || [];
 
-  if (list) {
-    for (const item of unresolved) {
-      const li = document.createElement("li");
-      li.className = "unresolved-item";
-      li.textContent =
-        (item.day || "") + " " + (item.meal_slot || "") + ": " + (item.unresolved_text || "");
-      li.addEventListener("click", () => {
-        openResolveModal(item, resolvedMenuId);
-      });
-      list.appendChild(li);
-    }
+  if (!unresolved.some((item) => String(item.menu_detail_id || "") === currentSelectedUnresolvedId)) {
+    currentSelectedUnresolvedId = null;
   }
+  renderUnresolvedList(unresolved, resolvedMenuId);
 
   showJson("unresolvedOut", result);
 }
@@ -566,6 +615,12 @@ function bindBuilderHandlers() {
 
         if (result && result.data && result.data.ok && result.data.composition) {
           setResolveBuildState(result.data.composition);
+          const name = String(result.data.composition.composition_name || "").trim();
+          setUnresolvedFeedback(
+            "Created composition and linked row successfully" +
+              (name ? ": " + name : ""),
+            "success",
+          );
         }
 
         await loadUnresolvedForMenu(refreshMenuId);

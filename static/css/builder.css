@@ -57,6 +57,52 @@ ul {
   margin-bottom: 4px;
 }
 
+.unresolved-card {
+  border: 1px solid #ddd;
+  padding: 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.unresolved-card:hover {
+  background: #f8f8f8;
+}
+
+.unresolved-card-selected {
+  border-color: #2f6fbd;
+  background: #eef5ff;
+}
+
+.unresolved-meta {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.unresolved-text {
+  font-weight: 600;
+}
+
+.unresolved-action {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #1f5aa6;
+}
+
+.unresolved-feedback-success {
+  border: 1px solid #9bd3aa;
+  background: #e5f6ea;
+  padding: 8px;
+  margin: 8px 0;
+}
+
+.unresolved-empty-state {
+  border: 1px solid #9bd3aa;
+  background: #f0fbf3;
+  padding: 8px;
+}
+
 .modal {
   position: fixed;
   top: 0;
