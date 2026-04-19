@@ -53,6 +53,29 @@ def test_create_composition_and_add_components_through_builder_flow() -> None:
     assert updated.components[0].component_id == "main_component"
 
 
+def test_remove_component_from_composition_through_builder_flow() -> None:
+    flow = _build_flow()
+
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Fish",
+        role="component",
+    )
+    flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Potatoes",
+        role="component",
+    )
+
+    updated = flow.remove_component_from_composition(
+        composition_id="plate",
+        component_id="fish",
+    )
+
+    assert [item.component_id for item in updated.components] == ["potatoes"]
+
+
 def test_create_menu_and_import_rows_through_builder_flow() -> None:
     flow = _build_flow()
     flow.create_composition(composition_id="plate", composition_name="Kottbullar med mos")
@@ -182,3 +205,52 @@ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
     assert updated.composition_ref_type == "composition"
     assert updated.composition_id == created.composition_id
     assert updated.unresolved_text is None
+
+
+def test_create_composition_from_unresolved_row_adds_suggested_components() -> None:
+    flow = _build_flow()
+    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    summary = flow.import_menu_rows(
+        menu_id="menu_1",
+        rows=[
+            ImportedMenuRow(
+                day="monday",
+                meal_slot="lunch",
+                raw_text="Kokt torsk med äggsås och pressad potatis",
+            )
+        ],
+    )
+    detail_id = summary.row_results[0].menu_detail_id
+
+    created, _ = flow.create_composition_from_unresolved_row(
+        menu_id="menu_1",
+        menu_detail_id=detail_id,
+        composition_name="Fiskratt",
+    )
+
+    component_ids = [item.component_id for item in created.components]
+    assert component_ids == ["kokt_torsk", "aggsas", "pressad_potatis"]
+
+
+def test_swedish_suggestions_preserve_display_names_and_normalize_ids() -> None:
+    flow = _build_flow()
+    raw_text = "Köttbullar med gräddsås och rödbetor"
+
+    display_names = flow._suggest_components_from_unresolved_text(raw_text)
+    assert display_names == ["Köttbullar", "Gräddsås", "Rödbetor"]
+
+    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    summary = flow.import_menu_rows(
+        menu_id="menu_1",
+        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text=raw_text)],
+    )
+    detail_id = summary.row_results[0].menu_detail_id
+
+    created, _ = flow.create_composition_from_unresolved_row(
+        menu_id="menu_1",
+        menu_detail_id=detail_id,
+        composition_name="Svensk plate",
+    )
+
+    component_ids = [item.component_id for item in created.components]
+    assert component_ids == ["kottbullar", "graddsas", "rodbetor"]

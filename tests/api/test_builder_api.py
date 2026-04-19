@@ -94,6 +94,37 @@ def test_add_component_to_composition_endpoint_supports_connector_role() -> None
     assert components[0]["role"] == "connector"
 
 
+def test_remove_component_from_composition_endpoint() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_3", "composition_name": "Fish Plate 3"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_3/components",
+        json={"component_name": "Fisk", "role": "component"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_3/components",
+        json={"component_name": "Potatis", "role": "component"},
+        headers=HEADERS,
+    )
+
+    rv = client.delete(
+        "/api/builder/compositions/plate_3/components/fisk",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    components = body.get("composition", {}).get("components") or []
+    assert len(components) == 1
+    assert components[0]["component_id"] == "potatis"
+
+
 def test_create_menu_endpoint() -> None:
     client = _client()
 
@@ -301,6 +332,49 @@ def test_create_composition_from_row_endpoint() -> None:
     assert detail.get("unresolved_text") is None
 
 
+def test_create_composition_from_row_populates_suggested_components() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    imported = client.post(
+        "/api/builder/menus/menu_1/import",
+        json={
+            "rows": [
+                {
+                    "day": "monday",
+                    "meal_slot": "lunch",
+                    "raw_text": "Kokt torsk med äggsås och pressad potatis",
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+    detail_id = (
+        (imported.get_json() or {})
+        .get("summary", {})
+        .get("row_results", [{}])[0]
+        .get("menu_detail_id")
+    )
+
+    rv = client.post(
+        "/api/builder/menus/menu_1/create-composition-from-row",
+        json={
+            "menu_detail_id": detail_id,
+            "composition_name": "Fiskgratang",
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
+    body = rv.get_json() or {}
+    components = body.get("composition", {}).get("components") or []
+    component_ids = [item.get("component_id") for item in components]
+    assert component_ids == ["kokt_torsk", "aggsas", "pressad_potatis"]
+
+
 def test_create_composition_from_row_requires_detail_belongs_to_menu() -> None:
     client = _client()
     client.post(
@@ -421,6 +495,7 @@ def test_create_from_row_then_add_component_returns_updated_composition() -> Non
     body = rv.get_json() or {}
     assert body.get("ok") is True
     components = body.get("composition", {}).get("components") or []
-    assert len(components) == 1
-    assert components[0].get("component_id") == "fisk"
-    assert components[0].get("role") == "component"
+    assert len(components) == 2
+    component_ids = [item.get("component_id") for item in components]
+    assert component_ids == ["no_match", "fisk"]
+    assert all(item.get("role") == "component" for item in components)

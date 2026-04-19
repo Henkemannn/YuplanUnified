@@ -106,11 +106,24 @@ ul {
   gap: 8px;
 }
 
+.component-row-right {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .component-role-pill {
   border: 1px solid #ddd;
   border-radius: 10px;
   padding: 0 8px;
   font-size: 12px;
+  line-height: 18px;
+}
+
+.component-remove-btn {
+  width: auto;
+  margin-top: 0;
+  padding: 0 6px;
   line-height: 18px;
 }
 

@@ -50,6 +50,38 @@ let currentResolve = null;
 let currentBuilderComposition = null;
 let currentNewItemRole = "component";
 
+async function removeComponentFromCurrentComposition(componentId) {
+  if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
+    showJson("builderOut", {
+      status: 0,
+      data: { ok: false, error: "no_composition_selected" },
+    });
+    return;
+  }
+
+  const compositionId = String(currentBuilderComposition.composition_id);
+  const url =
+    "/api/builder/compositions/" +
+    encodeURIComponent(compositionId) +
+    "/components/" +
+    encodeURIComponent(String(componentId || ""));
+
+  console.log("REQUEST:", url, null);
+  showLoading("builderOut");
+  try {
+    const result = await callApi(url, { method: "DELETE" });
+    showJson("builderOut", result);
+    if (result && result.data && result.data.ok && result.data.composition) {
+      renderBuilderPanel(result.data.composition);
+    }
+  } catch (error) {
+    showJson("builderOut", {
+      status: 0,
+      data: { ok: false, error: String(error.message || error) },
+    });
+  }
+}
+
 function setNewItemRole(role) {
   const roleValue = role === "connector" ? "connector" : "component";
   const componentBtn = document.getElementById("newItemRoleComponent");
@@ -96,8 +128,22 @@ function renderBuilderPanel(composition) {
     role.className = "component-role-pill";
     role.textContent = String(component.role || "component");
 
+    const remove = document.createElement("button");
+    remove.className = "component-remove-btn";
+    remove.type = "button";
+    remove.textContent = "X";
+    remove.title = "Remove component";
+    remove.addEventListener("click", () => {
+      removeComponentFromCurrentComposition(String(component.component_id || ""));
+    });
+
+    const right = document.createElement("div");
+    right.className = "component-row-right";
+    right.appendChild(role);
+    right.appendChild(remove);
+
     row.appendChild(name);
-    row.appendChild(role);
+    row.appendChild(right);
     li.appendChild(row);
     list.appendChild(li);
   }

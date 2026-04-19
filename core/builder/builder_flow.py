@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 import secrets
 
 from ..components import (
@@ -83,6 +84,16 @@ class BuilderFlow:
             role=role,
         )
 
+    def remove_component_from_composition(
+        self,
+        composition_id: str,
+        component_id: str,
+    ) -> Composition:
+        return self._composition_service.remove_component_from_composition(
+            composition_id=composition_id,
+            component_id=component_id,
+        )
+
     def create_menu(
         self,
         menu_id: str,
@@ -154,6 +165,14 @@ class BuilderFlow:
             composition_id=self._generate_composition_id(),
             composition_name=composition_name,
         )
+
+        for suggestion in self._suggest_components_from_unresolved_text(unresolved_text):
+            composition = self.add_component_to_composition(
+                composition_id=composition.composition_id,
+                component_name=suggestion,
+                role="component",
+            )
+
         updated = self.resolve_menu_detail(
             menu_id=menu_id,
             menu_detail_id=menu_detail_id,
@@ -194,6 +213,28 @@ class BuilderFlow:
             candidate = f"{base}_{suffix}"
             suffix += 1
         return candidate
+
+    @staticmethod
+    def _capitalize_first(value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        return text[:1].upper() + text[1:]
+
+    def _suggest_components_from_unresolved_text(self, unresolved_text: str) -> list[str]:
+        text = str(unresolved_text or "").strip()
+        if not text:
+            return []
+
+        # Keep user-facing suggestion text intact (including Swedish characters).
+        # Normalization/transliteration is only applied later when generating component_id.
+        parts = re.split(r"\s+(?:med|och|m)\s+", text, flags=re.IGNORECASE)
+        suggestions: list[str] = []
+        for part in parts:
+            candidate = self._capitalize_first(part)
+            if candidate:
+                suggestions.append(candidate)
+        return suggestions
 
     def get_menu_cost_overview(
         self,

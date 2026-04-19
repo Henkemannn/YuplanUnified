@@ -256,6 +256,21 @@ def add_component_to_composition(composition_id: str):
     return jsonify({"ok": True, "composition": _serialize_composition(composition)})
 
 
+@bp.delete("/compositions/<composition_id>/components/<component_id>")
+@require_roles("editor", "admin", "superuser")
+def remove_component_from_composition(composition_id: str, component_id: str):
+    try:
+        flow = _get_builder_flow()
+        composition = flow.remove_component_from_composition(
+            composition_id=str(composition_id),
+            component_id=str(component_id),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "composition": _serialize_composition(composition)})
+
+
 @bp.post("/menus")
 @require_roles("editor", "admin", "superuser")
 def create_menu():
