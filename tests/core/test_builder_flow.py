@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import pytest
 
 from core.builder import BuilderFlow
 from core.components import (
@@ -74,6 +75,50 @@ def test_remove_component_from_composition_through_builder_flow() -> None:
     )
 
     assert [item.component_id for item in updated.components] == ["potatoes"]
+
+
+def test_rename_component_in_composition_through_builder_flow() -> None:
+    flow = _build_flow()
+
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Fish",
+        role="connector",
+    )
+    flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Potatoes",
+        role="component",
+    )
+
+    updated = flow.rename_component_in_composition(
+        composition_id="plate",
+        component_id="fish",
+        new_component_name="Salmon",
+    )
+
+    component_ids = [item.component_id for item in updated.components]
+    assert component_ids == ["salmon", "potatoes"]
+    assert updated.components[0].role == "connector"
+    assert updated.components[0].sort_order == 10
+
+
+def test_rename_component_in_composition_rejects_empty_name() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Fish",
+        role="component",
+    )
+
+    with pytest.raises(ValueError, match="component_name must be non-empty"):
+        flow.rename_component_in_composition(
+            composition_id="plate",
+            component_id="fish",
+            new_component_name="   ",
+        )
 
 
 def test_create_menu_and_import_rows_through_builder_flow() -> None:

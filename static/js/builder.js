@@ -82,6 +82,54 @@ async function removeComponentFromCurrentComposition(componentId) {
   }
 }
 
+async function renameComponentInCurrentComposition(componentId, currentName) {
+  if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
+    showJson("builderOut", {
+      status: 0,
+      data: { ok: false, error: "no_composition_selected" },
+    });
+    return;
+  }
+
+  const newName = String(window.prompt("New component name", String(currentName || "")) || "").trim();
+  if (!newName) {
+    showJson("builderOut", {
+      status: 0,
+      data: { ok: false, error: "component_name is required" },
+    });
+    return;
+  }
+
+  const compositionId = String(currentBuilderComposition.composition_id);
+  const url =
+    "/api/builder/compositions/" +
+    encodeURIComponent(compositionId) +
+    "/components/" +
+    encodeURIComponent(String(componentId || ""));
+  const payload = { component_name: newName };
+
+  console.log("REQUEST:", url, payload);
+  showLoading("builderOut");
+  try {
+    const result = await callApi(url, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: payload,
+    });
+    showJson("builderOut", result);
+    if (result && result.data && result.data.ok && result.data.composition) {
+      renderBuilderPanel(result.data.composition);
+    }
+  } catch (error) {
+    showJson("builderOut", {
+      status: 0,
+      data: { ok: false, error: String(error.message || error) },
+    });
+  }
+}
+
 function setNewItemRole(role) {
   const roleValue = role === "connector" ? "connector" : "component";
   const componentBtn = document.getElementById("newItemRoleComponent");
@@ -137,9 +185,22 @@ function renderBuilderPanel(composition) {
       removeComponentFromCurrentComposition(String(component.component_id || ""));
     });
 
+    const rename = document.createElement("button");
+    rename.className = "component-rename-btn";
+    rename.type = "button";
+    rename.textContent = "Rename";
+    rename.title = "Rename component";
+    rename.addEventListener("click", () => {
+      renameComponentInCurrentComposition(
+        String(component.component_id || ""),
+        String(component.component_id || ""),
+      );
+    });
+
     const right = document.createElement("div");
     right.className = "component-row-right";
     right.appendChild(role);
+    right.appendChild(rename);
     right.appendChild(remove);
 
     row.appendChild(name);

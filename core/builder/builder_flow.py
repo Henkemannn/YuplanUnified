@@ -94,6 +94,44 @@ class BuilderFlow:
             component_id=component_id,
         )
 
+    def rename_component_in_composition(
+        self,
+        composition_id: str,
+        component_id: str,
+        new_component_name: str,
+    ) -> Composition:
+        composition = self._composition_service.get_composition(composition_id)
+        if composition is None:
+            raise ValueError(f"composition not found: {composition_id}")
+
+        new_name_value = str(new_component_name or "").strip()
+        if not new_name_value:
+            raise ValueError("component_name must be non-empty")
+
+        existing = next(
+            (item for item in composition.components if item.component_id == str(component_id)),
+            None,
+        )
+        if existing is None:
+            raise ValueError("component entry not found in composition")
+
+        self._composition_service.remove_component_from_composition(
+            composition_id=composition_id,
+            component_id=str(component_id),
+            sort_order=existing.sort_order,
+        )
+        updated_composition = self._composition_service.get_composition(composition_id)
+        if updated_composition is None:
+            raise ValueError(f"composition not found: {composition_id}")
+
+        new_component_id = self._generate_component_id(updated_composition, new_name_value)
+        return self._composition_service.add_component_to_composition(
+            composition_id=composition_id,
+            component_id=new_component_id,
+            role=existing.role,
+            sort_order=existing.sort_order,
+        )
+
     def create_menu(
         self,
         menu_id: str,

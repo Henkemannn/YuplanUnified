@@ -271,6 +271,26 @@ def remove_component_from_composition(composition_id: str, component_id: str):
     return jsonify({"ok": True, "composition": _serialize_composition(composition)})
 
 
+@bp.patch("/compositions/<composition_id>/components/<component_id>")
+@require_roles("editor", "admin", "superuser")
+def rename_component_in_composition(composition_id: str, component_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        composition = flow.rename_component_in_composition(
+            composition_id=str(composition_id),
+            component_id=str(component_id),
+            new_component_name=_require_str(payload, "component_name"),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "composition": _serialize_composition(composition)})
+
+
 @bp.post("/menus")
 @require_roles("editor", "admin", "superuser")
 def create_menu():

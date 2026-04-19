@@ -127,6 +127,13 @@ ul {
   line-height: 18px;
 }
 
+.component-rename-btn {
+  width: auto;
+  margin-top: 0;
+  padding: 0 6px;
+  line-height: 18px;
+}
+
 .role-toggle-row {
   margin-top: 8px;
   display: grid;

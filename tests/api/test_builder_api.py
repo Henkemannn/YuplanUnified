@@ -125,6 +125,62 @@ def test_remove_component_from_composition_endpoint() -> None:
     assert components[0]["component_id"] == "potatis"
 
 
+def test_rename_component_in_composition_endpoint() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_4", "composition_name": "Fish Plate 4"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_4/components",
+        json={"component_name": "Fisk", "role": "connector"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_4/components",
+        json={"component_name": "Potatis", "role": "component"},
+        headers=HEADERS,
+    )
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_4/components/fisk",
+        json={"component_name": "Lax"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    components = body.get("composition", {}).get("components") or []
+    assert [item["component_id"] for item in components] == ["lax", "potatis"]
+    assert components[0]["role"] == "connector"
+
+
+def test_rename_component_in_composition_endpoint_rejects_empty_name() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_5", "composition_name": "Fish Plate 5"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_5/components",
+        json={"component_name": "Fisk", "role": "component"},
+        headers=HEADERS,
+    )
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_5/components/fisk",
+        json={"component_name": "   "},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("error") == "bad_request"
+
+
 def test_create_menu_endpoint() -> None:
     client = _client()
 
