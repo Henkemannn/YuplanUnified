@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
@@ -61,6 +62,75 @@ def _maybe_int(value: Any, *, field: str) -> int | None:
         raise ValueError(f"{field} must be an integer") from exc
 
 
+def _require_int(payload: dict[str, Any], field: str) -> int:
+    value = _maybe_int(payload.get(field), field=field)
+    if value is None:
+        raise ValueError(f"{field} is required")
+    return value
+
+
+def _decimal_to_json(value: Decimal) -> str:
+    return str(value)
+
+
+def _serialize_recipe(recipe) -> dict[str, Any]:
+    return {
+        "recipe_id": recipe.recipe_id,
+        "component_id": recipe.component_id,
+        "recipe_name": recipe.recipe_name,
+        "visibility": recipe.visibility,
+        "is_default": recipe.is_default,
+        "yield_portions": recipe.yield_portions,
+        "notes": recipe.notes,
+    }
+
+
+def _serialize_recipe_for_component(recipe, *, primary_recipe_id: str | None) -> dict[str, Any]:
+    payload = _serialize_recipe(recipe)
+    payload["is_primary"] = str(recipe.recipe_id) == str(primary_recipe_id or "")
+    return payload
+
+
+def _serialize_recipe_ingredient_line(line) -> dict[str, Any]:
+    amount_value = float(line.quantity_value)
+    return {
+        "recipe_ingredient_line_id": line.recipe_ingredient_line_id,
+        "recipe_id": line.recipe_id,
+        "ingredient_name": line.ingredient_name,
+        "amount_value": amount_value,
+        "amount_unit": line.quantity_unit,
+        "note": line.note,
+        "sort_order": line.sort_order,
+    }
+
+
+def _serialize_recipe_scaling_preview(preview) -> dict[str, Any]:
+    return {
+        "recipe": {
+            "recipe_id": preview.recipe_id,
+            "component_id": preview.component_id,
+            "recipe_name": preview.recipe_name,
+            "visibility": preview.visibility,
+            "notes": preview.notes,
+        },
+        "source_yield_portions": preview.source_yield_portions,
+        "target_portions": preview.target_portions,
+        "scaling_factor": _decimal_to_json(preview.scaling_factor),
+        "ingredient_lines": [
+            {
+                "recipe_ingredient_line_id": line.recipe_ingredient_line_id,
+                "ingredient_name": line.ingredient_name,
+                "amount_unit": line.amount_unit,
+                "original_amount_value": _decimal_to_json(line.original_amount_value),
+                "scaled_amount_value": _decimal_to_json(line.scaled_amount_value),
+                "note": line.note,
+                "sort_order": line.sort_order,
+            }
+            for line in preview.ingredient_lines
+        ],
+    }
+
+
 def _serialize_composition_component(component) -> dict[str, Any]:
     return {
         "component_id": component.component_id,
@@ -81,10 +151,29 @@ def _serialize_composition(composition) -> dict[str, Any]:
     }
 
 
+def _serialize_rendered_composition_text(model) -> dict[str, Any]:
+    return {
+        "composition_id": model.composition_id,
+        "composition_name": model.composition_name,
+        "text": model.text,
+        "components": [
+            {
+                "component_id": item.component_id,
+                "component_name": item.component_name,
+                "role": item.role,
+                "sort_order": item.sort_order,
+                "text_token": item.text_token,
+            }
+            for item in model.rendered_components
+        ],
+    }
+
+
 def _serialize_component(component) -> dict[str, Any]:
     return {
         "component_id": component.component_id,
         "component_name": component.canonical_name,
+        "primary_recipe_id": component.primary_recipe_id,
     }
 
 
@@ -444,6 +533,53 @@ def attach_existing_component_to_composition(composition_id: str):
     return jsonify({"ok": True, "composition": _serialize_composition(composition)})
 
 
+@bp.patch("/compositions/<composition_id>/components/reorder")
+@require_roles("editor", "admin", "superuser")
+def reorder_components_in_composition(composition_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    ordered_entries_raw = payload.get("ordered_entries")
+    if not isinstance(ordered_entries_raw, list) or len(ordered_entries_raw) == 0:
+        return _bad_request("ordered_entries must be a non-empty list")
+
+    ordered_entries: list[tuple[str, int]] = []
+    for index, item in enumerate(ordered_entries_raw):
+        if not isinstance(item, dict):
+            return _bad_request(f"ordered_entries[{index}] must be an object")
+        component_id_value = str(item.get("component_id") or "").strip()
+        if not component_id_value:
+            return _bad_request(f"ordered_entries[{index}].component_id is required")
+        sort_order_value = _maybe_int(item.get("sort_order"), field=f"ordered_entries[{index}].sort_order")
+        if sort_order_value is None:
+            return _bad_request(f"ordered_entries[{index}].sort_order is required")
+        ordered_entries.append((component_id_value, int(sort_order_value)))
+
+    try:
+        flow = _get_builder_flow()
+        composition = flow.reorder_components_in_composition(
+            composition_id=str(composition_id),
+            ordered_entries=ordered_entries,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "composition": _serialize_composition(composition)})
+
+
+@bp.get("/compositions/<composition_id>/render/text")
+@require_roles("editor", "admin", "superuser")
+def render_composition_text(composition_id: str):
+    try:
+        flow = _get_builder_flow()
+        model = flow.render_composition_text_model(composition_id=str(composition_id))
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "rendered": _serialize_rendered_composition_text(model)})
+
+
 @bp.delete("/compositions/<composition_id>/components/<component_id>")
 @require_roles("editor", "admin", "superuser")
 def remove_component_from_composition(composition_id: str, component_id: str):
@@ -493,6 +629,284 @@ def rename_component_in_composition(composition_id: str, component_id: str):
         return _bad_request(str(exc))
 
     return jsonify({"ok": True, "composition": _serialize_composition(composition)})
+
+
+@bp.post("/components/<component_id>/recipes")
+@require_roles("editor", "admin", "superuser")
+def create_component_recipe(component_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        recipe = flow.create_component_recipe(
+            component_id=str(component_id),
+            recipe_name=_require_str(payload, "recipe_name"),
+            visibility=_optional_str(payload, "visibility") or "private",
+            yield_portions=_require_int(payload, "yield_portions"),
+            notes=_optional_str(payload, "notes"),
+            recipe_id=_optional_str(payload, "recipe_id"),
+            is_primary=bool(payload.get("is_primary", False)),
+        )
+
+        raw_lines = payload.get("ingredient_lines")
+        if raw_lines is not None:
+            if not isinstance(raw_lines, list):
+                raise ValueError("ingredient_lines must be a list")
+            for idx, item in enumerate(raw_lines):
+                if not isinstance(item, dict):
+                    raise ValueError(f"ingredient_lines[{idx}] must be an object")
+                amount_value = item.get("amount_value")
+                if amount_value is None:
+                    amount_value = item.get("quantity_value")
+                amount_unit = item.get("amount_unit")
+                if amount_unit is None:
+                    amount_unit = item.get("quantity_unit")
+
+                flow.add_recipe_ingredient_line(
+                    component_id=str(component_id),
+                    recipe_id=recipe.recipe_id,
+                    ingredient_name=_require_str(item, "ingredient_name"),
+                    amount_value=amount_value,
+                    amount_unit=str(amount_unit or "").strip(),
+                    note=_optional_str(item, "note"),
+                    sort_order=_maybe_int(item.get("sort_order"), field="sort_order") or 0,
+                    recipe_ingredient_line_id=_optional_str(item, "recipe_ingredient_line_id"),
+                )
+
+        recipe, lines = flow.get_component_recipe_detail(
+            component_id=str(component_id),
+            recipe_id=recipe.recipe_id,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return (
+        jsonify(
+            {
+                "ok": True,
+                "recipe": _serialize_recipe(recipe),
+                "ingredient_lines": [_serialize_recipe_ingredient_line(line) for line in lines],
+            }
+        ),
+        201,
+    )
+
+
+@bp.get("/components/<component_id>/recipes")
+@require_roles("editor", "admin", "superuser")
+def list_component_recipes(component_id: str):
+    try:
+        flow = _get_builder_flow()
+        component, recipes = flow.list_component_recipes(component_id=str(component_id))
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "component": _serialize_component(component),
+            "count": len(recipes),
+            "recipes": [
+                _serialize_recipe_for_component(
+                    recipe,
+                    primary_recipe_id=component.primary_recipe_id,
+                )
+                for recipe in recipes
+            ],
+        }
+    )
+
+
+@bp.patch("/components/<component_id>/recipes/primary")
+@require_roles("editor", "admin", "superuser")
+def set_component_primary_recipe(component_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        component = flow.set_component_primary_recipe(
+            component_id=str(component_id),
+            recipe_id=_optional_str(payload, "recipe_id"),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "component": _serialize_component(component)})
+
+
+@bp.post("/components/<component_id>/recipes/<recipe_id>/ingredients")
+@require_roles("editor", "admin", "superuser")
+def add_component_recipe_ingredient(component_id: str, recipe_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        amount_value = payload.get("amount_value")
+        if amount_value is None:
+            amount_value = payload.get("quantity_value")
+        if amount_value is None:
+            raise ValueError("amount_value is required")
+
+        amount_unit = payload.get("amount_unit")
+        if amount_unit is None:
+            amount_unit = payload.get("quantity_unit")
+        if str(amount_unit or "").strip() == "":
+            raise ValueError("amount_unit is required")
+
+        line = flow.add_recipe_ingredient_line(
+            component_id=str(component_id),
+            recipe_id=str(recipe_id),
+            ingredient_name=_require_str(payload, "ingredient_name"),
+            amount_value=amount_value,
+            amount_unit=str(amount_unit),
+            note=_optional_str(payload, "note"),
+            sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
+            recipe_ingredient_line_id=_optional_str(payload, "recipe_ingredient_line_id"),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "ingredient_line": _serialize_recipe_ingredient_line(line)}), 201
+
+
+@bp.patch("/components/<component_id>/recipes/<recipe_id>")
+@require_roles("editor", "admin", "superuser")
+def update_component_recipe(component_id: str, recipe_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        recipe = flow.update_component_recipe_metadata(
+            component_id=str(component_id),
+            recipe_id=str(recipe_id),
+            recipe_name=_require_str(payload, "recipe_name"),
+            yield_portions=_require_int(payload, "yield_portions"),
+            visibility=_optional_str(payload, "visibility"),
+            notes=_optional_str(payload, "notes"),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "recipe": _serialize_recipe(recipe)})
+
+
+@bp.delete("/components/<component_id>/recipes/<recipe_id>")
+@require_roles("editor", "admin", "superuser")
+def delete_component_recipe(component_id: str, recipe_id: str):
+    try:
+        flow = _get_builder_flow()
+        flow.delete_component_recipe(
+            component_id=str(component_id),
+            recipe_id=str(recipe_id),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True})
+
+
+@bp.patch("/components/<component_id>/recipes/<recipe_id>/ingredients/<ingredient_line_id>")
+@require_roles("editor", "admin", "superuser")
+def update_component_recipe_ingredient(component_id: str, recipe_id: str, ingredient_line_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        amount_value = payload.get("amount_value")
+        if amount_value is None:
+            amount_value = payload.get("quantity_value")
+        if amount_value is None:
+            raise ValueError("amount_value is required")
+
+        amount_unit = payload.get("amount_unit")
+        if amount_unit is None:
+            amount_unit = payload.get("quantity_unit")
+        if str(amount_unit or "").strip() == "":
+            raise ValueError("amount_unit is required")
+
+        line = flow.update_recipe_ingredient_line(
+            component_id=str(component_id),
+            recipe_id=str(recipe_id),
+            recipe_ingredient_line_id=str(ingredient_line_id),
+            ingredient_name=_require_str(payload, "ingredient_name"),
+            amount_value=amount_value,
+            amount_unit=str(amount_unit),
+            note=_optional_str(payload, "note"),
+            sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "ingredient_line": _serialize_recipe_ingredient_line(line)})
+
+
+@bp.delete("/components/<component_id>/recipes/<recipe_id>/ingredients/<ingredient_line_id>")
+@require_roles("editor", "admin", "superuser")
+def delete_component_recipe_ingredient(component_id: str, recipe_id: str, ingredient_line_id: str):
+    try:
+        flow = _get_builder_flow()
+        flow.delete_recipe_ingredient_line(
+            component_id=str(component_id),
+            recipe_id=str(recipe_id),
+            recipe_ingredient_line_id=str(ingredient_line_id),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True})
+
+
+@bp.get("/components/<component_id>/recipes/<recipe_id>")
+@require_roles("editor", "admin", "superuser")
+def get_component_recipe(component_id: str, recipe_id: str):
+    try:
+        flow = _get_builder_flow()
+        recipe, lines = flow.get_component_recipe_detail(
+            component_id=str(component_id),
+            recipe_id=str(recipe_id),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "recipe": _serialize_recipe(recipe),
+            "ingredient_lines": [_serialize_recipe_ingredient_line(line) for line in lines],
+        }
+    )
+
+
+@bp.get("/components/<component_id>/recipes/<recipe_id>/scaling-preview")
+@require_roles("editor", "admin", "superuser")
+def get_component_recipe_scaling_preview(component_id: str, recipe_id: str):
+    try:
+        target_portions = _maybe_int(
+            request.args.get("target_portions"),
+            field="target_portions",
+        )
+        if target_portions is None:
+            raise ValueError("target_portions is required")
+        flow = _get_builder_flow()
+        preview = flow.preview_component_recipe_scaling(
+            component_id=str(component_id),
+            recipe_id=str(recipe_id),
+            target_portions=int(target_portions),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "preview": _serialize_recipe_scaling_preview(preview)})
 
 
 __all__ = ["bp", "_get_builder_flow"]

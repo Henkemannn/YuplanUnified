@@ -182,7 +182,7 @@ def test_list_menu_rows_orders_by_sort_order_first() -> None:
     assert rows[1]["sort_order"] == 20
 
 
-def test_list_menu_rows_grouped_orders_by_day_then_meal_slot() -> None:
+def test_list_menu_rows_grouped_orders_deterministically_without_calendar_assumptions() -> None:
     builder_flow, flow = _build_flows()
     builder_flow.create_composition(composition_id="plate_1", composition_name="Fish Plate")
     flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")

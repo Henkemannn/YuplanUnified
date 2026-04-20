@@ -24,6 +24,7 @@ class ComponentService:
             default_uom=default_uom,
             tags=list(tags) if tags is not None else [],
             categories=list(categories) if categories is not None else [],
+            primary_recipe_id=None,
         )
         self._repository.add(component)
         return component
@@ -35,3 +36,29 @@ class ComponentService:
         if active_only:
             return self._repository.list_active()
         return self._repository.list_all()
+
+    def set_primary_recipe_id(
+        self,
+        component_id: str,
+        recipe_id: str | None,
+    ) -> Component:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        component = self._repository.get(component_id_value)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+
+        recipe_id_value = str(recipe_id or "").strip() or None
+        updated = Component(
+            component_id=component.component_id,
+            canonical_name=component.canonical_name,
+            is_active=component.is_active,
+            default_uom=component.default_uom,
+            tags=list(component.tags),
+            categories=list(component.categories),
+            primary_recipe_id=recipe_id_value,
+        )
+        self._repository.update(updated)
+        return updated

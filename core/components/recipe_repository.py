@@ -15,8 +15,18 @@ class InMemoryRecipeRepository:
     def get_recipe(self, recipe_id: str) -> Recipe | None:
         return self._recipes.get(recipe_id)
 
+    def update_recipe(self, recipe: Recipe) -> None:
+        if recipe.recipe_id not in self._recipes:
+            raise ValueError(f"recipe not found: {recipe.recipe_id}")
+        self._recipes[recipe.recipe_id] = recipe
+
     def list_recipes_for_component(self, component_id: str) -> list[Recipe]:
         return [recipe for recipe in self._recipes.values() if recipe.component_id == component_id]
+
+    def delete_recipe(self, recipe_id: str) -> None:
+        if recipe_id not in self._recipes:
+            raise ValueError(f"recipe not found: {recipe_id}")
+        del self._recipes[recipe_id]
 
     def set_default_recipe_for_component(self, component_id: str, recipe_id: str) -> Recipe:
         target = self._recipes.get(recipe_id)
@@ -62,6 +72,30 @@ class InMemoryRecipeIngredientLineRepository:
                 f"recipe ingredient line already exists: {line.recipe_ingredient_line_id}"
             )
         self._lines[line.recipe_ingredient_line_id] = line
+
+    def get_ingredient_line(self, recipe_ingredient_line_id: str) -> RecipeIngredientLine | None:
+        return self._lines.get(recipe_ingredient_line_id)
+
+    def update_ingredient_line(self, line: RecipeIngredientLine) -> None:
+        if line.recipe_ingredient_line_id not in self._lines:
+            raise ValueError(
+                f"recipe ingredient line not found: {line.recipe_ingredient_line_id}"
+            )
+        self._lines[line.recipe_ingredient_line_id] = line
+
+    def delete_ingredient_line(self, recipe_ingredient_line_id: str) -> None:
+        if recipe_ingredient_line_id not in self._lines:
+            raise ValueError(f"recipe ingredient line not found: {recipe_ingredient_line_id}")
+        del self._lines[recipe_ingredient_line_id]
+
+    def delete_ingredient_lines_for_recipe(self, recipe_id: str) -> None:
+        to_delete = [
+            line_id
+            for line_id, line in self._lines.items()
+            if line.recipe_id == recipe_id
+        ]
+        for line_id in to_delete:
+            del self._lines[line_id]
 
     def list_ingredient_lines_for_recipe(self, recipe_id: str) -> list[RecipeIngredientLine]:
         lines = [line for line in self._lines.values() if line.recipe_id == recipe_id]

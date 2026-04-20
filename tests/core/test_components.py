@@ -62,3 +62,25 @@ def test_duplicate_component_id_raises() -> None:
 
     with pytest.raises(ValueError, match="component already exists"):
         service.create_component(component_id="meatballs", canonical_name="Meatballs V2")
+
+
+def test_set_primary_recipe_id_for_component() -> None:
+    service = ComponentService()
+    service.create_component(component_id="meatballs", canonical_name="Meatballs")
+
+    updated = service.set_primary_recipe_id(component_id="meatballs", recipe_id="r1")
+
+    assert updated.primary_recipe_id == "r1"
+    fetched = service.get_component("meatballs")
+    assert fetched is not None
+    assert fetched.primary_recipe_id == "r1"
+
+
+def test_set_primary_recipe_id_can_clear_value() -> None:
+    service = ComponentService()
+    service.create_component(component_id="fish", canonical_name="Fish")
+    service.set_primary_recipe_id(component_id="fish", recipe_id="r1")
+
+    updated = service.set_primary_recipe_id(component_id="fish", recipe_id="   ")
+
+    assert updated.primary_recipe_id is None

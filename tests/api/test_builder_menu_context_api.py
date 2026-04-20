@@ -287,6 +287,7 @@ def test_menu_composition_adapter_endpoint_resolves_composition_components_and_r
     body = rv.get_json() or {}
     payload = body.get("payload") or {}
     assert body.get("ok") is True
+    assert payload.get("adapter_version") == "menu-composition-adapter/v1.2"
     assert payload.get("menu", {}).get("menu_id") == "menu_1"
     rows = payload.get("rows") or []
     assert len(rows) == 1
@@ -297,6 +298,12 @@ def test_menu_composition_adapter_endpoint_resolves_composition_components_and_r
     components = composition.get("components") or []
     assert [item.get("component_id") for item in components] == ["fish", "dill_sauce"]
     assert [item.get("role") for item in components] == ["main", "sauce"]
+    readiness = payload.get("readiness") or {}
+    assert readiness.get("total_rows") == 1
+    assert readiness.get("resolved_rows") == 1
+    assert readiness.get("unresolved_rows") == 0
+    assert readiness.get("rows_with_roles") == 1
+    assert readiness.get("rows_missing_roles") == 0
 
 
 def test_menu_composition_adapter_endpoint_handles_unresolved_row_explicitly() -> None:
@@ -438,6 +445,7 @@ def test_menu_composition_grouped_adapter_endpoint_groups_rows_by_day_and_meal()
     body = rv.get_json() or {}
     payload = body.get("payload") or {}
     assert body.get("ok") is True
+    assert payload.get("adapter_version") == "menu-composition-adapter/v1.2"
     assert payload.get("menu", {}).get("menu_id") == "menu_1"
     assert payload.get("count") == 2
     days = payload.get("days") or []
@@ -452,6 +460,12 @@ def test_menu_composition_grouped_adapter_endpoint_groups_rows_by_day_and_meal()
     components = ((resolution.get("composition") or {}).get("components") or [])
     assert [item.get("component_id") for item in components] == ["fish"]
     assert [item.get("role") for item in components] == ["main"]
+    readiness = payload.get("readiness") or {}
+    assert readiness.get("total_rows") == 2
+    assert readiness.get("resolved_rows") == 1
+    assert readiness.get("unresolved_rows") == 1
+    assert readiness.get("rows_with_roles") == 1
+    assert readiness.get("rows_missing_roles") == 0
 
 
 def test_menu_composition_grouped_adapter_endpoint_keeps_unresolved_visible() -> None:
@@ -515,6 +529,122 @@ def test_menu_composition_grouped_adapter_endpoint_excludes_production_fields() 
     resolution = row.get("resolution") or {}
     assert forbidden.isdisjoint(set(resolution.keys()))
     composition = resolution.get("composition") or {}
+    assert forbidden.isdisjoint(set(composition.keys()))
+
+
+def test_menu_composition_production_shape_endpoint_returns_role_aware_structure() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_1/components",
+        json={"component_name": "Fish", "role": "main"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_1/components",
+        json={"component_name": "Dill Sauce", "role": "sauce"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus/menu_1/rows",
+        json={"day": "monday", "meal_slot": "lunch", "composition_id": "plate_1", "sort_order": 10},
+        headers=HEADERS,
+    )
+
+    rv = client.get(
+        "/api/builder/menus/menu_1/adapter/compositions/production-shape",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    payload = (rv.get_json() or {}).get("payload") or {}
+    assert payload.get("adapter_version") == "menu-composition-adapter/v1.3-production-shape"
+    blocks = payload.get("context_blocks") or []
+    assert len(blocks) == 1
+    assert blocks[0].get("context") == {"day": "monday", "meal_slot": "lunch"}
+    compositions = blocks[0].get("compositions") or []
+    assert len(compositions) == 1
+    composition = (compositions[0] or {}).get("composition") or {}
+    assert composition.get("composition_id") == "plate_1"
+    role_groups = composition.get("role_groups") or []
+    assert [item.get("role") for item in role_groups] == ["main", "sauce"]
+
+
+def test_menu_composition_production_shape_endpoint_keeps_unresolved_rows_visible() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus/menu_1/import",
+        json={"rows": [{"day": "monday", "meal_slot": "dinner", "raw_text": "No Match"}]},
+        headers=HEADERS,
+    )
+
+    rv = client.get(
+        "/api/builder/menus/menu_1/adapter/compositions/production-shape",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    payload = (rv.get_json() or {}).get("payload") or {}
+    blocks = payload.get("context_blocks") or []
+    assert len(blocks) == 1
+    unresolved_rows = blocks[0].get("unresolved_rows") or []
+    assert len(unresolved_rows) == 1
+    assert unresolved_rows[0].get("unresolved_text") == "No Match"
+
+
+def test_menu_composition_production_shape_endpoint_excludes_production_fields() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus/menu_1/rows",
+        json={"day": "monday", "meal_slot": "lunch", "composition_id": "plate_1"},
+        headers=HEADERS,
+    )
+
+    rv = client.get(
+        "/api/builder/menus/menu_1/adapter/compositions/production-shape",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    payload = (rv.get_json() or {}).get("payload") or {}
+    forbidden = {
+        "quantity",
+        "quantity_value",
+        "ingredient",
+        "ingredients",
+        "recipe",
+        "recipe_id",
+        "target_portions",
+        "total_cost",
+        "prep",
+    }
+    block = (payload.get("context_blocks") or [{}])[0]
+    assert forbidden.isdisjoint(set(block.keys()))
+    composition = ((((block.get("compositions") or [{}])[0]).get("composition") or {}))
     assert forbidden.isdisjoint(set(composition.keys()))
 
 

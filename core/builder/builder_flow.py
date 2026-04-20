@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import logging
 import re
 import secrets
+from decimal import Decimal
 
 from ..components import (
     Component,
@@ -11,6 +12,11 @@ from ..components import (
     Composition,
     CompositionService,
     InMemoryCompositionRepository,
+    Recipe,
+    RecipeIngredientLine,
+    RecipeScalingPreview,
+    RecipeService,
+    calculate_recipe_scaling_preview,
 )
 from ..menu import (
     InMemoryCompositionAliasRepository,
@@ -18,6 +24,7 @@ from ..menu import (
     normalize_menu_import_text,
     resolve_composition_reference,
 )
+from .composition_text_renderer import RenderedCompositionTextModel, render_composition_to_text_model
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +56,354 @@ class BuilderFlow:
         composition_service: CompositionService,
         composition_repository: InMemoryCompositionRepository,
         alias_repository: InMemoryCompositionAliasRepository,
+        recipe_service: RecipeService | None = None,
     ) -> None:
         self._component_service = component_service
         self._composition_service = composition_service
         self._composition_repository = composition_repository
         self._alias_repository = alias_repository
+        self._recipe_service = recipe_service or RecipeService()
+
+    def create_component_recipe(
+        self,
+        *,
+        component_id: str,
+        recipe_name: str,
+        yield_portions: int,
+        visibility: str = "private",
+        notes: str | None = None,
+        recipe_id: str | None = None,
+        is_primary: bool = False,
+    ) -> Recipe:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+        component = self._component_service.get_component(component_id_value)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+
+        recipe_name_value = str(recipe_name or "").strip()
+        if not recipe_name_value:
+            raise ValueError("recipe_name must be non-empty")
+
+        recipe_id_value = str(recipe_id or "").strip() or self._generate_recipe_id()
+        recipe = self._recipe_service.create_recipe(
+            recipe_id=recipe_id_value,
+            component_id=component_id_value,
+            recipe_name=recipe_name_value,
+            visibility=str(visibility or "private").strip() or "private",
+            yield_portions=int(yield_portions),
+            is_default=bool(is_primary),
+            notes=notes,
+        )
+        if is_primary:
+            self._component_service.set_primary_recipe_id(component_id_value, recipe.recipe_id)
+        return recipe
+
+    def set_component_primary_recipe(
+        self,
+        *,
+        component_id: str,
+        recipe_id: str | None,
+    ) -> Component:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        component = self._component_service.get_component(component_id_value)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+
+        recipe_id_value = str(recipe_id or "").strip() or None
+        if recipe_id_value is not None:
+            recipe = self._recipe_service.get_recipe(recipe_id_value)
+            if recipe is None:
+                raise ValueError(f"recipe not found: {recipe_id_value}")
+            if recipe.component_id != component_id_value:
+                raise ValueError(
+                    f"recipe {recipe_id_value} does not belong to component {component_id_value}"
+                )
+            self._recipe_service.set_default_recipe(component_id_value, recipe_id_value)
+
+        return self._component_service.set_primary_recipe_id(component_id_value, recipe_id_value)
+
+    def add_recipe_ingredient_line(
+        self,
+        *,
+        component_id: str,
+        recipe_id: str,
+        ingredient_name: str,
+        amount_value: int | float | Decimal,
+        amount_unit: str,
+        note: str | None = None,
+        sort_order: int = 0,
+        recipe_ingredient_line_id: str | None = None,
+    ) -> RecipeIngredientLine:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        recipe_id_value = str(recipe_id or "").strip()
+        if not recipe_id_value:
+            raise ValueError("recipe_id must be non-empty")
+
+        recipe = self._recipe_service.get_recipe(recipe_id_value)
+        if recipe is None:
+            raise ValueError(f"recipe not found: {recipe_id_value}")
+        if recipe.component_id != component_id_value:
+            raise ValueError(
+                f"recipe {recipe_id_value} does not belong to component {component_id_value}"
+            )
+
+        ingredient_name_value = str(ingredient_name or "").strip()
+        if not ingredient_name_value:
+            raise ValueError("ingredient_name must be non-empty")
+
+        line_id = str(recipe_ingredient_line_id or "").strip() or self._generate_recipe_line_id()
+        return self._recipe_service.add_ingredient_line(
+            recipe_ingredient_line_id=line_id,
+            recipe_id=recipe_id_value,
+            ingredient_name=ingredient_name_value,
+            quantity_value=amount_value,
+            quantity_unit=str(amount_unit or "").strip(),
+            note=note,
+            sort_order=int(sort_order),
+        )
+
+    def get_component_recipe_detail(
+        self,
+        *,
+        component_id: str,
+        recipe_id: str,
+    ) -> tuple[Recipe, list[RecipeIngredientLine]]:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        recipe_id_value = str(recipe_id or "").strip()
+        if not recipe_id_value:
+            raise ValueError("recipe_id must be non-empty")
+
+        recipe = self._recipe_service.get_recipe(recipe_id_value)
+        if recipe is None:
+            raise ValueError(f"recipe not found: {recipe_id_value}")
+        if recipe.component_id != component_id_value:
+            raise ValueError(
+                f"recipe {recipe_id_value} does not belong to component {component_id_value}"
+            )
+
+        lines = self._recipe_service.list_ingredient_lines(recipe_id_value)
+        return recipe, lines
+
+    def preview_component_recipe_scaling(
+        self,
+        *,
+        component_id: str,
+        recipe_id: str,
+        target_portions: int,
+    ) -> RecipeScalingPreview:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        recipe_id_value = str(recipe_id or "").strip()
+        if not recipe_id_value:
+            raise ValueError("recipe_id must be non-empty")
+
+        target = int(target_portions)
+        if target <= 0:
+            raise ValueError("target_portions must be > 0")
+
+        recipe = self._recipe_service.get_recipe(recipe_id_value)
+        if recipe is None:
+            raise ValueError(f"recipe not found: {recipe_id_value}")
+        if recipe.component_id != component_id_value:
+            raise ValueError(
+                f"recipe {recipe_id_value} does not belong to component {component_id_value}"
+            )
+
+        lines = self._recipe_service.list_ingredient_lines(recipe_id_value)
+        return calculate_recipe_scaling_preview(
+            recipe=recipe,
+            ingredient_lines=lines,
+            target_portions=target,
+        )
+
+    def list_component_recipes(
+        self,
+        *,
+        component_id: str,
+    ) -> tuple[Component, list[Recipe]]:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        component = self._component_service.get_component(component_id_value)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+
+        recipes = self._recipe_service.list_recipes_for_component(component_id_value)
+        primary_recipe_id = str(component.primary_recipe_id or "").strip()
+        ordered = sorted(
+            recipes,
+            key=lambda recipe: (
+                0 if str(recipe.recipe_id) == primary_recipe_id else 1,
+                str(recipe.recipe_name or "").lower(),
+                str(recipe.recipe_id),
+            ),
+        )
+        return component, ordered
+
+    def update_component_recipe_metadata(
+        self,
+        *,
+        component_id: str,
+        recipe_id: str,
+        recipe_name: str,
+        yield_portions: int,
+        visibility: str | None = None,
+        notes: str | None = None,
+    ) -> Recipe:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        recipe_id_value = str(recipe_id or "").strip()
+        if not recipe_id_value:
+            raise ValueError("recipe_id must be non-empty")
+
+        recipe = self._recipe_service.get_recipe(recipe_id_value)
+        if recipe is None:
+            raise ValueError(f"recipe not found: {recipe_id_value}")
+        if recipe.component_id != component_id_value:
+            raise ValueError(
+                f"recipe {recipe_id_value} does not belong to component {component_id_value}"
+            )
+
+        return self._recipe_service.update_recipe_metadata(
+            recipe_id=recipe_id_value,
+            recipe_name=recipe_name,
+            yield_portions=int(yield_portions),
+            visibility=visibility,
+            notes=notes,
+        )
+
+    def update_recipe_ingredient_line(
+        self,
+        *,
+        component_id: str,
+        recipe_id: str,
+        recipe_ingredient_line_id: str,
+        ingredient_name: str,
+        amount_value: int | float | Decimal,
+        amount_unit: str,
+        note: str | None = None,
+        sort_order: int = 0,
+    ) -> RecipeIngredientLine:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        recipe_id_value = str(recipe_id or "").strip()
+        if not recipe_id_value:
+            raise ValueError("recipe_id must be non-empty")
+
+        line_id_value = str(recipe_ingredient_line_id or "").strip()
+        if not line_id_value:
+            raise ValueError("recipe_ingredient_line_id must be non-empty")
+
+        recipe = self._recipe_service.get_recipe(recipe_id_value)
+        if recipe is None:
+            raise ValueError(f"recipe not found: {recipe_id_value}")
+        if recipe.component_id != component_id_value:
+            raise ValueError(
+                f"recipe {recipe_id_value} does not belong to component {component_id_value}"
+            )
+
+        existing_line = self._recipe_service.get_ingredient_line(line_id_value)
+        if existing_line is None:
+            raise ValueError(f"recipe ingredient line not found: {line_id_value}")
+        if existing_line.recipe_id != recipe_id_value:
+            raise ValueError(
+                f"ingredient line {line_id_value} does not belong to recipe {recipe_id_value}"
+            )
+
+        line = self._recipe_service.update_ingredient_line(
+            recipe_ingredient_line_id=line_id_value,
+            ingredient_name=ingredient_name,
+            quantity_value=amount_value,
+            quantity_unit=amount_unit,
+            note=note,
+            sort_order=int(sort_order),
+        )
+        return line
+
+    def delete_recipe_ingredient_line(
+        self,
+        *,
+        component_id: str,
+        recipe_id: str,
+        recipe_ingredient_line_id: str,
+    ) -> None:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        recipe_id_value = str(recipe_id or "").strip()
+        if not recipe_id_value:
+            raise ValueError("recipe_id must be non-empty")
+
+        recipe = self._recipe_service.get_recipe(recipe_id_value)
+        if recipe is None:
+            raise ValueError(f"recipe not found: {recipe_id_value}")
+        if recipe.component_id != component_id_value:
+            raise ValueError(
+                f"recipe {recipe_id_value} does not belong to component {component_id_value}"
+            )
+
+        line_id_value = str(recipe_ingredient_line_id or "").strip()
+        if not line_id_value:
+            raise ValueError("recipe_ingredient_line_id must be non-empty")
+
+        line = self._recipe_service.get_ingredient_line(line_id_value)
+        if line is None:
+            raise ValueError(f"recipe ingredient line not found: {line_id_value}")
+        if line.recipe_id != recipe_id_value:
+            raise ValueError(
+                f"ingredient line {line_id_value} does not belong to recipe {recipe_id_value}"
+            )
+        self._recipe_service.delete_ingredient_line(line_id_value)
+
+    def delete_component_recipe(
+        self,
+        *,
+        component_id: str,
+        recipe_id: str,
+    ) -> None:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        recipe_id_value = str(recipe_id or "").strip()
+        if not recipe_id_value:
+            raise ValueError("recipe_id must be non-empty")
+
+        component = self._component_service.get_component(component_id_value)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+
+        recipe = self._recipe_service.get_recipe(recipe_id_value)
+        if recipe is None:
+            raise ValueError(f"recipe not found: {recipe_id_value}")
+        if recipe.component_id != component_id_value:
+            raise ValueError(
+                f"recipe {recipe_id_value} does not belong to component {component_id_value}"
+            )
+
+        if str(component.primary_recipe_id or "").strip() == recipe_id_value:
+            raise ValueError("cannot delete primary recipe; clear or switch primary first")
+
+        self._recipe_service.delete_recipe(recipe_id_value)
 
     def create_standalone_component(self, component_name: str) -> Component:
         name_value = self._normalize_component_name(component_name)
@@ -208,6 +558,44 @@ class BuilderFlow:
 
     def list_compositions(self, *, group_name: str | None = None) -> list[Composition]:
         return self._composition_service.list_compositions(group_name=group_name)
+
+    def render_composition_text_model(self, *, composition_id: str) -> RenderedCompositionTextModel:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
+
+        composition = self._composition_service.get_composition(composition_id_value)
+        if composition is None:
+            raise ValueError(f"composition not found: {composition_id_value}")
+
+        return render_composition_to_text_model(composition)
+
+    def reorder_components_in_composition(
+        self,
+        *,
+        composition_id: str,
+        ordered_entries: list[tuple[str, int]],
+    ) -> Composition:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
+        if not isinstance(ordered_entries, list) or not ordered_entries:
+            raise ValueError("ordered_entries must be a non-empty list")
+
+        normalized_entries: list[tuple[str, int]] = []
+        for entry in ordered_entries:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                raise ValueError("ordered_entries must contain (component_id, sort_order) tuples")
+            component_id_value, sort_order_value = entry
+            component_id_text = str(component_id_value or "").strip()
+            if not component_id_text:
+                raise ValueError("component_id must be non-empty")
+            normalized_entries.append((component_id_text, int(sort_order_value)))
+
+        return self._composition_service.reorder_components_in_composition(
+            composition_id=composition_id_value,
+            ordered_entries=normalized_entries,
+        )
 
     def list_library_components(self) -> list[Component]:
         items = self._component_service.list_components(active_only=False)
@@ -423,6 +811,20 @@ class BuilderFlow:
             if candidate not in existing_ids:
                 return candidate
         raise ValueError("unable to generate unique alias_id")
+
+    def _generate_recipe_id(self) -> str:
+        alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        for _ in range(50):
+            suffix = "".join(secrets.choice(alphabet) for _ in range(8))
+            candidate = f"rcp_{suffix}"
+            if self._recipe_service.get_recipe(candidate) is None:
+                return candidate
+        raise ValueError("unable to generate unique recipe_id")
+
+    def _generate_recipe_line_id(self) -> str:
+        alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        suffix = "".join(secrets.choice(alphabet) for _ in range(8))
+        return f"ril_{suffix}"
 
     def _generate_composition_id(self) -> str:
         alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"

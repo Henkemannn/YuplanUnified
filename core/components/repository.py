@@ -15,6 +15,11 @@ class InMemoryComponentRepository:
     def get(self, component_id: str) -> Component | None:
         return self._components.get(component_id)
 
+    def update(self, component: Component) -> None:
+        if component.component_id not in self._components:
+            raise ValueError(f"component not found: {component.component_id}")
+        self._components[component.component_id] = component
+
     def list_all(self) -> list[Component]:
         return list(self._components.values())
 

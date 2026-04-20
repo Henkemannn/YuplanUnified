@@ -11,3 +11,4 @@ class Component:
     default_uom: str | None = None
     tags: list[str] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
+    primary_recipe_id: str | None = None

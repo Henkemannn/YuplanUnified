@@ -35,15 +35,13 @@
 
     <div class="library-block">
       <h3>Components</h3>
-      <ul id="libraryComponentsList"></ul>
+      <div id="libraryComponentsGrid" class="component-library-grid"></div>
     </div>
 
     <div class="library-block">
       <h3>Dishes</h3>
-      <ul id="libraryCompositionsList"></ul>
+      <div id="libraryCompositionsGrid" class="composition-library-grid"></div>
     </div>
-
-    <pre id="libraryOut"></pre>
   </section>
 
   <section>
@@ -83,7 +81,7 @@ Fiskgratang</textarea>
   </section>
 
   <div id="resolveModal" class="modal hidden">
-    <div class="modal-content">
+    <div class="modal-content modal-content-dish">
       <h3 id="resolveModalTitle">Edit dish</h3>
       <p id="resolveStatusLine" class="modal-status-line hidden"></p>
 
@@ -91,13 +89,13 @@ Fiskgratang</textarea>
         <p id="builderCompositionTitle"></p>
         <p class="modal-section-title">Included parts</p>
         <p id="builderRoleSummary" class="builder-role-summary"></p>
-        <ul id="builderComponentsList" class="builder-components-list"></ul>
+        <ul id="builderComponentsList" class="component-block-list"></ul>
 
-        <p class="modal-section-title">Add a part to this dish</p>
-        <label>What should be included?
-          <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Type a part, for example Potatis eller Löksås">
-          <datalist id="componentNameSuggestions"></datalist>
+        <p class="modal-section-title">Pick components from library</p>
+        <label>Search components
+          <input id="builderPaletteSearch" type="text" placeholder="Search reusable components">
         </label>
+        <div id="builderComponentPalette" class="component-palette"></div>
         <label>Role (optional)
           <input id="newComponentRole" list="componentRoleSuggestions" type="text" placeholder="main, side, sauce ... or leave empty">
           <datalist id="componentRoleSuggestions">
@@ -109,12 +107,111 @@ Fiskgratang</textarea>
             <option value="other"></option>
           </datalist>
         </label>
-        <button id="btnAddComponent" type="button">Add to dish</button>
+
+        <details id="manualComponentAddPanel" class="manual-component-panel">
+          <summary>Add a new component by name</summary>
+          <label>Component name
+            <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Type a new component name">
+            <datalist id="componentNameSuggestions"></datalist>
+          </label>
+          <button id="btnAddComponent" type="button">Create and add component</button>
+        </details>
         <pre id="builderOut"></pre>
       </div>
 
       <div class="modal-actions">
         <button id="resolveCancel" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="componentDetailModal" class="modal hidden">
+    <div class="modal-content modal-content-component-detail">
+      <h3 id="componentDetailModalTitle">Component detail</h3>
+      <p id="componentDetailComponentTitle">Component: not selected</p>
+      <p id="recipePrimaryStatus" class="recipe-primary-status"></p>
+
+      <p class="modal-section-title">Composition text preview</p>
+      <p id="componentDetailTextPreviewHint" class="component-detail-preview-hint">Read-only text rendered from persisted composition structure.</p>
+      <pre id="componentDetailTextPreview">No composition selected</pre>
+
+      <div id="modalRecipeSection" class="create-new-section modal-section">
+        <div class="recipe-grid">
+          <div class="recipe-col">
+            <p class="modal-section-title">Recipes for component</p>
+            <ul id="recipeList" class="recipe-list"></ul>
+
+            <p class="modal-section-title">Create recipe</p>
+            <label>Recipe name
+              <input id="recipeCreateName" type="text" placeholder="Base recipe">
+            </label>
+            <label>Yield portions
+              <input id="recipeCreateYieldPortions" type="number" min="1" step="1" placeholder="20">
+            </label>
+            <label>Visibility
+              <input id="recipeCreateVisibility" type="text" placeholder="private, site, tenant" value="private">
+            </label>
+            <label>Notes (optional)
+              <input id="recipeCreateNotes" type="text" placeholder="Optional note">
+            </label>
+            <button id="btnRecipeCreate" type="button">Create recipe</button>
+          </div>
+
+          <div class="recipe-col">
+            <p class="modal-section-title">Selected recipe</p>
+            <p id="recipeSelectedSummary">No recipe selected</p>
+            <button id="btnRecipeSetPrimary" type="button" disabled>Set as primary</button>
+            <button id="btnRecipeDelete" type="button" disabled>Delete recipe</button>
+
+            <p class="modal-section-title">Edit recipe metadata</p>
+            <label>Recipe name
+              <input id="recipeEditName" type="text" placeholder="Base recipe" disabled>
+            </label>
+            <label>Yield portions
+              <input id="recipeEditYieldPortions" type="number" min="1" step="1" placeholder="20" disabled>
+            </label>
+            <label>Visibility
+              <input id="recipeEditVisibility" type="text" placeholder="private, site, tenant" disabled>
+            </label>
+            <label>Notes (optional)
+              <input id="recipeEditNotes" type="text" placeholder="Optional note" disabled>
+            </label>
+            <button id="btnRecipeSaveMetadata" type="button" disabled>Save recipe metadata</button>
+
+            <p class="modal-section-title">Ingredients</p>
+            <ul id="recipeIngredientsList" class="recipe-ingredient-list"></ul>
+
+            <p class="modal-section-title">Add ingredient</p>
+            <label>Ingredient name
+              <input id="recipeIngredientName" type="text" placeholder="Potato">
+            </label>
+            <label>Amount value
+              <input id="recipeIngredientAmountValue" type="number" step="0.01" min="0.0001" placeholder="900">
+            </label>
+            <label>Amount unit
+              <input id="recipeIngredientAmountUnit" list="recipeUnitSuggestions" type="text" placeholder="g">
+              <datalist id="recipeUnitSuggestions">
+                <option value="g"></option>
+                <option value="kg"></option>
+                <option value="ml"></option>
+                <option value="dl"></option>
+                <option value="l"></option>
+                <option value="st"></option>
+                <option value="tsk"></option>
+                <option value="msk"></option>
+              </datalist>
+            </label>
+            <label>Note (optional)
+              <input id="recipeIngredientNote" type="text" placeholder="Optional note">
+            </label>
+            <button id="btnRecipeIngredientAdd" type="button" disabled>Add ingredient</button>
+            <pre id="recipeOut"></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="componentDetailModalClose" type="button">Done</button>
       </div>
     </div>
   </div>

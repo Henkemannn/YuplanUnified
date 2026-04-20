@@ -22,6 +22,7 @@ from .menu import (
 )
 from .planera_v2.adapters import build_menu_composition_payload
 from .planera_v2.adapters import build_menu_composition_grouped_payload
+from .planera_v2.adapters import build_menu_composition_production_shape_payload
 
 logger = logging.getLogger(__name__)
 
@@ -35,22 +36,6 @@ class MenuCostOverview:
 
 
 class BuilderMenuContextFlow:
-    _DAY_ORDER = {
-        "monday": 1,
-        "tuesday": 2,
-        "wednesday": 3,
-        "thursday": 4,
-        "friday": 5,
-        "saturday": 6,
-        "sunday": 7,
-    }
-    _MEAL_SLOT_ORDER = {
-        "breakfast": 1,
-        "lunch": 2,
-        "dinner": 3,
-        "kvallsmat": 4,
-    }
-
     def __init__(
         self,
         *,
@@ -132,6 +117,22 @@ class BuilderMenuContextFlow:
         )
         return payload
 
+    def get_menu_composition_production_shape_adapter_payload(
+        self,
+        menu_id: str,
+    ) -> dict[str, object]:
+        menu = self._menu_service.get_menu(str(menu_id))
+        if menu is None:
+            raise ValueError(f"menu not found: {menu_id}")
+
+        details = self._menu_service.list_menu_details(str(menu_id))
+        payload = build_menu_composition_production_shape_payload(
+            menu=menu,
+            menu_details=details,
+            composition_repository=self._composition_repository,
+        )
+        return payload
+
     def add_composition_menu_row(
         self,
         *,
@@ -195,7 +196,7 @@ class BuilderMenuContextFlow:
 
     def list_menu_rows(self, menu_id: str) -> list[dict[str, str | int | None]]:
         rows: list[dict[str, str | int | None]] = []
-        for detail in self._menu_service.list_menu_details(menu_id):
+        for insertion_index, detail in enumerate(self._menu_service.list_menu_details(menu_id)):
             composition_name: str | None = None
             if detail.composition_id:
                 composition = self._composition_repository.get(detail.composition_id)
@@ -213,51 +214,81 @@ class BuilderMenuContextFlow:
                     "unresolved_text": detail.unresolved_text,
                     "note": detail.note,
                     "sort_order": detail.sort_order,
+                    "_insertion_index": insertion_index,
                 }
             )
-        return sorted(
+
+        ordered_rows = sorted(
             rows,
             key=lambda row: (
                 int(row.get("sort_order") or 0),
-                str(row.get("day") or ""),
-                str(row.get("meal_slot") or ""),
+                int(row.get("_insertion_index") or 0),
                 str(row.get("menu_detail_id") or ""),
             ),
         )
+
+        cleaned_rows: list[dict[str, str | int | None]] = []
+        for row in ordered_rows:
+            cleaned = dict(row)
+            cleaned.pop("_insertion_index", None)
+            cleaned_rows.append(cleaned)
+        return cleaned_rows
 
     def list_menu_rows_grouped(
         self,
         menu_id: str,
     ) -> list[dict[str, str | int | list[dict[str, str | int | None]]]]:
         rows = self.list_menu_rows(menu_id)
-        grouped: dict[tuple[str, str], list[dict[str, str | int | None]]] = {}
+        grouped: dict[tuple[str, str], dict[str, object]] = {}
+        group_order: list[tuple[str, str]] = []
 
         for row in rows:
             day = str(row.get("day") or "")
             meal_slot = str(row.get("meal_slot") or "")
             key = (day, meal_slot)
-            grouped.setdefault(key, []).append(row)
+            if key not in grouped:
+                grouped[key] = {
+                    "rows": [],
+                    "first_insertion_index": len(group_order),
+                }
+                group_order.append(key)
+            grouped[key]["rows"].append(row)
 
         groups: list[dict[str, str | int | list[dict[str, str | int | None]]]] = []
-        for (day, meal_slot), grouped_rows in grouped.items():
+        for day, meal_slot in group_order:
+            grouped_rows = grouped[(day, meal_slot)]["rows"]
             groups.append(
                 {
                     "day": day,
                     "meal_slot": meal_slot,
                     "count": len(grouped_rows),
                     "rows": grouped_rows,
+                    "_first_sort_order": min(
+                        int((row.get("sort_order") or 0)) for row in grouped_rows
+                    ),
+                    "_first_insertion_index": int(
+                        grouped[(day, meal_slot)]["first_insertion_index"] or 0
+                    ),
                 }
             )
 
-        return sorted(
+        ordered_groups = sorted(
             groups,
             key=lambda group: (
-                self._DAY_ORDER.get(str(group.get("day") or ""), 99),
-                self._MEAL_SLOT_ORDER.get(str(group.get("meal_slot") or ""), 99),
+                int(group.get("_first_sort_order") or 0),
+                int(group.get("_first_insertion_index") or 0),
                 str(group.get("day") or ""),
                 str(group.get("meal_slot") or ""),
             ),
         )
+
+        cleaned_groups: list[dict[str, str | int | list[dict[str, str | int | None]]]] = []
+        for group in ordered_groups:
+            cleaned = dict(group)
+            cleaned.pop("_first_sort_order", None)
+            cleaned.pop("_first_insertion_index", None)
+            cleaned_groups.append(cleaned)
+        return cleaned_groups
 
     def import_menu_rows(self, menu_id: str, rows: list[ImportedMenuRow]) -> MenuImportSummary:
         return import_menu_rows(

@@ -471,3 +471,375 @@ def test_rename_component_in_composition_updates_component_name() -> None:
     assert len(updated.components) == 1
     assert updated.components[0].component_name == "Köttbullar"
     assert updated.components[0].component_id == "kottbullar"
+
+
+def test_builder_flow_component_recipe_structured_ingredient_storage() -> None:
+    flow = _build_flow()
+    component = flow.create_standalone_component("Meatballs")
+
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        visibility="site",
+        yield_portions=20,
+        is_primary=True,
+    )
+    line = flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Potato",
+        amount_value=900,
+        amount_unit="g",
+        note="peeled",
+        sort_order=10,
+    )
+    fetched_recipe, lines = flow.get_component_recipe_detail(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+    )
+
+    assert fetched_recipe.yield_portions == 20
+    assert line.quantity_value == 900
+    assert line.quantity_unit == "g"
+    assert len(lines) == 1
+    assert lines[0].ingredient_name == "Potato"
+    assert lines[0].note == "peeled"
+    updated_component = flow.list_library_components()[0]
+    assert updated_component.primary_recipe_id == recipe.recipe_id
+
+
+def test_builder_flow_recipe_must_belong_to_component() -> None:
+    flow = _build_flow()
+    first = flow.create_standalone_component("Fish")
+    second = flow.create_standalone_component("Potato")
+    recipe = flow.create_component_recipe(
+        component_id=first.component_id,
+        recipe_name="Fish Base",
+        visibility="private",
+        yield_portions=10,
+    )
+
+    with pytest.raises(ValueError, match="does not belong to component"):
+        flow.add_recipe_ingredient_line(
+            component_id=second.component_id,
+            recipe_id=recipe.recipe_id,
+            ingredient_name="Salt",
+            amount_value=1,
+            amount_unit="g",
+        )
+
+
+def test_builder_flow_lists_component_recipes_primary_first_then_name() -> None:
+    flow = _build_flow()
+    first = flow.create_standalone_component("Fish")
+    second = flow.create_standalone_component("Potato")
+
+    r_b = flow.create_component_recipe(
+        component_id=first.component_id,
+        recipe_name="B Recipe",
+        visibility="private",
+        yield_portions=10,
+    )
+    flow.create_component_recipe(
+        component_id=first.component_id,
+        recipe_name="A Recipe",
+        visibility="private",
+        yield_portions=10,
+    )
+    flow.create_component_recipe(
+        component_id=second.component_id,
+        recipe_name="Other",
+        visibility="private",
+        yield_portions=10,
+    )
+    flow.set_component_primary_recipe(component_id=first.component_id, recipe_id=r_b.recipe_id)
+
+    component, recipes = flow.list_component_recipes(component_id=first.component_id)
+
+    assert component.component_id == first.component_id
+    assert [item.recipe_name for item in recipes] == ["B Recipe", "A Recipe"]
+
+
+def test_builder_flow_updates_recipe_metadata() -> None:
+    flow = _build_flow()
+    component = flow.create_standalone_component("Fish")
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Old",
+        visibility="private",
+        yield_portions=10,
+        notes="old",
+    )
+
+    updated = flow.update_component_recipe_metadata(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        recipe_name="New",
+        yield_portions=24,
+        visibility="site",
+        notes="new",
+    )
+
+    assert updated.recipe_name == "New"
+    assert updated.yield_portions == 24
+    assert updated.visibility == "site"
+    assert updated.notes == "new"
+
+
+def test_builder_flow_updates_and_deletes_recipe_ingredient_line() -> None:
+    flow = _build_flow()
+    component = flow.create_standalone_component("Soup")
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        visibility="private",
+        yield_portions=12,
+    )
+    line = flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Salt",
+        amount_value=10,
+        amount_unit="g",
+        note="initial",
+        sort_order=10,
+    )
+
+    updated = flow.update_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        recipe_ingredient_line_id=line.recipe_ingredient_line_id,
+        ingredient_name="Sea salt",
+        amount_value=12,
+        amount_unit="g",
+        note="updated",
+        sort_order=20,
+    )
+    assert updated.ingredient_name == "Sea salt"
+    assert str(updated.quantity_value) == "12"
+    assert updated.note == "updated"
+    assert updated.sort_order == 20
+
+    flow.delete_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        recipe_ingredient_line_id=line.recipe_ingredient_line_id,
+    )
+    _, lines = flow.get_component_recipe_detail(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+    )
+    assert lines == []
+
+
+def test_builder_flow_recipe_delete_guard_and_delete_after_unset_primary() -> None:
+    flow = _build_flow()
+    component = flow.create_standalone_component("Stew")
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        visibility="private",
+        yield_portions=8,
+        is_primary=True,
+    )
+
+    with pytest.raises(ValueError, match="cannot delete primary recipe"):
+        flow.delete_component_recipe(component_id=component.component_id, recipe_id=recipe.recipe_id)
+
+    flow.set_component_primary_recipe(component_id=component.component_id, recipe_id=None)
+    flow.delete_component_recipe(component_id=component.component_id, recipe_id=recipe.recipe_id)
+
+    _, recipes = flow.list_component_recipes(component_id=component.component_id)
+    assert recipes == []
+
+
+def test_builder_flow_recipe_scaling_preview_scales_amounts_deterministically() -> None:
+    flow = _build_flow()
+    component = flow.create_standalone_component("Soup")
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        visibility="private",
+        yield_portions=4,
+    )
+    flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Water",
+        amount_value=2,
+        amount_unit="l",
+        note="cold",
+        sort_order=10,
+    )
+    flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Salt",
+        amount_value=8,
+        amount_unit="g",
+        note=None,
+        sort_order=20,
+    )
+
+    preview = flow.preview_component_recipe_scaling(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        target_portions=10,
+    )
+
+    assert preview.source_yield_portions == 4
+    assert preview.target_portions == 10
+    assert str(preview.scaling_factor) == "2.5"
+    assert [line.ingredient_name for line in preview.ingredient_lines] == ["Water", "Salt"]
+    assert [str(line.original_amount_value) for line in preview.ingredient_lines] == ["2", "8"]
+    assert [str(line.scaled_amount_value) for line in preview.ingredient_lines] == ["5.0", "20.0"]
+    assert [line.amount_unit for line in preview.ingredient_lines] == ["l", "g"]
+    assert [line.note for line in preview.ingredient_lines] == ["cold", None]
+
+
+def test_builder_flow_recipe_scaling_preview_rejects_invalid_target_portions() -> None:
+    flow = _build_flow()
+    component = flow.create_standalone_component("Soup")
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        visibility="private",
+        yield_portions=4,
+    )
+
+    with pytest.raises(ValueError, match="target_portions must be > 0"):
+        flow.preview_component_recipe_scaling(
+            component_id=component.component_id,
+            recipe_id=recipe.recipe_id,
+            target_portions=0,
+        )
+
+
+def test_builder_flow_recipe_scaling_preview_enforces_component_ownership() -> None:
+    flow = _build_flow()
+    c1 = flow.create_standalone_component("Fish")
+    c2 = flow.create_standalone_component("Potato")
+    recipe = flow.create_component_recipe(
+        component_id=c1.component_id,
+        recipe_name="Fish Base",
+        visibility="private",
+        yield_portions=6,
+    )
+
+    with pytest.raises(ValueError, match="does not belong to component"):
+        flow.preview_component_recipe_scaling(
+            component_id=c2.component_id,
+            recipe_id=recipe.recipe_id,
+            target_portions=12,
+        )
+
+
+def test_reorder_components_in_composition_persists_explicit_sort_order() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    first = flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Potato",
+        role="side",
+    )
+    second = flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Fish",
+        role="main",
+    )
+
+    original = second.components
+    reordered = flow.reorder_components_in_composition(
+        composition_id="plate",
+        ordered_entries=[
+            (original[1].component_id, original[1].sort_order),
+            (original[0].component_id, original[0].sort_order),
+        ],
+    )
+
+    assert [item.component_name for item in reordered.components] == ["Fish", "Potato"]
+    assert [item.sort_order for item in reordered.components] == [10, 20]
+
+
+def test_reorder_components_order_is_deterministic_after_reload_for_text_outputs() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    flow.add_component_to_composition(composition_id="plate", component_name="A")
+    flow.add_component_to_composition(composition_id="plate", component_name="B")
+    added = flow.add_component_to_composition(composition_id="plate", component_name="C")
+
+    reordered = flow.reorder_components_in_composition(
+        composition_id="plate",
+        ordered_entries=[
+            (added.components[2].component_id, added.components[2].sort_order),
+            (added.components[0].component_id, added.components[0].sort_order),
+            (added.components[1].component_id, added.components[1].sort_order),
+        ],
+    )
+
+    reloaded = flow.list_compositions()
+    plate = next(item for item in reloaded if item.composition_id == "plate")
+    assert [item.component_name for item in plate.components] == ["C", "A", "B"]
+    assert [item.sort_order for item in plate.components] == [10, 20, 30]
+    assert [item.component_name for item in reordered.components] == ["C", "A", "B"]
+
+
+def test_render_composition_text_model_follows_persisted_sort_order() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    flow.add_component_to_composition(composition_id="plate", component_name="Potato", role="side")
+    with_two = flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Fish",
+        role="main",
+    )
+
+    flow.reorder_components_in_composition(
+        composition_id="plate",
+        ordered_entries=[
+            (with_two.components[1].component_id, with_two.components[1].sort_order),
+            (with_two.components[0].component_id, with_two.components[0].sort_order),
+        ],
+    )
+
+    rendered = flow.render_composition_text_model(composition_id="plate")
+    assert rendered.text == "Plate: Fish (main), Potato (side)"
+    assert [item.component_name for item in rendered.rendered_components] == ["Fish", "Potato"]
+    assert [item.sort_order for item in rendered.rendered_components] == [10, 20]
+
+
+def test_render_composition_text_model_is_deterministic_across_reloads() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    flow.add_component_to_composition(composition_id="plate", component_name="A")
+    flow.add_component_to_composition(composition_id="plate", component_name="B")
+    with_three = flow.add_component_to_composition(composition_id="plate", component_name="C")
+
+    flow.reorder_components_in_composition(
+        composition_id="plate",
+        ordered_entries=[
+            (with_three.components[2].component_id, with_three.components[2].sort_order),
+            (with_three.components[0].component_id, with_three.components[0].sort_order),
+            (with_three.components[1].component_id, with_three.components[1].sort_order),
+        ],
+    )
+
+    first = flow.render_composition_text_model(composition_id="plate")
+    second = flow.render_composition_text_model(composition_id="plate")
+
+    assert first.text == "Plate: C, A, B"
+    assert second.text == first.text
+    assert [item.text_token for item in second.rendered_components] == ["C", "A", "B"]
+
+
+def test_render_composition_text_model_does_not_mix_other_compositions() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate_a", composition_name="Plate A")
+    flow.create_composition(composition_id="plate_b", composition_name="Plate B")
+    flow.add_component_to_composition(composition_id="plate_a", component_name="Fish")
+    flow.add_component_to_composition(composition_id="plate_b", component_name="Soup")
+
+    rendered = flow.render_composition_text_model(composition_id="plate_a")
+
+    assert rendered.text == "Plate A: Fish"
+    assert [item.component_name for item in rendered.rendered_components] == ["Fish"]

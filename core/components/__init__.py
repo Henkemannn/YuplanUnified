@@ -12,6 +12,11 @@ from .recipe_calculations import (
 	ScaledIngredientLine,
 	calculate_recipe_cost_breakdown,
 )
+from .recipe_scaling_preview import (
+	RecipeScalingPreview,
+	ScaledRecipeIngredientLinePreview,
+	calculate_recipe_scaling_preview,
+)
 from .recipe_domain import Recipe, RecipeIngredientLine
 from .recipe_repository import InMemoryRecipeIngredientLineRepository, InMemoryRecipeRepository
 from .recipe_service import RecipeService
@@ -37,4 +42,7 @@ __all__ = [
 	"InMemoryRecipeRepository",
 	"InMemoryRecipeIngredientLineRepository",
 	"RecipeService",
+	"RecipeScalingPreview",
+	"ScaledRecipeIngredientLinePreview",
+	"calculate_recipe_scaling_preview",
 ]

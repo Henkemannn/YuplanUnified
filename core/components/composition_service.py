@@ -177,6 +177,50 @@ class CompositionService:
         self._repository.update(updated)
         return updated
 
+    def reorder_components_in_composition(
+        self,
+        composition_id: str,
+        ordered_entries: list[tuple[str, int]],
+    ) -> Composition:
+        composition = self._require_composition(composition_id)
+        existing_components = list(composition.components)
+
+        if len(ordered_entries) != len(existing_components):
+            raise ValueError("ordered_entries must include every existing component entry")
+
+        entry_to_component: dict[tuple[str, int], CompositionComponent] = {}
+        for item in existing_components:
+            key = (str(item.component_id), int(item.sort_order))
+            entry_to_component[key] = item
+
+        requested_keys: list[tuple[str, int]] = []
+        for component_id_value, sort_order_value in ordered_entries:
+            requested_keys.append((str(component_id_value), int(sort_order_value)))
+
+        if set(requested_keys) != set(entry_to_component.keys()):
+            raise ValueError("ordered_entries does not match existing composition entries")
+
+        updated_components: list[CompositionComponent] = []
+        for index, key in enumerate(requested_keys):
+            current = entry_to_component[key]
+            updated_components.append(
+                CompositionComponent(
+                    component_id=current.component_id,
+                    component_name=current.component_name,
+                    role=current.role,
+                    sort_order=(index + 1) * 10,
+                )
+            )
+
+        updated = Composition(
+            composition_id=composition.composition_id,
+            composition_name=composition.composition_name,
+            library_group=composition.library_group,
+            components=updated_components,
+        )
+        self._repository.update(updated)
+        return updated
+
     def _require_composition(self, composition_id: str) -> Composition:
         composition_id_value = str(composition_id or "").strip()
         if not composition_id_value:

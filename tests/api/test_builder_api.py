@@ -866,6 +866,148 @@ def test_attach_existing_component_endpoint_prevents_duplicate_attach() -> None:
     assert second.status_code == 400
 
 
+def test_reorder_components_endpoint_persists_order_and_sort_order() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_reorder", "composition_name": "Reorder Plate"},
+        headers=HEADERS,
+    )
+    a = client.post(
+        "/api/builder/compositions/plate_reorder/components",
+        json={"component_name": "Potato", "role": "side"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_reorder/components",
+        json={"component_name": "Fish", "role": "main"},
+        headers=HEADERS,
+    )
+
+    components = ((a.get_json() or {}).get("composition") or {}).get("components") or []
+    assert len(components) == 1
+    listed_before = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
+    plate_before = next(
+        item
+        for item in (listed_before.get("compositions") or [])
+        if item.get("composition_id") == "plate_reorder"
+    )
+    entries = plate_before.get("components") or []
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_reorder/components/reorder",
+        json={
+            "ordered_entries": [
+                {"component_id": entries[1].get("component_id"), "sort_order": entries[1].get("sort_order")},
+                {"component_id": entries[0].get("component_id"), "sort_order": entries[0].get("sort_order")},
+            ]
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    after = ((body.get("composition") or {}).get("components") or [])
+    assert [item.get("component_name") for item in after] == ["Fish", "Potato"]
+    assert [item.get("sort_order") for item in after] == [10, 20]
+    assert "primary_recipe_id" not in (after[0] if after else {})
+
+    listed_after = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
+    plate_after = next(
+        item
+        for item in (listed_after.get("compositions") or [])
+        if item.get("composition_id") == "plate_reorder"
+    )
+    reloaded = plate_after.get("components") or []
+    assert [item.get("component_name") for item in reloaded] == ["Fish", "Potato"]
+    assert [item.get("sort_order") for item in reloaded] == [10, 20]
+
+
+def test_render_composition_text_endpoint_uses_persisted_order() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_text", "composition_name": "Text Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_text/components",
+        json={"component_name": "Potato", "role": "side"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_text/components",
+        json={"component_name": "Fish", "role": "main"},
+        headers=HEADERS,
+    )
+
+    listed = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
+    plate = next(
+        item
+        for item in (listed.get("compositions") or [])
+        if item.get("composition_id") == "plate_text"
+    )
+    entries = plate.get("components") or []
+    reorder = client.patch(
+        "/api/builder/compositions/plate_text/components/reorder",
+        json={
+            "ordered_entries": [
+                {"component_id": entries[1].get("component_id"), "sort_order": entries[1].get("sort_order")},
+                {"component_id": entries[0].get("component_id"), "sort_order": entries[0].get("sort_order")},
+            ]
+        },
+        headers=HEADERS,
+    )
+    assert reorder.status_code == 200
+
+    rv = client.get("/api/builder/compositions/plate_text/render/text", headers=HEADERS)
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    rendered = body.get("rendered") or {}
+    assert body.get("ok") is True
+    assert rendered.get("text") == "Text Plate: Fish (main), Potato (side)"
+    names = [item.get("component_name") for item in (rendered.get("components") or [])]
+    assert names == ["Fish", "Potato"]
+    assert [item.get("sort_order") for item in (rendered.get("components") or [])] == [10, 20]
+
+
+def test_render_composition_text_endpoint_is_deterministic_and_isolated() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_a", "composition_name": "Plate A"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_b", "composition_name": "Plate B"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_a/components",
+        json={"component_name": "Fish"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_b/components",
+        json={"component_name": "Soup"},
+        headers=HEADERS,
+    )
+
+    first = client.get("/api/builder/compositions/plate_a/render/text", headers=HEADERS)
+    second = client.get("/api/builder/compositions/plate_a/render/text", headers=HEADERS)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    first_rendered = (first.get_json() or {}).get("rendered") or {}
+    second_rendered = (second.get_json() or {}).get("rendered") or {}
+    assert first_rendered.get("text") == "Plate A: Fish"
+    assert second_rendered.get("text") == "Plate A: Fish"
+    assert first_rendered.get("text") == second_rendered.get("text")
+    assert [item.get("component_name") for item in (first_rendered.get("components") or [])] == ["Fish"]
+
+
 def test_remove_component_from_composition_endpoint() -> None:
     client = _client()
     client.post(
@@ -1094,3 +1236,417 @@ def test_invalid_payload_handling_returns_400() -> None:
     assert rv1.status_code == 400
     body1 = rv1.get_json() or {}
     assert body1.get("error") == "bad_request"
+
+
+def test_create_component_recipe_endpoint_requires_yield_portions_and_structured_lines() -> None:
+    client = _client()
+    component_rv = client.post(
+        "/api/builder/components",
+        json={"component_name": "Meatballs"},
+        headers=HEADERS,
+    )
+    component_id = ((component_rv.get_json() or {}).get("component") or {}).get("component_id")
+
+    rv = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={
+            "recipe_name": "Base",
+            "visibility": "site",
+            "yield_portions": 24,
+            "is_primary": True,
+            "ingredient_lines": [
+                {
+                    "ingredient_name": "Potato",
+                    "amount_value": 900,
+                    "amount_unit": "g",
+                    "note": "peeled",
+                    "sort_order": 10,
+                }
+            ],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
+    body = rv.get_json() or {}
+    recipe = body.get("recipe") or {}
+    assert recipe.get("yield_portions") == 24
+    lines = body.get("ingredient_lines") or []
+    assert len(lines) == 1
+    assert lines[0].get("ingredient_name") == "Potato"
+    assert lines[0].get("amount_value") == 900.0
+    assert lines[0].get("amount_unit") == "g"
+    assert lines[0].get("note") == "peeled"
+
+    list_components = client.get("/api/builder/components", headers=HEADERS)
+    components = (list_components.get_json() or {}).get("components") or []
+    linked = next(item for item in components if item.get("component_id") == component_id)
+    assert linked.get("primary_recipe_id") == recipe.get("recipe_id")
+
+
+def test_create_component_recipe_endpoint_rejects_missing_yield_portions() -> None:
+    client = _client()
+    component_rv = client.post(
+        "/api/builder/components",
+        json={"component_name": "Fish"},
+        headers=HEADERS,
+    )
+    component_id = ((component_rv.get_json() or {}).get("component") or {}).get("component_id")
+
+    rv = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Base", "visibility": "private"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("error") == "bad_request"
+
+
+def test_add_recipe_ingredient_endpoint_accepts_structured_amount_and_reads_back() -> None:
+    client = _client()
+    component_rv = client.post(
+        "/api/builder/components",
+        json={"component_name": "Sauce"},
+        headers=HEADERS,
+    )
+    component_id = ((component_rv.get_json() or {}).get("component") or {}).get("component_id")
+
+    recipe_rv = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Sauce Base", "yield_portions": 10, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((recipe_rv.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    add_rv = client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={
+            "ingredient_name": "Cream",
+            "amount_value": 2.5,
+            "amount_unit": "dl",
+            "note": "warm",
+        },
+        headers=HEADERS,
+    )
+    get_rv = client.get(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}",
+        headers=HEADERS,
+    )
+
+    assert add_rv.status_code == 201
+    assert get_rv.status_code == 200
+    lines = (get_rv.get_json() or {}).get("ingredient_lines") or []
+    assert len(lines) == 1
+    assert lines[0].get("ingredient_name") == "Cream"
+    assert lines[0].get("amount_value") == 2.5
+    assert lines[0].get("amount_unit") == "dl"
+    assert lines[0].get("note") == "warm"
+
+
+def test_set_component_primary_recipe_endpoint_rejects_recipe_from_other_component() -> None:
+    client = _client()
+    c1 = client.post("/api/builder/components", json={"component_name": "Fish"}, headers=HEADERS)
+    c2 = client.post("/api/builder/components", json={"component_name": "Potato"}, headers=HEADERS)
+    c1_id = ((c1.get_json() or {}).get("component") or {}).get("component_id")
+    c2_id = ((c2.get_json() or {}).get("component") or {}).get("component_id")
+
+    recipe_rv = client.post(
+        f"/api/builder/components/{c1_id}/recipes",
+        json={"recipe_name": "Fish Base", "yield_portions": 10, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((recipe_rv.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    rv = client.patch(
+        f"/api/builder/components/{c2_id}/recipes/primary",
+        json={"recipe_id": recipe_id},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("error") == "bad_request"
+
+
+def test_list_component_recipes_endpoint_returns_component_scoped_deterministic_list() -> None:
+    client = _client()
+    c1 = client.post("/api/builder/components", json={"component_name": "Fish"}, headers=HEADERS)
+    c2 = client.post("/api/builder/components", json={"component_name": "Potato"}, headers=HEADERS)
+    c1_id = ((c1.get_json() or {}).get("component") or {}).get("component_id")
+    c2_id = ((c2.get_json() or {}).get("component") or {}).get("component_id")
+
+    r_b = client.post(
+        f"/api/builder/components/{c1_id}/recipes",
+        json={"recipe_name": "B Recipe", "yield_portions": 10, "visibility": "private"},
+        headers=HEADERS,
+    )
+    r_a = client.post(
+        f"/api/builder/components/{c1_id}/recipes",
+        json={"recipe_name": "A Recipe", "yield_portions": 12, "visibility": "private"},
+        headers=HEADERS,
+    )
+    client.post(
+        f"/api/builder/components/{c2_id}/recipes",
+        json={"recipe_name": "Other Component Recipe", "yield_portions": 8, "visibility": "private"},
+        headers=HEADERS,
+    )
+
+    primary_id = ((r_b.get_json() or {}).get("recipe") or {}).get("recipe_id")
+    client.patch(
+        f"/api/builder/components/{c1_id}/recipes/primary",
+        json={"recipe_id": primary_id},
+        headers=HEADERS,
+    )
+
+    rv = client.get(f"/api/builder/components/{c1_id}/recipes", headers=HEADERS)
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    recipes = body.get("recipes") or []
+    assert len(recipes) == 2
+    assert recipes[0].get("recipe_id") == primary_id
+    assert recipes[0].get("is_primary") is True
+    assert recipes[1].get("recipe_name") == "A Recipe"
+    assert body.get("component", {}).get("component_id") == c1_id
+
+    all_ids = {item.get("recipe_id") for item in recipes}
+    assert ((r_a.get_json() or {}).get("recipe") or {}).get("recipe_id") in all_ids
+    assert not any(item.get("recipe_name") == "Other Component Recipe" for item in recipes)
+
+
+def test_update_recipe_metadata_endpoint() -> None:
+    client = _client()
+    c = client.post("/api/builder/components", json={"component_name": "Fish"}, headers=HEADERS)
+    component_id = ((c.get_json() or {}).get("component") or {}).get("component_id")
+    created = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Old", "yield_portions": 10, "visibility": "private", "notes": "old"},
+        headers=HEADERS,
+    )
+    recipe_id = ((created.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    rv = client.patch(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}",
+        json={"recipe_name": "New", "yield_portions": 24, "visibility": "site", "notes": "new"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    recipe = (rv.get_json() or {}).get("recipe") or {}
+    assert recipe.get("recipe_name") == "New"
+    assert recipe.get("yield_portions") == 24
+    assert recipe.get("visibility") == "site"
+    assert recipe.get("notes") == "new"
+
+
+def test_update_and_delete_recipe_ingredient_endpoint() -> None:
+    client = _client()
+    c = client.post("/api/builder/components", json={"component_name": "Soup"}, headers=HEADERS)
+    component_id = ((c.get_json() or {}).get("component") or {}).get("component_id")
+    created = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Base", "yield_portions": 10, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((created.get_json() or {}).get("recipe") or {}).get("recipe_id")
+    added = client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={"ingredient_name": "Salt", "amount_value": 10, "amount_unit": "g", "note": "initial"},
+        headers=HEADERS,
+    )
+    line_id = ((added.get_json() or {}).get("ingredient_line") or {}).get("recipe_ingredient_line_id")
+
+    update_rv = client.patch(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients/{line_id}",
+        json={
+            "ingredient_name": "Sea salt",
+            "amount_value": 12,
+            "amount_unit": "g",
+            "note": "updated",
+            "sort_order": 20,
+        },
+        headers=HEADERS,
+    )
+    delete_rv = client.delete(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients/{line_id}",
+        headers=HEADERS,
+    )
+    detail_rv = client.get(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}",
+        headers=HEADERS,
+    )
+
+    assert update_rv.status_code == 200
+    line = (update_rv.get_json() or {}).get("ingredient_line") or {}
+    assert line.get("ingredient_name") == "Sea salt"
+    assert line.get("amount_value") == 12.0
+    assert line.get("sort_order") == 20
+    assert delete_rv.status_code == 200
+    lines = (detail_rv.get_json() or {}).get("ingredient_lines") or []
+    assert lines == []
+
+
+def test_delete_recipe_endpoint_guard_for_primary_recipe() -> None:
+    client = _client()
+    c = client.post("/api/builder/components", json={"component_name": "Stew"}, headers=HEADERS)
+    component_id = ((c.get_json() or {}).get("component") or {}).get("component_id")
+    created = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Base", "yield_portions": 8, "visibility": "private", "is_primary": True},
+        headers=HEADERS,
+    )
+    recipe_id = ((created.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    blocked = client.delete(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}",
+        headers=HEADERS,
+    )
+    clear_primary = client.patch(
+        f"/api/builder/components/{component_id}/recipes/primary",
+        json={"recipe_id": ""},
+        headers=HEADERS,
+    )
+    deleted = client.delete(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}",
+        headers=HEADERS,
+    )
+
+    assert blocked.status_code == 400
+    assert (blocked.get_json() or {}).get("error") == "bad_request"
+    assert clear_primary.status_code == 200
+    assert deleted.status_code == 200
+
+
+def test_update_recipe_ingredient_enforces_component_ownership() -> None:
+    client = _client()
+    c1 = client.post("/api/builder/components", json={"component_name": "Fish"}, headers=HEADERS)
+    c2 = client.post("/api/builder/components", json={"component_name": "Potato"}, headers=HEADERS)
+    c1_id = ((c1.get_json() or {}).get("component") or {}).get("component_id")
+    c2_id = ((c2.get_json() or {}).get("component") or {}).get("component_id")
+
+    created = client.post(
+        f"/api/builder/components/{c1_id}/recipes",
+        json={"recipe_name": "Fish Base", "yield_portions": 10, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((created.get_json() or {}).get("recipe") or {}).get("recipe_id")
+    added = client.post(
+        f"/api/builder/components/{c1_id}/recipes/{recipe_id}/ingredients",
+        json={"ingredient_name": "Salt", "amount_value": 10, "amount_unit": "g"},
+        headers=HEADERS,
+    )
+    line_id = ((added.get_json() or {}).get("ingredient_line") or {}).get("recipe_ingredient_line_id")
+
+    rv = client.patch(
+        f"/api/builder/components/{c2_id}/recipes/{recipe_id}/ingredients/{line_id}",
+        json={"ingredient_name": "Salt", "amount_value": 11, "amount_unit": "g"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    assert (rv.get_json() or {}).get("error") == "bad_request"
+
+
+def test_recipe_scaling_preview_endpoint_returns_scaled_rows_and_metadata() -> None:
+    client = _client()
+    c = client.post("/api/builder/components", json={"component_name": "Soup"}, headers=HEADERS)
+    component_id = ((c.get_json() or {}).get("component") or {}).get("component_id")
+
+    created = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Base", "yield_portions": 4, "visibility": "private", "notes": "v1"},
+        headers=HEADERS,
+    )
+    recipe_id = ((created.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={
+            "ingredient_name": "Water",
+            "amount_value": 2,
+            "amount_unit": "l",
+            "note": "cold",
+            "sort_order": 10,
+        },
+        headers=HEADERS,
+    )
+    client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={"ingredient_name": "Salt", "amount_value": 8, "amount_unit": "g", "sort_order": 20},
+        headers=HEADERS,
+    )
+
+    rv = client.get(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/scaling-preview?target_portions=10",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    preview = body.get("preview") or {}
+    assert body.get("ok") is True
+    recipe = preview.get("recipe") or {}
+    assert recipe.get("recipe_id") == recipe_id
+    assert recipe.get("component_id") == component_id
+    assert recipe.get("recipe_name") == "Base"
+    assert recipe.get("notes") == "v1"
+    assert preview.get("source_yield_portions") == 4
+    assert preview.get("target_portions") == 10
+    assert preview.get("scaling_factor") == "2.5"
+    lines = preview.get("ingredient_lines") or []
+    assert [item.get("ingredient_name") for item in lines] == ["Water", "Salt"]
+    assert [item.get("amount_unit") for item in lines] == ["l", "g"]
+    assert [item.get("original_amount_value") for item in lines] == ["2", "8"]
+    assert [item.get("scaled_amount_value") for item in lines] == ["5.0", "20.0"]
+    assert [item.get("note") for item in lines] == ["cold", None]
+
+
+def test_recipe_scaling_preview_endpoint_rejects_invalid_target_portions() -> None:
+    client = _client()
+    c = client.post("/api/builder/components", json={"component_name": "Soup"}, headers=HEADERS)
+    component_id = ((c.get_json() or {}).get("component") or {}).get("component_id")
+    created = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Base", "yield_portions": 4, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((created.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    missing = client.get(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/scaling-preview",
+        headers=HEADERS,
+    )
+    invalid = client.get(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/scaling-preview?target_portions=0",
+        headers=HEADERS,
+    )
+
+    assert missing.status_code == 400
+    assert (missing.get_json() or {}).get("error") == "bad_request"
+    assert invalid.status_code == 400
+    assert (invalid.get_json() or {}).get("error") == "bad_request"
+
+
+def test_recipe_scaling_preview_endpoint_enforces_component_ownership() -> None:
+    client = _client()
+    c1 = client.post("/api/builder/components", json={"component_name": "Fish"}, headers=HEADERS)
+    c2 = client.post("/api/builder/components", json={"component_name": "Potato"}, headers=HEADERS)
+    c1_id = ((c1.get_json() or {}).get("component") or {}).get("component_id")
+    c2_id = ((c2.get_json() or {}).get("component") or {}).get("component_id")
+    created = client.post(
+        f"/api/builder/components/{c1_id}/recipes",
+        json={"recipe_name": "Fish Base", "yield_portions": 6, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((created.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    rv = client.get(
+        f"/api/builder/components/{c2_id}/recipes/{recipe_id}/scaling-preview?target_portions=12",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    assert (rv.get_json() or {}).get("error") == "bad_request"
