@@ -38,6 +38,44 @@ ul {
   margin: 8px 0;
 }
 
+.import-preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.import-preview-toolbar button {
+  width: auto;
+  margin-top: 0;
+  padding: 6px 10px;
+}
+
+.import-preview-summary {
+  color: #333;
+  font-size: 13px;
+}
+
+.import-preview-item {
+  border: 1px solid #e7e7e7;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  list-style: none;
+}
+
+.import-preview-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+}
+
+.import-preview-line input[type="checkbox"] {
+  width: auto;
+  margin-top: 2px;
+}
+
 .modal {
   position: fixed;
   top: 0;
@@ -97,16 +135,69 @@ ul {
   padding: 8px 8px 8px 24px;
 }
 
+.builder-role-summary {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #3a3a3a;
+}
+
+.builder-role-summary-missing {
+  color: #7a4e00;
+}
+
+.component-list-item {
+  margin-bottom: 6px;
+}
+
+.component-list-item-missing-role {
+  background: #fff8db;
+}
+
 .component-row {
   display: flex;
   justify-content: space-between;
   gap: 8px;
 }
 
+.component-row-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.component-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.component-role-tag {
+  font-size: 11px;
+  color: #4f4f4f;
+}
+
+.component-role-tag-missing {
+  color: #7a4e00;
+  font-weight: 600;
+}
+
 .component-row-right {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+
+.component-role-input {
+  width: 120px;
+  margin-top: 0;
+}
+
+.component-role-btn {
+  width: auto;
+  margin-top: 0;
+  padding: 0 6px;
+  line-height: 18px;
 }
 
 .component-remove-btn {

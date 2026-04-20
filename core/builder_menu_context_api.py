@@ -293,6 +293,34 @@ def list_menu_rows(menu_id: str):
     )
 
 
+@bp.get("/<menu_id>/adapter/compositions")
+@require_roles("editor", "admin", "superuser")
+def get_menu_composition_adapter_payload(menu_id: str):
+    menu_detail_id = str(request.args.get("menu_detail_id") or "").strip() or None
+    try:
+        flow = _get_menu_context_flow()
+        payload = flow.get_menu_composition_adapter_payload(
+            str(menu_id),
+            menu_detail_id=menu_detail_id,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "payload": payload})
+
+
+@bp.get("/<menu_id>/adapter/compositions/grouped")
+@require_roles("editor", "admin", "superuser")
+def get_menu_composition_grouped_adapter_payload(menu_id: str):
+    try:
+        flow = _get_menu_context_flow()
+        payload = flow.get_menu_composition_grouped_adapter_payload(str(menu_id))
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "payload": payload})
+
+
 @bp.patch("/<menu_id>/rows/<menu_detail_id>")
 @require_roles("editor", "admin", "superuser")
 def update_composition_menu_row(menu_id: str, menu_detail_id: str):

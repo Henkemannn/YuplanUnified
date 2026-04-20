@@ -69,12 +69,18 @@ function renderImportSummary(result) {
   const counts = document.createElement("div");
   counts.className = "import-counts";
   counts.textContent =
-    "Imported: " +
+    "Imported lines: " +
     String(summary.imported_count || 0) +
-    " | Created: " +
-    String(summary.created_count || 0) +
-    " | Reused: " +
-    String(summary.reused_count || 0);
+    " | Created compositions: " +
+    String(summary.created_composition_count || summary.created_count || 0) +
+    " | Reused compositions: " +
+    String(summary.reused_composition_count || summary.reused_count || 0) +
+    " | Created components: " +
+    String(summary.created_component_count || 0) +
+    " | Reused components: " +
+    String(summary.reused_component_count || 0) +
+    " | Ignored noise: " +
+    String(summary.ignored_noise_count || 0);
   host.appendChild(counts);
 
   const summaryWarnings = Array.isArray(summary.warnings) ? summary.warnings : [];
@@ -93,7 +99,7 @@ function renderImportSummary(result) {
     const badge = document.createElement("span");
     badge.className = "status-resolved";
     const via = String(row.matched_via || "").toLowerCase();
-    badge.textContent = via === "created" ? "Created" : "Reused";
+    badge.textContent = via === "created" ? "Created composition" : "Reused composition";
 
     const primary = document.createElement("span");
     primary.className = "import-row-primary";
@@ -125,7 +131,134 @@ function renderImportSummary(result) {
   }
 }
 
-let pendingFileImportLines = [];
+const IMPORT_PREVIEW_INITIAL_CHUNK = 40;
+const IMPORT_PREVIEW_CHUNK_SIZE = 40;
+
+let pendingFileImportItems = [];
+let pendingFileIgnoredItems = [];
+let importPreviewVisibleCount = 0;
+let importIgnoredExpanded = false;
+
+function selectedFileImportLines() {
+  const selected = [];
+  for (const item of pendingFileImportItems) {
+    if (item && item.selected) {
+      selected.push(String(item.line || ""));
+    }
+  }
+  return selected;
+}
+
+function updateFileImportControls() {
+  const confirmBtn = document.getElementById("btnImportFileConfirm");
+  const selectSummary = document.getElementById("importFileSelectionSummary");
+  const ignoredSummary = document.getElementById("importFileIgnoredSummary");
+  const showMoreBtn = document.getElementById("btnImportPreviewShowMore");
+  const toggleIgnoredBtn = document.getElementById("btnImportPreviewToggleIgnored");
+
+  const total = pendingFileImportItems.length;
+  const selectedCount = selectedFileImportLines().length;
+  const visibleCount = Math.min(importPreviewVisibleCount, total);
+  const ignoredCount = pendingFileIgnoredItems.length;
+
+  if (confirmBtn) {
+    confirmBtn.disabled = selectedCount === 0;
+  }
+
+  if (selectSummary) {
+    selectSummary.textContent =
+      "Selected " +
+      String(selectedCount) +
+      " of " +
+      String(total) +
+      " importable lines (showing " +
+      String(visibleCount) +
+      ")";
+  }
+
+  if (ignoredSummary) {
+    ignoredSummary.textContent = "Ignored noise: " + String(ignoredCount);
+  }
+
+  if (showMoreBtn) {
+    showMoreBtn.disabled = visibleCount >= total;
+    showMoreBtn.textContent =
+      visibleCount >= total
+        ? "All importable lines visible"
+        : "Show more importable lines";
+  }
+
+  if (toggleIgnoredBtn) {
+    toggleIgnoredBtn.disabled = ignoredCount === 0;
+    toggleIgnoredBtn.textContent = importIgnoredExpanded ? "Hide ignored lines" : "Show ignored lines";
+  }
+}
+
+function renderImportablePreviewList() {
+  const list = document.getElementById("importFilePreviewList");
+  if (!list) {
+    return;
+  }
+
+  list.innerHTML = "";
+  const visibleCount = Math.min(importPreviewVisibleCount, pendingFileImportItems.length);
+  for (let index = 0; index < visibleCount; index += 1) {
+    const itemData = pendingFileImportItems[index] || {};
+    const item = document.createElement("li");
+    item.className = "import-preview-item";
+
+    const label = document.createElement("label");
+    label.className = "import-preview-line";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = Boolean(itemData.selected);
+    checkbox.dataset.previewId = String(itemData.previewId || index);
+
+    const text = document.createElement("span");
+    text.textContent = String(itemData.line || "");
+
+    label.appendChild(checkbox);
+    label.appendChild(text);
+    item.appendChild(label);
+    list.appendChild(item);
+  }
+}
+
+function renderIgnoredPreviewList() {
+  const ignoredList = document.getElementById("importFileIgnoredList");
+  if (!ignoredList) {
+    return;
+  }
+
+  ignoredList.innerHTML = "";
+  if (!importIgnoredExpanded) {
+    ignoredList.classList.add("hidden");
+    return;
+  }
+
+  ignoredList.classList.remove("hidden");
+  for (const itemData of pendingFileIgnoredItems) {
+    const item = document.createElement("li");
+    const text = String(itemData.normalized_text || itemData.raw_text || "");
+    const reason = String(itemData.reason || "ignored_noise");
+    item.textContent = text + " (" + reason + ")";
+    ignoredList.appendChild(item);
+  }
+}
+
+function refreshFilePreviewLists() {
+  renderImportablePreviewList();
+  renderIgnoredPreviewList();
+  updateFileImportControls();
+}
+
+function toggleAllImportableLines(selected) {
+  for (const item of pendingFileImportItems) {
+    item.selected = Boolean(selected);
+  }
+  refreshFilePreviewLists();
+}
 
 function setFileImportStatus(message, isError) {
   const status = document.getElementById("importFileStatus");
@@ -137,60 +270,44 @@ function setFileImportStatus(message, isError) {
 }
 
 function renderFileImportPreview(result) {
-  const list = document.getElementById("importFilePreviewList");
-  const ignoredList = document.getElementById("importFileIgnoredList");
-  const confirmBtn = document.getElementById("btnImportFileConfirm");
-  if (list) {
-    list.innerHTML = "";
-  }
-  if (ignoredList) {
-    ignoredList.innerHTML = "";
-  }
-
-  pendingFileImportLines = [];
-  if (confirmBtn) {
-    confirmBtn.disabled = true;
-  }
+  pendingFileImportItems = [];
+  pendingFileIgnoredItems = [];
+  importPreviewVisibleCount = 0;
+  importIgnoredExpanded = false;
+  refreshFilePreviewLists();
 
   const data = (result && result.data) || {};
   const preview = data.preview || {};
   const lines = Array.isArray(preview.importable_lines)
     ? preview.importable_lines
     : (Array.isArray(preview.lines) ? preview.lines : []);
+  const importableItems = Array.isArray(preview.importable_items)
+    ? preview.importable_items
+    : lines.map((line, index) => ({ preview_index: index, line }));
   const ignored = Array.isArray(preview.ignored_lines) ? preview.ignored_lines : [];
-  if (!result || result.status >= 400 || lines.length === 0) {
+  if (!result || result.status >= 400 || importableItems.length === 0) {
     setFileImportStatus(String(data.message || data.error || "Unable to preview file"), true);
     return;
   }
 
-  pendingFileImportLines = lines;
-  if (confirmBtn) {
-    confirmBtn.disabled = false;
-  }
+  pendingFileImportItems = importableItems.map((item, index) => ({
+    previewId: Number.isInteger(item.preview_index) ? item.preview_index : index,
+    line: String(item.line || lines[index] || ""),
+    selected: true,
+  }));
+  pendingFileIgnoredItems = ignored;
+  importPreviewVisibleCount = Math.min(IMPORT_PREVIEW_INITIAL_CHUNK, pendingFileImportItems.length);
 
-  if (list) {
-    for (const line of lines) {
-      const item = document.createElement("li");
-      item.textContent = String(line || "");
-      list.appendChild(item);
-    }
+  if (pendingFileImportItems.length > 0 && importPreviewVisibleCount === 0) {
+    importPreviewVisibleCount = pendingFileImportItems.length;
   }
-
-  if (ignoredList) {
-    for (const itemData of ignored) {
-      const item = document.createElement("li");
-      const text = String(itemData.normalized_text || itemData.raw_text || "");
-      const reason = String(itemData.reason || "ignored_noise");
-      item.textContent = text + " (" + reason + ")";
-      ignoredList.appendChild(item);
-    }
-  }
+  refreshFilePreviewLists();
 
   setFileImportStatus(
     "Preview ready: " +
-      String(preview.line_count || lines.length) +
+      String(preview.line_count || pendingFileImportItems.length) +
       " importable lines, " +
-      String(ignored.length) +
+      String(pendingFileIgnoredItems.length) +
       " ignored from " +
       String(preview.file_type || "file"),
     false,
@@ -306,6 +423,7 @@ async function loadReusableComponents(query) {
 function renderBuilderPanel(composition) {
   const title = document.getElementById("builderCompositionTitle");
   const list = document.getElementById("builderComponentsList");
+  const roleSummary = document.getElementById("builderRoleSummary");
 
   if (!title || !list || !composition) {
     return;
@@ -316,6 +434,17 @@ function renderBuilderPanel(composition) {
   list.innerHTML = "";
 
   const components = Array.isArray(composition.components) ? composition.components : [];
+  const missingRoleCount = components.filter((item) => !String(item.role || "").trim()).length;
+  if (roleSummary) {
+    roleSummary.textContent =
+      "Missing role: " +
+      String(missingRoleCount) +
+      " | With role: " +
+      String(Math.max(0, components.length - missingRoleCount));
+    roleSummary.className =
+      missingRoleCount > 0 ? "builder-role-summary builder-role-summary-missing" : "builder-role-summary";
+  }
+
   if (components.length === 0) {
     const li = document.createElement("li");
     li.textContent = "No parts added yet";
@@ -323,13 +452,89 @@ function renderBuilderPanel(composition) {
     return;
   }
 
-  for (const component of components) {
+  const visibleComponents = [...components].sort((left, right) => {
+    const leftRole = String(left.role || "").trim();
+    const rightRole = String(right.role || "").trim();
+    const leftMissing = leftRole.length === 0 ? 0 : 1;
+    const rightMissing = rightRole.length === 0 ? 0 : 1;
+    if (leftMissing !== rightMissing) {
+      return leftMissing - rightMissing;
+    }
+    if (leftMissing === 0) {
+      return Number(left.sort_order || 0) - Number(right.sort_order || 0);
+    }
+    const roleCompare = leftRole.localeCompare(rightRole, undefined, { sensitivity: "base" });
+    if (roleCompare !== 0) {
+      return roleCompare;
+    }
+    return Number(left.sort_order || 0) - Number(right.sort_order || 0);
+  });
+
+  for (const component of visibleComponents) {
     const li = document.createElement("li");
+    li.className = "component-list-item";
+    if (!String(component.role || "").trim()) {
+      li.classList.add("component-list-item-missing-role");
+    }
     const row = document.createElement("div");
     row.className = "component-row";
 
+    const left = document.createElement("div");
+    left.className = "component-row-left";
+
     const name = document.createElement("span");
+    name.className = "component-name";
     name.textContent = String(component.component_name || component.component_id || "");
+
+    const roleTag = document.createElement("span");
+    roleTag.className = "component-role-tag";
+    const roleValue = String(component.role || "").trim();
+    if (roleValue) {
+      roleTag.textContent = "role: " + roleValue;
+    } else {
+      roleTag.textContent = "missing role";
+      roleTag.classList.add("component-role-tag-missing");
+    }
+    left.appendChild(name);
+    left.appendChild(roleTag);
+
+    const roleInput = document.createElement("input");
+    roleInput.type = "text";
+    roleInput.className = "component-role-input";
+    roleInput.placeholder = "role (optional)";
+    roleInput.value = String(component.role || "");
+    roleInput.setAttribute("list", "componentRoleSuggestions");
+
+    const applyRoleUpdate = () => {
+      const nextRole = String(roleInput.value || "").trim();
+      const currentRole = String(component.role || "").trim();
+      if (nextRole === currentRole) {
+        return;
+      }
+      updateComponentRoleInCurrentComposition(
+        String(component.component_id || ""),
+        nextRole,
+      );
+    };
+    roleInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      applyRoleUpdate();
+    });
+    roleInput.addEventListener("blur", () => {
+      applyRoleUpdate();
+    });
+
+    const saveRole = document.createElement("button");
+    saveRole.className = "component-role-btn";
+    saveRole.type = "button";
+    saveRole.textContent = "Apply";
+    saveRole.title = "Save role";
+    saveRole.addEventListener("click", () => {
+      applyRoleUpdate();
+    });
 
     const remove = document.createElement("button");
     remove.className = "component-remove-btn";
@@ -354,13 +559,50 @@ function renderBuilderPanel(composition) {
 
     const right = document.createElement("div");
     right.className = "component-row-right";
+    right.appendChild(roleInput);
+    right.appendChild(saveRole);
     right.appendChild(rename);
     right.appendChild(remove);
 
-    row.appendChild(name);
+    row.appendChild(left);
     row.appendChild(right);
     li.appendChild(row);
     list.appendChild(li);
+  }
+}
+
+async function updateComponentRoleInCurrentComposition(componentId, roleValue) {
+  if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
+    showJson("builderOut", {
+      status: 0,
+      data: { ok: false, error: "no_composition_selected" },
+    });
+    return;
+  }
+
+  const compositionId = String(currentBuilderComposition.composition_id);
+  const url =
+    "/api/builder/compositions/" +
+    encodeURIComponent(compositionId) +
+    "/components/" +
+    encodeURIComponent(String(componentId || ""));
+
+  showLoading("builderOut");
+  try {
+    const result = await callApi(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: { role: String(roleValue || "").trim() },
+    });
+    showJson("builderOut", result);
+    if (result && result.data && result.data.ok && result.data.composition) {
+      renderBuilderPanel(result.data.composition);
+    }
+  } catch (error) {
+    showJson("builderOut", {
+      status: 0,
+      data: { ok: false, error: String(error.message || error) },
+    });
   }
 }
 
@@ -480,6 +722,12 @@ function bindBuilderHandlers() {
   const newComponentInput = document.getElementById("newComponentName");
   const importFilePreviewBtn = document.getElementById("btnImportFilePreview");
   const importFileConfirmBtn = document.getElementById("btnImportFileConfirm");
+  const newComponentRoleInput = document.getElementById("newComponentRole");
+  const importFileSelectAllBtn = document.getElementById("btnImportPreviewSelectAll");
+  const importFileSelectNoneBtn = document.getElementById("btnImportPreviewSelectNone");
+  const importFileShowMoreBtn = document.getElementById("btnImportPreviewShowMore");
+  const importFileToggleIgnoredBtn = document.getElementById("btnImportPreviewToggleIgnored");
+  const importFilePreviewList = document.getElementById("importFilePreviewList");
 
   if (createDishBtn) {
     createDishBtn.addEventListener("click", async () => {
@@ -573,7 +821,7 @@ function bindBuilderHandlers() {
       const csvColumnInput = document.getElementById("importCsvColumn");
       const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
       if (!file) {
-        setFileImportStatus("Choose a .txt or .csv file first", true);
+        setFileImportStatus("Choose a .txt, .csv, or .xlsx file first", true);
         return;
       }
 
@@ -604,7 +852,8 @@ function bindBuilderHandlers() {
 
   if (importFileConfirmBtn) {
     importFileConfirmBtn.addEventListener("click", async () => {
-      if (!Array.isArray(pendingFileImportLines) || pendingFileImportLines.length === 0) {
+      const selectedLines = selectedFileImportLines();
+      if (selectedLines.length === 0) {
         setFileImportStatus("No preview lines available. Run preview first.", true);
         return;
       }
@@ -614,12 +863,19 @@ function bindBuilderHandlers() {
       try {
         const result = await callApi("/api/builder/import/file/confirm", {
           method: "POST",
-          body: { lines: pendingFileImportLines },
+          body: {
+            lines: selectedLines,
+            ignored_noise_count: pendingFileIgnoredItems.length,
+          },
         });
         renderImportSummary(result);
         showJson("importOut", result);
         if (result && result.status < 400) {
-          pendingFileImportLines = [];
+          pendingFileImportItems = [];
+          pendingFileIgnoredItems = [];
+          importPreviewVisibleCount = 0;
+          importIgnoredExpanded = false;
+          refreshFilePreviewLists();
           importFileConfirmBtn.disabled = true;
           setFileImportStatus("File import completed.", false);
         } else {
@@ -632,6 +888,51 @@ function bindBuilderHandlers() {
         showJson("importOut", failResult);
         setFileImportStatus("File import failed", true);
       }
+    });
+  }
+
+  if (importFilePreviewList) {
+    importFilePreviewList.addEventListener("change", (event) => {
+      const target = event && event.target;
+      if (!target || target.tagName !== "INPUT") {
+        return;
+      }
+      const previewId = String(target.dataset.previewId || "");
+      const checked = Boolean(target.checked);
+      for (const item of pendingFileImportItems) {
+        if (String(item.previewId) === previewId) {
+          item.selected = checked;
+          break;
+        }
+      }
+      updateFileImportControls();
+    });
+  }
+
+  if (importFileSelectAllBtn) {
+    importFileSelectAllBtn.addEventListener("click", () => {
+      toggleAllImportableLines(true);
+    });
+  }
+
+  if (importFileSelectNoneBtn) {
+    importFileSelectNoneBtn.addEventListener("click", () => {
+      toggleAllImportableLines(false);
+    });
+  }
+
+  if (importFileShowMoreBtn) {
+    importFileShowMoreBtn.addEventListener("click", () => {
+      const total = pendingFileImportItems.length;
+      importPreviewVisibleCount = Math.min(total, importPreviewVisibleCount + IMPORT_PREVIEW_CHUNK_SIZE);
+      refreshFilePreviewLists();
+    });
+  }
+
+  if (importFileToggleIgnoredBtn) {
+    importFileToggleIgnoredBtn.addEventListener("click", () => {
+      importIgnoredExpanded = !importIgnoredExpanded;
+      refreshFilePreviewLists();
     });
   }
 
@@ -660,6 +961,7 @@ function bindBuilderHandlers() {
 
       const newComponentNameEl = document.getElementById("newComponentName");
       const component_name = newComponentNameEl ? String(newComponentNameEl.value || "").trim() : "";
+      const role = newComponentRoleInput ? String(newComponentRoleInput.value || "").trim() : "";
       if (!component_name) {
         showJson("builderOut", { status: 0, data: { ok: false, error: "component_name is required" } });
         return;
@@ -672,7 +974,7 @@ function bindBuilderHandlers() {
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: { component_name },
+            body: { component_name, role },
           },
         );
         showJson("builderOut", result);
@@ -680,6 +982,9 @@ function bindBuilderHandlers() {
           renderBuilderPanel(result.data.composition);
           if (newComponentNameEl) {
             newComponentNameEl.value = "";
+          }
+          if (newComponentRoleInput) {
+            newComponentRoleInput.value = "";
           }
         }
       } catch (error) {

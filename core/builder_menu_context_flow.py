@@ -20,6 +20,8 @@ from .menu import (
     calculate_menu_detail_cost,
     import_menu_rows,
 )
+from .planera_v2.adapters import build_menu_composition_payload
+from .planera_v2.adapters import build_menu_composition_grouped_payload
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +89,48 @@ class BuilderMenuContextFlow:
 
     def list_menus(self):
         return self._menu_service.list_menus()
+
+    def get_menu_composition_adapter_payload(
+        self,
+        menu_id: str,
+        *,
+        menu_detail_id: str | None = None,
+    ) -> dict[str, object]:
+        menu = self._menu_service.get_menu(str(menu_id))
+        if menu is None:
+            raise ValueError(f"menu not found: {menu_id}")
+
+        details = self._menu_service.list_menu_details(str(menu_id))
+        if menu_detail_id:
+            target_detail_id = str(menu_detail_id).strip()
+            if not target_detail_id:
+                raise ValueError("menu_detail_id must be non-empty")
+            if not any(detail.menu_detail_id == target_detail_id for detail in details):
+                raise ValueError("menu_detail_id not found for menu")
+
+        payload = build_menu_composition_payload(
+            menu=menu,
+            menu_details=details,
+            composition_repository=self._composition_repository,
+            menu_detail_id=menu_detail_id,
+        )
+        return payload
+
+    def get_menu_composition_grouped_adapter_payload(
+        self,
+        menu_id: str,
+    ) -> dict[str, object]:
+        menu = self._menu_service.get_menu(str(menu_id))
+        if menu is None:
+            raise ValueError(f"menu not found: {menu_id}")
+
+        details = self._menu_service.list_menu_details(str(menu_id))
+        payload = build_menu_composition_grouped_payload(
+            menu=menu,
+            menu_details=details,
+            composition_repository=self._composition_repository,
+        )
+        return payload
 
     def add_composition_menu_row(
         self,

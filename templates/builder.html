@@ -49,9 +49,9 @@
   <section>
     <h2>4. Importera ratter till biblioteket</h2>
     <p>Klistra in en ratt per rad. Builder skapar eller ateranvander bibliotekets ratter och komponenter.</p>
-    <p>Filimport v1: stodjer .txt och .csv for forhandsgranskning innan import.</p>
-    <label>fil (.txt eller .csv)
-      <input id="importLibraryFile" type="file" accept=".txt,.csv,text/plain,text/csv">
+    <p>Filimport v1: stodjer .txt, .csv och .xlsx for forhandsgranskning innan import.</p>
+    <label>fil (.txt, .csv eller .xlsx)
+      <input id="importLibraryFile" type="file" accept=".txt,.csv,.xlsx,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
     </label>
     <label>csv-kolumn (valfritt, namn eller index)
       <input id="importCsvColumn" type="text" placeholder="text eller 0">
@@ -59,8 +59,18 @@
     <button id="btnImportFilePreview" type="button">Forhandsgranska fil</button>
     <button id="btnImportFileConfirm" type="button" disabled>Bekrafta filimport</button>
     <div id="importFileStatus"></div>
+    <div class="import-preview-toolbar">
+      <button id="btnImportPreviewSelectAll" type="button">Valj alla importbara</button>
+      <button id="btnImportPreviewSelectNone" type="button">Avmarkera alla</button>
+      <button id="btnImportPreviewShowMore" type="button" disabled>Visa fler importbara</button>
+      <span id="importFileSelectionSummary" class="import-preview-summary">Selected 0 of 0 importable lines</span>
+    </div>
     <h4>Kommer importeras</h4>
     <ul id="importFilePreviewList"></ul>
+    <div class="import-preview-toolbar">
+      <button id="btnImportPreviewToggleIgnored" type="button" disabled>Visa ignorerade rader</button>
+      <span id="importFileIgnoredSummary" class="import-preview-summary">Ignored noise: 0</span>
+    </div>
     <h4>Ignoreras som brus</h4>
     <ul id="importFileIgnoredList"></ul>
     <label>ratter (en rad per ratt)
@@ -80,12 +90,24 @@ Fiskgratang</textarea>
       <div id="modalBuilderSection" class="create-new-section modal-section">
         <p id="builderCompositionTitle"></p>
         <p class="modal-section-title">Included parts</p>
+        <p id="builderRoleSummary" class="builder-role-summary"></p>
         <ul id="builderComponentsList" class="builder-components-list"></ul>
 
         <p class="modal-section-title">Add a part to this dish</p>
         <label>What should be included?
           <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Type a part, for example Potatis eller Löksås">
           <datalist id="componentNameSuggestions"></datalist>
+        </label>
+        <label>Role (optional)
+          <input id="newComponentRole" list="componentRoleSuggestions" type="text" placeholder="main, side, sauce ... or leave empty">
+          <datalist id="componentRoleSuggestions">
+            <option value="main"></option>
+            <option value="side"></option>
+            <option value="sauce"></option>
+            <option value="garnish"></option>
+            <option value="beverage"></option>
+            <option value="other"></option>
+          </datalist>
         </label>
         <button id="btnAddComponent" type="button">Add to dish</button>
         <pre id="builderOut"></pre>

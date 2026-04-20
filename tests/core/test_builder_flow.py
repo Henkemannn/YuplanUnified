@@ -389,6 +389,26 @@ def test_rename_component_in_composition_rejects_empty_name() -> None:
         )
 
 
+def test_update_component_role_in_composition_through_builder_flow() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+    flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="Fish",
+        role="component",
+    )
+
+    updated = flow.update_component_role_in_composition(
+        composition_id="plate",
+        component_id="fish",
+        role="main protein",
+    )
+
+    assert len(updated.components) == 1
+    assert updated.components[0].component_id == "fish"
+    assert updated.components[0].role == "main protein"
+
+
 def test_swedish_suggestions_preserve_display_names_and_normalize_ids() -> None:
     flow = _build_flow()
     raw_text = "Köttbullar med gräddsås och rödbetor"

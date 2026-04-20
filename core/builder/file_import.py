@@ -5,9 +5,11 @@ import io
 import re
 from dataclasses import dataclass
 
+from openpyxl import load_workbook
+
 from werkzeug.datastructures import FileStorage
 
-_SUPPORTED_EXTENSIONS = {".txt", ".csv"}
+_SUPPORTED_EXTENSIONS = {".txt", ".csv", ".xlsx"}
 _TEXT_HEADER_TOKENS = {
     "text",
     "line",
@@ -83,7 +85,7 @@ def parse_builder_import_file(
 
     lower_name = filename.lower()
     if not any(lower_name.endswith(ext) for ext in _SUPPORTED_EXTENSIONS):
-        raise ValueError("unsupported file type; use .txt or .csv")
+        raise ValueError("unsupported file type; use .txt, .csv, or .xlsx")
 
     raw_bytes = file_storage.read()
     if not raw_bytes:
@@ -91,6 +93,15 @@ def parse_builder_import_file(
 
     if lower_name.endswith(".txt"):
         return _build_preview(file_type="txt", lines=_parse_txt_lines(raw_bytes))
+
+    if lower_name.endswith(".xlsx"):
+        lines, used_column, used_index = _parse_xlsx_lines(raw_bytes, csv_column=csv_column)
+        return _build_preview(
+            file_type="xlsx",
+            lines=lines,
+            csv_column=used_column,
+            csv_column_index=used_index,
+        )
 
     lines, used_column, used_index = _parse_csv_lines(raw_bytes, csv_column=csv_column)
     return _build_preview(
@@ -156,6 +167,55 @@ def _parse_csv_lines(
     if not rows:
         raise ValueError("file contains no importable rows")
 
+    extracted, used_column, used_index = _extract_lines_from_tabular_rows(rows, csv_column=csv_column)
+
+    if not extracted:
+        raise ValueError("file contains no importable lines")
+
+    return extracted, used_column, used_index
+
+
+def _parse_xlsx_lines(
+    raw_bytes: bytes,
+    *,
+    csv_column: str | None,
+) -> tuple[list[str], str | None, int]:
+    workbook = None
+    try:
+        workbook = load_workbook(filename=io.BytesIO(raw_bytes), read_only=True, data_only=True)
+    except Exception as exc:
+        raise ValueError("invalid xlsx file") from exc
+
+    if not workbook.worksheets:
+        raise ValueError("file contains no importable rows")
+
+    rows: list[list[str]] = []
+    try:
+        worksheet = workbook.worksheets[0]
+        for row in worksheet.iter_rows(values_only=True):
+            normalized_row = [str(cell or "").strip() for cell in row]
+            if any(cell for cell in normalized_row):
+                rows.append(normalized_row)
+    finally:
+        if workbook is not None:
+            workbook.close()
+
+    if not rows:
+        raise ValueError("file contains no importable rows")
+
+    extracted, used_column, used_index = _extract_lines_from_tabular_rows(rows, csv_column=csv_column)
+
+    if not extracted:
+        raise ValueError("file contains no importable lines")
+
+    return extracted, used_column, used_index
+
+
+def _extract_lines_from_tabular_rows(
+    rows: list[list[str]],
+    *,
+    csv_column: str | None,
+) -> tuple[list[str], str | None, int]:
     header_row = [str(cell or "").strip() for cell in rows[0]]
     header_tokens = [cell.lower() for cell in header_row]
 
@@ -210,9 +270,6 @@ def _parse_csv_lines(
         normalized = str(value or "").strip()
         if normalized:
             extracted.append(normalized)
-
-    if not extracted:
-        raise ValueError("file contains no importable lines")
 
     return extracted, selected_column, selected_index
 

@@ -130,6 +130,47 @@ def test_remove_component_from_composition_by_sort_order() -> None:
     assert updated.components[0].sort_order == 20
 
 
+def test_update_component_role_in_composition() -> None:
+    service = CompositionService()
+    service.create_composition(composition_id="plate", composition_name="Plate")
+    service.add_component_to_composition(
+        composition_id="plate",
+        component_id="potatoes",
+        role="side",
+        sort_order=10,
+    )
+
+    updated = service.update_component_role_in_composition(
+        composition_id="plate",
+        component_id="potatoes",
+        role="carb",
+    )
+
+    assert len(updated.components) == 1
+    assert updated.components[0].component_id == "potatoes"
+    assert updated.components[0].role == "carb"
+
+
+def test_update_component_role_in_composition_allows_clearing_role() -> None:
+    service = CompositionService()
+    service.create_composition(composition_id="plate", composition_name="Plate")
+    service.add_component_to_composition(
+        composition_id="plate",
+        component_id="potatoes",
+        role="side",
+        sort_order=10,
+    )
+
+    updated = service.update_component_role_in_composition(
+        composition_id="plate",
+        component_id="potatoes",
+        role="   ",
+    )
+
+    assert len(updated.components) == 1
+    assert updated.components[0].role is None
+
+
 def test_invalid_ids_and_names_rejected() -> None:
     service = CompositionService()
 

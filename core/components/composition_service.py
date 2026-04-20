@@ -74,7 +74,7 @@ class CompositionService:
             CompositionComponent(
                 component_id=component_id_value,
                 component_name=component_name_value,
-                role=str(role).strip() if role is not None else None,
+                role=self._normalize_role(role),
                 sort_order=resolved_sort_order,
             )
         )
@@ -88,6 +88,54 @@ class CompositionService:
         )
         self._repository.update(updated)
         return updated
+
+    def update_component_role_in_composition(
+        self,
+        composition_id: str,
+        component_id: str,
+        *,
+        role: str | None,
+        sort_order: int | None = None,
+    ) -> Composition:
+        composition = self._require_composition(composition_id)
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        updated_components: list[CompositionComponent] = []
+        updated = False
+        for existing in composition.components:
+            if updated:
+                updated_components.append(existing)
+                continue
+
+            matches_component = existing.component_id == component_id_value
+            matches_sort_order = sort_order is None or existing.sort_order == int(sort_order)
+            if not (matches_component and matches_sort_order):
+                updated_components.append(existing)
+                continue
+
+            updated_components.append(
+                CompositionComponent(
+                    component_id=existing.component_id,
+                    component_name=existing.component_name,
+                    role=self._normalize_role(role),
+                    sort_order=existing.sort_order,
+                )
+            )
+            updated = True
+
+        if not updated:
+            raise ValueError("component entry not found in composition")
+
+        refreshed = Composition(
+            composition_id=composition.composition_id,
+            composition_name=composition.composition_name,
+            library_group=composition.library_group,
+            components=updated_components,
+        )
+        self._repository.update(refreshed)
+        return refreshed
 
     def remove_component_from_composition(
         self,
@@ -146,3 +194,10 @@ class CompositionService:
         if not composition.components:
             return 10
         return max(item.sort_order for item in composition.components) + 10
+
+    @staticmethod
+    def _normalize_role(role: str | None) -> str | None:
+        if role is None:
+            return None
+        value = str(role).strip()
+        return value or None

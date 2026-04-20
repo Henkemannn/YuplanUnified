@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 
+from openpyxl import Workbook
 from core.app_factory import create_app
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -10,6 +11,18 @@ HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 def _client():
     app = create_app({"TESTING": True})
     return app.test_client()
+
+
+def _xlsx_bytes(rows: list[list[str]]) -> bytes:
+    workbook = Workbook()
+    sheet = workbook.active
+    for row in rows:
+        sheet.append(row)
+
+    stream = io.BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    return stream.getvalue()
 
 
 def test_create_composition_endpoint() -> None:
@@ -341,6 +354,14 @@ def test_builder_file_import_preview_txt_endpoint() -> None:
     assert preview.get("file_type") == "txt"
     assert preview.get("line_count") == 2
     assert preview.get("lines") == ["Kottbullar med potatismos", "Fiskgratang"]
+    assert preview.get("preview_contract_version") == 2
+    assert preview.get("importable_items") == [
+        {"preview_index": 0, "line": "Kottbullar med potatismos"},
+        {"preview_index": 1, "line": "Fiskgratang"},
+    ]
+    counts = preview.get("counts") or {}
+    assert counts.get("importable") == 2
+    assert counts.get("ignored") == 1
 
 
 def test_builder_file_import_preview_classifies_noise_vs_importable() -> None:
@@ -361,6 +382,35 @@ def test_builder_file_import_preview_classifies_noise_vs_importable() -> None:
     ignored_texts = {item.get("normalized_text") for item in ignored}
     assert "Alt 1" in ignored_texts
     assert "Week 12" in ignored_texts
+    counts = preview.get("counts") or {}
+    assert counts.get("total_classified") == 3
+    assert counts.get("importable") == 1
+    assert counts.get("ignored") == 2
+
+
+def test_builder_file_import_preview_large_payload_keeps_contract_shape() -> None:
+    client = _client()
+    payload_lines = [f"Dish {index}" for index in range(1, 121)]
+    payload = ("\n".join(payload_lines) + "\n").encode("utf-8")
+
+    rv = client.post(
+        "/api/builder/import/file/preview",
+        data={"file": (io.BytesIO(payload), "library.txt")},
+        content_type="multipart/form-data",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    preview = body.get("preview") or {}
+    assert preview.get("line_count") == 120
+    importable_items = preview.get("importable_items") or []
+    assert len(importable_items) == 120
+    assert importable_items[0] == {"preview_index": 0, "line": "Dish 1"}
+    assert importable_items[-1] == {"preview_index": 119, "line": "Dish 120"}
+    counts = preview.get("counts") or {}
+    assert counts.get("importable") == 120
+    assert counts.get("ignored") == 0
 
 
 def test_builder_file_import_preview_csv_endpoint_detects_text_column() -> None:
@@ -381,6 +431,87 @@ def test_builder_file_import_preview_csv_endpoint_detects_text_column() -> None:
     assert preview.get("lines") == ["Kottbullar med potatismos", "Fiskgratang"]
     assert preview.get("csv_column") == "dish_name"
     assert preview.get("csv_column_index") == 0
+
+
+def test_builder_file_import_preview_xlsx_endpoint_detects_text_column() -> None:
+    client = _client()
+    payload = _xlsx_bytes(
+        [
+            ["dish_name", "category"],
+            ["Kottbullar med potatismos", "main"],
+            ["Fiskgratang", "main"],
+        ]
+    )
+
+    rv = client.post(
+        "/api/builder/import/file/preview",
+        data={"file": (io.BytesIO(payload), "library.xlsx")},
+        content_type="multipart/form-data",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    preview = body.get("preview") or {}
+    assert preview.get("file_type") == "xlsx"
+    assert preview.get("lines") == ["Kottbullar med potatismos", "Fiskgratang"]
+    assert preview.get("csv_column") == "dish_name"
+    assert preview.get("csv_column_index") == 0
+
+
+def test_builder_file_import_preview_xlsx_supports_explicit_column_name() -> None:
+    client = _client()
+    payload = _xlsx_bytes(
+        [
+            ["id", "text", "tag"],
+            ["1", "Kottbullar med potatismos", "A"],
+            ["2", "Fiskgratang", "B"],
+        ]
+    )
+
+    rv = client.post(
+        "/api/builder/import/file/preview",
+        data={
+            "file": (io.BytesIO(payload), "library.xlsx"),
+            "csv_column": "text",
+        },
+        content_type="multipart/form-data",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    preview = (rv.get_json() or {}).get("preview") or {}
+    assert preview.get("file_type") == "xlsx"
+    assert preview.get("importable_lines") == ["Kottbullar med potatismos", "Fiskgratang"]
+    assert preview.get("csv_column") == "text"
+    assert preview.get("csv_column_index") == 1
+
+
+def test_builder_file_import_preview_xlsx_classifies_noise_vs_importable() -> None:
+    client = _client()
+    payload = _xlsx_bytes(
+        [
+            ["text"],
+            ["Week 12"],
+            ["Alt 1"],
+            ["Fiskgratang"],
+        ]
+    )
+
+    rv = client.post(
+        "/api/builder/import/file/preview",
+        data={"file": (io.BytesIO(payload), "library.xlsx")},
+        content_type="multipart/form-data",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    preview = (rv.get_json() or {}).get("preview") or {}
+    assert preview.get("importable_lines") == ["Fiskgratang"]
+    ignored = preview.get("ignored_lines") or []
+    ignored_texts = {item.get("normalized_text") for item in ignored}
+    assert "Week 12" in ignored_texts
+    assert "Alt 1" in ignored_texts
 
 
 def test_builder_file_import_confirm_reuses_hardened_pipeline() -> None:
@@ -414,6 +545,9 @@ def test_builder_file_import_confirm_reuses_hardened_pipeline() -> None:
     assert first_summary.get("created_count") == 1
     assert second_summary.get("created_count") == 0
     assert second_summary.get("reused_count") == 1
+    assert first_summary.get("created_composition_count") == 1
+    assert second_summary.get("reused_composition_count") == 1
+    assert first_summary.get("ignored_noise_count") == 0
 
     row = (first_summary.get("row_results") or [{}])[0]
     assert row.get("kind") == "composition"
@@ -432,19 +566,112 @@ def test_builder_file_import_confirm_imports_only_preview_importable_lines() -> 
     )
     preview_body = preview.get_json() or {}
     importable_lines = ((preview_body.get("preview") or {}).get("importable_lines") or [])
+    selected_lines = importable_lines[:1]
 
     confirmed = client.post(
         "/api/builder/import/file/confirm",
-        json={"lines": importable_lines},
+        json={"lines": selected_lines, "ignored_noise_count": 2},
         headers=HEADERS,
     )
 
     assert confirmed.status_code == 200
     summary = ((confirmed.get_json() or {}).get("summary") or {})
     assert summary.get("imported_count") == 1
+    assert summary.get("ignored_noise_count") == 2
     rows = summary.get("row_results") or []
     assert len(rows) == 1
     assert rows[0].get("raw_text") == "Fiskgratang"
+
+
+def test_builder_file_import_confirm_reuses_pipeline_for_xlsx_preview_lines() -> None:
+    client = _client()
+    preview_payload = _xlsx_bytes(
+        [
+            ["text"],
+            ["Kottbullar med potatismos"],
+        ]
+    )
+
+    preview = client.post(
+        "/api/builder/import/file/preview",
+        data={"file": (io.BytesIO(preview_payload), "library.xlsx")},
+        content_type="multipart/form-data",
+        headers=HEADERS,
+    )
+    lines = ((preview.get_json() or {}).get("preview") or {}).get("lines") or []
+
+    first = client.post(
+        "/api/builder/import/file/confirm",
+        json={"lines": lines},
+        headers=HEADERS,
+    )
+    second = client.post(
+        "/api/builder/import/file/confirm",
+        json={"lines": lines},
+        headers=HEADERS,
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    first_summary = ((first.get_json() or {}).get("summary") or {})
+    second_summary = ((second.get_json() or {}).get("summary") or {})
+    assert first_summary.get("created_count") == 1
+    assert second_summary.get("created_count") == 0
+    assert second_summary.get("reused_count") == 1
+
+    row = (first_summary.get("row_results") or [{}])[0]
+    assert row.get("kind") == "composition"
+    assert row.get("composition_id")
+    assert "day" not in row
+    assert "meal_slot" not in row
+
+
+def test_builder_file_import_confirm_summary_reports_component_creation_and_reuse() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/import/file/confirm",
+        json={
+            "lines": [
+                "Kottbullar med potatismos",
+                "Kottbullar med graddsas",
+            ],
+            "ignored_noise_count": 3,
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    summary = ((rv.get_json() or {}).get("summary") or {})
+    assert summary.get("imported_count") == 2
+    assert summary.get("created_composition_count") == 2
+    assert summary.get("reused_composition_count") == 0
+    assert summary.get("created_component_count") == 3
+    assert summary.get("reused_component_count") == 1
+    assert summary.get("ignored_noise_count") == 3
+
+
+def test_builder_file_import_confirm_response_remains_library_only() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/import/file/confirm",
+        json={"lines": ["Fiskgratang"]},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    summary = ((rv.get_json() or {}).get("summary") or {})
+    assert "day" not in summary
+    assert "meal_slot" not in summary
+    assert "menu_detail_id" not in summary
+    rows = summary.get("row_results") or []
+    assert len(rows) == 1
+    row = rows[0]
+    assert "day" not in row
+    assert "meal_slot" not in row
+    assert "menu_detail_id" not in row
 
 
 def test_list_compositions_endpoint() -> None:
@@ -510,6 +737,26 @@ def test_add_component_to_composition_endpoint_supports_connector_role() -> None
     assert len(components) == 1
     assert components[0]["component_id"] == "med"
     assert components[0]["role"] == "connector"
+
+
+def test_add_component_to_composition_endpoint_allows_empty_role() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_no_role", "composition_name": "Role Free Plate"},
+        headers=HEADERS,
+    )
+
+    rv = client.post(
+        "/api/builder/compositions/plate_no_role/components",
+        json={"component_name": "Fisk"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    components = ((rv.get_json() or {}).get("composition") or {}).get("components") or []
+    assert len(components) == 1
+    assert components[0].get("role") is None
 
 
 def test_attach_existing_component_endpoint_reuses_component_id_and_does_not_create_duplicate_entity() -> None:
@@ -726,6 +973,108 @@ def test_rename_component_in_composition_endpoint_rejects_empty_name() -> None:
     rv = client.patch(
         "/api/builder/compositions/plate_5/components/fisk",
         json={"component_name": "   "},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("error") == "bad_request"
+
+
+def test_update_component_role_in_composition_endpoint_role_only() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_role_patch", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_role_patch/components",
+        json={"component_name": "Fisk", "role": "component"},
+        headers=HEADERS,
+    )
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_role_patch/components/fisk",
+        json={"role": "main"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    components = ((rv.get_json() or {}).get("composition") or {}).get("components") or []
+    assert len(components) == 1
+    assert components[0].get("component_id") == "fisk"
+    assert components[0].get("role") == "main"
+
+
+def test_update_component_role_in_composition_endpoint_allows_clearing_role() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_role_clear", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_role_clear/components",
+        json={"component_name": "Fisk", "role": "main"},
+        headers=HEADERS,
+    )
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_role_clear/components/fisk",
+        json={"role": "   "},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    components = ((rv.get_json() or {}).get("composition") or {}).get("components") or []
+    assert len(components) == 1
+    assert components[0].get("role") is None
+
+
+def test_rename_component_in_composition_endpoint_can_update_name_and_role_together() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_name_role_patch", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_name_role_patch/components",
+        json={"component_name": "Fisk", "role": "component"},
+        headers=HEADERS,
+    )
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_name_role_patch/components/fisk",
+        json={"component_name": "Lax", "role": "main"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    components = ((rv.get_json() or {}).get("composition") or {}).get("components") or []
+    assert len(components) == 1
+    assert components[0].get("component_id") == "lax"
+    assert components[0].get("component_name") == "Lax"
+    assert components[0].get("role") == "main"
+
+
+def test_update_component_endpoint_requires_component_name_or_role() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_patch_required", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_patch_required/components",
+        json={"component_name": "Fisk", "role": "component"},
+        headers=HEADERS,
+    )
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_patch_required/components/fisk",
+        json={},
         headers=HEADERS,
     )
 

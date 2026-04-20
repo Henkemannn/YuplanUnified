@@ -151,6 +151,9 @@ class BuilderFlow:
         composition_id: str,
         component_id: str,
         new_component_name: str,
+        *,
+        role: str | None = None,
+        role_provided: bool = False,
     ) -> Composition:
         composition = self._composition_service.get_composition(composition_id)
         if composition is None:
@@ -177,12 +180,30 @@ class BuilderFlow:
             raise ValueError(f"composition not found: {composition_id}")
 
         resolved_component = self.create_standalone_component(new_name_value)
+        resolved_role = role if role_provided else existing.role
         return self._composition_service.add_component_to_composition(
             composition_id=composition_id,
             component_id=resolved_component.component_id,
             component_name=resolved_component.canonical_name,
-            role=existing.role,
+            role=resolved_role,
             sort_order=existing.sort_order,
+        )
+
+    def update_component_role_in_composition(
+        self,
+        composition_id: str,
+        component_id: str,
+        *,
+        role: str | None,
+    ) -> Composition:
+        composition = self._composition_service.get_composition(composition_id)
+        if composition is None:
+            raise ValueError(f"composition not found: {composition_id}")
+
+        return self._composition_service.update_component_role_in_composition(
+            composition_id=composition_id,
+            component_id=component_id,
+            role=role,
         )
 
     def list_compositions(self, *, group_name: str | None = None) -> list[Composition]:

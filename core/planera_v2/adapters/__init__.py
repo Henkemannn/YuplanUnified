@@ -1,4 +1,11 @@
 from .kommun_adapter import build_payload_from_kommun_input
 from .kommun_from_weekview import build_plan_request_from_weekview_day
+from .menu_composition_adapter import build_menu_composition_payload
+from .menu_composition_adapter import build_menu_composition_grouped_payload
 
-__all__ = ["build_payload_from_kommun_input", "build_plan_request_from_weekview_day"]
+__all__ = [
+	"build_payload_from_kommun_input",
+	"build_plan_request_from_weekview_day",
+	"build_menu_composition_payload",
+	"build_menu_composition_grouped_payload",
+]

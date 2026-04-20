@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
@@ -16,6 +17,13 @@ from .components import (
 from .menu import InMemoryCompositionAliasRepository
 
 bp = Blueprint("builder_api", __name__, url_prefix="/api/builder")
+
+
+@dataclass(frozen=True)
+class _LibraryImportMetrics:
+    created_component_count: int
+    reused_component_count: int
+    ignored_noise_count: int
 
 
 def _bad_request(message: str):
@@ -87,11 +95,16 @@ def _serialize_library_composition(composition) -> dict[str, Any]:
     }
 
 
-def _serialize_library_import_summary(summary) -> dict[str, Any]:
+def _serialize_library_import_summary(summary, metrics: _LibraryImportMetrics) -> dict[str, Any]:
     return {
         "imported_count": summary.imported_count,
         "created_count": summary.created_count,
         "reused_count": summary.reused_count,
+        "created_composition_count": summary.created_count,
+        "reused_composition_count": summary.reused_count,
+        "created_component_count": metrics.created_component_count,
+        "reused_component_count": metrics.reused_component_count,
+        "ignored_noise_count": metrics.ignored_noise_count,
         "row_results": [
             {
                 "raw_text": row.raw_text,
@@ -107,9 +120,45 @@ def _serialize_library_import_summary(summary) -> dict[str, Any]:
     }
 
 
-def _run_library_import(lines: list[str]):
+def _run_library_import(
+    lines: list[str],
+    *,
+    ignored_noise_count: int = 0,
+) -> tuple[Any, _LibraryImportMetrics]:
     flow = _get_builder_flow()
-    return flow.import_library_text_lines(lines)
+    known_component_ids = {
+        str(component.component_id)
+        for component in flow.list_library_components()
+        if str(component.component_id).strip()
+    }
+
+    summary = flow.import_library_text_lines(lines)
+
+    created_component_ids: set[str] = set()
+    reused_component_ids: set[str] = set()
+    seen_component_ids = set(known_component_ids)
+    for row in summary.row_results:
+        if str(row.matched_via or "").lower() != "created":
+            continue
+        composition = flow._composition_repository.get(row.composition_id)
+        if composition is None:
+            continue
+        for component in composition.components:
+            component_id = str(component.component_id or "").strip()
+            if not component_id:
+                continue
+            if component_id in seen_component_ids:
+                reused_component_ids.add(component_id)
+            else:
+                created_component_ids.add(component_id)
+                seen_component_ids.add(component_id)
+
+    metrics = _LibraryImportMetrics(
+        created_component_count=len(created_component_ids),
+        reused_component_count=len(reused_component_ids),
+        ignored_noise_count=max(0, int(ignored_noise_count)),
+    )
+    return summary, metrics
 
 
 def _get_builder_flow() -> BuilderFlow:
@@ -242,11 +291,11 @@ def import_library_lines():
         lines.extend(str(item or "") for item in raw_lines)
 
     try:
-        summary = _run_library_import(lines)
+        summary, metrics = _run_library_import(lines)
     except ValueError as exc:
         return _bad_request(str(exc))
 
-    return jsonify({"ok": True, "summary": _serialize_library_import_summary(summary)})
+    return jsonify({"ok": True, "summary": _serialize_library_import_summary(summary, metrics)})
 
 
 @bp.post("/import/file/preview")
@@ -267,10 +316,18 @@ def import_library_file_preview():
         {
             "ok": True,
             "preview": {
+                "preview_contract_version": 2,
                 "file_type": preview.file_type,
                 "line_count": len(preview.importable_lines),
                 "lines": list(preview.importable_lines),
                 "importable_lines": list(preview.importable_lines),
+                "importable_items": [
+                    {
+                        "preview_index": index,
+                        "line": line,
+                    }
+                    for index, line in enumerate(preview.importable_lines)
+                ],
                 "ignored_lines": [
                     {
                         "raw_text": item.raw_text,
@@ -289,6 +346,11 @@ def import_library_file_preview():
                     }
                     for item in preview.classified_lines
                 ],
+                "counts": {
+                    "total_classified": len(preview.classified_lines),
+                    "importable": len(preview.importable_lines),
+                    "ignored": len(preview.ignored_lines),
+                },
                 "csv_column": preview.csv_column,
                 "csv_column_index": preview.csv_column_index,
             },
@@ -309,11 +371,16 @@ def import_library_file_confirm():
     lines = [str(item or "") for item in raw_lines]
 
     try:
-        summary = _run_library_import(lines)
+        ignored_noise_count = _maybe_int(payload.get("ignored_noise_count"), field="ignored_noise_count")
+        if ignored_noise_count is None:
+            ignored_noise_count = 0
+        if ignored_noise_count < 0:
+            raise ValueError("ignored_noise_count must be >= 0")
+        summary, metrics = _run_library_import(lines, ignored_noise_count=ignored_noise_count)
     except ValueError as exc:
         return _bad_request(str(exc))
 
-    return jsonify({"ok": True, "summary": _serialize_library_import_summary(summary)})
+    return jsonify({"ok": True, "summary": _serialize_library_import_summary(summary, metrics)})
 
 
 @bp.get("/compositions")
@@ -399,13 +466,29 @@ def rename_component_in_composition(composition_id: str, component_id: str):
     if isinstance(payload, tuple):
         return payload
 
+    has_name = "component_name" in payload
+    has_role = "role" in payload
+    if not has_name and not has_role:
+        return _bad_request("component_name or role is required")
+
     try:
         flow = _get_builder_flow()
-        composition = flow.rename_component_in_composition(
-            composition_id=str(composition_id),
-            component_id=str(component_id),
-            new_component_name=_require_str(payload, "component_name"),
-        )
+        composition = None
+
+        if has_name:
+            composition = flow.rename_component_in_composition(
+                composition_id=str(composition_id),
+                component_id=str(component_id),
+                new_component_name=_require_str(payload, "component_name"),
+                role=_optional_str(payload, "role"),
+                role_provided=has_role,
+            )
+        elif has_role:
+            composition = flow.update_component_role_in_composition(
+                composition_id=str(composition_id),
+                component_id=str(component_id),
+                role=_optional_str(payload, "role"),
+            )
     except ValueError as exc:
         return _bad_request(str(exc))
 
