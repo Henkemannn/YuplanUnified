@@ -26,3 +26,4 @@ class RecipeIngredientLine:
     unit_price_unit: str | None = None
     note: str | None = None
     sort_order: int = 0
+    trait_signals: tuple[str, ...] = ()

@@ -734,6 +734,191 @@ def test_builder_flow_recipe_scaling_preview_enforces_component_ownership() -> N
         )
 
 
+def test_builder_flow_recipe_ingredient_line_persists_trait_signals() -> None:
+    flow = _build_flow()
+    component = flow.create_standalone_component("Sauce")
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        visibility="private",
+        yield_portions=8,
+    )
+
+    flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Cream",
+        amount_value=2,
+        amount_unit="dl",
+        trait_signals=["lactose", "  lactose  ", "fish"],
+    )
+    _, lines = flow.get_component_recipe_detail(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+    )
+
+    assert len(lines) == 1
+    assert lines[0].trait_signals == ("fish", "lactose")
+
+
+def test_builder_flow_recipe_trait_preview_exposes_union_and_line_signals() -> None:
+    flow = _build_flow()
+    component = flow.create_standalone_component("Fish Soup")
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        visibility="private",
+        yield_portions=8,
+    )
+    flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Cream",
+        amount_value=2,
+        amount_unit="dl",
+        trait_signals=["lactose"],
+        sort_order=10,
+    )
+    flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Cod",
+        amount_value=500,
+        amount_unit="g",
+        trait_signals=["fish"],
+        sort_order=20,
+    )
+
+    preview = flow.preview_component_recipe_trait_signals(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+    )
+
+    assert preview.recipe_name == "Base"
+    assert preview.trait_signals_present == ("fish", "lactose")
+    assert [line.ingredient_name for line in preview.ingredient_lines] == ["Cream", "Cod"]
+    assert [line.trait_signals for line in preview.ingredient_lines] == [("lactose",), ("fish",)]
+
+
+def test_builder_flow_recipe_trait_preview_enforces_component_ownership() -> None:
+    flow = _build_flow()
+    c1 = flow.create_standalone_component("Fish")
+    c2 = flow.create_standalone_component("Potato")
+    recipe = flow.create_component_recipe(
+        component_id=c1.component_id,
+        recipe_name="Fish Base",
+        visibility="private",
+        yield_portions=6,
+    )
+
+    with pytest.raises(ValueError, match="does not belong to component"):
+        flow.preview_component_recipe_trait_signals(
+            component_id=c2.component_id,
+            recipe_id=recipe.recipe_id,
+        )
+
+
+def test_component_declaration_readiness_aggregates_primary_recipe_trait_sources() -> None:
+    flow = _build_flow()
+    component = flow.create_standalone_component("Fish Sauce")
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        visibility="private",
+        yield_portions=10,
+    )
+    flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Cod",
+        amount_value=500,
+        amount_unit="g",
+        trait_signals=["fish"],
+        sort_order=10,
+    )
+    flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Cream",
+        amount_value=2,
+        amount_unit="dl",
+        trait_signals=["lactose"],
+        sort_order=20,
+    )
+
+    readiness = flow.preview_component_declaration_readiness(component_id=component.component_id)
+
+    assert readiness.component_id == component.component_id
+    assert readiness.primary_recipe_id is None
+    assert readiness.trait_signals_present == ("fish", "lactose")
+    assert [source.ingredient_name for source in readiness.ingredient_sources] == ["Cod", "Cream"]
+    assert any("missing primary recipe" in message for message in readiness.warnings)
+
+
+def test_composition_declaration_readiness_aggregates_component_signals_deterministically() -> None:
+    flow = _build_flow()
+    flow.create_composition(composition_id="plate_1", composition_name="Fish Plate")
+
+    added = flow.add_component_to_composition(
+        composition_id="plate_1",
+        component_name="Sauce",
+        role="sauce",
+    )
+    sauce_component_id = added.components[0].component_id
+
+    added = flow.add_component_to_composition(
+        composition_id="plate_1",
+        component_name="Fish",
+        role="main",
+    )
+    fish_component_id = next(
+        item.component_id for item in added.components if item.component_name == "Fish"
+    )
+
+    fish_recipe = flow.create_component_recipe(
+        component_id=fish_component_id,
+        recipe_name="Fish Base",
+        visibility="private",
+        yield_portions=10,
+    )
+    flow.add_recipe_ingredient_line(
+        component_id=fish_component_id,
+        recipe_id=fish_recipe.recipe_id,
+        ingredient_name="Cod",
+        amount_value=400,
+        amount_unit="g",
+        trait_signals=["fish"],
+        sort_order=10,
+    )
+
+    sauce_recipe = flow.create_component_recipe(
+        component_id=sauce_component_id,
+        recipe_name="Sauce Base",
+        visibility="private",
+        yield_portions=10,
+    )
+    flow.add_recipe_ingredient_line(
+        component_id=sauce_component_id,
+        recipe_id=sauce_recipe.recipe_id,
+        ingredient_name="Cream",
+        amount_value=3,
+        amount_unit="dl",
+        trait_signals=["lactose"],
+        sort_order=10,
+    )
+
+    readiness = flow.preview_composition_declaration_readiness(composition_id="plate_1")
+
+    assert readiness.composition_id == "plate_1"
+    assert readiness.trait_signals_present == ("fish", "lactose")
+    assert [component.component_name for component in readiness.components] == ["Sauce", "Fish"]
+    assert [component.trait_signals_present for component in readiness.components] == [
+        ("lactose",),
+        ("fish",),
+    ]
+    assert any("missing primary recipe" in message for message in readiness.warnings)
+
+
 def test_reorder_components_in_composition_persists_explicit_sort_order() -> None:
     flow = _build_flow()
     flow.create_composition(composition_id="plate", composition_name="Plate")

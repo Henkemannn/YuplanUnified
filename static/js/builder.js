@@ -525,6 +525,258 @@ let currentSelectedRecipeId = null;
 let currentSelectedRecipe = null;
 let currentSelectedRecipeLines = [];
 
+function setRecipeScalingStatus(message, isError) {
+  const status = document.getElementById("recipeScalingStatus");
+  if (!status) {
+    return;
+  }
+  status.textContent = String(message || "");
+  status.className = isError ? "recipe-scaling-status recipe-scaling-status-error" : "recipe-scaling-status";
+}
+
+function resetRecipeScalingPreview(message) {
+  const summary = document.getElementById("recipeScalingSummary");
+  const list = document.getElementById("recipeScalingRows");
+  const target = document.getElementById("recipeScalingTargetPortions");
+  const previewBtn = document.getElementById("btnRecipeScalingPreview");
+
+  if (summary) {
+    summary.textContent = String(message || "Select a recipe to preview scaling.");
+  }
+  if (list) {
+    list.innerHTML = "";
+  }
+  if (target) {
+    target.value = "";
+    target.disabled = true;
+  }
+  if (previewBtn) {
+    previewBtn.disabled = true;
+  }
+  setRecipeScalingStatus("", false);
+}
+
+function renderRecipeScalingPreview(preview) {
+  const summary = document.getElementById("recipeScalingSummary");
+  const list = document.getElementById("recipeScalingRows");
+  if (!summary || !list) {
+    return;
+  }
+
+  list.innerHTML = "";
+  summary.textContent =
+    "Yield " +
+    String(preview.source_yield_portions) +
+    " -> target " +
+    String(preview.target_portions) +
+    " | factor " +
+    String(preview.scaling_factor || "");
+
+  const rows = Array.isArray(preview.ingredient_lines) ? preview.ingredient_lines : [];
+  if (rows.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = "No ingredients to scale";
+    list.appendChild(li);
+    return;
+  }
+
+  for (const row of rows) {
+    const li = document.createElement("li");
+    const note = row.note ? " (" + String(row.note) + ")" : "";
+    li.textContent =
+      String(row.ingredient_name || "") +
+      ": " +
+      String(row.original_amount_value || "") +
+      " -> " +
+      String(row.scaled_amount_value || "") +
+      " " +
+      String(row.amount_unit || "") +
+      note;
+    list.appendChild(li);
+  }
+}
+
+function setListContent(listId, items, emptyMessage) {
+  const list = document.getElementById(listId);
+  if (!list) {
+    return;
+  }
+  list.innerHTML = "";
+  const values = Array.isArray(items) ? items : [];
+  if (values.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = String(emptyMessage || "None");
+    list.appendChild(li);
+    return;
+  }
+  for (const item of values) {
+    const li = document.createElement("li");
+    li.textContent = String(item || "");
+    list.appendChild(li);
+  }
+}
+
+function renderComponentDeclarationPreview(payload) {
+  const enabled = Boolean(payload && payload.declaration_enabled);
+  const readiness = enabled ? (payload.readiness || {}) : null;
+  const status = document.getElementById("componentDeclarationStatus");
+  const disabledNotice = document.getElementById("componentDeclarationDisabled");
+  const summary = document.getElementById("componentDeclarationSignalsSummary");
+
+  if (disabledNotice) {
+    if (enabled) {
+      disabledNotice.classList.add("hidden");
+    } else {
+      disabledNotice.classList.remove("hidden");
+      disabledNotice.textContent = "Declaration preview unavailable right now.";
+    }
+  }
+
+  if (status) {
+    status.textContent = "Read-only preview. No automation applied.";
+  }
+
+  const signals = readiness && Array.isArray(readiness.trait_signals_present)
+    ? readiness.trait_signals_present
+    : [];
+  if (summary) {
+    summary.textContent = enabled
+      ? (signals.length > 0
+        ? "Signals present: " + signals.join(", ")
+        : "No declaration signals present")
+      : "Declaration preview disabled";
+  }
+
+  setListContent("componentDeclarationSignals", signals, "No signals");
+
+  const provenanceItems = [];
+  const sources = readiness && Array.isArray(readiness.ingredient_sources)
+    ? readiness.ingredient_sources
+    : [];
+  for (const source of sources) {
+    provenanceItems.push(
+      String(source.ingredient_name || "") +
+      " -> " +
+      (Array.isArray(source.trait_signals) ? source.trait_signals.join(", ") : "") +
+      " (recipe " +
+      String(source.recipe_id || "") +
+      ")",
+    );
+  }
+  setListContent("componentDeclarationProvenance", provenanceItems, "No ingredient provenance");
+
+  const warnings = readiness && Array.isArray(readiness.warnings) ? readiness.warnings : [];
+  setListContent("componentDeclarationWarnings", warnings, "No warnings");
+}
+
+function renderCompositionDeclarationPreview(payload) {
+  const enabled = Boolean(payload && payload.declaration_enabled);
+  const readiness = enabled ? (payload.readiness || {}) : null;
+  const status = document.getElementById("compositionDeclarationStatus");
+  const disabledNotice = document.getElementById("compositionDeclarationDisabled");
+  const summary = document.getElementById("compositionDeclarationSignalsSummary");
+
+  if (disabledNotice) {
+    if (enabled) {
+      disabledNotice.classList.add("hidden");
+    } else {
+      disabledNotice.classList.remove("hidden");
+      disabledNotice.textContent = "Declaration preview unavailable right now.";
+    }
+  }
+
+  if (status) {
+    status.textContent = "Read-only preview. No automation applied.";
+  }
+
+  const signals = readiness && Array.isArray(readiness.trait_signals_present)
+    ? readiness.trait_signals_present
+    : [];
+  if (summary) {
+    summary.textContent = enabled
+      ? (signals.length > 0
+        ? "Signals present: " + signals.join(", ")
+        : "No declaration signals present")
+      : "Declaration preview disabled";
+  }
+
+  setListContent("compositionDeclarationSignals", signals, "No signals");
+  const warnings = readiness && Array.isArray(readiness.warnings) ? readiness.warnings : [];
+  setListContent("compositionDeclarationWarnings", warnings, "No warnings");
+}
+
+async function loadComponentDeclarationPreview(componentId) {
+  const componentIdValue = String(componentId || "").trim();
+  if (!componentIdValue) {
+    renderComponentDeclarationPreview({ declaration_enabled: false, readiness: null });
+    return;
+  }
+
+  const result = await callApi(
+    "/api/builder/components/" + encodeURIComponent(componentIdValue) + "/declaration-readiness",
+    { method: "GET" },
+  );
+  if (!result || result.status >= 400 || !result.data || !result.data.ok) {
+    renderComponentDeclarationPreview({ declaration_enabled: false, readiness: null });
+    return;
+  }
+  renderComponentDeclarationPreview(result.data);
+}
+
+async function loadCompositionDeclarationPreview(compositionId) {
+  const compositionIdValue = String(compositionId || "").trim();
+  if (!compositionIdValue) {
+    renderCompositionDeclarationPreview({ declaration_enabled: false, readiness: null });
+    return;
+  }
+
+  const result = await callApi(
+    "/api/builder/compositions/" + encodeURIComponent(compositionIdValue) + "/declaration-readiness",
+    { method: "GET" },
+  );
+  if (!result || result.status >= 400 || !result.data || !result.data.ok) {
+    renderCompositionDeclarationPreview({ declaration_enabled: false, readiness: null });
+    return;
+  }
+  renderCompositionDeclarationPreview(result.data);
+}
+
+async function loadRecipeScalingPreview() {
+  if (!currentRecipeComponent || !currentRecipeComponent.component_id || !currentSelectedRecipeId) {
+    setRecipeScalingStatus("Select a recipe first", true);
+    return;
+  }
+
+  const targetInput = document.getElementById("recipeScalingTargetPortions");
+  const targetRaw = targetInput ? String(targetInput.value || "").trim() : "";
+  const targetValue = Number(targetRaw);
+  if (!targetRaw || !Number.isFinite(targetValue) || targetValue <= 0) {
+    setRecipeScalingStatus("Target portions must be > 0", true);
+    return;
+  }
+
+  setRecipeScalingStatus("Loading scaling preview...", false);
+  const result = await callApi(
+    "/api/builder/components/" +
+      encodeURIComponent(String(currentRecipeComponent.component_id)) +
+      "/recipes/" +
+      encodeURIComponent(String(currentSelectedRecipeId)) +
+      "/scaling-preview?target_portions=" +
+      encodeURIComponent(String(Math.trunc(targetValue))),
+    { method: "GET" },
+  );
+
+  if (!result || result.status >= 400 || !result.data || !result.data.ok) {
+    const message =
+      String((result && result.data && (result.data.message || result.data.error)) || "Unable to load scaling preview");
+    setRecipeScalingStatus(message, true);
+    return;
+  }
+
+  renderRecipeScalingPreview(result.data.preview || {});
+  setRecipeScalingStatus("Scaling preview ready", false);
+}
+
 function setComponentDetailTextPreview(message) {
   const preview = document.getElementById("componentDetailTextPreview");
   if (!preview) {
@@ -678,7 +930,9 @@ function resetRecipePanel(message) {
     addIngredientBtn.disabled = true;
   }
   setRecipeEditControlsDisabled(true);
+  resetRecipeScalingPreview("Select a recipe to preview scaling.");
   setComponentDetailTextPreview("No composition selected");
+  renderComponentDeclarationPreview({ declaration_enabled: false, readiness: null });
 }
 
 function renderRecipeList() {
@@ -911,6 +1165,14 @@ async function loadRecipesForComponent(componentId, componentName) {
     addIngredientBtn.disabled = true;
   }
 
+  resetRecipeScalingPreview("Select a recipe to preview scaling.");
+
+  try {
+    await loadComponentDeclarationPreview(componentIdValue);
+  } catch (_error) {
+    renderComponentDeclarationPreview({ declaration_enabled: false, readiness: null });
+  }
+
   renderRecipeList();
 }
 
@@ -982,6 +1244,8 @@ async function loadRecipeDetail(recipeId) {
   const editYield = document.getElementById("recipeEditYieldPortions");
   const editVisibility = document.getElementById("recipeEditVisibility");
   const editNotes = document.getElementById("recipeEditNotes");
+  const scalingTarget = document.getElementById("recipeScalingTargetPortions");
+  const scalingBtn = document.getElementById("btnRecipeScalingPreview");
   if (editName) {
     editName.value = String(recipe.recipe_name || "");
   }
@@ -993,6 +1257,14 @@ async function loadRecipeDetail(recipeId) {
   }
   if (editNotes) {
     editNotes.value = String(recipe.notes || "");
+  }
+  resetRecipeScalingPreview("Click preview to scale ingredient rows.");
+  if (scalingTarget) {
+    scalingTarget.disabled = false;
+    scalingTarget.value = String(recipe.yield_portions || "");
+  }
+  if (scalingBtn) {
+    scalingBtn.disabled = false;
   }
 
   setRecipeEditControlsDisabled(false);
@@ -1109,6 +1381,10 @@ function renderBuilderPanel(composition) {
   resetRecipePanel("Component: not selected");
   title.textContent = "Dish: " + String(composition.composition_name || "");
   list.innerHTML = "";
+
+  loadCompositionDeclarationPreview(String(composition.composition_id || "")).catch(() => {
+    renderCompositionDeclarationPreview({ declaration_enabled: false, readiness: null });
+  });
 
   const components = Array.isArray(composition.components) ? composition.components : [];
   const missingRoleCount = components.filter((item) => !String(item.role || "").trim()).length;
@@ -1509,6 +1785,7 @@ function bindBuilderHandlers() {
   const recipeAddIngredientBtn = document.getElementById("btnRecipeIngredientAdd");
   const recipeSaveMetadataBtn = document.getElementById("btnRecipeSaveMetadata");
   const recipeDeleteBtn = document.getElementById("btnRecipeDelete");
+  const recipeScalingPreviewBtn = document.getElementById("btnRecipeScalingPreview");
 
   if (createDishBtn) {
     createDishBtn.addEventListener("click", async () => {
@@ -2036,6 +2313,12 @@ function bindBuilderHandlers() {
       } catch (error) {
         showJson("recipeOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
       }
+    });
+  }
+
+  if (recipeScalingPreviewBtn) {
+    recipeScalingPreviewBtn.addEventListener("click", async () => {
+      await loadRecipeScalingPreview();
     });
   }
 }

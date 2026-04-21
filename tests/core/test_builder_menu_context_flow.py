@@ -403,3 +403,65 @@ def test_reimport_same_text_resolves_via_auto_created_alias() -> None:
     assert second.resolved_count == 1
     assert second.unresolved_count == 0
     assert second.row_results[0].composition_id == created.composition_id
+
+
+def test_menu_declaration_readiness_aggregates_signals_from_composition_rows() -> None:
+    builder_flow, flow = _build_flows()
+    builder_flow.create_composition(composition_id="plate_1", composition_name="Fish Plate")
+    with_component = builder_flow.add_component_to_composition(
+        composition_id="plate_1",
+        component_name="Fish",
+        role="main",
+    )
+    component_id = with_component.components[0].component_id
+    recipe = builder_flow.create_component_recipe(
+        component_id=component_id,
+        recipe_name="Fish Base",
+        visibility="private",
+        yield_portions=8,
+    )
+    builder_flow.add_recipe_ingredient_line(
+        component_id=component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Cod",
+        amount_value=500,
+        amount_unit="g",
+        trait_signals=["fish"],
+    )
+
+    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    created = flow.add_composition_menu_row(
+        menu_id="menu_1",
+        day="monday",
+        meal_slot="lunch",
+        composition_id="plate_1",
+    )
+
+    readiness = flow.get_menu_declaration_readiness("menu_1")
+
+    assert readiness.menu_id == "menu_1"
+    assert readiness.trait_signals_present == ("fish",)
+    assert len(readiness.rows) == 1
+    assert readiness.rows[0].menu_detail_id == created.menu_detail_id
+    assert readiness.rows[0].composition_id == "plate_1"
+    assert readiness.rows[0].trait_signals_present == ("fish",)
+    assert any("missing primary recipe" in message for message in readiness.rows[0].warnings)
+    assert any("missing primary recipe" in message for message in readiness.warnings)
+
+
+def test_menu_declaration_readiness_marks_unresolved_rows_without_automation() -> None:
+    _, flow = _build_flows()
+    flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    flow.import_menu_rows(
+        menu_id="menu_1",
+        rows=[ImportedMenuRow(day="monday", meal_slot="lunch", raw_text="No Match")],
+    )
+
+    readiness = flow.get_menu_declaration_readiness("menu_1")
+
+    assert readiness.trait_signals_present == ()
+    assert len(readiness.rows) == 1
+    assert readiness.rows[0].composition_ref_type == "unresolved"
+    assert readiness.rows[0].components == []
+    assert readiness.rows[0].warnings
+    assert "unresolved menu row text: No Match" in readiness.rows[0].warnings[0]

@@ -6,6 +6,7 @@ from .recipe_domain import Recipe, RecipeIngredientLine
 from .recipe_repository import InMemoryRecipeIngredientLineRepository, InMemoryRecipeRepository
 
 _ALLOWED_VISIBILITY = {"private", "site", "tenant"}
+_KNOWN_TRAIT_SIGNALS = {"lactose", "gluten", "fish", "egg", "nuts"}
 
 
 class RecipeService:
@@ -125,6 +126,7 @@ class RecipeService:
         unit_price_unit: str | None = None,
         note: str | None = None,
         sort_order: int = 0,
+        trait_signals: list[str] | tuple[str, ...] | None = None,
     ) -> RecipeIngredientLine:
         recipe = self._recipe_repository.get_recipe(recipe_id)
         if recipe is None:
@@ -152,6 +154,7 @@ class RecipeService:
             unit_price_unit=str(unit_price_unit).strip() if unit_price_unit is not None else None,
             note=note,
             sort_order=int(sort_order),
+            trait_signals=_normalize_trait_signals(trait_signals),
         )
         self._ingredient_line_repository.add_ingredient_line(line)
         return line
@@ -171,6 +174,7 @@ class RecipeService:
         quantity_unit: str,
         note: str | None = None,
         sort_order: int = 0,
+        trait_signals: list[str] | tuple[str, ...] | None = None,
     ) -> RecipeIngredientLine:
         existing = self._ingredient_line_repository.get_ingredient_line(recipe_ingredient_line_id)
         if existing is None:
@@ -202,6 +206,11 @@ class RecipeService:
             unit_price_unit=existing.unit_price_unit,
             note=note,
             sort_order=int(sort_order),
+            trait_signals=(
+                _normalize_trait_signals(trait_signals)
+                if trait_signals is not None
+                else existing.trait_signals
+            ),
         )
         self._ingredient_line_repository.update_ingredient_line(updated)
         return updated
@@ -218,3 +227,22 @@ def _to_decimal(value: int | float | Decimal, *, field_name: str) -> Decimal:
         return Decimal(str(value))
     except Exception as exc:  # pragma: no cover - defensive conversion guard
         raise ValueError(f"{field_name} must be numeric") from exc
+
+
+def _normalize_trait_signals(
+    trait_signals: list[str] | tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    if trait_signals is None:
+        return ()
+
+    values: set[str] = set()
+    for raw in trait_signals:
+        value = str(raw or "").strip().lower()
+        if not value:
+            continue
+        values.add(value)
+
+    # Keep the baseline known signals first while allowing extension values.
+    known = sorted(v for v in values if v in _KNOWN_TRAIT_SIGNALS)
+    extension = sorted(v for v in values if v not in _KNOWN_TRAIT_SIGNALS)
+    return tuple(known + extension)

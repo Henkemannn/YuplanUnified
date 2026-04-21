@@ -4,6 +4,11 @@ from dataclasses import dataclass, field
 import logging
 
 from .builder import BuilderFlow
+from .builder.declaration_readiness import (
+    ComponentDeclarationReadiness,
+    MenuDeclarationReadiness,
+    MenuRowDeclarationReadiness,
+)
 from .components import (
     Composition,
     InMemoryCompositionRepository,
@@ -289,6 +294,69 @@ class BuilderMenuContextFlow:
             cleaned.pop("_first_insertion_index", None)
             cleaned_groups.append(cleaned)
         return cleaned_groups
+
+    def get_menu_declaration_readiness(
+        self,
+        menu_id: str,
+    ) -> MenuDeclarationReadiness:
+        menu = self._menu_service.get_menu(str(menu_id))
+        if menu is None:
+            raise ValueError(f"menu not found: {menu_id}")
+
+        rows = self.list_menu_rows(str(menu_id))
+        row_models: list[MenuRowDeclarationReadiness] = []
+        warnings: list[str] = []
+
+        for row in rows:
+            row_warnings: list[str] = []
+            component_models: list[ComponentDeclarationReadiness] = []
+            row_signals: tuple[str, ...] = ()
+            composition_id = str(row.get("composition_id") or "").strip() or None
+            composition_ref_type = str(row.get("composition_ref_type") or "")
+            composition_name = (
+                str(row.get("composition_name") or "").strip() or None
+            )
+
+            if composition_ref_type != "composition" or composition_id is None:
+                unresolved_text = str(row.get("unresolved_text") or "").strip()
+                if unresolved_text:
+                    row_warnings.append(f"unresolved menu row text: {unresolved_text}")
+            else:
+                try:
+                    composition_readiness = self._library_flow.preview_composition_declaration_readiness(
+                        composition_id=composition_id,
+                    )
+                    row_signals = tuple(composition_readiness.trait_signals_present)
+                    component_models = list(composition_readiness.components)
+                    row_warnings.extend(composition_readiness.warnings)
+                except ValueError as exc:
+                    row_warnings.append(str(exc))
+
+            model = MenuRowDeclarationReadiness(
+                menu_detail_id=str(row.get("menu_detail_id") or ""),
+                composition_ref_type=composition_ref_type,
+                composition_id=composition_id,
+                composition_name=composition_name,
+                trait_signals_present=row_signals,
+                components=component_models,
+                warnings=row_warnings,
+            )
+            row_models.append(model)
+            warnings.extend([f"row {model.menu_detail_id}: {message}" for message in row_warnings])
+
+        signal_union = sorted(
+            {
+                signal
+                for row_model in row_models
+                for signal in row_model.trait_signals_present
+            }
+        )
+        return MenuDeclarationReadiness(
+            menu_id=menu.menu_id,
+            trait_signals_present=tuple(signal_union),
+            rows=row_models,
+            warnings=warnings,
+        )
 
     def import_menu_rows(self, menu_id: str, rows: list[ImportedMenuRow]) -> MenuImportSummary:
         return import_menu_rows(

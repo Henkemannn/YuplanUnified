@@ -69,6 +69,27 @@ def _require_int(payload: dict[str, Any], field: str) -> int:
     return value
 
 
+def _parse_bool_query_param(name: str, *, default: bool = False) -> bool:
+    raw = request.args.get(name)
+    if raw is None:
+        return bool(default)
+    value = str(raw).strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean")
+
+
+def _optional_str_list(payload: dict[str, Any], field: str) -> list[str] | None:
+    raw = payload.get(field)
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise ValueError(f"{field} must be a list")
+    return [str(item or "").strip() for item in raw]
+
+
 def _decimal_to_json(value: Decimal) -> str:
     return str(value)
 
@@ -101,6 +122,7 @@ def _serialize_recipe_ingredient_line(line) -> dict[str, Any]:
         "amount_unit": line.quantity_unit,
         "note": line.note,
         "sort_order": line.sort_order,
+        "trait_signals": list(line.trait_signals),
     }
 
 
@@ -128,6 +150,59 @@ def _serialize_recipe_scaling_preview(preview) -> dict[str, Any]:
             }
             for line in preview.ingredient_lines
         ],
+    }
+
+
+def _serialize_recipe_trait_signal_preview(preview) -> dict[str, Any]:
+    return {
+        "recipe": {
+            "recipe_id": preview.recipe_id,
+            "component_id": preview.component_id,
+            "recipe_name": preview.recipe_name,
+        },
+        "trait_signals_present": list(preview.trait_signals_present),
+        "ingredient_lines": [
+            {
+                "recipe_ingredient_line_id": line.recipe_ingredient_line_id,
+                "ingredient_name": line.ingredient_name,
+                "amount_unit": line.amount_unit,
+                "note": line.note,
+                "trait_signals": list(line.trait_signals),
+            }
+            for line in preview.ingredient_lines
+        ],
+    }
+
+
+def _serialize_component_declaration_readiness(readiness) -> dict[str, Any]:
+    return {
+        "component_id": readiness.component_id,
+        "component_name": readiness.component_name,
+        "primary_recipe_id": readiness.primary_recipe_id,
+        "trait_signals_present": list(readiness.trait_signals_present),
+        "ingredient_sources": [
+            {
+                "recipe_id": source.recipe_id,
+                "recipe_ingredient_line_id": source.recipe_ingredient_line_id,
+                "ingredient_name": source.ingredient_name,
+                "trait_signals": list(source.trait_signals),
+            }
+            for source in readiness.ingredient_sources
+        ],
+        "warnings": list(readiness.warnings),
+    }
+
+
+def _serialize_composition_declaration_readiness(readiness) -> dict[str, Any]:
+    return {
+        "composition_id": readiness.composition_id,
+        "composition_name": readiness.composition_name,
+        "trait_signals_present": list(readiness.trait_signals_present),
+        "components": [
+            _serialize_component_declaration_readiness(component)
+            for component in readiness.components
+        ],
+        "warnings": list(readiness.warnings),
     }
 
 
@@ -672,6 +747,7 @@ def create_component_recipe(component_id: str):
                     amount_unit=str(amount_unit or "").strip(),
                     note=_optional_str(item, "note"),
                     sort_order=_maybe_int(item.get("sort_order"), field="sort_order") or 0,
+                    trait_signals=_optional_str_list(item, "trait_signals"),
                     recipe_ingredient_line_id=_optional_str(item, "recipe_ingredient_line_id"),
                 )
 
@@ -767,6 +843,7 @@ def add_component_recipe_ingredient(component_id: str, recipe_id: str):
             amount_unit=str(amount_unit),
             note=_optional_str(payload, "note"),
             sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
+            trait_signals=_optional_str_list(payload, "trait_signals"),
             recipe_ingredient_line_id=_optional_str(payload, "recipe_ingredient_line_id"),
         )
     except ValueError as exc:
@@ -843,6 +920,7 @@ def update_component_recipe_ingredient(component_id: str, recipe_id: str, ingred
             amount_unit=str(amount_unit),
             note=_optional_str(payload, "note"),
             sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
+            trait_signals=_optional_str_list(payload, "trait_signals"),
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -907,6 +985,75 @@ def get_component_recipe_scaling_preview(component_id: str, recipe_id: str):
         return _bad_request(str(exc))
 
     return jsonify({"ok": True, "preview": _serialize_recipe_scaling_preview(preview)})
+
+
+@bp.get("/components/<component_id>/recipes/<recipe_id>/trait-signals")
+@require_roles("editor", "admin", "superuser")
+def get_component_recipe_trait_signals(component_id: str, recipe_id: str):
+    try:
+        flow = _get_builder_flow()
+        preview = flow.preview_component_recipe_trait_signals(
+            component_id=str(component_id),
+            recipe_id=str(recipe_id),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "preview": _serialize_recipe_trait_signal_preview(preview)})
+
+
+@bp.get("/components/<component_id>/declaration-readiness")
+@require_roles("editor", "admin", "superuser")
+def get_component_declaration_readiness(component_id: str):
+    try:
+        include_declaration = _parse_bool_query_param(
+            "include_declaration",
+            default=bool(current_app.config.get("DECLARATION_READINESS_VISIBLE", False)),
+        )
+        if not include_declaration:
+            return jsonify({"ok": True, "declaration_enabled": False, "readiness": None})
+
+        flow = _get_builder_flow()
+        readiness = flow.preview_component_declaration_readiness(
+            component_id=str(component_id),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "declaration_enabled": True,
+            "readiness": _serialize_component_declaration_readiness(readiness),
+        }
+    )
+
+
+@bp.get("/compositions/<composition_id>/declaration-readiness")
+@require_roles("editor", "admin", "superuser")
+def get_composition_declaration_readiness(composition_id: str):
+    try:
+        include_declaration = _parse_bool_query_param(
+            "include_declaration",
+            default=bool(current_app.config.get("DECLARATION_READINESS_VISIBLE", False)),
+        )
+        if not include_declaration:
+            return jsonify({"ok": True, "declaration_enabled": False, "readiness": None})
+
+        flow = _get_builder_flow()
+        readiness = flow.preview_composition_declaration_readiness(
+            composition_id=str(composition_id),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "declaration_enabled": True,
+            "readiness": _serialize_composition_declaration_readiness(readiness),
+        }
+    )
 
 
 __all__ = ["bp", "_get_builder_flow"]

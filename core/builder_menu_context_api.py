@@ -50,6 +50,18 @@ def _maybe_int(value: Any, *, field: str) -> int | None:
         raise ValueError(f"{field} must be an integer") from exc
 
 
+def _parse_bool_query_param(name: str, *, default: bool = False) -> bool:
+    raw = request.args.get(name)
+    if raw is None:
+        return bool(default)
+    value = str(raw).strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean")
+
+
 def _decimal_to_json(value: Decimal | None) -> str | None:
     if value is None:
         return None
@@ -161,6 +173,44 @@ def _serialize_menu_cost_overview(overview) -> dict[str, Any]:
             }
             for detail in overview.detail_costs
         ],
+    }
+
+
+def _serialize_menu_declaration_readiness(readiness) -> dict[str, Any]:
+    return {
+        "menu_id": readiness.menu_id,
+        "trait_signals_present": list(readiness.trait_signals_present),
+        "rows": [
+            {
+                "menu_detail_id": row.menu_detail_id,
+                "composition_ref_type": row.composition_ref_type,
+                "composition_id": row.composition_id,
+                "composition_name": row.composition_name,
+                "trait_signals_present": list(row.trait_signals_present),
+                "components": [
+                    {
+                        "component_id": component.component_id,
+                        "component_name": component.component_name,
+                        "primary_recipe_id": component.primary_recipe_id,
+                        "trait_signals_present": list(component.trait_signals_present),
+                        "ingredient_sources": [
+                            {
+                                "recipe_id": source.recipe_id,
+                                "recipe_ingredient_line_id": source.recipe_ingredient_line_id,
+                                "ingredient_name": source.ingredient_name,
+                                "trait_signals": list(source.trait_signals),
+                            }
+                            for source in component.ingredient_sources
+                        ],
+                        "warnings": list(component.warnings),
+                    }
+                    for component in row.components
+                ],
+                "warnings": list(row.warnings),
+            }
+            for row in readiness.rows
+        ],
+        "warnings": list(readiness.warnings),
     }
 
 
@@ -444,6 +494,31 @@ def menu_cost_overview(menu_id: str):
         return _bad_request(str(exc))
 
     return jsonify({"ok": True, "overview": _serialize_menu_cost_overview(overview)})
+
+
+@bp.get("/<menu_id>/declaration-readiness")
+@require_roles("editor", "admin", "superuser")
+def menu_declaration_readiness(menu_id: str):
+    try:
+        include_declaration = _parse_bool_query_param(
+            "include_declaration",
+            default=bool(current_app.config.get("DECLARATION_READINESS_VISIBLE", False)),
+        )
+        if not include_declaration:
+            return jsonify({"ok": True, "declaration_enabled": False, "readiness": None})
+
+        flow = _get_menu_context_flow()
+        readiness = flow.get_menu_declaration_readiness(str(menu_id))
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "declaration_enabled": True,
+            "readiness": _serialize_menu_declaration_readiness(readiness),
+        }
+    )
 
 
 @bp.post("/<menu_id>/resolve")

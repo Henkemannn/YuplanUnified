@@ -114,9 +114,20 @@
   <section>
     <h2>3. Weekly Menu Workspace</h2>
     <button id="btnRefreshRows" type="button">Refresh rows</button>
+    <label class="declaration-toggle-label">
+      <input id="menuDeclarationVisibleToggle" type="checkbox" checked>
+      Show declaration preview
+    </label>
     <label>filter compositions
       <input id="compositionSearch" type="text" placeholder="search composition by name or id">
     </label>
+    <div id="menuDeclarationPreview" class="menu-declaration-preview">
+      <p id="menuDeclarationStatus" class="declaration-preview-status">Read-only preview. No automation applied.</p>
+      <p id="menuDeclarationDisabled" class="declaration-preview-disabled hidden">Declaration preview is currently unavailable.</p>
+      <p id="menuDeclarationSignalsSummary" class="declaration-preview-summary">No declaration signals loaded.</p>
+      <ul id="menuDeclarationSignals" class="declaration-preview-signals"></ul>
+      <ul id="menuDeclarationWarnings" class="declaration-preview-warnings"></ul>
+    </div>
     <div id="menuRowsBody" class="menu-week-groups"></div>
 
     <div id="editRowPanel" class="hidden" style="border:1px solid #ddd; padding:10px; margin-top:10px;">

@@ -7,6 +7,7 @@ import secrets
 from decimal import Decimal
 
 from ..components import (
+    build_recipe_trait_signal_preview,
     Component,
     ComponentService,
     Composition,
@@ -14,6 +15,7 @@ from ..components import (
     InMemoryCompositionRepository,
     Recipe,
     RecipeIngredientLine,
+    RecipeTraitSignalPreview,
     RecipeScalingPreview,
     RecipeService,
     calculate_recipe_scaling_preview,
@@ -25,6 +27,11 @@ from ..menu import (
     resolve_composition_reference,
 )
 from .composition_text_renderer import RenderedCompositionTextModel, render_composition_to_text_model
+from .declaration_readiness import (
+    ComponentDeclarationReadiness,
+    CompositionDeclarationReadiness,
+    IngredientTraitSource,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +144,7 @@ class BuilderFlow:
         amount_unit: str,
         note: str | None = None,
         sort_order: int = 0,
+        trait_signals: list[str] | tuple[str, ...] | None = None,
         recipe_ingredient_line_id: str | None = None,
     ) -> RecipeIngredientLine:
         component_id_value = str(component_id or "").strip()
@@ -168,6 +176,7 @@ class BuilderFlow:
             quantity_unit=str(amount_unit or "").strip(),
             note=note,
             sort_order=int(sort_order),
+            trait_signals=trait_signals,
         )
 
     def get_component_recipe_detail(
@@ -228,6 +237,31 @@ class BuilderFlow:
             ingredient_lines=lines,
             target_portions=target,
         )
+
+    def preview_component_recipe_trait_signals(
+        self,
+        *,
+        component_id: str,
+        recipe_id: str,
+    ) -> RecipeTraitSignalPreview:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        recipe_id_value = str(recipe_id or "").strip()
+        if not recipe_id_value:
+            raise ValueError("recipe_id must be non-empty")
+
+        recipe = self._recipe_service.get_recipe(recipe_id_value)
+        if recipe is None:
+            raise ValueError(f"recipe not found: {recipe_id_value}")
+        if recipe.component_id != component_id_value:
+            raise ValueError(
+                f"recipe {recipe_id_value} does not belong to component {component_id_value}"
+            )
+
+        lines = self._recipe_service.list_ingredient_lines(recipe_id_value)
+        return build_recipe_trait_signal_preview(recipe, lines)
 
     def list_component_recipes(
         self,
@@ -299,6 +333,7 @@ class BuilderFlow:
         amount_unit: str,
         note: str | None = None,
         sort_order: int = 0,
+        trait_signals: list[str] | tuple[str, ...] | None = None,
     ) -> RecipeIngredientLine:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
@@ -335,6 +370,7 @@ class BuilderFlow:
             quantity_unit=amount_unit,
             note=note,
             sort_order=int(sort_order),
+            trait_signals=trait_signals,
         )
         return line
 
@@ -558,6 +594,126 @@ class BuilderFlow:
 
     def list_compositions(self, *, group_name: str | None = None) -> list[Composition]:
         return self._composition_service.list_compositions(group_name=group_name)
+
+    def preview_component_declaration_readiness(
+        self,
+        *,
+        component_id: str,
+    ) -> ComponentDeclarationReadiness:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        component = self._component_service.get_component(component_id_value)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+
+        primary_recipe_id = str(component.primary_recipe_id or "").strip() or None
+        warnings: list[str] = []
+        sources: list[IngredientTraitSource] = []
+
+        recipes = self._recipe_service.list_recipes_for_component(component.component_id)
+        ordered_recipes = sorted(
+            list(recipes),
+            key=lambda item: (
+                str(item.recipe_name or "").lower(),
+                str(item.recipe_id or ""),
+            ),
+        )
+
+        recipe_ids_to_scan: list[str] = []
+        if primary_recipe_id:
+            recipe = self._recipe_service.get_recipe(primary_recipe_id)
+            if recipe is None:
+                warnings.append(f"primary recipe not found: {primary_recipe_id}")
+            elif recipe.component_id != component.component_id:
+                warnings.append(
+                    f"primary recipe {primary_recipe_id} does not belong to component {component.component_id}"
+                )
+            else:
+                recipe_ids_to_scan.append(primary_recipe_id)
+
+        if not recipe_ids_to_scan and ordered_recipes:
+            recipe_ids_to_scan = [str(item.recipe_id) for item in ordered_recipes]
+            if primary_recipe_id is None:
+                warnings.append(f"missing primary recipe for component: {component.component_id}")
+            warnings.append(
+                f"using {len(recipe_ids_to_scan)} recipe(s) for declaration preview"
+            )
+
+        if not recipe_ids_to_scan and primary_recipe_id is None:
+            warnings.append(f"missing primary recipe for component: {component.component_id}")
+
+        for recipe_id in recipe_ids_to_scan:
+            for line in self._recipe_service.list_ingredient_lines(recipe_id):
+                signals = tuple(str(signal or "").strip() for signal in line.trait_signals)
+                signals = tuple(signal for signal in signals if signal)
+                if not signals:
+                    continue
+                sources.append(
+                    IngredientTraitSource(
+                        recipe_id=recipe_id,
+                        recipe_ingredient_line_id=line.recipe_ingredient_line_id,
+                        ingredient_name=line.ingredient_name,
+                        trait_signals=signals,
+                    )
+                )
+
+        signal_union = sorted({signal for source in sources for signal in source.trait_signals})
+        return ComponentDeclarationReadiness(
+            component_id=component.component_id,
+            component_name=component.canonical_name,
+            primary_recipe_id=primary_recipe_id,
+            trait_signals_present=tuple(signal_union),
+            ingredient_sources=sources,
+            warnings=warnings,
+        )
+
+    def preview_composition_declaration_readiness(
+        self,
+        *,
+        composition_id: str,
+    ) -> CompositionDeclarationReadiness:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
+
+        composition = self._composition_service.get_composition(composition_id_value)
+        if composition is None:
+            raise ValueError(f"composition not found: {composition_id_value}")
+
+        component_readiness: list[ComponentDeclarationReadiness] = []
+        warnings: list[str] = []
+
+        ordered_components = sorted(
+            list(composition.components),
+            key=lambda item: (
+                int(item.sort_order),
+                str(item.component_name or item.component_id or "").lower(),
+                str(item.component_id or ""),
+            ),
+        )
+        for linked in ordered_components:
+            readiness = self.preview_component_declaration_readiness(
+                component_id=linked.component_id,
+            )
+            component_readiness.append(readiness)
+            warnings.extend([f"component {linked.component_id}: {message}" for message in readiness.warnings])
+
+        signal_union = sorted(
+            {
+                signal
+                for component in component_readiness
+                for signal in component.trait_signals_present
+            }
+        )
+        return CompositionDeclarationReadiness(
+            composition_id=composition.composition_id,
+            composition_name=composition.composition_name,
+            trait_signals_present=tuple(signal_union),
+            components=component_readiness,
+            warnings=warnings,
+        )
 
     def render_composition_text_model(self, *, composition_id: str) -> RenderedCompositionTextModel:
         composition_id_value = str(composition_id or "").strip()

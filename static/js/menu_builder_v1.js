@@ -30,6 +30,95 @@ let allCompositions = [];
 let currentRows = [];
 let currentGroups = [];
 
+function setListContent(listId, items, emptyMessage) {
+  const list = document.getElementById(listId);
+  if (!list) {
+    return;
+  }
+  list.innerHTML = "";
+  const values = Array.isArray(items) ? items : [];
+  if (values.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = String(emptyMessage || "None");
+    list.appendChild(li);
+    return;
+  }
+  for (const item of values) {
+    const li = document.createElement("li");
+    li.textContent = String(item || "");
+    list.appendChild(li);
+  }
+}
+
+function isMenuDeclarationVisible() {
+  const toggle = document.getElementById("menuDeclarationVisibleToggle");
+  return toggle ? Boolean(toggle.checked) : true;
+}
+
+function renderMenuDeclarationPreview(payload) {
+  const status = document.getElementById("menuDeclarationStatus");
+  const disabled = document.getElementById("menuDeclarationDisabled");
+  const summary = document.getElementById("menuDeclarationSignalsSummary");
+  const enabled = Boolean(payload && payload.declaration_enabled);
+  const readiness = enabled ? (payload.readiness || {}) : null;
+  const signals = readiness && Array.isArray(readiness.trait_signals_present)
+    ? readiness.trait_signals_present
+    : [];
+
+  if (status) {
+    status.textContent = "Read-only preview. No automation applied.";
+  }
+  if (disabled) {
+    if (enabled) {
+      disabled.classList.add("hidden");
+    } else {
+      disabled.classList.remove("hidden");
+      disabled.textContent = "Declaration preview unavailable right now.";
+    }
+  }
+  if (summary) {
+    summary.textContent = enabled
+      ? (signals.length > 0
+        ? "Menu-level signals: " + signals.join(", ")
+        : "No declaration signals present")
+      : "Declaration preview disabled";
+  }
+
+  setListContent("menuDeclarationSignals", signals, "No signals");
+
+  const warnings = [];
+  if (readiness && Array.isArray(readiness.warnings)) {
+    warnings.push(...readiness.warnings);
+  }
+  const rows = readiness && Array.isArray(readiness.rows) ? readiness.rows : [];
+  for (const row of rows) {
+    const rowWarnings = Array.isArray(row.warnings) ? row.warnings : [];
+    for (const warning of rowWarnings) {
+      warnings.push("Row " + String(row.menu_detail_id || "") + ": " + String(warning || ""));
+    }
+  }
+  setListContent("menuDeclarationWarnings", warnings, "No warnings");
+}
+
+async function refreshDeclarationPreview() {
+  const menuId = getActiveMenuId();
+  if (!menuId) {
+    renderMenuDeclarationPreview({ declaration_enabled: false, readiness: null });
+    return;
+  }
+
+  const include = isMenuDeclarationVisible() ? "1" : "0";
+  const result = await callApi(
+    "/api/builder/menus/" + encodeURIComponent(menuId) + "/declaration-readiness?include_declaration=" + include,
+    { method: "GET" },
+  );
+  if (!result || result.status >= 400 || !result.data || !result.data.ok) {
+    renderMenuDeclarationPreview({ declaration_enabled: false, readiness: null });
+    return;
+  }
+  renderMenuDeclarationPreview(result.data);
+}
+
 function getActiveMenuId() {
   const el = document.getElementById("activeMenuId");
   return el ? String(el.value || "").trim() : "";
@@ -266,6 +355,7 @@ async function refreshRows() {
   currentRows = rows;
   currentGroups = groups;
   renderMenuRowsGrouped(groups, query);
+  await refreshDeclarationPreview();
   showJson("menuRowsOut", result);
 }
 
@@ -337,6 +427,7 @@ function bindHandlers() {
   const compositionSearch = document.getElementById("compositionSearch");
   const saveEditBtn = document.getElementById("btnSaveRowEdit");
   const cancelEditBtn = document.getElementById("btnCancelRowEdit");
+  const declarationToggle = document.getElementById("menuDeclarationVisibleToggle");
 
   if (createMenuBtn) {
     createMenuBtn.addEventListener("click", async () => {
@@ -426,6 +517,12 @@ function bindHandlers() {
   if (cancelEditBtn) {
     cancelEditBtn.addEventListener("click", () => {
       closeEditPanel();
+    });
+  }
+
+  if (declarationToggle) {
+    declarationToggle.addEventListener("change", async () => {
+      await refreshDeclarationPreview();
     });
   }
 }

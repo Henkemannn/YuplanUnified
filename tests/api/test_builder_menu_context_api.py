@@ -999,3 +999,99 @@ def test_create_from_row_then_add_component_returns_updated_composition() -> Non
     component_ids = [item.get("component_id") for item in components]
     assert component_ids == ["no_match", "fisk"]
     assert all(item.get("role") == "component" for item in components)
+
+
+def test_menu_declaration_readiness_endpoint_returns_row_and_component_sources() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    with_component = client.post(
+        "/api/builder/compositions/plate_1/components",
+        json={"component_name": "Fish", "role": "main"},
+        headers=HEADERS,
+    )
+    component_id = (
+        ((with_component.get_json() or {}).get("composition") or {}).get("components") or [{}]
+    )[0].get("component_id")
+    recipe = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Fish Base", "yield_portions": 8, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((recipe.get_json() or {}).get("recipe") or {}).get("recipe_id")
+    client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={"ingredient_name": "Cod", "amount_value": 500, "amount_unit": "g", "trait_signals": ["fish"]},
+        headers=HEADERS,
+    )
+
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus/menu_1/rows",
+        json={"day": "monday", "meal_slot": "lunch", "composition_id": "plate_1"},
+        headers=HEADERS,
+    )
+
+    rv = client.get(
+        "/api/builder/menus/menu_1/declaration-readiness?include_declaration=1",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    readiness = body.get("readiness") or {}
+    assert body.get("ok") is True
+    assert body.get("declaration_enabled") is True
+    assert readiness.get("menu_id") == "menu_1"
+    assert readiness.get("trait_signals_present") == ["fish"]
+    rows = readiness.get("rows") or []
+    assert len(rows) == 1
+    assert rows[0].get("trait_signals_present") == ["fish"]
+    components = rows[0].get("components") or []
+    assert len(components) == 1
+    assert components[0].get("component_id") == component_id
+    assert components[0].get("trait_signals_present") == ["fish"]
+
+
+def test_menu_declaration_readiness_endpoint_can_be_disabled_and_keeps_read_only_contract() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus/menu_1/import",
+        json={"rows": [{"day": "monday", "meal_slot": "lunch", "raw_text": "No Match"}]},
+        headers=HEADERS,
+    )
+
+    disabled = client.get(
+        "/api/builder/menus/menu_1/declaration-readiness?include_declaration=0",
+        headers=HEADERS,
+    )
+    enabled = client.get(
+        "/api/builder/menus/menu_1/declaration-readiness?include_declaration=true",
+        headers=HEADERS,
+    )
+
+    assert disabled.status_code == 200
+    disabled_body = disabled.get_json() or {}
+    assert disabled_body.get("declaration_enabled") is False
+    assert disabled_body.get("readiness") is None
+
+    assert enabled.status_code == 200
+    enabled_body = enabled.get_json() or {}
+    readiness = enabled_body.get("readiness") or {}
+    rows = readiness.get("rows") or []
+    assert enabled_body.get("declaration_enabled") is True
+    assert len(rows) == 1
+    assert rows[0].get("composition_ref_type") == "unresolved"
+    assert rows[0].get("components") == []

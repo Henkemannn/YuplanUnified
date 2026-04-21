@@ -89,6 +89,12 @@ Fiskgratang</textarea>
         <p id="builderCompositionTitle"></p>
         <p class="modal-section-title">Included parts</p>
         <p id="builderRoleSummary" class="builder-role-summary"></p>
+        <p class="modal-section-title">Declaration preview</p>
+        <p id="compositionDeclarationStatus" class="declaration-preview-status">Read-only preview. No automation applied.</p>
+        <p id="compositionDeclarationDisabled" class="declaration-preview-disabled hidden">Declaration preview is currently unavailable.</p>
+        <p id="compositionDeclarationSignalsSummary" class="declaration-preview-summary">No declaration signals loaded.</p>
+        <ul id="compositionDeclarationSignals" class="declaration-preview-signals"></ul>
+        <ul id="compositionDeclarationWarnings" class="declaration-preview-warnings"></ul>
         <ul id="builderComponentsList" class="component-block-list"></ul>
 
         <p class="modal-section-title">Pick components from library</p>
@@ -180,6 +186,24 @@ Fiskgratang</textarea>
 
             <p class="modal-section-title">Ingredients</p>
             <ul id="recipeIngredientsList" class="recipe-ingredient-list"></ul>
+
+            <p class="modal-section-title">Declaration preview</p>
+            <p id="componentDeclarationStatus" class="declaration-preview-status">Read-only preview. No automation applied.</p>
+            <p id="componentDeclarationDisabled" class="declaration-preview-disabled hidden">Declaration preview is currently unavailable.</p>
+            <p id="componentDeclarationSignalsSummary" class="declaration-preview-summary">No declaration signals loaded.</p>
+            <ul id="componentDeclarationSignals" class="declaration-preview-signals"></ul>
+            <p class="declaration-preview-provenance-title">Ingredient provenance</p>
+            <ul id="componentDeclarationProvenance" class="declaration-preview-provenance"></ul>
+            <ul id="componentDeclarationWarnings" class="declaration-preview-warnings"></ul>
+
+            <p class="modal-section-title">Scaling preview</p>
+            <label>Target portions
+              <input id="recipeScalingTargetPortions" type="number" min="1" step="1" placeholder="Enter target portions" disabled>
+            </label>
+            <button id="btnRecipeScalingPreview" type="button" disabled>Preview scaled recipe</button>
+            <p id="recipeScalingStatus" class="recipe-scaling-status"></p>
+            <p id="recipeScalingSummary" class="recipe-scaling-summary">Select a recipe to preview scaling.</p>
+            <ul id="recipeScalingRows" class="recipe-scaling-list"></ul>
 
             <p class="modal-section-title">Add ingredient</p>
             <label>Ingredient name

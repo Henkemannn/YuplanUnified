@@ -4,6 +4,13 @@ from .composition_text_renderer import (
 	RenderedCompositionTextModel,
 	render_composition_to_text_model,
 )
+from .declaration_readiness import (
+	ComponentDeclarationReadiness,
+	CompositionDeclarationReadiness,
+	IngredientTraitSource,
+	MenuDeclarationReadiness,
+	MenuRowDeclarationReadiness,
+)
 
 __all__ = [
 	"BuilderFlow",
@@ -12,4 +19,9 @@ __all__ = [
 	"RenderedCompositionComponent",
 	"RenderedCompositionTextModel",
 	"render_composition_to_text_model",
+	"IngredientTraitSource",
+	"ComponentDeclarationReadiness",
+	"CompositionDeclarationReadiness",
+	"MenuRowDeclarationReadiness",
+	"MenuDeclarationReadiness",
 ]

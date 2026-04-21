@@ -3,6 +3,11 @@ from .composition_cost import (
 	CompositionCostBreakdown,
 	calculate_composition_cost,
 )
+from .ingredient_intelligence import (
+	RecipeIngredientTraitSignalLine,
+	RecipeTraitSignalPreview,
+	build_recipe_trait_signal_preview,
+)
 from .composition_domain import Composition, CompositionComponent
 from .composition_repository import InMemoryCompositionRepository
 from .composition_service import CompositionService
@@ -30,6 +35,9 @@ __all__ = [
 	"ComponentCostBreakdown",
 	"CompositionCostBreakdown",
 	"calculate_composition_cost",
+	"RecipeIngredientTraitSignalLine",
+	"RecipeTraitSignalPreview",
+	"build_recipe_trait_signal_preview",
 	"InMemoryCompositionRepository",
 	"CompositionService",
 	"InMemoryComponentRepository",

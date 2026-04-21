@@ -22,6 +22,15 @@ def test_builder_ui_includes_separate_component_detail_modal_controls(client_adm
     assert 'id="btnRecipeDelete"' in html
     assert 'id="recipeEditName"' in html
     assert 'id="recipeEditYieldPortions"' in html
+    assert 'id="recipeScalingTargetPortions"' in html
+    assert 'id="btnRecipeScalingPreview"' in html
+    assert 'id="recipeScalingSummary"' in html
+    assert 'id="recipeScalingRows"' in html
+    assert 'id="componentDeclarationStatus"' in html
+    assert 'id="componentDeclarationDisabled"' in html
+    assert 'id="componentDeclarationSignals"' in html
+    assert 'id="componentDeclarationProvenance"' in html
+    assert 'id="componentDeclarationWarnings"' in html
 
     assert 'id="componentDetailTextPreview"' in html
 
@@ -35,6 +44,10 @@ def test_builder_ui_includes_separate_component_detail_modal_controls(client_adm
     assert 'id="recipeList"' not in resolve_html
     assert 'id="btnRecipeCreate"' not in resolve_html
     assert 'id="componentDetailTextPreview"' not in resolve_html
+    assert 'id="compositionDeclarationStatus"' in resolve_html
+    assert 'id="compositionDeclarationSignals"' in resolve_html
+    assert 'id="compositionDeclarationWarnings"' in resolve_html
+    assert "Read-only preview. No automation applied." in html
 
 
 def test_builder_ui_uses_component_block_list_in_dish_editor(client_admin) -> None:
@@ -84,5 +97,12 @@ def test_builder_script_contains_block_model_and_minimized_controls(client_admin
     assert "component-palette-pill-included" in script
     assert "No components match search" in script
     assert "builderPaletteSearch" in script
+    assert "loadComponentDeclarationPreview" in script
+    assert "loadCompositionDeclarationPreview" in script
+    assert "Declaration preview unavailable right now." in script
+    assert "Read-only preview. No automation applied." in script
     assert "/components/attach" in script
     assert "attachExistingComponentToCurrentComposition" in script
+    assert "/scaling-preview?target_portions=" in script
+    assert "Target portions must be > 0" in script
+    assert "btnRecipeScalingPreview" in script

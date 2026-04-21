@@ -1650,3 +1650,193 @@ def test_recipe_scaling_preview_endpoint_enforces_component_ownership() -> None:
 
     assert rv.status_code == 400
     assert (rv.get_json() or {}).get("error") == "bad_request"
+
+
+def test_recipe_ingredient_trait_signals_readback_and_preview_endpoint() -> None:
+    client = _client()
+    c = client.post("/api/builder/components", json={"component_name": "Soup"}, headers=HEADERS)
+    component_id = ((c.get_json() or {}).get("component") or {}).get("component_id")
+    created = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Base", "yield_portions": 6, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((created.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    add_a = client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={
+            "ingredient_name": "Cream",
+            "amount_value": 2,
+            "amount_unit": "dl",
+            "trait_signals": ["lactose", "lactose"],
+            "sort_order": 10,
+        },
+        headers=HEADERS,
+    )
+    add_b = client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={
+            "ingredient_name": "Cod",
+            "amount_value": 500,
+            "amount_unit": "g",
+            "trait_signals": ["fish"],
+            "sort_order": 20,
+        },
+        headers=HEADERS,
+    )
+    detail = client.get(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}",
+        headers=HEADERS,
+    )
+    preview = client.get(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/trait-signals",
+        headers=HEADERS,
+    )
+
+    assert add_a.status_code == 201
+    assert add_b.status_code == 201
+    assert detail.status_code == 200
+    lines = (detail.get_json() or {}).get("ingredient_lines") or []
+    assert [item.get("trait_signals") for item in lines] == [["lactose"], ["fish"]]
+
+    assert preview.status_code == 200
+    body = preview.get_json() or {}
+    data = body.get("preview") or {}
+    assert body.get("ok") is True
+    assert data.get("trait_signals_present") == ["fish", "lactose"]
+    line_signals = [item.get("trait_signals") for item in (data.get("ingredient_lines") or [])]
+    assert line_signals == [["lactose"], ["fish"]]
+
+
+def test_recipe_trait_signals_preview_enforces_component_ownership() -> None:
+    client = _client()
+    c1 = client.post("/api/builder/components", json={"component_name": "Fish"}, headers=HEADERS)
+    c2 = client.post("/api/builder/components", json={"component_name": "Potato"}, headers=HEADERS)
+    c1_id = ((c1.get_json() or {}).get("component") or {}).get("component_id")
+    c2_id = ((c2.get_json() or {}).get("component") or {}).get("component_id")
+
+    created = client.post(
+        f"/api/builder/components/{c1_id}/recipes",
+        json={"recipe_name": "Fish Base", "yield_portions": 6, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((created.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    rv = client.get(
+        f"/api/builder/components/{c2_id}/recipes/{recipe_id}/trait-signals",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    assert (rv.get_json() or {}).get("error") == "bad_request"
+
+
+def test_component_declaration_readiness_endpoint_returns_trait_sources() -> None:
+    client = _client()
+    created_component = client.post(
+        "/api/builder/components",
+        json={"component_name": "Fish Sauce"},
+        headers=HEADERS,
+    )
+    component_id = ((created_component.get_json() or {}).get("component") or {}).get("component_id")
+    created_recipe = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Base", "yield_portions": 8, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((created_recipe.get_json() or {}).get("recipe") or {}).get("recipe_id")
+    client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={
+            "ingredient_name": "Cod",
+            "amount_value": 500,
+            "amount_unit": "g",
+            "trait_signals": ["fish"],
+            "sort_order": 10,
+        },
+        headers=HEADERS,
+    )
+
+    rv = client.get(
+        f"/api/builder/components/{component_id}/declaration-readiness?include_declaration=1",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    readiness = body.get("readiness") or {}
+    assert body.get("ok") is True
+    assert body.get("declaration_enabled") is True
+    assert readiness.get("component_id") == component_id
+    assert readiness.get("trait_signals_present") == ["fish"]
+    sources = readiness.get("ingredient_sources") or []
+    assert len(sources) == 1
+    assert sources[0].get("ingredient_name") == "Cod"
+    assert sources[0].get("trait_signals") == ["fish"]
+
+
+def test_composition_declaration_readiness_endpoint_aggregates_component_signals() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_1", "composition_name": "Fish Plate"},
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+
+    added = client.post(
+        "/api/builder/compositions/plate_1/components",
+        json={"component_name": "Fish", "role": "main", "sort_order": 10},
+        headers=HEADERS,
+    )
+    component_id = (((added.get_json() or {}).get("composition") or {}).get("components") or [{}])[0].get(
+        "component_id"
+    )
+    recipe = client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Fish Base", "yield_portions": 8, "visibility": "private"},
+        headers=HEADERS,
+    )
+    recipe_id = ((recipe.get_json() or {}).get("recipe") or {}).get("recipe_id")
+    client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={"ingredient_name": "Cod", "amount_value": 500, "amount_unit": "g", "trait_signals": ["fish"]},
+        headers=HEADERS,
+    )
+
+    rv = client.get(
+        "/api/builder/compositions/plate_1/declaration-readiness?include_declaration=true",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    readiness = body.get("readiness") or {}
+    assert body.get("declaration_enabled") is True
+    assert readiness.get("composition_id") == "plate_1"
+    assert readiness.get("trait_signals_present") == ["fish"]
+    components = readiness.get("components") or []
+    assert len(components) == 1
+    assert components[0].get("trait_signals_present") == ["fish"]
+
+
+def test_component_declaration_readiness_endpoint_can_be_disabled_by_toggle() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Soup"},
+        headers=HEADERS,
+    )
+    component_id = ((created.get_json() or {}).get("component") or {}).get("component_id")
+
+    rv = client.get(
+        f"/api/builder/components/{component_id}/declaration-readiness?include_declaration=0",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    assert body.get("declaration_enabled") is False
+    assert body.get("readiness") is None
