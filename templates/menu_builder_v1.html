@@ -8,14 +8,14 @@
   <style>
     .menu-week-groups {
       display: grid;
-      gap: 12px;
+      gap: 14px;
       margin-top: 10px;
     }
     .menu-group {
-      border: 1px solid #d7dce4;
-      border-radius: 8px;
+      border: 1px solid #d8e1ea;
+      border-radius: 10px;
       padding: 10px;
-      background: #fafbfd;
+      background: linear-gradient(180deg, #fafcff 0%, #f7fbff 100%);
     }
     .menu-group-header {
       font-weight: 600;
@@ -23,13 +23,7 @@
     }
     .menu-group-list {
       display: grid;
-      gap: 8px;
-    }
-    .menu-row-card {
-      border: 1px solid #e2e6ec;
-      border-radius: 6px;
-      padding: 8px;
-      background: #fff;
+      gap: 10px;
     }
     .menu-row-card.unresolved {
       border-color: #d59b28;
@@ -101,6 +95,7 @@
     <label>composition
       <select id="rowCompositionId"></select>
     </label>
+    <div id="rowCompositionPalette" class="menu-quick-palette"></div>
     <label>sort_order
       <input id="rowSortOrder" type="number" value="0">
     </label>
@@ -126,6 +121,8 @@
       <p id="menuDeclarationDisabled" class="declaration-preview-disabled hidden">Declaration preview is currently unavailable.</p>
       <p id="menuDeclarationSignalsSummary" class="declaration-preview-summary">No declaration signals loaded.</p>
       <ul id="menuDeclarationSignals" class="declaration-preview-signals"></ul>
+      <p class="declaration-preview-provenance-title">Potential diet conflicts</p>
+      <ul id="menuConflictList" class="declaration-preview-conflicts"></ul>
       <ul id="menuDeclarationWarnings" class="declaration-preview-warnings"></ul>
     </div>
     <div id="menuRowsBody" class="menu-week-groups"></div>

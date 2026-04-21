@@ -1051,13 +1051,16 @@ def test_menu_declaration_readiness_endpoint_returns_row_and_component_sources()
     assert body.get("declaration_enabled") is True
     assert readiness.get("menu_id") == "menu_1"
     assert readiness.get("trait_signals_present") == ["fish"]
+    assert (readiness.get("conflict_preview") or {}).get("conflicts_present") == ["fish_relevant"]
     rows = readiness.get("rows") or []
     assert len(rows) == 1
     assert rows[0].get("trait_signals_present") == ["fish"]
+    assert (rows[0].get("conflict_preview") or {}).get("conflicts_present") == ["fish_relevant"]
     components = rows[0].get("components") or []
     assert len(components) == 1
     assert components[0].get("component_id") == component_id
     assert components[0].get("trait_signals_present") == ["fish"]
+    assert (components[0].get("conflict_preview") or {}).get("conflicts_present") == ["fish_relevant"]
 
 
 def test_menu_declaration_readiness_endpoint_can_be_disabled_and_keeps_read_only_contract() -> None:

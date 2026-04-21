@@ -29,6 +29,172 @@ async function callApi(url, options) {
 let allCompositions = [];
 let currentRows = [];
 let currentGroups = [];
+let currentRowIndicatorsByDetailId = {};
+
+const CONFLICT_TOKEN_META = {
+  lactose_relevant: { icon: "🥛", label: "Milk/Lactose" },
+  gluten_relevant: { icon: "🌾", label: "Gluten" },
+  fish_relevant: { icon: "🐟", label: "Fish" },
+  egg_relevant: { icon: "🥚", label: "Egg" },
+  nut_relevant: { icon: "🥜", label: "Nuts" },
+};
+
+function tokenLabelForConflict(conflictKey) {
+  const meta = CONFLICT_TOKEN_META[String(conflictKey || "")];
+  if (meta) {
+    return meta.icon + " " + meta.label;
+  }
+  return String(conflictKey || "").replace(/_/g, " ");
+}
+
+function renderTokenList(listId, items, emptyMessage, labelBuilder) {
+  const list = document.getElementById(listId);
+  if (!list) {
+    return;
+  }
+  list.innerHTML = "";
+  const values = Array.isArray(items) ? items : [];
+  if (values.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = String(emptyMessage || "None");
+    li.className = "declaration-list-empty";
+    list.appendChild(li);
+    return;
+  }
+  for (const item of values) {
+    const li = document.createElement("li");
+    li.className = "declaration-token-item";
+    const token = document.createElement("span");
+    token.className = "declaration-token";
+    token.textContent = String(labelBuilder ? labelBuilder(item) : item || "");
+    li.appendChild(token);
+    list.appendChild(li);
+  }
+}
+
+function buildRowIndicators(readinessRows) {
+  const rows = Array.isArray(readinessRows) ? readinessRows : [];
+  const indicators = {};
+  for (const row of rows) {
+    const detailId = String(row.menu_detail_id || "");
+    if (!detailId) {
+      continue;
+    }
+    const rowConflicts = row && row.conflict_preview && Array.isArray(row.conflict_preview.conflicts_present)
+      ? row.conflict_preview.conflicts_present
+      : [];
+    const components = Array.isArray(row.components) ? row.components : [];
+    const hasRecipe = components.some((component) => Boolean(component && component.primary_recipe_id));
+    const hasComponentConflicts = components.some((component) => {
+      const componentConflicts = component && component.conflict_preview && Array.isArray(component.conflict_preview.conflicts_present)
+        ? component.conflict_preview.conflicts_present
+        : [];
+      return componentConflicts.length > 0;
+    });
+    indicators[detailId] = {
+      hasRecipe,
+      hasConflicts: rowConflicts.length > 0 || hasComponentConflicts,
+    };
+  }
+  return indicators;
+}
+
+function renderRowIndicators(menuDetailId) {
+  const wrap = document.createElement("div");
+  wrap.className = "menu-row-indicators";
+  const indicator = currentRowIndicatorsByDetailId[String(menuDetailId || "")] || {};
+
+  if (indicator.hasRecipe) {
+    const recipe = document.createElement("span");
+    recipe.className = "menu-row-indicator menu-row-indicator-recipe";
+    recipe.textContent = "🍳";
+    recipe.title = "Has recipe";
+    wrap.appendChild(recipe);
+  }
+  if (indicator.hasConflicts) {
+    const conflict = document.createElement("span");
+    conflict.className = "menu-row-indicator menu-row-indicator-conflict";
+    conflict.textContent = "⚑";
+    conflict.title = "Has potential conflicts";
+    wrap.appendChild(conflict);
+  }
+
+  return wrap;
+}
+
+function renderQuickCompositionPalette(query) {
+  const host = document.getElementById("rowCompositionPalette");
+  if (!host) {
+    return;
+  }
+  host.innerHTML = "";
+  const filtered = filterCompositions(query).slice(0, 24);
+  if (filtered.length === 0) {
+    const empty = document.createElement("span");
+    empty.className = "menu-quick-palette-empty";
+    empty.textContent = "No compositions";
+    host.appendChild(empty);
+    return;
+  }
+
+  for (const composition of filtered) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "menu-quick-pill";
+    btn.textContent = String(composition.composition_name || composition.composition_id || "");
+    const compositionId = String(composition.composition_id || "");
+    btn.title = "Add " + btn.textContent + " to current menu";
+    btn.addEventListener("click", async () => {
+      await addMenuRowByCompositionId(compositionId);
+    });
+    host.appendChild(btn);
+  }
+}
+
+async function addMenuRowByCompositionId(compositionId) {
+  const menuId = getActiveMenuId();
+  const dayEl = document.getElementById("rowDay");
+  const mealSlotEl = document.getElementById("rowMealSlot");
+  const noteEl = document.getElementById("rowNote");
+  const sortOrderEl = document.getElementById("rowSortOrder");
+  const compositionEl = document.getElementById("rowCompositionId");
+
+  if (!menuId) {
+    showJson("addMenuRowOut", { ok: false, error: "active menu_id is required" });
+    return;
+  }
+
+  const selectedCompositionId = String(compositionId || (compositionEl ? compositionEl.value : "") || "").trim();
+  if (!selectedCompositionId) {
+    showJson("addMenuRowOut", { ok: false, error: "composition_id is required" });
+    return;
+  }
+  if (compositionEl) {
+    compositionEl.value = selectedCompositionId;
+  }
+
+  const payload = {
+    day: dayEl ? String(dayEl.value || "").trim() : "",
+    meal_slot: mealSlotEl ? String(mealSlotEl.value || "").trim() : "",
+    composition_id: selectedCompositionId,
+    note: noteEl ? String(noteEl.value || "").trim() : "",
+    sort_order: sortOrderEl ? Number.parseInt(String(sortOrderEl.value || "0"), 10) : 0,
+  };
+
+  showLoading("addMenuRowOut");
+  const result = await callApi("/api/builder/menus/" + encodeURIComponent(menuId) + "/rows", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: payload,
+  });
+  showJson("addMenuRowOut", result);
+  if (result && result.data && result.data.ok) {
+    if (noteEl) {
+      noteEl.value = "";
+    }
+    await refreshRows();
+  }
+}
 
 function setListContent(listId, items, emptyMessage) {
   const list = document.getElementById(listId);
@@ -64,6 +230,13 @@ function renderMenuDeclarationPreview(payload) {
   const signals = readiness && Array.isArray(readiness.trait_signals_present)
     ? readiness.trait_signals_present
     : [];
+  const conflictPreview = readiness && readiness.conflict_preview ? readiness.conflict_preview : {};
+  const conflictsPresent = Array.isArray(conflictPreview.conflicts_present)
+    ? conflictPreview.conflicts_present
+    : [];
+  const conflictSources = Array.isArray(conflictPreview.conflict_sources)
+    ? conflictPreview.conflict_sources
+    : [];
 
   if (status) {
     status.textContent = "Read-only preview. No automation applied.";
@@ -77,20 +250,40 @@ function renderMenuDeclarationPreview(payload) {
     }
   }
   if (summary) {
-    summary.textContent = enabled
-      ? (signals.length > 0
-        ? "Menu-level signals: " + signals.join(", ")
-        : "No declaration signals present")
-      : "Declaration preview disabled";
+    if (!enabled) {
+      summary.textContent = "Declaration preview disabled";
+    } else if (conflictsPresent.length > 0) {
+      summary.textContent = "This menu contains: " + conflictsPresent.map((v) => tokenLabelForConflict(v)).join(", ");
+    } else if (signals.length > 0) {
+      summary.textContent = "This menu contains declaration signals.";
+    } else {
+      summary.textContent = "This menu contains no declaration conflicts.";
+    }
   }
 
-  setListContent("menuDeclarationSignals", signals, "No signals");
+  renderTokenList("menuDeclarationSignals", signals, "No signals", (item) => String(item || ""));
+  const conflictItems = [];
+  for (const source of conflictSources) {
+    const traits = Array.isArray(source.triggering_trait_signals)
+      ? source.triggering_trait_signals.join(", ")
+      : "";
+    conflictItems.push(tokenLabelForConflict(source.conflict_key) + (traits ? " · " + traits : ""));
+  }
+  if (conflictItems.length === 0 && conflictsPresent.length > 0) {
+    for (const conflict of conflictsPresent) {
+      conflictItems.push(tokenLabelForConflict(conflict));
+    }
+  }
+  renderTokenList("menuConflictList", conflictItems, "No potential conflicts", (item) => String(item || ""));
 
   const warnings = [];
   if (readiness && Array.isArray(readiness.warnings)) {
     warnings.push(...readiness.warnings);
   }
   const rows = readiness && Array.isArray(readiness.rows) ? readiness.rows : [];
+  currentRowIndicatorsByDetailId = enabled ? buildRowIndicators(rows) : {};
+  const searchInput = document.getElementById("compositionSearch");
+  renderMenuRowsGrouped(currentGroups, searchInput ? String(searchInput.value || "") : "");
   for (const row of rows) {
     const rowWarnings = Array.isArray(row.warnings) ? row.warnings : [];
     for (const warning of rowWarnings) {
@@ -179,6 +372,7 @@ function renderCompositionOptions(query) {
   })();
   renderCompositionOptionsForSelect("rowCompositionId", filtered, addSelected);
   renderCompositionOptionsForSelect("editRowCompositionId", filtered, editSelected);
+  renderQuickCompositionPalette(query);
 }
 
 async function loadCompositionOptions() {
@@ -244,6 +438,9 @@ function renderMenuRowsGrouped(groups, query) {
       const unresolved = row.is_unresolved || row.composition_ref_type === "unresolved";
       card.className = unresolved ? "menu-row-card unresolved" : "menu-row-card";
 
+      const titleWrap = document.createElement("div");
+      titleWrap.className = "menu-row-title-wrap";
+
       const title = document.createElement("div");
       title.className = "menu-row-title";
       if (unresolved) {
@@ -251,7 +448,11 @@ function renderMenuRowsGrouped(groups, query) {
       } else {
         title.textContent = String(row.composition_name || row.composition_id || "");
       }
-      card.appendChild(title);
+      titleWrap.appendChild(title);
+      if (!unresolved) {
+        titleWrap.appendChild(renderRowIndicators(row.menu_detail_id));
+      }
+      card.appendChild(titleWrap);
 
       const meta = document.createElement("div");
       meta.className = "menu-row-meta";
@@ -459,39 +660,7 @@ function bindHandlers() {
 
   if (addRowBtn) {
     addRowBtn.addEventListener("click", async () => {
-      const menuId = getActiveMenuId();
-      const dayEl = document.getElementById("rowDay");
-      const mealSlotEl = document.getElementById("rowMealSlot");
-      const compositionEl = document.getElementById("rowCompositionId");
-      const noteEl = document.getElementById("rowNote");
-      const sortOrderEl = document.getElementById("rowSortOrder");
-
-      const payload = {
-        day: dayEl ? String(dayEl.value || "").trim() : "",
-        meal_slot: mealSlotEl ? String(mealSlotEl.value || "").trim() : "",
-        composition_id: compositionEl ? String(compositionEl.value || "").trim() : "",
-        note: noteEl ? String(noteEl.value || "").trim() : "",
-        sort_order: sortOrderEl ? Number.parseInt(String(sortOrderEl.value || "0"), 10) : 0,
-      };
-
-      if (!menuId) {
-        showJson("addMenuRowOut", { ok: false, error: "active menu_id is required" });
-        return;
-      }
-
-      showLoading("addMenuRowOut");
-      const result = await callApi("/api/builder/menus/" + encodeURIComponent(menuId) + "/rows", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      });
-      showJson("addMenuRowOut", result);
-      if (result && result.data && result.data.ok) {
-        if (noteEl) {
-          noteEl.value = "";
-        }
-        await refreshRows();
-      }
+      await addMenuRowByCompositionId("");
     });
   }
 

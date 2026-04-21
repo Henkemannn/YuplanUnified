@@ -29,6 +29,7 @@ def test_builder_ui_includes_separate_component_detail_modal_controls(client_adm
     assert 'id="componentDeclarationStatus"' in html
     assert 'id="componentDeclarationDisabled"' in html
     assert 'id="componentDeclarationSignals"' in html
+    assert 'id="componentConflictList"' in html
     assert 'id="componentDeclarationProvenance"' in html
     assert 'id="componentDeclarationWarnings"' in html
 
@@ -46,7 +47,9 @@ def test_builder_ui_includes_separate_component_detail_modal_controls(client_adm
     assert 'id="componentDetailTextPreview"' not in resolve_html
     assert 'id="compositionDeclarationStatus"' in resolve_html
     assert 'id="compositionDeclarationSignals"' in resolve_html
+    assert 'id="compositionConflictList"' in resolve_html
     assert 'id="compositionDeclarationWarnings"' in resolve_html
+    assert "Potential diet conflicts" in html
     assert "Read-only preview. No automation applied." in html
 
 
@@ -101,6 +104,8 @@ def test_builder_script_contains_block_model_and_minimized_controls(client_admin
     assert "loadCompositionDeclarationPreview" in script
     assert "Declaration preview unavailable right now." in script
     assert "Read-only preview. No automation applied." in script
+    assert "componentConflictList" in script
+    assert "compositionConflictList" in script
     assert "/components/attach" in script
     assert "attachExistingComponentToCurrentComposition" in script
     assert "/scaling-preview?target_portions=" in script

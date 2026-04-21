@@ -851,6 +851,11 @@ def test_component_declaration_readiness_aggregates_primary_recipe_trait_sources
     assert readiness.component_id == component.component_id
     assert readiness.primary_recipe_id is None
     assert readiness.trait_signals_present == ("fish", "lactose")
+    assert readiness.conflict_preview.conflicts_present == ("fish_relevant", "lactose_relevant")
+    assert [source.conflict_key for source in readiness.conflict_preview.conflict_sources] == [
+        "fish_relevant",
+        "lactose_relevant",
+    ]
     assert [source.ingredient_name for source in readiness.ingredient_sources] == ["Cod", "Cream"]
     assert any("missing primary recipe" in message for message in readiness.warnings)
 
@@ -911,6 +916,7 @@ def test_composition_declaration_readiness_aggregates_component_signals_determin
 
     assert readiness.composition_id == "plate_1"
     assert readiness.trait_signals_present == ("fish", "lactose")
+    assert readiness.conflict_preview.conflicts_present == ("fish_relevant", "lactose_relevant")
     assert [component.component_name for component in readiness.components] == ["Sauce", "Fish"]
     assert [component.trait_signals_present for component in readiness.components] == [
         ("lactose",),

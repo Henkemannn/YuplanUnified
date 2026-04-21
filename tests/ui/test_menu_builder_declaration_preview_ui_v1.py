@@ -11,7 +11,9 @@ def test_menu_builder_ui_includes_declaration_preview_controls(client_admin) -> 
     assert 'id="menuDeclarationStatus"' in html
     assert 'id="menuDeclarationDisabled"' in html
     assert 'id="menuDeclarationSignals"' in html
+    assert 'id="menuConflictList"' in html
     assert 'id="menuDeclarationWarnings"' in html
+    assert "Potential diet conflicts" in html
     assert "Read-only preview. No automation applied." in html
 
 
@@ -25,5 +27,6 @@ def test_menu_builder_script_contains_declaration_preview_toggle_and_warning_ren
     assert "/declaration-readiness?include_declaration=" in script
     assert "Declaration preview unavailable right now." in script
     assert "Read-only preview. No automation applied." in script
+    assert "menuConflictList" in script
     assert "Row " in script
     assert "No special-diet automation" not in script

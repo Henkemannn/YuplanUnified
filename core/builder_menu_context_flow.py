@@ -9,6 +9,7 @@ from .builder.declaration_readiness import (
     MenuDeclarationReadiness,
     MenuRowDeclarationReadiness,
 )
+from .builder.diet_conflict_preview import DietConflictPreview, merge_diet_conflict_previews
 from .components import (
     Composition,
     InMemoryCompositionRepository,
@@ -311,6 +312,7 @@ class BuilderMenuContextFlow:
             row_warnings: list[str] = []
             component_models: list[ComponentDeclarationReadiness] = []
             row_signals: tuple[str, ...] = ()
+            row_conflict_preview = DietConflictPreview()
             composition_id = str(row.get("composition_id") or "").strip() or None
             composition_ref_type = str(row.get("composition_ref_type") or "")
             composition_name = (
@@ -327,6 +329,7 @@ class BuilderMenuContextFlow:
                         composition_id=composition_id,
                     )
                     row_signals = tuple(composition_readiness.trait_signals_present)
+                    row_conflict_preview = composition_readiness.conflict_preview
                     component_models = list(composition_readiness.components)
                     row_warnings.extend(composition_readiness.warnings)
                 except ValueError as exc:
@@ -338,6 +341,7 @@ class BuilderMenuContextFlow:
                 composition_id=composition_id,
                 composition_name=composition_name,
                 trait_signals_present=row_signals,
+                conflict_preview=row_conflict_preview,
                 components=component_models,
                 warnings=row_warnings,
             )
@@ -351,9 +355,13 @@ class BuilderMenuContextFlow:
                 for signal in row_model.trait_signals_present
             }
         )
+        merged_conflicts = merge_diet_conflict_previews(
+            [row_model.conflict_preview for row_model in row_models]
+        )
         return MenuDeclarationReadiness(
             menu_id=menu.menu_id,
             trait_signals_present=tuple(signal_union),
+            conflict_preview=merged_conflicts,
             rows=row_models,
             warnings=warnings,
         )

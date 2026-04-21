@@ -616,6 +616,126 @@ function setListContent(listId, items, emptyMessage) {
   }
 }
 
+const CONFLICT_TOKEN_META = {
+  lactose_relevant: { icon: "🥛", label: "Milk/Lactose" },
+  gluten_relevant: { icon: "🌾", label: "Gluten" },
+  fish_relevant: { icon: "🐟", label: "Fish" },
+  egg_relevant: { icon: "🥚", label: "Egg" },
+  nut_relevant: { icon: "🥜", label: "Nuts" },
+};
+
+const SIGNAL_TOKEN_META = {
+  milk: { icon: "🥛", label: "Milk" },
+  lactose: { icon: "🥛", label: "Lactose" },
+  gluten: { icon: "🌾", label: "Gluten" },
+  fish: { icon: "🐟", label: "Fish" },
+  egg: { icon: "🥚", label: "Egg" },
+  nuts: { icon: "🥜", label: "Nuts" },
+};
+
+let currentCompositionConflictsByComponentId = {};
+
+function tokenLabelForConflict(conflictKey) {
+  const meta = CONFLICT_TOKEN_META[String(conflictKey || "")];
+  if (meta) {
+    return meta.icon + " " + meta.label;
+  }
+  return String(conflictKey || "").replace(/_/g, " ");
+}
+
+function tokenLabelForSignal(signalKey) {
+  const meta = SIGNAL_TOKEN_META[String(signalKey || "")];
+  if (meta) {
+    return meta.icon + " " + meta.label;
+  }
+  return String(signalKey || "");
+}
+
+function renderTokenList(listId, items, emptyMessage, labelBuilder) {
+  const list = document.getElementById(listId);
+  if (!list) {
+    return;
+  }
+  list.innerHTML = "";
+  const values = Array.isArray(items) ? items : [];
+  if (values.length === 0) {
+    const li = document.createElement("li");
+    li.textContent = String(emptyMessage || "None");
+    li.className = "declaration-list-empty";
+    list.appendChild(li);
+    return;
+  }
+
+  for (const item of values) {
+    const li = document.createElement("li");
+    li.className = "declaration-token-item";
+    const token = document.createElement("span");
+    token.className = "declaration-token";
+    token.textContent = String(labelBuilder ? labelBuilder(item) : item || "");
+    li.appendChild(token);
+    list.appendChild(li);
+  }
+}
+
+function renderConflictTokenList(listId, conflictPreview) {
+  const preview = conflictPreview || {};
+  const conflictsPresent = Array.isArray(preview.conflicts_present)
+    ? preview.conflicts_present
+    : [];
+  const conflictSources = Array.isArray(preview.conflict_sources)
+    ? preview.conflict_sources
+    : [];
+
+  const sourceMap = {};
+  for (const source of conflictSources) {
+    const conflictKey = String(source.conflict_key || "");
+    const traits = Array.isArray(source.triggering_trait_signals)
+      ? source.triggering_trait_signals
+      : [];
+    const conflictLabel = tokenLabelForConflict(conflictKey);
+    const traitLabel = traits.length > 0 ? traits.map((v) => tokenLabelForSignal(v)).join(", ") : "";
+    if (!sourceMap[conflictKey]) {
+      sourceMap[conflictKey] = [];
+    }
+    if (traitLabel) {
+      sourceMap[conflictKey].push(conflictLabel + " · " + traitLabel);
+    }
+  }
+
+  const items = [];
+  for (const conflict of conflictsPresent) {
+    const key = String(conflict || "");
+    if (sourceMap[key] && sourceMap[key].length > 0) {
+      items.push(sourceMap[key][0]);
+    } else {
+      items.push(tokenLabelForConflict(key));
+    }
+  }
+
+  renderTokenList(listId, items, "No potential conflicts", (item) => String(item || ""));
+}
+
+function updateComponentConflictBadgesDom() {
+  const blocks = document.querySelectorAll(".component-block[data-component-id]");
+  for (const block of blocks) {
+    const componentId = String(block.getAttribute("data-component-id") || "");
+    const count = Number(currentCompositionConflictsByComponentId[componentId] || 0);
+    const badge = block.querySelector(".component-conflict-badge");
+    if (!badge) {
+      continue;
+    }
+    if (count > 0) {
+      badge.classList.remove("hidden");
+      badge.textContent = "⚑ " + String(count);
+      badge.title = "Potential diet conflicts detected";
+    } else {
+      badge.classList.add("hidden");
+      badge.textContent = "";
+      badge.title = "";
+    }
+  }
+}
+
 function renderComponentDeclarationPreview(payload) {
   const enabled = Boolean(payload && payload.declaration_enabled);
   const readiness = enabled ? (payload.readiness || {}) : null;
@@ -639,6 +759,7 @@ function renderComponentDeclarationPreview(payload) {
   const signals = readiness && Array.isArray(readiness.trait_signals_present)
     ? readiness.trait_signals_present
     : [];
+  const conflictPreview = readiness && readiness.conflict_preview ? readiness.conflict_preview : {};
   if (summary) {
     summary.textContent = enabled
       ? (signals.length > 0
@@ -647,7 +768,8 @@ function renderComponentDeclarationPreview(payload) {
       : "Declaration preview disabled";
   }
 
-  setListContent("componentDeclarationSignals", signals, "No signals");
+  renderTokenList("componentDeclarationSignals", signals, "No signals", (item) => tokenLabelForSignal(item));
+  renderConflictTokenList("componentConflictList", conflictPreview);
 
   const provenanceItems = [];
   const sources = readiness && Array.isArray(readiness.ingredient_sources)
@@ -692,6 +814,19 @@ function renderCompositionDeclarationPreview(payload) {
   const signals = readiness && Array.isArray(readiness.trait_signals_present)
     ? readiness.trait_signals_present
     : [];
+  const conflictPreview = readiness && readiness.conflict_preview ? readiness.conflict_preview : {};
+  currentCompositionConflictsByComponentId = {};
+  const components = readiness && Array.isArray(readiness.components) ? readiness.components : [];
+  for (const component of components) {
+    const componentId = String(component.component_id || "");
+    const componentConflicts = component && component.conflict_preview
+      ? component.conflict_preview
+      : {};
+    const componentConflictCount = Array.isArray(componentConflicts.conflicts_present)
+      ? componentConflicts.conflicts_present.length
+      : 0;
+    currentCompositionConflictsByComponentId[componentId] = componentConflictCount;
+  }
   if (summary) {
     summary.textContent = enabled
       ? (signals.length > 0
@@ -700,9 +835,11 @@ function renderCompositionDeclarationPreview(payload) {
       : "Declaration preview disabled";
   }
 
-  setListContent("compositionDeclarationSignals", signals, "No signals");
+  renderTokenList("compositionDeclarationSignals", signals, "No signals", (item) => tokenLabelForSignal(item));
+  renderConflictTokenList("compositionConflictList", conflictPreview);
   const warnings = readiness && Array.isArray(readiness.warnings) ? readiness.warnings : [];
   setListContent("compositionDeclarationWarnings", warnings, "No warnings");
+  updateComponentConflictBadgesDom();
 }
 
 async function loadComponentDeclarationPreview(componentId) {
@@ -1426,6 +1563,7 @@ function renderBuilderPanel(composition) {
     }
     const block = document.createElement("div");
     block.className = "component-block";
+      block.dataset.componentId = componentIdValue;
       block.draggable = true;
       const entryKey = componentEntryKey(component);
       block.dataset.entryKey = entryKey;
@@ -1567,6 +1705,9 @@ function renderBuilderPanel(composition) {
 
     const right = document.createElement("div");
     right.className = "component-row-right";
+    const conflictBadge = document.createElement("span");
+    conflictBadge.className = "component-conflict-badge hidden";
+    right.appendChild(conflictBadge);
     right.appendChild(dataIcon);
     right.appendChild(overflow);
 
@@ -1576,6 +1717,7 @@ function renderBuilderPanel(composition) {
     list.appendChild(li);
   }
 
+  updateComponentConflictBadgesDom();
   renderComponentPalette();
 }
 

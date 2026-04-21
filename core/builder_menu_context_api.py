@@ -176,10 +176,27 @@ def _serialize_menu_cost_overview(overview) -> dict[str, Any]:
     }
 
 
+def _serialize_diet_conflict_preview(preview) -> dict[str, Any]:
+    return {
+        "conflicts_present": list(preview.conflicts_present),
+        "conflict_sources": [
+            {
+                "conflict_key": source.conflict_key,
+                "triggering_trait_signals": list(source.triggering_trait_signals),
+                "source_type": source.source_type,
+                "source_id": source.source_id,
+                "source_label": source.source_label,
+            }
+            for source in preview.conflict_sources
+        ],
+    }
+
+
 def _serialize_menu_declaration_readiness(readiness) -> dict[str, Any]:
     return {
         "menu_id": readiness.menu_id,
         "trait_signals_present": list(readiness.trait_signals_present),
+        "conflict_preview": _serialize_diet_conflict_preview(readiness.conflict_preview),
         "rows": [
             {
                 "menu_detail_id": row.menu_detail_id,
@@ -187,12 +204,14 @@ def _serialize_menu_declaration_readiness(readiness) -> dict[str, Any]:
                 "composition_id": row.composition_id,
                 "composition_name": row.composition_name,
                 "trait_signals_present": list(row.trait_signals_present),
+                "conflict_preview": _serialize_diet_conflict_preview(row.conflict_preview),
                 "components": [
                     {
                         "component_id": component.component_id,
                         "component_name": component.component_name,
                         "primary_recipe_id": component.primary_recipe_id,
                         "trait_signals_present": list(component.trait_signals_present),
+                        "conflict_preview": _serialize_diet_conflict_preview(component.conflict_preview),
                         "ingredient_sources": [
                             {
                                 "recipe_id": source.recipe_id,

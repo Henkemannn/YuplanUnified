@@ -441,10 +441,12 @@ def test_menu_declaration_readiness_aggregates_signals_from_composition_rows() -
 
     assert readiness.menu_id == "menu_1"
     assert readiness.trait_signals_present == ("fish",)
+    assert readiness.conflict_preview.conflicts_present == ("fish_relevant",)
     assert len(readiness.rows) == 1
     assert readiness.rows[0].menu_detail_id == created.menu_detail_id
     assert readiness.rows[0].composition_id == "plate_1"
     assert readiness.rows[0].trait_signals_present == ("fish",)
+    assert readiness.rows[0].conflict_preview.conflicts_present == ("fish_relevant",)
     assert any("missing primary recipe" in message for message in readiness.rows[0].warnings)
     assert any("missing primary recipe" in message for message in readiness.warnings)
 
@@ -460,6 +462,7 @@ def test_menu_declaration_readiness_marks_unresolved_rows_without_automation() -
     readiness = flow.get_menu_declaration_readiness("menu_1")
 
     assert readiness.trait_signals_present == ()
+    assert readiness.conflict_preview.conflicts_present == ()
     assert len(readiness.rows) == 1
     assert readiness.rows[0].composition_ref_type == "unresolved"
     assert readiness.rows[0].components == []

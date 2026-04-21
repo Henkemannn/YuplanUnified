@@ -32,6 +32,11 @@ from .declaration_readiness import (
     CompositionDeclarationReadiness,
     IngredientTraitSource,
 )
+from .diet_conflict_preview import (
+    DietConflictPreview,
+    build_diet_conflict_preview_from_traits,
+    merge_diet_conflict_previews,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -660,11 +665,23 @@ class BuilderFlow:
                 )
 
         signal_union = sorted({signal for source in sources for signal in source.trait_signals})
+        conflict_previews: list[DietConflictPreview] = []
+        for source in sources:
+            conflict_previews.append(
+                build_diet_conflict_preview_from_traits(
+                    source.trait_signals,
+                    source_type="ingredient_line",
+                    source_id=source.recipe_ingredient_line_id,
+                    source_label=source.ingredient_name,
+                )
+            )
+
         return ComponentDeclarationReadiness(
             component_id=component.component_id,
             component_name=component.canonical_name,
             primary_recipe_id=primary_recipe_id,
             trait_signals_present=tuple(signal_union),
+            conflict_preview=merge_diet_conflict_previews(conflict_previews),
             ingredient_sources=sources,
             warnings=warnings,
         )
@@ -707,10 +724,14 @@ class BuilderFlow:
                 for signal in component.trait_signals_present
             }
         )
+        merged_conflicts = merge_diet_conflict_previews(
+            [component.conflict_preview for component in component_readiness]
+        )
         return CompositionDeclarationReadiness(
             composition_id=composition.composition_id,
             composition_name=composition.composition_name,
             trait_signals_present=tuple(signal_union),
+            conflict_preview=merged_conflicts,
             components=component_readiness,
             warnings=warnings,
         )

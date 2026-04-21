@@ -11,6 +11,12 @@ from .declaration_readiness import (
 	MenuDeclarationReadiness,
 	MenuRowDeclarationReadiness,
 )
+from .diet_conflict_preview import (
+	DietConflictPreview,
+	DietConflictSource,
+	build_diet_conflict_preview_from_traits,
+	merge_diet_conflict_previews,
+)
 
 __all__ = [
 	"BuilderFlow",
@@ -24,4 +30,8 @@ __all__ = [
 	"CompositionDeclarationReadiness",
 	"MenuRowDeclarationReadiness",
 	"MenuDeclarationReadiness",
+	"DietConflictSource",
+	"DietConflictPreview",
+	"build_diet_conflict_preview_from_traits",
+	"merge_diet_conflict_previews",
 ]

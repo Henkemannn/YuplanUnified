@@ -1770,6 +1770,11 @@ def test_component_declaration_readiness_endpoint_returns_trait_sources() -> Non
     assert body.get("declaration_enabled") is True
     assert readiness.get("component_id") == component_id
     assert readiness.get("trait_signals_present") == ["fish"]
+    assert (readiness.get("conflict_preview") or {}).get("conflicts_present") == ["fish_relevant"]
+    conflict_sources = (readiness.get("conflict_preview") or {}).get("conflict_sources") or []
+    assert len(conflict_sources) == 1
+    assert conflict_sources[0].get("conflict_key") == "fish_relevant"
+    assert conflict_sources[0].get("triggering_trait_signals") == ["fish"]
     sources = readiness.get("ingredient_sources") or []
     assert len(sources) == 1
     assert sources[0].get("ingredient_name") == "Cod"
@@ -1816,9 +1821,11 @@ def test_composition_declaration_readiness_endpoint_aggregates_component_signals
     assert body.get("declaration_enabled") is True
     assert readiness.get("composition_id") == "plate_1"
     assert readiness.get("trait_signals_present") == ["fish"]
+    assert (readiness.get("conflict_preview") or {}).get("conflicts_present") == ["fish_relevant"]
     components = readiness.get("components") or []
     assert len(components) == 1
     assert components[0].get("trait_signals_present") == ["fish"]
+    assert (components[0].get("conflict_preview") or {}).get("conflicts_present") == ["fish_relevant"]
 
 
 def test_component_declaration_readiness_endpoint_can_be_disabled_by_toggle() -> None:

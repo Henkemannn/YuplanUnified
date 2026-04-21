@@ -124,6 +124,12 @@ def builder_internal_ui():
     return render_template("builder.html")
 
 
+@ui_bp.get("/builder-workspace-v1")
+@require_roles("editor", "admin", "superuser")
+def builder_workspace_v1_ui():
+    return render_template("builder_workspace_v1.html")
+
+
 @ui_bp.get("/menu-builder-v1")
 @require_roles("editor", "admin", "superuser")
 def menu_builder_v1_ui():

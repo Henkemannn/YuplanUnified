@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Builder Workspace v1</title>
+  <link rel="stylesheet" href="/static/css/builder.css">
+</head>
+<body class="builder-workspace-v1">
+  <header class="builder-workspace-hero">
+    <div class="builder-workspace-hero-copy">
+      <p class="builder-workspace-eyebrow">Builder Workspace v1</p>
+      <h1>Build reusable components and dishes</h1>
+      <p class="builder-workspace-subtitle">Start with your library, open any dish to build it from components, and jump into component detail when recipes need attention.</p>
+    </div>
+    <div class="builder-workspace-actions">
+      <section class="workspace-quick-card">
+        <h2>New dish</h2>
+        <label>Dish name
+          <input id="freeDishName" type="text" placeholder="Kottbullar med potatis">
+        </label>
+        <button id="btnCreateDish" type="button">Create dish</button>
+        <div id="createDishOut" class="workspace-feedback" aria-live="polite"></div>
+      </section>
+
+      <section class="workspace-quick-card">
+        <h2>New component</h2>
+        <label>Component name
+          <input id="freeComponentName" type="text" placeholder="Mashed Potatoes">
+        </label>
+        <button id="btnCreateComponent" type="button">Create component</button>
+        <div id="createComponentOut" class="workspace-feedback" aria-live="polite"></div>
+      </section>
+    </div>
+  </header>
+
+  <main class="builder-workspace-main">
+    <section class="workspace-panel workspace-panel-dishes">
+      <div class="workspace-panel-header">
+        <div>
+          <p class="workspace-panel-kicker">Composition library</p>
+          <h2>Dishes</h2>
+        </div>
+        <p class="workspace-panel-copy">Open any dish to build, reorder, and inspect its components.</p>
+      </div>
+      <div id="libraryCompositionsGrid" class="composition-library-grid"></div>
+    </section>
+
+    <section class="workspace-panel workspace-panel-components">
+      <div class="workspace-panel-header">
+        <div>
+          <p class="workspace-panel-kicker">Component library</p>
+          <h2>Components</h2>
+        </div>
+        <p class="workspace-panel-copy">Open a component to manage recipes, ingredients, scaling, and declaration visibility.</p>
+      </div>
+      <div id="libraryComponentsGrid" class="component-library-grid"></div>
+    </section>
+  </main>
+
+  <div id="libraryOut" class="workspace-feedback workspace-feedback-page" aria-live="polite"></div>
+
+  <div id="resolveModal" class="modal hidden">
+    <div class="modal-content modal-content-dish">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Dish workspace</p>
+          <h3 id="resolveModalTitle">Edit dish</h3>
+        </div>
+        <button id="resolveCancel" type="button">Done</button>
+      </div>
+      <p id="resolveStatusLine" class="modal-status-line hidden"></p>
+
+      <div id="modalBuilderSection" class="workspace-modal-body modal-section">
+        <div class="workspace-modal-column workspace-modal-column-primary">
+          <p id="builderCompositionTitle" class="workspace-modal-titleline"></p>
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Included parts</p>
+            <p id="builderRoleSummary" class="builder-role-summary"></p>
+            <ul id="builderComponentsList" class="component-block-list"></ul>
+          </div>
+
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Declaration preview</p>
+            <p id="compositionDeclarationStatus" class="declaration-preview-status">Read-only preview. No automation applied.</p>
+            <p id="compositionDeclarationDisabled" class="declaration-preview-disabled hidden">Declaration preview is currently unavailable.</p>
+            <p id="compositionDeclarationSignalsSummary" class="declaration-preview-summary">No declaration signals loaded.</p>
+            <ul id="compositionDeclarationSignals" class="declaration-preview-signals"></ul>
+            <p class="declaration-preview-provenance-title">Potential diet conflicts</p>
+            <ul id="compositionConflictList" class="declaration-preview-conflicts"></ul>
+            <ul id="compositionDeclarationWarnings" class="declaration-preview-warnings"></ul>
+          </div>
+        </div>
+
+        <div class="workspace-modal-column workspace-modal-column-secondary">
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Pick components from library</p>
+            <label>Search components
+              <input id="builderPaletteSearch" type="text" placeholder="Search reusable components">
+            </label>
+            <div id="builderComponentPalette" class="component-palette"></div>
+          </div>
+
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Add a new component</p>
+            <label>Role (optional)
+              <input id="newComponentRole" list="componentRoleSuggestions" type="text" placeholder="main, side, sauce ... or leave empty">
+              <datalist id="componentRoleSuggestions">
+                <option value="main"></option>
+                <option value="side"></option>
+                <option value="sauce"></option>
+                <option value="garnish"></option>
+                <option value="beverage"></option>
+                <option value="other"></option>
+              </datalist>
+            </label>
+            <label>Component name
+              <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Type a new component name">
+              <datalist id="componentNameSuggestions"></datalist>
+            </label>
+            <button id="btnAddComponent" type="button">Create and add component</button>
+          </div>
+
+          <div id="builderOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="componentDetailModal" class="modal hidden">
+    <div class="modal-content modal-content-component-detail">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Component detail</p>
+          <h3 id="componentDetailModalTitle">Component detail</h3>
+        </div>
+        <button id="componentDetailModalClose" type="button">Done</button>
+      </div>
+      <p id="componentDetailComponentTitle" class="workspace-modal-titleline">Component: not selected</p>
+      <p id="recipePrimaryStatus" class="recipe-primary-status"></p>
+
+      <div class="workspace-modal-body workspace-modal-body-recipes">
+        <div class="workspace-modal-column workspace-modal-column-primary">
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Composition text preview</p>
+            <p id="componentDetailTextPreviewHint" class="component-detail-preview-hint">Read-only text rendered from persisted composition structure.</p>
+            <pre id="componentDetailTextPreview">No composition selected</pre>
+          </div>
+
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Recipes for component</p>
+            <ul id="recipeList" class="recipe-list"></ul>
+          </div>
+
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Create recipe</p>
+            <label>Recipe name
+              <input id="recipeCreateName" type="text" placeholder="Base recipe">
+            </label>
+            <label>Yield portions
+              <input id="recipeCreateYieldPortions" type="number" min="1" step="1" placeholder="20">
+            </label>
+            <label>Visibility
+              <input id="recipeCreateVisibility" type="text" placeholder="private, site, tenant" value="private">
+            </label>
+            <label>Notes (optional)
+              <input id="recipeCreateNotes" type="text" placeholder="Optional note">
+            </label>
+            <button id="btnRecipeCreate" type="button">Create recipe</button>
+          </div>
+        </div>
+
+        <div class="workspace-modal-column workspace-modal-column-secondary">
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Selected recipe</p>
+            <p id="recipeSelectedSummary">No recipe selected</p>
+            <div class="workspace-inline-actions">
+              <button id="btnRecipeSetPrimary" type="button" disabled>Set as primary</button>
+              <button id="btnRecipeDelete" type="button" disabled>Delete recipe</button>
+            </div>
+          </div>
+
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Edit recipe metadata</p>
+            <label>Recipe name
+              <input id="recipeEditName" type="text" placeholder="Base recipe" disabled>
+            </label>
+            <label>Yield portions
+              <input id="recipeEditYieldPortions" type="number" min="1" step="1" placeholder="20" disabled>
+            </label>
+            <label>Visibility
+              <input id="recipeEditVisibility" type="text" placeholder="private, site, tenant" disabled>
+            </label>
+            <label>Notes (optional)
+              <input id="recipeEditNotes" type="text" placeholder="Optional note" disabled>
+            </label>
+            <button id="btnRecipeSaveMetadata" type="button" disabled>Save recipe metadata</button>
+          </div>
+
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Ingredients</p>
+            <ul id="recipeIngredientsList" class="recipe-ingredient-list"></ul>
+          </div>
+
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Declaration preview</p>
+            <p id="componentDeclarationStatus" class="declaration-preview-status">Read-only preview. No automation applied.</p>
+            <p id="componentDeclarationDisabled" class="declaration-preview-disabled hidden">Declaration preview is currently unavailable.</p>
+            <p id="componentDeclarationSignalsSummary" class="declaration-preview-summary">No declaration signals loaded.</p>
+            <ul id="componentDeclarationSignals" class="declaration-preview-signals"></ul>
+            <p class="declaration-preview-provenance-title">Potential diet conflicts</p>
+            <ul id="componentConflictList" class="declaration-preview-conflicts"></ul>
+            <p class="declaration-preview-provenance-title">Ingredient provenance</p>
+            <ul id="componentDeclarationProvenance" class="declaration-preview-provenance"></ul>
+            <ul id="componentDeclarationWarnings" class="declaration-preview-warnings"></ul>
+          </div>
+
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Scaling preview</p>
+            <label>Target portions
+              <input id="recipeScalingTargetPortions" type="number" min="1" step="1" placeholder="Enter target portions" disabled>
+            </label>
+            <button id="btnRecipeScalingPreview" type="button" disabled>Preview scaled recipe</button>
+            <p id="recipeScalingStatus" class="recipe-scaling-status"></p>
+            <p id="recipeScalingSummary" class="recipe-scaling-summary">Select a recipe to preview scaling.</p>
+            <ul id="recipeScalingRows" class="recipe-scaling-list"></ul>
+          </div>
+
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Add ingredient</p>
+            <label>Ingredient name
+              <input id="recipeIngredientName" type="text" placeholder="Potato">
+            </label>
+            <label>Amount value
+              <input id="recipeIngredientAmountValue" type="number" step="0.01" min="0.0001" placeholder="900">
+            </label>
+            <label>Amount unit
+              <input id="recipeIngredientAmountUnit" list="recipeUnitSuggestions" type="text" placeholder="g">
+              <datalist id="recipeUnitSuggestions">
+                <option value="g"></option>
+                <option value="kg"></option>
+                <option value="ml"></option>
+                <option value="dl"></option>
+                <option value="l"></option>
+                <option value="st"></option>
+                <option value="tsk"></option>
+                <option value="msk"></option>
+              </datalist>
+            </label>
+            <label>Note (optional)
+              <input id="recipeIngredientNote" type="text" placeholder="Optional note">
+            </label>
+            <button id="btnRecipeIngredientAdd" type="button" disabled>Add ingredient</button>
+          </div>
+
+          <div id="recipeOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/builder.js"></script>
+</body>
+</html>

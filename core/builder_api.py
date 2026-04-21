@@ -174,12 +174,29 @@ def _serialize_recipe_trait_signal_preview(preview) -> dict[str, Any]:
     }
 
 
+def _serialize_diet_conflict_preview(preview) -> dict[str, Any]:
+    return {
+        "conflicts_present": list(preview.conflicts_present),
+        "conflict_sources": [
+            {
+                "conflict_key": source.conflict_key,
+                "triggering_trait_signals": list(source.triggering_trait_signals),
+                "source_type": source.source_type,
+                "source_id": source.source_id,
+                "source_label": source.source_label,
+            }
+            for source in preview.conflict_sources
+        ],
+    }
+
+
 def _serialize_component_declaration_readiness(readiness) -> dict[str, Any]:
     return {
         "component_id": readiness.component_id,
         "component_name": readiness.component_name,
         "primary_recipe_id": readiness.primary_recipe_id,
         "trait_signals_present": list(readiness.trait_signals_present),
+        "conflict_preview": _serialize_diet_conflict_preview(readiness.conflict_preview),
         "ingredient_sources": [
             {
                 "recipe_id": source.recipe_id,
@@ -198,6 +215,7 @@ def _serialize_composition_declaration_readiness(readiness) -> dict[str, Any]:
         "composition_id": readiness.composition_id,
         "composition_name": readiness.composition_name,
         "trait_signals_present": list(readiness.trait_signals_present),
+        "conflict_preview": _serialize_diet_conflict_preview(readiness.conflict_preview),
         "components": [
             _serialize_component_declaration_readiness(component)
             for component in readiness.components
