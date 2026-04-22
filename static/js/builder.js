@@ -3,6 +3,10 @@ function showJson(targetId, value) {
   if (!el) {
     return;
   }
+  if (isBuilderWorkspaceV1()) {
+    el.textContent = formatWorkspaceMessage(targetId, value);
+    return;
+  }
   el.textContent = JSON.stringify(value, null, 2);
 }
 
@@ -11,10 +15,60 @@ function showLoading(targetId) {
   if (!el) {
     return;
   }
+  if (isBuilderWorkspaceV1()) {
+    el.textContent = loadingMessageForTarget(targetId);
+    return;
+  }
   el.textContent = "Loading...";
 }
 
+function isBuilderWorkspaceV1() {
+  const body = document.body;
+  return Boolean(body && body.classList.contains("builder-workspace-v1"));
+}
+
+function loadingMessageForTarget(targetId) {
+  const id = String(targetId || "");
+  if (id === "createDishOut" || id === "createComponentOut") {
+    return "Saving...";
+  }
+  if (id === "builderOut" || id === "recipeOut") {
+    return "Saving changes...";
+  }
+  return "Loading...";
+}
+
+function formatWorkspaceMessage(targetId, value) {
+  const id = String(targetId || "");
+  const payload = (value && value.data) || {};
+  const ok = Boolean(payload && payload.ok);
+
+  if (id === "createDishOut") {
+    return ok ? "Dish created." : "Could not create dish.";
+  }
+  if (id === "createComponentOut") {
+    return ok ? "Component created." : "Could not create component.";
+  }
+  if (id === "builderOut") {
+    return ok ? "Saved." : "Could not save changes.";
+  }
+  if (id === "recipeOut") {
+    return ok ? "Saved." : "Could not save changes.";
+  }
+  if (id === "libraryOut") {
+    return ok ? "Updated." : "Could not refresh library.";
+  }
+  return ok ? "Saved." : "Could not save changes.";
+}
+
 async function callApi(url, options) {
+  const method = String(options.method || "GET").toUpperCase();
+  let requestUrl = String(url || "");
+  if (method === "GET") {
+    const cacheBust = "_ts=" + String(Date.now());
+    requestUrl += requestUrl.includes("?") ? "&" + cacheBust : "?" + cacheBust;
+  }
+
   const headers = Object.assign({}, options.headers || {});
   let body = undefined;
 
@@ -30,10 +84,11 @@ async function callApi(url, options) {
     }
   }
 
-  const response = await fetch(url, {
-    method: options.method || "GET",
+  const response = await fetch(requestUrl, {
+    method,
     headers,
     body,
+    cache: method === "GET" ? "no-store" : "default",
   });
   const data = await response
     .json()
@@ -266,7 +321,7 @@ function setFileImportStatus(message, isError) {
     return;
   }
   status.textContent = String(message || "");
-  status.className = isError ? "import-warning-block" : "";
+  status.className = isError ? "workspace-import-status import-warning-block" : "workspace-import-status";
 }
 
 function renderFileImportPreview(result) {
@@ -321,6 +376,8 @@ async function loadAllCompositions() {
 function renderLibrary(result) {
   const componentsGrid = document.getElementById("libraryComponentsGrid");
   const compositionsGrid = document.getElementById("libraryCompositionsGrid");
+  const componentsMeta = document.getElementById("workspaceComponentsMeta");
+  const dishesMeta = document.getElementById("workspaceDishesMeta");
   if (!componentsGrid || !compositionsGrid) {
     return;
   }
@@ -332,11 +389,67 @@ function renderLibrary(result) {
   const components = Array.isArray(data.components) ? data.components : [];
   const compositions = Array.isArray(data.compositions) ? data.compositions : [];
 
+  if (componentsMeta) {
+    componentsMeta.textContent =
+      components.length === 0
+        ? "No components yet. Create one or import to seed your library."
+        : String(components.length) + (components.length === 1 ? " component" : " components") + " in library";
+  }
+
+  if (dishesMeta) {
+    dishesMeta.textContent =
+      compositions.length === 0
+        ? "No dishes yet. Create one or import to start building."
+        : String(compositions.length) + (compositions.length === 1 ? " dish" : " dishes") + " in library";
+  }
+
   if (components.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "library-empty";
-    empty.textContent = "No components yet";
+    empty.className = "library-empty workspace-library-empty";
+
+    const title = document.createElement("p");
+    title.className = "workspace-library-empty-title";
+    title.textContent = "No components yet";
+
+    const copy = document.createElement("p");
+    copy.className = "workspace-library-empty-copy";
+    copy.textContent = "Create a component now, or import lines/files to bootstrap your component library.";
+
+    const actions = document.createElement("div");
+    actions.className = "workspace-inline-actions";
+
+    const createBtn = document.createElement("button");
+    createBtn.type = "button";
+    createBtn.textContent = "Create component";
+    createBtn.addEventListener("click", () => {
+      const input = document.getElementById("freeComponentName");
+      if (input) {
+        input.focus();
+      }
+    });
+
+    const importBtn = document.createElement("button");
+    importBtn.type = "button";
+    importBtn.textContent = "Go to import";
+    importBtn.addEventListener("click", () => {
+      const importInput = document.getElementById("importLibraryLines");
+      if (importInput) {
+        importInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        importInput.focus();
+      }
+    });
+
+    actions.appendChild(createBtn);
+    actions.appendChild(importBtn);
+    empty.appendChild(title);
+    empty.appendChild(copy);
+    empty.appendChild(actions);
     componentsGrid.appendChild(empty);
+  } else if (components.length <= 2) {
+    const hint = document.createElement("article");
+    hint.className = "workspace-library-hint";
+    hint.textContent = "Tip: Add a few core components or import a file to speed up dish building.";
+    componentsGrid.appendChild(hint);
   } else {
     for (const item of components) {
       const componentId = String(item.component_id || "");
@@ -385,9 +498,51 @@ function renderLibrary(result) {
 
   if (compositions.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "library-empty";
-    empty.textContent = "No dishes yet";
+    empty.className = "library-empty workspace-library-empty";
+
+    const title = document.createElement("p");
+    title.className = "workspace-library-empty-title";
+    title.textContent = "No dishes yet";
+
+    const copy = document.createElement("p");
+    copy.className = "workspace-library-empty-copy";
+    copy.textContent = "Create a dish manually, or import dish lines and continue editing from the library.";
+
+    const actions = document.createElement("div");
+    actions.className = "workspace-inline-actions";
+
+    const createBtn = document.createElement("button");
+    createBtn.type = "button";
+    createBtn.textContent = "Create dish";
+    createBtn.addEventListener("click", () => {
+      const input = document.getElementById("freeDishName");
+      if (input) {
+        input.focus();
+      }
+    });
+
+    const importBtn = document.createElement("button");
+    importBtn.type = "button";
+    importBtn.textContent = "Go to import";
+    importBtn.addEventListener("click", () => {
+      const importInput = document.getElementById("importLibraryLines");
+      if (importInput) {
+        importInput.scrollIntoView({ behavior: "smooth", block: "center" });
+        importInput.focus();
+      }
+    });
+
+    actions.appendChild(createBtn);
+    actions.appendChild(importBtn);
+    empty.appendChild(title);
+    empty.appendChild(copy);
+    empty.appendChild(actions);
     compositionsGrid.appendChild(empty);
+  } else if (compositions.length <= 2) {
+    const hint = document.createElement("article");
+    hint.className = "workspace-library-hint";
+    hint.textContent = "Tip: Open a dish card to keep refining components and declaration readiness.";
+    compositionsGrid.appendChild(hint);
   } else {
     for (const item of compositions) {
       const compositionId = String(item.composition_id || "");
@@ -455,6 +610,21 @@ let currentBuilderComposition = null;
 let reusableComponentsCache = [];
 let selectedComponentId = null;
 let draggedComponentEntryKey = null;
+let pendingAddedPulseComponentId = null;
+let pendingSelectedPulseComponentId = null;
+let pendingReorderedPulseComponentId = null;
+
+function stageAddedComponentPulse(componentId) {
+  pendingAddedPulseComponentId = String(componentId || "").trim() || null;
+}
+
+function stageSelectedComponentPulse(componentId) {
+  pendingSelectedPulseComponentId = String(componentId || "").trim() || null;
+}
+
+function stageReorderedComponentPulse(componentId) {
+  pendingReorderedPulseComponentId = String(componentId || "").trim() || null;
+}
 
 function componentEntryKey(component) {
   return String(component.component_id || "") + "::" + String(component.sort_order || 0);
@@ -959,11 +1129,11 @@ function findCachedComponentById(componentId) {
 
 function selectComponentBlock(componentId) {
   selectedComponentId = String(componentId || "").trim() || null;
+  stageSelectedComponentPulse(selectedComponentId);
   if (currentBuilderComposition) {
     renderBuilderPanel(currentBuilderComposition);
   }
 }
-
 async function setComponentRoleWithPrompt(component) {
   const nextRole = window.prompt(
     "Role (optional, leave empty to clear)",
@@ -1472,6 +1642,10 @@ function renderComponentPalette() {
       pill.disabled = true;
     } else {
       pill.addEventListener("click", async () => {
+        pill.classList.add("component-palette-pill-pick");
+        setTimeout(() => {
+          pill.classList.remove("component-palette-pill-pick");
+        }, 260);
         await attachExistingComponentToCurrentComposition(componentId);
       });
     }
@@ -1538,7 +1712,8 @@ function renderBuilderPanel(composition) {
   if (components.length === 0) {
     selectedComponentId = null;
     const li = document.createElement("li");
-    li.textContent = "No parts added yet";
+    li.className = "component-build-surface-empty";
+    li.textContent = "No blocks yet. Pick from the palette or create a new component to start building this dish.";
     list.appendChild(li);
     renderComponentPalette();
     return;
@@ -1563,60 +1738,72 @@ function renderBuilderPanel(composition) {
     }
     const block = document.createElement("div");
     block.className = "component-block";
-      block.dataset.componentId = componentIdValue;
-      block.draggable = true;
-      const entryKey = componentEntryKey(component);
-      block.dataset.entryKey = entryKey;
+    block.dataset.componentId = componentIdValue;
+    block.draggable = true;
+    const entryKey = componentEntryKey(component);
+    block.dataset.entryKey = entryKey;
+
     if (selectedComponentId === componentIdValue) {
       block.classList.add("component-block-selected");
-        block.addEventListener("dragstart", (event) => {
-          draggedComponentEntryKey = entryKey;
-          block.classList.add("component-block-dragging");
-          if (event && event.dataTransfer) {
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", entryKey);
-          }
-        });
-        block.addEventListener("dragend", () => {
-          draggedComponentEntryKey = null;
-          block.classList.remove("component-block-dragging");
-          const allBlocks = list.querySelectorAll(".component-block-drop-target");
-          for (const element of allBlocks) {
-            element.classList.remove("component-block-drop-target");
-          }
-        });
-        block.addEventListener("dragover", (event) => {
-          if (!draggedComponentEntryKey || draggedComponentEntryKey === entryKey) {
-            return;
-          }
-          event.preventDefault();
-          if (event && event.dataTransfer) {
-            event.dataTransfer.dropEffect = "move";
-          }
-          block.classList.add("component-block-drop-target");
-        });
-        block.addEventListener("dragleave", () => {
-          block.classList.remove("component-block-drop-target");
-        });
-        block.addEventListener("drop", async (event) => {
-          event.preventDefault();
-          block.classList.remove("component-block-drop-target");
-          const fromKey = draggedComponentEntryKey || "";
-          draggedComponentEntryKey = null;
-          if (!fromKey || fromKey === entryKey) {
-            return;
-          }
-          showLoading("builderOut");
-          try {
-            await reorderCompositionBlocksByEntryKey(fromKey, entryKey);
-          } catch (error) {
-            showJson("builderOut", {
-              status: 0,
-              data: { ok: false, error: String(error.message || error) },
-            });
-          }
-        });
     }
+    if (pendingAddedPulseComponentId === componentIdValue) {
+      block.classList.add("component-block-just-added");
+    }
+    if (pendingSelectedPulseComponentId === componentIdValue) {
+      block.classList.add("component-block-just-selected");
+    }
+    if (pendingReorderedPulseComponentId === componentIdValue) {
+      block.classList.add("component-block-just-reordered");
+    }
+
+    block.addEventListener("dragstart", (event) => {
+      draggedComponentEntryKey = entryKey;
+      block.classList.add("component-block-dragging");
+      if (event && event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", entryKey);
+      }
+    });
+    block.addEventListener("dragend", () => {
+      draggedComponentEntryKey = null;
+      block.classList.remove("component-block-dragging");
+      const allBlocks = list.querySelectorAll(".component-block-drop-target");
+      for (const element of allBlocks) {
+        element.classList.remove("component-block-drop-target");
+      }
+    });
+    block.addEventListener("dragover", (event) => {
+      if (!draggedComponentEntryKey || draggedComponentEntryKey === entryKey) {
+        return;
+      }
+      event.preventDefault();
+      if (event && event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+      block.classList.add("component-block-drop-target");
+    });
+    block.addEventListener("dragleave", () => {
+      block.classList.remove("component-block-drop-target");
+    });
+    block.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      block.classList.remove("component-block-drop-target");
+      const fromKey = draggedComponentEntryKey || "";
+      draggedComponentEntryKey = null;
+      if (!fromKey || fromKey === entryKey) {
+        return;
+      }
+      stageReorderedComponentPulse(componentIdValue);
+      showLoading("builderOut");
+      try {
+        await reorderCompositionBlocksByEntryKey(fromKey, entryKey);
+      } catch (error) {
+        showJson("builderOut", {
+          status: 0,
+          data: { ok: false, error: String(error.message || error) },
+        });
+      }
+    });
 
     const surface = document.createElement("button");
     surface.type = "button";
@@ -1719,6 +1906,9 @@ function renderBuilderPanel(composition) {
 
   updateComponentConflictBadgesDom();
   renderComponentPalette();
+  pendingAddedPulseComponentId = null;
+  pendingSelectedPulseComponentId = null;
+  pendingReorderedPulseComponentId = null;
 }
 
 async function updateComponentRoleInCurrentComposition(componentId, roleValue) {
@@ -1851,6 +2041,10 @@ async function attachExistingComponentToCurrentComposition(componentId) {
     );
     showJson("builderOut", result);
     if (result && result.data && result.data.ok && result.data.composition) {
+      const attachedId = String(componentId || "").trim();
+      selectedComponentId = attachedId || selectedComponentId;
+      stageAddedComponentPulse(attachedId);
+      stageSelectedComponentPulse(attachedId);
       renderBuilderPanel(result.data.composition);
     }
   } catch (error) {
@@ -2179,6 +2373,12 @@ function bindBuilderHandlers() {
         return;
       }
 
+      const beforeIds = new Set(
+        (Array.isArray(currentBuilderComposition.components) ? currentBuilderComposition.components : []).map((item) =>
+          String(item.component_id || ""),
+        ),
+      );
+
       showLoading("builderOut");
       try {
         const result = await callApi(
@@ -2191,6 +2391,16 @@ function bindBuilderHandlers() {
         );
         showJson("builderOut", result);
         if (result && result.data && result.data.ok && result.data.composition) {
+          const nextComponents = Array.isArray(result.data.composition.components)
+            ? result.data.composition.components
+            : [];
+          const addedComponent = nextComponents.find((item) => !beforeIds.has(String(item.component_id || "")));
+          if (addedComponent) {
+            const addedId = String(addedComponent.component_id || "").trim();
+            selectedComponentId = addedId || selectedComponentId;
+            stageAddedComponentPulse(addedId);
+            stageSelectedComponentPulse(addedId);
+          }
           renderBuilderPanel(result.data.composition);
           if (newComponentNameEl) {
             newComponentNameEl.value = "";

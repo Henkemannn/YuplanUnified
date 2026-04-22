@@ -111,3 +111,5 @@ def test_builder_script_contains_block_model_and_minimized_controls(client_admin
     assert "/scaling-preview?target_portions=" in script
     assert "Target portions must be > 0" in script
     assert "btnRecipeScalingPreview" in script
+    assert 'cache: method === "GET" ? "no-store" : "default"' in script
+    assert 'const cacheBust = "_ts=" + String(Date.now());' in script

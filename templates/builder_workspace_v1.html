@@ -10,9 +10,10 @@
   <header class="builder-workspace-hero">
     <div class="builder-workspace-hero-copy">
       <p class="builder-workspace-eyebrow">Builder Workspace v1</p>
-      <h1>Build reusable components and dishes</h1>
-      <p class="builder-workspace-subtitle">Start with your library, open any dish to build it from components, and jump into component detail when recipes need attention.</p>
+      <h1>Builder workbench</h1>
+      <p class="builder-workspace-subtitle">Work directly in your library: create, import, open, refine, and publish reusable dishes and components.</p>
     </div>
+
     <div class="builder-workspace-actions">
       <section class="workspace-quick-card">
         <h2>New dish</h2>
@@ -31,8 +32,61 @@
         <button id="btnCreateComponent" type="button">Create component</button>
         <div id="createComponentOut" class="workspace-feedback" aria-live="polite"></div>
       </section>
+
+      <section class="workspace-quick-card workspace-quick-card-import">
+        <h2>Import into library</h2>
+        <p class="workspace-quick-card-copy">Paste lines or preview a file before import. Uses the same builder import pipeline as internal mode.</p>
+
+        <label>Paste lines
+          <textarea id="importLibraryLines" placeholder="One dish per line"></textarea>
+        </label>
+        <button id="btnImportLibrary" type="button">Import pasted lines</button>
+
+        <div class="workspace-file-import">
+          <label>Import file (.txt, .csv, .xlsx)
+            <input id="importLibraryFile" type="file" accept=".txt,.csv,.xlsx">
+          </label>
+          <label>CSV column (optional)
+            <input id="importCsvColumn" type="text" placeholder="Dish, Name, or column letter">
+          </label>
+          <div class="workspace-inline-actions workspace-import-preview-actions">
+            <button id="btnImportFilePreview" type="button">Preview file</button>
+            <button id="btnImportFileConfirm" type="button" disabled>Confirm import</button>
+          </div>
+          <p id="importFileStatus" class="workspace-import-status"></p>
+          <div class="workspace-import-preview-meta">
+            <p id="importFileSelectionSummary">Selected 0 of 0 importable lines (showing 0)</p>
+            <p id="importFileIgnoredSummary">Ignored noise: 0</p>
+          </div>
+          <div class="workspace-inline-actions workspace-import-preview-actions">
+            <button id="btnImportPreviewSelectAll" type="button">Select all</button>
+            <button id="btnImportPreviewSelectNone" type="button">Select none</button>
+            <button id="btnImportPreviewShowMore" type="button">Show more importable lines</button>
+            <button id="btnImportPreviewToggleIgnored" type="button">Show ignored lines</button>
+          </div>
+          <ul id="importFilePreviewList" class="workspace-import-preview-list"></ul>
+          <ul id="importFileIgnoredList" class="workspace-import-ignored-list hidden"></ul>
+        </div>
+
+        <div id="importOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
+      </section>
     </div>
   </header>
+
+  <section class="workspace-workbench-guidance" aria-label="Workspace guidance">
+    <article class="workspace-guide-card">
+      <h2>Start fast</h2>
+      <p>Create a dish, then open it to compose reusable components.</p>
+    </article>
+    <article class="workspace-guide-card">
+      <h2>Build from what exists</h2>
+      <p>Open any library card to continue work instead of starting from scratch.</p>
+    </article>
+    <article class="workspace-guide-card">
+      <h2>Seed with import</h2>
+      <p>Use import to bootstrap dishes/components, then refine details in the editor.</p>
+    </article>
+  </section>
 
   <main class="builder-workspace-main">
     <section class="workspace-panel workspace-panel-dishes">
@@ -43,6 +97,7 @@
         </div>
         <p class="workspace-panel-copy">Open any dish to build, reorder, and inspect its components.</p>
       </div>
+      <div class="workspace-panel-meta" id="workspaceDishesMeta">Loading dishes...</div>
       <div id="libraryCompositionsGrid" class="composition-library-grid"></div>
     </section>
 
@@ -54,9 +109,21 @@
         </div>
         <p class="workspace-panel-copy">Open a component to manage recipes, ingredients, scaling, and declaration visibility.</p>
       </div>
+      <div class="workspace-panel-meta" id="workspaceComponentsMeta">Loading components...</div>
       <div id="libraryComponentsGrid" class="component-library-grid"></div>
     </section>
   </main>
+
+  <section class="workspace-panel workspace-import-summary-panel">
+    <div class="workspace-panel-header">
+      <div>
+        <p class="workspace-panel-kicker">Import activity</p>
+        <h2>Latest import summary</h2>
+      </div>
+      <p class="workspace-panel-copy">Preview/confirm outcomes appear here so imports feel part of the workbench.</p>
+    </div>
+    <div id="importSummaryView"></div>
+  </section>
 
   <div id="libraryOut" class="workspace-feedback workspace-feedback-page" aria-live="polite"></div>
 

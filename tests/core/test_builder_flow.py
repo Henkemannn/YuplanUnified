@@ -473,6 +473,66 @@ def test_rename_component_in_composition_updates_component_name() -> None:
     assert updated.components[0].component_id == "kottbullar"
 
 
+def test_rename_component_in_composition_removes_old_coarse_component_from_library() -> None:
+    """After renaming a coarse component, the old entity must no longer appear in list_library_components."""
+    flow = _build_flow()
+    flow.create_composition(composition_id="dish1", composition_name="Pannbiff")
+    flow.add_component_to_composition(
+        composition_id="dish1",
+        component_name="Stekt lök, potatis",
+        role="component",
+    )
+
+    old_ids = {item.component_id for item in flow.list_library_components()}
+    assert "stekt_lok_potatis" in old_ids
+
+    flow.rename_component_in_composition(
+        composition_id="dish1",
+        component_id="stekt_lok_potatis",
+        new_component_name="Stekt lök",
+    )
+    flow.add_component_to_composition(
+        composition_id="dish1",
+        component_name="Kokt potatis",
+        role="component",
+    )
+
+    library_ids = {item.component_id for item in flow.list_library_components()}
+    assert "stekt_lok_potatis" not in library_ids, "Old coarse component must be purged from library after rename"
+    assert "stekt_lok" in library_ids
+    assert "kokt_potatis" in library_ids
+
+
+def test_rename_component_in_composition_keeps_old_component_when_still_referenced_elsewhere() -> None:
+    """Old component entity must NOT be deleted if it is still linked to another composition."""
+    flow = _build_flow()
+    flow.create_composition(composition_id="dish1", composition_name="Dish 1")
+    flow.create_composition(composition_id="dish2", composition_name="Dish 2")
+    flow.add_component_to_composition(
+        composition_id="dish1",
+        component_name="Fish",
+        role="component",
+    )
+    # Attach the same component entity to dish2
+    flow.attach_existing_component_to_composition(
+        composition_id="dish2",
+        component_id="fish",
+        role="component",
+    )
+
+    # Rename fish out of dish1 only
+    flow.rename_component_in_composition(
+        composition_id="dish1",
+        component_id="fish",
+        new_component_name="Salmon",
+    )
+
+    library_ids = {item.component_id for item in flow.list_library_components()}
+    # "fish" must still be in the library because dish2 still references it
+    assert "fish" in library_ids
+    assert "salmon" in library_ids
+
+
 def test_builder_flow_component_recipe_structured_ingredient_storage() -> None:
     flow = _build_flow()
     component = flow.create_standalone_component("Meatballs")

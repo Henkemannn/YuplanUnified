@@ -561,14 +561,26 @@ class BuilderFlow:
         if existing is None:
             raise ValueError("component entry not found in composition")
 
+        old_component_id = str(component_id)
         self._composition_service.remove_component_from_composition(
             composition_id=composition_id,
-            component_id=str(component_id),
+            component_id=old_component_id,
             sort_order=existing.sort_order,
         )
         updated_composition = self._composition_service.get_composition(composition_id)
         if updated_composition is None:
             raise ValueError(f"composition not found: {composition_id}")
+
+        all_compositions = self._composition_service.list_compositions()
+        old_still_referenced = any(
+            any(item.component_id == old_component_id for item in comp.components)
+            for comp in all_compositions
+        )
+        if not old_still_referenced:
+            try:
+                self._component_service.delete_component(old_component_id)
+            except ValueError:
+                pass
 
         resolved_component = self.create_standalone_component(new_name_value)
         resolved_role = role if role_provided else existing.role

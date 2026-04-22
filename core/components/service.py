@@ -37,6 +37,12 @@ class ComponentService:
             return self._repository.list_active()
         return self._repository.list_all()
 
+    def delete_component(self, component_id: str) -> None:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+        self._repository.delete(component_id_value)
+
     def set_primary_recipe_id(
         self,
         component_id: str,

@@ -1099,6 +1099,45 @@ def test_rename_component_in_composition_endpoint_preserves_swedish_component_na
     assert components[0]["component_id"] == "kottbullar"
 
 
+def test_rename_then_add_component_persists_in_list_reload_for_coarse_component_flow() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_coarse", "composition_name": "Plate coarse"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_coarse/components",
+        json={"component_name": "stekt lök,potatis", "role": "side"},
+        headers=HEADERS,
+    )
+
+    renamed = client.patch(
+        "/api/builder/compositions/plate_coarse/components/stekt_lok_potatis",
+        json={"component_name": "stekt lök"},
+        headers=HEADERS,
+    )
+    assert renamed.status_code == 200
+
+    added = client.post(
+        "/api/builder/compositions/plate_coarse/components",
+        json={"component_name": "kokt potatis", "role": "side"},
+        headers=HEADERS,
+    )
+    assert added.status_code == 200
+
+    listed = client.get("/api/builder/compositions", headers=HEADERS)
+    assert listed.status_code == 200
+
+    compositions = (listed.get_json() or {}).get("compositions") or []
+    target = next((item for item in compositions if item.get("composition_id") == "plate_coarse"), None)
+    assert target is not None
+    names = [str(item.get("component_name") or "") for item in (target.get("components") or [])]
+    assert "stekt lök,potatis" not in names
+    assert "stekt lök" in names
+    assert "kokt potatis" in names
+
+
 def test_rename_component_in_composition_endpoint_rejects_empty_name() -> None:
     client = _client()
     client.post(

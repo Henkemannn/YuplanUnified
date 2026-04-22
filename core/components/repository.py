@@ -25,3 +25,8 @@ class InMemoryComponentRepository:
 
     def list_active(self) -> list[Component]:
         return [component for component in self._components.values() if component.is_active]
+
+    def delete(self, component_id: str) -> None:
+        if component_id not in self._components:
+            raise ValueError(f"component not found: {component_id}")
+        del self._components[component_id]
