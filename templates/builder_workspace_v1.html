@@ -7,36 +7,93 @@
   <link rel="stylesheet" href="/static/css/builder.css">
 </head>
 <body class="builder-workspace-v1">
-  <header class="builder-workspace-hero">
-    <div class="builder-workspace-hero-copy">
-      <p class="builder-workspace-eyebrow">Builder Workspace v1</p>
-      <h1>Builder workbench</h1>
-      <p class="builder-workspace-subtitle">Work directly in your library: create, import, open, refine, and publish reusable dishes and components.</p>
-    </div>
+  <header class="builder-platform-header">
+    <p class="builder-workspace-eyebrow">Builder Workspace v1</p>
+    <h1>Builder library</h1>
+    <p class="builder-start-hint">Open a dish, add components, save.</p>
+  </header>
 
-    <div class="builder-workspace-actions">
+  <div class="builder-platform-layout">
+    <main class="builder-platform-primary">
+      <section class="builder-library-primary" aria-label="Library">
+        <div class="builder-primary-actions" aria-label="Builder quick actions">
+          <button id="openNewDishModalBtn" class="builder-primary-cta" type="button">New dish</button>
+          <button id="openComponentsModalBtn" class="builder-secondary-action" type="button">Components</button>
+          <button id="openImportModalBtn" class="builder-secondary-action" type="button">Import</button>
+          <a class="workspace-menu-link builder-secondary-link" href="/menu-builder-v1">Menus</a>
+        </div>
+
+        <div class="builder-library-columns">
+          <section class="builder-library-block builder-library-block-dishes">
+            <h2>Dishes</h2>
+            <div class="workspace-panel-meta" id="workspaceDishesMeta">Loading dishes...</div>
+            <div id="libraryCompositionsGrid" class="composition-library-grid"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <aside class="builder-platform-secondary" aria-label="Builder actions and import">
+      <div class="builder-secondary-note">Secondary tools stay available when needed.</div>
+    </aside>
+  </div>
+
+  <div id="libraryOut" class="workspace-feedback workspace-feedback-page" aria-live="polite"></div>
+
+  <div id="quickCreateModal" class="modal hidden">
+    <div class="modal-content modal-content-compact">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Dish creation</p>
+          <h3>Create dish</h3>
+        </div>
+        <button id="quickCreateModalClose" type="button">Done</button>
+      </div>
+
       <section class="workspace-quick-card">
-        <h2>New dish</h2>
         <label>Dish name
           <input id="freeDishName" type="text" placeholder="Kottbullar med potatis">
         </label>
         <button id="btnCreateDish" type="button">Create dish</button>
         <div id="createDishOut" class="workspace-feedback" aria-live="polite"></div>
       </section>
+    </div>
+  </div>
 
-      <section class="workspace-quick-card">
-        <h2>New component</h2>
+  <div id="componentsLibraryModal" class="modal hidden">
+    <div class="modal-content modal-content-components">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Component library</p>
+          <h3>Components</h3>
+        </div>
+        <button id="componentsLibraryModalClose" type="button">Done</button>
+      </div>
+
+      <div class="workspace-panel-meta" id="workspaceComponentsMeta">Loading components...</div>
+      <div id="libraryComponentsGrid" class="component-library-grid"></div>
+
+      <section class="workspace-quick-card workspace-inline-create-component">
         <label>Component name
           <input id="freeComponentName" type="text" placeholder="Mashed Potatoes">
         </label>
         <button id="btnCreateComponent" type="button">Create component</button>
         <div id="createComponentOut" class="workspace-feedback" aria-live="polite"></div>
       </section>
+    </div>
+  </div>
+
+  <div id="importLibraryModal" class="modal hidden">
+    <div class="modal-content modal-content-import">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Library import</p>
+          <h3>Import</h3>
+        </div>
+        <button id="importLibraryModalClose" type="button">Done</button>
+      </div>
 
       <section class="workspace-quick-card workspace-quick-card-import">
-        <h2>Import into library</h2>
-        <p class="workspace-quick-card-copy">Paste lines or preview a file before import. Uses the same builder import pipeline as internal mode.</p>
-
         <label>Paste lines
           <textarea id="importLibraryLines" placeholder="One dish per line"></textarea>
         </label>
@@ -46,7 +103,7 @@
           <label>Import file (.txt, .csv, .xlsx)
             <input id="importLibraryFile" type="file" accept=".txt,.csv,.xlsx">
           </label>
-          <label>CSV column (optional)
+          <label>CSV column
             <input id="importCsvColumn" type="text" placeholder="Dish, Name, or column letter">
           </label>
           <div class="workspace-inline-actions workspace-import-preview-actions">
@@ -70,62 +127,13 @@
 
         <div id="importOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
       </section>
+
+      <section class="workspace-quick-card workspace-import-summary-card">
+        <h4>Import summary</h4>
+        <div id="importSummaryView"></div>
+      </section>
     </div>
-  </header>
-
-  <section class="workspace-workbench-guidance" aria-label="Workspace guidance">
-    <article class="workspace-guide-card">
-      <h2>Start fast</h2>
-      <p>Create a dish, then open it to compose reusable components.</p>
-    </article>
-    <article class="workspace-guide-card">
-      <h2>Build from what exists</h2>
-      <p>Open any library card to continue work instead of starting from scratch.</p>
-    </article>
-    <article class="workspace-guide-card">
-      <h2>Seed with import</h2>
-      <p>Use import to bootstrap dishes/components, then refine details in the editor.</p>
-    </article>
-  </section>
-
-  <main class="builder-workspace-main">
-    <section class="workspace-panel workspace-panel-dishes">
-      <div class="workspace-panel-header">
-        <div>
-          <p class="workspace-panel-kicker">Composition library</p>
-          <h2>Dishes</h2>
-        </div>
-        <p class="workspace-panel-copy">Open any dish to build, reorder, and inspect its components.</p>
-      </div>
-      <div class="workspace-panel-meta" id="workspaceDishesMeta">Loading dishes...</div>
-      <div id="libraryCompositionsGrid" class="composition-library-grid"></div>
-    </section>
-
-    <section class="workspace-panel workspace-panel-components">
-      <div class="workspace-panel-header">
-        <div>
-          <p class="workspace-panel-kicker">Component library</p>
-          <h2>Components</h2>
-        </div>
-        <p class="workspace-panel-copy">Open a component to manage recipes, ingredients, scaling, and declaration visibility.</p>
-      </div>
-      <div class="workspace-panel-meta" id="workspaceComponentsMeta">Loading components...</div>
-      <div id="libraryComponentsGrid" class="component-library-grid"></div>
-    </section>
-  </main>
-
-  <section class="workspace-panel workspace-import-summary-panel">
-    <div class="workspace-panel-header">
-      <div>
-        <p class="workspace-panel-kicker">Import activity</p>
-        <h2>Latest import summary</h2>
-      </div>
-      <p class="workspace-panel-copy">Preview/confirm outcomes appear here so imports feel part of the workbench.</p>
-    </div>
-    <div id="importSummaryView"></div>
-  </section>
-
-  <div id="libraryOut" class="workspace-feedback workspace-feedback-page" aria-live="polite"></div>
+  </div>
 
   <div id="resolveModal" class="modal hidden">
     <div class="modal-content modal-content-dish">

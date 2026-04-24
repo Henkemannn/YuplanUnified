@@ -7,10 +7,18 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert "Builder Workspace v1" in html
+    assert "Builder library" in html
+    assert 'id="openNewDishModalBtn"' in html
+    assert 'id="openComponentsModalBtn"' in html
+    assert 'id="openImportModalBtn"' in html
     assert 'id="libraryComponentsGrid" class="component-library-grid"' in html
     assert 'id="libraryCompositionsGrid" class="composition-library-grid"' in html
     assert 'id="resolveModal"' in html
     assert 'id="componentDetailModal"' in html
+    assert 'id="quickCreateModal"' in html
+    assert 'id="componentsLibraryModal"' in html
+    assert 'id="importLibraryModal"' in html
+    assert 'href="/menu-builder-v1"' in html
     assert 'id="btnCreateDish"' in html
     assert 'id="btnCreateComponent"' in html
     assert 'id="btnImportLibrary"' in html

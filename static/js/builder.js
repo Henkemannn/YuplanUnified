@@ -422,6 +422,7 @@ function renderLibrary(result) {
     createBtn.type = "button";
     createBtn.textContent = "Create component";
     createBtn.addEventListener("click", () => {
+      openSimpleModal("componentsLibraryModal");
       const input = document.getElementById("freeComponentName");
       if (input) {
         input.focus();
@@ -430,11 +431,11 @@ function renderLibrary(result) {
 
     const importBtn = document.createElement("button");
     importBtn.type = "button";
-    importBtn.textContent = "Go to import";
+    importBtn.textContent = "Import";
     importBtn.addEventListener("click", () => {
+      openSimpleModal("importLibraryModal");
       const importInput = document.getElementById("importLibraryLines");
       if (importInput) {
-        importInput.scrollIntoView({ behavior: "smooth", block: "center" });
         importInput.focus();
       }
     });
@@ -445,11 +446,6 @@ function renderLibrary(result) {
     empty.appendChild(copy);
     empty.appendChild(actions);
     componentsGrid.appendChild(empty);
-  } else if (components.length <= 2) {
-    const hint = document.createElement("article");
-    hint.className = "workspace-library-hint";
-    hint.textContent = "Tip: Add a few core components or import a file to speed up dish building.";
-    componentsGrid.appendChild(hint);
   } else {
     for (const item of components) {
       const componentId = String(item.component_id || "");
@@ -515,6 +511,7 @@ function renderLibrary(result) {
     createBtn.type = "button";
     createBtn.textContent = "Create dish";
     createBtn.addEventListener("click", () => {
+      openSimpleModal("quickCreateModal");
       const input = document.getElementById("freeDishName");
       if (input) {
         input.focus();
@@ -523,11 +520,11 @@ function renderLibrary(result) {
 
     const importBtn = document.createElement("button");
     importBtn.type = "button";
-    importBtn.textContent = "Go to import";
+    importBtn.textContent = "Import";
     importBtn.addEventListener("click", () => {
+      openSimpleModal("importLibraryModal");
       const importInput = document.getElementById("importLibraryLines");
       if (importInput) {
-        importInput.scrollIntoView({ behavior: "smooth", block: "center" });
         importInput.focus();
       }
     });
@@ -538,11 +535,6 @@ function renderLibrary(result) {
     empty.appendChild(copy);
     empty.appendChild(actions);
     compositionsGrid.appendChild(empty);
-  } else if (compositions.length <= 2) {
-    const hint = document.createElement("article");
-    hint.className = "workspace-library-hint";
-    hint.textContent = "Tip: Open a dish card to keep refining components and declaration readiness.";
-    compositionsGrid.appendChild(hint);
   } else {
     for (const item of compositions) {
       const compositionId = String(item.composition_id || "");
@@ -1508,6 +1500,20 @@ function closeRecipeModal() {
   resetRecipePanel("Component: not selected");
 }
 
+function openSimpleModal(modalId) {
+  const modal = document.getElementById(String(modalId || ""));
+  if (modal) {
+    modal.classList.remove("hidden");
+  }
+}
+
+function closeSimpleModal(modalId) {
+  const modal = document.getElementById(String(modalId || ""));
+  if (modal) {
+    modal.classList.add("hidden");
+  }
+}
+
 async function loadRecipeDetail(recipeId) {
   if (!currentRecipeComponent || !currentRecipeComponent.component_id) {
     return;
@@ -2100,6 +2106,12 @@ async function renameComponentInCurrentComposition(componentId, currentName) {
 }
 
 function bindBuilderHandlers() {
+  const openNewDishModalBtn = document.getElementById("openNewDishModalBtn");
+  const openComponentsModalBtn = document.getElementById("openComponentsModalBtn");
+  const openImportModalBtn = document.getElementById("openImportModalBtn");
+  const quickCreateModalCloseBtn = document.getElementById("quickCreateModalClose");
+  const componentsLibraryModalCloseBtn = document.getElementById("componentsLibraryModalClose");
+  const importLibraryModalCloseBtn = document.getElementById("importLibraryModalClose");
   const createDishBtn = document.getElementById("btnCreateDish");
   const createComponentBtn = document.getElementById("btnCreateComponent");
   const importLibraryBtn = document.getElementById("btnImportLibrary");
@@ -2123,6 +2135,50 @@ function bindBuilderHandlers() {
   const recipeDeleteBtn = document.getElementById("btnRecipeDelete");
   const recipeScalingPreviewBtn = document.getElementById("btnRecipeScalingPreview");
 
+  if (openNewDishModalBtn) {
+    openNewDishModalBtn.addEventListener("click", () => {
+      openSimpleModal("quickCreateModal");
+      const freeDishNameEl = document.getElementById("freeDishName");
+      if (freeDishNameEl) {
+        freeDishNameEl.focus();
+      }
+    });
+  }
+
+  if (openComponentsModalBtn) {
+    openComponentsModalBtn.addEventListener("click", () => {
+      openSimpleModal("componentsLibraryModal");
+    });
+  }
+
+  if (openImportModalBtn) {
+    openImportModalBtn.addEventListener("click", () => {
+      openSimpleModal("importLibraryModal");
+      const importInput = document.getElementById("importLibraryLines");
+      if (importInput) {
+        importInput.focus();
+      }
+    });
+  }
+
+  if (quickCreateModalCloseBtn) {
+    quickCreateModalCloseBtn.addEventListener("click", () => {
+      closeSimpleModal("quickCreateModal");
+    });
+  }
+
+  if (componentsLibraryModalCloseBtn) {
+    componentsLibraryModalCloseBtn.addEventListener("click", () => {
+      closeSimpleModal("componentsLibraryModal");
+    });
+  }
+
+  if (importLibraryModalCloseBtn) {
+    importLibraryModalCloseBtn.addEventListener("click", () => {
+      closeSimpleModal("importLibraryModal");
+    });
+  }
+
   if (createDishBtn) {
     createDishBtn.addEventListener("click", async () => {
       const freeDishNameEl = document.getElementById("freeDishName");
@@ -2141,6 +2197,7 @@ function bindBuilderHandlers() {
         });
         showJson("createDishOut", result);
         if (result && result.data && result.data.ok && result.data.composition) {
+          closeSimpleModal("quickCreateModal");
           openBuilderModalForComposition(result.data.composition);
           if (freeDishNameEl) {
             freeDishNameEl.value = "";
