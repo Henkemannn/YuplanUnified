@@ -8,17 +8,26 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     html = rv.data.decode("utf-8")
     assert "Builder Workspace v1" in html
     assert "Builder library" in html
+    assert 'id="openComponentCreateModalBtn"' in html
+    assert 'id="openDishesLibraryModalBtn"' in html
+    assert 'id="builderMenusEntry"' in html
+    assert "Create, open, and print menus" in html
+    assert "Open Menu Builder" in html
+    assert "View/Print Menu" in html
     assert 'id="openNewDishModalBtn"' in html
-    assert 'id="openComponentsModalBtn"' in html
     assert 'id="openImportModalBtn"' in html
     assert 'id="libraryComponentsGrid" class="component-library-grid"' in html
     assert 'id="libraryCompositionsGrid" class="composition-library-grid"' in html
     assert 'id="resolveModal"' in html
     assert 'id="componentDetailModal"' in html
+    assert 'id="componentCreateModal"' in html
     assert 'id="quickCreateModal"' in html
-    assert 'id="componentsLibraryModal"' in html
+    assert 'id="dishesLibraryModal"' in html
     assert 'id="importLibraryModal"' in html
+    assert 'id="openAddComponentModalBtn"' in html
+    assert 'id="addComponentModal"' in html
     assert 'href="/menu-builder-v1"' in html
+    assert 'href="/menu-output-v1"' in html
     assert 'id="btnCreateDish"' in html
     assert 'id="btnCreateComponent"' in html
     assert 'id="btnImportLibrary"' in html
@@ -26,6 +35,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="btnImportFilePreview"' in html
     assert 'id="btnImportFileConfirm"' in html
     assert 'id="importSummaryView"' in html
+    assert 'id="importReviewNotice"' in html
     assert 'id="workspaceDishesMeta"' in html
     assert 'id="workspaceComponentsMeta"' in html
     assert 'id="builderPaletteSearch"' in html
@@ -53,3 +63,6 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'return ok ? "Dish created." : "Could not create dish.";' in script
     assert 'return ok ? "Component created." : "Could not create component.";' in script
     assert 'return ok ? "Saved." : "Could not save changes.";' in script
+    assert 'reviewNotice.textContent =' in script
+    assert 'possible component matches need review.' in script
+    assert 'reviewBlock.className = "import-review-block";' in script

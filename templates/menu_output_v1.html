@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Menu Output v1</title>
+  <link rel="stylesheet" href="/static/css/builder.css">
+  <style>
+    :root {
+      --menu-bg: #eef2f5;
+      --menu-card-bg: #ffffff;
+      --menu-border: #d6e0e8;
+      --menu-text: #1f3141;
+      --menu-muted: #546779;
+      --menu-accent: #2f4f6a;
+      --menu-soft: #f7fbff;
+      --menu-error-bg: #fff5f4;
+      --menu-error-border: #e9c8c5;
+      --menu-error-text: #7a2e29;
+    }
+
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      margin: 0;
+      padding: 24px 16px;
+      background: radial-gradient(circle at top right, #f8fafc 0%, var(--menu-bg) 55%, #e9eef3 100%);
+      color: var(--menu-text);
+    }
+    .menu-output-shell {
+      max-width: 920px;
+      margin: 0 auto;
+      display: grid;
+      gap: 14px;
+    }
+    .menu-output-card {
+      border: 1px solid var(--menu-border);
+      border-radius: 14px;
+      background: var(--menu-card-bg);
+      padding: 14px;
+      box-shadow: 0 8px 18px rgba(32, 54, 72, 0.08);
+    }
+
+    .menu-output-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .menu-output-toolbar label {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--menu-muted);
+    }
+
+    .menu-output-toolbar select,
+    .menu-output-toolbar button {
+      width: auto;
+      margin: 0;
+    }
+
+    .menu-output-toolbar button {
+      padding: 8px 12px;
+    }
+
+    .menu-output-head {
+      border-bottom: 1px solid #e3ebf1;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+
+    .menu-output-title {
+      margin: 0;
+      font-size: clamp(30px, 4.2vw, 42px);
+      line-height: 1.08;
+      color: var(--menu-accent);
+    }
+
+    .menu-output-subtitle {
+      margin: 8px 0 0;
+      color: var(--menu-muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .menu-output-meta {
+      margin: 8px 0 0;
+      font-size: 12px;
+      color: var(--menu-muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .menu-output-meta span {
+      padding: 2px 8px;
+      border: 1px solid #dce7ef;
+      border-radius: 999px;
+      background: var(--menu-soft);
+    }
+
+    .menu-output-state {
+      border: 1px dashed #c7d6e2;
+      border-radius: 10px;
+      background: #f8fbfe;
+      padding: 10px 12px;
+      color: var(--menu-muted);
+      font-size: 13px;
+    }
+
+    .menu-output-state.is-loading {
+      background: #f2f7fb;
+      border-style: solid;
+    }
+
+    .menu-output-state.is-error {
+      background: var(--menu-error-bg);
+      border-color: var(--menu-error-border);
+      color: var(--menu-error-text);
+      border-style: solid;
+    }
+
+    .menu-output-state:empty {
+      display: none;
+    }
+
+    .menu-output-sections {
+      display: grid;
+      gap: 12px;
+    }
+
+    .menu-output-section {
+      border: 1px solid #dbe4eb;
+      border-radius: 12px;
+      background: #fcfdff;
+      padding: 12px;
+    }
+
+    .menu-output-section h3 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      color: #20374a;
+      letter-spacing: 0.2px;
+    }
+
+    .menu-output-dishes {
+      margin: 0;
+      padding-left: 20px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .menu-output-dishes li {
+      line-height: 1.45;
+      color: #2d4356;
+      font-size: 16px;
+    }
+
+    .menu-output-empty {
+      border: 1px dashed #c8d6e1;
+      border-radius: 10px;
+      background: #f7fbff;
+      padding: 10px;
+      color: #53687b;
+      font-size: 13px;
+    }
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 12mm;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        color: #111;
+      }
+
+      .print-hidden {
+        display: none !important;
+      }
+
+      .menu-output-shell {
+        max-width: none;
+        gap: 6mm;
+      }
+
+      .menu-output-card {
+        border: 0;
+        box-shadow: none;
+        padding: 0;
+      }
+
+      .menu-output-head {
+        border-bottom: 1px solid #c9c9c9;
+        margin-bottom: 4mm;
+        padding-bottom: 2mm;
+      }
+
+      .menu-output-title {
+        font-size: 19pt;
+        color: #111;
+      }
+
+      .menu-output-subtitle,
+      .menu-output-meta {
+        font-size: 10pt;
+      }
+
+      .menu-output-section {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        border-color: #d9d9d9;
+        background: #fff;
+        margin-bottom: 3mm;
+      }
+
+      .menu-output-section h3 {
+        font-size: 13pt;
+        margin-bottom: 2mm;
+      }
+
+      .menu-output-dishes {
+        gap: 2mm;
+      }
+
+      .menu-output-dishes li {
+        font-size: 11pt;
+        orphans: 3;
+        widows: 3;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="menu-output-shell">
+    <section class="menu-output-card print-hidden">
+      <div class="menu-output-toolbar">
+        <label>Menu
+          <select id="menuOutputSelect"></select>
+        </label>
+        <button id="btnOpenMenuOutput" type="button">Open menu</button>
+        <button id="btnPrintMenuOutput" type="button">Print</button>
+        <button id="btnExportPdfMenuOutput" type="button">Print / Save as PDF</button>
+        <a href="/menu-builder-v1" class="workspace-menu-link">Back to menu builder</a>
+      </div>
+    </section>
+
+    <section class="menu-output-card">
+      <div class="menu-output-head">
+        <h1 id="menuOutputTitle" class="menu-output-title">Menu output</h1>
+        <p id="menuOutputMeta" class="menu-output-subtitle">Select a menu to render.</p>
+        <div class="menu-output-meta" id="menuOutputMetaRow">
+          <span id="menuOutputGeneratedAt">Generated: -</span>
+        </div>
+      </div>
+      <div id="menuOutputState" class="menu-output-state" aria-live="polite">Choose a menu above to view a clean printable output.</div>
+      <div id="menuOutputSections" class="menu-output-sections"></div>
+    </section>
+  </div>
+
+  <script src="/static/js/menu_output_v1.js"></script>
+</body>
+</html>

@@ -148,6 +148,35 @@ def test_list_reusable_components_endpoint_supports_listing_and_search() -> None
     assert [item.get("component_name") for item in (search_body.get("components") or [])] == ["Fish Sauce"]
 
 
+def test_component_alias_endpoints_create_and_list_aliases() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Kokt potatis"},
+        headers=HEADERS,
+    )
+    component_id = ((created.get_json() or {}).get("component") or {}).get("component_id")
+
+    alias_rv = client.post(
+        f"/api/builder/components/{component_id}/aliases",
+        json={"alias_text": "potatis kokt", "source": "import"},
+        headers=HEADERS,
+    )
+    listed = client.get(
+        f"/api/builder/components/{component_id}/aliases",
+        headers=HEADERS,
+    )
+
+    assert alias_rv.status_code == 201
+    alias_body = alias_rv.get_json() or {}
+    assert alias_body.get("ok") is True
+    assert ((alias_body.get("alias") or {}).get("alias_norm")) == "potatis kokt"
+    assert listed.status_code == 200
+    listed_body = listed.get_json() or {}
+    assert listed_body.get("count") == 1
+    assert (listed_body.get("aliases") or [])[0].get("alias_text") == "potatis kokt"
+
+
 def test_library_endpoint_returns_separate_sorted_components_and_compositions() -> None:
     client = _client()
     client.post("/api/builder/components", json={"component_name": "zeta"}, headers=HEADERS)
@@ -321,6 +350,35 @@ def test_builder_library_import_reuses_alias_without_creating_new_composition() 
     assert summary.get("created_count") == 0
     assert summary.get("reused_count") == 1
     assert row.get("composition_id") == first_id
+
+
+def test_builder_library_import_reports_possible_component_matches_without_blocking() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/components",
+        json={"component_name": "Kokt potatis"},
+        headers=HEADERS,
+    )
+
+    rv = client.post(
+        "/api/builder/import",
+        json={"lines": ["Kokt potatisar"]},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    summary = body.get("summary") or {}
+    assert summary.get("created_count") == 1
+    assert summary.get("imported_count") == 1
+    review_items = summary.get("component_review_items") or []
+    assert len(review_items) == 1
+    review = review_items[0]
+    assert review.get("status") == "possible_match"
+    assert review.get("suggested_component_name") == "Kokt potatisar"
+    possible = review.get("possible_matches") or []
+    assert possible[0].get("component_name") == "Kokt potatis"
+    assert isinstance(possible[0].get("score"), float)
 
 
 def test_builder_library_import_rejects_empty_payload_lines() -> None:

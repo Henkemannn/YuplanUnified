@@ -8,10 +8,19 @@ from .ingredient_intelligence import (
 	RecipeTraitSignalPreview,
 	build_recipe_trait_signal_preview,
 )
+from .alias_domain import ComponentAlias
+from .alias_repository import InMemoryComponentAliasRepository
 from .composition_domain import Composition, CompositionComponent
 from .composition_repository import InMemoryCompositionRepository
 from .composition_service import CompositionService
 from .domain import Component
+from .matching import (
+	ComponentMatchResult,
+	ComponentPossibleMatch,
+	create_component_alias,
+	match_component_reference,
+	normalize_component_match_text,
+)
 from .recipe_calculations import (
 	RecipeCostBreakdown,
 	ScaledIngredientLine,
@@ -30,6 +39,7 @@ from .service import ComponentService
 
 __all__ = [
 	"Component",
+	"ComponentAlias",
 	"Composition",
 	"CompositionComponent",
 	"ComponentCostBreakdown",
@@ -40,8 +50,14 @@ __all__ = [
 	"build_recipe_trait_signal_preview",
 	"InMemoryCompositionRepository",
 	"CompositionService",
+	"InMemoryComponentAliasRepository",
 	"InMemoryComponentRepository",
 	"ComponentService",
+	"ComponentMatchResult",
+	"ComponentPossibleMatch",
+	"normalize_component_match_text",
+	"match_component_reference",
+	"create_component_alias",
 	"Recipe",
 	"RecipeIngredientLine",
 	"ScaledIngredientLine",

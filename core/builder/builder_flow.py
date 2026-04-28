@@ -8,11 +8,17 @@ from decimal import Decimal
 
 from ..components import (
     build_recipe_trait_signal_preview,
+    create_component_alias,
     Component,
+    ComponentMatchResult,
+    ComponentPossibleMatch,
     ComponentService,
     Composition,
     CompositionService,
+    InMemoryComponentAliasRepository,
     InMemoryCompositionRepository,
+    match_component_reference,
+    normalize_component_match_text,
     Recipe,
     RecipeIngredientLine,
     RecipeTraitSignalPreview,
@@ -57,6 +63,7 @@ class LibraryImportSummary:
     created_count: int
     reused_count: int
     row_results: list[LibraryImportRowResult] = field(default_factory=list)
+    component_review_items: list[dict[str, object]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -68,12 +75,14 @@ class BuilderFlow:
         composition_service: CompositionService,
         composition_repository: InMemoryCompositionRepository,
         alias_repository: InMemoryCompositionAliasRepository,
+        component_alias_repository: InMemoryComponentAliasRepository | None = None,
         recipe_service: RecipeService | None = None,
     ) -> None:
         self._component_service = component_service
         self._composition_service = composition_service
         self._composition_repository = composition_repository
         self._alias_repository = alias_repository
+        self._component_alias_repository = component_alias_repository or InMemoryComponentAliasRepository()
         self._recipe_service = recipe_service or RecipeService()
 
     def create_component_recipe(
@@ -451,6 +460,12 @@ class BuilderFlow:
         if not name_value:
             raise ValueError("component_name must be non-empty")
 
+        match = self.match_component_name(name_value)
+        if match.status in {"exact_match", "alias_match"} and match.component_id:
+            existing = self._component_service.get_component(match.component_id)
+            if existing is not None:
+                return existing
+
         normalized_key = self._normalize_component_key(name_value)
         for existing_item in self._component_service.list_components(active_only=False):
             if self._normalize_component_key(existing_item.canonical_name) == normalized_key:
@@ -476,6 +491,59 @@ class BuilderFlow:
             canonical_name=name_value,
         )
 
+    def add_component_alias(
+        self,
+        *,
+        component_id: str,
+        alias_text: str,
+        source: str = "manual",
+        confidence: Decimal | float | None = Decimal("1.0"),
+    ):
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        component = self._component_service.get_component(component_id_value)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+
+        alias_text_value = str(alias_text or "").strip()
+        if not alias_text_value:
+            raise ValueError("alias_text must be non-empty")
+
+        alias_norm = normalize_component_match_text(alias_text_value)
+        existing_aliases = self._component_alias_repository.find_by_alias_norm(alias_norm)
+        existing_for_component = next(
+            (alias for alias in existing_aliases if alias.component_id == component_id_value),
+            None,
+        )
+        if existing_for_component is not None:
+            return existing_for_component
+        if any(alias.component_id != component_id_value for alias in existing_aliases):
+            raise ValueError("alias already mapped to another component")
+
+        return create_component_alias(
+            alias_repository=self._component_alias_repository,
+            alias_id=self._generate_component_alias_id(),
+            component_id=component_id_value,
+            alias_text=alias_text_value,
+            source=source,
+            confidence=confidence,
+            components=self._component_service.list_components(active_only=False),
+        )
+
+    def list_component_aliases(self, *, component_id: str | None = None):
+        if component_id is None:
+            return self._component_alias_repository.list_all()
+        return self._component_alias_repository.list_for_component(component_id)
+
+    def match_component_name(self, text: str) -> ComponentMatchResult:
+        return match_component_reference(
+            import_text=text,
+            components=self._component_service.list_components(active_only=False),
+            alias_repository=self._component_alias_repository,
+        )
+
     def create_composition(
         self,
         composition_id: str,
@@ -496,7 +564,7 @@ class BuilderFlow:
         library_group: str | None = None,
         seed_components: bool = False,
     ) -> Composition:
-        composition, _ = self.create_library_composition_from_text(
+        composition, _, _ = self.create_library_composition_from_text(
             raw_text=composition_name,
             library_group=library_group,
             seed_components=seed_components,
@@ -846,6 +914,7 @@ class BuilderFlow:
             raise ValueError("lines must contain at least one non-empty text")
 
         row_results: list[LibraryImportRowResult] = []
+        component_review_items: list[dict[str, object]] = []
         summary_warnings: list[str] = []
         created_count = 0
         reused_count = 0
@@ -868,7 +937,7 @@ class BuilderFlow:
                     matched_via = matched_via or "existing"
 
             if composition is None:
-                composition, create_warnings = self.create_library_composition_from_text(
+                composition, create_warnings, review_items = self.create_library_composition_from_text(
                     raw_text=line,
                     library_group=None,
                     seed_components=True,
@@ -877,6 +946,7 @@ class BuilderFlow:
                 created_count += 1
                 matched_via = "created"
                 warnings.extend(create_warnings)
+                component_review_items.extend(review_items)
 
             row_results.append(
                 LibraryImportRowResult(
@@ -895,6 +965,7 @@ class BuilderFlow:
             created_count=created_count,
             reused_count=reused_count,
             row_results=row_results,
+            component_review_items=component_review_items,
             warnings=summary_warnings,
         )
 
@@ -907,7 +978,7 @@ class BuilderFlow:
         learn_alias: bool,
         alias_text: str | None = None,
         composition_name_override: str | None = None,
-    ) -> tuple[Composition, list[str]]:
+    ) -> tuple[Composition, list[str], list[dict[str, object]]]:
         chosen_name = composition_name_override if composition_name_override is not None else raw_text
         composition_name = self._normalize_component_name(chosen_name)
         if not composition_name:
@@ -919,14 +990,34 @@ class BuilderFlow:
             library_group=library_group,
         )
         warnings: list[str] = []
+        review_items: list[dict[str, object]] = []
 
         if seed_components:
             for suggestion in self._suggest_components_from_unresolved_text(raw_text):
+                match = self.match_component_name(suggestion)
                 composition = self.add_component_to_composition(
                     composition_id=composition.composition_id,
                     component_name=suggestion,
                     role="component",
                 )
+                if match.status == "possible_match":
+                    review_items.append(
+                        {
+                            "raw_text": raw_text,
+                            "suggested_component_name": suggestion,
+                            "status": "possible_match",
+                            "normalized_text": match.normalized_text,
+                            "possible_matches": [
+                                {
+                                    "component_id": candidate.component_id,
+                                    "component_name": candidate.component_name,
+                                    "matched_on": candidate.matched_on,
+                                    "score": candidate.score,
+                                }
+                                for candidate in match.possible_matches
+                            ],
+                        }
+                    )
 
         if learn_alias:
             alias_warning = self._create_manual_alias_for_composition(
@@ -945,7 +1036,7 @@ class BuilderFlow:
                 warnings.append(alias_warning)
                 logger.warning(alias_warning)
 
-        return composition, warnings
+        return composition, warnings, review_items
 
     def suggest_components_from_text(self, raw_text: str) -> list[str]:
         return self._suggest_components_from_unresolved_text(raw_text)
@@ -1000,6 +1091,16 @@ class BuilderFlow:
             if candidate not in existing_ids:
                 return candidate
         raise ValueError("unable to generate unique alias_id")
+
+    def _generate_component_alias_id(self) -> str:
+        alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+        existing_ids = {alias.alias_id for alias in self._component_alias_repository.list_all()}
+        for _ in range(50):
+            suffix = "".join(secrets.choice(alphabet) for _ in range(6))
+            candidate = f"cmp_alias_{suffix}"
+            if candidate not in existing_ids:
+                return candidate
+        raise ValueError("unable to generate unique component alias_id")
 
     def _generate_recipe_id(self) -> str:
         alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"

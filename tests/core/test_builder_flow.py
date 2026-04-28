@@ -322,6 +322,67 @@ def test_library_import_rejects_empty_input_lines() -> None:
         flow.import_library_text_lines(["   ", ""])
 
 
+def test_component_alias_reused_when_attaching_to_composition() -> None:
+    flow = _build_flow()
+    existing = flow.create_standalone_component("Kokt potatis")
+    flow.add_component_alias(component_id=existing.component_id, alias_text="potatis kokt")
+    flow.create_composition(composition_id="plate", composition_name="Plate")
+
+    updated = flow.add_component_to_composition(
+        composition_id="plate",
+        component_name="potatis kokt",
+        role="component",
+    )
+
+    assert updated.components[0].component_id == existing.component_id
+    names = [item.canonical_name for item in flow.list_library_components()]
+    assert names.count("Kokt potatis") == 1
+
+
+def test_component_no_match_creates_new_component() -> None:
+    flow = _build_flow()
+    flow.create_standalone_component("Kokt potatis")
+
+    created = flow.create_standalone_component("Stekt fisk")
+
+    assert created.canonical_name == "Stekt fisk"
+    names = [item.canonical_name for item in flow.list_library_components()]
+    assert "Kokt potatis" in names
+    assert "Stekt fisk" in names
+
+
+def test_repeated_component_import_reuses_existing_component() -> None:
+    flow = _build_flow()
+
+    first = flow.import_library_text_lines(["Kottbullar med potatis"])
+    second = flow.import_library_text_lines(["Kottbullar med sas"])
+
+    assert first.created_count == 1
+    assert second.created_count == 1
+    kottbullar = [
+        item
+        for item in flow.list_library_components()
+        if item.canonical_name.lower() == "kottbullar"
+    ]
+    assert len(kottbullar) == 1
+
+
+def test_uncertain_component_matches_are_reported_but_import_continues() -> None:
+    flow = _build_flow()
+    flow.create_standalone_component("Kokt potatis")
+
+    summary = flow.import_library_text_lines(["Kokt potatisar"])
+
+    assert summary.imported_count == 1
+    assert summary.created_count == 1
+    assert summary.reused_count == 0
+    assert len(summary.component_review_items) == 1
+    review = summary.component_review_items[0]
+    assert review.get("status") == "possible_match"
+    possible = review.get("possible_matches") or []
+    assert possible[0].get("component_name") == "Kokt potatis"
+
+
 def test_remove_component_from_composition_through_builder_flow() -> None:
     flow = _build_flow()
 

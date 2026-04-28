@@ -10,35 +10,76 @@
   <header class="builder-platform-header">
     <p class="builder-workspace-eyebrow">Builder Workspace v1</p>
     <h1>Builder library</h1>
-    <p class="builder-start-hint">Open a dish, add components, save.</p>
+    <p class="builder-start-hint">Start with components. Build dishes. Then build menus.</p>
   </header>
 
   <div class="builder-platform-layout">
     <main class="builder-platform-primary">
       <section class="builder-library-primary" aria-label="Library">
-        <div class="builder-primary-actions" aria-label="Builder quick actions">
-          <button id="openNewDishModalBtn" class="builder-primary-cta" type="button">New dish</button>
-          <button id="openComponentsModalBtn" class="builder-secondary-action" type="button">Components</button>
-          <button id="openImportModalBtn" class="builder-secondary-action" type="button">Import</button>
-          <a class="workspace-menu-link builder-secondary-link" href="/menu-builder-v1">Menus</a>
+        <div class="builder-primary-header" aria-label="Component workspace">
+          <div>
+            <p class="builder-workspace-eyebrow">Primary</p>
+            <h2>Components</h2>
+            <p class="builder-primary-copy">Build reusable kitchen blocks once, then use them in every dish.</p>
+          </div>
+          <div class="builder-primary-actions">
+            <button id="openComponentCreateModalBtn" class="builder-primary-cta" type="button">Create component</button>
+            <button id="openImportLibraryModalBtn" class="builder-secondary-action" type="button">Import menu/recipes</button>
+          </div>
         </div>
 
         <div class="builder-library-columns">
-          <section class="builder-library-block builder-library-block-dishes">
-            <h2>Dishes</h2>
-            <div class="workspace-panel-meta" id="workspaceDishesMeta">Loading dishes...</div>
-            <div id="libraryCompositionsGrid" class="composition-library-grid"></div>
+          <section class="builder-library-block builder-library-block-components">
+            <div class="workspace-panel-meta" id="workspaceComponentsMeta">Loading components...</div>
+            <div class="builder-library-search-row">
+              <input id="libraryComponentsSearch" type="search" placeholder="Search components…" autocomplete="off">
+            </div>
+            <div id="libraryComponentsGrid" class="component-library-grid"></div>
           </section>
         </div>
       </section>
     </main>
 
-    <aside class="builder-platform-secondary" aria-label="Builder actions and import">
-      <div class="builder-secondary-note">Secondary tools stay available when needed.</div>
+    <aside class="builder-platform-secondary" aria-label="Secondary Builder entry">
+      <button id="openDishesLibraryModalBtn" class="builder-dishes-entry" type="button">
+        <span class="builder-dishes-entry-kicker">Secondary</span>
+        <span class="builder-dishes-entry-title">Dishes</span>
+        <span class="builder-dishes-entry-copy">Combine components into dishes.</span>
+      </button>
+
+      <section id="builderMenusEntry" class="builder-menus-entry" aria-label="Menus">
+        <p class="builder-dishes-entry-kicker">Menus</p>
+        <h3 class="builder-menus-entry-title">Create, open, and print menus</h3>
+        <p class="builder-menus-entry-copy">Use Menu Builder to create/open menus, then open output to view and print.</p>
+        <div class="builder-menus-entry-actions">
+          <a id="builderMenusOpenLink" class="workspace-menu-link" href="/menu-builder-v1">Open Menu Builder</a>
+          <a id="builderMenusOutputLink" class="workspace-menu-link" href="/menu-output-v1">View/Print Menu</a>
+        </div>
+      </section>
     </aside>
   </div>
 
   <div id="libraryOut" class="workspace-feedback workspace-feedback-page" aria-live="polite"></div>
+
+  <div id="componentCreateModal" class="modal hidden">
+    <div class="modal-content modal-content-compact">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Component creation</p>
+          <h3>Create component</h3>
+        </div>
+        <button id="componentCreateModalClose" type="button">Done</button>
+      </div>
+
+      <section class="workspace-quick-card">
+        <label>Component name
+          <input id="freeComponentName" type="text" placeholder="Mashed Potatoes">
+        </label>
+        <button id="btnCreateComponent" type="button">Create component</button>
+        <div id="createComponentOut" class="workspace-feedback" aria-live="polite"></div>
+      </section>
+    </div>
+  </div>
 
   <div id="quickCreateModal" class="modal hidden">
     <div class="modal-content modal-content-compact">
@@ -60,26 +101,24 @@
     </div>
   </div>
 
-  <div id="componentsLibraryModal" class="modal hidden">
+  <div id="dishesLibraryModal" class="modal hidden">
     <div class="modal-content modal-content-components">
       <div class="workspace-modal-header">
         <div>
-          <p class="workspace-modal-kicker">Component library</p>
-          <h3>Components</h3>
+          <p class="workspace-modal-kicker">Dish library</p>
+          <h3>Dishes</h3>
         </div>
-        <button id="componentsLibraryModalClose" type="button">Done</button>
+        <div class="workspace-inline-actions">
+          <button id="openNewDishModalBtn" type="button">New dish</button>
+          <button id="openImportModalBtn" type="button">Import</button>
+          <a class="workspace-menu-link" href="/menu-builder-v1">Menus</a>
+          <a class="workspace-menu-link" href="/menu-output-v1">Output</a>
+          <button id="dishesLibraryModalClose" type="button">Done</button>
+        </div>
       </div>
 
-      <div class="workspace-panel-meta" id="workspaceComponentsMeta">Loading components...</div>
-      <div id="libraryComponentsGrid" class="component-library-grid"></div>
-
-      <section class="workspace-quick-card workspace-inline-create-component">
-        <label>Component name
-          <input id="freeComponentName" type="text" placeholder="Mashed Potatoes">
-        </label>
-        <button id="btnCreateComponent" type="button">Create component</button>
-        <div id="createComponentOut" class="workspace-feedback" aria-live="polite"></div>
-      </section>
+      <div class="workspace-panel-meta" id="workspaceDishesMeta">Loading dishes...</div>
+      <div id="libraryCompositionsGrid" class="composition-library-grid"></div>
     </div>
   </div>
 
@@ -130,6 +169,7 @@
 
       <section class="workspace-quick-card workspace-import-summary-card">
         <h4>Import summary</h4>
+        <div id="importReviewNotice" class="import-review-notice hidden" aria-live="polite"></div>
         <div id="importSummaryView"></div>
       </section>
     </div>
@@ -146,59 +186,65 @@
       </div>
       <p id="resolveStatusLine" class="modal-status-line hidden"></p>
 
-      <div id="modalBuilderSection" class="workspace-modal-body modal-section">
-        <div class="workspace-modal-column workspace-modal-column-primary">
+      <div id="modalBuilderSection" class="workspace-modal-body workspace-modal-body-single modal-section">
+        <div class="workspace-modal-column workspace-modal-column-primary workspace-modal-column-single">
           <p id="builderCompositionTitle" class="workspace-modal-titleline"></p>
           <div class="workspace-modal-section-card">
             <p class="modal-section-title">Included parts</p>
-            <p id="builderRoleSummary" class="builder-role-summary"></p>
             <ul id="builderComponentsList" class="component-block-list"></ul>
           </div>
 
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Declaration preview</p>
-            <p id="compositionDeclarationStatus" class="declaration-preview-status">Read-only preview. No automation applied.</p>
-            <p id="compositionDeclarationDisabled" class="declaration-preview-disabled hidden">Declaration preview is currently unavailable.</p>
-            <p id="compositionDeclarationSignalsSummary" class="declaration-preview-summary">No declaration signals loaded.</p>
-            <ul id="compositionDeclarationSignals" class="declaration-preview-signals"></ul>
-            <p class="declaration-preview-provenance-title">Potential diet conflicts</p>
-            <ul id="compositionConflictList" class="declaration-preview-conflicts"></ul>
-            <ul id="compositionDeclarationWarnings" class="declaration-preview-warnings"></ul>
-          </div>
-        </div>
-
-        <div class="workspace-modal-column workspace-modal-column-secondary">
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Pick components from library</p>
-            <label>Search components
-              <input id="builderPaletteSearch" type="text" placeholder="Search reusable components">
-            </label>
-            <div id="builderComponentPalette" class="component-palette"></div>
-          </div>
-
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Add a new component</p>
-            <label>Role (optional)
-              <input id="newComponentRole" list="componentRoleSuggestions" type="text" placeholder="main, side, sauce ... or leave empty">
-              <datalist id="componentRoleSuggestions">
-                <option value="main"></option>
-                <option value="side"></option>
-                <option value="sauce"></option>
-                <option value="garnish"></option>
-                <option value="beverage"></option>
-                <option value="other"></option>
-              </datalist>
-            </label>
-            <label>Component name
-              <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Type a new component name">
-              <datalist id="componentNameSuggestions"></datalist>
-            </label>
-            <button id="btnAddComponent" type="button">Create and add component</button>
+          <div class="workspace-inline-actions workspace-builder-primary-actions">
+            <button id="openAddComponentModalBtn" type="button">Add component</button>
           </div>
 
           <div id="builderOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div id="addComponentModal" class="modal hidden">
+    <div class="modal-content modal-content-components">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Dish building</p>
+          <h3>Add component</h3>
+        </div>
+        <button id="addComponentModalClose" type="button">Done</button>
+      </div>
+
+      <div class="workspace-modal-section-card">
+        <p class="modal-section-title">Pick components from library</p>
+        <label>Search components
+          <input id="builderPaletteSearch" type="text" placeholder="Search reusable components">
+        </label>
+        <div id="builderComponentPalette" class="component-palette"></div>
+      </div>
+
+      <details class="workspace-inline-create-details">
+        <summary>Or create a new component</summary>
+        <div class="workspace-modal-section-card workspace-inline-create-component">
+          <p class="modal-section-title">Create and add component</p>
+          <label>Role (optional)
+            <input id="newComponentRole" list="componentRoleSuggestions" type="text" placeholder="main, side, sauce ... or leave empty">
+            <datalist id="componentRoleSuggestions">
+              <option value="main"></option>
+              <option value="side"></option>
+              <option value="sauce"></option>
+              <option value="garnish"></option>
+              <option value="beverage"></option>
+              <option value="other"></option>
+            </datalist>
+          </label>
+          <label>Component name
+            <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Type a new component name">
+            <datalist id="componentNameSuggestions"></datalist>
+          </label>
+          <button id="btnAddComponent" type="button">Create and add component</button>
+        </div>
+      </details>
+
     </div>
   </div>
 

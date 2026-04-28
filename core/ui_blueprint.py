@@ -135,6 +135,12 @@ def builder_workspace_v1_ui():
 def menu_builder_v1_ui():
     return render_template("menu_builder_v1.html")
 
+
+@ui_bp.get("/menu-output-v1")
+@require_roles("editor", "admin", "superuser")
+def menu_output_v1_ui():
+    return render_template("menu_output_v1.html")
+
 # Weekview special diets mark toggle API (ETag-safe), aligned with report marks
 @ui_bp.route("/api/weekview/specialdiets/mark", methods=["POST"])
 @require_roles("cook", "admin", "superuser", "kitchen")

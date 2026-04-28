@@ -13,7 +13,9 @@ from .components import (
     CompositionService,
     InMemoryCompositionRepository,
     ComponentService,
+    InMemoryComponentAliasRepository,
     InMemoryComponentRepository,
+    normalize_component_match_text,
 )
 from .menu import InMemoryCompositionAliasRepository
 
@@ -270,6 +272,17 @@ def _serialize_component(component) -> dict[str, Any]:
     }
 
 
+def _serialize_component_alias(alias) -> dict[str, Any]:
+    return {
+        "alias_id": alias.alias_id,
+        "component_id": alias.component_id,
+        "alias_text": alias.alias_text,
+        "alias_norm": alias.alias_norm,
+        "source": alias.source,
+        "confidence": _decimal_to_json(alias.confidence) if isinstance(alias.confidence, Decimal) else alias.confidence,
+    }
+
+
 def _serialize_library_composition(composition) -> dict[str, Any]:
     return {
         "composition_id": composition.composition_id,
@@ -298,6 +311,7 @@ def _serialize_library_import_summary(summary, metrics: _LibraryImportMetrics) -
             }
             for row in summary.row_results
         ],
+        "component_review_items": list(summary.component_review_items),
         "warnings": list(summary.warnings),
     }
 
@@ -349,6 +363,7 @@ def _get_builder_flow() -> BuilderFlow:
         return flow
 
     component_repository = InMemoryComponentRepository()
+    component_alias_repository = InMemoryComponentAliasRepository()
     composition_repository = InMemoryCompositionRepository()
     alias_repository = InMemoryCompositionAliasRepository()
     component_service = ComponentService(repository=component_repository)
@@ -359,6 +374,7 @@ def _get_builder_flow() -> BuilderFlow:
         composition_service=composition_service,
         composition_repository=composition_repository,
         alias_repository=alias_repository,
+        component_alias_repository=component_alias_repository,
     )
     current_app.extensions["builder_flow"] = flow
     return flow
@@ -430,6 +446,62 @@ def list_reusable_components():
             "components": [_serialize_component(component) for component in components],
         }
     )
+
+
+@bp.get("/components/<component_id>/aliases")
+@require_roles("editor", "admin", "superuser")
+def list_component_aliases(component_id: str):
+    component_id_value = str(component_id or "").strip()
+    if not component_id_value:
+        return _bad_request("component_id is required")
+
+    try:
+        flow = _get_builder_flow()
+        component = flow._component_service.get_component(component_id_value)
+        if component is None:
+            return _bad_request(f"component not found: {component_id_value}")
+        aliases = flow.list_component_aliases(component_id=component_id_value)
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "component_id": component_id_value,
+            "count": len(aliases),
+            "aliases": [_serialize_component_alias(alias) for alias in aliases],
+        }
+    )
+
+
+@bp.post("/components/<component_id>/aliases")
+@require_roles("editor", "admin", "superuser")
+def create_component_alias_endpoint(component_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    component_id_value = str(component_id or "").strip()
+    if not component_id_value:
+        return _bad_request("component_id is required")
+
+    try:
+        flow = _get_builder_flow()
+        alias = flow.add_component_alias(
+            component_id=component_id_value,
+            alias_text=_require_str(payload, "alias_text"),
+            source=_optional_str(payload, "source") or "manual",
+            confidence=payload.get("confidence", 1.0),
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "alias": _serialize_component_alias(alias),
+        }
+    ), 201
 
 
 @bp.get("/library")

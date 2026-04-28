@@ -6,165 +6,256 @@
   <title>Menu Builder v1</title>
   <link rel="stylesheet" href="/static/css/builder.css">
   <style>
-    .menu-week-groups {
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(180deg, #f7f3ec 0%, #f2f6f8 100%);
+      color: #213243;
+    }
+    .menu-shell {
       display: grid;
       gap: 14px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    .menu-card {
+      border: 1px solid #d5e0ea;
+      border-radius: 16px;
+      background: #ffffff;
+      padding: 14px;
+      box-shadow: 0 8px 20px rgba(35, 56, 74, 0.08);
+    }
+    .menu-topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .menu-topbar h1,
+    .menu-card h2,
+    .menu-card h3 {
+      margin: 0;
+    }
+    .menu-inline {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .menu-inline button,
+    .menu-inline input,
+    .menu-inline select {
+      width: auto;
+      margin: 0;
+    }
+    .menu-inline input {
+      min-width: 220px;
+    }
+    .menu-meta {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #4c6174;
+    }
+    .menu-sections {
+      display: grid;
+      gap: 12px;
       margin-top: 10px;
     }
-    .menu-group {
-      border: 1px solid #d8e1ea;
-      border-radius: 10px;
+    .menu-section {
+      border: 1px solid #d8e2ea;
+      border-radius: 12px;
+      background: #fbfdff;
       padding: 10px;
-      background: linear-gradient(180deg, #fafcff 0%, #f7fbff 100%);
     }
-    .menu-group-header {
-      font-weight: 600;
+    .menu-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
       margin-bottom: 8px;
     }
-    .menu-group-list {
+    .menu-section-name {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .menu-section-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .menu-section-actions button {
+      width: auto;
+      margin: 0;
+      padding: 7px 10px;
+    }
+    .menu-dish-list {
       display: grid;
+      gap: 8px;
+    }
+    .menu-dish-row {
+      border: 1px solid #dde6ee;
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 10px;
     }
-    .menu-row-card.unresolved {
-      border-color: #d59b28;
-      background: #fff8e9;
-    }
-    .menu-row-title {
+    .menu-dish-label {
       font-weight: 600;
     }
-    .menu-row-meta {
+    .menu-dish-meta {
       font-size: 12px;
-      color: #525b67;
-      margin-top: 4px;
+      color: #5b6f80;
+      margin-top: 3px;
     }
-    .menu-row-note {
-      margin-top: 4px;
+    .menu-dish-row button {
+      width: auto;
+      margin: 0;
+      padding: 6px 10px;
+    }
+    .menu-empty {
+      border: 1px dashed #cad7e3;
+      border-radius: 10px;
+      background: #f7fbff;
+      color: #536778;
+      padding: 10px;
       font-size: 13px;
     }
-    .menu-row-actions {
+    .menu-library-list {
+      display: grid;
+      gap: 8px;
       margin-top: 8px;
+    }
+    .menu-library-item {
+      border: 1px solid #d7e1e9;
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .menu-library-item button {
+      width: auto;
+      margin: 0;
+      padding: 6px 10px;
+    }
+    .menu-library-item-meta {
+      font-size: 12px;
+      color: #5b6f80;
+      margin-top: 3px;
+    }
+    .menu-picker-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+      max-height: 340px;
+      overflow-y: auto;
+    }
+    .menu-picker-item {
+      border: 1px solid #d8e1ea;
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .menu-picker-item button {
+      width: auto;
+      margin: 0;
+      padding: 6px 10px;
+    }
+    .menu-feedback {
+      margin-top: 10px;
+      border: 1px solid #dde5ed;
+      border-radius: 10px;
+      background: #f6f8fb;
+      color: #475868;
+      font-size: 12px;
+      white-space: pre-wrap;
+      padding: 8px 10px;
+    }
+    .menu-feedback:empty {
+      display: none;
+    }
+    .hidden {
+      display: none;
     }
   </style>
 </head>
 <body>
-  <h1>Menu Builder v1.2</h1>
-  <p>Menu Context layer UI. Menu rows reference existing library compositions.</p>
+  <div class="menu-shell">
+    <section class="menu-card menu-topbar">
+      <div>
+        <h1>Menu Builder v1.1</h1>
+        <p class="menu-meta">Flexible sections with dish lists. No fixed weekdays or Alt slots required.</p>
+      </div>
+      <div class="menu-inline">
+        <button id="btnNewMenu" type="button">New menu</button>
+      </div>
+    </section>
 
-  <section>
-    <h2>1. Create Menu</h2>
-    <label>title (optional)
-      <input id="menuTitle" type="text" placeholder="Week 16 menu">
-    </label>
-    <label>menu_id (optional)
-      <input id="menuId" type="text" placeholder="menu_site1_w16">
-    </label>
-    <label>site_id
-      <input id="siteId" type="text" value="site_1">
-    </label>
-    <label>week_key
-      <input id="weekKey" type="text" value="2026-W16">
-    </label>
-    <button id="btnCreateMenu" type="button">Create menu</button>
-    <pre id="createMenuOut"></pre>
-  </section>
+    <section class="menu-card">
+      <h2>Create Menu</h2>
+      <div class="menu-inline">
+        <label>Name
+          <input id="menuTitle" type="text" placeholder="Spring event menu">
+        </label>
+        <button id="btnCreateMenu" type="button">Save menu</button>
+      </div>
+      <p class="menu-meta" id="activeMenuMeta">No active menu</p>
+      <div id="createMenuOut" class="menu-feedback" aria-live="polite"></div>
+    </section>
 
-  <section>
-    <h2>2. Add Composition Row</h2>
-    <label>active menu_id
-      <input id="activeMenuId" type="text" placeholder="menu id">
-    </label>
-    <label>day
-      <select id="rowDay">
-        <option value="monday">monday</option>
-        <option value="tuesday">tuesday</option>
-        <option value="wednesday">wednesday</option>
-        <option value="thursday">thursday</option>
-        <option value="friday">friday</option>
-        <option value="saturday">saturday</option>
-        <option value="sunday">sunday</option>
-      </select>
-    </label>
-    <label>meal_slot
-      <select id="rowMealSlot">
-        <option value="lunch">lunch</option>
-        <option value="dinner">dinner</option>
-        <option value="breakfast">breakfast</option>
-        <option value="kvallsmat">kvallsmat</option>
-      </select>
-    </label>
-    <label>composition
-      <select id="rowCompositionId"></select>
-    </label>
-    <div id="rowCompositionPalette" class="menu-quick-palette"></div>
-    <label>sort_order
-      <input id="rowSortOrder" type="number" value="0">
-    </label>
-    <label>note (optional)
-      <input id="rowNote" type="text" placeholder="optional note">
-    </label>
-    <button id="btnAddMenuRow" type="button">Add row</button>
-    <pre id="addMenuRowOut"></pre>
-  </section>
+    <section class="menu-card">
+      <div class="menu-topbar">
+        <h2>Menu Sections</h2>
+        <div class="menu-inline">
+          <input id="newSectionName" type="text" placeholder="Section name (e.g. Monday lunch)">
+          <button id="btnAddSection" type="button">Add section</button>
+          <button id="btnRefreshSections" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="menuSections" class="menu-sections"></div>
+      <div id="menuSectionsOut" class="menu-feedback" aria-live="polite"></div>
+    </section>
 
-  <section>
-    <h2>3. Weekly Menu Workspace</h2>
-    <button id="btnRefreshRows" type="button">Refresh rows</button>
-    <label class="declaration-toggle-label">
-      <input id="menuDeclarationVisibleToggle" type="checkbox" checked>
-      Show declaration preview
-    </label>
-    <label>filter compositions
-      <input id="compositionSearch" type="text" placeholder="search composition by name or id">
-    </label>
-    <div id="menuDeclarationPreview" class="menu-declaration-preview">
-      <p id="menuDeclarationStatus" class="declaration-preview-status">Read-only preview. No automation applied.</p>
-      <p id="menuDeclarationDisabled" class="declaration-preview-disabled hidden">Declaration preview is currently unavailable.</p>
-      <p id="menuDeclarationSignalsSummary" class="declaration-preview-summary">No declaration signals loaded.</p>
-      <ul id="menuDeclarationSignals" class="declaration-preview-signals"></ul>
-      <p class="declaration-preview-provenance-title">Potential diet conflicts</p>
-      <ul id="menuConflictList" class="declaration-preview-conflicts"></ul>
-      <ul id="menuDeclarationWarnings" class="declaration-preview-warnings"></ul>
+    <section class="menu-card">
+      <h2>Menu Library</h2>
+      <div class="menu-inline">
+        <button id="btnRefreshMenuLibrary" type="button">Refresh menu library</button>
+      </div>
+      <div id="menuLibraryList" class="menu-library-list"></div>
+      <div id="menuLibraryOut" class="menu-feedback" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <div id="dishPickerModal" class="modal hidden">
+    <div class="modal-content modal-content-components">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Dish picker</p>
+          <h3>Add dish to section</h3>
+        </div>
+        <button id="dishPickerClose" type="button">Done</button>
+      </div>
+      <p class="menu-meta" id="dishPickerSectionMeta"></p>
+      <label>Search dishes
+        <input id="dishPickerSearch" type="text" placeholder="Search dish by name">
+      </label>
+      <div id="dishPickerList" class="menu-picker-list"></div>
+      <div id="dishPickerOut" class="menu-feedback" aria-live="polite"></div>
     </div>
-    <div id="menuRowsBody" class="menu-week-groups"></div>
-
-    <div id="editRowPanel" class="hidden" style="border:1px solid #ddd; padding:10px; margin-top:10px;">
-      <h3>Edit selected row</h3>
-      <input id="editRowId" type="hidden">
-      <label>day
-        <select id="editRowDay">
-          <option value="monday">monday</option>
-          <option value="tuesday">tuesday</option>
-          <option value="wednesday">wednesday</option>
-          <option value="thursday">thursday</option>
-          <option value="friday">friday</option>
-          <option value="saturday">saturday</option>
-          <option value="sunday">sunday</option>
-        </select>
-      </label>
-      <label>meal_slot
-        <select id="editRowMealSlot">
-          <option value="lunch">lunch</option>
-          <option value="dinner">dinner</option>
-          <option value="breakfast">breakfast</option>
-          <option value="kvallsmat">kvallsmat</option>
-        </select>
-      </label>
-      <label>composition
-        <select id="editRowCompositionId"></select>
-      </label>
-      <label>sort_order
-        <input id="editRowSortOrder" type="number" value="0">
-      </label>
-      <label>note
-        <input id="editRowNote" type="text" placeholder="optional note">
-      </label>
-      <button id="btnSaveRowEdit" type="button">Save row</button>
-      <button id="btnCancelRowEdit" type="button">Cancel</button>
-      <pre id="editMenuRowOut"></pre>
-    </div>
-
-    <pre id="menuRowsOut"></pre>
-  </section>
+  </div>
 
   <script src="/static/js/menu_builder_v1.js"></script>
 </body>

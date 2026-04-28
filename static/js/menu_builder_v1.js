@@ -1,17 +1,13 @@
-function showJson(targetId, value) {
+function showText(targetId, text) {
   const el = document.getElementById(targetId);
   if (!el) {
     return;
   }
-  el.textContent = JSON.stringify(value, null, 2);
+  el.textContent = String(text || "");
 }
 
 function showLoading(targetId) {
-  const el = document.getElementById(targetId);
-  if (!el) {
-    return;
-  }
-  el.textContent = "Loading...";
+  showText(targetId, "Loading...");
 }
 
 async function callApi(url, options) {
@@ -26,681 +22,632 @@ async function callApi(url, options) {
   return { status: response.status, data };
 }
 
-let allCompositions = [];
+const DEFAULT_SITE_ID = "site_1";
+const DEFAULT_WEEK_KEY = "2026-W16";
+const DEFAULT_MEAL_SLOT = "section";
+
+let allDishes = [];
+let activeMenuId = "";
+let activeMenuTitle = "";
 let currentRows = [];
-let currentGroups = [];
-let currentRowIndicatorsByDetailId = {};
+let sectionDrafts = [];
+let pickerOpenSection = "";
 
-const CONFLICT_TOKEN_META = {
-  lactose_relevant: { icon: "🥛", label: "Milk/Lactose" },
-  gluten_relevant: { icon: "🌾", label: "Gluten" },
-  fish_relevant: { icon: "🐟", label: "Fish" },
-  egg_relevant: { icon: "🥚", label: "Egg" },
-  nut_relevant: { icon: "🥜", label: "Nuts" },
-};
-
-function tokenLabelForConflict(conflictKey) {
-  const meta = CONFLICT_TOKEN_META[String(conflictKey || "")];
-  if (meta) {
-    return meta.icon + " " + meta.label;
-  }
-  return String(conflictKey || "").replace(/_/g, " ");
+function normalize(value) {
+  return String(value || "").trim();
 }
 
-function renderTokenList(listId, items, emptyMessage, labelBuilder) {
-  const list = document.getElementById(listId);
-  if (!list) {
-    return;
-  }
-  list.innerHTML = "";
-  const values = Array.isArray(items) ? items : [];
-  if (values.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = String(emptyMessage || "None");
-    li.className = "declaration-list-empty";
-    list.appendChild(li);
-    return;
-  }
-  for (const item of values) {
-    const li = document.createElement("li");
-    li.className = "declaration-token-item";
-    const token = document.createElement("span");
-    token.className = "declaration-token";
-    token.textContent = String(labelBuilder ? labelBuilder(item) : item || "");
-    li.appendChild(token);
-    list.appendChild(li);
-  }
+function normalizeLower(value) {
+  return normalize(value).toLowerCase();
 }
 
-function buildRowIndicators(readinessRows) {
-  const rows = Array.isArray(readinessRows) ? readinessRows : [];
-  const indicators = {};
+function setActiveMenu(menu) {
+  activeMenuId = String((menu && menu.menu_id) || "");
+  activeMenuTitle = String((menu && menu.title) || "");
+  const meta = document.getElementById("activeMenuMeta");
+  if (!meta) {
+    return;
+  }
+  if (!activeMenuId) {
+    meta.textContent = "No active menu";
+    return;
+  }
+  meta.textContent =
+    "Active menu: " +
+    (activeMenuTitle ? activeMenuTitle + " (" + activeMenuId + ")" : activeMenuId);
+}
+
+function sectionsFromRows(rows) {
+  const bySection = {};
   for (const row of rows) {
-    const detailId = String(row.menu_detail_id || "");
-    if (!detailId) {
+    const sectionName = normalize(row.day);
+    if (!sectionName) {
       continue;
     }
-    const rowConflicts = row && row.conflict_preview && Array.isArray(row.conflict_preview.conflicts_present)
-      ? row.conflict_preview.conflicts_present
-      : [];
-    const components = Array.isArray(row.components) ? row.components : [];
-    const hasRecipe = components.some((component) => Boolean(component && component.primary_recipe_id));
-    const hasComponentConflicts = components.some((component) => {
-      const componentConflicts = component && component.conflict_preview && Array.isArray(component.conflict_preview.conflicts_present)
-        ? component.conflict_preview.conflicts_present
-        : [];
-      return componentConflicts.length > 0;
+    if (!bySection[sectionName]) {
+      bySection[sectionName] = [];
+    }
+    bySection[sectionName].push(row);
+  }
+
+  const names = Object.keys(bySection).sort((a, b) => a.localeCompare(b));
+  const sections = names.map((name) => {
+    const items = bySection[name].slice().sort((left, right) => {
+      const leftSort = Number(left.sort_order || 0);
+      const rightSort = Number(right.sort_order || 0);
+      if (leftSort !== rightSort) {
+        return leftSort - rightSort;
+      }
+      return String(left.menu_detail_id || "").localeCompare(String(right.menu_detail_id || ""));
     });
-    indicators[detailId] = {
-      hasRecipe,
-      hasConflicts: rowConflicts.length > 0 || hasComponentConflicts,
-    };
+    return { name, rows: items };
+  });
+
+  for (const draft of sectionDrafts) {
+    const draftName = normalize(draft);
+    if (!draftName) {
+      continue;
+    }
+    if (!sections.some((item) => normalizeLower(item.name) === normalizeLower(draftName))) {
+      sections.push({ name: draftName, rows: [] });
+    }
   }
-  return indicators;
+
+  return sections;
 }
 
-function renderRowIndicators(menuDetailId) {
-  const wrap = document.createElement("div");
-  wrap.className = "menu-row-indicators";
-  const indicator = currentRowIndicatorsByDetailId[String(menuDetailId || "")] || {};
-
-  if (indicator.hasRecipe) {
-    const recipe = document.createElement("span");
-    recipe.className = "menu-row-indicator menu-row-indicator-recipe";
-    recipe.textContent = "🍳";
-    recipe.title = "Has recipe";
-    wrap.appendChild(recipe);
-  }
-  if (indicator.hasConflicts) {
-    const conflict = document.createElement("span");
-    conflict.className = "menu-row-indicator menu-row-indicator-conflict";
-    conflict.textContent = "⚑";
-    conflict.title = "Has potential conflicts";
-    wrap.appendChild(conflict);
-  }
-
-  return wrap;
-}
-
-function renderQuickCompositionPalette(query) {
-  const host = document.getElementById("rowCompositionPalette");
+function renderSections() {
+  const host = document.getElementById("menuSections");
   if (!host) {
     return;
   }
   host.innerHTML = "";
-  const filtered = filterCompositions(query).slice(0, 24);
-  if (filtered.length === 0) {
-    const empty = document.createElement("span");
-    empty.className = "menu-quick-palette-empty";
-    empty.textContent = "No compositions";
+
+  const sections = sectionsFromRows(currentRows);
+  if (sections.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "menu-empty";
+    empty.textContent = "No sections yet. Add your first section.";
     host.appendChild(empty);
     return;
   }
 
-  for (const composition of filtered) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "menu-quick-pill";
-    btn.textContent = String(composition.composition_name || composition.composition_id || "");
-    const compositionId = String(composition.composition_id || "");
-    btn.title = "Add " + btn.textContent + " to current menu";
-    btn.addEventListener("click", async () => {
-      await addMenuRowByCompositionId(compositionId);
+  for (const section of sections) {
+    const block = document.createElement("section");
+    block.className = "menu-section";
+
+    const header = document.createElement("div");
+    header.className = "menu-section-header";
+
+    const title = document.createElement("p");
+    title.className = "menu-section-name";
+    title.textContent = section.name;
+
+    const actions = document.createElement("div");
+    actions.className = "menu-section-actions";
+
+    const addDishBtn = document.createElement("button");
+    addDishBtn.type = "button";
+    addDishBtn.textContent = "Add dish";
+    addDishBtn.addEventListener("click", () => {
+      openDishPicker(section.name);
     });
-    host.appendChild(btn);
-  }
-}
 
-async function addMenuRowByCompositionId(compositionId) {
-  const menuId = getActiveMenuId();
-  const dayEl = document.getElementById("rowDay");
-  const mealSlotEl = document.getElementById("rowMealSlot");
-  const noteEl = document.getElementById("rowNote");
-  const sortOrderEl = document.getElementById("rowSortOrder");
-  const compositionEl = document.getElementById("rowCompositionId");
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.textContent = "Rename";
+    renameBtn.addEventListener("click", async () => {
+      await renameSection(section.name);
+    });
 
-  if (!menuId) {
-    showJson("addMenuRowOut", { ok: false, error: "active menu_id is required" });
-    return;
-  }
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "Remove section";
+    removeBtn.addEventListener("click", async () => {
+      await removeSection(section.name);
+    });
 
-  const selectedCompositionId = String(compositionId || (compositionEl ? compositionEl.value : "") || "").trim();
-  if (!selectedCompositionId) {
-    showJson("addMenuRowOut", { ok: false, error: "composition_id is required" });
-    return;
-  }
-  if (compositionEl) {
-    compositionEl.value = selectedCompositionId;
-  }
+    actions.appendChild(addDishBtn);
+    actions.appendChild(renameBtn);
+    actions.appendChild(removeBtn);
 
-  const payload = {
-    day: dayEl ? String(dayEl.value || "").trim() : "",
-    meal_slot: mealSlotEl ? String(mealSlotEl.value || "").trim() : "",
-    composition_id: selectedCompositionId,
-    note: noteEl ? String(noteEl.value || "").trim() : "",
-    sort_order: sortOrderEl ? Number.parseInt(String(sortOrderEl.value || "0"), 10) : 0,
-  };
+    header.appendChild(title);
+    header.appendChild(actions);
+    block.appendChild(header);
 
-  showLoading("addMenuRowOut");
-  const result = await callApi("/api/builder/menus/" + encodeURIComponent(menuId) + "/rows", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: payload,
-  });
-  showJson("addMenuRowOut", result);
-  if (result && result.data && result.data.ok) {
-    if (noteEl) {
-      noteEl.value = "";
-    }
-    await refreshRows();
-  }
-}
+    const list = document.createElement("div");
+    list.className = "menu-dish-list";
 
-function setListContent(listId, items, emptyMessage) {
-  const list = document.getElementById(listId);
-  if (!list) {
-    return;
-  }
-  list.innerHTML = "";
-  const values = Array.isArray(items) ? items : [];
-  if (values.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = String(emptyMessage || "None");
-    list.appendChild(li);
-    return;
-  }
-  for (const item of values) {
-    const li = document.createElement("li");
-    li.textContent = String(item || "");
-    list.appendChild(li);
-  }
-}
-
-function isMenuDeclarationVisible() {
-  const toggle = document.getElementById("menuDeclarationVisibleToggle");
-  return toggle ? Boolean(toggle.checked) : true;
-}
-
-function renderMenuDeclarationPreview(payload) {
-  const status = document.getElementById("menuDeclarationStatus");
-  const disabled = document.getElementById("menuDeclarationDisabled");
-  const summary = document.getElementById("menuDeclarationSignalsSummary");
-  const enabled = Boolean(payload && payload.declaration_enabled);
-  const readiness = enabled ? (payload.readiness || {}) : null;
-  const signals = readiness && Array.isArray(readiness.trait_signals_present)
-    ? readiness.trait_signals_present
-    : [];
-  const conflictPreview = readiness && readiness.conflict_preview ? readiness.conflict_preview : {};
-  const conflictsPresent = Array.isArray(conflictPreview.conflicts_present)
-    ? conflictPreview.conflicts_present
-    : [];
-  const conflictSources = Array.isArray(conflictPreview.conflict_sources)
-    ? conflictPreview.conflict_sources
-    : [];
-
-  if (status) {
-    status.textContent = "Read-only preview. No automation applied.";
-  }
-  if (disabled) {
-    if (enabled) {
-      disabled.classList.add("hidden");
+    if (section.rows.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "menu-empty";
+      empty.textContent = "No dishes in this section yet.";
+      list.appendChild(empty);
     } else {
-      disabled.classList.remove("hidden");
-      disabled.textContent = "Declaration preview unavailable right now.";
-    }
-  }
-  if (summary) {
-    if (!enabled) {
-      summary.textContent = "Declaration preview disabled";
-    } else if (conflictsPresent.length > 0) {
-      summary.textContent = "This menu contains: " + conflictsPresent.map((v) => tokenLabelForConflict(v)).join(", ");
-    } else if (signals.length > 0) {
-      summary.textContent = "This menu contains declaration signals.";
-    } else {
-      summary.textContent = "This menu contains no declaration conflicts.";
-    }
-  }
+      for (const row of section.rows) {
+        const item = document.createElement("div");
+        item.className = "menu-dish-row";
 
-  renderTokenList("menuDeclarationSignals", signals, "No signals", (item) => String(item || ""));
-  const conflictItems = [];
-  for (const source of conflictSources) {
-    const traits = Array.isArray(source.triggering_trait_signals)
-      ? source.triggering_trait_signals.join(", ")
-      : "";
-    conflictItems.push(tokenLabelForConflict(source.conflict_key) + (traits ? " · " + traits : ""));
-  }
-  if (conflictItems.length === 0 && conflictsPresent.length > 0) {
-    for (const conflict of conflictsPresent) {
-      conflictItems.push(tokenLabelForConflict(conflict));
-    }
-  }
-  renderTokenList("menuConflictList", conflictItems, "No potential conflicts", (item) => String(item || ""));
+        const left = document.createElement("div");
 
-  const warnings = [];
-  if (readiness && Array.isArray(readiness.warnings)) {
-    warnings.push(...readiness.warnings);
-  }
-  const rows = readiness && Array.isArray(readiness.rows) ? readiness.rows : [];
-  currentRowIndicatorsByDetailId = enabled ? buildRowIndicators(rows) : {};
-  const searchInput = document.getElementById("compositionSearch");
-  renderMenuRowsGrouped(currentGroups, searchInput ? String(searchInput.value || "") : "");
-  for (const row of rows) {
-    const rowWarnings = Array.isArray(row.warnings) ? row.warnings : [];
-    for (const warning of rowWarnings) {
-      warnings.push("Row " + String(row.menu_detail_id || "") + ": " + String(warning || ""));
+        const label = document.createElement("div");
+        label.className = "menu-dish-label";
+        label.textContent = String(row.composition_name || row.composition_id || "Dish");
+
+        const meta = document.createElement("div");
+        meta.className = "menu-dish-meta";
+        meta.textContent = "dish_id: " + String(row.composition_id || "") + " | sort: " + String(row.sort_order || 0);
+
+        left.appendChild(label);
+        left.appendChild(meta);
+
+        const removeDishBtn = document.createElement("button");
+        removeDishBtn.type = "button";
+        removeDishBtn.textContent = "Remove";
+        removeDishBtn.addEventListener("click", async () => {
+          await removeDish(row.menu_detail_id);
+        });
+
+        item.appendChild(left);
+        item.appendChild(removeDishBtn);
+        list.appendChild(item);
+      }
     }
+
+    block.appendChild(list);
+    host.appendChild(block);
   }
-  setListContent("menuDeclarationWarnings", warnings, "No warnings");
 }
 
-async function refreshDeclarationPreview() {
-  const menuId = getActiveMenuId();
-  if (!menuId) {
-    renderMenuDeclarationPreview({ declaration_enabled: false, readiness: null });
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (!el) {
     return;
   }
+  el.classList.remove("hidden");
+}
 
-  const include = isMenuDeclarationVisible() ? "1" : "0";
-  const result = await callApi(
-    "/api/builder/menus/" + encodeURIComponent(menuId) + "/declaration-readiness?include_declaration=" + include,
-    { method: "GET" },
-  );
-  if (!result || result.status >= 400 || !result.data || !result.data.ok) {
-    renderMenuDeclarationPreview({ declaration_enabled: false, readiness: null });
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) {
     return;
   }
-  renderMenuDeclarationPreview(result.data);
+  el.classList.add("hidden");
 }
 
-function getActiveMenuId() {
-  const el = document.getElementById("activeMenuId");
-  return el ? String(el.value || "").trim() : "";
-}
-
-function setActiveMenuId(menuId) {
-  const el = document.getElementById("activeMenuId");
-  if (el) {
-    el.value = String(menuId || "");
-  }
-}
-
-function normalizeText(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function filterCompositions(query) {
-  const q = normalizeText(query);
+function filterDishes(query) {
+  const q = normalizeLower(query);
   if (!q) {
-    return allCompositions;
+    return allDishes;
   }
-  return allCompositions.filter((item) => {
-    const id = normalizeText(item.composition_id);
-    const name = normalizeText(item.composition_name);
+  return allDishes.filter((item) => {
+    const id = normalizeLower(item.composition_id);
+    const name = normalizeLower(item.composition_name);
     return id.includes(q) || name.includes(q);
   });
 }
 
-function renderCompositionOptionsForSelect(selectId, compositions, selectedValue) {
-  const select = document.getElementById(selectId);
-  if (!select) {
+function renderDishPicker() {
+  const host = document.getElementById("dishPickerList");
+  const search = document.getElementById("dishPickerSearch");
+  if (!host) {
     return;
   }
-  select.innerHTML = "";
 
-  const list = Array.isArray(compositions) ? compositions : [];
-  for (const row of list) {
-    const opt = document.createElement("option");
-    const value = String(row.composition_id || "");
-    opt.value = value;
-    opt.textContent = String(row.composition_name || row.composition_id || "");
-    if (selectedValue && selectedValue === value) {
-      opt.selected = true;
-    }
-    select.appendChild(opt);
-  }
-}
-
-function renderCompositionOptions(query) {
-  const filtered = filterCompositions(query);
-  const addSelected = (() => {
-    const el = document.getElementById("rowCompositionId");
-    return el ? String(el.value || "") : "";
-  })();
-  const editSelected = (() => {
-    const el = document.getElementById("editRowCompositionId");
-    return el ? String(el.value || "") : "";
-  })();
-  renderCompositionOptionsForSelect("rowCompositionId", filtered, addSelected);
-  renderCompositionOptionsForSelect("editRowCompositionId", filtered, editSelected);
-  renderQuickCompositionPalette(query);
-}
-
-async function loadCompositionOptions() {
-  const result = await callApi("/api/builder/library", { method: "GET" });
-  allCompositions = (result && result.data && result.data.compositions) || [];
-  renderCompositionOptions("");
-  showJson("menuRowsOut", {
-    ok: true,
-    message: "Library compositions loaded",
-    count: allCompositions.length,
-  });
-}
-
-function rowMatchesQuery(row, query) {
-  const q = normalizeText(query);
-  if (!q) {
-    return true;
-  }
-  const idText = normalizeText(row.composition_id);
-  const nameText = normalizeText(row.composition_name);
-  const unresolvedText = normalizeText(row.unresolved_text);
-  return idText.includes(q) || nameText.includes(q) || unresolvedText.includes(q);
-}
-
-function renderMenuRowsGrouped(groups, query) {
-  const body = document.getElementById("menuRowsBody");
-  if (!body) {
-    return;
-  }
-  body.innerHTML = "";
-
-  const groupList = Array.isArray(groups) ? groups : [];
-  if (groupList.length === 0) {
+  host.innerHTML = "";
+  const query = search ? String(search.value || "") : "";
+  const filtered = filterDishes(query);
+  if (filtered.length === 0) {
     const empty = document.createElement("div");
-    empty.textContent = "No rows";
-    body.appendChild(empty);
+    empty.className = "menu-empty";
+    empty.textContent = "No dishes found.";
+    host.appendChild(empty);
     return;
   }
 
-  let renderedCount = 0;
+  for (const dish of filtered) {
+    const row = document.createElement("div");
+    row.className = "menu-picker-item";
 
-  for (const group of groupList) {
-    const rows = Array.isArray(group.rows) ? group.rows : [];
-    const filteredRows = rows.filter((row) => rowMatchesQuery(row, query));
-    if (filteredRows.length === 0) {
-      continue;
-    }
+    const name = document.createElement("div");
+    name.textContent = String(dish.composition_name || dish.composition_id || "");
 
-    const section = document.createElement("section");
-    section.className = "menu-group";
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.textContent = "Attach";
+    addBtn.addEventListener("click", async () => {
+      await attachDishToSection(String(dish.composition_id || ""));
+    });
 
-    const header = document.createElement("div");
-    header.className = "menu-group-header";
-    header.textContent =
-      String(group.day || "") + " - " + String(group.meal_slot || "") + " (" + String(filteredRows.length) + ")";
-    section.appendChild(header);
-
-    const list = document.createElement("div");
-    list.className = "menu-group-list";
-
-    for (const row of filteredRows) {
-      const card = document.createElement("article");
-      const unresolved = row.is_unresolved || row.composition_ref_type === "unresolved";
-      card.className = unresolved ? "menu-row-card unresolved" : "menu-row-card";
-
-      const titleWrap = document.createElement("div");
-      titleWrap.className = "menu-row-title-wrap";
-
-      const title = document.createElement("div");
-      title.className = "menu-row-title";
-      if (unresolved) {
-        title.textContent = "Unresolved: " + String(row.unresolved_text || "") ;
-      } else {
-        title.textContent = String(row.composition_name || row.composition_id || "");
-      }
-      titleWrap.appendChild(title);
-      if (!unresolved) {
-        titleWrap.appendChild(renderRowIndicators(row.menu_detail_id));
-      }
-      card.appendChild(titleWrap);
-
-      const meta = document.createElement("div");
-      meta.className = "menu-row-meta";
-      meta.textContent =
-        "sort " + String(row.sort_order || 0) +
-        " | ref " + String(row.composition_ref_type || "") +
-        (row.composition_id ? " | id " + String(row.composition_id) : "");
-      card.appendChild(meta);
-
-      if (row.note) {
-        const note = document.createElement("div");
-        note.className = "menu-row-note";
-        note.textContent = "Note: " + String(row.note || "");
-        card.appendChild(note);
-      }
-
-      const actions = document.createElement("div");
-      actions.className = "menu-row-actions";
-
-      const editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.textContent = "Edit";
-      editBtn.addEventListener("click", () => {
-        openEditPanel(row);
-      });
-      actions.appendChild(editBtn);
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.textContent = "Delete";
-      deleteBtn.style.marginLeft = "6px";
-      deleteBtn.addEventListener("click", async () => {
-        await deleteRow(row.menu_detail_id);
-      });
-      actions.appendChild(deleteBtn);
-
-      card.appendChild(actions);
-      list.appendChild(card);
-      renderedCount += 1;
-    }
-
-    section.appendChild(list);
-    body.appendChild(section);
-  }
-
-  if (renderedCount === 0) {
-    const empty = document.createElement("div");
-    empty.textContent = "No rows match current filter";
-    body.appendChild(empty);
+    row.appendChild(name);
+    row.appendChild(addBtn);
+    host.appendChild(row);
   }
 }
 
-function openEditPanel(row) {
-  const panel = document.getElementById("editRowPanel");
-  const rowId = document.getElementById("editRowId");
-  const day = document.getElementById("editRowDay");
-  const mealSlot = document.getElementById("editRowMealSlot");
-  const composition = document.getElementById("editRowCompositionId");
-  const note = document.getElementById("editRowNote");
-  const sortOrder = document.getElementById("editRowSortOrder");
-
-  if (!panel || !rowId || !day || !mealSlot || !composition || !note || !sortOrder) {
+function openDishPicker(sectionName) {
+  if (!activeMenuId) {
+    showText("menuSectionsOut", "Create or open a menu first.");
     return;
   }
 
-  rowId.value = String(row.menu_detail_id || "");
-  day.value = String(row.day || "monday");
-  mealSlot.value = String(row.meal_slot || "lunch");
-  composition.value = String(row.composition_id || "");
-  note.value = String(row.note || "");
-  sortOrder.value = String(row.sort_order || 0);
-  panel.classList.remove("hidden");
+  pickerOpenSection = String(sectionName || "");
+  const meta = document.getElementById("dishPickerSectionMeta");
+  if (meta) {
+    meta.textContent = "Section: " + pickerOpenSection;
+  }
+  const search = document.getElementById("dishPickerSearch");
+  if (search) {
+    search.value = "";
+  }
+  showText("dishPickerOut", "");
+  renderDishPicker();
+  openModal("dishPickerModal");
 }
 
-function closeEditPanel() {
-  const panel = document.getElementById("editRowPanel");
-  const rowId = document.getElementById("editRowId");
-  if (panel) {
-    panel.classList.add("hidden");
-  }
-  if (rowId) {
-    rowId.value = "";
-  }
-}
-
-async function refreshRows() {
-  const menuId = getActiveMenuId();
-  if (!menuId) {
-    showJson("menuRowsOut", { ok: false, error: "active menu_id is required" });
+async function attachDishToSection(compositionId) {
+  if (!activeMenuId) {
+    showText("dishPickerOut", "Create or open a menu first.");
     return;
   }
 
-  showLoading("menuRowsOut");
-  const result = await callApi("/api/builder/menus/" + encodeURIComponent(menuId) + "/rows", {
-    method: "GET",
-  });
-  const rows = (result && result.data && result.data.rows) || [];
-  const groups = (result && result.data && result.data.groups) || [];
-  const searchInput = document.getElementById("compositionSearch");
-  const query = searchInput ? String(searchInput.value || "") : "";
-  currentRows = rows;
-  currentGroups = groups;
-  renderMenuRowsGrouped(groups, query);
-  await refreshDeclarationPreview();
-  showJson("menuRowsOut", result);
-}
-
-async function deleteRow(menuDetailId) {
-  const menuId = getActiveMenuId();
-  if (!menuId) {
-    showJson("menuRowsOut", { ok: false, error: "active menu_id is required" });
+  const compositionIdValue = normalize(compositionId);
+  if (!compositionIdValue) {
+    showText("dishPickerOut", "Dish id is required.");
     return;
   }
-  const confirmed = window.confirm("Delete this menu row?");
+
+  const sectionName = normalize(pickerOpenSection);
+  if (!sectionName) {
+    showText("dishPickerOut", "Section is required.");
+    return;
+  }
+
+  const sectionRows = currentRows.filter((row) => normalizeLower(row.day) === normalizeLower(sectionName));
+  const sortOrder = sectionRows.length;
+
+  showLoading("dishPickerOut");
+  const result = await callApi(
+    "/api/builder/menus/" + encodeURIComponent(activeMenuId) + "/rows",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: {
+        day: sectionName,
+        meal_slot: DEFAULT_MEAL_SLOT,
+        composition_id: compositionIdValue,
+        note: "",
+        sort_order: sortOrder,
+      },
+    },
+  );
+
+  if (!result || !result.data || !result.data.ok) {
+    showText("dishPickerOut", "Could not attach dish.");
+    return;
+  }
+
+  showText("dishPickerOut", "Dish attached.");
+  await refreshRows();
+  closeModal("dishPickerModal");
+}
+
+async function removeDish(menuDetailId) {
+  const detailIdValue = normalize(menuDetailId);
+  if (!activeMenuId || !detailIdValue) {
+    return;
+  }
+  const confirmed = window.confirm("Remove this dish from section?");
   if (!confirmed) {
     return;
   }
+
   const result = await callApi(
-    "/api/builder/menus/" + encodeURIComponent(menuId) + "/rows/" + encodeURIComponent(String(menuDetailId || "")),
+    "/api/builder/menus/" + encodeURIComponent(activeMenuId) + "/rows/" + encodeURIComponent(detailIdValue),
     { method: "DELETE" },
   );
-  showJson("menuRowsOut", result);
+  if (!result || !result.data || !result.data.ok) {
+    showText("menuSectionsOut", "Could not remove dish.");
+    return;
+  }
+  showText("menuSectionsOut", "Dish removed.");
   await refreshRows();
 }
 
-async function saveRowEdit() {
-  const menuId = getActiveMenuId();
-  const rowId = document.getElementById("editRowId");
-  const day = document.getElementById("editRowDay");
-  const mealSlot = document.getElementById("editRowMealSlot");
-  const composition = document.getElementById("editRowCompositionId");
-  const note = document.getElementById("editRowNote");
-  const sortOrder = document.getElementById("editRowSortOrder");
-
-  if (!menuId) {
-    showJson("editMenuRowOut", { ok: false, error: "active menu_id is required" });
+async function renameSection(oldName) {
+  const oldValue = normalize(oldName);
+  if (!oldValue) {
     return;
   }
-  const menuDetailId = rowId ? String(rowId.value || "").trim() : "";
-  if (!menuDetailId) {
-    showJson("editMenuRowOut", { ok: false, error: "menu_detail_id is required" });
+  const nextValue = normalize(window.prompt("Rename section", oldValue));
+  if (!nextValue || normalizeLower(nextValue) === normalizeLower(oldValue)) {
     return;
   }
 
-  const payload = {
-    day: day ? String(day.value || "").trim() : "",
-    meal_slot: mealSlot ? String(mealSlot.value || "").trim() : "",
-    composition_id: composition ? String(composition.value || "").trim() : "",
-    note: note ? String(note.value || "").trim() : "",
-    sort_order: sortOrder ? Number.parseInt(String(sortOrder.value || "0"), 10) : 0,
-  };
+  const rowsInSection = currentRows.filter((row) => normalizeLower(row.day) === normalizeLower(oldValue));
+  if (rowsInSection.length === 0) {
+    sectionDrafts = sectionDrafts.map((name) => (normalizeLower(name) === normalizeLower(oldValue) ? nextValue : name));
+    renderSections();
+    return;
+  }
 
-  showLoading("editMenuRowOut");
+  showLoading("menuSectionsOut");
+  for (const row of rowsInSection) {
+    const result = await callApi(
+      "/api/builder/menus/" + encodeURIComponent(activeMenuId) + "/rows/" + encodeURIComponent(String(row.menu_detail_id || "")),
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: {
+          day: nextValue,
+          meal_slot: String(row.meal_slot || DEFAULT_MEAL_SLOT),
+          composition_id: String(row.composition_id || ""),
+          note: String(row.note || ""),
+          sort_order: Number(row.sort_order || 0),
+        },
+      },
+    );
+    if (!result || !result.data || !result.data.ok) {
+      showText("menuSectionsOut", "Could not rename section.");
+      return;
+    }
+  }
+
+  sectionDrafts = sectionDrafts.map((name) => (normalizeLower(name) === normalizeLower(oldValue) ? nextValue : name));
+  showText("menuSectionsOut", "Section renamed.");
+  await refreshRows();
+}
+
+async function removeSection(sectionName) {
+  const sectionValue = normalize(sectionName);
+  if (!sectionValue) {
+    return;
+  }
+  const confirmed = window.confirm("Remove this section and all its dishes?");
+  if (!confirmed) {
+    return;
+  }
+
+  const rowsInSection = currentRows.filter((row) => normalizeLower(row.day) === normalizeLower(sectionValue));
+  if (rowsInSection.length === 0) {
+    sectionDrafts = sectionDrafts.filter((name) => normalizeLower(name) !== normalizeLower(sectionValue));
+    renderSections();
+    return;
+  }
+
+  showLoading("menuSectionsOut");
+  for (const row of rowsInSection) {
+    const result = await callApi(
+      "/api/builder/menus/" + encodeURIComponent(activeMenuId) + "/rows/" + encodeURIComponent(String(row.menu_detail_id || "")),
+      { method: "DELETE" },
+    );
+    if (!result || !result.data || !result.data.ok) {
+      showText("menuSectionsOut", "Could not remove section.");
+      return;
+    }
+  }
+
+  sectionDrafts = sectionDrafts.filter((name) => normalizeLower(name) !== normalizeLower(sectionValue));
+  showText("menuSectionsOut", "Section removed.");
+  await refreshRows();
+}
+
+async function refreshRows() {
+  if (!activeMenuId) {
+    currentRows = [];
+    renderSections();
+    return;
+  }
+
   const result = await callApi(
-    "/api/builder/menus/" + encodeURIComponent(menuId) + "/rows/" + encodeURIComponent(menuDetailId),
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: payload,
-    },
+    "/api/builder/menus/" + encodeURIComponent(activeMenuId) + "/rows",
+    { method: "GET" },
   );
-  showJson("editMenuRowOut", result);
-  if (result && result.data && result.data.ok) {
-    closeEditPanel();
-    await refreshRows();
+
+  if (!result || !result.data || !result.data.ok) {
+    showText("menuSectionsOut", "Could not load sections.");
+    return;
+  }
+
+  currentRows = Array.isArray(result.data.rows) ? result.data.rows : [];
+  renderSections();
+}
+
+async function loadDishes() {
+  const result = await callApi("/api/builder/library", { method: "GET" });
+  allDishes = result && result.data && Array.isArray(result.data.compositions)
+    ? result.data.compositions
+    : [];
+}
+
+function renderMenuLibrary(menus) {
+  const host = document.getElementById("menuLibraryList");
+  if (!host) {
+    return;
+  }
+  host.innerHTML = "";
+
+  const items = Array.isArray(menus) ? menus : [];
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "menu-empty";
+    empty.textContent = "No menus yet.";
+    host.appendChild(empty);
+    return;
+  }
+
+  for (const menu of items) {
+    const row = document.createElement("div");
+    row.className = "menu-library-item";
+
+    const left = document.createElement("div");
+    const name = document.createElement("div");
+    name.textContent = String(menu.title || menu.menu_id || "");
+    const meta = document.createElement("div");
+    meta.className = "menu-library-item-meta";
+    meta.textContent = "menu_id: " + String(menu.menu_id || "") + " | week_key: " + String(menu.week_key || "");
+    left.appendChild(name);
+    left.appendChild(meta);
+
+    const openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.textContent = "Open";
+    openBtn.addEventListener("click", async () => {
+      setActiveMenu(menu);
+      showText("menuLibraryOut", "Menu opened.");
+      await refreshRows();
+    });
+
+    const outputBtn = document.createElement("button");
+    outputBtn.type = "button";
+    outputBtn.textContent = "View/Print";
+    outputBtn.addEventListener("click", () => {
+      const id = String(menu.menu_id || "");
+      if (!id) {
+        return;
+      }
+      window.location.href = "/menu-output-v1?menu_id=" + encodeURIComponent(id);
+    });
+
+    const actionWrap = document.createElement("div");
+    actionWrap.className = "menu-inline";
+    actionWrap.appendChild(openBtn);
+    actionWrap.appendChild(outputBtn);
+
+    row.appendChild(left);
+    row.appendChild(actionWrap);
+    host.appendChild(row);
   }
 }
 
+async function refreshMenuLibrary() {
+  showLoading("menuLibraryOut");
+  const result = await callApi("/api/builder/menus", { method: "GET" });
+  if (!result || !result.data || !result.data.ok) {
+    showText("menuLibraryOut", "Could not load menu library.");
+    return;
+  }
+  renderMenuLibrary(result.data.menus);
+  showText("menuLibraryOut", "Menu library updated.");
+}
+
+async function createMenu() {
+  const titleInput = document.getElementById("menuTitle");
+  const title = titleInput ? normalize(titleInput.value) : "";
+  if (!title) {
+    showText("createMenuOut", "Menu name is required.");
+    return;
+  }
+
+  showLoading("createMenuOut");
+  const result = await callApi("/api/builder/menus", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: {
+      title,
+      site_id: DEFAULT_SITE_ID,
+      week_key: DEFAULT_WEEK_KEY,
+    },
+  });
+
+  if (!result || !result.data || !result.data.ok) {
+    showText("createMenuOut", "Could not create menu.");
+    return;
+  }
+
+  setActiveMenu(result.data.menu || {});
+  sectionDrafts = ["Section 1"];
+  showText("createMenuOut", "Menu created and opened.");
+  await refreshRows();
+  await refreshMenuLibrary();
+}
+
+function addSectionDraft() {
+  const input = document.getElementById("newSectionName");
+  const name = input ? normalize(input.value) : "";
+  if (!name) {
+    showText("menuSectionsOut", "Section name is required.");
+    return;
+  }
+  if (!activeMenuId) {
+    showText("menuSectionsOut", "Create or open a menu first.");
+    return;
+  }
+
+  const existsInRows = currentRows.some((row) => normalizeLower(row.day) === normalizeLower(name));
+  const existsInDrafts = sectionDrafts.some((section) => normalizeLower(section) === normalizeLower(name));
+  if (existsInRows || existsInDrafts) {
+    showText("menuSectionsOut", "Section already exists.");
+    return;
+  }
+
+  sectionDrafts.push(name);
+  if (input) {
+    input.value = "";
+  }
+  renderSections();
+  showText("menuSectionsOut", "Section added. Add dishes to persist it.");
+}
+
 function bindHandlers() {
-  const createMenuBtn = document.getElementById("btnCreateMenu");
-  const addRowBtn = document.getElementById("btnAddMenuRow");
-  const refreshRowsBtn = document.getElementById("btnRefreshRows");
-  const compositionSearch = document.getElementById("compositionSearch");
-  const saveEditBtn = document.getElementById("btnSaveRowEdit");
-  const cancelEditBtn = document.getElementById("btnCancelRowEdit");
-  const declarationToggle = document.getElementById("menuDeclarationVisibleToggle");
+  const btnNewMenu = document.getElementById("btnNewMenu");
+  const btnCreateMenu = document.getElementById("btnCreateMenu");
+  const btnAddSection = document.getElementById("btnAddSection");
+  const btnRefreshSections = document.getElementById("btnRefreshSections");
+  const btnRefreshMenuLibrary = document.getElementById("btnRefreshMenuLibrary");
+  const dishPickerClose = document.getElementById("dishPickerClose");
+  const dishPickerSearch = document.getElementById("dishPickerSearch");
 
-  if (createMenuBtn) {
-    createMenuBtn.addEventListener("click", async () => {
-      const menuTitleEl = document.getElementById("menuTitle");
-      const menuIdEl = document.getElementById("menuId");
-      const siteIdEl = document.getElementById("siteId");
-      const weekKeyEl = document.getElementById("weekKey");
-
-      const payload = {
-        title: menuTitleEl ? String(menuTitleEl.value || "").trim() : "",
-        menu_id: menuIdEl ? String(menuIdEl.value || "").trim() : "",
-        site_id: siteIdEl ? String(siteIdEl.value || "").trim() : "",
-        week_key: weekKeyEl ? String(weekKeyEl.value || "").trim() : "",
-      };
-
-      showLoading("createMenuOut");
-      const result = await callApi("/api/builder/menus", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      });
-      showJson("createMenuOut", result);
-      if (result && result.data && result.data.ok && result.data.menu && result.data.menu.menu_id) {
-        setActiveMenuId(result.data.menu.menu_id);
-        await refreshRows();
-      }
+  if (btnNewMenu) {
+    btnNewMenu.addEventListener("click", () => {
+      setActiveMenu({ menu_id: "", title: "" });
+      currentRows = [];
+      sectionDrafts = [];
+      renderSections();
+      showText("createMenuOut", "Enter a menu name and save.");
     });
   }
 
-  if (addRowBtn) {
-    addRowBtn.addEventListener("click", async () => {
-      await addMenuRowByCompositionId("");
+  if (btnCreateMenu) {
+    btnCreateMenu.addEventListener("click", async () => {
+      await createMenu();
     });
   }
 
-  if (refreshRowsBtn) {
-    refreshRowsBtn.addEventListener("click", async () => {
+  if (btnAddSection) {
+    btnAddSection.addEventListener("click", () => {
+      addSectionDraft();
+    });
+  }
+
+  if (btnRefreshSections) {
+    btnRefreshSections.addEventListener("click", async () => {
       await refreshRows();
     });
   }
 
-  if (compositionSearch) {
-    compositionSearch.addEventListener("input", () => {
-      renderCompositionOptions(String(compositionSearch.value || ""));
-      renderMenuRowsGrouped(currentGroups, String(compositionSearch.value || ""));
+  if (btnRefreshMenuLibrary) {
+    btnRefreshMenuLibrary.addEventListener("click", async () => {
+      await refreshMenuLibrary();
     });
   }
 
-  if (saveEditBtn) {
-    saveEditBtn.addEventListener("click", async () => {
-      await saveRowEdit();
+  if (dishPickerClose) {
+    dishPickerClose.addEventListener("click", () => {
+      closeModal("dishPickerModal");
     });
   }
 
-  if (cancelEditBtn) {
-    cancelEditBtn.addEventListener("click", () => {
-      closeEditPanel();
-    });
-  }
-
-  if (declarationToggle) {
-    declarationToggle.addEventListener("change", async () => {
-      await refreshDeclarationPreview();
+  if (dishPickerSearch) {
+    dishPickerSearch.addEventListener("input", () => {
+      renderDishPicker();
     });
   }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindHandlers();
-  try {
-    await loadCompositionOptions();
-  } catch (error) {
-    showJson("menuRowsOut", { ok: false, error: String(error.message || error) });
-  }
+  await loadDishes();
+  await refreshMenuLibrary();
+  renderSections();
 });

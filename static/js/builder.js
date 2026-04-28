@@ -105,11 +105,16 @@ function parseLibraryLines(text) {
 
 function renderImportSummary(result) {
   const host = document.getElementById("importSummaryView");
+  const reviewNotice = document.getElementById("importReviewNotice");
   if (!host) {
     return;
   }
 
   host.innerHTML = "";
+  if (reviewNotice) {
+    reviewNotice.classList.add("hidden");
+    reviewNotice.textContent = "";
+  }
 
   const data = (result && result.data) || {};
   const summary = data.summary;
@@ -144,6 +149,66 @@ function renderImportSummary(result) {
     warningBlock.className = "import-warning-block";
     warningBlock.textContent = "Warnings: " + summaryWarnings.join(" | ");
     host.appendChild(warningBlock);
+  }
+
+  const reviewItems = Array.isArray(summary.component_review_items) ? summary.component_review_items : [];
+  if (reviewItems.length > 0) {
+    if (reviewNotice) {
+      reviewNotice.textContent =
+        String(reviewItems.length) +
+        (reviewItems.length === 1
+          ? " possible component match needs review."
+          : " possible component matches need review.");
+      reviewNotice.classList.remove("hidden");
+    }
+
+    const reviewBlock = document.createElement("div");
+    reviewBlock.className = "import-review-block";
+
+    const reviewTitle = document.createElement("p");
+    reviewTitle.className = "import-review-title";
+    reviewTitle.textContent = "Review-needed component matches";
+    reviewBlock.appendChild(reviewTitle);
+
+    const reviewList = document.createElement("div");
+    reviewList.className = "import-review-list";
+
+    for (const item of reviewItems) {
+      const row = document.createElement("div");
+      row.className = "import-review-item";
+
+      const suggestedName = String(item.suggested_component_name || item.raw_text || "");
+      const status = String(item.status || "possible_match");
+      const statusLabel = document.createElement("span");
+      statusLabel.className = "import-review-status";
+      statusLabel.textContent = status.replace(/_/g, " ");
+
+      const primary = document.createElement("p");
+      primary.className = "import-review-primary";
+      primary.textContent = "Imported component: " + suggestedName;
+
+      const possibleMatches = Array.isArray(item.possible_matches) ? item.possible_matches : [];
+      const candidate = possibleMatches.length > 0 ? possibleMatches[0] : null;
+      const existingName = candidate ? String(candidate.component_name || "") : "No candidate";
+      const scoreValue = candidate && typeof candidate.score === "number"
+        ? candidate.score.toFixed(2)
+        : "-";
+
+      const secondary = document.createElement("p");
+      secondary.className = "import-review-secondary";
+      secondary.textContent =
+        "Possible existing match: " + existingName +
+        " | Score: " + scoreValue +
+        " | Status: " + status.replace(/_/g, " ");
+
+      row.appendChild(statusLabel);
+      row.appendChild(primary);
+      row.appendChild(secondary);
+      reviewList.appendChild(row);
+    }
+
+    reviewBlock.appendChild(reviewList);
+    host.appendChild(reviewBlock);
   }
 
   const rows = Array.isArray(summary.row_results) ? summary.row_results : [];
@@ -373,6 +438,120 @@ async function loadAllCompositions() {
   return callApi("/api/builder/compositions", { method: "GET" });
 }
 
+let _cachedLibraryComponents = [];
+
+function renderComponentLibraryCards(items, targetGrid) {
+  if (!targetGrid) {
+    return;
+  }
+
+  for (const item of items) {
+    const componentId = String(item.component_id || "");
+    const componentName = String(item.component_name || item.component_id || "");
+    const hasPrimaryRecipe = Boolean(String(item.primary_recipe_id || "").trim());
+
+    const card = document.createElement("article");
+    card.className = "component-library-card";
+
+    const openSurface = document.createElement("button");
+    openSurface.type = "button";
+    openSurface.className = "component-library-card-surface";
+    openSurface.addEventListener("click", () => {
+      openRecipeModalForComponent(componentId, componentName);
+    });
+
+    const kicker = document.createElement("span");
+    kicker.className = "component-library-card-kicker";
+    kicker.textContent = "Component";
+
+    const topRow = document.createElement("div");
+    topRow.className = "component-library-card-row";
+
+    const name = document.createElement("div");
+    name.className = "component-library-card-name";
+    name.textContent = componentName;
+
+    const chip = document.createElement("span");
+    chip.className = "component-library-card-status component-library-card-status-chip";
+    chip.textContent = hasPrimaryRecipe ? "Recipe ready" : "Needs recipe";
+    chip.classList.add(
+      hasPrimaryRecipe
+        ? "component-library-card-status-has-data"
+        : "component-library-card-status-no-data",
+    );
+
+    topRow.appendChild(name);
+    topRow.appendChild(chip);
+
+    const footer = document.createElement("p");
+    footer.className = "component-library-card-footer";
+    footer.textContent = "Open details to edit recipes, ingredients, scaling, and declarations.";
+
+    openSurface.appendChild(kicker);
+    openSurface.appendChild(topRow);
+    openSurface.appendChild(footer);
+
+    card.appendChild(openSurface);
+    targetGrid.appendChild(card);
+  }
+}
+
+function buildLibraryStartEmptyState(targetGrid) {
+  const start = document.createElement("section");
+  start.className = "workspace-library-start";
+
+  const title = document.createElement("h3");
+  title.className = "workspace-library-start-title";
+  title.textContent = "Start building your kitchen library";
+
+  const copy = document.createElement("p");
+  copy.className = "workspace-library-start-copy";
+  copy.textContent = "Create reusable components first. Then combine them into dishes when you are ready.";
+
+  const actions = document.createElement("div");
+  actions.className = "workspace-library-start-actions";
+
+  const createAction = document.createElement("button");
+  createAction.type = "button";
+  createAction.className = "workspace-library-start-action";
+  createAction.innerHTML = "<strong>Create component</strong><span>Add your first reusable building block</span>";
+  createAction.addEventListener("click", () => {
+    openSimpleModal("componentCreateModal");
+    const input = document.getElementById("freeComponentName");
+    if (input) {
+      input.focus();
+    }
+  });
+
+  const importAction = document.createElement("button");
+  importAction.type = "button";
+  importAction.className = "workspace-library-start-action";
+  importAction.innerHTML = "<strong>Import menu/recipes</strong><span>Bring in existing names to get started quickly</span>";
+  importAction.addEventListener("click", () => {
+    openSimpleModal("importLibraryModal");
+    const importInput = document.getElementById("importLibraryLines");
+    if (importInput) {
+      importInput.focus();
+    }
+  });
+
+  const dishesAction = document.createElement("button");
+  dishesAction.type = "button";
+  dishesAction.className = "workspace-library-start-action";
+  dishesAction.innerHTML = "<strong>Open dishes</strong><span>See dishes and start combining components</span>";
+  dishesAction.addEventListener("click", () => {
+    openSimpleModal("dishesLibraryModal");
+  });
+
+  actions.appendChild(createAction);
+  actions.appendChild(importAction);
+  actions.appendChild(dishesAction);
+  start.appendChild(title);
+  start.appendChild(copy);
+  start.appendChild(actions);
+  targetGrid.appendChild(start);
+}
+
 function renderLibrary(result) {
   const componentsGrid = document.getElementById("libraryComponentsGrid");
   const compositionsGrid = document.getElementById("libraryCompositionsGrid");
@@ -389,10 +568,17 @@ function renderLibrary(result) {
   const components = Array.isArray(data.components) ? data.components : [];
   const compositions = Array.isArray(data.compositions) ? data.compositions : [];
 
+  _cachedLibraryComponents = components;
+
+  const searchInput = document.getElementById("libraryComponentsSearch");
+  if (searchInput) {
+    searchInput.value = "";
+  }
+
   if (componentsMeta) {
     componentsMeta.textContent =
       components.length === 0
-        ? "No components yet. Create one or import to seed your library."
+        ? "No components yet. Start by creating one or importing existing names."
         : String(components.length) + (components.length === 1 ? " component" : " components") + " in library";
   }
 
@@ -404,92 +590,9 @@ function renderLibrary(result) {
   }
 
   if (components.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "library-empty workspace-library-empty";
-
-    const title = document.createElement("p");
-    title.className = "workspace-library-empty-title";
-    title.textContent = "No components yet";
-
-    const copy = document.createElement("p");
-    copy.className = "workspace-library-empty-copy";
-    copy.textContent = "Create a component now, or import lines/files to bootstrap your component library.";
-
-    const actions = document.createElement("div");
-    actions.className = "workspace-inline-actions";
-
-    const createBtn = document.createElement("button");
-    createBtn.type = "button";
-    createBtn.textContent = "Create component";
-    createBtn.addEventListener("click", () => {
-      openSimpleModal("componentsLibraryModal");
-      const input = document.getElementById("freeComponentName");
-      if (input) {
-        input.focus();
-      }
-    });
-
-    const importBtn = document.createElement("button");
-    importBtn.type = "button";
-    importBtn.textContent = "Import";
-    importBtn.addEventListener("click", () => {
-      openSimpleModal("importLibraryModal");
-      const importInput = document.getElementById("importLibraryLines");
-      if (importInput) {
-        importInput.focus();
-      }
-    });
-
-    actions.appendChild(createBtn);
-    actions.appendChild(importBtn);
-    empty.appendChild(title);
-    empty.appendChild(copy);
-    empty.appendChild(actions);
-    componentsGrid.appendChild(empty);
+    buildLibraryStartEmptyState(componentsGrid);
   } else {
-    for (const item of components) {
-      const componentId = String(item.component_id || "");
-      const componentName = String(item.component_name || item.component_id || "");
-      const hasPrimaryRecipe = Boolean(String(item.primary_recipe_id || "").trim());
-
-      const card = document.createElement("article");
-      card.className = "component-library-card";
-
-      const openSurface = document.createElement("button");
-      openSurface.type = "button";
-      openSurface.className = "component-library-card-surface";
-      openSurface.addEventListener("click", () => {
-        openRecipeModalForComponent(componentId, componentName);
-      });
-
-      const name = document.createElement("div");
-      name.className = "component-library-card-name";
-      name.textContent = componentName;
-
-      const status = document.createElement("div");
-      status.className = "component-library-card-status";
-      status.textContent = hasPrimaryRecipe ? "Primary recipe linked" : "No primary recipe yet";
-      status.classList.add(
-        hasPrimaryRecipe
-          ? "component-library-card-status-has-data"
-          : "component-library-card-status-no-data",
-      );
-
-      openSurface.appendChild(name);
-      openSurface.appendChild(status);
-
-      const openBtn = document.createElement("button");
-      openBtn.type = "button";
-      openBtn.className = "library-component-open-btn";
-      openBtn.textContent = "Open component detail";
-      openBtn.addEventListener("click", () => {
-        openRecipeModalForComponent(componentId, componentName);
-      });
-
-      card.appendChild(openSurface);
-      card.appendChild(openBtn);
-      componentsGrid.appendChild(card);
-    }
+    renderComponentLibraryCards(components, componentsGrid);
   }
 
   if (compositions.length === 0) {
@@ -561,19 +664,35 @@ function renderLibrary(result) {
       openSurface.appendChild(name);
       openSurface.appendChild(status);
 
-      const open = document.createElement("button");
-      open.className = "library-composition-open-btn";
-      open.type = "button";
-      open.textContent = "Open dish editor";
-      open.addEventListener("click", async () => {
-        await openCompositionFromLibrary(compositionId);
-      });
-
       card.appendChild(openSurface);
-      card.appendChild(open);
       compositionsGrid.appendChild(card);
     }
   }
+}
+
+function filterLibraryComponents(query) {
+  const grid = document.getElementById("libraryComponentsGrid");
+  if (!grid) {
+    return;
+  }
+  const q = String(query || "").trim().toLowerCase();
+  const filtered = q
+    ? _cachedLibraryComponents.filter((c) =>
+        String(c.component_name || c.component_id || "").toLowerCase().includes(q),
+      )
+    : _cachedLibraryComponents;
+
+  grid.innerHTML = "";
+
+  if (filtered.length === 0 && _cachedLibraryComponents.length > 0) {
+    const noMatch = document.createElement("p");
+    noMatch.className = "workspace-library-hint";
+    noMatch.textContent = 'No components match "' + q + '"';
+    grid.appendChild(noMatch);
+    return;
+  }
+
+  renderComponentLibraryCards(filtered, grid);
 }
 
 async function openCompositionFromLibrary(compositionId) {
@@ -589,6 +708,7 @@ async function openCompositionFromLibrary(compositionId) {
       String(candidate.composition_id || "") === compositionIdValue,
   );
   if (full) {
+    closeSimpleModal("dishesLibraryModal");
     openBuilderModalForComposition(full);
   }
 }
@@ -1688,7 +1808,6 @@ async function loadReusableComponents(query) {
 function renderBuilderPanel(composition) {
   const title = document.getElementById("builderCompositionTitle");
   const list = document.getElementById("builderComponentsList");
-  const roleSummary = document.getElementById("builderRoleSummary");
 
   if (!title || !list || !composition) {
     return;
@@ -1704,22 +1823,12 @@ function renderBuilderPanel(composition) {
   });
 
   const components = Array.isArray(composition.components) ? composition.components : [];
-  const missingRoleCount = components.filter((item) => !String(item.role || "").trim()).length;
-  if (roleSummary) {
-    roleSummary.textContent =
-      "Missing role: " +
-      String(missingRoleCount) +
-      " | With role: " +
-      String(Math.max(0, components.length - missingRoleCount));
-    roleSummary.className =
-      missingRoleCount > 0 ? "builder-role-summary builder-role-summary-missing" : "builder-role-summary";
-  }
 
   if (components.length === 0) {
     selectedComponentId = null;
     const li = document.createElement("li");
     li.className = "component-build-surface-empty";
-    li.textContent = "No blocks yet. Pick from the palette or create a new component to start building this dish.";
+    li.textContent = "No components yet. Use Add component to start building this dish.";
     list.appendChild(li);
     renderComponentPalette();
     return;
@@ -2051,6 +2160,7 @@ async function attachExistingComponentToCurrentComposition(componentId) {
       selectedComponentId = attachedId || selectedComponentId;
       stageAddedComponentPulse(attachedId);
       stageSelectedComponentPulse(attachedId);
+      closeSimpleModal("addComponentModal");
       renderBuilderPanel(result.data.composition);
     }
   } catch (error) {
@@ -2106,12 +2216,17 @@ async function renameComponentInCurrentComposition(componentId, currentName) {
 }
 
 function bindBuilderHandlers() {
+  const openComponentCreateModalBtn = document.getElementById("openComponentCreateModalBtn");
+  const openImportLibraryModalBtn = document.getElementById("openImportLibraryModalBtn");
+  const componentCreateModalCloseBtn = document.getElementById("componentCreateModalClose");
+  const openDishesLibraryModalBtn = document.getElementById("openDishesLibraryModalBtn");
   const openNewDishModalBtn = document.getElementById("openNewDishModalBtn");
-  const openComponentsModalBtn = document.getElementById("openComponentsModalBtn");
   const openImportModalBtn = document.getElementById("openImportModalBtn");
+  const dishesLibraryModalCloseBtn = document.getElementById("dishesLibraryModalClose");
   const quickCreateModalCloseBtn = document.getElementById("quickCreateModalClose");
-  const componentsLibraryModalCloseBtn = document.getElementById("componentsLibraryModalClose");
   const importLibraryModalCloseBtn = document.getElementById("importLibraryModalClose");
+  const openAddComponentModalBtn = document.getElementById("openAddComponentModalBtn");
+  const addComponentModalCloseBtn = document.getElementById("addComponentModalClose");
   const createDishBtn = document.getElementById("btnCreateDish");
   const createComponentBtn = document.getElementById("btnCreateComponent");
   const importLibraryBtn = document.getElementById("btnImportLibrary");
@@ -2134,6 +2249,45 @@ function bindBuilderHandlers() {
   const recipeSaveMetadataBtn = document.getElementById("btnRecipeSaveMetadata");
   const recipeDeleteBtn = document.getElementById("btnRecipeDelete");
   const recipeScalingPreviewBtn = document.getElementById("btnRecipeScalingPreview");
+  const libraryComponentsSearchInput = document.getElementById("libraryComponentsSearch");
+
+  if (libraryComponentsSearchInput) {
+    libraryComponentsSearchInput.addEventListener("input", () => {
+      filterLibraryComponents(libraryComponentsSearchInput.value);
+    });
+  }
+
+  if (openComponentCreateModalBtn) {
+    openComponentCreateModalBtn.addEventListener("click", () => {
+      openSimpleModal("componentCreateModal");
+      const freeComponentNameEl = document.getElementById("freeComponentName");
+      if (freeComponentNameEl) {
+        freeComponentNameEl.focus();
+      }
+    });
+  }
+
+  if (openImportLibraryModalBtn) {
+    openImportLibraryModalBtn.addEventListener("click", () => {
+      openSimpleModal("importLibraryModal");
+      const importInput = document.getElementById("importLibraryLines");
+      if (importInput) {
+        importInput.focus();
+      }
+    });
+  }
+
+  if (componentCreateModalCloseBtn) {
+    componentCreateModalCloseBtn.addEventListener("click", () => {
+      closeSimpleModal("componentCreateModal");
+    });
+  }
+
+  if (openDishesLibraryModalBtn) {
+    openDishesLibraryModalBtn.addEventListener("click", () => {
+      openSimpleModal("dishesLibraryModal");
+    });
+  }
 
   if (openNewDishModalBtn) {
     openNewDishModalBtn.addEventListener("click", () => {
@@ -2142,12 +2296,6 @@ function bindBuilderHandlers() {
       if (freeDishNameEl) {
         freeDishNameEl.focus();
       }
-    });
-  }
-
-  if (openComponentsModalBtn) {
-    openComponentsModalBtn.addEventListener("click", () => {
-      openSimpleModal("componentsLibraryModal");
     });
   }
 
@@ -2161,21 +2309,37 @@ function bindBuilderHandlers() {
     });
   }
 
+  if (dishesLibraryModalCloseBtn) {
+    dishesLibraryModalCloseBtn.addEventListener("click", () => {
+      closeSimpleModal("dishesLibraryModal");
+    });
+  }
+
   if (quickCreateModalCloseBtn) {
     quickCreateModalCloseBtn.addEventListener("click", () => {
       closeSimpleModal("quickCreateModal");
     });
   }
 
-  if (componentsLibraryModalCloseBtn) {
-    componentsLibraryModalCloseBtn.addEventListener("click", () => {
-      closeSimpleModal("componentsLibraryModal");
-    });
-  }
-
   if (importLibraryModalCloseBtn) {
     importLibraryModalCloseBtn.addEventListener("click", () => {
       closeSimpleModal("importLibraryModal");
+    });
+  }
+
+  if (openAddComponentModalBtn) {
+    openAddComponentModalBtn.addEventListener("click", () => {
+      openSimpleModal("addComponentModal");
+      const paletteSearch = document.getElementById("builderPaletteSearch");
+      if (paletteSearch) {
+        paletteSearch.focus();
+      }
+    });
+  }
+
+  if (addComponentModalCloseBtn) {
+    addComponentModalCloseBtn.addEventListener("click", () => {
+      closeSimpleModal("addComponentModal");
     });
   }
 
@@ -2197,6 +2361,7 @@ function bindBuilderHandlers() {
         });
         showJson("createDishOut", result);
         if (result && result.data && result.data.ok && result.data.composition) {
+          closeSimpleModal("dishesLibraryModal");
           closeSimpleModal("quickCreateModal");
           openBuilderModalForComposition(result.data.composition);
           if (freeDishNameEl) {
@@ -2228,6 +2393,7 @@ function bindBuilderHandlers() {
         });
         showJson("createComponentOut", result);
         if (result && result.data && result.data.ok) {
+          closeSimpleModal("componentCreateModal");
           if (freeComponentNameEl) {
             freeComponentNameEl.value = "";
           }
@@ -2458,6 +2624,7 @@ function bindBuilderHandlers() {
             stageAddedComponentPulse(addedId);
             stageSelectedComponentPulse(addedId);
           }
+          closeSimpleModal("addComponentModal");
           renderBuilderPanel(result.data.composition);
           if (newComponentNameEl) {
             newComponentNameEl.value = "";
