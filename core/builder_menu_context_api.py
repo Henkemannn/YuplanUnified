@@ -9,6 +9,11 @@ from flask import Blueprint, current_app, jsonify, request
 from .app_authz import require_roles
 from .builder import BuilderFlow
 from .builder_menu_context_flow import BuilderMenuContextFlow
+from .builder_sqlite import (
+    initialize_builder_sqlite,
+    SQLiteMenuDetailRepository,
+    SQLiteMenuRepository,
+)
 from .components import InMemoryRecipeIngredientLineRepository, InMemoryRecipeRepository
 from .menu import ImportedMenuRow, MenuService
 
@@ -246,7 +251,16 @@ def _get_menu_context_flow() -> BuilderMenuContextFlow:
 
     menu_service = current_app.extensions.get("builder_menu_service")
     if not isinstance(menu_service, MenuService):
-        menu_service = MenuService(composition_repository=builder_flow._composition_repository)
+        builder_db_path = str(current_app.config.get("BUILDER_DB_PATH") or "").strip()
+        if builder_db_path:
+            db_path = initialize_builder_sqlite(builder_db_path)
+            menu_service = MenuService(
+                menu_repository=SQLiteMenuRepository(db_path=db_path),
+                menu_detail_repository=SQLiteMenuDetailRepository(db_path=db_path),
+                composition_repository=builder_flow._composition_repository,
+            )
+        else:
+            menu_service = MenuService(composition_repository=builder_flow._composition_repository)
         current_app.extensions["builder_menu_service"] = menu_service
 
     recipe_repository = current_app.extensions.get("builder_menu_recipe_repository")

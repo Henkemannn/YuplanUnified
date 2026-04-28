@@ -127,6 +127,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
     except Exception:
         pass
     app.config.update(cfg.to_flask_dict())
+    builder_db_env = str(os.getenv("BUILDER_DB_PATH") or "").strip()
+    builder_db_cfg = str(app.config.get("BUILDER_DB_PATH") or "").strip()
+    builder_db_path = builder_db_env or builder_db_cfg
+    if not builder_db_path and not bool(app.config.get("TESTING")):
+        os.makedirs(app.instance_path, exist_ok=True)
+        builder_db_path = os.path.join(app.instance_path, "builder_library.db")
+    app.config["BUILDER_DB_PATH"] = builder_db_path
     jwt_secret_env = (os.getenv("JWT_SECRET") or "").strip()
     if jwt_secret_env:
         app.config["JWT_SECRET"] = jwt_secret_env

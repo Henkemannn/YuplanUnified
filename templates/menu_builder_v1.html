@@ -96,6 +96,37 @@
       display: grid;
       gap: 8px;
     }
+    .menu-slot-row {
+      border: 1px solid #dde6ee;
+      border-radius: 10px;
+      background: #fff;
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+    }
+    .menu-slot-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .menu-slot-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #2a4256;
+      margin: 0;
+    }
+    .menu-slot-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .menu-slot-actions button {
+      width: auto;
+      margin: 0;
+      padding: 6px 10px;
+    }
     .menu-dish-row {
       border: 1px solid #dde6ee;
       border-radius: 10px;
@@ -190,6 +221,23 @@
     .hidden {
       display: none;
     }
+    .menu-template-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 8px;
+    }
+    .menu-template-grid label {
+      display: grid;
+      gap: 4px;
+      font-size: 12px;
+      color: #4f6273;
+    }
+    .menu-template-grid input,
+    .menu-template-grid select {
+      width: 100%;
+      margin: 0;
+    }
   </style>
 </head>
 <body>
@@ -214,6 +262,31 @@
       </div>
       <p class="menu-meta" id="activeMenuMeta">No active menu</p>
       <div id="createMenuOut" class="menu-feedback" aria-live="polite"></div>
+    </section>
+
+    <section class="menu-card">
+      <h2>Template Builder</h2>
+      <p class="menu-meta">Generate editable empty structure. Sections and slot labels can be renamed later.</p>
+      <div class="menu-template-grid">
+        <label>Menu type / intent
+          <select id="menuTemplateType">
+            <option value="weekly_lunch">Weekly lunch menu</option>
+            <option value="free_menu">Free menu</option>
+            <option value="event_proposal">Event/proposal menu</option>
+            <option value="a_la_carte">A la carte menu</option>
+          </select>
+        </label>
+        <label>Number of sections / days
+          <input id="menuTemplateSectionCount" type="number" min="1" max="30" value="3">
+        </label>
+        <label>Slots / options per section
+          <input id="menuTemplateSlotCount" type="number" min="1" max="20" value="2">
+        </label>
+      </div>
+      <div class="menu-inline" style="margin-top:8px;">
+        <button id="btnApplyTemplateBuilder" type="button">Generate structure</button>
+      </div>
+      <div id="menuTemplateOut" class="menu-feedback" aria-live="polite"></div>
     </section>
 
     <section class="menu-card">
@@ -244,11 +317,12 @@
       <div class="workspace-modal-header">
         <div>
           <p class="workspace-modal-kicker">Dish picker</p>
-          <h3>Add dish to section</h3>
+          <h3>Add dish to slot</h3>
         </div>
         <button id="dishPickerClose" type="button">Done</button>
       </div>
       <p class="menu-meta" id="dishPickerSectionMeta"></p>
+      <p class="menu-meta" id="dishPickerSlotMeta"></p>
       <label>Search dishes
         <input id="dishPickerSearch" type="text" placeholder="Search dish by name">
       </label>

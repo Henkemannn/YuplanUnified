@@ -17,6 +17,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="openNewDishModalBtn"' in html
     assert 'id="openImportModalBtn"' in html
     assert 'id="libraryComponentsGrid" class="component-library-grid"' in html
+    assert 'id="libraryComponentsScope"' in html
     assert 'id="libraryCompositionsGrid" class="composition-library-grid"' in html
     assert 'id="resolveModal"' in html
     assert 'id="componentDetailModal"' in html
@@ -31,10 +32,13 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="btnCreateDish"' in html
     assert 'id="btnCreateComponent"' in html
     assert 'id="btnImportLibrary"' in html
+    assert 'id="btnImportLibraryPreview"' in html
     assert 'id="importLibraryLines"' in html
     assert 'id="btnImportFilePreview"' in html
     assert 'id="btnImportFileConfirm"' in html
     assert 'id="importSummaryView"' in html
+    assert 'id="recentImportGroups"' in html
+    assert 'id="importContextType"' in html
     assert 'id="importReviewNotice"' in html
     assert 'id="workspaceDishesMeta"' in html
     assert 'id="workspaceComponentsMeta"' in html
@@ -66,3 +70,10 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'reviewNotice.textContent =' in script
     assert 'possible component matches need review.' in script
     assert 'reviewBlock.className = "import-review-block";' in script
+    assert 'const IMPORT_TYPE_MENU = "menu";' in script
+    assert 'function parseMenuImportStructure(lines)' in script
+    assert 'function createStructuredMenusFromImport(groupedMenu, summary)' in script
+    assert 'function selectedImportType()' in script
+    assert 'function applyComponentLibraryFilter(query)' in script
+    assert 'function previewPastedImportLines()' in script
+    assert '/api/builder/import/preview-lines' in script

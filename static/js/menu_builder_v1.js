@@ -32,6 +32,88 @@ let activeMenuTitle = "";
 let currentRows = [];
 let sectionDrafts = [];
 let pickerOpenSection = "";
+let pickerOpenSlotIndex = null;
+
+function makeSectionDraft(name, slotLabels) {
+  return {
+    name: String(name || "").trim(),
+    slotLabels: Array.isArray(slotLabels)
+      ? slotLabels.map((item) => String(item || "").trim()).filter(Boolean)
+      : [],
+  };
+}
+
+function defaultSlotLabel(index) {
+  return "Option " + String(Number(index) + 1);
+}
+
+function defaultSectionLabel(menuType, index) {
+  const i = Number(index) + 1;
+  if (String(menuType || "") === "weekly_lunch") {
+    return "Day " + String(i);
+  }
+  return "Section " + String(i);
+}
+
+function findDraftIndexByName(name) {
+  const target = normalizeLower(name);
+  return sectionDrafts.findIndex((item) => normalizeLower(item.name) === target);
+}
+
+function getDraftSectionByName(name) {
+  const index = findDraftIndexByName(name);
+  return index >= 0 ? sectionDrafts[index] : null;
+}
+
+function ensureDraftSection(name) {
+  const value = normalize(name);
+  if (!value) {
+    return null;
+  }
+  const existing = getDraftSectionByName(value);
+  if (existing) {
+    return existing;
+  }
+  const next = makeSectionDraft(value, [defaultSlotLabel(0)]);
+  sectionDrafts.push(next);
+  return next;
+}
+
+function ensureSlotLabel(sectionName, slotIndex) {
+  const draft = ensureDraftSection(sectionName);
+  if (!draft) {
+    return;
+  }
+  const targetIndex = Math.max(0, Number(slotIndex) || 0);
+  while (draft.slotLabels.length <= targetIndex) {
+    draft.slotLabels.push(defaultSlotLabel(draft.slotLabels.length));
+  }
+}
+
+function syncDraftsWithRows(rows) {
+  const grouped = {};
+  for (const row of rows || []) {
+    const section = normalize(row.day);
+    if (!section) {
+      continue;
+    }
+    if (!grouped[section]) {
+      grouped[section] = [];
+    }
+    grouped[section].push(row);
+  }
+
+  for (const name of Object.keys(grouped)) {
+    const draft = ensureDraftSection(name);
+    if (!draft) {
+      continue;
+    }
+    const count = Math.max(1, grouped[name].length);
+    while (draft.slotLabels.length < count) {
+      draft.slotLabels.push(defaultSlotLabel(draft.slotLabels.length));
+    }
+  }
+}
 
 function normalize(value) {
   return String(value || "").trim();
@@ -57,6 +139,31 @@ function setActiveMenu(menu) {
     (activeMenuTitle ? activeMenuTitle + " (" + activeMenuId + ")" : activeMenuId);
 }
 
+function rowsToSlotMap(rows) {
+  const mapping = {};
+  const leftovers = [];
+
+  for (const row of rows) {
+    const sort = Number(row.sort_order);
+    if (Number.isInteger(sort) && sort >= 0 && !mapping[sort]) {
+      mapping[sort] = row;
+    } else {
+      leftovers.push(row);
+    }
+  }
+
+  let idx = 0;
+  for (const row of leftovers) {
+    while (mapping[idx]) {
+      idx += 1;
+    }
+    mapping[idx] = row;
+    idx += 1;
+  }
+
+  return mapping;
+}
+
 function sectionsFromRows(rows) {
   const bySection = {};
   for (const row of rows) {
@@ -70,9 +177,21 @@ function sectionsFromRows(rows) {
     bySection[sectionName].push(row);
   }
 
-  const names = Object.keys(bySection).sort((a, b) => a.localeCompare(b));
-  const sections = names.map((name) => {
-    const items = bySection[name].slice().sort((left, right) => {
+  const sectionNames = [];
+  for (const draft of sectionDrafts) {
+    const name = normalize(draft.name);
+    if (name && !sectionNames.some((item) => normalizeLower(item) === normalizeLower(name))) {
+      sectionNames.push(name);
+    }
+  }
+  for (const name of Object.keys(bySection).sort((a, b) => a.localeCompare(b))) {
+    if (!sectionNames.some((item) => normalizeLower(item) === normalizeLower(name))) {
+      sectionNames.push(name);
+    }
+  }
+
+  const sections = sectionNames.map((name) => {
+    const items = (bySection[name] || []).slice().sort((left, right) => {
       const leftSort = Number(left.sort_order || 0);
       const rightSort = Number(right.sort_order || 0);
       if (leftSort !== rightSort) {
@@ -80,20 +199,112 @@ function sectionsFromRows(rows) {
       }
       return String(left.menu_detail_id || "").localeCompare(String(right.menu_detail_id || ""));
     });
-    return { name, rows: items };
+
+    const draft = getDraftSectionByName(name) || makeSectionDraft(name, []);
+    const slotMap = rowsToSlotMap(items);
+    const maxSlotIndex = Math.max(
+      draft.slotLabels.length - 1,
+      ...Object.keys(slotMap).map((value) => Number(value)).filter((value) => Number.isInteger(value) && value >= 0),
+    );
+    const slotCount = Math.max(1, maxSlotIndex + 1);
+    const slots = [];
+    for (let i = 0; i < slotCount; i += 1) {
+      slots.push({
+        index: i,
+        label: normalize(draft.slotLabels[i]) || defaultSlotLabel(i),
+        row: slotMap[i] || null,
+      });
+    }
+
+    return {
+      name,
+      rows: items,
+      slotLabels: draft.slotLabels.slice(),
+      slots,
+    };
   });
 
-  for (const draft of sectionDrafts) {
-    const draftName = normalize(draft);
-    if (!draftName) {
+  return sections;
+}
+
+function nextEmptySlotIndex(section) {
+  const slots = Array.isArray(section && section.slots) ? section.slots : [];
+  const empty = slots.find((slot) => !slot.row);
+  if (empty) {
+    return Number(empty.index || 0);
+  }
+  return slots.length;
+}
+
+function setSlotLabel(sectionName, slotIndex, value) {
+  const draft = ensureDraftSection(sectionName);
+  if (!draft) {
+    return;
+  }
+  const index = Math.max(0, Number(slotIndex) || 0);
+  ensureSlotLabel(sectionName, index);
+  draft.slotLabels[index] = normalize(value) || defaultSlotLabel(index);
+}
+
+function removeSlotLabel(sectionName, slotIndex) {
+  const draft = getDraftSectionByName(sectionName);
+  if (!draft) {
+    return;
+  }
+  const index = Math.max(0, Number(slotIndex) || 0);
+  if (index >= draft.slotLabels.length) {
+    return;
+  }
+  draft.slotLabels.splice(index, 1);
+  if (draft.slotLabels.length === 0) {
+    draft.slotLabels.push(defaultSlotLabel(0));
+  }
+}
+
+function getRowForSectionSlot(sectionName, slotIndex) {
+  const section = normalize(sectionName);
+  const index = Math.max(0, Number(slotIndex) || 0);
+  return currentRows.find(
+    (row) => normalizeLower(row.day) === normalizeLower(section) && Number(row.sort_order) === index,
+  ) || null;
+}
+
+async function resequenceSectionRows(sectionName) {
+  const rows = currentRows
+    .filter((row) => normalizeLower(row.day) === normalizeLower(sectionName))
+    .slice()
+    .sort((left, right) => {
+      const leftSort = Number(left.sort_order || 0);
+      const rightSort = Number(right.sort_order || 0);
+      if (leftSort !== rightSort) {
+        return leftSort - rightSort;
+      }
+      return String(left.menu_detail_id || "").localeCompare(String(right.menu_detail_id || ""));
+    });
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (Number(row.sort_order) === i) {
       continue;
     }
-    if (!sections.some((item) => normalizeLower(item.name) === normalizeLower(draftName))) {
-      sections.push({ name: draftName, rows: [] });
+    const result = await callApi(
+      "/api/builder/menus/" + encodeURIComponent(activeMenuId) + "/rows/" + encodeURIComponent(String(row.menu_detail_id || "")),
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: {
+          day: String(row.day || sectionName),
+          meal_slot: String(row.meal_slot || DEFAULT_MEAL_SLOT),
+          composition_id: String(row.composition_id || ""),
+          note: String(row.note || ""),
+          sort_order: i,
+        },
+      },
+    );
+    if (!result || !result.data || !result.data.ok) {
+      throw new Error("Could not resequence section rows.");
     }
   }
-
-  return sections;
 }
 
 function renderSections() {
@@ -130,7 +341,14 @@ function renderSections() {
     addDishBtn.type = "button";
     addDishBtn.textContent = "Add dish";
     addDishBtn.addEventListener("click", () => {
-      openDishPicker(section.name);
+      openDishPicker(section.name, nextEmptySlotIndex(section));
+    });
+
+    const addSlotBtn = document.createElement("button");
+    addSlotBtn.type = "button";
+    addSlotBtn.textContent = "Add slot";
+    addSlotBtn.addEventListener("click", () => {
+      addSlotToSection(section.name);
     });
 
     const renameBtn = document.createElement("button");
@@ -148,6 +366,7 @@ function renderSections() {
     });
 
     actions.appendChild(addDishBtn);
+  actions.appendChild(addSlotBtn);
     actions.appendChild(renameBtn);
     actions.appendChild(removeBtn);
 
@@ -158,40 +377,92 @@ function renderSections() {
     const list = document.createElement("div");
     list.className = "menu-dish-list";
 
-    if (section.rows.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "menu-empty";
-      empty.textContent = "No dishes in this section yet.";
-      list.appendChild(empty);
-    } else {
-      for (const row of section.rows) {
-        const item = document.createElement("div");
-        item.className = "menu-dish-row";
+    for (const slot of section.slots) {
+      const slotRow = document.createElement("div");
+      slotRow.className = "menu-slot-row";
+
+      const slotTop = document.createElement("div");
+      slotTop.className = "menu-slot-top";
+
+      const slotName = document.createElement("p");
+      slotName.className = "menu-slot-name";
+      slotName.textContent = slot.label;
+
+      const slotActions = document.createElement("div");
+      slotActions.className = "menu-slot-actions";
+
+      const renameSlotBtn = document.createElement("button");
+      renameSlotBtn.type = "button";
+      renameSlotBtn.textContent = "Rename slot";
+      renameSlotBtn.addEventListener("click", () => {
+        renameSlot(section.name, slot.index);
+      });
+
+      const pickDishBtn = document.createElement("button");
+      pickDishBtn.type = "button";
+      pickDishBtn.textContent = "Pick dish";
+      pickDishBtn.addEventListener("click", () => {
+        openDishPicker(section.name, slot.index);
+      });
+
+      const typeDishBtn = document.createElement("button");
+      typeDishBtn.type = "button";
+      typeDishBtn.textContent = "Type new dish";
+      typeDishBtn.addEventListener("click", async () => {
+        await addFreeTextDish(section.name, slot.index);
+      });
+
+      slotActions.appendChild(renameSlotBtn);
+      slotActions.appendChild(pickDishBtn);
+      slotActions.appendChild(typeDishBtn);
+
+      if (slot.row) {
+        const removeDishBtn = document.createElement("button");
+        removeDishBtn.type = "button";
+        removeDishBtn.textContent = "Remove dish";
+        removeDishBtn.addEventListener("click", async () => {
+          await removeDish(slot.row.menu_detail_id);
+        });
+        slotActions.appendChild(removeDishBtn);
+      }
+
+      const removeSlotBtn = document.createElement("button");
+      removeSlotBtn.type = "button";
+      removeSlotBtn.textContent = "Remove slot";
+      removeSlotBtn.addEventListener("click", async () => {
+        await removeSlot(section.name, slot.index);
+      });
+      slotActions.appendChild(removeSlotBtn);
+
+      slotTop.appendChild(slotName);
+      slotTop.appendChild(slotActions);
+      slotRow.appendChild(slotTop);
+
+      if (!slot.row) {
+        const empty = document.createElement("div");
+        empty.className = "menu-empty";
+        empty.textContent = "No dish in this slot yet.";
+        slotRow.appendChild(empty);
+      } else {
+        const dishRow = document.createElement("div");
+        dishRow.className = "menu-dish-row";
 
         const left = document.createElement("div");
-
         const label = document.createElement("div");
         label.className = "menu-dish-label";
-        label.textContent = String(row.composition_name || row.composition_id || "Dish");
+        label.textContent = String(slot.row.composition_name || slot.row.composition_id || "Dish");
 
         const meta = document.createElement("div");
         meta.className = "menu-dish-meta";
-        meta.textContent = "dish_id: " + String(row.composition_id || "") + " | sort: " + String(row.sort_order || 0);
+        meta.textContent = "dish_id: " + String(slot.row.composition_id || "") + " | slot: " + String(slot.index + 1);
 
         left.appendChild(label);
         left.appendChild(meta);
-
-        const removeDishBtn = document.createElement("button");
-        removeDishBtn.type = "button";
-        removeDishBtn.textContent = "Remove";
-        removeDishBtn.addEventListener("click", async () => {
-          await removeDish(row.menu_detail_id);
-        });
-
-        item.appendChild(left);
-        item.appendChild(removeDishBtn);
-        list.appendChild(item);
+        dishRow.appendChild(left);
+        slotRow.appendChild(dishRow);
       }
+
+      list.appendChild(slotRow);
     }
 
     block.appendChild(list);
@@ -265,16 +536,23 @@ function renderDishPicker() {
   }
 }
 
-function openDishPicker(sectionName) {
+function openDishPicker(sectionName, slotIndex) {
   if (!activeMenuId) {
     showText("menuSectionsOut", "Create or open a menu first.");
     return;
   }
 
   pickerOpenSection = String(sectionName || "");
+  pickerOpenSlotIndex = Number.isInteger(Number(slotIndex)) ? Math.max(0, Number(slotIndex)) : null;
   const meta = document.getElementById("dishPickerSectionMeta");
   if (meta) {
     meta.textContent = "Section: " + pickerOpenSection;
+  }
+  const slotMeta = document.getElementById("dishPickerSlotMeta");
+  if (slotMeta) {
+    slotMeta.textContent = pickerOpenSlotIndex === null
+      ? "Slot: next available"
+      : "Slot: " + String(pickerOpenSlotIndex + 1);
   }
   const search = document.getElementById("dishPickerSearch");
   if (search) {
@@ -283,6 +561,57 @@ function openDishPicker(sectionName) {
   showText("dishPickerOut", "");
   renderDishPicker();
   openModal("dishPickerModal");
+}
+
+async function attachCompositionToSlot(sectionName, slotIndex, compositionId) {
+  const sectionValue = normalize(sectionName);
+  const compositionIdValue = normalize(compositionId);
+  if (!activeMenuId || !sectionValue || !compositionIdValue) {
+    return { ok: false };
+  }
+
+  const targetSlot = Math.max(0, Number(slotIndex) || 0);
+  ensureSlotLabel(sectionValue, targetSlot);
+  const existing = getRowForSectionSlot(sectionValue, targetSlot);
+
+  if (existing) {
+    const updateResult = await callApi(
+      "/api/builder/menus/" + encodeURIComponent(activeMenuId) + "/rows/" + encodeURIComponent(String(existing.menu_detail_id || "")),
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: {
+          day: sectionValue,
+          meal_slot: String(existing.meal_slot || DEFAULT_MEAL_SLOT),
+          composition_id: compositionIdValue,
+          note: String(existing.note || ""),
+          sort_order: targetSlot,
+        },
+      },
+    );
+    return updateResult && updateResult.data && updateResult.data.ok
+      ? { ok: true, mode: "updated" }
+      : { ok: false };
+  }
+
+  const createResult = await callApi(
+    "/api/builder/menus/" + encodeURIComponent(activeMenuId) + "/rows",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: {
+        day: sectionValue,
+        meal_slot: DEFAULT_MEAL_SLOT,
+        composition_id: compositionIdValue,
+        note: "",
+        sort_order: targetSlot,
+      },
+    },
+  );
+
+  return createResult && createResult.data && createResult.data.ok
+    ? { ok: true, mode: "created" }
+    : { ok: false };
 }
 
 async function attachDishToSection(compositionId) {
@@ -303,41 +632,29 @@ async function attachDishToSection(compositionId) {
     return;
   }
 
-  const sectionRows = currentRows.filter((row) => normalizeLower(row.day) === normalizeLower(sectionName));
-  const sortOrder = sectionRows.length;
+  const slotIndex = pickerOpenSlotIndex === null
+    ? currentRows.filter((row) => normalizeLower(row.day) === normalizeLower(sectionName)).length
+    : pickerOpenSlotIndex;
 
   showLoading("dishPickerOut");
-  const result = await callApi(
-    "/api/builder/menus/" + encodeURIComponent(activeMenuId) + "/rows",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: {
-        day: sectionName,
-        meal_slot: DEFAULT_MEAL_SLOT,
-        composition_id: compositionIdValue,
-        note: "",
-        sort_order: sortOrder,
-      },
-    },
-  );
-
-  if (!result || !result.data || !result.data.ok) {
+  const result = await attachCompositionToSlot(sectionName, slotIndex, compositionIdValue);
+  if (!result || !result.ok) {
     showText("dishPickerOut", "Could not attach dish.");
     return;
   }
 
-  showText("dishPickerOut", "Dish attached.");
+  showText("dishPickerOut", result.mode === "updated" ? "Dish replaced." : "Dish attached.");
   await refreshRows();
   closeModal("dishPickerModal");
 }
 
-async function removeDish(menuDetailId) {
+async function removeDish(menuDetailId, options) {
+  const config = options || {};
   const detailIdValue = normalize(menuDetailId);
   if (!activeMenuId || !detailIdValue) {
     return;
   }
-  const confirmed = window.confirm("Remove this dish from section?");
+  const confirmed = config.confirm === false ? true : window.confirm("Remove this dish from section?");
   if (!confirmed) {
     return;
   }
@@ -347,11 +664,17 @@ async function removeDish(menuDetailId) {
     { method: "DELETE" },
   );
   if (!result || !result.data || !result.data.ok) {
-    showText("menuSectionsOut", "Could not remove dish.");
+    if (!config.quiet) {
+      showText("menuSectionsOut", "Could not remove dish.");
+    }
     return;
   }
-  showText("menuSectionsOut", "Dish removed.");
-  await refreshRows();
+  if (!config.quiet) {
+    showText("menuSectionsOut", "Dish removed.");
+  }
+  if (!config.skipRefresh) {
+    await refreshRows();
+  }
 }
 
 async function renameSection(oldName) {
@@ -366,7 +689,10 @@ async function renameSection(oldName) {
 
   const rowsInSection = currentRows.filter((row) => normalizeLower(row.day) === normalizeLower(oldValue));
   if (rowsInSection.length === 0) {
-    sectionDrafts = sectionDrafts.map((name) => (normalizeLower(name) === normalizeLower(oldValue) ? nextValue : name));
+    const draftIndex = findDraftIndexByName(oldValue);
+    if (draftIndex >= 0) {
+      sectionDrafts[draftIndex].name = nextValue;
+    }
     renderSections();
     return;
   }
@@ -393,7 +719,10 @@ async function renameSection(oldName) {
     }
   }
 
-  sectionDrafts = sectionDrafts.map((name) => (normalizeLower(name) === normalizeLower(oldValue) ? nextValue : name));
+  const draftIndex = findDraftIndexByName(oldValue);
+  if (draftIndex >= 0) {
+    sectionDrafts[draftIndex].name = nextValue;
+  }
   showText("menuSectionsOut", "Section renamed.");
   await refreshRows();
 }
@@ -410,7 +739,7 @@ async function removeSection(sectionName) {
 
   const rowsInSection = currentRows.filter((row) => normalizeLower(row.day) === normalizeLower(sectionValue));
   if (rowsInSection.length === 0) {
-    sectionDrafts = sectionDrafts.filter((name) => normalizeLower(name) !== normalizeLower(sectionValue));
+    sectionDrafts = sectionDrafts.filter((item) => normalizeLower(item.name) !== normalizeLower(sectionValue));
     renderSections();
     return;
   }
@@ -427,9 +756,118 @@ async function removeSection(sectionName) {
     }
   }
 
-  sectionDrafts = sectionDrafts.filter((name) => normalizeLower(name) !== normalizeLower(sectionValue));
+  sectionDrafts = sectionDrafts.filter((item) => normalizeLower(item.name) !== normalizeLower(sectionValue));
   showText("menuSectionsOut", "Section removed.");
   await refreshRows();
+}
+
+function addSlotToSection(sectionName) {
+  const sectionValue = normalize(sectionName);
+  if (!sectionValue) {
+    return;
+  }
+  const draft = ensureDraftSection(sectionValue);
+  if (!draft) {
+    return;
+  }
+  draft.slotLabels.push(defaultSlotLabel(draft.slotLabels.length));
+  renderSections();
+  showText("menuSectionsOut", "Slot added.");
+}
+
+function renameSlot(sectionName, slotIndex) {
+  const sectionValue = normalize(sectionName);
+  if (!sectionValue) {
+    return;
+  }
+  const draft = ensureDraftSection(sectionValue);
+  if (!draft) {
+    return;
+  }
+  ensureSlotLabel(sectionValue, slotIndex);
+  const currentLabel = draft.slotLabels[slotIndex] || defaultSlotLabel(slotIndex);
+  const next = normalize(window.prompt("Rename slot", currentLabel));
+  if (!next || normalizeLower(next) === normalizeLower(currentLabel)) {
+    return;
+  }
+  setSlotLabel(sectionValue, slotIndex, next);
+  renderSections();
+  showText("menuSectionsOut", "Slot renamed.");
+}
+
+async function removeSlot(sectionName, slotIndex) {
+  const sectionValue = normalize(sectionName);
+  if (!sectionValue) {
+    return;
+  }
+
+  const confirmed = window.confirm("Remove this slot? Assigned dish will also be removed.");
+  if (!confirmed) {
+    return;
+  }
+
+  const row = getRowForSectionSlot(sectionValue, slotIndex);
+  if (row) {
+    await removeDish(row.menu_detail_id, { quiet: true, skipRefresh: true, confirm: false });
+  }
+
+  removeSlotLabel(sectionValue, slotIndex);
+
+  try {
+    await refreshRows();
+    await resequenceSectionRows(sectionValue);
+    await refreshRows();
+  } catch (_err) {
+    showText("menuSectionsOut", "Could not re-order slots after removal.");
+    return;
+  }
+
+  showText("menuSectionsOut", "Slot removed.");
+}
+
+async function addFreeTextDish(sectionName, slotIndex) {
+  if (!activeMenuId) {
+    showText("menuSectionsOut", "Create or open a menu first.");
+    return;
+  }
+
+  const name = normalize(window.prompt("Type new dish name", ""));
+  if (!name) {
+    return;
+  }
+
+  showLoading("menuSectionsOut");
+  const created = await callApi("/api/builder/compositions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { composition_name: name },
+  });
+
+  if (!created || !created.data || !created.data.ok || !created.data.composition) {
+    showText("menuSectionsOut", "Could not create dish from text.");
+    return;
+  }
+
+  const composition = created.data.composition;
+  const compositionId = normalize(composition.composition_id);
+  if (!compositionId) {
+    showText("menuSectionsOut", "Dish created without id.");
+    return;
+  }
+
+  allDishes.unshift({
+    composition_id: compositionId,
+    composition_name: normalize(composition.composition_name) || compositionId,
+  });
+
+  const attached = await attachCompositionToSlot(sectionName, slotIndex, compositionId);
+  if (!attached || !attached.ok) {
+    showText("menuSectionsOut", "Dish was created but could not be attached.");
+    return;
+  }
+
+  await refreshRows();
+  showText("menuSectionsOut", "Dish created and attached.");
 }
 
 async function refreshRows() {
@@ -450,6 +888,7 @@ async function refreshRows() {
   }
 
   currentRows = Array.isArray(result.data.rows) ? result.data.rows : [];
+  syncDraftsWithRows(currentRows);
   renderSections();
 }
 
@@ -556,8 +995,9 @@ async function createMenu() {
   }
 
   setActiveMenu(result.data.menu || {});
-  sectionDrafts = ["Section 1"];
+  sectionDrafts = [makeSectionDraft("Section 1", [defaultSlotLabel(0)])];
   showText("createMenuOut", "Menu created and opened.");
+  showText("menuTemplateOut", "Apply template to generate full structure quickly.");
   await refreshRows();
   await refreshMenuLibrary();
 }
@@ -575,18 +1015,50 @@ function addSectionDraft() {
   }
 
   const existsInRows = currentRows.some((row) => normalizeLower(row.day) === normalizeLower(name));
-  const existsInDrafts = sectionDrafts.some((section) => normalizeLower(section) === normalizeLower(name));
+  const existsInDrafts = sectionDrafts.some((section) => normalizeLower(section.name) === normalizeLower(name));
   if (existsInRows || existsInDrafts) {
     showText("menuSectionsOut", "Section already exists.");
     return;
   }
 
-  sectionDrafts.push(name);
+  sectionDrafts.push(makeSectionDraft(name, [defaultSlotLabel(0)]));
   if (input) {
     input.value = "";
   }
   renderSections();
   showText("menuSectionsOut", "Section added. Add dishes to persist it.");
+}
+
+function generateTemplateStructure() {
+  if (!activeMenuId) {
+    showText("menuTemplateOut", "Create or open a menu first.");
+    return;
+  }
+
+  const typeEl = document.getElementById("menuTemplateType");
+  const sectionCountEl = document.getElementById("menuTemplateSectionCount");
+  const slotCountEl = document.getElementById("menuTemplateSlotCount");
+
+  const menuType = typeEl ? normalize(typeEl.value) : "free_menu";
+  const sectionCount = Math.max(1, Math.min(30, Number(sectionCountEl && sectionCountEl.value) || 1));
+  const slotCount = Math.max(1, Math.min(20, Number(slotCountEl && slotCountEl.value) || 1));
+
+  const nextDrafts = [];
+  for (let i = 0; i < sectionCount; i += 1) {
+    const slotLabels = [];
+    for (let j = 0; j < slotCount; j += 1) {
+      slotLabels.push(defaultSlotLabel(j));
+    }
+    nextDrafts.push(makeSectionDraft(defaultSectionLabel(menuType, i), slotLabels));
+  }
+
+  sectionDrafts = nextDrafts;
+  renderSections();
+  showText(
+    "menuTemplateOut",
+    "Template generated: " + String(sectionCount) + " sections with " + String(slotCount) + " slots each.",
+  );
+  showText("menuSectionsOut", "Structure generated. Add dishes from library or type new dishes directly.");
 }
 
 function bindHandlers() {
@@ -595,6 +1067,7 @@ function bindHandlers() {
   const btnAddSection = document.getElementById("btnAddSection");
   const btnRefreshSections = document.getElementById("btnRefreshSections");
   const btnRefreshMenuLibrary = document.getElementById("btnRefreshMenuLibrary");
+  const btnApplyTemplateBuilder = document.getElementById("btnApplyTemplateBuilder");
   const dishPickerClose = document.getElementById("dishPickerClose");
   const dishPickerSearch = document.getElementById("dishPickerSearch");
 
@@ -603,6 +1076,7 @@ function bindHandlers() {
       setActiveMenu({ menu_id: "", title: "" });
       currentRows = [];
       sectionDrafts = [];
+      showText("menuTemplateOut", "");
       renderSections();
       showText("createMenuOut", "Enter a menu name and save.");
     });
@@ -629,6 +1103,12 @@ function bindHandlers() {
   if (btnRefreshMenuLibrary) {
     btnRefreshMenuLibrary.addEventListener("click", async () => {
       await refreshMenuLibrary();
+    });
+  }
+
+  if (btnApplyTemplateBuilder) {
+    btnApplyTemplateBuilder.addEventListener("click", () => {
+      generateTemplateStructure();
     });
   }
 

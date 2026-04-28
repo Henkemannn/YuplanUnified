@@ -8,7 +8,14 @@ from flask import Blueprint, current_app, jsonify, request
 
 from .app_authz import require_roles
 from .builder import BuilderFlow
-from .builder.file_import import parse_builder_import_file
+from .builder.file_import import classify_builder_import_lines, parse_builder_import_file
+from .builder_sqlite import (
+    initialize_builder_sqlite,
+    SQLiteComponentAliasRepository,
+    SQLiteComponentRepository,
+    SQLiteCompositionAliasRepository,
+    SQLiteCompositionRepository,
+)
 from .components import (
     CompositionService,
     InMemoryCompositionRepository,
@@ -362,6 +369,28 @@ def _get_builder_flow() -> BuilderFlow:
     if isinstance(flow, BuilderFlow):
         return flow
 
+    builder_db_path = str(current_app.config.get("BUILDER_DB_PATH") or "").strip()
+
+    if builder_db_path:
+        db_path = initialize_builder_sqlite(builder_db_path)
+        component_repository = SQLiteComponentRepository(db_path=db_path)
+        component_alias_repository = SQLiteComponentAliasRepository(db_path=db_path)
+        composition_repository = SQLiteCompositionRepository(db_path=db_path)
+        alias_repository = SQLiteCompositionAliasRepository(db_path=db_path)
+
+        component_service = ComponentService(repository=component_repository)
+        composition_service = CompositionService(repository=composition_repository)
+
+        flow = BuilderFlow(
+            component_service=component_service,
+            composition_service=composition_service,
+            composition_repository=composition_repository,
+            alias_repository=alias_repository,
+            component_alias_repository=component_alias_repository,
+        )
+        current_app.extensions["builder_flow"] = flow
+        return flow
+
     component_repository = InMemoryComponentRepository()
     component_alias_repository = InMemoryComponentAliasRepository()
     composition_repository = InMemoryCompositionRepository()
@@ -550,6 +579,66 @@ def import_library_lines():
         return _bad_request(str(exc))
 
     return jsonify({"ok": True, "summary": _serialize_library_import_summary(summary, metrics)})
+
+
+@bp.post("/import/preview-lines")
+@require_roles("editor", "admin", "superuser")
+def import_library_preview_lines():
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    raw_lines = payload.get("lines")
+    if not isinstance(raw_lines, list):
+        return _bad_request("lines must be a list")
+
+    lines = [str(item or "") for item in raw_lines]
+    classified = classify_builder_import_lines(lines)
+    importable = [item for item in classified if item.classification == "importable_dish"]
+    ignored = [item for item in classified if item.classification != "importable_dish"]
+
+    return jsonify(
+        {
+            "ok": True,
+            "preview": {
+                "preview_contract_version": 2,
+                "file_type": "pasted",
+                "line_count": len(importable),
+                "lines": [item.normalized_text for item in importable],
+                "importable_lines": [item.normalized_text for item in importable],
+                "importable_items": [
+                    {
+                        "preview_index": index,
+                        "line": item.normalized_text,
+                    }
+                    for index, item in enumerate(importable)
+                ],
+                "ignored_lines": [
+                    {
+                        "raw_text": item.raw_text,
+                        "normalized_text": item.normalized_text,
+                        "classification": item.classification,
+                        "reason": item.reason,
+                    }
+                    for item in ignored
+                ],
+                "classified_lines": [
+                    {
+                        "raw_text": item.raw_text,
+                        "normalized_text": item.normalized_text,
+                        "classification": item.classification,
+                        "reason": item.reason,
+                    }
+                    for item in classified
+                ],
+                "counts": {
+                    "total_classified": len(classified),
+                    "importable": len(importable),
+                    "ignored": len(ignored),
+                },
+            },
+        }
+    )
 
 
 @bp.post("/import/file/preview")

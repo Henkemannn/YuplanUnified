@@ -33,6 +33,10 @@
             <div class="workspace-panel-meta" id="workspaceComponentsMeta">Loading components...</div>
             <div class="builder-library-search-row">
               <input id="libraryComponentsSearch" type="search" placeholder="Search components…" autocomplete="off">
+              <select id="libraryComponentsScope" aria-label="Component view scope">
+                <option value="recent">Recently added</option>
+                <option value="all">All</option>
+              </select>
             </div>
             <div id="libraryComponentsGrid" class="component-library-grid"></div>
           </section>
@@ -133,10 +137,21 @@
       </div>
 
       <section class="workspace-quick-card workspace-quick-card-import">
+        <label>Import type
+          <select id="importContextType">
+            <option value="menu" selected>Menu (weekly menus, structured)</option>
+            <option value="dish_list">Dish list</option>
+            <option value="component_list">Component list</option>
+            <option value="recipe_text">Recipe text</option>
+          </select>
+        </label>
         <label>Paste lines
           <textarea id="importLibraryLines" placeholder="One dish per line"></textarea>
         </label>
-        <button id="btnImportLibrary" type="button">Import pasted lines</button>
+        <div class="workspace-inline-actions">
+          <button id="btnImportLibraryPreview" type="button">Preview pasted lines</button>
+          <button id="btnImportLibrary" type="button">Import selected pasted lines</button>
+        </div>
 
         <div class="workspace-file-import">
           <label>Import file (.txt, .csv, .xlsx)
@@ -169,6 +184,7 @@
 
       <section class="workspace-quick-card workspace-import-summary-card">
         <h4>Import summary</h4>
+        <div id="recentImportGroups" class="import-grouped-summary"></div>
         <div id="importReviewNotice" class="import-review-notice hidden" aria-live="polite"></div>
         <div id="importSummaryView"></div>
       </section>

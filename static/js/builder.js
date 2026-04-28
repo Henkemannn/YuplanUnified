@@ -103,6 +103,179 @@ function parseLibraryLines(text) {
     .filter(Boolean);
 }
 
+const IMPORT_TYPE_MENU = "menu";
+const IMPORT_TYPE_DISH_LIST = "dish_list";
+const IMPORT_TYPE_COMPONENT_LIST = "component_list";
+const IMPORT_TYPE_RECIPE_TEXT = "recipe_text";
+const IMPORT_RESULT_ROW_LIMIT = 60;
+const COMPONENT_RENDER_LIMIT = 80;
+
+let _lastImportSession = null;
+let _cachedLibraryComponents = [];
+let _cachedLibraryCompositions = [];
+let _recentComponentIds = [];
+
+function selectedImportType() {
+  const el = document.getElementById("importContextType");
+  const value = el ? String(el.value || "") : "";
+  return value || IMPORT_TYPE_MENU;
+}
+
+function normalizeImportText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isWeekHeader(text) {
+  const value = normalizeImportText(text);
+  return /^week\s*\d+/.test(value) || /^vecka\s*\d+/.test(value) || /^v\s*\d+/.test(value);
+}
+
+function isDayHeader(text) {
+  const value = normalizeImportText(text);
+  return /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/.test(value)
+    || /^(monday|tuesday|wednesday|thursday|friday)\s+.+/.test(value)
+    || /^(mon|tue|wed|thu|fri|sat|sun)\b/.test(value)
+    || /^(man|mon|tis|tisdag|ons|onsdag|tors|torsdag|fre|fredag|lor|lordag|son|sondag)\b/.test(value)
+    || /^(day)\s*\d+/.test(value);
+}
+
+function parseMenuImportStructure(lines) {
+  const source = Array.isArray(lines) ? lines : [];
+  const grouped = [];
+  let currentWeek = "Week 1";
+  let currentSection = "Day 1";
+  let seenAnySection = false;
+  let weekCounter = 1;
+
+  function ensureGroup(weekLabel) {
+    const label = String(weekLabel || "").trim() || "Week " + String(weekCounter);
+    let group = grouped.find((item) => normalizeImportText(item.week_label) === normalizeImportText(label));
+    if (!group) {
+      group = { week_label: label, items: [] };
+      grouped.push(group);
+    }
+    return group;
+  }
+
+  for (const raw of source) {
+    const line = String(raw || "").trim();
+    if (!line) {
+      continue;
+    }
+
+    if (isWeekHeader(line)) {
+      currentWeek = line;
+      weekCounter += 1;
+      currentSection = "Day 1";
+      seenAnySection = false;
+      ensureGroup(currentWeek);
+      continue;
+    }
+
+    if (isDayHeader(line)) {
+      currentSection = line;
+      seenAnySection = true;
+      ensureGroup(currentWeek);
+      continue;
+    }
+
+    const group = ensureGroup(currentWeek);
+    if (!seenAnySection && group.items.length === 0) {
+      currentSection = "Day 1";
+    }
+    group.items.push({
+      raw_text: line,
+      section_label: currentSection,
+    });
+  }
+
+  return grouped.filter((group) => Array.isArray(group.items) && group.items.length > 0);
+}
+
+function buildDishLinesFromGroupedMenu(groupedMenu) {
+  const lines = [];
+  for (const group of groupedMenu || []) {
+    for (const item of group.items || []) {
+      const rawText = String(item.raw_text || "").trim();
+      if (rawText) {
+        lines.push(rawText);
+      }
+    }
+  }
+  return lines;
+}
+
+function normalizeRecentImportGroups(groups) {
+  const normalized = [];
+  for (const group of groups || []) {
+    const label = String(group.week_label || group.group_label || "Imported items").trim() || "Imported items";
+    const items = Array.isArray(group.items) ? group.items : [];
+    normalized.push({ week_label: label, items });
+  }
+  return normalized;
+}
+
+function renderRecentImportGroups() {
+  const host = document.getElementById("recentImportGroups");
+  if (!host) {
+    return;
+  }
+  host.innerHTML = "";
+
+  const session = _lastImportSession;
+  if (!session || !Array.isArray(session.groups) || session.groups.length === 0) {
+    return;
+  }
+
+  const title = document.createElement("div");
+  title.className = "import-grouped-block";
+  const titleText = document.createElement("p");
+  titleText.className = "import-grouped-block-title";
+  titleText.textContent = "Recent import: " + String(session.import_type_label || "Import");
+  title.appendChild(titleText);
+  if (session.note) {
+    const note = document.createElement("p");
+    note.className = "import-grouped-block-meta";
+    note.textContent = String(session.note);
+    title.appendChild(note);
+  }
+  host.appendChild(title);
+
+  for (const group of session.groups) {
+    const card = document.createElement("div");
+    card.className = "import-grouped-block";
+
+    const heading = document.createElement("p");
+    heading.className = "import-grouped-block-title";
+    heading.textContent = String(group.week_label || "Group");
+    card.appendChild(heading);
+
+    const meta = document.createElement("p");
+    meta.className = "import-grouped-block-meta";
+    meta.textContent = String((group.items || []).length) + " items";
+    card.appendChild(meta);
+
+    const sample = (group.items || []).slice(0, 4);
+    if (sample.length > 0) {
+      const list = document.createElement("ul");
+      list.className = "import-grouped-list";
+      for (const item of sample) {
+        const li = document.createElement("li");
+        li.textContent = String(item.raw_text || item.label || "");
+        list.appendChild(li);
+      }
+      if ((group.items || []).length > sample.length) {
+        const li = document.createElement("li");
+        li.textContent = "...";
+        list.appendChild(li);
+      }
+      card.appendChild(list);
+    }
+
+    host.appendChild(card);
+  }
+}
+
 function renderImportSummary(result) {
   const host = document.getElementById("importSummaryView");
   const reviewNotice = document.getElementById("importReviewNotice");
@@ -111,6 +284,7 @@ function renderImportSummary(result) {
   }
 
   host.innerHTML = "";
+  renderRecentImportGroups();
   if (reviewNotice) {
     reviewNotice.classList.add("hidden");
     reviewNotice.textContent = "";
@@ -212,7 +386,16 @@ function renderImportSummary(result) {
   }
 
   const rows = Array.isArray(summary.row_results) ? summary.row_results : [];
-  for (const row of rows) {
+  const visibleRows = rows.slice(0, IMPORT_RESULT_ROW_LIMIT);
+  if (rows.length > visibleRows.length) {
+    const clipped = document.createElement("div");
+    clipped.className = "workspace-library-hint";
+    clipped.textContent =
+      "Showing first " + String(visibleRows.length) + " of " + String(rows.length) + " imported rows.";
+    host.appendChild(clipped);
+  }
+
+  for (const row of visibleRows) {
     const item = document.createElement("div");
     item.className = "import-row-result";
 
@@ -258,6 +441,7 @@ let pendingFileImportItems = [];
 let pendingFileIgnoredItems = [];
 let importPreviewVisibleCount = 0;
 let importIgnoredExpanded = false;
+let pendingImportSource = "";
 
 function selectedFileImportLines() {
   const selected = [];
@@ -434,11 +618,101 @@ function renderFileImportPreview(result) {
   );
 }
 
+async function previewPastedImportLines() {
+  const importLinesEl = document.getElementById("importLibraryLines");
+  const linesInput = importLinesEl ? String(importLinesEl.value || "") : "";
+  const lines = parseLibraryLines(linesInput);
+  if (lines.length === 0) {
+    setFileImportStatus("Paste lines before preview.", true);
+    return;
+  }
+
+  setFileImportStatus("Building pasted import preview...", false);
+  showLoading("importOut");
+  try {
+    const result = await callApi("/api/builder/import/preview-lines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: { lines },
+    });
+    pendingImportSource = "pasted";
+    renderFileImportPreview(result);
+    showJson("importOut", result);
+  } catch (error) {
+    pendingImportSource = "";
+    const fail = { status: 0, data: { ok: false, error: String(error.message || error) } };
+    renderFileImportPreview(fail);
+    showJson("importOut", fail);
+  }
+}
+
 async function loadAllCompositions() {
   return callApi("/api/builder/compositions", { method: "GET" });
 }
 
-let _cachedLibraryComponents = [];
+function currentComponentScope() {
+  const scopeEl = document.getElementById("libraryComponentsScope");
+  const value = scopeEl ? String(scopeEl.value || "") : "";
+  return value === "all" ? "all" : "recent";
+}
+
+function applyComponentLibraryFilter(query) {
+  const grid = document.getElementById("libraryComponentsGrid");
+  const componentsMeta = document.getElementById("workspaceComponentsMeta");
+  if (!grid) {
+    return;
+  }
+
+  const q = String(query || "").trim().toLowerCase();
+  const scope = currentComponentScope();
+  let scopedItems = _cachedLibraryComponents;
+  if (scope === "recent" && _recentComponentIds.length > 0) {
+    const idSet = new Set(_recentComponentIds.map((value) => String(value || "")));
+    scopedItems = _cachedLibraryComponents.filter((item) => idSet.has(String(item.component_id || "")));
+  }
+
+  const filtered = q
+    ? scopedItems.filter((item) =>
+        String(item.component_name || item.component_id || "").toLowerCase().includes(q),
+      )
+    : scopedItems;
+
+  grid.innerHTML = "";
+
+  if (filtered.length === 0 && _cachedLibraryComponents.length > 0) {
+    const noMatch = document.createElement("p");
+    noMatch.className = "workspace-library-hint";
+    noMatch.textContent = q
+      ? 'No components match "' + q + '"'
+      : (scope === "recent"
+        ? "No recent components yet. Switch filter to All."
+        : "No components to show.");
+    grid.appendChild(noMatch);
+    if (componentsMeta) {
+      componentsMeta.textContent = "No components in current filter.";
+    }
+    return;
+  }
+
+  const visible = filtered.slice(0, COMPONENT_RENDER_LIMIT);
+  renderComponentLibraryCards(visible, grid);
+
+  if (filtered.length > visible.length) {
+    const clipped = document.createElement("p");
+    clipped.className = "workspace-library-hint";
+    clipped.textContent =
+      "Showing " + String(visible.length) + " of " + String(filtered.length) +
+      " components in this view. Use search to narrow further.";
+    grid.appendChild(clipped);
+  }
+
+  if (componentsMeta) {
+    componentsMeta.textContent =
+      String(visible.length) + " shown" +
+      (filtered.length > visible.length ? " of " + String(filtered.length) : "") +
+      " components (" + (scope === "recent" ? "recent" : "all") + " filter).";
+  }
+}
 
 function renderComponentLibraryCards(items, targetGrid) {
   if (!targetGrid) {
@@ -569,17 +843,13 @@ function renderLibrary(result) {
   const compositions = Array.isArray(data.compositions) ? data.compositions : [];
 
   _cachedLibraryComponents = components;
+  _cachedLibraryCompositions = compositions;
 
   const searchInput = document.getElementById("libraryComponentsSearch");
-  if (searchInput) {
-    searchInput.value = "";
-  }
+  const currentQuery = searchInput ? String(searchInput.value || "") : "";
 
-  if (componentsMeta) {
-    componentsMeta.textContent =
-      components.length === 0
-        ? "No components yet. Start by creating one or importing existing names."
-        : String(components.length) + (components.length === 1 ? " component" : " components") + " in library";
+  if (componentsMeta && components.length === 0) {
+    componentsMeta.textContent = "No components yet. Start by creating one or importing existing names.";
   }
 
   if (dishesMeta) {
@@ -592,7 +862,7 @@ function renderLibrary(result) {
   if (components.length === 0) {
     buildLibraryStartEmptyState(componentsGrid);
   } else {
-    renderComponentLibraryCards(components, componentsGrid);
+    applyComponentLibraryFilter(currentQuery);
   }
 
   if (compositions.length === 0) {
@@ -639,7 +909,8 @@ function renderLibrary(result) {
     empty.appendChild(actions);
     compositionsGrid.appendChild(empty);
   } else {
-    for (const item of compositions) {
+    const visibleCompositions = compositions.slice(0, COMPONENT_RENDER_LIMIT);
+    for (const item of visibleCompositions) {
       const compositionId = String(item.composition_id || "");
       const compositionName = String(item.composition_name || item.composition_id || "");
 
@@ -667,32 +938,20 @@ function renderLibrary(result) {
       card.appendChild(openSurface);
       compositionsGrid.appendChild(card);
     }
+
+    if (compositions.length > visibleCompositions.length) {
+      const clipped = document.createElement("p");
+      clipped.className = "workspace-library-hint";
+      clipped.textContent =
+        "Showing " + String(visibleCompositions.length) + " of " + String(compositions.length) +
+        " dishes. Open Menu Builder for structured menu output.";
+      compositionsGrid.appendChild(clipped);
+    }
   }
 }
 
 function filterLibraryComponents(query) {
-  const grid = document.getElementById("libraryComponentsGrid");
-  if (!grid) {
-    return;
-  }
-  const q = String(query || "").trim().toLowerCase();
-  const filtered = q
-    ? _cachedLibraryComponents.filter((c) =>
-        String(c.component_name || c.component_id || "").toLowerCase().includes(q),
-      )
-    : _cachedLibraryComponents;
-
-  grid.innerHTML = "";
-
-  if (filtered.length === 0 && _cachedLibraryComponents.length > 0) {
-    const noMatch = document.createElement("p");
-    noMatch.className = "workspace-library-hint";
-    noMatch.textContent = 'No components match "' + q + '"';
-    grid.appendChild(noMatch);
-    return;
-  }
-
-  renderComponentLibraryCards(filtered, grid);
+  applyComponentLibraryFilter(query);
 }
 
 async function openCompositionFromLibrary(compositionId) {
@@ -2215,6 +2474,159 @@ async function renameComponentInCurrentComposition(componentId, currentName) {
   }
 }
 
+function importTypeLabel(importType) {
+  const value = String(importType || "");
+  if (value === IMPORT_TYPE_MENU) {
+    return "Menu";
+  }
+  if (value === IMPORT_TYPE_COMPONENT_LIST) {
+    return "Component list";
+  }
+  if (value === IMPORT_TYPE_RECIPE_TEXT) {
+    return "Recipe text";
+  }
+  return "Dish list";
+}
+
+function buildCompositionQueueFromSummary(summary) {
+  const queue = {};
+  const rows = Array.isArray(summary && summary.row_results) ? summary.row_results : [];
+  for (const row of rows) {
+    const key = normalizeImportText(row.raw_text);
+    const compositionId = String(row.composition_id || "").trim();
+    if (!key || !compositionId) {
+      continue;
+    }
+    if (!queue[key]) {
+      queue[key] = [];
+    }
+    queue[key].push(compositionId);
+  }
+  return queue;
+}
+
+function nextCompositionIdForRawText(compositionQueue, rawText) {
+  const key = normalizeImportText(rawText);
+  const entries = compositionQueue[key];
+  if (!entries || entries.length === 0) {
+    return "";
+  }
+  return String(entries.shift() || "");
+}
+
+function generateImportWeekKey(index) {
+  const now = new Date();
+  const y = String(now.getFullYear());
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return "IMPORT-" + y + m + d + "-" + String(index + 1).padStart(2, "0");
+}
+
+async function createStructuredMenusFromImport(groupedMenu, summary) {
+  const groups = normalizeRecentImportGroups(groupedMenu);
+  if (groups.length === 0) {
+    return { created_menus: 0, created_rows: 0, failed_rows: 0, groups: [] };
+  }
+
+  const compositionQueue = buildCompositionQueueFromSummary(summary);
+  let createdMenus = 0;
+  let createdRows = 0;
+  let failedRows = 0;
+  const sessionGroups = [];
+
+  for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+    const group = groups[groupIndex];
+    const menuTitle = String(group.week_label || "Imported menu " + String(groupIndex + 1));
+
+    const menuResult = await callApi("/api/builder/menus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: {
+        title: menuTitle,
+        site_id: "site_1",
+        week_key: generateImportWeekKey(groupIndex),
+      },
+    });
+
+    if (!menuResult || !menuResult.data || !menuResult.data.ok || !menuResult.data.menu) {
+      failedRows += (group.items || []).length;
+      continue;
+    }
+
+    createdMenus += 1;
+    const menuId = String(menuResult.data.menu.menu_id || "");
+    const sectionCounters = {};
+
+    for (const item of group.items || []) {
+      const compositionId = nextCompositionIdForRawText(compositionQueue, item.raw_text);
+      if (!compositionId) {
+        failedRows += 1;
+        continue;
+      }
+
+      const sectionLabel = String(item.section_label || "Section 1");
+      const sortOrder = Number(sectionCounters[sectionLabel] || 0);
+      sectionCounters[sectionLabel] = sortOrder + 1;
+
+      const rowResult = await callApi(
+        "/api/builder/menus/" + encodeURIComponent(menuId) + "/rows",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: {
+            day: sectionLabel,
+            meal_slot: "section",
+            composition_id: compositionId,
+            note: "",
+            sort_order: sortOrder,
+          },
+        },
+      );
+
+      if (rowResult && rowResult.data && rowResult.data.ok) {
+        createdRows += 1;
+      } else {
+        failedRows += 1;
+      }
+    }
+
+    sessionGroups.push({
+      week_label: menuTitle,
+      menu_id: menuId,
+      items: (group.items || []).map((item) => ({
+        raw_text: item.raw_text,
+        section_label: item.section_label,
+      })),
+    });
+  }
+
+  return {
+    created_menus: createdMenus,
+    created_rows: createdRows,
+    failed_rows: failedRows,
+    groups: sessionGroups,
+  };
+}
+
+function captureCurrentComponentIds() {
+  return new Set((_cachedLibraryComponents || []).map((item) => String(item.component_id || "")));
+}
+
+function updateRecentComponentsFromSnapshot(previousSet) {
+  const before = previousSet instanceof Set ? previousSet : new Set();
+  const now = (_cachedLibraryComponents || []).map((item) => String(item.component_id || ""));
+  _recentComponentIds = now.filter((id) => id && !before.has(id));
+}
+
+function setLastImportSession(importType, groups, note) {
+  _lastImportSession = {
+    import_type: String(importType || IMPORT_TYPE_DISH_LIST),
+    import_type_label: importTypeLabel(importType),
+    groups: normalizeRecentImportGroups(groups || []),
+    note: String(note || ""),
+  };
+}
+
 function bindBuilderHandlers() {
   const openComponentCreateModalBtn = document.getElementById("openComponentCreateModalBtn");
   const openImportLibraryModalBtn = document.getElementById("openImportLibraryModalBtn");
@@ -2230,6 +2642,7 @@ function bindBuilderHandlers() {
   const createDishBtn = document.getElementById("btnCreateDish");
   const createComponentBtn = document.getElementById("btnCreateComponent");
   const importLibraryBtn = document.getElementById("btnImportLibrary");
+  const importLibraryPreviewBtn = document.getElementById("btnImportLibraryPreview");
   const resolveCancelBtn = document.getElementById("resolveCancel");
   const addComponentBtn = document.getElementById("btnAddComponent");
   const paletteSearchInput = document.getElementById("builderPaletteSearch");
@@ -2250,10 +2663,18 @@ function bindBuilderHandlers() {
   const recipeDeleteBtn = document.getElementById("btnRecipeDelete");
   const recipeScalingPreviewBtn = document.getElementById("btnRecipeScalingPreview");
   const libraryComponentsSearchInput = document.getElementById("libraryComponentsSearch");
+  const libraryComponentsScopeSelect = document.getElementById("libraryComponentsScope");
 
   if (libraryComponentsSearchInput) {
     libraryComponentsSearchInput.addEventListener("input", () => {
       filterLibraryComponents(libraryComponentsSearchInput.value);
+    });
+  }
+
+  if (libraryComponentsScopeSelect) {
+    libraryComponentsScopeSelect.addEventListener("change", () => {
+      const query = libraryComponentsSearchInput ? String(libraryComponentsSearchInput.value || "") : "";
+      filterLibraryComponents(query);
     });
   }
 
@@ -2407,28 +2828,80 @@ function bindBuilderHandlers() {
 
   if (importLibraryBtn) {
     importLibraryBtn.addEventListener("click", async () => {
-      const importLinesEl = document.getElementById("importLibraryLines");
       const importSummaryView = document.getElementById("importSummaryView");
+      const importType = selectedImportType();
+      const beforeComponentIds = captureCurrentComponentIds();
       showLoading("importOut");
       if (importSummaryView) {
         importSummaryView.textContent = "Loading import summary...";
       }
 
+      if (pendingImportSource !== "pasted") {
+        setFileImportStatus("Preview pasted lines first, then import selected items.", true);
+        return;
+      }
+
+      const selected = selectedFileImportLines();
+      if (selected.length === 0) {
+        setFileImportStatus("Select at least one preview line before import.", true);
+        return;
+      }
+
       try {
-        const linesInput = importLinesEl ? String(importLinesEl.value || "") : "";
+        const rawLines = selected;
+        let groupedMenu = [];
+        let linesToImport = rawLines;
+        if (importType === IMPORT_TYPE_MENU) {
+          groupedMenu = parseMenuImportStructure(rawLines);
+          const extracted = buildDishLinesFromGroupedMenu(groupedMenu);
+          linesToImport = extracted.length > 0 ? extracted : rawLines;
+        }
+
         const result = await callApi("/api/builder/import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: { lines: parseLibraryLines(linesInput) },
+          body: { lines: linesToImport },
         });
+
+        const summary = result && result.data ? result.data.summary : null;
+        if (result && result.data && result.data.ok) {
+          if (importType === IMPORT_TYPE_MENU && Array.isArray(groupedMenu) && groupedMenu.length > 0 && summary) {
+            const menuBuildResult = await createStructuredMenusFromImport(groupedMenu, summary);
+            setLastImportSession(
+              importType,
+              menuBuildResult.groups,
+              "Created " + String(menuBuildResult.created_menus) + " menus from structured import.",
+            );
+          } else {
+            const rows = Array.isArray(summary && summary.row_results) ? summary.row_results : [];
+            setLastImportSession(importType, [{ week_label: "Imported items", items: rows }], "Import completed.");
+          }
+        }
+
         renderImportSummary(result);
         showJson("importOut", result);
         await loadLibrary();
+        updateRecentComponentsFromSnapshot(beforeComponentIds);
+        const query = libraryComponentsSearchInput ? String(libraryComponentsSearchInput.value || "") : "";
+        filterLibraryComponents(query);
+        pendingFileImportItems = [];
+        pendingFileIgnoredItems = [];
+        importPreviewVisibleCount = 0;
+        importIgnoredExpanded = false;
+        pendingImportSource = "";
+        refreshFilePreviewLists();
+        setFileImportStatus("Pasted import completed.", false);
       } catch (error) {
         const failResult = { status: 0, data: { ok: false, error: String(error.message || error) } };
         renderImportSummary(failResult);
         showJson("importOut", failResult);
       }
+    });
+  }
+
+  if (importLibraryPreviewBtn) {
+    importLibraryPreviewBtn.addEventListener("click", async () => {
+      await previewPastedImportLines();
     });
   }
 
@@ -2457,9 +2930,11 @@ function bindBuilderHandlers() {
           method: "POST",
           formData,
         });
+        pendingImportSource = "file";
         renderFileImportPreview(result);
         showJson("importOut", result);
       } catch (error) {
+        pendingImportSource = "";
         const fail = { status: 0, data: { ok: false, error: String(error.message || error) } };
         renderFileImportPreview(fail);
         showJson("importOut", fail);
@@ -2470,6 +2945,8 @@ function bindBuilderHandlers() {
   if (importFileConfirmBtn) {
     importFileConfirmBtn.addEventListener("click", async () => {
       const selectedLines = selectedFileImportLines();
+      const importType = selectedImportType();
+      const beforeComponentIds = captureCurrentComponentIds();
       if (selectedLines.length === 0) {
         setFileImportStatus("No preview lines available. Run preview first.", true);
         return;
@@ -2478,13 +2955,37 @@ function bindBuilderHandlers() {
       showLoading("importOut");
       setFileImportStatus("Importing previewed lines...", false);
       try {
+        let groupedMenu = [];
+        let linesToImport = selectedLines;
+        if (importType === IMPORT_TYPE_MENU) {
+          groupedMenu = parseMenuImportStructure(selectedLines);
+          const extracted = buildDishLinesFromGroupedMenu(groupedMenu);
+          linesToImport = extracted.length > 0 ? extracted : selectedLines;
+        }
+
         const result = await callApi("/api/builder/import/file/confirm", {
           method: "POST",
           body: {
-            lines: selectedLines,
+            lines: linesToImport,
             ignored_noise_count: pendingFileIgnoredItems.length,
           },
         });
+
+        const summary = result && result.data ? result.data.summary : null;
+        if (result && result.data && result.data.ok) {
+          if (importType === IMPORT_TYPE_MENU && Array.isArray(groupedMenu) && groupedMenu.length > 0 && summary) {
+            const menuBuildResult = await createStructuredMenusFromImport(groupedMenu, summary);
+            setLastImportSession(
+              importType,
+              menuBuildResult.groups,
+              "Created " + String(menuBuildResult.created_menus) + " menus from structured import.",
+            );
+          } else {
+            const rows = Array.isArray(summary && summary.row_results) ? summary.row_results : [];
+            setLastImportSession(importType, [{ week_label: "Imported items", items: rows }], "Import completed.");
+          }
+        }
+
         renderImportSummary(result);
         showJson("importOut", result);
         if (result && result.status < 400) {
@@ -2494,11 +2995,15 @@ function bindBuilderHandlers() {
           importIgnoredExpanded = false;
           refreshFilePreviewLists();
           importFileConfirmBtn.disabled = true;
+          pendingImportSource = "";
           setFileImportStatus("File import completed.", false);
         } else {
           setFileImportStatus("File import failed", true);
         }
         await loadLibrary();
+        updateRecentComponentsFromSnapshot(beforeComponentIds);
+        const query = libraryComponentsSearchInput ? String(libraryComponentsSearchInput.value || "") : "";
+        filterLibraryComponents(query);
       } catch (error) {
         const failResult = { status: 0, data: { ok: false, error: String(error.message || error) } };
         renderImportSummary(failResult);

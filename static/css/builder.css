@@ -1400,7 +1400,9 @@ ul {
 
 .workspace-inline-create-details {
   margin-top: 12px;
-}
+  display: flex;
+  gap: 8px;
+  align-items: center;
 
 .workspace-inline-create-details > summary {
   display: block;
@@ -1412,6 +1414,52 @@ ul {
   border-radius: 12px;
   border: 1px solid #d4dde7;
   background: #f5f8fb;
+#libraryComponentsScope {
+  width: auto;
+  margin: 0;
+  min-width: 150px;
+}
+
+.import-grouped-summary {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.import-grouped-block {
+  border: 1px solid #d6e2ec;
+  border-radius: 10px;
+  background: #f8fbfe;
+  padding: 8px 10px;
+}
+
+.import-grouped-block-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #273c4f;
+}
+
+.import-grouped-block-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #4e6273;
+}
+
+.import-grouped-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #4e6273;
+}
+
+.workspace-library-hint {
+  border: 1px dashed #cad8e4;
+  border-radius: 10px;
+  background: #f7fbff;
+  color: #4d6275;
+  padding: 8px 10px;
+  font-size: 12px;
   list-style: none;
   user-select: none;
   transition: border-color 120ms ease, background 120ms ease;
