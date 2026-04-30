@@ -7,7 +7,7 @@ function showText(targetId, text) {
 }
 
 function showLoading(targetId) {
-  showText(targetId, "Loading...");
+  showText(targetId, "Working...");
 }
 
 async function callApi(url, options) {
@@ -127,16 +127,27 @@ function setActiveMenu(menu) {
   activeMenuId = String((menu && menu.menu_id) || "");
   activeMenuTitle = String((menu && menu.title) || "");
   const meta = document.getElementById("activeMenuMeta");
+  const saveStatus = document.getElementById("menuSaveStatus");
+  const viewPrintBtn = document.getElementById("btnViewPrintActive");
+
+  if (viewPrintBtn) {
+    viewPrintBtn.disabled = !activeMenuId;
+  }
+
   if (!meta) {
     return;
   }
   if (!activeMenuId) {
-    meta.textContent = "No active menu";
+    if (saveStatus) {
+      saveStatus.textContent = "Create or open a menu to start saving your changes.";
+    }
+    meta.textContent = "Create a menu or open one to start.";
     return;
   }
-  meta.textContent =
-    "Active menu: " +
-    (activeMenuTitle ? activeMenuTitle + " (" + activeMenuId + ")" : activeMenuId);
+  if (saveStatus) {
+    saveStatus.textContent = "Saved automatically while you edit.";
+  }
+  meta.textContent = "Now editing: " + (activeMenuTitle || "Untitled menu");
 }
 
 function rowsToSlotMap(rows) {
@@ -318,7 +329,7 @@ function renderSections() {
   if (sections.length === 0) {
     const empty = document.createElement("div");
     empty.className = "menu-empty";
-    empty.textContent = "No sections yet. Add your first section.";
+    empty.textContent = "No sections yet. Add a section or create menu structure.";
     host.appendChild(empty);
     return;
   }
@@ -400,14 +411,14 @@ function renderSections() {
 
       const pickDishBtn = document.createElement("button");
       pickDishBtn.type = "button";
-      pickDishBtn.textContent = "Pick dish";
+      pickDishBtn.textContent = "Choose dish";
       pickDishBtn.addEventListener("click", () => {
         openDishPicker(section.name, slot.index);
       });
 
       const typeDishBtn = document.createElement("button");
       typeDishBtn.type = "button";
-      typeDishBtn.textContent = "Type new dish";
+      typeDishBtn.textContent = "Type dish";
       typeDishBtn.addEventListener("click", async () => {
         await addFreeTextDish(section.name, slot.index);
       });
@@ -441,7 +452,7 @@ function renderSections() {
       if (!slot.row) {
         const empty = document.createElement("div");
         empty.className = "menu-empty";
-        empty.textContent = "No dish in this slot yet.";
+        empty.textContent = "No dish yet. Choose dish or type dish.";
         slotRow.appendChild(empty);
       } else {
         const dishRow = document.createElement("div");
@@ -454,7 +465,7 @@ function renderSections() {
 
         const meta = document.createElement("div");
         meta.className = "menu-dish-meta";
-        meta.textContent = "dish_id: " + String(slot.row.composition_id || "") + " | slot: " + String(slot.index + 1);
+        meta.textContent = "Option " + String(slot.index + 1);
 
         left.appendChild(label);
         left.appendChild(meta);
@@ -525,7 +536,7 @@ function renderDishPicker() {
 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.textContent = "Attach";
+    addBtn.textContent = "Add to slot";
     addBtn.addEventListener("click", async () => {
       await attachDishToSection(String(dish.composition_id || ""));
     });
@@ -622,7 +633,7 @@ async function attachDishToSection(compositionId) {
 
   const compositionIdValue = normalize(compositionId);
   if (!compositionIdValue) {
-    showText("dishPickerOut", "Dish id is required.");
+    showText("dishPickerOut", "Choose a dish first.");
     return;
   }
 
@@ -639,11 +650,12 @@ async function attachDishToSection(compositionId) {
   showLoading("dishPickerOut");
   const result = await attachCompositionToSlot(sectionName, slotIndex, compositionIdValue);
   if (!result || !result.ok) {
-    showText("dishPickerOut", "Could not attach dish.");
+    showText("dishPickerOut", "Could not add dish to slot.");
     return;
   }
 
-  showText("dishPickerOut", result.mode === "updated" ? "Dish replaced." : "Dish attached.");
+  showText("dishPickerOut", result.mode === "updated" ? "Dish updated." : "Dish added.");
+  showText("menuSaveStatus", "Saved automatically while you edit.");
   await refreshRows();
   closeModal("dishPickerModal");
 }
@@ -654,7 +666,7 @@ async function removeDish(menuDetailId, options) {
   if (!activeMenuId || !detailIdValue) {
     return;
   }
-  const confirmed = config.confirm === false ? true : window.confirm("Remove this dish from section?");
+  const confirmed = config.confirm === false ? true : window.confirm("Remove this dish from the section?");
   if (!confirmed) {
     return;
   }
@@ -672,6 +684,7 @@ async function removeDish(menuDetailId, options) {
   if (!config.quiet) {
     showText("menuSectionsOut", "Dish removed.");
   }
+  showText("menuSaveStatus", "Saved automatically while you edit.");
   if (!config.skipRefresh) {
     await refreshRows();
   }
@@ -724,6 +737,7 @@ async function renameSection(oldName) {
     sectionDrafts[draftIndex].name = nextValue;
   }
   showText("menuSectionsOut", "Section renamed.");
+  showText("menuSaveStatus", "Saved automatically while you edit.");
   await refreshRows();
 }
 
@@ -758,6 +772,7 @@ async function removeSection(sectionName) {
 
   sectionDrafts = sectionDrafts.filter((item) => normalizeLower(item.name) !== normalizeLower(sectionValue));
   showText("menuSectionsOut", "Section removed.");
+  showText("menuSaveStatus", "Saved automatically while you edit.");
   await refreshRows();
 }
 
@@ -823,6 +838,7 @@ async function removeSlot(sectionName, slotIndex) {
   }
 
   showText("menuSectionsOut", "Slot removed.");
+  showText("menuSaveStatus", "Saved automatically while you edit.");
 }
 
 async function addFreeTextDish(sectionName, slotIndex) {
@@ -868,6 +884,7 @@ async function addFreeTextDish(sectionName, slotIndex) {
 
   await refreshRows();
   showText("menuSectionsOut", "Dish created and attached.");
+  showText("menuSaveStatus", "Saved automatically while you edit.");
 }
 
 async function refreshRows() {
@@ -924,7 +941,7 @@ function renderMenuLibrary(menus) {
     name.textContent = String(menu.title || menu.menu_id || "");
     const meta = document.createElement("div");
     meta.className = "menu-library-item-meta";
-    meta.textContent = "menu_id: " + String(menu.menu_id || "") + " | week_key: " + String(menu.week_key || "");
+    meta.textContent = "Ready to open";
     left.appendChild(name);
     left.appendChild(meta);
 
@@ -963,11 +980,29 @@ async function refreshMenuLibrary() {
   showLoading("menuLibraryOut");
   const result = await callApi("/api/builder/menus", { method: "GET" });
   if (!result || !result.data || !result.data.ok) {
-    showText("menuLibraryOut", "Could not load menu library.");
+    showText("menuLibraryOut", "Could not load menus.");
     return;
   }
   renderMenuLibrary(result.data.menus);
-  showText("menuLibraryOut", "Menu library updated.");
+  showText("menuLibraryOut", "Menus are up to date.");
+}
+
+function selectedStartMode() {
+  const modeEl = document.getElementById("menuStartMode");
+  return modeEl ? normalize(modeEl.value) : "blank";
+}
+
+function updateTemplateBuilderVisibility() {
+  const wrap = document.getElementById("menuTemplateWrap");
+  if (!wrap) {
+    return;
+  }
+  const show = selectedStartMode() === "template";
+  if (show) {
+    wrap.classList.remove("hidden");
+    return;
+  }
+  wrap.classList.add("hidden");
 }
 
 async function createMenu() {
@@ -995,9 +1030,18 @@ async function createMenu() {
   }
 
   setActiveMenu(result.data.menu || {});
-  sectionDrafts = [makeSectionDraft("Section 1", [defaultSlotLabel(0)])];
-  showText("createMenuOut", "Menu created and opened.");
-  showText("menuTemplateOut", "Apply template to generate full structure quickly.");
+  sectionDrafts = [];
+  showText("createMenuOut", "Menu created.");
+  showText("menuSaveStatus", "Saved automatically while you edit.");
+  showText("menuTemplateOut", "");
+
+  if (selectedStartMode() === "template") {
+    generateTemplateStructure();
+    showText("createMenuOut", "Menu created. Structure is ready.");
+  } else {
+    showText("menuSectionsOut", "Add a section to begin building your menu.");
+  }
+
   await refreshRows();
   await refreshMenuLibrary();
 }
@@ -1056,9 +1100,9 @@ function generateTemplateStructure() {
   renderSections();
   showText(
     "menuTemplateOut",
-    "Template generated: " + String(sectionCount) + " sections with " + String(slotCount) + " slots each.",
+    "Menu structure ready: " + String(sectionCount) + " sections with " + String(slotCount) + " options each.",
   );
-  showText("menuSectionsOut", "Structure generated. Add dishes from library or type new dishes directly.");
+  showText("menuSectionsOut", "Structure ready. Choose dishes from library or type dish names.");
 }
 
 function bindHandlers() {
@@ -1068,6 +1112,8 @@ function bindHandlers() {
   const btnRefreshSections = document.getElementById("btnRefreshSections");
   const btnRefreshMenuLibrary = document.getElementById("btnRefreshMenuLibrary");
   const btnApplyTemplateBuilder = document.getElementById("btnApplyTemplateBuilder");
+  const menuStartMode = document.getElementById("menuStartMode");
+  const btnViewPrintActive = document.getElementById("btnViewPrintActive");
   const dishPickerClose = document.getElementById("dishPickerClose");
   const dishPickerSearch = document.getElementById("dishPickerSearch");
 
@@ -1078,7 +1124,13 @@ function bindHandlers() {
       sectionDrafts = [];
       showText("menuTemplateOut", "");
       renderSections();
-      showText("createMenuOut", "Enter a menu name and save.");
+      showText("createMenuOut", "Enter a menu name, choose a start mode, and create.");
+    });
+  }
+
+  if (menuStartMode) {
+    menuStartMode.addEventListener("change", () => {
+      updateTemplateBuilderVisibility();
     });
   }
 
@@ -1123,10 +1175,21 @@ function bindHandlers() {
       renderDishPicker();
     });
   }
+
+  if (btnViewPrintActive) {
+    btnViewPrintActive.addEventListener("click", () => {
+      if (!activeMenuId) {
+        return;
+      }
+      window.location.href = "/menu-output-v1?menu_id=" + encodeURIComponent(activeMenuId);
+    });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindHandlers();
+  updateTemplateBuilderVisibility();
+  setActiveMenu({ menu_id: "", title: "" });
   await loadDishes();
   await refreshMenuLibrary();
   renderSections();

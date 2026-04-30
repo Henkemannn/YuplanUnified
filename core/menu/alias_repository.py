@@ -20,3 +20,13 @@ class InMemoryCompositionAliasRepository:
 
     def list_for_composition(self, composition_id: str) -> list[CompositionAlias]:
         return [alias for alias in self._aliases.values() if alias.composition_id == composition_id]
+
+    def delete_for_composition(self, composition_id: str) -> None:
+        composition_id_value = str(composition_id or "").strip()
+        keys = [
+            alias_id
+            for alias_id, alias in self._aliases.items()
+            if alias.composition_id == composition_id_value
+        ]
+        for alias_id in keys:
+            del self._aliases[alias_id]

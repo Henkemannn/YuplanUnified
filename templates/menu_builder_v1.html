@@ -53,10 +53,50 @@
     .menu-inline input {
       min-width: 220px;
     }
+    .menu-top-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
     .menu-meta {
       margin-top: 6px;
       font-size: 12px;
       color: #4c6174;
+    }
+    .menu-start-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      margin-top: 10px;
+    }
+    .menu-start-block {
+      border: 1px solid #d7e2eb;
+      border-radius: 12px;
+      background: #fbfdff;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+    .menu-start-block h3 {
+      margin: 0;
+      font-size: 18px;
+      color: #20384a;
+    }
+    .menu-stack {
+      display: grid;
+      gap: 8px;
+    }
+    .menu-stack label {
+      display: grid;
+      gap: 4px;
+      font-size: 12px;
+      color: #4f6273;
+    }
+    .menu-stack input,
+    .menu-stack select {
+      width: 100%;
+      margin: 0;
     }
     .menu-sections {
       display: grid;
@@ -238,6 +278,9 @@
       width: 100%;
       margin: 0;
     }
+    .menu-template-wrap.hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -245,70 +288,87 @@
     <section class="menu-card menu-topbar">
       <div>
         <h1>Menu Builder v1.1</h1>
-        <p class="menu-meta">Flexible sections with dish lists. No fixed weekdays or Alt slots required.</p>
+        <p class="menu-meta">Build your menu step by step: create or open, shape structure, add dishes, then view and print.</p>
       </div>
-      <div class="menu-inline">
-        <button id="btnNewMenu" type="button">New menu</button>
+      <div class="menu-top-actions">
+        <button id="btnNewMenu" type="button">Start new</button>
+        <button id="btnViewPrintActive" type="button" disabled>View / Print menu</button>
       </div>
     </section>
 
     <section class="menu-card">
-      <h2>Create Menu</h2>
-      <div class="menu-inline">
-        <label>Name
-          <input id="menuTitle" type="text" placeholder="Spring event menu">
-        </label>
-        <button id="btnCreateMenu" type="button">Save menu</button>
-      </div>
-      <p class="menu-meta" id="activeMenuMeta">No active menu</p>
-      <div id="createMenuOut" class="menu-feedback" aria-live="polite"></div>
-    </section>
+      <h2>Create or Open Menu</h2>
+      <p class="menu-meta" id="activeMenuMeta">Create a menu or open one to start.</p>
+      <div class="menu-start-grid">
+        <div class="menu-start-block">
+          <h3>New menu</h3>
+          <div class="menu-stack">
+            <label>Menu name
+              <input id="menuTitle" type="text" placeholder="Spring event menu">
+            </label>
+            <label>Start with
+              <select id="menuStartMode">
+                <option value="blank" selected>Blank menu</option>
+                <option value="template">Template builder</option>
+              </select>
+            </label>
+          </div>
 
-    <section class="menu-card">
-      <h2>Template Builder</h2>
-      <p class="menu-meta">Generate editable empty structure. Sections and slot labels can be renamed later.</p>
-      <div class="menu-template-grid">
-        <label>Menu type / intent
-          <select id="menuTemplateType">
-            <option value="weekly_lunch">Weekly lunch menu</option>
-            <option value="free_menu">Free menu</option>
-            <option value="event_proposal">Event/proposal menu</option>
-            <option value="a_la_carte">A la carte menu</option>
-          </select>
-        </label>
-        <label>Number of sections / days
-          <input id="menuTemplateSectionCount" type="number" min="1" max="30" value="3">
-        </label>
-        <label>Slots / options per section
-          <input id="menuTemplateSlotCount" type="number" min="1" max="20" value="2">
-        </label>
+          <div id="menuTemplateWrap" class="menu-template-wrap hidden">
+            <p class="menu-meta">Template builder</p>
+            <div class="menu-template-grid">
+              <label>What kind of menu?
+                <select id="menuTemplateType">
+                  <option value="weekly_lunch">Weekly lunch menu</option>
+                  <option value="free_menu">Free menu</option>
+                  <option value="event_proposal">Event/proposal menu</option>
+                  <option value="a_la_carte">A la carte menu</option>
+                </select>
+              </label>
+              <label>How many sections or days?
+                <input id="menuTemplateSectionCount" type="number" min="1" max="30" value="3">
+              </label>
+              <label>How many options per section?
+                <input id="menuTemplateSlotCount" type="number" min="1" max="20" value="2">
+              </label>
+            </div>
+            <div class="menu-inline" style="margin-top:8px;">
+              <button id="btnApplyTemplateBuilder" type="button">Create menu structure</button>
+            </div>
+          </div>
+
+          <div class="menu-inline">
+            <button id="btnCreateMenu" type="button">Create menu</button>
+          </div>
+          <div id="menuTemplateOut" class="menu-feedback" aria-live="polite"></div>
+          <div id="createMenuOut" class="menu-feedback" aria-live="polite"></div>
+        </div>
+
+        <div class="menu-start-block">
+          <h3>Open existing menu</h3>
+          <div class="menu-inline">
+            <button id="btnRefreshMenuLibrary" type="button">Show latest menus</button>
+          </div>
+          <div id="menuLibraryList" class="menu-library-list"></div>
+          <div id="menuLibraryOut" class="menu-feedback" aria-live="polite"></div>
+        </div>
       </div>
-      <div class="menu-inline" style="margin-top:8px;">
-        <button id="btnApplyTemplateBuilder" type="button">Generate structure</button>
-      </div>
-      <div id="menuTemplateOut" class="menu-feedback" aria-live="polite"></div>
     </section>
 
     <section class="menu-card">
       <div class="menu-topbar">
-        <h2>Menu Sections</h2>
+        <div>
+          <h2>Menu sections</h2>
+          <p id="menuSaveStatus" class="menu-meta">Changes are saved automatically while you edit.</p>
+        </div>
         <div class="menu-inline">
-          <input id="newSectionName" type="text" placeholder="Section name (e.g. Monday lunch)">
+          <input id="newSectionName" type="text" placeholder="New section name (for example Monday lunch)">
           <button id="btnAddSection" type="button">Add section</button>
-          <button id="btnRefreshSections" type="button">Refresh</button>
+          <button id="btnRefreshSections" type="button">Show latest changes</button>
         </div>
       </div>
       <div id="menuSections" class="menu-sections"></div>
       <div id="menuSectionsOut" class="menu-feedback" aria-live="polite"></div>
-    </section>
-
-    <section class="menu-card">
-      <h2>Menu Library</h2>
-      <div class="menu-inline">
-        <button id="btnRefreshMenuLibrary" type="button">Refresh menu library</button>
-      </div>
-      <div id="menuLibraryList" class="menu-library-list"></div>
-      <div id="menuLibraryOut" class="menu-feedback" aria-live="polite"></div>
     </section>
   </div>
 

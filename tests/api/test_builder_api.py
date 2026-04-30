@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import io
+import tempfile
+import os
 
+from docx import Document
 from openpyxl import Workbook
 from core.app_factory import create_app
 
@@ -10,6 +13,13 @@ HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 def _client():
     app = create_app({"TESTING": True})
+    return app.test_client()
+
+
+def _sqlite_client():
+    fd, db_path = tempfile.mkstemp(prefix="builder_import_session_", suffix=".db")
+    os.close(fd)
+    app = create_app({"TESTING": True, "BUILDER_DB_PATH": db_path})
     return app.test_client()
 
 
@@ -22,6 +32,23 @@ def _xlsx_bytes(rows: list[list[str]]) -> bytes:
     stream = io.BytesIO()
     workbook.save(stream)
     workbook.close()
+    return stream.getvalue()
+
+
+def _docx_bytes(*, paragraphs: list[str] | None = None, table_rows: list[list[str]] | None = None) -> bytes:
+    doc = Document()
+    for value in paragraphs or []:
+        doc.add_paragraph(str(value))
+
+    rows = table_rows or []
+    if rows:
+        table = doc.add_table(rows=len(rows), cols=max(len(r) for r in rows))
+        for row_index, row in enumerate(rows):
+            for col_index, value in enumerate(row):
+                table.rows[row_index].cells[col_index].text = str(value)
+
+    stream = io.BytesIO()
+    doc.save(stream)
     return stream.getvalue()
 
 
@@ -129,6 +156,99 @@ def test_create_standalone_component_endpoint_rejects_empty_name() -> None:
     assert rv.status_code == 400
     body = rv.get_json() or {}
     assert body.get("error") == "bad_request"
+
+
+def test_delete_component_endpoint_removes_unreferenced_component() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Temp component"},
+        headers=HEADERS,
+    )
+    component_id = ((created.get_json() or {}).get("component") or {}).get("component_id")
+
+    rv = client.delete(f"/api/builder/components/{component_id}", headers=HEADERS)
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    listed = client.get("/api/builder/components", headers=HEADERS).get_json() or {}
+    ids = [item.get("component_id") for item in (listed.get("components") or [])]
+    assert component_id not in ids
+
+
+def test_delete_component_endpoint_blocks_when_component_is_used_by_composition() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Shared component"},
+        headers=HEADERS,
+    )
+    component_id = ((created.get_json() or {}).get("component") or {}).get("component_id")
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_used", "composition_name": "Used dish"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_used/components/attach",
+        json={"component_id": component_id},
+        headers=HEADERS,
+    )
+
+    rv = client.delete(f"/api/builder/components/{component_id}", headers=HEADERS)
+
+    assert rv.status_code == 409
+    body = rv.get_json() or {}
+    assert body.get("error") == "conflict"
+    refs = body.get("references") or {}
+    assert "plate_used" in (refs.get("composition_ids") or [])
+
+
+def test_delete_composition_endpoint_removes_unreferenced_dish() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_delete", "composition_name": "Delete me"},
+        headers=HEADERS,
+    )
+    composition_id = ((created.get_json() or {}).get("composition") or {}).get("composition_id")
+
+    rv = client.delete(f"/api/builder/compositions/{composition_id}", headers=HEADERS)
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    listed = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
+    ids = [item.get("composition_id") for item in (listed.get("compositions") or [])]
+    assert composition_id not in ids
+
+
+def test_delete_composition_endpoint_blocks_when_dish_is_used_by_menu() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "dish_in_menu", "composition_name": "Dish in menu"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_1", "site_id": "site_1", "week_key": "2026-W16"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus/menu_1/import",
+        json={"rows": [{"day": "monday", "meal_slot": "lunch", "raw_text": "Dish in menu"}]},
+        headers=HEADERS,
+    )
+
+    rv = client.delete("/api/builder/compositions/dish_in_menu", headers=HEADERS)
+
+    assert rv.status_code == 409
+    body = rv.get_json() or {}
+    assert body.get("error") == "conflict"
+    refs = body.get("references") or {}
+    assert "menu_1" in (refs.get("menu_ids") or [])
 
 
 def test_list_reusable_components_endpoint_supports_listing_and_search() -> None:
@@ -515,6 +635,419 @@ def test_builder_file_import_preview_xlsx_endpoint_detects_text_column() -> None
     assert preview.get("lines") == ["Kottbullar med potatismos", "Fiskgratang"]
     assert preview.get("csv_column") == "dish_name"
     assert preview.get("csv_column_index") == 0
+
+
+def test_builder_file_import_preview_docx_endpoint_reads_paragraphs_and_tables() -> None:
+    client = _client()
+    payload = _docx_bytes(
+        paragraphs=["Week 12", "Alt 1", "Fiskgratang"],
+        table_rows=[
+            ["Dish"],
+            ["Kottbullar med potatismos"],
+        ],
+    )
+
+    rv = client.post(
+        "/api/builder/import/file/preview",
+        data={"file": (io.BytesIO(payload), "library.docx")},
+        content_type="multipart/form-data",
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    preview = (rv.get_json() or {}).get("preview") or {}
+    assert preview.get("file_type") == "docx"
+    assert "Fiskgratang" in (preview.get("importable_lines") or [])
+    assert "Kottbullar med potatismos" in (preview.get("importable_lines") or [])
+
+
+def test_builder_reset_endpoint_clears_all_builder_data() -> None:
+    client = _client()
+    client.post("/api/builder/components", json={"component_name": "Temp component"}, headers=HEADERS)
+    client.post("/api/builder/compositions", json={"composition_name": "Temp dish"}, headers=HEADERS)
+    client.post(
+        "/api/builder/menus",
+        json={"menu_id": "menu_reset", "site_id": "site_1", "week_key": "2026-W16", "title": "Reset menu"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/menus/menu_reset/import",
+        json={"rows": [{"day": "monday", "meal_slot": "lunch", "raw_text": "Temp dish"}]},
+        headers=HEADERS,
+    )
+
+    rv = client.post("/api/builder/reset", headers=HEADERS)
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    library = client.get("/api/builder/library", headers=HEADERS).get_json() or {}
+    menus = client.get("/api/builder/menus", headers=HEADERS).get_json() or {}
+    assert (library.get("components") or []) == []
+    assert (library.get("compositions") or []) == []
+    assert (menus.get("menus") or []) == []
+
+
+def test_import_review_preview_exposes_cleaned_draft_items() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/import/preview-lines",
+        json={"lines": ["Menyval1:köttbullar", "Lördag", "Köttbullar med potatis"]},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    preview = (rv.get_json() or {}).get("preview") or {}
+    drafts = preview.get("draft_items") or []
+    assert len(drafts) == 3
+    first = drafts[0]
+    assert first.get("name") == "köttbullar"
+    second = drafts[1]
+    assert second.get("item_type") == "ignore"
+    dish = drafts[2]
+    assert dish.get("item_type") == "dish"
+    components = dish.get("components") or []
+    component_names = [item.get("name") for item in components]
+    assert "Köttbullar" in component_names
+    assert "potatis" in [str(name).lower() for name in component_names]
+
+
+def test_import_sessions_create_list_and_open_detail() -> None:
+    client = _client()
+
+    created = client.post(
+        "/api/builder/import/sessions",
+        json={
+            "source_name": "Inbox test",
+            "import_type": "dish_list",
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "component",
+                    "raw_text": "Potatis",
+                    "name": "Potatis",
+                    "components": [],
+                },
+                {
+                    "selected": False,
+                    "item_type": "ignore",
+                    "raw_text": "Week 12",
+                    "name": "Week 12",
+                    "components": [],
+                },
+            ],
+        },
+        headers=HEADERS,
+    )
+
+    assert created.status_code == 201
+    created_body = created.get_json() or {}
+    session = created_body.get("session") or {}
+    session_id = str(session.get("session_id") or "")
+    assert session_id
+    assert session.get("pending_review_count") == 1
+
+    listed = client.get("/api/builder/import/sessions", headers=HEADERS)
+    assert listed.status_code == 200
+    listed_body = listed.get_json() or {}
+    assert listed_body.get("count", 0) >= 1
+    assert listed_body.get("pending_count", 0) >= 1
+
+    detail = client.get(f"/api/builder/import/sessions/{session_id}", headers=HEADERS)
+    assert detail.status_code == 200
+    detail_body = detail.get_json() or {}
+    grouped = detail_body.get("grouped") or {}
+    assert len(grouped.get("components") or []) == 1
+
+
+def test_import_sessions_item_update_and_publish_selected() -> None:
+    client = _client()
+
+    created = client.post(
+        "/api/builder/import/sessions",
+        json={
+            "source_name": "Publish session",
+            "import_type": "component_list",
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "component",
+                    "raw_text": "Potatis",
+                    "name": "Potatis",
+                    "components": [],
+                }
+            ],
+        },
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+    created_body = created.get_json() or {}
+    session = created_body.get("session") or {}
+    items = created_body.get("items") or []
+    session_id = str(session.get("session_id") or "")
+    item_id = str((items[0] or {}).get("item_id") or "")
+    assert session_id and item_id
+
+    patched = client.patch(
+        f"/api/builder/import/sessions/{session_id}/items/{item_id}",
+        json={"name": "Potatis mos", "selected": True, "components": ["Potatis", "Smor"]},
+        headers=HEADERS,
+    )
+    assert patched.status_code == 200
+
+    detail_after_patch = client.get(f"/api/builder/import/sessions/{session_id}", headers=HEADERS)
+    assert detail_after_patch.status_code == 200
+    detail_after_patch_items = (detail_after_patch.get_json() or {}).get("items") or []
+    patched_item = next(item for item in detail_after_patch_items if str(item.get("item_id") or "") == item_id)
+    assert patched_item.get("components") == ["Potatis", "Smor"]
+
+    published = client.post(
+        f"/api/builder/import/sessions/{session_id}/publish-selected",
+        json={},
+        headers=HEADERS,
+    )
+    assert published.status_code == 200
+    summary = (published.get_json() or {}).get("summary") or {}
+    assert summary.get("imported_count") == 1
+
+    detail = client.get(f"/api/builder/import/sessions/{session_id}", headers=HEADERS)
+    detail_items = (detail.get_json() or {}).get("items") or []
+    assert any(str(item.get("item_status") or "") == "published" for item in detail_items)
+
+    library = client.get("/api/builder/library", headers=HEADERS).get_json() or {}
+    names = [item.get("component_name") for item in (library.get("components") or [])]
+    assert "Potatis mos" in names
+
+
+def test_builder_reset_clears_import_sessions() -> None:
+    client = _client()
+
+    created = client.post(
+        "/api/builder/import/sessions",
+        json={
+            "source_name": "Reset me",
+            "import_type": "dish_list",
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "component",
+                    "raw_text": "Ris",
+                    "name": "Ris",
+                    "components": [],
+                }
+            ],
+        },
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+
+    reset = client.post("/api/builder/reset", headers=HEADERS)
+    assert reset.status_code == 200
+    reset_body = reset.get_json() or {}
+    counts = reset_body.get("cleared_counts") or {}
+    assert "builder_import_sessions" in counts
+
+    listed = client.get("/api/builder/import/sessions", headers=HEADERS)
+    listed_body = listed.get_json() or {}
+    assert listed_body.get("count") == 0
+    assert listed_body.get("pending_count") == 0
+
+
+def test_import_sessions_duplicate_payload_twice_succeeds() -> None:
+    client = _sqlite_client()
+
+    payload = {
+        "import_type": "dish_list",
+        "items": [
+            {
+                "item_id": "tmp_0",
+                "selected": True,
+                "item_type": "component",
+                "raw_text": "Potatis",
+                "name": "Potatis",
+                "components": [],
+            }
+        ],
+    }
+
+    first = client.post("/api/builder/import/sessions", json=payload, headers=HEADERS)
+    second = client.post("/api/builder/import/sessions", json=payload, headers=HEADERS)
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    first_session = (first.get_json() or {}).get("session") or {}
+    second_session = (second.get_json() or {}).get("session") or {}
+    assert first_session.get("session_id")
+    assert second_session.get("session_id")
+    assert first_session.get("session_id") != second_session.get("session_id")
+
+
+def test_import_sessions_noisy_and_malformed_rows_do_not_crash() -> None:
+    client = _sqlite_client()
+
+    rv = client.post(
+        "/api/builder/import/sessions",
+        json={
+            "import_type": "dish_list",
+            "items": [
+                {"selected": True, "item_type": "ignore", "raw_text": "Week 14", "name": "Week 14", "components": []},
+                {"selected": True, "item_type": "ignore", "raw_text": "Monday", "name": "Monday", "components": []},
+                {"selected": True, "item_type": "dish", "raw_text": "Alt 1", "name": "Alt 1", "components": []},
+                {"selected": True, "item_type": "dish", "raw_text": "Fiskgratang", "name": "Fiskgratang", "components": [{"name": "Fisk"}, {"name": "Potatis"}]},
+                {"selected": True, "item_type": "dish", "raw_text": "Fiskgratang", "name": "Fiskgratang", "components": [{"name": "Fisk"}, {"name": "Potatis"}]},
+                {"selected": True, "item_type": "component", "raw_text": "Potatis", "name": "Potatis", "components": []},
+                {"selected": True, "item_type": "component", "raw_text": "Potatis", "name": "Potatis", "components": []},
+                {},
+                {"selected": "badbool", "item_type": None, "raw_text": "", "name": None, "components": "bad"},
+            ],
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    session = body.get("session") or {}
+    items = body.get("items") or []
+    assert session.get("session_id")
+    assert isinstance(items, list)
+
+
+def test_import_sessions_invalid_items_payload_returns_structured_400() -> None:
+    client = _sqlite_client()
+
+    rv = client.post(
+        "/api/builder/import/sessions",
+        json={"items": "not-a-list"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("ok") is False
+    assert body.get("error") == "bad_request"
+    details = body.get("details") or {}
+    assert details.get("field") == "items"
+
+
+def test_import_review_publish_uses_inline_edited_component_name() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/import/publish-drafts",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "component",
+                    "raw_text": "Menyval1:köttbullar",
+                    "name": "Köttbullar",
+                    "components": [],
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    library = client.get("/api/builder/library", headers=HEADERS).get_json() or {}
+    names = [item.get("component_name") for item in (library.get("components") or [])]
+    assert "Köttbullar" in names
+
+
+def test_import_review_publish_skips_ignored_items() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/import/publish-drafts",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "ignore",
+                    "raw_text": "Lördag",
+                    "name": "Lördag",
+                    "components": [],
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    summary = (rv.get_json() or {}).get("summary") or {}
+    assert summary.get("imported_count") == 0
+    assert summary.get("ignored_count") == 1
+    library = client.get("/api/builder/library", headers=HEADERS).get_json() or {}
+    assert (library.get("components") or []) == []
+    assert (library.get("compositions") or []) == []
+
+
+def test_import_review_publish_only_selected_items() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/import/publish-drafts",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "component",
+                    "raw_text": "Potatis",
+                    "name": "Potatis",
+                    "components": [],
+                },
+                {
+                    "selected": False,
+                    "item_type": "component",
+                    "raw_text": "Ris",
+                    "name": "Ris",
+                    "components": [],
+                },
+            ]
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    summary = (rv.get_json() or {}).get("summary") or {}
+    assert summary.get("imported_count") == 1
+    library = client.get("/api/builder/library", headers=HEADERS).get_json() or {}
+    names = [item.get("component_name") for item in (library.get("components") or [])]
+    assert "Potatis" in names
+    assert "Ris" not in names
+
+
+def test_import_review_publish_dish_decomposes_to_components_not_single_component_row() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/import/publish-drafts",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "dish",
+                    "raw_text": "Köttbullar med potatis",
+                    "name": "Köttbullar med potatis",
+                    "components": [{"name": "Köttbullar"}, {"name": "Potatis"}],
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    compositions = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
+    items = compositions.get("compositions") or []
+    assert len(items) == 1
+    components = (items[0].get("components") or [])
+    component_names = [item.get("component_name") for item in components]
+    assert "Köttbullar" in component_names
+    assert "Potatis" in component_names
+    assert "Köttbullar med potatis" not in component_names
 
 
 def test_builder_file_import_preview_xlsx_supports_explicit_column_name() -> None:

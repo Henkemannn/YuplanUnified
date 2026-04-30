@@ -5,11 +5,12 @@ import io
 import re
 from dataclasses import dataclass
 
+from docx import Document
 from openpyxl import load_workbook
 
 from werkzeug.datastructures import FileStorage
 
-_SUPPORTED_EXTENSIONS = {".txt", ".csv", ".xlsx"}
+_SUPPORTED_EXTENSIONS = {".txt", ".csv", ".xlsx", ".docx"}
 _TEXT_HEADER_TOKENS = {
     "text",
     "line",
@@ -53,6 +54,112 @@ _LABEL_TOKENS = {
     "special",
     "specialkost",
 }
+_REVIEW_IGNORE_TOKENS = {
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "mon",
+    "tue",
+    "wed",
+    "thu",
+    "fri",
+    "sat",
+    "sun",
+    "mandag",
+    "tisdag",
+    "onsdag",
+    "torsdag",
+    "fredag",
+    "lordag",
+    "sondag",
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "januari",
+    "februari",
+    "mars",
+    "april",
+    "maj",
+    "juni",
+    "juli",
+    "augusti",
+    "september",
+    "oktober",
+    "november",
+    "december",
+}
+_MEAL_LABEL_TOKENS = {
+    "lunch",
+    "middag",
+    "dinner",
+    "breakfast",
+    "frukost",
+    "kvallsmat",
+    "special",
+    "specialkost",
+}
+
+_WEEKDAY_TOKENS = {
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "mon",
+    "tue",
+    "wed",
+    "thu",
+    "fri",
+    "sat",
+    "sun",
+    "mandag",
+    "tisdag",
+    "onsdag",
+    "torsdag",
+    "fredag",
+    "lordag",
+    "sondag",
+}
+_LEADING_LABEL_PREFIX_RE = re.compile(r"^([A-Za-zÅÄÖåäö\s]+):\s*")
+_LEADING_LABEL_PREFIX_TOKENS = {
+    "dessert",
+    "kvall",
+    "lunch",
+    "middag",
+    "frukost",
+    "supper",
+    "dinner",
+}
+_PREFIX_STRIP_RE = re.compile(
+    r"^(?:"
+    r"menyval\s*\d+|menu\s*choice\s*\d+|menu\s*val\s*\d+|"
+    r"alt\s*[12]|alternativ\s*[12]|"
+    r"lunch|middag|kvall|kvallsmat|dinner|breakfast|frokost|"
+    r"monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
+    r"mandag|tisdag|onsdag|torsdag|fredag|lordag|sondag"
+    r")\s*[:\-]\s*",
+    flags=re.IGNORECASE,
+)
+_SERVING_CONNECTOR_RE = re.compile(r"\b(?:serveras\s+med|served\s+with|with)\b", flags=re.IGNORECASE)
+_SERVING_WORD_RE = re.compile(r"\bserveras\b", flags=re.IGNORECASE)
+_COMPONENT_NOISE_RE = re.compile(r"^(?:serveras(?:\s+med)?|served\s+with|with|med)$", flags=re.IGNORECASE)
+_LEADING_COMPONENT_FILLER_RE = re.compile(r"^(?:serveras(?:\s+med)?|served\s+with|with|med)\b\s*", flags=re.IGNORECASE)
+_TRAILING_COMPONENT_FILLER_RE = re.compile(r"\s*\b(?:serveras(?:\s+med)?|served\s+with|with|med)\b$", flags=re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -85,7 +192,7 @@ def parse_builder_import_file(
 
     lower_name = filename.lower()
     if not any(lower_name.endswith(ext) for ext in _SUPPORTED_EXTENSIONS):
-        raise ValueError("unsupported file type; use .txt, .csv, or .xlsx")
+        raise ValueError("unsupported file type; use .txt, .csv, .xlsx, or .docx")
 
     raw_bytes = file_storage.read()
     if not raw_bytes:
@@ -102,6 +209,9 @@ def parse_builder_import_file(
             csv_column=used_column,
             csv_column_index=used_index,
         )
+
+    if lower_name.endswith(".docx"):
+        return _build_preview(file_type="docx", lines=_parse_docx_lines(raw_bytes))
 
     lines, used_column, used_index = _parse_csv_lines(raw_bytes, csv_column=csv_column)
     return _build_preview(
@@ -211,6 +321,31 @@ def _parse_xlsx_lines(
     return extracted, used_column, used_index
 
 
+def _parse_docx_lines(raw_bytes: bytes) -> list[str]:
+    try:
+        document = Document(io.BytesIO(raw_bytes))
+    except Exception as exc:
+        raise ValueError("invalid docx file") from exc
+
+    lines: list[str] = []
+    for paragraph in document.paragraphs:
+        text = str(paragraph.text or "").strip()
+        if text:
+            lines.append(text)
+
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text = str(cell.text or "").replace("\n", " ").strip()
+                if text:
+                    lines.append(text)
+
+    if not lines:
+        raise ValueError("file contains no importable rows")
+
+    return lines
+
+
 def _extract_lines_from_tabular_rows(
     rows: list[list[str]],
     *,
@@ -277,7 +412,7 @@ def _extract_lines_from_tabular_rows(
 def classify_builder_import_lines(lines: list[str]) -> list[BuilderFileImportLine]:
     classified: list[BuilderFileImportLine] = []
     for line in lines:
-        normalized = str(line or "").strip()
+        normalized = sanitize_builder_import_text(str(line or ""))
         classification, reason = _classify_single_line(normalized)
         classified.append(
             BuilderFileImportLine(
@@ -296,6 +431,7 @@ def _classify_single_line(normalized: str) -> tuple[str, str | None]:
 
     collapsed = re.sub(r"\s+", " ", normalized).strip()
     lower = collapsed.lower().strip(" :.-")
+    folded_lower = _fold_ascii(lower)
     alnum = re.sub(r"[^a-z0-9]+", "", lower)
 
     if re.fullmatch(r"alt\s*[12]", lower):
@@ -304,8 +440,20 @@ def _classify_single_line(normalized: str) -> tuple[str, str | None]:
     if lower in {"alt", "alt1", "alt2"}:
         return "ignored_noise", "alt_marker"
 
-    if any(lower == prefix or lower.startswith(prefix + " ") or lower.startswith(prefix + ":") for prefix in _HEADING_PREFIXES):
+    if re.fullmatch(r"(?:week|vecka|v)\s*\d+", folded_lower):
         return "ignored_noise", "heading"
+
+    if folded_lower in _WEEKDAY_TOKENS:
+        return "ignored_noise", "weekday_or_date"
+
+    if re.fullmatch(r"(?:alt|alternativ|menu\s*val|menyval)\s*\d+", folded_lower):
+        return "ignored_noise", "alt_marker"
+
+    if folded_lower in _MEAL_LABEL_TOKENS:
+        return "ignored_noise", "label"
+
+    if folded_lower in _REVIEW_IGNORE_TOKENS:
+        return "ignored_noise", "weekday_or_date"
 
     if lower in _LABEL_TOKENS:
         return "ignored_noise", "label"
@@ -313,7 +461,107 @@ def _classify_single_line(normalized: str) -> tuple[str, str | None]:
     if len(alnum) <= 1:
         return "ignored_noise", "near_blank"
 
+    if re.fullmatch(r"[-–—_=+*/|.:,;\s]+", collapsed):
+        return "ignored_noise", "separator"
+
     return "importable_dish", None
+
+
+def sanitize_builder_import_text(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    collapsed = re.sub(r"\s+", " ", text)
+    collapsed = collapsed.strip(" \t\r\n-|;:,.•")
+
+    while True:
+        updated = _strip_leading_label_prefix(collapsed)
+        updated = _PREFIX_STRIP_RE.sub("", updated).strip()
+        if updated == collapsed:
+            break
+        collapsed = updated
+
+    collapsed = collapsed.strip(" \t\r\n-|;:,.•")
+    return collapsed
+
+
+def _strip_leading_label_prefix(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    matched = _LEADING_LABEL_PREFIX_RE.match(text)
+    if not matched:
+        return text
+
+    token = _fold_ascii(matched.group(1)).strip()
+    if token not in _LEADING_LABEL_PREFIX_TOKENS:
+        return text
+
+    return text[matched.end() :].strip()
+
+
+def suggest_components_from_import_dish_name(name: str) -> list[str]:
+    text = sanitize_builder_import_text(name)
+    if not text:
+        return []
+
+    split_source = _SERVING_CONNECTOR_RE.sub(" med ", text)
+    split_source = _SERVING_WORD_RE.sub(" ", split_source)
+    split_source = re.sub(r"\s+", " ", split_source).strip()
+
+    parts = re.split(r"\s+(?:med|och|m)\s+", split_source, flags=re.IGNORECASE)
+    suggestions: list[str] = []
+    for part in parts:
+        candidate = str(part or "").strip(" \t\r\n-|;:,.•")
+        while candidate:
+            updated = _LEADING_COMPONENT_FILLER_RE.sub("", candidate).strip(" \t\r\n-|;:,.•")
+            updated = _TRAILING_COMPONENT_FILLER_RE.sub("", updated).strip(" \t\r\n-|;:,.•")
+            if updated == candidate:
+                break
+            candidate = updated
+        if not candidate:
+            continue
+        if _COMPONENT_NOISE_RE.fullmatch(candidate):
+            continue
+        label = candidate[:1].upper() + candidate[1:]
+        if label and label not in suggestions:
+            suggestions.append(label)
+    return suggestions
+
+
+def suggest_component_category(name: str) -> str:
+    value = _fold_ascii(sanitize_builder_import_text(name))
+    if not value:
+        return "Other"
+
+    rules = [
+        ("Fish", ["fisk", "fish", "lax", "torsk", "sej", "sill", "tonfisk"]),
+        ("Poultry", ["kyck", "chicken", "kalkon", "turkey", "anka", "duck"]),
+        ("Meat", ["kott", "beef", "flask", "pork", "lamm", "veal", "korv", "meat"]),
+        ("Vegetable", ["broccoli", "morot", "carrot", "gronsak", "vegetable", "spenat", "kikart", "linser"]),
+        ("Sauce", ["sas", "sauce", "gravy", "dressing", "dip", "pesto"]),
+        ("Side", ["potatis", "potato", "ris", "rice", "pasta", "bulgur", "couscous"]),
+        ("Dessert", ["dessert", "kaka", "cake", "glass", "pudding", "choklad", "fruit"]),
+    ]
+    for category, keywords in rules:
+        if any(keyword in value for keyword in keywords):
+            return category
+    return "Other"
+
+
+def _fold_ascii(value: str) -> str:
+    return (
+        str(value or "")
+        .replace("å", "a")
+        .replace("ä", "a")
+        .replace("ö", "o")
+        .replace("Å", "a")
+        .replace("Ä", "a")
+        .replace("Ö", "o")
+        .lower()
+    )
 
 
 __all__ = [
@@ -321,4 +569,7 @@ __all__ = [
     "BuilderFileImportPreview",
     "classify_builder_import_lines",
     "parse_builder_import_file",
+    "sanitize_builder_import_text",
+    "suggest_component_category",
+    "suggest_components_from_import_dish_name",
 ]

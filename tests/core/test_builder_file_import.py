@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from io import BytesIO
 
+from docx import Document
 from openpyxl import Workbook
 import pytest
 from werkzeug.datastructures import FileStorage
 
-from core.builder.file_import import parse_builder_import_file
+from core.builder.file_import import (
+    classify_builder_import_lines,
+    parse_builder_import_file,
+    suggest_components_from_import_dish_name,
+)
 
 
 def _file(name: str, raw: bytes) -> FileStorage:
@@ -22,6 +27,23 @@ def _xlsx_bytes(rows: list[list[str]]) -> bytes:
     stream = BytesIO()
     workbook.save(stream)
     workbook.close()
+    return stream.getvalue()
+
+
+def _docx_bytes(*, paragraphs: list[str] | None = None, table_rows: list[list[str]] | None = None) -> bytes:
+    doc = Document()
+    for value in paragraphs or []:
+        doc.add_paragraph(str(value))
+
+    rows = table_rows or []
+    if rows:
+        table = doc.add_table(rows=len(rows), cols=max(len(r) for r in rows))
+        for row_index, row in enumerate(rows):
+            for col_index, value in enumerate(row):
+                table.rows[row_index].cells[col_index].text = str(value)
+
+    stream = BytesIO()
+    doc.save(stream)
     return stream.getvalue()
 
 
@@ -167,3 +189,101 @@ def test_parse_txt_keeps_valid_dishes_and_ignores_labels() -> None:
     assert preview.importable_lines == ["Fiskgratang", "Kottbullar med graddsas"]
     ignored_reasons = {item.reason for item in preview.ignored_lines}
     assert "label" in ignored_reasons
+
+
+def test_parse_docx_file_reads_paragraph_lines() -> None:
+    preview = parse_builder_import_file(
+        _file(
+            "library.docx",
+            _docx_bytes(paragraphs=["Week 12", "Alt 1", "Fiskgratang", "Kottbullar med potatismos"]),
+        ),
+    )
+
+    assert preview.file_type == "docx"
+    assert preview.importable_lines == ["Fiskgratang", "Kottbullar med potatismos"]
+
+
+def test_parse_docx_file_reads_table_cells() -> None:
+    preview = parse_builder_import_file(
+        _file(
+            "library.docx",
+            _docx_bytes(
+                table_rows=[
+                    ["text", "tag"],
+                    ["Kottbullar med potatismos", "main"],
+                    ["Fiskgratang", "main"],
+                ],
+            ),
+        ),
+    )
+
+    assert preview.file_type == "docx"
+    assert "Kottbullar med potatismos" in preview.importable_lines
+    assert "Fiskgratang" in preview.importable_lines
+
+
+def test_classify_cleanup_strips_menu_prefixes() -> None:
+    items = classify_builder_import_lines(["Menyval1:köttbullar", "Alt 1: Fiskgryta"])
+
+    assert items[0].classification == "importable_dish"
+    assert items[0].normalized_text == "köttbullar"
+    assert items[1].classification == "importable_dish"
+    assert items[1].normalized_text == "Fiskgryta"
+
+
+def test_classify_cleanup_ignores_weekday_headers() -> None:
+    items = classify_builder_import_lines(["Lördag", "Monday"])
+
+    assert items[0].classification == "ignored_noise"
+    assert items[0].reason in {"weekday_or_date", "heading"}
+    assert items[1].classification == "ignored_noise"
+    assert items[1].reason in {"weekday_or_date", "heading"}
+
+
+def test_classify_strips_meal_prefix_dessert() -> None:
+    items = classify_builder_import_lines(["Dessert: Chokladpudding"])
+
+    assert items[0].classification == "importable_dish"
+    assert items[0].normalized_text == "Chokladpudding"
+
+
+def test_component_decomposition_strips_meal_prefix_kvall() -> None:
+    components = suggest_components_from_import_dish_name("Kväll: Omelett med sparris")
+
+    assert components == ["Omelett", "Sparris"]
+    assert all("Dessert:" not in name for name in components)
+    assert all("Kväll:" not in name for name in components)
+    assert all("Lunch:" not in name for name in components)
+
+
+def test_component_decomposition_strips_meal_prefix_lunch() -> None:
+    components = suggest_components_from_import_dish_name("Lunch: Köttbullar med potatis")
+
+    assert components == ["Köttbullar", "Potatis"]
+    assert all("Dessert:" not in name for name in components)
+    assert all("Kväll:" not in name for name in components)
+    assert all("Lunch:" not in name for name in components)
+
+
+def test_component_decomposition_ignores_serveras_only_suffix() -> None:
+    components = suggest_components_from_import_dish_name("Soppa serveras")
+
+    assert components == ["Soppa"]
+    assert all(name.lower() != "serveras" for name in components)
+    assert all(name.lower() != "serveras med" for name in components)
+
+
+def test_component_decomposition_handles_serveras_med_connector() -> None:
+    components = suggest_components_from_import_dish_name("Köttbullar serveras med potatis")
+
+    assert components == ["Köttbullar", "Potatis"]
+    assert all(name.lower() != "serveras" for name in components)
+    assert all(name.lower() != "serveras med" for name in components)
+
+
+def test_component_decomposition_handles_serveras_med_and_och() -> None:
+    components = suggest_components_from_import_dish_name("Fisk serveras med kokt potatis och sås")
+
+    assert components == ["Fisk", "Kokt potatis", "Sås"]
+    assert all(name.lower() != "serveras" for name in components)
+    assert all(name.lower() != "serveras med" for name in components)

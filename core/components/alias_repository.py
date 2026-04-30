@@ -25,3 +25,13 @@ class InMemoryComponentAliasRepository:
             for alias in self._aliases.values()
             if alias.component_id == component_id_value
         ]
+
+    def delete_for_component(self, component_id: str) -> None:
+        component_id_value = str(component_id or "").strip()
+        keys = [
+            alias_id
+            for alias_id, alias in self._aliases.items()
+            if alias.component_id == component_id_value
+        ]
+        for alias_id in keys:
+            del self._aliases[alias_id]

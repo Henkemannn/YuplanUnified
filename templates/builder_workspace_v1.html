@@ -15,7 +15,43 @@
 
   <div class="builder-platform-layout">
     <main class="builder-platform-primary">
-      <section class="builder-library-primary" aria-label="Library">
+      <section id="workspaceOverviewSection" class="builder-library-primary" aria-label="Workspace overview">
+        <div class="builder-primary-header" aria-label="Workspace overview header">
+          <div>
+            <p class="builder-workspace-eyebrow">Overview</p>
+            <h2>Workspace overview</h2>
+            <p class="builder-primary-copy">Open the library you want to work in. Keep the start page clean and focused.</p>
+          </div>
+        </div>
+
+        <div id="workspaceOverviewCards" class="builder-overview-cards">
+          <article class="builder-overview-card" aria-label="Components overview">
+            <p class="builder-overview-label">Components</p>
+            <p id="overviewComponentsCount" class="builder-overview-count">0</p>
+            <button id="openComponentsViewBtn" type="button">Open</button>
+          </article>
+
+          <article class="builder-overview-card" aria-label="Dishes overview">
+            <p class="builder-overview-label">Dishes</p>
+            <p id="overviewDishesCount" class="builder-overview-count">0</p>
+            <button id="openDishesViewBtn" type="button">Open</button>
+          </article>
+
+          <article class="builder-overview-card" aria-label="Menus overview">
+            <p class="builder-overview-label">Menus</p>
+            <p id="overviewMenusCount" class="builder-overview-count">0</p>
+            <button id="openMenusViewBtn" type="button">Open</button>
+          </article>
+
+          <article class="builder-overview-card" aria-label="Imports overview">
+            <p class="builder-overview-label">Imports</p>
+            <p id="overviewImportsCount" class="builder-overview-count">0</p>
+            <button id="openImportsViewBtn" type="button">Open</button>
+          </article>
+        </div>
+      </section>
+
+      <section id="componentsSection" class="builder-library-primary hidden" aria-label="Library">
         <div class="builder-primary-header" aria-label="Component workspace">
           <div>
             <p class="builder-workspace-eyebrow">Primary</p>
@@ -24,7 +60,7 @@
           </div>
           <div class="builder-primary-actions">
             <button id="openComponentCreateModalBtn" class="builder-primary-cta" type="button">Create component</button>
-            <button id="openImportLibraryModalBtn" class="builder-secondary-action" type="button">Import menu/recipes</button>
+            <button id="openImportLibraryModalBtn" class="builder-secondary-action" type="button">Import menu / recipes</button>
           </div>
         </div>
 
@@ -36,6 +72,7 @@
               <select id="libraryComponentsScope" aria-label="Component view scope">
                 <option value="recent">Recently added</option>
                 <option value="all">All</option>
+                <option value="unused">Unused only</option>
               </select>
             </div>
             <div id="libraryComponentsGrid" class="component-library-grid"></div>
@@ -45,6 +82,13 @@
     </main>
 
     <aside class="builder-platform-secondary" aria-label="Secondary Builder entry">
+      <nav class="builder-sidebar-nav" aria-label="Builder sections">
+        <button id="navComponentsBtn" type="button">Components</button>
+        <button id="navDishesBtn" type="button">Dishes</button>
+        <a id="navMenusLink" href="/menu-builder-v1">Menus</a>
+        <button id="navImportsBtn" type="button">Imports <span id="importsSidebarBadge">(0)</span></button>
+      </nav>
+
       <button id="openDishesLibraryModalBtn" class="builder-dishes-entry" type="button">
         <span class="builder-dishes-entry-kicker">Secondary</span>
         <span class="builder-dishes-entry-title">Dishes</span>
@@ -58,6 +102,15 @@
         <div class="builder-menus-entry-actions">
           <a id="builderMenusOpenLink" class="workspace-menu-link" href="/menu-builder-v1">Open Menu Builder</a>
           <a id="builderMenusOutputLink" class="workspace-menu-link" href="/menu-output-v1">View/Print Menu</a>
+        </div>
+      </section>
+
+      <section id="builderImportsInboxSection" class="builder-menus-entry" aria-label="Imports inbox">
+        <p class="builder-dishes-entry-kicker">Imports and review</p>
+        <h3 id="importsInboxPendingBadge" class="builder-menus-entry-title">Imports (0)</h3>
+        <p class="builder-menus-entry-copy">New imports waiting for review and publish.</p>
+        <div class="builder-menus-entry-actions">
+          <button id="openImportInboxBtn" type="button">Open Import Inbox</button>
         </div>
       </section>
     </aside>
@@ -114,7 +167,6 @@
         </div>
         <div class="workspace-inline-actions">
           <button id="openNewDishModalBtn" type="button">New dish</button>
-          <button id="openImportModalBtn" type="button">Import</button>
           <a class="workspace-menu-link" href="/menu-builder-v1">Menus</a>
           <a class="workspace-menu-link" href="/menu-output-v1">Output</a>
           <button id="dishesLibraryModalClose" type="button">Done</button>
@@ -154,28 +206,36 @@
         </div>
 
         <div class="workspace-file-import">
-          <label>Import file (.txt, .csv, .xlsx)
-            <input id="importLibraryFile" type="file" accept=".txt,.csv,.xlsx">
+          <label>Import file (.txt, .csv, .xlsx, .docx)
+            <input id="importLibraryFile" type="file" accept=".txt,.csv,.xlsx,.docx">
           </label>
           <label>CSV column
             <input id="importCsvColumn" type="text" placeholder="Dish, Name, or column letter">
           </label>
           <div class="workspace-inline-actions workspace-import-preview-actions">
             <button id="btnImportFilePreview" type="button">Preview file</button>
-            <button id="btnImportFileConfirm" type="button" disabled>Confirm import</button>
+            <button id="btnImportFileConfirm" type="button" disabled>Publish selected review rows</button>
           </div>
           <p id="importFileStatus" class="workspace-import-status"></p>
+          <div id="importAutoSummary" class="workspace-quick-card workspace-import-summary-card">
+            <h4>Import summary</h4>
+            <p id="importAutoSummaryCounts">Dishes found: 0 | Components suggested: 0 | Ignored: 0 | Needs review: 0</p>
+            <div class="workspace-inline-actions">
+              <button id="btnImportAutoPublish" type="button" disabled>Publish selected</button>
+              <button id="btnImportAutoReviewDetails" type="button">Review details</button>
+            </div>
+          </div>
           <div class="workspace-import-preview-meta">
-            <p id="importFileSelectionSummary">Selected 0 of 0 importable lines (showing 0)</p>
+            <p id="importFileSelectionSummary">Selected 0 of 0 review rows (showing 0)</p>
             <p id="importFileIgnoredSummary">Ignored noise: 0</p>
           </div>
           <div class="workspace-inline-actions workspace-import-preview-actions">
-            <button id="btnImportPreviewSelectAll" type="button">Select all</button>
-            <button id="btnImportPreviewSelectNone" type="button">Select none</button>
+            <button id="btnImportPreviewSelectAll" type="button">Accept all valid</button>
+            <button id="btnImportPreviewSelectNone" type="button">Ignore obvious noise</button>
             <button id="btnImportPreviewShowMore" type="button">Show more importable lines</button>
             <button id="btnImportPreviewToggleIgnored" type="button">Show ignored lines</button>
           </div>
-          <ul id="importFilePreviewList" class="workspace-import-preview-list"></ul>
+          <div id="importFilePreviewList" class="workspace-import-preview-cards"></div>
           <ul id="importFileIgnoredList" class="workspace-import-ignored-list hidden"></ul>
         </div>
 
@@ -184,10 +244,75 @@
 
       <section class="workspace-quick-card workspace-import-summary-card">
         <h4>Import summary</h4>
+        <div class="workspace-inline-actions">
+          <button id="btnClearImportSummary" type="button">Clear latest summary</button>
+        </div>
         <div id="recentImportGroups" class="import-grouped-summary"></div>
         <div id="importReviewNotice" class="import-review-notice hidden" aria-live="polite"></div>
         <div id="importSummaryView"></div>
       </section>
+    </div>
+  </div>
+
+  <div id="importEditModal" class="modal hidden">
+    <div class="modal-content modal-content-compact">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Import review</p>
+          <h3>Edit suggestion</h3>
+        </div>
+        <button id="importEditModalClose" type="button">Done</button>
+      </div>
+
+      <section class="workspace-quick-card">
+        <label>Name
+          <input id="importEditName" type="text" placeholder="Name">
+        </label>
+        <label>Type
+          <select id="importEditType">
+            <option value="dish">dish</option>
+            <option value="component">component</option>
+            <option value="ignore">ignore</option>
+          </select>
+        </label>
+        <label>Components (comma separated)
+          <input id="importEditComponents" type="text" placeholder="Kottbullar, Potatis">
+        </label>
+        <button id="btnImportEditSave" type="button">Save changes</button>
+      </section>
+    </div>
+  </div>
+
+  <div id="importInboxModal" class="modal hidden">
+    <div class="modal-content modal-content-component-detail">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Imports</p>
+          <h3>Import Inbox</h3>
+        </div>
+        <button id="importInboxModalClose" type="button">Done</button>
+      </div>
+      <p id="importsInboxMeta" class="workspace-panel-meta">Loading import sessions...</p>
+      <div class="workspace-modal-body workspace-modal-body-recipes">
+        <div class="workspace-modal-column workspace-modal-column-primary">
+          <div class="workspace-modal-section-card">
+            <p class="modal-section-title">Sessions</p>
+            <ul id="importsInboxList" class="imports-inbox-list"></ul>
+          </div>
+        </div>
+        <div class="workspace-modal-column workspace-modal-column-secondary">
+          <div class="workspace-modal-section-card">
+            <p id="importsInboxDetailTitle" class="imports-inbox-detail-title">Select an import session</p>
+            <p id="importsInboxDetailMeta" class="workspace-library-hint">Summary first, then review only uncertain rows.</p>
+            <div class="workspace-inline-actions">
+              <button id="btnImportsInboxRefresh" type="button">Refresh</button>
+              <button id="btnImportsInboxPublishSelected" type="button">Publish selected</button>
+              <button id="btnImportsInboxIgnoreSelected" type="button">Ignore selected</button>
+            </div>
+            <div id="importsInboxCards" class="workspace-import-preview-cards"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

@@ -64,6 +64,50 @@ ul {
   list-style: none;
 }
 
+.builder-sidebar-nav {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.builder-sidebar-nav button,
+.builder-sidebar-nav a {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid #d9e2da;
+  border-radius: 10px;
+  background: #f9fbf9;
+  color: #2f3e35;
+  text-decoration: none;
+  display: block;
+}
+
+.workspace-import-preview-cards {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.import-review-card {
+  border: 1px solid #dbe4dc;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fbfdfb;
+}
+
+.import-review-card-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.import-review-card-suggestion {
+  margin: 0 0 10px;
+  color: #4a5c50;
+  font-size: 13px;
+}
+
 .import-preview-line {
   display: flex;
   gap: 8px;
@@ -257,6 +301,75 @@ ul {
   cursor: pointer;
   font-size: 13px;
   color: #444;
+}
+
+.imports-inbox-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid #d8e1d9;
+  border-radius: 8px;
+  background: #f8fbf8;
+}
+
+.imports-inbox-row {
+  border-bottom: 1px solid #e4ebe5;
+}
+
+.imports-inbox-row:last-child {
+  border-bottom: none;
+}
+
+.imports-inbox-open {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  margin: 0;
+}
+
+.imports-inbox-row-active .imports-inbox-open {
+  background: #e8f1ea;
+  font-weight: 600;
+}
+
+.imports-inbox-detail {
+  margin-top: 8px;
+}
+
+.imports-inbox-detail-title {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.imports-inbox-table-wrap {
+  overflow-x: auto;
+}
+
+.imports-inbox-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.imports-inbox-detail .workspace-import-preview-cards {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.imports-inbox-table th,
+.imports-inbox-table td {
+  border: 1px solid #dde4df;
+  padding: 6px;
+  vertical-align: top;
+}
+
+.imports-inbox-table input,
+.imports-inbox-table select {
+  margin-top: 0;
 }
 
 .component-list-item {
@@ -736,6 +849,24 @@ ul {
   font-size: 11px;
   color: #6a6a6a;
   word-break: break-word;
+}
+
+.library-card-actions {
+  justify-content: flex-end;
+}
+
+.library-danger-action {
+  width: auto;
+  margin-top: 0;
+  padding: 4px 10px;
+  border: 1px solid #d8b5b5;
+  background: #fff5f5;
+  color: #7c2a2a;
+}
+
+.library-danger-action:hover {
+  border-color: #cc9f9f;
+  background: #ffeaea;
 }
 
 .library-composition-open-btn {
@@ -1646,6 +1777,42 @@ ul {
   background: #eff6fd;
 }
 
+.builder-overview-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.builder-overview-card {
+  border: 1px solid #d6e0ea;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfe 100%);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.builder-overview-label {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #627587;
+}
+
+.builder-overview-count {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 600;
+  color: #1f3142;
+}
+
+.builder-overview-card button {
+  width: auto;
+  justify-self: start;
+}
+
 .builder-workspace-v1 .component-library-card-status-has-data {
   color: #184f39;
   border-color: #9ec4ad;
@@ -1810,6 +1977,10 @@ ul {
 }
 
 @media (max-width: 1100px) {
+  .builder-overview-cards {
+    grid-template-columns: 1fr;
+  }
+
   .builder-platform-header,
   .builder-platform-layout,
   .workspace-library-columns,

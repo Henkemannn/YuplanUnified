@@ -129,9 +129,80 @@ def initialize_builder_sqlite(path: str) -> str:
             );
             CREATE INDEX IF NOT EXISTS idx_builder_menu_rows_menu
                 ON builder_menu_rows(menu_id, sort_order, day, meal_slot);
+
+            CREATE TABLE IF NOT EXISTS builder_import_sessions (
+                session_id TEXT PRIMARY KEY,
+                source_name TEXT NULL,
+                import_type TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'draft',
+                total_rows INTEGER NOT NULL DEFAULT 0,
+                detected_dishes INTEGER NOT NULL DEFAULT 0,
+                detected_components INTEGER NOT NULL DEFAULT 0,
+                ignored_rows INTEGER NOT NULL DEFAULT 0,
+                pending_review_count INTEGER NOT NULL DEFAULT 0,
+                published_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS builder_import_session_items (
+                item_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                item_order INTEGER NOT NULL,
+                raw_text TEXT NOT NULL,
+                cleaned_name TEXT NOT NULL,
+                item_type TEXT NOT NULL,
+                selected INTEGER NOT NULL DEFAULT 1,
+                item_status TEXT NOT NULL DEFAULT 'draft',
+                classification TEXT NOT NULL,
+                reason TEXT NULL,
+                components_json TEXT NOT NULL DEFAULT '[]',
+                category_hint TEXT NULL,
+                hints_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(session_id) REFERENCES builder_import_sessions(session_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_builder_import_items_session
+                ON builder_import_session_items(session_id, item_order);
             """
         )
     return db_path
+
+
+def clear_builder_sqlite_data(path: str) -> dict[str, int]:
+    db_path = _normalize_path(path)
+    if not os.path.exists(db_path):
+        return {}
+
+    ordered_tables = [
+        "builder_import_session_items",
+        "builder_import_sessions",
+        "builder_menu_rows",
+        "builder_menus",
+        "builder_composition_aliases",
+        "builder_composition_components",
+        "builder_compositions",
+        "builder_component_aliases",
+        "builder_components",
+    ]
+
+    counts: dict[str, int] = {}
+    with _connect(db_path) as conn:
+        names = {
+            str(row["name"])
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+
+        for table_name in ordered_tables:
+            if table_name not in names:
+                continue
+            row = conn.execute(f"SELECT COUNT(*) AS count FROM {table_name}").fetchone()
+            counts[table_name] = int(row["count"] if row is not None else 0)
+            conn.execute(f"DELETE FROM {table_name}")
+
+    return counts
 
 
 @dataclass
@@ -291,6 +362,14 @@ class SQLiteComponentAliasRepository:
         value = str(component_id or "").strip()
         return [item for item in self.list_all() if item.component_id == value]
 
+    def delete_for_component(self, component_id: str) -> None:
+        value = str(component_id or "").strip()
+        with _connect(self.db_path) as conn:
+            conn.execute(
+                "DELETE FROM builder_component_aliases WHERE component_id = ?",
+                (value,),
+            )
+
 
 @dataclass
 class SQLiteCompositionRepository:
@@ -402,6 +481,20 @@ class SQLiteCompositionRepository:
                     ),
                 )
 
+    def delete(self, composition_id: str) -> None:
+        composition_id_value = str(composition_id or "").strip()
+        with _connect(self.db_path) as conn:
+            conn.execute(
+                "DELETE FROM builder_composition_components WHERE composition_id = ?",
+                (composition_id_value,),
+            )
+            result = conn.execute(
+                "DELETE FROM builder_compositions WHERE composition_id = ?",
+                (composition_id_value,),
+            )
+            if result.rowcount == 0:
+                raise ValueError(f"composition not found: {composition_id_value}")
+
 
 @dataclass
 class SQLiteCompositionAliasRepository:
@@ -455,6 +548,14 @@ class SQLiteCompositionAliasRepository:
     def list_for_composition(self, composition_id: str) -> list[CompositionAlias]:
         value = str(composition_id or "")
         return [item for item in self.list_all() if item.composition_id == value]
+
+    def delete_for_composition(self, composition_id: str) -> None:
+        value = str(composition_id or "").strip()
+        with _connect(self.db_path) as conn:
+            conn.execute(
+                "DELETE FROM builder_composition_aliases WHERE composition_id = ?",
+                (value,),
+            )
 
 
 @dataclass

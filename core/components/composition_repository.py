@@ -29,3 +29,9 @@ class InMemoryCompositionRepository:
         if composition.composition_id not in self._compositions:
             raise ValueError(f"composition not found: {composition.composition_id}")
         self._compositions[composition.composition_id] = composition
+
+    def delete(self, composition_id: str) -> None:
+        composition_id_value = str(composition_id or "").strip()
+        if composition_id_value not in self._compositions:
+            raise ValueError(f"composition not found: {composition_id_value}")
+        del self._compositions[composition_id_value]

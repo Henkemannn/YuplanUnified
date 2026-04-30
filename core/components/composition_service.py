@@ -41,6 +41,12 @@ class CompositionService:
             return self._repository.list_all()
         return self._repository.list_by_group(group_name)
 
+    def delete_composition(self, composition_id: str) -> None:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
+        self._repository.delete(composition_id_value)
+
     def add_component_to_composition(
         self,
         composition_id: str,
