@@ -68,7 +68,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert html.count('id="componentDetailEditorClose"') == 1
     assert '<div id="componentDetailEditorModal" class="modal hidden">' in html
     assert 'class="modal-content modal-content-component-detail"' in html
-    assert '<h3 id="componentDetailEditorTitle">Komponenteditor</h3>' in html
+    assert '<h3 id="componentDetailEditorTitle">Komponentredigerare</h3>' in html
     modal_start = html.find('id="componentDetailEditorModal"')
     resolve_start = html.find('id="resolveModal"')
     assert modal_start != -1 and resolve_start != -1 and modal_start < resolve_start
@@ -90,14 +90,37 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="componentDetailPanelRecipe"' in html
     assert 'id="componentDetailPanelCalculation"' in html
     assert 'id="componentDetailPanelAllergens"' in html
+    assert html.count('id="componentDetailPanelOverview"') == 1
+    assert html.count('id="componentDetailPanelRecipe"') == 1
+    assert html.count('id="componentDetailPanelCalculation"') == 1
+    assert html.count('id="componentDetailPanelAllergens"') == 1
+    assert 'id="componentDetailPanelOverview" class="workspace-modal-section-card component-detail-panel" data-component-panel="overview"' in html
+    assert 'id="componentDetailPanelRecipe" class="workspace-modal-section-card component-detail-panel hidden" data-component-panel="recipe"' in html
+    assert 'id="componentDetailPanelCalculation" class="workspace-modal-section-card component-detail-panel hidden" data-component-panel="calculation"' in html
+    assert 'id="componentDetailPanelAllergens" class="workspace-modal-section-card component-detail-panel hidden" data-component-panel="allergens"' in html
     assert 'id="componentDetailOverviewName"' in html
     assert 'id="componentDetailOverviewClean"' in html
     assert 'id="componentDetailOverviewCategory"' in html
+    assert 'Grundinformation' not in html
+    assert 'Systeminformation' not in html
+    assert 'class="builder-component-overview-stack"' not in html
+    assert 'class="builder-component-overview-grid"' in html
+    assert 'class="builder-component-overview-card overview-card-identity"' in html
+    assert 'class="builder-component-overview-card overview-card-tags"' in html
+    assert 'class="builder-component-overview-card overview-card-description"' in html
+    assert 'class="builder-component-overview-card overview-card-system"' in html
+    assert 'builder-component-overview-field builder-component-overview-field-name' in html
+    assert 'builder-component-overview-field builder-component-overview-field-category' in html
+    assert 'builder-component-overview-field builder-component-overview-field-tags' in html
+    assert 'builder-component-overview-field builder-component-overview-field-description' in html
     assert 'Komponentnamn' in html
+    assert 'Rensa namn' in html
+    assert 'Rensa amn' not in html
     assert 'Kategori' in html
     assert 'Taggar' in html
     assert 'Beskrivning / längre namn' in html
     assert 'Komponent-ID:' in html
+    assert 'Tillbaka till komponenter' in html
     assert 'Category color' not in html
     assert '<option value="main">Huvudkomponent</option>' in html
     assert '<option value="side">Tillbehör</option>' in html
@@ -106,8 +129,24 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '<option value="ovrigt">Övrigt</option>' in html
     assert '<option value="">Uncategorized</option>' not in html
     assert 'id="componentDetailOverviewTags"' in html
+    assert 'id="componentDetailTagsEditor"' in html
+    assert 'id="componentDetailTagsChips"' in html
+    assert 'id="componentDetailTagsInput"' in html
+    assert 'id="componentDetailTagsSuggestions"' in html
+    assert 'Tagga för råvara, stil eller sökning.' in html
+    assert 'comma-separated' not in html
     assert 'id="componentDetailOverviewLongDescription"' in html
     assert 'id="componentDetailOverviewDelete"' in html
+    assert 'class="builder-component-overview-select"' in html
+    overview_start = html.find('id="componentDetailPanelOverview"')
+    recipe_start = html.find('id="componentDetailPanelRecipe"')
+    assert overview_start != -1 and recipe_start != -1 and overview_start < recipe_start
+    overview_html = html[overview_start:recipe_start]
+    assert overview_html.count('workspace-modal-section-card') == 1
+    tags_card_start = overview_html.find('overview-card-tags')
+    delete_button_start = overview_html.find('id="componentDetailOverviewDelete"')
+    assert tags_card_start != -1
+    assert delete_button_start != -1 and delete_button_start > tags_card_start
     assert 'id="componentDetailOverviewColor"' not in html
     assert 'id="componentDetailOverviewSave"' not in html
     assert 'id="componentDetailSaveChanges"' in html
@@ -115,6 +154,14 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="componentDetailOverviewMeta"' in html
     assert 'id="componentDetailRecipeIngredientRows"' in html
     assert 'id="componentDetailRecipeAddRow"' in html
+    assert 'class="builder-component-recipe-layout"' in html
+    assert 'class="builder-component-recipe-card builder-component-recipe-card-ingredients"' in html
+    assert 'class="builder-component-recipe-card builder-component-recipe-card-method"' in html
+    assert 'class="builder-component-recipe-header"' in html
+    assert 'class="builder-component-recipe-notes-grid"' in html
+    assert 'class="builder-component-recipe-note-field"' in html
+    assert 'Ingredienser' in html
+    assert 'Metod &amp; anteckning' in html
     assert 'Lägg till ingrediens' in html
     assert 'Ingrediens' in html
     assert 'Mängd' in html
@@ -338,8 +385,25 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'keyboardEvent.key !== "Enter" && keyboardEvent.key !== " "' in script
     assert 'target.closest("[data-component-secondary-action=\'1\']")' in script
     assert 'function saveActiveComponentDetailDraft() {' in script
+    assert 'const modal = document.getElementById("componentDetailEditorModal");' in script
+    assert 'const tabButtons = modal' in script
+    assert 'const tabPanels = modal' in script
+    assert 'modal.querySelectorAll(".component-detail-panel[data-component-panel]")' in script
+    assert 'panel.classList.toggle("hidden", !active);' in script
+    assert 'panel.setAttribute("hidden", "hidden");' in script
+    assert 'panel.removeAttribute("hidden");' in script
     assert 'function parseComponentTagsInput(value) {' in script
     assert 'function formatComponentTagsInput(tags) {' in script
+    assert 'function renderComponentDetailTagChips() {' in script
+    assert 'function renderComponentDetailTagSuggestions() {' in script
+    assert 'function addComponentDetailTagsFromInput(rawValue) {' in script
+    assert 'function removeComponentDetailTag(tagValue) {' in script
+    assert 'const componentDetailTagsInput = document.getElementById("componentDetailTagsInput");' in script
+    assert 'const componentDetailTagsChips = document.getElementById("componentDetailTagsChips");' in script
+    assert 'componentDetailTagsInput.addEventListener("keydown", (event) => {' in script
+    assert 'if (event.key !== "Enter" && event.key !== ",") {' in script
+    assert 'remove.setAttribute("data-remove-tag", tag);' in script
+    assert 'tags: currentComponentDetailTags(),' in script
     assert 'function componentTagCatalog(items) {' in script
     assert 'function renderComponentTagFilterOptions(selectEl, items, activeTag) {' in script
     assert 'const tagFilterSelect = document.getElementById("libraryComponentsCategoryFilter");' in script
@@ -364,6 +428,10 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'window.localStorage.getItem(key);' not in script
     assert 'setComponentDetailTab(tabValue);' in script
     assert 'closeModalById("componentDetailEditorModal");' in script
+    assert 'message: "Komponentdetaljer laddade."' in script
+    assert 'message: "Komponentdetaljer sparade."' in script
+    assert 'message: "Component details loaded."' not in script
+    assert 'message: "Component details saved."' not in script
 
     assert 'console.error("[modal-open] missing modal", modalId);' in script
     assert 'modal.classList.remove("hidden");' in script
@@ -565,8 +633,131 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     )
     assert final_component_modal_panel_block is not None
     assert "width: min(1280px, calc(100vw - 48px)) !important;" in final_component_modal_panel_block.group(0)
+    assert "min-width: 0 !important;" in final_component_modal_panel_block.group(0)
     assert "min-height: 320px !important;" in final_component_modal_panel_block.group(0)
     assert "max-height: calc(100vh - 48px) !important;" in final_component_modal_panel_block.group(0)
+    assert "overflow-x: hidden !important;" in final_component_modal_panel_block.group(0)
+
+    overview_panel_block = re.search(r"#componentDetailPanelOverview:not\(\.hidden\)\s*\{[^}]*\}", css, re.S)
+    assert overview_panel_block is not None
+    assert "display: grid;" in overview_panel_block.group(0)
+    assert "width: 100%;" in overview_panel_block.group(0)
+    assert "min-width: 0;" in overview_panel_block.group(0)
+    assert "margin: 0;" in overview_panel_block.group(0)
+    assert "gap: 10px;" in overview_panel_block.group(0)
+    assert "padding: 8px;" in overview_panel_block.group(0)
+    assert "--builder-overview-panel-bg:" in overview_panel_block.group(0)
+    assert "--builder-overview-card-bg:" in overview_panel_block.group(0)
+    assert "--builder-overview-card-border:" in overview_panel_block.group(0)
+    assert "--builder-overview-muted-text:" in overview_panel_block.group(0)
+    assert "--builder-overview-input-bg:" in overview_panel_block.group(0)
+    assert "--builder-overview-input-border:" in overview_panel_block.group(0)
+    assert "--builder-overview-card-shadow:" in overview_panel_block.group(0)
+    assert "background: var(--builder-overview-panel-bg);" in overview_panel_block.group(0)
+
+    component_hidden_guard_block = re.search(
+        r"#componentDetailEditorModal \.component-detail-panel\[hidden\],\s*\n#componentDetailEditorModal \.component-detail-panel\.hidden\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert component_hidden_guard_block is not None
+    assert "display: none !important;" in component_hidden_guard_block.group(0)
+
+    assert ".builder-component-overview-stack" not in css
+
+    overview_grid_block = re.search(r"\.builder-component-overview-grid\s*\{[^}]*\}", css, re.S)
+    assert overview_grid_block is not None
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in overview_grid_block.group(0)
+    assert "gap: 12px;" in overview_grid_block.group(0)
+
+    overview_card_block = re.search(r"\.builder-component-overview-card\s*\{[^}]*\}", css, re.S)
+    assert overview_card_block is not None
+    assert "border: 1px solid var(--builder-overview-card-border);" in overview_card_block.group(0)
+    assert "border-radius: 12px;" in overview_card_block.group(0)
+    assert "padding: 10px;" in overview_card_block.group(0)
+    assert "background: var(--builder-overview-card-bg);" in overview_card_block.group(0)
+    assert "box-shadow: var(--builder-overview-card-shadow);" in overview_card_block.group(0)
+
+    overview_field_block = re.search(r"\.builder-component-overview-field\s*\{[^}]*\}", css, re.S)
+    assert overview_field_block is not None
+    assert "display: grid;" in overview_field_block.group(0)
+    assert "gap: 2px;" in overview_field_block.group(0)
+
+    overview_input_block = re.search(
+        r"\.builder-component-overview-field input,\s*\n"
+        r"\.builder-component-overview-field select,\s*\n"
+        r"\.builder-component-overview-field textarea\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert overview_input_block is not None
+    assert "background: var(--builder-overview-input-bg);" in overview_input_block.group(0)
+    assert "border-color: var(--builder-overview-input-border);" in overview_input_block.group(0)
+
+    overview_description_block = re.search(r"#componentDetailOverviewLongDescription\s*\{[^}]*\}", css, re.S)
+    assert overview_description_block is not None
+    assert "min-height: 52px;" in overview_description_block.group(0)
+    assert "max-height: 80px;" in overview_description_block.group(0)
+
+    tags_editor_block = re.search(r"\.builder-component-tags-editor\s*\{[^}]*\}", css, re.S)
+    assert tags_editor_block is not None
+    assert "border: 1px solid var(--builder-overview-input-border);" in tags_editor_block.group(0)
+    assert "border-radius: 8px;" in tags_editor_block.group(0)
+    assert "padding: 4px;" in tags_editor_block.group(0)
+    assert "background: var(--builder-overview-input-bg);" in tags_editor_block.group(0)
+
+    overview_meta_block = re.search(r"\.builder-component-overview-meta\s*\{[^}]*\}", css, re.S)
+    assert overview_meta_block is not None
+    assert "color: var(--builder-overview-muted-text);" in overview_meta_block.group(0)
+
+    tags_helper_block = re.search(r"\.builder-component-tags-helper\s*\{[^}]*\}", css, re.S)
+    assert tags_helper_block is not None
+    assert "color: var(--builder-overview-muted-text);" in tags_helper_block.group(0)
+
+    tags_chip_block = re.search(r"\.builder-component-tag-chip\s*\{[^}]*\}", css, re.S)
+    assert tags_chip_block is not None
+    assert "border-radius: 999px;" in tags_chip_block.group(0)
+    assert "font-size: 11px;" in tags_chip_block.group(0)
+
+    tags_chip_remove_block = re.search(r"\.builder-component-tag-chip-remove\s*\{[^}]*\}", css, re.S)
+    assert tags_chip_remove_block is not None
+    assert "display: inline-flex;" in tags_chip_remove_block.group(0)
+    assert "align-items: center;" in tags_chip_remove_block.group(0)
+    assert "justify-content: center;" in tags_chip_remove_block.group(0)
+    assert "width: 16px;" in tags_chip_remove_block.group(0)
+    assert "height: 16px;" in tags_chip_remove_block.group(0)
+    assert "line-height: 1;" in tags_chip_remove_block.group(0)
+    assert "padding: 0;" in tags_chip_remove_block.group(0)
+    assert "border-radius: 999px;" in tags_chip_remove_block.group(0)
+    assert "vertical-align: middle;" in tags_chip_remove_block.group(0)
+
+    category_select_block = re.search(r"#componentDetailOverviewCategory\s*\{[^}]*\}", css, re.S)
+    assert category_select_block is not None
+    assert "min-height: 32px;" in category_select_block.group(0)
+    assert "border-radius: 8px;" in category_select_block.group(0)
+
+    overview_mobile_block = re.search(
+        r"@media \(max-width: 980px\)\s*\{[^}]*\.builder-component-overview-grid[^}]*grid-template-columns:\s*1fr;",
+        css,
+        re.S,
+    )
+    assert overview_mobile_block is not None
+
+    recipe_notes_mobile_block = re.search(
+        r"\.builder-component-recipe-notes-grid\s*\{\s*grid-template-columns:\s*1fr;",
+        css,
+        re.S,
+    )
+    assert recipe_notes_mobile_block is not None
+
+    tabs_chip_block = re.search(r"\.builder-component-detail-tabs \.builder-chip\s*\{[^}]*\}", css, re.S)
+    assert tabs_chip_block is not None
+    assert "min-height: 34px;" in tabs_chip_block.group(0)
+    assert "gap: 6px;" in tabs_chip_block.group(0)
+
+    tabs_chip_active_block = re.search(r"\.builder-component-detail-tabs \.builder-chip\.is-active\s*\{[^}]*\}", css, re.S)
+    assert tabs_chip_active_block is not None
+    assert "box-shadow:" in tabs_chip_active_block.group(0)
 
     assert ".builder-workspace-v1 .modal > .modal-content" in css
 
@@ -674,17 +865,61 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert calc_rows_block is not None
     assert "display: grid;" in calc_rows_block.group(0)
 
+    recipe_panel_block = re.search(r"#componentDetailPanelRecipe:not\(\.hidden\)\s*\{[^}]*\}", css, re.S)
+    assert recipe_panel_block is not None
+    assert "--builder-recipe-panel-bg:" in recipe_panel_block.group(0)
+    assert "--builder-recipe-card-bg:" in recipe_panel_block.group(0)
+    assert "--builder-recipe-card-border:" in recipe_panel_block.group(0)
+    assert "--builder-recipe-input-bg:" in recipe_panel_block.group(0)
+    assert "--builder-recipe-input-border:" in recipe_panel_block.group(0)
+
+    recipe_layout_block = re.search(r"\.builder-component-recipe-layout\s*\{[^}]*\}", css, re.S)
+    assert recipe_layout_block is not None
+    assert "display: grid;" in recipe_layout_block.group(0)
+    assert "gap: 12px;" in recipe_layout_block.group(0)
+
+    recipe_card_block = re.search(r"\.builder-component-recipe-card\s*\{[^}]*\}", css, re.S)
+    assert recipe_card_block is not None
+    assert "border: 1px solid var(--builder-recipe-card-border);" in recipe_card_block.group(0)
+    assert "background: var(--builder-recipe-card-bg);" in recipe_card_block.group(0)
+    assert "box-shadow: var(--builder-recipe-card-shadow);" in recipe_card_block.group(0)
+
+    recipe_header_block = re.search(r"\.builder-component-recipe-header\s*\{[^}]*\}", css, re.S)
+    assert recipe_header_block is not None
+    assert "grid-template-columns: minmax(0, 1.8fr) minmax(0, 0.9fr) minmax(0, 0.9fr) 28px;" in recipe_header_block.group(0)
+
     recipe_rows_block = re.search(r"\.builder-component-recipe-rows\s*\{[^}]*\}", css, re.S)
     assert recipe_rows_block is not None
     assert "display: grid;" in recipe_rows_block.group(0)
+    assert "gap: 6px;" in recipe_rows_block.group(0)
 
     recipe_row_block = re.search(r"\.builder-component-recipe-row\s*\{[^}]*\}", css, re.S)
     assert recipe_row_block is not None
-    assert "grid-template-columns:" in recipe_row_block.group(0)
+    assert "grid-template-columns: minmax(0, 1.8fr) minmax(0, 0.9fr) minmax(0, 0.9fr) 28px;" in recipe_row_block.group(0)
+
+    recipe_row_input_block = re.search(r"\.builder-component-recipe-row input\s*\{[^}]*\}", css, re.S)
+    assert recipe_row_input_block is not None
+    assert "min-height: 28px;" in recipe_row_input_block.group(0)
+    assert "background: var(--builder-recipe-input-bg);" in recipe_row_input_block.group(0)
 
     recipe_remove_block = re.search(r"\.builder-row-remove-icon\s*\{[^}]*\}", css, re.S)
     assert recipe_remove_block is not None
     assert "width: 22px;" in recipe_remove_block.group(0)
+
+    recipe_remove_center_block = re.search(r"#componentDetailPanelRecipe \.builder-row-remove-icon\s*\{[^}]*\}", css, re.S)
+    assert recipe_remove_center_block is not None
+    assert "display: inline-flex;" in recipe_remove_center_block.group(0)
+    assert "align-items: center;" in recipe_remove_center_block.group(0)
+    assert "justify-content: center;" in recipe_remove_center_block.group(0)
+
+    recipe_notes_grid_block = re.search(r"\.builder-component-recipe-notes-grid\s*\{[^}]*\}", css, re.S)
+    assert recipe_notes_grid_block is not None
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in recipe_notes_grid_block.group(0)
+
+    recipe_note_textarea_block = re.search(r"\.builder-component-recipe-note-field textarea\s*\{[^}]*\}", css, re.S)
+    assert recipe_note_textarea_block is not None
+    assert "min-height: 84px;" in recipe_note_textarea_block.group(0)
+    assert "max-height: 120px;" in recipe_note_textarea_block.group(0)
 
     calc_row_block = re.search(r"\.builder-component-calc-row\s*\{[^}]*\}", css, re.S)
     assert calc_row_block is not None

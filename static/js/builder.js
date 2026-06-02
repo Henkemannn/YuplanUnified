@@ -129,6 +129,7 @@ let _componentActionPopoverId = "";
 let _activeComponentDetailId = "";
 let _activeComponentDetailTab = "overview";
 let _componentDetailDirty = false;
+let _componentDetailTagsDraft = [];
 window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";
 console.log("Builder JS active: builder-modal-system-reset-1");
 
@@ -2494,16 +2495,32 @@ function componentDetailTabValue(value) {
 function setComponentDetailTab(tabValue) {
   const nextTab = componentDetailTabValue(tabValue);
   _activeComponentDetailTab = nextTab;
-  document.querySelectorAll("[data-component-tab]").forEach((button) => {
+  const modal = document.getElementById("componentDetailEditorModal");
+  const tabButtons = modal
+    ? Array.from(modal.querySelectorAll("[data-component-tab]"))
+    : Array.from(document.querySelectorAll("[data-component-tab]"));
+  const tabPanels = modal
+    ? Array.from(modal.querySelectorAll(".component-detail-panel[data-component-panel]"))
+    : Array.from(document.querySelectorAll(".component-detail-panel[data-component-panel]"));
+
+  tabButtons.forEach((button) => {
     const tab = String(button.getAttribute("data-component-tab") || "").trim().toLowerCase();
     const active = tab === nextTab;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-selected", active ? "true" : "false");
   });
-  document.querySelectorAll("[data-component-panel]").forEach((panel) => {
+
+  tabPanels.forEach((panel) => {
     const tab = String(panel.getAttribute("data-component-panel") || "").trim().toLowerCase();
-    panel.classList.toggle("hidden", tab !== nextTab);
+    const active = tab === nextTab;
+    panel.classList.toggle("hidden", !active);
+    if (active) {
+      panel.removeAttribute("hidden");
+    } else {
+      panel.setAttribute("hidden", "hidden");
+    }
   });
+
   if (nextTab === "calculation") {
     const host = document.getElementById("componentDetailCalculationRows");
     const hasRows = host ? Boolean(host.querySelector("[data-calc-row]")) : false;
@@ -2514,7 +2531,6 @@ function setComponentDetailTab(tabValue) {
 }
 
 function readComponentDetailFormDraft() {
-  const tagsInput = document.getElementById("componentDetailOverviewTags");
   const longDescriptionInput = document.getElementById("componentDetailOverviewLongDescription");
   const recipeIngredientsLegacy = document.getElementById("componentDetailRecipeIngredients");
   const methodText = document.getElementById("componentDetailMethodText");
@@ -2554,7 +2570,7 @@ function readComponentDetailFormDraft() {
   }
 
   return {
-    tags: parseComponentTagsInput(tagsInput ? tagsInput.value : ""),
+    tags: currentComponentDetailTags(),
     long_description: longDescriptionInput ? String(longDescriptionInput.value || "") : "",
     recipe_ingredient_rows: recipeIngredientRows,
     recipe_ingredients_text: recipeLegacyText,
@@ -2571,7 +2587,6 @@ function readComponentDetailFormDraft() {
 
 function applyComponentDetailDraftToForm(draft) {
   const payload = draft || defaultComponentDetailDraft();
-  const tagsInput = document.getElementById("componentDetailOverviewTags");
   const longDescriptionInput = document.getElementById("componentDetailOverviewLongDescription");
   const recipeIngredientsLegacy = document.getElementById("componentDetailRecipeIngredients");
   const methodText = document.getElementById("componentDetailMethodText");
@@ -2604,9 +2619,7 @@ function applyComponentDetailDraftToForm(draft) {
   if (allergenNotes) {
     allergenNotes.value = String(payload.allergen_notes || "");
   }
-  if (tagsInput) {
-    tagsInput.value = formatComponentTagsInput(payload.tags);
-  }
+  setComponentDetailTags(payload.tags);
   if (longDescriptionInput) {
     longDescriptionInput.value = String(payload.long_description || "");
   }
@@ -2709,7 +2722,7 @@ async function openComponentDetailEditor(componentId) {
   try {
     const draft = await fetchComponentDetailDraft(idValue);
     applyComponentDetailDraftToForm(draft);
-    setComponentDetailFeedback({ status: 200, data: { ok: true, message: "Component details loaded." } });
+    setComponentDetailFeedback({ status: 200, data: { ok: true, message: "Komponentdetaljer laddade." } });
   } catch (_error) {
     applyComponentDetailDraftToForm(defaultComponentDetailDraft());
     setComponentDetailFeedback({
@@ -2738,7 +2751,7 @@ async function saveActiveComponentDetailDraft() {
       target.tags = Array.isArray(saved.tags) ? saved.tags.slice() : [];
     }
     resetComponentDetailDirty();
-    setComponentDetailFeedback({ status: 200, data: { ok: true, message: "Component details saved." } });
+    setComponentDetailFeedback({ status: 200, data: { ok: true, message: "Komponentdetaljer sparade." } });
   } catch (_error) {
     setComponentDetailFeedback({
       status: 500,
@@ -2866,6 +2879,121 @@ function formatComponentTagsInput(tags) {
     .map((value) => String(value || "").trim().toLowerCase())
     .filter(Boolean)
     .join(", ");
+}
+
+function normalizeComponentDetailTagValue(value) {
+  return String(value || "")
+    .replace(/#/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function currentComponentDetailTags() {
+  return Array.isArray(_componentDetailTagsDraft) ? _componentDetailTagsDraft.slice() : [];
+}
+
+function renderComponentDetailTagSuggestions() {
+  const suggestions = document.getElementById("componentDetailTagsSuggestions");
+  if (!suggestions) {
+    return;
+  }
+  const selected = new Set(currentComponentDetailTags());
+  const catalog = componentTagCatalog(_cachedLibraryComponents)
+    .filter((tag) => !selected.has(tag))
+    .slice(0, 40);
+  suggestions.innerHTML = "";
+  for (const tag of catalog) {
+    const option = document.createElement("option");
+    option.value = tag;
+    suggestions.appendChild(option);
+  }
+}
+
+function renderComponentDetailTagChips() {
+  const host = document.getElementById("componentDetailTagsChips");
+  const hiddenInput = document.getElementById("componentDetailOverviewTags");
+  if (hiddenInput) {
+    hiddenInput.value = formatComponentTagsInput(_componentDetailTagsDraft);
+  }
+  if (!host) {
+    renderComponentDetailTagSuggestions();
+    return;
+  }
+  host.innerHTML = "";
+  if (!Array.isArray(_componentDetailTagsDraft) || _componentDetailTagsDraft.length === 0) {
+    const empty = document.createElement("span");
+    empty.className = "builder-component-tags-empty";
+    empty.textContent = "Inga taggar ännu.";
+    host.appendChild(empty);
+    renderComponentDetailTagSuggestions();
+    return;
+  }
+  for (const tag of _componentDetailTagsDraft) {
+    const chip = document.createElement("span");
+    chip.className = "builder-component-tag-chip";
+
+    const text = document.createElement("span");
+    text.textContent = "#" + tag;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "builder-component-tag-chip-remove";
+    remove.setAttribute("aria-label", "Ta bort tagg " + tag);
+    remove.setAttribute("data-remove-tag", tag);
+    remove.textContent = "x";
+
+    chip.appendChild(text);
+    chip.appendChild(remove);
+    host.appendChild(chip);
+  }
+  renderComponentDetailTagSuggestions();
+}
+
+function setComponentDetailTags(tags) {
+  const source = Array.isArray(tags) ? tags : parseComponentTagsInput(tags);
+  _componentDetailTagsDraft = Array.from(new Set(
+    source
+      .map((value) => normalizeComponentDetailTagValue(value))
+      .filter(Boolean),
+  ));
+  renderComponentDetailTagChips();
+}
+
+function addComponentDetailTagsFromInput(rawValue) {
+  const parsed = parseComponentTagsInput(String(rawValue || "").replace(/#/g, ","));
+  if (parsed.length === 0) {
+    return false;
+  }
+  const next = new Set(currentComponentDetailTags());
+  let changed = false;
+  for (const tag of parsed) {
+    const normalized = normalizeComponentDetailTagValue(tag);
+    if (!normalized || next.has(normalized)) {
+      continue;
+    }
+    next.add(normalized);
+    changed = true;
+  }
+  if (!changed) {
+    return false;
+  }
+  setComponentDetailTags(Array.from(next));
+  return true;
+}
+
+function removeComponentDetailTag(tagValue) {
+  const normalized = normalizeComponentDetailTagValue(tagValue);
+  if (!normalized) {
+    return false;
+  }
+  const current = currentComponentDetailTags();
+  const next = current.filter((tag) => tag !== normalized);
+  if (next.length === current.length) {
+    return false;
+  }
+  setComponentDetailTags(next);
+  return true;
 }
 
 function renderComponentCategoryFilters(target, items, activeFilter) {
@@ -3316,6 +3444,7 @@ function renderLibrary(result) {
 
   _cachedLibraryComponents = components;
   _cachedLibraryCompositions = compositions;
+  renderComponentDetailTagSuggestions();
   updateComponentCategoryChipCounts();
 
   const searchInput = document.getElementById("libraryComponentsSearch");
@@ -5297,9 +5426,13 @@ function bindBuilderHandlers() {
   const componentDetailOverviewCleanBtn = document.getElementById("componentDetailOverviewClean");
   const componentDetailOverviewDeleteBtn = document.getElementById("componentDetailOverviewDelete");
   const componentDetailOverviewCategoryInput = document.getElementById("componentDetailOverviewCategory");
+  const componentDetailTagsInput = document.getElementById("componentDetailTagsInput");
+  const componentDetailTagsChips = document.getElementById("componentDetailTagsChips");
   const componentDetailRecipeAddRowBtn = document.getElementById("componentDetailRecipeAddRow");
   const componentDetailCalcSyncRowsBtn = document.getElementById("componentDetailCalcSyncRows");
   const componentDetailTabs = document.getElementById("componentDetailTabs");
+
+  setComponentDetailTags([]);
 
   window.closeAllBuilderModals = function () {
     document.querySelectorAll(".modal").forEach((modal) => {
@@ -5453,6 +5586,44 @@ function bindBuilderHandlers() {
   if (componentDetailOverviewCategoryInput) {
     componentDetailOverviewCategoryInput.addEventListener("change", () => {
       markComponentDetailDirty();
+    });
+  }
+
+  if (componentDetailTagsInput) {
+    componentDetailTagsInput.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== ",") {
+        return;
+      }
+      event.preventDefault();
+      const didAdd = addComponentDetailTagsFromInput(componentDetailTagsInput.value);
+      componentDetailTagsInput.value = "";
+      if (didAdd) {
+        markComponentDetailDirty();
+      }
+    });
+    componentDetailTagsInput.addEventListener("blur", () => {
+      const didAdd = addComponentDetailTagsFromInput(componentDetailTagsInput.value);
+      componentDetailTagsInput.value = "";
+      if (didAdd) {
+        markComponentDetailDirty();
+      }
+    });
+  }
+
+  if (componentDetailTagsChips) {
+    componentDetailTagsChips.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) {
+        return;
+      }
+      const removeBtn = target.closest("[data-remove-tag]");
+      if (!removeBtn) {
+        return;
+      }
+      const tagValue = String(removeBtn.getAttribute("data-remove-tag") || "");
+      if (removeComponentDetailTag(tagValue)) {
+        markComponentDetailDirty();
+      }
     });
   }
 
