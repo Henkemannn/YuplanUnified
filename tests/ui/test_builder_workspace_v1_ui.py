@@ -321,10 +321,19 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'if (detailSummary.has_allergen_data) {' in script
     assert 'methodIcon.textContent = "📖";' in script
     assert 'methodIcon.title = "Recept/metod finns";' in script
+    assert 'methodIcon.dataset.componentTabTarget = "recipe";' in script
+    assert 'methodIcon.setAttribute("role", "button");' in script
+    assert 'methodIcon.setAttribute("tabindex", "0");' in script
     assert 'calculationIcon.textContent = "💰";' in script
     assert 'calculationIcon.title = "Kalkyl finns";' in script
+    assert 'calculationIcon.dataset.componentTabTarget = "calculation";' in script
+    assert 'calculationIcon.setAttribute("role", "button");' in script
+    assert 'calculationIcon.setAttribute("tabindex", "0");' in script
     assert 'allergenIcon.textContent = "🌾";' in script
     assert 'allergenIcon.title = "Allergen/kostinfo finns";' in script
+    assert 'allergenIcon.dataset.componentTabTarget = "allergens";' in script
+    assert 'allergenIcon.setAttribute("role", "button");' in script
+    assert 'allergenIcon.setAttribute("tabindex", "0");' in script
     assert 'methodIcon.textContent = "M";' not in script
     assert 'calculationIcon.textContent = "C";' not in script
     assert 'allergenIcon.textContent = "A";' not in script
@@ -381,16 +390,22 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     # Home/Components are separate views, not one stacked mixed page.
     assert 'overview.classList.toggle("hidden", _workspaceSurface !== "home");' in script
     assert 'components.classList.toggle("hidden", _workspaceSurface !== "components");' in script
-    assert 'function openComponentDetailEditor(componentId) {' in script
+    assert 'function openComponentDetailEditor(componentId, initialTab) {' in script
+    assert 'const requestedTab = componentDetailTabValue(initialTab || "overview");' in script
     assert 'openSimpleModal("componentDetailEditorModal");' in script
     assert 'openSimpleModal("componentDetailModal");' not in script
     assert 'const libraryComponentsGrid = document.getElementById("libraryComponentsGrid");' in script
     assert 'libraryComponentsGrid.addEventListener("click", (event) => {' in script
+    assert 'const tabTargetTrigger = target.closest("[data-component-tab-target]");' in script
+    assert 'event.stopPropagation();' in script
+    assert 'openComponentDetailEditor(componentId, tabTarget);' in script
     assert 'target.closest("[data-open-component-editor=\'1\']")' in script
     assert 'const componentId = String(trigger.getAttribute("data-component-id") || "").trim();' in script
     assert 'openComponentDetailEditor(componentId);' in script
     assert 'libraryComponentsGrid.addEventListener("keydown", (event) => {' in script
     assert 'keyboardEvent.key !== "Enter" && keyboardEvent.key !== " "' in script
+    assert 'const tabTarget = componentDetailTabValue(tabTargetTrigger.getAttribute("data-component-tab-target") || "overview");' in script
+    assert 'keyboardEvent.stopPropagation();' in script
     assert 'target.closest("[data-component-secondary-action=\'1\']")' in script
     assert 'function saveActiveComponentDetailDraft() {' in script
     assert 'const modal = document.getElementById("componentDetailEditorModal");' in script

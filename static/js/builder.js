@@ -2672,11 +2672,12 @@ async function saveComponentOverviewFromDetail(componentId) {
   filterLibraryComponents(currentComponentSearchQuery());
 }
 
-async function openComponentDetailEditor(componentId) {
+async function openComponentDetailEditor(componentId, initialTab) {
   const idValue = String(componentId || "").trim();
   if (!idValue) {
     return;
   }
+  const requestedTab = componentDetailTabValue(initialTab || "overview");
   const component = (_cachedLibraryComponents || []).find((item) => String(item.component_id || "") === idValue);
   if (!component) {
     return;
@@ -2730,7 +2731,7 @@ async function openComponentDetailEditor(componentId) {
       data: { ok: false, message: "Could not load details from backend. Try again." },
     });
   }
-  setComponentDetailTab(_activeComponentDetailTab || "overview");
+  setComponentDetailTab(requestedTab || "overview");
   resetComponentDetailDirty();
   openSimpleModal("componentDetailEditorModal");
 }
@@ -3289,6 +3290,9 @@ function renderComponentLibraryCards(items, targetGrid, options) {
       methodIcon.textContent = "📖";
       methodIcon.title = "Recept/metod finns";
       methodIcon.setAttribute("aria-label", "Recept/metod finns");
+      methodIcon.setAttribute("role", "button");
+      methodIcon.setAttribute("tabindex", "0");
+      methodIcon.dataset.componentTabTarget = "recipe";
       badges.appendChild(methodIcon);
     }
     if (detailSummary.has_calculation_data) {
@@ -3297,6 +3301,9 @@ function renderComponentLibraryCards(items, targetGrid, options) {
       calculationIcon.textContent = "💰";
       calculationIcon.title = "Kalkyl finns";
       calculationIcon.setAttribute("aria-label", "Kalkyl finns");
+      calculationIcon.setAttribute("role", "button");
+      calculationIcon.setAttribute("tabindex", "0");
+      calculationIcon.dataset.componentTabTarget = "calculation";
       badges.appendChild(calculationIcon);
     }
     if (detailSummary.has_allergen_data) {
@@ -3305,6 +3312,9 @@ function renderComponentLibraryCards(items, targetGrid, options) {
       allergenIcon.textContent = "🌾";
       allergenIcon.title = "Allergen/kostinfo finns";
       allergenIcon.setAttribute("aria-label", "Allergen/kostinfo finns");
+      allergenIcon.setAttribute("role", "button");
+      allergenIcon.setAttribute("tabindex", "0");
+      allergenIcon.dataset.componentTabTarget = "allergens";
       badges.appendChild(allergenIcon);
     }
     surface.appendChild(name);
@@ -5491,6 +5501,19 @@ function bindBuilderHandlers() {
         return;
       }
 
+      const tabTargetTrigger = target.closest("[data-component-tab-target]");
+      if (tabTargetTrigger) {
+        const trigger = tabTargetTrigger.closest("[data-open-component-editor='1']");
+        const componentId = String((trigger && trigger.getAttribute("data-component-id")) || "").trim();
+        const tabTarget = componentDetailTabValue(tabTargetTrigger.getAttribute("data-component-tab-target") || "overview");
+        if (componentId) {
+          event.preventDefault();
+          event.stopPropagation();
+          openComponentDetailEditor(componentId, tabTarget);
+        }
+        return;
+      }
+
       const secondaryAction = target.closest("[data-component-secondary-action='1']");
       if (secondaryAction) {
         return;
@@ -5523,6 +5546,20 @@ function bindBuilderHandlers() {
       }
 
       if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") {
+        return;
+      }
+
+      const tabTargetTrigger = target.closest("[data-component-tab-target]");
+      if (tabTargetTrigger) {
+        const trigger = tabTargetTrigger.closest("[data-open-component-editor='1']");
+        const componentId = String((trigger && trigger.getAttribute("data-component-id")) || "").trim();
+        const tabTarget = componentDetailTabValue(tabTargetTrigger.getAttribute("data-component-tab-target") || "overview");
+        if (!componentId) {
+          return;
+        }
+        keyboardEvent.preventDefault();
+        keyboardEvent.stopPropagation();
+        openComponentDetailEditor(componentId, tabTarget);
         return;
       }
 
