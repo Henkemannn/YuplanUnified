@@ -886,16 +886,26 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
 
     recipe_header_block = re.search(r"\.builder-component-recipe-header\s*\{[^}]*\}", css, re.S)
     assert recipe_header_block is not None
-    assert "grid-template-columns: minmax(0, 1.8fr) minmax(0, 0.9fr) minmax(0, 0.9fr) 28px;" in recipe_header_block.group(0)
+    assert "grid-template-columns: minmax(240px, 380px) 80px 70px 32px;" in recipe_header_block.group(0)
+    assert "max-width: 720px;" in recipe_header_block.group(0)
+    assert "justify-self: start;" in recipe_header_block.group(0)
 
     recipe_rows_block = re.search(r"\.builder-component-recipe-rows\s*\{[^}]*\}", css, re.S)
     assert recipe_rows_block is not None
     assert "display: grid;" in recipe_rows_block.group(0)
     assert "gap: 6px;" in recipe_rows_block.group(0)
+    assert "overflow-x: auto;" in recipe_rows_block.group(0)
+    assert "max-width: 720px;" in recipe_rows_block.group(0)
+    assert "justify-self: start;" in recipe_rows_block.group(0)
 
     recipe_row_block = re.search(r"\.builder-component-recipe-row\s*\{[^}]*\}", css, re.S)
     assert recipe_row_block is not None
-    assert "grid-template-columns: minmax(0, 1.8fr) minmax(0, 0.9fr) minmax(0, 0.9fr) 28px;" in recipe_row_block.group(0)
+    assert "grid-template-columns: minmax(240px, 380px) 80px 70px 32px;" in recipe_row_block.group(0)
+
+    recipe_actions_block = re.search(r"\.builder-component-recipe-actions\s*\{[^}]*\}", css, re.S)
+    assert recipe_actions_block is not None
+    assert "max-width: 720px;" in recipe_actions_block.group(0)
+    assert "justify-self: start;" in recipe_actions_block.group(0)
 
     recipe_row_input_block = re.search(r"\.builder-component-recipe-row input\s*\{[^}]*\}", css, re.S)
     assert recipe_row_input_block is not None
@@ -905,6 +915,9 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     recipe_remove_block = re.search(r"\.builder-row-remove-icon\s*\{[^}]*\}", css, re.S)
     assert recipe_remove_block is not None
     assert "width: 22px;" in recipe_remove_block.group(0)
+    assert "display: inline-flex;" in recipe_remove_block.group(0)
+    assert "align-items: center;" in recipe_remove_block.group(0)
+    assert "justify-content: center;" in recipe_remove_block.group(0)
 
     recipe_remove_center_block = re.search(r"#componentDetailPanelRecipe \.builder-row-remove-icon\s*\{[^}]*\}", css, re.S)
     assert recipe_remove_center_block is not None
@@ -923,7 +936,15 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
 
     calc_row_block = re.search(r"\.builder-component-calc-row\s*\{[^}]*\}", css, re.S)
     assert calc_row_block is not None
-    assert "grid-template-columns:" in calc_row_block.group(0)
+    assert "grid-template-columns: minmax(220px, 1fr) 90px 80px 110px 110px 110px;" in calc_row_block.group(0)
+
+    calc_rows_block = re.search(r"\.builder-component-calc-rows\s*\{[^}]*\}", css, re.S)
+    assert calc_rows_block is not None
+    assert "overflow-x: auto;" in calc_rows_block.group(0)
+
+    calc_header_block = re.search(r"\.builder-component-grid-head-calc,\s*\n\.builder-component-grid-header-calc\s*\{[^}]*\}", css, re.S)
+    assert calc_header_block is not None
+    assert "grid-template-columns: minmax(220px, 1fr) 90px 80px 110px 110px 110px;" in calc_header_block.group(0)
 
     detail_tabs_block = re.search(r"\.builder-component-detail-tabs\s*\{[^}]*\}", css, re.S)
     assert detail_tabs_block is not None
