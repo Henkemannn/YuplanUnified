@@ -445,24 +445,33 @@
 
       <section id="componentDetailPanelCalculation" class="workspace-modal-section-card component-detail-panel hidden" data-component-panel="calculation">
         <p class="modal-section-title">💰 Kalkyl</p>
-        <div class="builder-component-grid-head builder-component-grid-head-calc" aria-hidden="true">
-          <span>Ingrediens</span>
-          <span>Mängd</span>
-          <span>Enhet</span>
-          <span>Pris</span>
-          <span>Prisenhet</span>
-          <span>Kostnad</span>
+        <div class="builder-component-calc-layout">
+          <article class="builder-component-calc-card builder-component-calc-card-main" aria-label="Portionskalkyl">
+            <p class="builder-component-card-label">Portionskalkyl</p>
+            <div class="builder-component-calc-header builder-component-grid-head builder-component-grid-head-calc" aria-hidden="true">
+              <span>Ingrediens</span>
+              <span>Mängd</span>
+              <span>Enhet</span>
+              <span>Pris</span>
+              <span>Prisenhet</span>
+              <span>Kostnad</span>
+            </div>
+            <div id="componentDetailCalculationRows" class="builder-component-calc-rows"></div>
+            <div class="workspace-inline-actions builder-component-calc-actions">
+              <button id="componentDetailCalcSyncRows" type="button" class="builder-button-ghost">Synka från recept</button>
+            </div>
+            <label class="builder-component-calc-total">Total portionskostnad
+              <input id="componentDetailCalcCost" type="text" placeholder="0.00" readonly>
+            </label>
+          </article>
+
+          <article class="builder-component-calc-card builder-component-calc-card-notes" aria-label="Kalkylanteckning">
+            <p class="builder-component-card-label">Kalkylanteckning</p>
+            <label class="builder-component-calc-note-field">Kalkylanteckning
+              <textarea id="componentDetailCalcNotes" placeholder="Antaganden för portionskostnad"></textarea>
+            </label>
+          </article>
         </div>
-        <div id="componentDetailCalculationRows" class="builder-component-calc-rows"></div>
-        <div class="workspace-inline-actions">
-          <button id="componentDetailCalcSyncRows" type="button" class="builder-button-ghost">Synka från recept</button>
-        </div>
-        <label>Total portionskostnad
-          <input id="componentDetailCalcCost" type="text" placeholder="0.00" readonly>
-        </label>
-        <label>Kalkylanteckning
-          <textarea id="componentDetailCalcNotes" placeholder="Antaganden för portionskostnad"></textarea>
-        </label>
       </section>
 
       <section id="componentDetailPanelAllergens" class="workspace-modal-section-card component-detail-panel hidden" data-component-panel="allergens">

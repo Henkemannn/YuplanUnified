@@ -3118,7 +3118,7 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-component-grid-head-calc,
 .builder-component-grid-header-calc {
-  grid-template-columns: minmax(220px, 1fr) 90px 80px 110px 110px 110px;
+  grid-template-columns: minmax(220px, 320px) 80px 70px 90px 100px 100px;
 }
 
 .builder-component-allergen-grid {
@@ -3298,23 +3298,73 @@ body:not(.builder-workspace-v1) ul {
   border-color: var(--builder-recipe-input-border);
 }
 
+#componentDetailPanelCalculation:not(.hidden) {
+  --builder-calc-panel-bg: var(--builder-overview-panel-bg, #f6f9fc);
+  --builder-calc-card-bg: var(--builder-overview-card-bg, #ffffff);
+  --builder-calc-card-border: var(--builder-overview-card-border, #c8d6e3);
+  --builder-calc-muted-text: var(--builder-overview-muted-text, #556a7d);
+  --builder-calc-input-bg: var(--builder-overview-input-bg, #ffffff);
+  --builder-calc-input-border: var(--builder-overview-input-border, #c7d5e2);
+  --builder-calc-card-shadow: var(--builder-overview-card-shadow, 0 8px 20px rgba(18, 38, 54, 0.08));
+  display: grid;
+  gap: 10px;
+  padding: 8px;
+  background: var(--builder-calc-panel-bg);
+  border-radius: 12px;
+}
+
+.builder-component-calc-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+
+.builder-component-calc-card {
+  border: 1px solid var(--builder-calc-card-border);
+  border-radius: 12px;
+  background: var(--builder-calc-card-bg);
+  box-shadow: var(--builder-calc-card-shadow);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.builder-component-calc-header {
+  width: 100%;
+  max-width: 920px;
+  justify-self: start;
+}
+
 .builder-component-calc-rows {
   display: grid;
   gap: 6px;
   margin-bottom: 10px;
+  width: 100%;
+  max-width: 920px;
+  justify-self: start;
   overflow-x: auto;
 }
 
 .builder-component-calc-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 90px 80px 110px 110px 110px;
+  grid-template-columns: minmax(220px, 320px) 80px 70px 90px 100px 100px;
   gap: 6px;
   align-items: center;
+  width: 100%;
+  min-width: 0;
 }
 
 .builder-component-calc-row input {
-  min-height: 30px;
-  padding: 5px 8px;
+  min-height: 28px;
+  padding: 4px 7px;
+  margin: 0;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--builder-calc-input-bg);
+  border-color: var(--builder-calc-input-border);
 }
 
 .builder-component-calc-row [data-calc-field="ingredient_name"],
@@ -3323,11 +3373,48 @@ body:not(.builder-workspace-v1) ul {
   background: #f6f8fb;
 }
 
+.builder-component-calc-actions {
+  width: 100%;
+  max-width: 920px;
+  justify-self: start;
+}
+
+.builder-component-calc-total {
+  width: 100%;
+  max-width: 920px;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--builder-calc-muted-text);
+}
+
 #componentDetailCalcCost {
-  font-weight: 700;
+  font-weight: 800;
   color: #223746;
-  background: #f7fbff;
-  font-size: 15px;
+  background: #eef6ff;
+  font-size: 16px;
+  border: 1px solid #bdd0e0;
+  border-radius: 10px;
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+.builder-component-calc-note-field {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.builder-component-calc-note-field textarea {
+  min-height: 84px;
+  max-height: 120px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--builder-calc-input-bg);
+  border-color: var(--builder-calc-input-border);
 }
 
 @media (max-width: 980px) {

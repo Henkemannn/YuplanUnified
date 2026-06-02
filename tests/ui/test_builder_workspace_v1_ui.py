@@ -173,6 +173,14 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="componentDetailMethodNotes"' in html
     assert 'id="componentDetailCalculationRows"' in html
     assert 'id="componentDetailCalcSyncRows"' in html
+    assert 'class="builder-component-calc-layout"' in html
+    assert 'class="builder-component-calc-card builder-component-calc-card-main"' in html
+    assert 'class="builder-component-calc-card builder-component-calc-card-notes"' in html
+    assert 'class="builder-component-calc-header builder-component-grid-head builder-component-grid-head-calc"' in html
+    assert 'builder-component-calc-actions' in html
+    assert 'class="builder-component-calc-total"' in html
+    assert 'class="builder-component-calc-note-field"' in html
+    assert 'Portionskalkyl' in html
     assert 'Synka från recept' in html
     assert 'Pris' in html
     assert 'Prisenhet' in html
@@ -934,17 +942,43 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert "min-height: 84px;" in recipe_note_textarea_block.group(0)
     assert "max-height: 120px;" in recipe_note_textarea_block.group(0)
 
+    calc_panel_block = re.search(r"#componentDetailPanelCalculation:not\(\.hidden\)\s*\{[^}]*\}", css, re.S)
+    assert calc_panel_block is not None
+    assert "--builder-calc-panel-bg:" in calc_panel_block.group(0)
+    assert "--builder-calc-card-bg:" in calc_panel_block.group(0)
+    assert "--builder-calc-card-border:" in calc_panel_block.group(0)
+
+    calc_layout_block = re.search(r"\.builder-component-calc-layout\s*\{[^}]*\}", css, re.S)
+    assert calc_layout_block is not None
+    assert "display: grid;" in calc_layout_block.group(0)
+
+    calc_card_block = re.search(r"\.builder-component-calc-card\s*\{[^}]*\}", css, re.S)
+    assert calc_card_block is not None
+    assert "border: 1px solid var(--builder-calc-card-border);" in calc_card_block.group(0)
+    assert "background: var(--builder-calc-card-bg);" in calc_card_block.group(0)
+    assert "box-shadow: var(--builder-calc-card-shadow);" in calc_card_block.group(0)
+
     calc_row_block = re.search(r"\.builder-component-calc-row\s*\{[^}]*\}", css, re.S)
     assert calc_row_block is not None
-    assert "grid-template-columns: minmax(220px, 1fr) 90px 80px 110px 110px 110px;" in calc_row_block.group(0)
+    assert "grid-template-columns: minmax(220px, 320px) 80px 70px 90px 100px 100px;" in calc_row_block.group(0)
 
     calc_rows_block = re.search(r"\.builder-component-calc-rows\s*\{[^}]*\}", css, re.S)
     assert calc_rows_block is not None
     assert "overflow-x: auto;" in calc_rows_block.group(0)
+    assert "max-width: 920px;" in calc_rows_block.group(0)
 
     calc_header_block = re.search(r"\.builder-component-grid-head-calc,\s*\n\.builder-component-grid-header-calc\s*\{[^}]*\}", css, re.S)
     assert calc_header_block is not None
-    assert "grid-template-columns: minmax(220px, 1fr) 90px 80px 110px 110px 110px;" in calc_header_block.group(0)
+    assert "grid-template-columns: minmax(220px, 320px) 80px 70px 90px 100px 100px;" in calc_header_block.group(0)
+
+    calc_total_block = re.search(r"\.builder-component-calc-total\s*\{[^}]*\}", css, re.S)
+    assert calc_total_block is not None
+    assert "display: grid;" in calc_total_block.group(0)
+
+    calc_cost_block = re.search(r"#componentDetailCalcCost\s*\{[^}]*\}", css, re.S)
+    assert calc_cost_block is not None
+    assert "font-weight: 800;" in calc_cost_block.group(0)
+    assert "font-size: 16px;" in calc_cost_block.group(0)
 
     detail_tabs_block = re.search(r"\.builder-component-detail-tabs\s*\{[^}]*\}", css, re.S)
     assert detail_tabs_block is not None
