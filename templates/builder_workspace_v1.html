@@ -4,116 +4,161 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Builder Workspace v1</title>
-  <link rel="stylesheet" href="/static/css/builder.css">
+  <link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">
 </head>
 <body class="builder-workspace-v1">
   <header class="builder-platform-header">
     <p class="builder-workspace-eyebrow">Builder Workspace v1</p>
-    <h1>Builder library</h1>
-    <p class="builder-start-hint">Start with components. Build dishes. Then build menus.</p>
+    <h1>Yuplan Builder</h1>
+    <p class="builder-start-hint">Create dishes, manage components, and publish menus in one place.</p>
+    <p class="builder-ui-version-marker" id="builderUiVersionMarker">UI foundation v1 active</p>
   </header>
 
-  <div class="builder-platform-layout">
-    <main class="builder-platform-primary">
-      <section id="workspaceOverviewSection" class="builder-library-primary" aria-label="Workspace overview">
-        <div class="builder-primary-header" aria-label="Workspace overview header">
-          <div>
-            <p class="builder-workspace-eyebrow">Overview</p>
-            <h2>Workspace overview</h2>
-            <p class="builder-primary-copy">Open the library you want to work in. Keep the start page clean and focused.</p>
+  <div class="builder-platform-layout builder-shell">
+    <aside class="builder-platform-sidebar builder-sidebar" aria-label="Builder navigation">
+      <nav class="builder-sidebar-nav" aria-label="Builder sections">
+        <button id="navHomeBtn" data-builder-nav="home" type="button" class="builder-button-ghost is-active">Home</button>
+        <button id="navComponentsBtn" data-builder-nav="components" type="button" class="builder-button-ghost">Components</button>
+        <button id="navDishesBtn" type="button" class="builder-button-ghost">Dishes</button>
+        <a id="navMenusLink" class="builder-button-ghost" href="/menu-builder-v1">Menus</a>
+        <button id="navImportsBtn" type="button" class="builder-button-ghost">Imports <span id="importsSidebarBadge">(0)</span></button>
+      </nav>
+    </aside>
+
+    <main class="builder-platform-primary builder-main">
+      <section id="workspaceOverviewSection" class="builder-library-primary builder-start-surface" aria-label="Builder start">
+        <section class="builder-card builder-home-hero" aria-label="Builder hero">
+          <h2>What do you want to do today?</h2>
+          <p>Import menu or recipe, sort components, build dishes, and build menu in one focused flow.</p>
+        </section>
+
+        <section class="builder-home-block" aria-label="Primary actions">
+          <div class="builder-card-grid builder-card-grid-actions">
+            <article class="builder-card builder-action-card" data-action-card="import-menu-recipes">
+              <p class="builder-action-icon" aria-hidden="true">📥</p>
+              <h3>Import menu or recipe</h3>
+              <p>Bring in source lines and continue from review with clean suggestions.</p>
+              <button id="homeActionImportBtn" class="builder-button-primary builder-action-cta" type="button">Import menu or recipe</button>
+            </article>
+            <article class="builder-card builder-action-card" data-action-card="create-component">
+              <p class="builder-action-icon" aria-hidden="true">🧩</p>
+              <h3>Sort components</h3>
+              <p>Shape a calm library with clear categories and useful tags.</p>
+              <button id="homeActionCreateComponentBtn" class="builder-button-primary builder-action-cta" type="button">Create component</button>
+            </article>
+            <article class="builder-card builder-action-card" data-action-card="create-dish">
+              <p class="builder-action-icon" aria-hidden="true">🍽️</p>
+              <h3>Build dishes</h3>
+              <p>Compose dishes from your component library with clear structure.</p>
+              <button id="primaryCreateDishBtn" class="builder-button-primary builder-action-cta" type="button">Create dish</button>
+            </article>
+            <article class="builder-card builder-action-card" data-action-card="create-menu">
+              <p class="builder-action-icon" aria-hidden="true">🗓️</p>
+              <h3>Build menu</h3>
+              <p>Open menu builder to arrange dishes into a weekly plan.</p>
+              <a id="homeActionCreateMenuBtn" class="builder-button-primary builder-action-cta" href="/menu-builder-v1">Create menu</a>
+            </article>
           </div>
+        </section>
+
+        <section class="builder-home-block" aria-label="Continue work status">
+          <h3>Continue work</h3>
+          <div class="builder-card-grid builder-card-grid-overview">
+            <article class="builder-card builder-overview-card">
+              <p class="builder-overview-label">Pending imports</p>
+              <p id="homePendingImportsCount" class="builder-overview-count">0</p>
+            </article>
+            <article class="builder-card builder-overview-card">
+              <p class="builder-overview-label">Uncategorized components</p>
+              <p id="homeUncategorizedComponentsCount" class="builder-overview-count">0</p>
+            </article>
+            <article class="builder-card builder-overview-card">
+              <p class="builder-overview-label">Dishes needing review</p>
+              <p id="homeDishesNeedCategoryCount" class="builder-overview-count">0</p>
+            </article>
+            <article class="builder-card builder-overview-card">
+              <p class="builder-overview-label">Draft menus</p>
+              <p id="homeMenusCount" class="builder-overview-count">0</p>
+            </article>
+          </div>
+        </section>
+
+        <div class="hidden" aria-hidden="true">
+          <span id="importsInboxPendingBadge">Imports (0)</span>
+          <button id="openImportsViewBtn" class="builder-button-secondary" type="button">Open import inbox</button>
         </div>
 
-        <div id="workspaceOverviewCards" class="builder-overview-cards">
-          <article class="builder-overview-card" aria-label="Components overview">
-            <p class="builder-overview-label">Components</p>
-            <p id="overviewComponentsCount" class="builder-overview-count">0</p>
-            <button id="openComponentsViewBtn" type="button">Open</button>
-          </article>
-
-          <article class="builder-overview-card" aria-label="Dishes overview">
-            <p class="builder-overview-label">Dishes</p>
-            <p id="overviewDishesCount" class="builder-overview-count">0</p>
-            <button id="openDishesViewBtn" type="button">Open</button>
-          </article>
-
-          <article class="builder-overview-card" aria-label="Menus overview">
-            <p class="builder-overview-label">Menus</p>
-            <p id="overviewMenusCount" class="builder-overview-count">0</p>
-            <button id="openMenusViewBtn" type="button">Open</button>
-          </article>
-
-          <article class="builder-overview-card" aria-label="Imports overview">
-            <p class="builder-overview-label">Imports</p>
-            <p id="overviewImportsCount" class="builder-overview-count">0</p>
-            <button id="openImportsViewBtn" type="button">Open</button>
-          </article>
+        <div class="hidden" aria-hidden="true">
+          <span id="overviewComponentsCount">0</span>
+          <span id="overviewDishesCount">0</span>
+          <span id="overviewMenusCount">0</span>
+          <span id="overviewImportsCount">0</span>
+          <span id="overviewComponentsCountInline">0</span>
+          <span id="overviewDishesCountInline">0</span>
         </div>
       </section>
 
       <section id="componentsSection" class="builder-library-primary hidden" aria-label="Library">
         <div class="builder-primary-header" aria-label="Component workspace">
           <div>
-            <p class="builder-workspace-eyebrow">Primary</p>
             <h2>Components</h2>
-            <p class="builder-primary-copy">Build reusable kitchen blocks once, then use them in every dish.</p>
           </div>
           <div class="builder-primary-actions">
-            <button id="openComponentCreateModalBtn" class="builder-primary-cta" type="button">Create component</button>
-            <button id="openImportLibraryModalBtn" class="builder-secondary-action" type="button">Import menu / recipes</button>
+            <button id="componentsBackHomeBtn" class="builder-button-ghost builder-secondary-action" type="button">Back to Home</button>
+            <button id="openComponentCreateModalBtn" class="builder-button-primary builder-primary-cta" type="button">Create component</button>
+            <button id="openImportLibraryModalBtn" class="builder-button-secondary builder-secondary-action" type="button">Import menu / recipes</button>
           </div>
         </div>
 
         <div class="builder-library-columns">
-          <section class="builder-library-block builder-library-block-components">
-            <div class="workspace-panel-meta" id="workspaceComponentsMeta">Loading components...</div>
+          <section class="builder-library-block builder-library-block-components builder-components-workspace">
+            <aside class="builder-components-filters" aria-label="Component categories">
+              <p class="builder-components-filter-title">Library categories</p>
+              <nav id="libraryComponentsCategoryNav" class="builder-components-category-nav" aria-label="Component category filters"></nav>
+            </aside>
+            <div class="builder-components-grid-surface">
+              <h3>Component library</h3>
+              <div class="workspace-panel-meta" id="workspaceComponentsMeta">Loading components...</div>
+              <div class="builder-library-search-row">
+                <input id="libraryComponentsSearch" type="search" placeholder="Search components…" autocomplete="off">
+                <select id="libraryComponentsCategoryFilter" aria-label="Tag filter">
+                  <option value="all">Alla taggar</option>
+                </select>
+              </div>
+              <div id="libraryComponentsGrid" class="component-library-grid"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="dishesSection" class="builder-library-primary hidden" aria-label="Dishes library">
+        <div class="builder-primary-header" aria-label="Dishes workspace">
+          <div>
+            <h2>Dishes</h2>
+          </div>
+          <div class="builder-primary-actions">
+            <button id="dishesBackHomeBtn" class="builder-button-ghost builder-secondary-action" type="button">Back to Home</button>
+            <button id="openNewDishFromDishesViewBtn" class="builder-button-primary builder-primary-cta" type="button">Create dish</button>
+          </div>
+        </div>
+
+        <div class="builder-library-columns">
+          <section class="builder-library-block builder-library-block-dishes">
+            <div class="workspace-panel-meta" id="workspaceDishesMeta">Loading dishes...</div>
             <div class="builder-library-search-row">
-              <input id="libraryComponentsSearch" type="search" placeholder="Search components…" autocomplete="off">
-              <select id="libraryComponentsScope" aria-label="Component view scope">
-                <option value="recent">Recently added</option>
-                <option value="all">All</option>
-                <option value="unused">Unused only</option>
+              <input id="libraryDishesSearch" type="search" placeholder="Search dishes…" autocomplete="off">
+              <select id="libraryDishesScope" aria-label="Dishes view scope">
+                <option value="all" selected>All</option>
+                <option value="needs_component_categories">Needs component categories</option>
+                <option value="has_main_component">Has main component</option>
               </select>
             </div>
-            <div id="libraryComponentsGrid" class="component-library-grid"></div>
+            <div id="libraryCompositionsGrid" class="composition-library-grid"></div>
           </section>
         </div>
       </section>
     </main>
 
-    <aside class="builder-platform-secondary" aria-label="Secondary Builder entry">
-      <nav class="builder-sidebar-nav" aria-label="Builder sections">
-        <button id="navComponentsBtn" type="button">Components</button>
-        <button id="navDishesBtn" type="button">Dishes</button>
-        <a id="navMenusLink" href="/menu-builder-v1">Menus</a>
-        <button id="navImportsBtn" type="button">Imports <span id="importsSidebarBadge">(0)</span></button>
-      </nav>
-
-      <button id="openDishesLibraryModalBtn" class="builder-dishes-entry" type="button">
-        <span class="builder-dishes-entry-kicker">Secondary</span>
-        <span class="builder-dishes-entry-title">Dishes</span>
-        <span class="builder-dishes-entry-copy">Combine components into dishes.</span>
-      </button>
-
-      <section id="builderMenusEntry" class="builder-menus-entry" aria-label="Menus">
-        <p class="builder-dishes-entry-kicker">Menus</p>
-        <h3 class="builder-menus-entry-title">Create, open, and print menus</h3>
-        <p class="builder-menus-entry-copy">Use Menu Builder to create/open menus, then open output to view and print.</p>
-        <div class="builder-menus-entry-actions">
-          <a id="builderMenusOpenLink" class="workspace-menu-link" href="/menu-builder-v1">Open Menu Builder</a>
-          <a id="builderMenusOutputLink" class="workspace-menu-link" href="/menu-output-v1">View/Print Menu</a>
-        </div>
-      </section>
-
-      <section id="builderImportsInboxSection" class="builder-menus-entry" aria-label="Imports inbox">
-        <p class="builder-dishes-entry-kicker">Imports and review</p>
-        <h3 id="importsInboxPendingBadge" class="builder-menus-entry-title">Imports (0)</h3>
-        <p class="builder-menus-entry-copy">New imports waiting for review and publish.</p>
-        <div class="builder-menus-entry-actions">
-          <button id="openImportInboxBtn" type="button">Open Import Inbox</button>
-        </div>
-      </section>
-    </aside>
   </div>
 
   <div id="libraryOut" class="workspace-feedback workspace-feedback-page" aria-live="polite"></div>
@@ -165,16 +210,11 @@
           <p class="workspace-modal-kicker">Dish library</p>
           <h3>Dishes</h3>
         </div>
-        <div class="workspace-inline-actions">
-          <button id="openNewDishModalBtn" type="button">New dish</button>
-          <a class="workspace-menu-link" href="/menu-builder-v1">Menus</a>
-          <a class="workspace-menu-link" href="/menu-output-v1">Output</a>
-          <button id="dishesLibraryModalClose" type="button">Done</button>
-        </div>
+        <button id="dishesLibraryModalClose" type="button">Done</button>
       </div>
 
-      <div class="workspace-panel-meta" id="workspaceDishesMeta">Loading dishes...</div>
-      <div id="libraryCompositionsGrid" class="composition-library-grid"></div>
+      <div class="workspace-panel-meta" id="workspaceDishesMetaModal">Loading dishes...</div>
+      <div id="libraryDishesModalGrid" class="composition-library-grid"></div>
     </div>
   </div>
 
@@ -182,14 +222,14 @@
     <div class="modal-content modal-content-import">
       <div class="workspace-modal-header">
         <div>
-          <p class="workspace-modal-kicker">Library import</p>
-          <h3>Import</h3>
+          <p class="workspace-modal-kicker">Import</p>
+          <h3>Import menu / recipes</h3>
         </div>
         <button id="importLibraryModalClose" type="button">Done</button>
       </div>
 
       <section class="workspace-quick-card workspace-quick-card-import">
-        <label>Import type
+        <label>Context
           <select id="importContextType">
             <option value="menu" selected>Menu (weekly menus, structured)</option>
             <option value="dish_list">Dish list</option>
@@ -198,58 +238,46 @@
           </select>
         </label>
         <label>Paste lines
-          <textarea id="importLibraryLines" placeholder="One dish per line"></textarea>
+          <textarea id="importRawInput" rows="8" placeholder="Paste lines from menu, component, or recipe source"></textarea>
         </label>
         <div class="workspace-inline-actions">
-          <button id="btnImportLibraryPreview" type="button">Preview pasted lines</button>
-          <button id="btnImportLibrary" type="button">Import selected pasted lines</button>
+          <button id="btnImportLibraryPreview" type="button">Preview suggestions</button>
+          <button id="btnImportLibrary" type="button">Import reviewed rows</button>
+          <button id="btnImportOpenInbox" type="button">Open import inbox</button>
         </div>
 
         <div class="workspace-file-import">
           <label>Import file (.txt, .csv, .xlsx, .docx)
-            <input id="importLibraryFile" type="file" accept=".txt,.csv,.xlsx,.docx">
+            <input id="importFileInput" type="file" accept=".txt,.csv,.xlsx,.docx">
           </label>
           <label>CSV column
             <input id="importCsvColumn" type="text" placeholder="Dish, Name, or column letter">
           </label>
-          <div class="workspace-inline-actions workspace-import-preview-actions">
+          <div class="workspace-inline-actions">
             <button id="btnImportFilePreview" type="button">Preview file</button>
             <button id="btnImportFileConfirm" type="button" disabled>Publish selected review rows</button>
           </div>
           <p id="importFileStatus" class="workspace-import-status"></p>
           <div id="importAutoSummary" class="workspace-quick-card workspace-import-summary-card">
             <h4>Import summary</h4>
-            <p id="importAutoSummaryCounts">Dishes found: 0 | Components suggested: 0 | Ignored: 0 | Needs review: 0</p>
+            <p id="importAutoSummaryCounts" class="workspace-library-hint">No summary yet.</p>
             <div class="workspace-inline-actions">
-              <button id="btnImportAutoPublish" type="button" disabled>Publish selected</button>
-              <button id="btnImportAutoReviewDetails" type="button">Review details</button>
+              <button id="btnClearImportSummary" type="button">Clear summary</button>
             </div>
           </div>
           <div class="workspace-import-preview-meta">
             <p id="importFileSelectionSummary">Selected 0 of 0 review rows (showing 0)</p>
-            <p id="importFileIgnoredSummary">Ignored noise: 0</p>
           </div>
           <div class="workspace-inline-actions workspace-import-preview-actions">
             <button id="btnImportPreviewSelectAll" type="button">Accept all valid</button>
-            <button id="btnImportPreviewSelectNone" type="button">Ignore obvious noise</button>
+            <button id="btnImportPreviewSelectNone" type="button">Select none</button>
             <button id="btnImportPreviewShowMore" type="button">Show more importable lines</button>
-            <button id="btnImportPreviewToggleIgnored" type="button">Show ignored lines</button>
+            <button id="btnImportPreviewToggleIgnored" type="button">Show ignored</button>
           </div>
           <div id="importFilePreviewList" class="workspace-import-preview-cards"></div>
-          <ul id="importFileIgnoredList" class="workspace-import-ignored-list hidden"></ul>
         </div>
 
         <div id="importOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
-      </section>
-
-      <section class="workspace-quick-card workspace-import-summary-card">
-        <h4>Import summary</h4>
-        <div class="workspace-inline-actions">
-          <button id="btnClearImportSummary" type="button">Clear latest summary</button>
-        </div>
-        <div id="recentImportGroups" class="import-grouped-summary"></div>
-        <div id="importReviewNotice" class="import-review-notice hidden" aria-live="polite"></div>
-        <div id="importSummaryView"></div>
       </section>
     </div>
   </div>
@@ -313,6 +341,125 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div id="componentDetailEditorModal" class="modal hidden">
+    <div class="modal-content modal-content-component-detail">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Komponentdetaljer</p>
+          <h3 id="componentDetailEditorTitle">Komponenteditor</h3>
+        </div>
+        <div class="workspace-inline-actions">
+          <button id="componentDetailSaveChanges" type="button">Spara ändringar</button>
+          <button id="componentDetailEditorClose" type="button">Tillbaka till Komponenter</button>
+        </div>
+      </div>
+
+      <div class="builder-component-detail-tabs" id="componentDetailTabs" role="tablist" aria-label="Komponentdetaljer sektioner">
+        <button id="componentDetailTabOverview" type="button" class="builder-chip is-active" data-component-tab="overview" role="tab" aria-selected="true">Översikt</button>
+        <button id="componentDetailTabRecipe" type="button" class="builder-chip" data-component-tab="recipe" role="tab" aria-selected="false">📖 Recept &amp; metod</button>
+        <button id="componentDetailTabCalculation" type="button" class="builder-chip" data-component-tab="calculation" role="tab" aria-selected="false">💰 Kalkyl</button>
+        <button id="componentDetailTabAllergens" type="button" class="builder-chip" data-component-tab="allergens" role="tab" aria-selected="false">🌾 Allergener/kostinfo</button>
+      </div>
+
+      <section id="componentDetailPanelOverview" class="workspace-modal-section-card" data-component-panel="overview">
+        <p class="modal-section-title">Översikt</p>
+        <label>Komponentnamn
+          <input id="componentDetailOverviewName" type="text" placeholder="Ange komponentnamn">
+        </label>
+        <div class="workspace-inline-actions">
+          <button id="componentDetailOverviewClean" type="button">Rensa namn</button>
+        </div>
+        <label>Kategori
+          <select id="componentDetailOverviewCategory">
+            <option value="main">Huvudkomponent</option>
+            <option value="side">Tillbehör</option>
+            <option value="sauce">Sås</option>
+            <option value="dessert">Dessert</option>
+            <option value="ovrigt">Övrigt</option>
+          </select>
+        </label>
+        <label>Taggar
+          <input id="componentDetailOverviewTags" type="text" placeholder="fisk, kyckling, husmanskost">
+        </label>
+        <label>Beskrivning / längre namn
+          <textarea id="componentDetailOverviewLongDescription" placeholder="Beskrivning för kök och planering"></textarea>
+        </label>
+        <div class="workspace-inline-actions">
+          <button id="componentDetailOverviewDelete" type="button" class="library-danger-action">Ta bort komponent</button>
+        </div>
+        <p id="componentDetailOverviewMeta" class="workspace-library-hint">Komponent-ID: -</p>
+      </section>
+
+      <section id="componentDetailPanelRecipe" class="workspace-modal-section-card hidden" data-component-panel="recipe">
+        <p class="modal-section-title">📖 Recept &amp; metod</p>
+        <div class="builder-component-grid-head builder-component-grid-head-recipe" aria-hidden="true">
+          <span>Ingrediens</span>
+          <span>Mängd</span>
+          <span>Enhet</span>
+          <span></span>
+        </div>
+        <div id="componentDetailRecipeIngredientRows" class="builder-component-recipe-rows"></div>
+        <div class="workspace-inline-actions">
+          <button id="componentDetailRecipeAddRow" type="button">Lägg till ingrediens</button>
+        </div>
+        <textarea id="componentDetailRecipeIngredients" class="hidden" aria-hidden="true"></textarea>
+        <label>Metod
+          <textarea id="componentDetailMethodText" placeholder="Beskriv arbetsgång och tillagning"></textarea>
+        </label>
+        <label>Köksanteckning
+          <textarea id="componentDetailMethodNotes" placeholder="Anteckningar för köket"></textarea>
+        </label>
+      </section>
+
+      <section id="componentDetailPanelCalculation" class="workspace-modal-section-card hidden" data-component-panel="calculation">
+        <p class="modal-section-title">💰 Kalkyl</p>
+        <div class="builder-component-grid-head builder-component-grid-head-calc" aria-hidden="true">
+          <span>Ingrediens</span>
+          <span>Mängd</span>
+          <span>Enhet</span>
+          <span>Pris</span>
+          <span>Prisenhet</span>
+          <span>Kostnad</span>
+        </div>
+        <div id="componentDetailCalculationRows" class="builder-component-calc-rows"></div>
+        <div class="workspace-inline-actions">
+          <button id="componentDetailCalcSyncRows" type="button" class="builder-button-ghost">Synka från recept</button>
+        </div>
+        <label>Total portionskostnad
+          <input id="componentDetailCalcCost" type="text" placeholder="0.00" readonly>
+        </label>
+        <label>Kalkylanteckning
+          <textarea id="componentDetailCalcNotes" placeholder="Antaganden för portionskostnad"></textarea>
+        </label>
+      </section>
+
+      <section id="componentDetailPanelAllergens" class="workspace-modal-section-card hidden" data-component-panel="allergens">
+        <p class="modal-section-title">🌾 Allergener/kostinfo</p>
+        <div class="builder-component-allergen-grid">
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="gluten_cereals"> Glutenhaltiga spannmål</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="crustaceans"> Kräftdjur</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="eggs"> Ägg</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="fish"> Fisk</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="peanuts"> Jordnötter</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="soybeans"> Sojabönor</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="milk_lactose"> Mjölk/laktos</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="nuts"> Nötter</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="celery"> Selleri</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="mustard"> Senap</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="sesame"> Sesamfrön</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="sulphur_dioxide_sulphites"> Svaveldioxid och sulfiter</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="lupin"> Lupin</label>
+          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="molluscs"> Blötdjur</label>
+        </div>
+        <label>Allergi-/kostanteckning
+          <textarea id="componentDetailAllergenNotes" placeholder="Noteringar om allergi och kost"></textarea>
+        </label>
+      </section>
+
+      <div id="componentDetailOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
     </div>
   </div>
 
@@ -389,138 +536,6 @@
     </div>
   </div>
 
-  <div id="componentDetailModal" class="modal hidden">
-    <div class="modal-content modal-content-component-detail">
-      <div class="workspace-modal-header">
-        <div>
-          <p class="workspace-modal-kicker">Component detail</p>
-          <h3 id="componentDetailModalTitle">Component detail</h3>
-        </div>
-        <button id="componentDetailModalClose" type="button">Done</button>
-      </div>
-      <p id="componentDetailComponentTitle" class="workspace-modal-titleline">Component: not selected</p>
-      <p id="recipePrimaryStatus" class="recipe-primary-status"></p>
-
-      <div class="workspace-modal-body workspace-modal-body-recipes">
-        <div class="workspace-modal-column workspace-modal-column-primary">
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Composition text preview</p>
-            <p id="componentDetailTextPreviewHint" class="component-detail-preview-hint">Read-only text rendered from persisted composition structure.</p>
-            <pre id="componentDetailTextPreview">No composition selected</pre>
-          </div>
-
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Recipes for component</p>
-            <ul id="recipeList" class="recipe-list"></ul>
-          </div>
-
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Create recipe</p>
-            <label>Recipe name
-              <input id="recipeCreateName" type="text" placeholder="Base recipe">
-            </label>
-            <label>Yield portions
-              <input id="recipeCreateYieldPortions" type="number" min="1" step="1" placeholder="20">
-            </label>
-            <label>Visibility
-              <input id="recipeCreateVisibility" type="text" placeholder="private, site, tenant" value="private">
-            </label>
-            <label>Notes (optional)
-              <input id="recipeCreateNotes" type="text" placeholder="Optional note">
-            </label>
-            <button id="btnRecipeCreate" type="button">Create recipe</button>
-          </div>
-        </div>
-
-        <div class="workspace-modal-column workspace-modal-column-secondary">
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Selected recipe</p>
-            <p id="recipeSelectedSummary">No recipe selected</p>
-            <div class="workspace-inline-actions">
-              <button id="btnRecipeSetPrimary" type="button" disabled>Set as primary</button>
-              <button id="btnRecipeDelete" type="button" disabled>Delete recipe</button>
-            </div>
-          </div>
-
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Edit recipe metadata</p>
-            <label>Recipe name
-              <input id="recipeEditName" type="text" placeholder="Base recipe" disabled>
-            </label>
-            <label>Yield portions
-              <input id="recipeEditYieldPortions" type="number" min="1" step="1" placeholder="20" disabled>
-            </label>
-            <label>Visibility
-              <input id="recipeEditVisibility" type="text" placeholder="private, site, tenant" disabled>
-            </label>
-            <label>Notes (optional)
-              <input id="recipeEditNotes" type="text" placeholder="Optional note" disabled>
-            </label>
-            <button id="btnRecipeSaveMetadata" type="button" disabled>Save recipe metadata</button>
-          </div>
-
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Ingredients</p>
-            <ul id="recipeIngredientsList" class="recipe-ingredient-list"></ul>
-          </div>
-
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Declaration preview</p>
-            <p id="componentDeclarationStatus" class="declaration-preview-status">Read-only preview. No automation applied.</p>
-            <p id="componentDeclarationDisabled" class="declaration-preview-disabled hidden">Declaration preview is currently unavailable.</p>
-            <p id="componentDeclarationSignalsSummary" class="declaration-preview-summary">No declaration signals loaded.</p>
-            <ul id="componentDeclarationSignals" class="declaration-preview-signals"></ul>
-            <p class="declaration-preview-provenance-title">Potential diet conflicts</p>
-            <ul id="componentConflictList" class="declaration-preview-conflicts"></ul>
-            <p class="declaration-preview-provenance-title">Ingredient provenance</p>
-            <ul id="componentDeclarationProvenance" class="declaration-preview-provenance"></ul>
-            <ul id="componentDeclarationWarnings" class="declaration-preview-warnings"></ul>
-          </div>
-
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Scaling preview</p>
-            <label>Target portions
-              <input id="recipeScalingTargetPortions" type="number" min="1" step="1" placeholder="Enter target portions" disabled>
-            </label>
-            <button id="btnRecipeScalingPreview" type="button" disabled>Preview scaled recipe</button>
-            <p id="recipeScalingStatus" class="recipe-scaling-status"></p>
-            <p id="recipeScalingSummary" class="recipe-scaling-summary">Select a recipe to preview scaling.</p>
-            <ul id="recipeScalingRows" class="recipe-scaling-list"></ul>
-          </div>
-
-          <div class="workspace-modal-section-card">
-            <p class="modal-section-title">Add ingredient</p>
-            <label>Ingredient name
-              <input id="recipeIngredientName" type="text" placeholder="Potato">
-            </label>
-            <label>Amount value
-              <input id="recipeIngredientAmountValue" type="number" step="0.01" min="0.0001" placeholder="900">
-            </label>
-            <label>Amount unit
-              <input id="recipeIngredientAmountUnit" list="recipeUnitSuggestions" type="text" placeholder="g">
-              <datalist id="recipeUnitSuggestions">
-                <option value="g"></option>
-                <option value="kg"></option>
-                <option value="ml"></option>
-                <option value="dl"></option>
-                <option value="l"></option>
-                <option value="st"></option>
-                <option value="tsk"></option>
-                <option value="msk"></option>
-              </datalist>
-            </label>
-            <label>Note (optional)
-              <input id="recipeIngredientNote" type="text" placeholder="Optional note">
-            </label>
-            <button id="btnRecipeIngredientAdd" type="button" disabled>Add ingredient</button>
-          </div>
-
-          <div id="recipeOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script src="/static/js/builder.js"></script>
+  <script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>
 </body>
 </html>

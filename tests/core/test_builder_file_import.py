@@ -10,6 +10,8 @@ from werkzeug.datastructures import FileStorage
 from core.builder.file_import import (
     classify_builder_import_lines,
     parse_builder_import_file,
+    suggest_component_category,
+    suggest_component_tags,
     suggest_components_from_import_dish_name,
 )
 
@@ -287,3 +289,51 @@ def test_component_decomposition_handles_serveras_med_and_och() -> None:
     assert components == ["Fisk", "Kokt potatis", "Sås"]
     assert all(name.lower() != "serveras" for name in components)
     assert all(name.lower() != "serveras med" for name in components)
+
+
+def test_component_decomposition_ignores_descriptive_phrase_only_fragment() -> None:
+    components = suggest_components_from_import_dish_name("Kycklinggryta med smak av dragon")
+
+    assert components == ["Kycklinggryta"]
+    assert all("smak av" not in name.lower() for name in components)
+
+
+def test_suggest_component_category_rules_are_lightweight() -> None:
+    assert suggest_component_category("Köttfärssås") == "sauce"
+    assert suggest_component_category("Senapssås") == "sauce"
+    assert suggest_component_category("Vitvinssås") == "sauce"
+    assert suggest_component_category("Äppelcidersås") == "sauce"
+    assert suggest_component_category("Gräddsås") == "sauce"
+    assert suggest_component_category("Gurkmajonnäs") == "sauce"
+    assert suggest_component_category("Hallonsås") == "sauce"
+    assert suggest_component_category("Kokt potatis") == "side"
+    assert suggest_component_category("Potatisgratäng") == "side"
+    assert suggest_component_category("Potatismos") == "side"
+    assert suggest_component_category("Rotmos") == "side"
+    assert suggest_component_category("Stuvad potatis") == "side"
+    assert suggest_component_category("Kycklingfilé") == "main"
+    assert suggest_component_category("Laxfilé") == "main"
+    assert suggest_component_category("Stekt fläsk") == "main"
+    assert suggest_component_category("Omelett") == "main"
+    assert suggest_component_category("Kycklinggryta") == "main"
+    assert suggest_component_category("Fläskbog") == "main"
+    assert suggest_component_category("Isterband") == "main"
+    assert suggest_component_category("Rödbetor") == "side"
+    assert suggest_component_category("Salt gurka") == "side"
+    assert suggest_component_category("Majonnäs") == "sauce"
+    assert suggest_component_category("Pannacotta") == "dessert"
+    assert suggest_component_category("Vaniljvisp") == "dessert"
+    assert suggest_component_category("Tosca persikor") == "dessert"
+    assert suggest_component_category("Chokladmousse") == "dessert"
+    assert suggest_component_category("Björnbärskräm") == "dessert"
+    assert suggest_component_category("Chokladkaka") == "dessert"
+    assert suggest_component_category("Fiskpudding") == "main"
+    assert suggest_component_category("Vatten") == "ovrigt"
+
+
+def test_suggest_component_tags_returns_keyword_matches() -> None:
+    assert suggest_component_tags("Lax med kokt potatis") == ["fisk"]
+    assert suggest_component_tags("Kycklinggryta") == ["kyckling"]
+    assert suggest_component_tags("Vegetarisk soppa") == ["vegetariskt"]
+    assert suggest_component_tags("Nötkött i sås") == ["kott", "sas"]
+    assert suggest_component_tags("Potatissallad") == []

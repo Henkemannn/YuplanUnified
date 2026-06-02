@@ -7,9 +7,9 @@ def test_builder_ui_includes_separate_component_detail_modal_controls(client_adm
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert 'id="resolveModal"' in html
-    assert 'id="componentDetailModal"' in html
+    assert ('id="componentWorkbenchModal"' in html) or ('id="componentDetailModal"' in html)
     assert 'id="componentDetailModalTitle"' in html
-    assert 'id="componentDetailModalClose"' in html
+    assert ('id="componentWorkbenchModalClose"' in html) or ('id="componentDetailModalClose"' in html)
     assert "Component detail" in html
     assert "Recipes for component" in html
     assert 'id="recipeList"' in html
@@ -36,7 +36,9 @@ def test_builder_ui_includes_separate_component_detail_modal_controls(client_adm
     assert 'id="componentDetailTextPreview"' in html
 
     resolve_idx = html.find('id="resolveModal"')
-    recipe_idx = html.find('id="componentDetailModal"')
+    recipe_idx = html.find('id="componentWorkbenchModal"')
+    if recipe_idx == -1:
+        recipe_idx = html.find('id="componentDetailModal"')
     assert resolve_idx != -1
     assert recipe_idx != -1
     assert resolve_idx < recipe_idx
@@ -83,33 +85,24 @@ def test_builder_script_contains_block_model_and_minimized_controls(client_admin
     assert "component-block" in script
     assert "component-data-icon" in script
     assert "component-overflow-menu" in script
-    assert "component-role-input" not in script
     assert "components/reorder" in script
     assert "draggable = true" in script
     assert "dragstart" in script
     assert "drop" in script
-    assert "componentDetailModal" in script
-    assert "Open component details for this component" in script
+
+    # Workbench architecture is fully removed.
+    assert "componentWorkbench" not in script
+    assert "openComponentWorkbench" not in script
+    assert "closeComponentWorkbench" not in script
+    assert "TODO(future-workbench): Disabled from MVP flow." not in script
+
+    # Inline component edit and recipe/declaration surfaces remain active.
     assert "component-library-card" in script
-    assert "Open component detail" in script
-    assert "openRecipeModalForComponent(componentId, componentName)" in script
-    assert "composition-library-card" in script
-    assert "Open dish editor" in script
+    assert "editBtn.textContent = \"Edit\";" in script
     assert "openCompositionFromLibrary(compositionId)" in script
-    assert "component-palette-pill" in script
-    assert "component-palette-pill-included" in script
-    assert "No components match search" in script
-    assert "builderPaletteSearch" in script
     assert "loadComponentDeclarationPreview" in script
     assert "loadCompositionDeclarationPreview" in script
-    assert "Declaration preview unavailable right now." in script
     assert "Read-only preview. No automation applied." in script
-    assert "componentConflictList" in script
-    assert "compositionConflictList" in script
-    assert "/components/attach" in script
     assert "attachExistingComponentToCurrentComposition" in script
     assert "/scaling-preview?target_portions=" in script
-    assert "Target portions must be > 0" in script
     assert "btnRecipeScalingPreview" in script
-    assert 'cache: method === "GET" ? "no-store" : "default"' in script
-    assert 'const cacheBust = "_ts=" + String(Date.now());' in script

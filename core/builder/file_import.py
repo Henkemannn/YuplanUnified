@@ -160,6 +160,11 @@ _SERVING_WORD_RE = re.compile(r"\bserveras\b", flags=re.IGNORECASE)
 _COMPONENT_NOISE_RE = re.compile(r"^(?:serveras(?:\s+med)?|served\s+with|with|med)$", flags=re.IGNORECASE)
 _LEADING_COMPONENT_FILLER_RE = re.compile(r"^(?:serveras(?:\s+med)?|served\s+with|with|med)\b\s*", flags=re.IGNORECASE)
 _TRAILING_COMPONENT_FILLER_RE = re.compile(r"\s*\b(?:serveras(?:\s+med)?|served\s+with|with|med)\b$", flags=re.IGNORECASE)
+_DESCRIPTIVE_COMPONENT_FRAGMENT_RE = re.compile(
+    r"^(?:med\s+smak\s+av|smak\s+av|med\s+inslag\s+av|inslag\s+av|smaksatt(?:\s+med)?)\b",
+    flags=re.IGNORECASE,
+)
+DEFAULT_COMPONENT_CATEGORIES = ("main", "side", "sauce", "dessert")
 
 
 @dataclass(frozen=True)
@@ -525,6 +530,8 @@ def suggest_components_from_import_dish_name(name: str) -> list[str]:
             continue
         if _COMPONENT_NOISE_RE.fullmatch(candidate):
             continue
+        if _DESCRIPTIVE_COMPONENT_FRAGMENT_RE.match(candidate):
+            continue
         label = candidate[:1].upper() + candidate[1:]
         if label and label not in suggestions:
             suggestions.append(label)
@@ -534,21 +541,99 @@ def suggest_components_from_import_dish_name(name: str) -> list[str]:
 def suggest_component_category(name: str) -> str:
     value = _fold_ascii(sanitize_builder_import_text(name))
     if not value:
-        return "Other"
+        return "ovrigt"
 
-    rules = [
-        ("Fish", ["fisk", "fish", "lax", "torsk", "sej", "sill", "tonfisk"]),
-        ("Poultry", ["kyck", "chicken", "kalkon", "turkey", "anka", "duck"]),
-        ("Meat", ["kott", "beef", "flask", "pork", "lamm", "veal", "korv", "meat"]),
-        ("Vegetable", ["broccoli", "morot", "carrot", "gronsak", "vegetable", "spenat", "kikart", "linser"]),
-        ("Sauce", ["sas", "sauce", "gravy", "dressing", "dip", "pesto"]),
-        ("Side", ["potatis", "potato", "ris", "rice", "pasta", "bulgur", "couscous"]),
-        ("Dessert", ["dessert", "kaka", "cake", "glass", "pudding", "choklad", "fruit"]),
+    # Keep fish pudding in main unless a stronger sauce/side/dessert rule matches first.
+    if "fiskpudding" in value:
+        return "main"
+
+    sauce_keywords = [
+        "sas",
+        "majonnas",
+        "dressing",
+        "sky",
+        "vinaigrette",
+        "graddsas",
     ]
-    for category, keywords in rules:
+    if value.endswith("sas") or any(keyword in value for keyword in sauce_keywords):
+        return "sauce"
+
+    side_keywords = [
+        "potatis",
+        "mos",
+        "gratang",
+        "ris",
+        "pasta",
+        "rotmos",
+        "rodbetor",
+        "gurka",
+        "sallad",
+        "stuvning",
+    ]
+    if any(keyword in value for keyword in side_keywords):
+        return "side"
+
+    dessert_keywords = [
+        "pannacotta",
+        "kaka",
+        "paj",
+        "mousse",
+        "kram",
+        "visp",
+        "dessert",
+        "tosca persikor",
+        "persikor",
+    ]
+    if any(keyword in value for keyword in dessert_keywords):
+        return "dessert"
+
+    main_keywords = [
+        "kyck",
+        "flask",
+        "kott",
+        "fars",
+        "isterband",
+        "korv",
+        "omelett",
+        "fisk",
+        "lax",
+        "torsk",
+        "sej",
+        "sill",
+        "tonfisk",
+        "beef",
+        "pork",
+        "chicken",
+        "meat",
+    ]
+    if any(keyword in value for keyword in main_keywords):
+        return "main"
+    return "ovrigt"
+
+
+def suggest_component_tags(name: str) -> list[str]:
+    value = _fold_ascii(sanitize_builder_import_text(name))
+    if not value:
+        return []
+
+    ordered_rules = [
+        ("fisk", ["fisk", "fish", "lax", "torsk", "sej", "sill", "tonfisk"]),
+        ("kott", ["kott", "beef", "flask", "pork", "lamm", "veal", "isterband", "korv", "meat"]),
+        ("kyckling", ["kyck", "chicken", "kalkon", "turkey", "anka", "duck"]),
+        ("fars", ["fars", "mince"]),
+        ("vegetariskt", ["vegetar", "veg", "tofu", "lins", "bon", "quorn", "halloumi", "falafel"]),
+        ("italienskt", ["pasta", "lasagne", "risotto", "parmesan", "tomat", "bologn"]),
+        ("asiatiskt", ["nudel", "soja", "ingefara", "curry", "wok", "teriyaki"]),
+        ("husmanskost", ["husman", "kottbull", "pytt", "falukorv", "raggmunk", "kalops"]),
+        ("dessert", ["dessert", "kaka", "pannacotta", "mousse", "kram", "paj", "glass", "pudding"]),
+        ("sas", ["sas", "sauce", "dressing", "majonnas", "graddsas", "pesto"]),
+    ]
+
+    tags: list[str] = []
+    for tag, keywords in ordered_rules:
         if any(keyword in value for keyword in keywords):
-            return category
-    return "Other"
+            tags.append(tag)
+    return tags[:6]
 
 
 def _fold_ascii(value: str) -> str:
@@ -565,11 +650,13 @@ def _fold_ascii(value: str) -> str:
 
 
 __all__ = [
+    "DEFAULT_COMPONENT_CATEGORIES",
     "BuilderFileImportLine",
     "BuilderFileImportPreview",
     "classify_builder_import_lines",
     "parse_builder_import_file",
     "sanitize_builder_import_text",
     "suggest_component_category",
+    "suggest_component_tags",
     "suggest_components_from_import_dish_name",
 ]

@@ -47,12 +47,12 @@ function formatWorkspaceMessage(targetId, value) {
     return ok ? "Dish created." : "Could not create dish.";
   }
   if (id === "createComponentOut") {
+    if (payload && payload.message) {
+      return String(payload.message);
+    }
     return ok ? "Component created." : "Could not create component.";
   }
-  if (id === "builderOut") {
-    return ok ? "Saved." : "Could not save changes.";
-  }
-  if (id === "recipeOut") {
+  if (id === "builderOut" || id === "recipeOut") {
     return ok ? "Saved." : "Could not save changes.";
   }
   if (id === "libraryOut") {
@@ -62,23 +62,25 @@ function formatWorkspaceMessage(targetId, value) {
 }
 
 async function callApi(url, options) {
-  const method = String(options.method || "GET").toUpperCase();
+  const settings = options || {};
+  const method = String(settings.method || "GET").toUpperCase();
   let requestUrl = String(url || "");
+
   if (method === "GET") {
     const cacheBust = "_ts=" + String(Date.now());
     requestUrl += requestUrl.includes("?") ? "&" + cacheBust : "?" + cacheBust;
   }
 
-  const headers = Object.assign({}, options.headers || {});
-  let body = undefined;
+  const headers = Object.assign({}, settings.headers || {});
+  let body;
 
-  if (options.formData) {
-    body = options.formData;
+  if (settings.formData) {
+    body = settings.formData;
     if (headers["Content-Type"]) {
       delete headers["Content-Type"];
     }
-  } else if (Object.prototype.hasOwnProperty.call(options, "body")) {
-    body = JSON.stringify(options.body);
+  } else if (Object.prototype.hasOwnProperty.call(settings, "body")) {
+    body = JSON.stringify(settings.body);
     if (!headers["Content-Type"]) {
       headers["Content-Type"] = "application/json";
     }
@@ -109,13 +111,27 @@ const IMPORT_TYPE_COMPONENT_LIST = "component_list";
 const IMPORT_TYPE_RECIPE_TEXT = "recipe_text";
 const IMPORT_RESULT_ROW_LIMIT = 60;
 const COMPONENT_RENDER_LIMIT = 80;
+const COMPONENT_CATEGORY_OPTIONS = ["main", "side", "sauce", "dessert"];
+const COMPONENT_RAIL_CATEGORY_OPTIONS = ["main", "side", "sauce", "dessert", "ovrigt"];
+const COMPONENT_DEFAULT_LIBRARY_CATEGORIES = COMPONENT_RAIL_CATEGORY_OPTIONS;
 
 let _lastImportSession = null;
 let _cachedLibraryComponents = [];
 let _cachedLibraryCompositions = [];
 let _recentComponentIds = [];
-let _workspaceSurface = "overview";
+let _recentCompositionIds = [];
+let _workspaceSurface = "home";
 let _lastLibraryResult = null;
+let _componentCategoryFilter = "all";
+let _componentTagFilter = "all";
+let _componentInlineEditId = "";
+let _componentActionPopoverId = "";
+let _activeComponentDetailId = "";
+let _activeComponentDetailTab = "overview";
+let _componentDetailDirty = false;
+window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";
+console.log("Builder JS active: builder-modal-system-reset-1");
+
 const IMPORT_LEADING_LABEL_RE = /^([A-Za-zÅÄÖåäö\s]+):\s*/;
 const IMPORT_LEADING_LABEL_TOKENS = new Set([
   "dessert",
@@ -134,20 +150,48 @@ function selectedImportType() {
 }
 
 function setWorkspaceSurface(surface) {
-  const value = String(surface || "overview");
-  _workspaceSurface = value === "components" ? "components" : "overview";
+  const value = String(surface || "home").trim().toLowerCase();
+  if (value === "components" || value === "dishes") {
+    _workspaceSurface = value;
+  } else {
+    _workspaceSurface = "home";
+  }
 
   const overview = document.getElementById("workspaceOverviewSection");
   const components = document.getElementById("componentsSection");
+  const dishes = document.getElementById("dishesSection");
   if (overview) {
-    overview.classList.toggle("hidden", _workspaceSurface !== "overview");
+    overview.classList.toggle("hidden", _workspaceSurface !== "home");
   }
   if (components) {
     components.classList.toggle("hidden", _workspaceSurface !== "components");
   }
+  if (dishes) {
+    dishes.classList.toggle("hidden", _workspaceSurface !== "dishes");
+  }
 
-  if (_workspaceSurface === "components" && _lastLibraryResult) {
+  const navHomeBtn = document.getElementById("navHomeBtn");
+  const navComponentsBtn = document.getElementById("navComponentsBtn");
+  const navDishesBtn = document.getElementById("navDishesBtn");
+  if (navHomeBtn) {
+    navHomeBtn.classList.toggle("is-active", _workspaceSurface === "home");
+  }
+  if (navComponentsBtn) {
+    navComponentsBtn.classList.toggle("is-active", _workspaceSurface === "components");
+  }
+  if (navDishesBtn) {
+    navDishesBtn.classList.toggle("is-active", _workspaceSurface === "dishes");
+  }
+
+  if ((_workspaceSurface === "components" || _workspaceSurface === "dishes") && _lastLibraryResult) {
     renderLibrary(_lastLibraryResult);
+  }
+
+  if (_workspaceSurface !== "components") {
+    closeModalById("componentDetailEditorModal");
+    _activeComponentDetailId = "";
+    _componentActionPopoverId = "";
+    _componentInlineEditId = "";
   }
 }
 
@@ -159,20 +203,36 @@ function renderWorkspaceOverviewCounts(data) {
   const importsCount = Number(payload.importsCount || 0);
 
   const componentsEl = document.getElementById("overviewComponentsCount");
+  const componentsInlineEl = document.getElementById("overviewComponentsCountInline");
   const dishesEl = document.getElementById("overviewDishesCount");
+  const dishesInlineEl = document.getElementById("overviewDishesCountInline");
   const menusEl = document.getElementById("overviewMenusCount");
   const importsEl = document.getElementById("overviewImportsCount");
+  const homeImportsEl = document.getElementById("homePendingImportsCount");
+  const homeMenusEl = document.getElementById("homeMenusCount");
   if (componentsEl) {
     componentsEl.textContent = String(componentsCount);
   }
+  if (componentsInlineEl) {
+    componentsInlineEl.textContent = String(componentsCount);
+  }
   if (dishesEl) {
     dishesEl.textContent = String(dishesCount);
+  }
+  if (dishesInlineEl) {
+    dishesInlineEl.textContent = String(dishesCount);
   }
   if (menusEl) {
     menusEl.textContent = String(menusCount);
   }
   if (importsEl) {
     importsEl.textContent = String(importsCount);
+  }
+  if (homeImportsEl) {
+    homeImportsEl.textContent = String(importsCount);
+  }
+  if (homeMenusEl) {
+    homeMenusEl.textContent = String(menusCount);
   }
 }
 
@@ -1075,6 +1135,9 @@ function normalizeImportComponentName(value) {
   if (!text || /^(serveras|serveras med|served with|with|med)$/i.test(text)) {
     return "";
   }
+  if (/^(med\s+smak\s+av|smak\s+av|med\s+inslag\s+av|inslag\s+av|smaksatt(?:\s+med)?)/i.test(text)) {
+    return "";
+  }
   return text;
 }
 
@@ -1096,7 +1159,8 @@ function suggestReviewComponents(name) {
   if (!text) {
     return [];
   }
-  const parts = text.split(/\s+(?:med|och|m)\s+/i);
+  const splitSource = text.replace(/\b(serveras\s+med|served\s+with|with)\b/gi, " med ").replace(/\bserveras\b/gi, " ");
+  const parts = splitSource.split(/\s+(?:med|och|m)\s+/i);
   return normalizeImportComponentNames(parts);
 }
 
@@ -1782,70 +1846,1115 @@ async function loadAllCompositions() {
   return callApi("/api/builder/compositions", { method: "GET" });
 }
 
-function currentComponentScope() {
-  const scopeEl = document.getElementById("libraryComponentsScope");
+function currentComponentCategoryFilter() {
+  const value = String(_componentCategoryFilter || "").trim().toLowerCase();
+  return value || "all";
+}
+
+function currentComponentTagFilter() {
+  const value = String(_componentTagFilter || "").trim().toLowerCase();
+  return value || "all";
+}
+
+function currentDishesScope() {
+  const scopeEl = document.getElementById("libraryDishesScope");
   const value = scopeEl ? String(scopeEl.value || "") : "";
-  if (value === "all") {
-    return "all";
+  if (value === "needs_component_categories") {
+    return "needs_component_categories";
   }
-  if (value === "unused") {
-    return "unused";
+  if (value === "has_main_component") {
+    return "has_main_component";
   }
-  return "recent";
+  return "all";
+}
+
+function componentCategoryValue(item) {
+  return normalizeComponentUiCategoryKey((item && item.category) || "");
+}
+
+function componentCategoryLabel(category) {
+  const value = normalizeComponentUiCategoryKey(category);
+  if (value === "main") {
+    return "Huvudkomponent";
+  }
+  if (value === "side") {
+    return "Tillbehör";
+  }
+  if (value === "sauce") {
+    return "Sås";
+  }
+  if (value === "dessert") {
+    return "Dessert";
+  }
+  return "Övrigt";
+}
+
+function normalizeComponentUiCategoryKey(value) {
+  const folded = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[åä]/g, "a")
+    .replace(/ö/g, "o");
+  if (!folded) {
+    return "ovrigt";
+  }
+  if (folded === "main" || folded === "kott" || folded === "protein" || folded === "fish" || folded === "fisk" || folded === "vegetarian" || folded === "vegetarisk" || folded === "vegetariskt" || folded === "veg") {
+    return "main";
+  }
+  if (folded === "side" || folded === "tillbehor") {
+    return "side";
+  }
+  if (folded === "sauce" || folded === "sas") {
+    return "sauce";
+  }
+  if (folded === "dessert") {
+    return "dessert";
+  }
+  if (folded === "uncategorized" || folded === "unknown" || folded === "other" || folded === "ovrigt") {
+    return "ovrigt";
+  }
+  return "ovrigt";
+}
+
+function normalizeCategoryThemeValue(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[åä]/g, "a")
+    .replace(/ö/g, "o");
+}
+
+function resolveComponentCategoryThemeKey(item) {
+  const explicitColor = String((item && item.category_color) || "").trim().toLowerCase();
+  if (explicitColor) {
+    return explicitColor;
+  }
+
+  const category = normalizeCategoryThemeValue(componentCategoryValue(item));
+  if (!category) {
+    return "neutral";
+  }
+  if (category === "main" || category === "kott" || category === "protein") {
+    return "main";
+  }
+  if (category === "fish" || category === "fisk") {
+    return "fish";
+  }
+  if (category === "side" || category === "tillbehor" || category === "vegetariskt") {
+    return "side";
+  }
+  if (category === "sauce" || category === "sas") {
+    return "sauce";
+  }
+  if (category === "dessert") {
+    return "dessert";
+  }
+  return "neutral";
+}
+
+function categoryThemeColorHex(themeKey) {
+  const key = String(themeKey || "neutral").trim().toLowerCase();
+  if (key === "main") {
+    return "#d74959";
+  }
+  if (key === "fish") {
+    return "#2180c7";
+  }
+  if (key === "side") {
+    return "#2d9854";
+  }
+  if (key === "sauce") {
+    return "#bf8b12";
+  }
+  if (key === "dessert") {
+    return "#874dc9";
+  }
+  return "#7b8a9b";
+}
+
+function componentDetailSummary(item) {
+  const summary = (item && typeof item.detail_summary === "object" && item.detail_summary)
+    ? item.detail_summary
+    : null;
+  return {
+    has_method_data: Boolean(summary && summary.has_method_data === true),
+    has_calculation_data: Boolean(summary && summary.has_calculation_data === true),
+    has_allergen_data: Boolean(summary && summary.has_allergen_data === true),
+  };
+}
+
+function defaultRecipeIngredientRow() {
+  return {
+    ingredient_name: "",
+    amount_value: "",
+    amount_unit: "g",
+  };
+}
+
+function normalizeRecipeIngredientRows(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((row) => {
+      const base = defaultRecipeIngredientRow();
+      const source = row || {};
+      return {
+        ingredient_name: String(source.ingredient_name || base.ingredient_name),
+        amount_value: String(source.amount_value || base.amount_value),
+        amount_unit: String(source.amount_unit || base.amount_unit),
+      };
+    })
+    .filter((row) => {
+      return Boolean(String(row.ingredient_name || "").trim())
+        || Boolean(String(row.amount_value || "").trim())
+        || Boolean(String(row.amount_unit || "").trim());
+    });
+}
+
+function parseLegacyRecipeIngredientText(value) {
+  const text = String(value || "");
+  if (!text.trim()) {
+    return [];
+  }
+  return text
+    .split(/\r?\n/)
+    .map((line) => String(line || "").trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split("|").map((part) => String(part || "").trim());
+      if (parts.length >= 3) {
+        return {
+          ingredient_name: parts[0],
+          amount_value: parts[1],
+          amount_unit: parts[2],
+        };
+      }
+      return {
+        ingredient_name: line,
+        amount_value: "",
+        amount_unit: "g",
+      };
+    });
+}
+
+function recipeIngredientRowsToLegacyText(rows) {
+  return normalizeRecipeIngredientRows(rows)
+    .map((row) => {
+      const ingredient = String(row.ingredient_name || "").trim();
+      const amount = String(row.amount_value || "").trim();
+      const unit = String(row.amount_unit || "").trim();
+      if (ingredient && amount && unit) {
+        return ingredient + " | " + amount + " | " + unit;
+      }
+      if (ingredient && amount) {
+        return ingredient + " | " + amount;
+      }
+      return ingredient || "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function defaultCalculationRow() {
+  return {
+    ingredient_name: "",
+    amount_value: "",
+    amount_unit: "g",
+    price_value: "",
+    price_unit: "kr/kg",
+    calculated_cost: "",
+  };
+}
+
+function parseFloatSafe(value) {
+  const num = Number(String(value || "").replace(",", "."));
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeCalculationRows(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((row) => {
+      const base = defaultCalculationRow();
+      const source = row || {};
+      return {
+        ingredient_name: String(source.ingredient_name || base.ingredient_name),
+        amount_value: String(source.amount_value || base.amount_value),
+        amount_unit: String(source.amount_unit || base.amount_unit),
+        price_value: String(source.price_value || base.price_value),
+        price_unit: String(source.price_unit || base.price_unit),
+        calculated_cost: String(source.calculated_cost || base.calculated_cost),
+      };
+    })
+    .filter((row) => Boolean(String(row.ingredient_name || "").trim()) || Boolean(String(row.amount_value || "").trim()) || Boolean(String(row.price_value || "").trim()));
+}
+
+function calculateRowCost(row) {
+  const amountValue = parseFloatSafe(row && row.amount_value);
+  const priceValue = parseFloatSafe(row && row.price_value);
+  const amountUnit = String((row && row.amount_unit) || "").trim().toLowerCase();
+  const priceUnit = String((row && row.price_unit) || "").trim().toLowerCase();
+
+  if (amountValue == null || priceValue == null) {
+    return null;
+  }
+
+  if (priceUnit === "kr/kg") {
+    if (amountUnit === "g") {
+      return (amountValue / 1000) * priceValue;
+    }
+    if (amountUnit === "kg") {
+      return amountValue * priceValue;
+    }
+  }
+
+  if (priceUnit === "kr/l") {
+    if (amountUnit === "ml") {
+      return (amountValue / 1000) * priceValue;
+    }
+    if (amountUnit === "dl") {
+      return (amountValue / 10) * priceValue;
+    }
+    if (amountUnit === "l") {
+      return amountValue * priceValue;
+    }
+    if (amountUnit === "g") {
+      return (amountValue / 1000) * priceValue;
+    }
+  }
+
+  if (priceUnit === "kr/st") {
+    return amountValue * priceValue;
+  }
+
+  return null;
+}
+
+function readRecipeIngredientRowsFromForm() {
+  const host = document.getElementById("componentDetailRecipeIngredientRows");
+  if (!host) {
+    return [];
+  }
+  const rows = Array.from(host.querySelectorAll("[data-recipe-row]"));
+  return normalizeRecipeIngredientRows(
+    rows.map((rowEl) => {
+      const readField = (field) => {
+        const input = rowEl.querySelector("[data-recipe-field='" + field + "']");
+        return input ? String(input.value || "") : "";
+      };
+      return {
+        ingredient_name: readField("ingredient_name"),
+        amount_value: readField("amount_value"),
+        amount_unit: readField("amount_unit"),
+      };
+    }),
+  );
+}
+
+function buildCalculationRowsFromRecipeRows(recipeRows, existingCalculationRows) {
+  const normalizedRecipeRows = normalizeRecipeIngredientRows(recipeRows);
+  const normalizedExisting = normalizeCalculationRows(existingCalculationRows);
+  const existingByKey = new Map();
+
+  normalizedExisting.forEach((row) => {
+    const key = String(row.ingredient_name || "").trim().toLowerCase();
+    if (key && !existingByKey.has(key)) {
+      existingByKey.set(key, row);
+    }
+  });
+
+  return normalizedRecipeRows.map((recipeRow) => {
+    const key = String(recipeRow.ingredient_name || "").trim().toLowerCase();
+    const existing = key ? existingByKey.get(key) : null;
+    return {
+      ingredient_name: String(recipeRow.ingredient_name || ""),
+      amount_value: String(recipeRow.amount_value || ""),
+      amount_unit: String(recipeRow.amount_unit || "g"),
+      price_value: existing ? String(existing.price_value || "") : "",
+      price_unit: existing ? String(existing.price_unit || "kr/kg") : "kr/kg",
+      calculated_cost: "",
+    };
+  });
+}
+
+function syncCalculationRowsFromRecipeRows() {
+  const recipeRows = readRecipeIngredientRowsFromForm();
+  const host = document.getElementById("componentDetailCalculationRows");
+  const existing = host
+    ? Array.from(host.querySelectorAll("[data-calc-row]")).map((rowEl) => {
+      const readField = (field) => {
+        const input = rowEl.querySelector("[data-calc-field='" + field + "']");
+        return input ? String(input.value || "") : "";
+      };
+      return {
+        ingredient_name: readField("ingredient_name"),
+        amount_value: readField("amount_value"),
+        amount_unit: readField("amount_unit"),
+        price_value: readField("price_value"),
+        price_unit: readField("price_unit"),
+        calculated_cost: readField("calculated_cost"),
+      };
+    })
+    : [];
+  renderCalculationRows(buildCalculationRowsFromRecipeRows(recipeRows, existing));
+}
+
+function renderRecipeIngredientRows(rows) {
+  const host = document.getElementById("componentDetailRecipeIngredientRows");
+  if (!host) {
+    return;
+  }
+
+  const normalized = normalizeRecipeIngredientRows(rows);
+  const sourceRows = normalized.length > 0 ? normalized : [defaultRecipeIngredientRow()];
+  host.innerHTML = "";
+
+  sourceRows.forEach((row) => {
+    const rowWrap = document.createElement("div");
+    rowWrap.className = "builder-component-recipe-row";
+    rowWrap.setAttribute("data-recipe-row", "1");
+
+    const ingredient = document.createElement("input");
+    ingredient.type = "text";
+    ingredient.placeholder = "Ingrediens";
+    ingredient.value = String(row.ingredient_name || "");
+    ingredient.setAttribute("data-recipe-field", "ingredient_name");
+
+    const amountValue = document.createElement("input");
+    amountValue.type = "number";
+    amountValue.step = "0.01";
+    amountValue.placeholder = "Mängd";
+    amountValue.value = String(row.amount_value || "");
+    amountValue.setAttribute("data-recipe-field", "amount_value");
+
+    const amountUnit = document.createElement("input");
+    amountUnit.type = "text";
+    amountUnit.placeholder = "Enhet (g/ml/dl/kg/l/st)";
+    amountUnit.value = String(row.amount_unit || "g");
+    amountUnit.setAttribute("data-recipe-field", "amount_unit");
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "builder-row-remove-icon";
+    removeBtn.textContent = "x";
+    removeBtn.setAttribute("aria-label", "Ta bort ingrediensrad");
+    removeBtn.addEventListener("click", () => {
+      rowWrap.remove();
+      if (!host.querySelector("[data-recipe-row]")) {
+        renderRecipeIngredientRows([defaultRecipeIngredientRow()]);
+      }
+      _componentDetailDirty = true;
+    });
+
+    [ingredient, amountValue, amountUnit].forEach((input) => {
+      input.addEventListener("input", () => {
+        _componentDetailDirty = true;
+      });
+    });
+
+    rowWrap.appendChild(ingredient);
+    rowWrap.appendChild(amountValue);
+    rowWrap.appendChild(amountUnit);
+    rowWrap.appendChild(removeBtn);
+    host.appendChild(rowWrap);
+  });
+}
+
+function formatCostValue(value) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  return value.toFixed(2);
+}
+
+function recalculateCalculationRowsCost() {
+  const host = document.getElementById("componentDetailCalculationRows");
+  const totalInput = document.getElementById("componentDetailCalcCost");
+  if (!host) {
+    return;
+  }
+
+  let total = 0;
+  const rows = Array.from(host.querySelectorAll("[data-calc-row]"));
+  rows.forEach((rowEl) => {
+    const amountInput = rowEl.querySelector("[data-calc-field='amount_value']");
+    const amountUnitInput = rowEl.querySelector("[data-calc-field='amount_unit']");
+    const priceInput = rowEl.querySelector("[data-calc-field='price_value']");
+    const priceUnitInput = rowEl.querySelector("[data-calc-field='price_unit']");
+    const calcCostInput = rowEl.querySelector("[data-calc-field='calculated_cost']");
+    const rowData = {
+      amount_value: amountInput ? amountInput.value : "",
+      amount_unit: amountUnitInput ? amountUnitInput.value : "",
+      price_value: priceInput ? priceInput.value : "",
+      price_unit: priceUnitInput ? priceUnitInput.value : "",
+    };
+    const cost = calculateRowCost(rowData);
+    if (calcCostInput) {
+      calcCostInput.value = cost == null ? "" : formatCostValue(cost) + " kr";
+    }
+    if (cost != null) {
+      total += cost;
+    }
+  });
+
+  if (totalInput) {
+    totalInput.value = total > 0 ? formatCostValue(total) + " kr" : "";
+  }
+}
+
+function renderCalculationRows(rows) {
+  const host = document.getElementById("componentDetailCalculationRows");
+  if (!host) {
+    return;
+  }
+  const normalized = normalizeCalculationRows(rows);
+  const sourceRows = normalized.length > 0 ? normalized : [defaultCalculationRow()];
+
+  host.innerHTML = "";
+  for (const row of sourceRows) {
+    const rowWrap = document.createElement("div");
+    rowWrap.className = "builder-component-calc-row";
+    rowWrap.setAttribute("data-calc-row", "1");
+
+    const ingredient = document.createElement("input");
+    ingredient.type = "text";
+    ingredient.placeholder = "Ingrediens";
+    ingredient.value = String(row.ingredient_name || "");
+    ingredient.setAttribute("data-calc-field", "ingredient_name");
+    ingredient.readOnly = true;
+
+    const amountValue = document.createElement("input");
+    amountValue.type = "number";
+    amountValue.placeholder = "Mängd";
+    amountValue.step = "0.01";
+    amountValue.value = String(row.amount_value || "");
+    amountValue.setAttribute("data-calc-field", "amount_value");
+    amountValue.readOnly = true;
+
+    const amountUnit = document.createElement("input");
+    amountUnit.type = "text";
+    amountUnit.placeholder = "Enhet (g/ml/kg/l/st)";
+    amountUnit.value = String(row.amount_unit || "g");
+    amountUnit.setAttribute("data-calc-field", "amount_unit");
+    amountUnit.readOnly = true;
+
+    const priceValue = document.createElement("input");
+    priceValue.type = "number";
+    priceValue.placeholder = "Pris";
+    priceValue.step = "0.01";
+    priceValue.value = String(row.price_value || "");
+    priceValue.setAttribute("data-calc-field", "price_value");
+
+    const priceUnit = document.createElement("input");
+    priceUnit.type = "text";
+    priceUnit.placeholder = "Prisenhet (kr/kg, kr/l, kr/st)";
+    priceUnit.value = String(row.price_unit || "kr/kg");
+    priceUnit.setAttribute("data-calc-field", "price_unit");
+
+    const calcCost = document.createElement("input");
+    calcCost.type = "text";
+    calcCost.placeholder = "Kostnad";
+    calcCost.readOnly = true;
+    calcCost.value = String(row.calculated_cost || "");
+    calcCost.setAttribute("data-calc-field", "calculated_cost");
+
+    [priceValue, priceUnit].forEach((input) => {
+      input.addEventListener("input", () => {
+        _componentDetailDirty = true;
+        recalculateCalculationRowsCost();
+      });
+    });
+
+    rowWrap.appendChild(ingredient);
+    rowWrap.appendChild(amountValue);
+    rowWrap.appendChild(amountUnit);
+    rowWrap.appendChild(priceValue);
+    rowWrap.appendChild(priceUnit);
+    rowWrap.appendChild(calcCost);
+    host.appendChild(rowWrap);
+  }
+
+  recalculateCalculationRowsCost();
+}
+
+function defaultComponentDetailDraft() {
+  return {
+    tags: [],
+    long_description: "",
+    recipe_ingredient_rows: [],
+    recipe_ingredients_text: "",
+    method_text: "",
+    method_notes: "",
+    calculation_yield: "",
+    calculation_cost: "",
+    calculation_notes: "",
+    calculation_rows: [],
+    allergens: [],
+    allergen_notes: "",
+  };
+}
+
+function normalizeComponentDetailDraft(value) {
+  const source = value || {};
+  const base = defaultComponentDetailDraft();
+  const recipeIngredientRows = normalizeRecipeIngredientRows(source.recipe_ingredient_rows);
+  const normalizedRecipeRows = recipeIngredientRows.length > 0
+    ? recipeIngredientRows
+    : normalizeRecipeIngredientRows(parseLegacyRecipeIngredientText(source.recipe_ingredients_text));
+  return {
+    tags: Array.isArray(source.tags)
+      ? Array.from(new Set(source.tags.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean)))
+      : [],
+    long_description: String(source.long_description || base.long_description),
+    recipe_ingredient_rows: normalizedRecipeRows,
+    recipe_ingredients_text: String(source.recipe_ingredients_text || recipeIngredientRowsToLegacyText(normalizedRecipeRows) || base.recipe_ingredients_text),
+    method_text: String(source.method_text || base.method_text),
+    method_notes: String(source.method_notes || base.method_notes),
+    calculation_yield: String(source.calculation_yield || base.calculation_yield),
+    calculation_cost: String(source.calculation_cost || base.calculation_cost),
+    calculation_notes: String(source.calculation_notes || base.calculation_notes),
+    calculation_rows: normalizeCalculationRows(source.calculation_rows),
+    allergens: Array.isArray(source.allergens)
+      ? source.allergens.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean)
+      : [],
+    allergen_notes: String(source.allergen_notes || base.allergen_notes),
+  };
+}
+
+async function fetchComponentDetailDraft(componentId) {
+  const idValue = String(componentId || "").trim();
+  if (!idValue) {
+    return defaultComponentDetailDraft();
+  }
+  const result = await callApi(
+    "/api/builder/components/" + encodeURIComponent(idValue) + "/details",
+    { method: "GET" },
+  );
+  if (!(result && result.status < 400 && result.data && result.data.ok)) {
+    throw new Error("Could not load component details from backend.");
+  }
+  const details = result.data && result.data.details ? result.data.details : {};
+  return normalizeComponentDetailDraft(details);
+}
+
+async function saveComponentDetailDraft(componentId, draft) {
+  const idValue = String(componentId || "").trim();
+  if (!idValue) {
+    throw new Error("Component id is missing.");
+  }
+  const payload = normalizeComponentDetailDraft(draft);
+  const result = await callApi(
+    "/api/builder/components/" + encodeURIComponent(idValue) + "/details",
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+    },
+  );
+  if (!(result && result.status < 400 && result.data && result.data.ok)) {
+    throw new Error("Could not save component details to backend.");
+  }
+  const details = result.data && result.data.details ? result.data.details : payload;
+  return normalizeComponentDetailDraft(details);
+}
+
+function setComponentDetailFeedback(payload) {
+  const el = document.getElementById("componentDetailOut");
+  if (!el) {
+    return;
+  }
+  const data = (payload && payload.data) || {};
+  const ok = Boolean(data && data.ok);
+  if (ok) {
+    el.textContent = String(data.message || "Saved.");
+    return;
+  }
+  el.textContent = String(data.message || data.error || "Could not save changes.");
+}
+
+function markComponentDetailDirty() {
+  _componentDetailDirty = true;
+}
+
+function resetComponentDetailDirty() {
+  _componentDetailDirty = false;
+}
+
+function componentDetailTabValue(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "recipe" || key === "calculation" || key === "allergens") {
+    return key;
+  }
+  return "overview";
+}
+
+function setComponentDetailTab(tabValue) {
+  const nextTab = componentDetailTabValue(tabValue);
+  _activeComponentDetailTab = nextTab;
+  document.querySelectorAll("[data-component-tab]").forEach((button) => {
+    const tab = String(button.getAttribute("data-component-tab") || "").trim().toLowerCase();
+    const active = tab === nextTab;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  document.querySelectorAll("[data-component-panel]").forEach((panel) => {
+    const tab = String(panel.getAttribute("data-component-panel") || "").trim().toLowerCase();
+    panel.classList.toggle("hidden", tab !== nextTab);
+  });
+  if (nextTab === "calculation") {
+    const host = document.getElementById("componentDetailCalculationRows");
+    const hasRows = host ? Boolean(host.querySelector("[data-calc-row]")) : false;
+    if (!hasRows) {
+      syncCalculationRowsFromRecipeRows();
+    }
+  }
+}
+
+function readComponentDetailFormDraft() {
+  const tagsInput = document.getElementById("componentDetailOverviewTags");
+  const longDescriptionInput = document.getElementById("componentDetailOverviewLongDescription");
+  const recipeIngredientsLegacy = document.getElementById("componentDetailRecipeIngredients");
+  const methodText = document.getElementById("componentDetailMethodText");
+  const methodNotes = document.getElementById("componentDetailMethodNotes");
+  const calcCost = document.getElementById("componentDetailCalcCost");
+  const calcNotes = document.getElementById("componentDetailCalcNotes");
+  const allergenNotes = document.getElementById("componentDetailAllergenNotes");
+  const checkboxes = Array.from(document.querySelectorAll(".component-detail-allergen-checkbox"));
+  const allergens = checkboxes
+    .filter((box) => Boolean(box.checked))
+    .map((box) => String(box.value || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  const recipeIngredientRows = readRecipeIngredientRowsFromForm();
+
+  const calculationRowsHost = document.getElementById("componentDetailCalculationRows");
+  const existingCalculationRows = calculationRowsHost
+    ? Array.from(calculationRowsHost.querySelectorAll("[data-calc-row]")).map((rowEl) => {
+      const readField = (field) => {
+        const input = rowEl.querySelector("[data-calc-field='" + field + "']");
+        return input ? String(input.value || "") : "";
+      };
+      return {
+        ingredient_name: readField("ingredient_name"),
+        amount_value: readField("amount_value"),
+        amount_unit: readField("amount_unit"),
+        price_value: readField("price_value"),
+        price_unit: readField("price_unit"),
+        calculated_cost: readField("calculated_cost"),
+      };
+    })
+    : [];
+  const calculationRows = buildCalculationRowsFromRecipeRows(recipeIngredientRows, existingCalculationRows);
+  const recipeLegacyText = recipeIngredientRowsToLegacyText(recipeIngredientRows);
+  if (recipeIngredientsLegacy) {
+    recipeIngredientsLegacy.value = recipeLegacyText;
+  }
+
+  return {
+    tags: parseComponentTagsInput(tagsInput ? tagsInput.value : ""),
+    long_description: longDescriptionInput ? String(longDescriptionInput.value || "") : "",
+    recipe_ingredient_rows: recipeIngredientRows,
+    recipe_ingredients_text: recipeLegacyText,
+    method_text: methodText ? String(methodText.value || "") : "",
+    method_notes: methodNotes ? String(methodNotes.value || "") : "",
+    calculation_yield: "",
+    calculation_cost: calcCost ? String(calcCost.value || "") : "",
+    calculation_notes: calcNotes ? String(calcNotes.value || "") : "",
+    calculation_rows: normalizeCalculationRows(calculationRows),
+    allergens,
+    allergen_notes: allergenNotes ? String(allergenNotes.value || "") : "",
+  };
+}
+
+function applyComponentDetailDraftToForm(draft) {
+  const payload = draft || defaultComponentDetailDraft();
+  const tagsInput = document.getElementById("componentDetailOverviewTags");
+  const longDescriptionInput = document.getElementById("componentDetailOverviewLongDescription");
+  const recipeIngredientsLegacy = document.getElementById("componentDetailRecipeIngredients");
+  const methodText = document.getElementById("componentDetailMethodText");
+  const methodNotes = document.getElementById("componentDetailMethodNotes");
+  const calcCost = document.getElementById("componentDetailCalcCost");
+  const calcNotes = document.getElementById("componentDetailCalcNotes");
+  const allergenNotes = document.getElementById("componentDetailAllergenNotes");
+  const selected = new Set(Array.isArray(payload.allergens) ? payload.allergens.map((item) => String(item || "").trim().toLowerCase()) : []);
+
+  const recipeRows = normalizeRecipeIngredientRows(payload.recipe_ingredient_rows)
+    .length > 0
+    ? normalizeRecipeIngredientRows(payload.recipe_ingredient_rows)
+    : normalizeRecipeIngredientRows(parseLegacyRecipeIngredientText(payload.recipe_ingredients_text));
+  renderRecipeIngredientRows(recipeRows);
+  if (recipeIngredientsLegacy) {
+    recipeIngredientsLegacy.value = recipeIngredientRowsToLegacyText(recipeRows);
+  }
+  if (methodText) {
+    methodText.value = String(payload.method_text || "");
+  }
+  if (methodNotes) {
+    methodNotes.value = String(payload.method_notes || "");
+  }
+  if (calcCost) {
+    calcCost.value = String(payload.calculation_cost || "");
+  }
+  if (calcNotes) {
+    calcNotes.value = String(payload.calculation_notes || "");
+  }
+  if (allergenNotes) {
+    allergenNotes.value = String(payload.allergen_notes || "");
+  }
+  if (tagsInput) {
+    tagsInput.value = formatComponentTagsInput(payload.tags);
+  }
+  if (longDescriptionInput) {
+    longDescriptionInput.value = String(payload.long_description || "");
+  }
+  const syncedRows = buildCalculationRowsFromRecipeRows(recipeRows, payload.calculation_rows || []);
+  renderCalculationRows(syncedRows);
+  document.querySelectorAll(".component-detail-allergen-checkbox").forEach((checkbox) => {
+    const value = String(checkbox.value || "").trim().toLowerCase();
+    checkbox.checked = selected.has(value);
+  });
+}
+
+async function saveComponentOverviewFromDetail(componentId) {
+  const idValue = String(componentId || "").trim();
+  if (!idValue) {
+    return;
+  }
+  const nameInput = document.getElementById("componentDetailOverviewName");
+  const categoryInput = document.getElementById("componentDetailOverviewCategory");
+  const nextName = cleanComponentInlineName(nameInput ? nameInput.value : "");
+  const nextCategory = String((categoryInput && categoryInput.value) || "").trim().toLowerCase();
+  if (!nextName) {
+    window.alert("Component name is required.");
+    return;
+  }
+
+  showLoading("componentDetailOut");
+  const result = await callApi(
+    "/api/builder/components/" + encodeURIComponent(idValue),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: { name: nextName, category: nextCategory || null },
+    },
+  );
+  setComponentDetailFeedback(result);
+  if (!(result && result.status < 400 && result.data && result.data.ok)) {
+    return;
+  }
+
+  const target = (_cachedLibraryComponents || []).find((entry) => String(entry.component_id || "") === idValue);
+  if (target) {
+    target.component_name = nextName;
+    target.category = nextCategory || "";
+  }
+
+  if (nameInput) {
+    nameInput.value = nextName;
+  }
+  updateComponentCategoryChipCounts();
+  filterLibraryComponents(currentComponentSearchQuery());
+}
+
+async function openComponentDetailEditor(componentId) {
+  const idValue = String(componentId || "").trim();
+  if (!idValue) {
+    return;
+  }
+  const component = (_cachedLibraryComponents || []).find((item) => String(item.component_id || "") === idValue);
+  if (!component) {
+    return;
+  }
+
+  _activeComponentDetailId = idValue;
+  _componentActionPopoverId = "";
+  _componentInlineEditId = "";
+
+  const title = document.getElementById("componentDetailEditorTitle");
+  const nameInput = document.getElementById("componentDetailOverviewName");
+  const categoryInput = document.getElementById("componentDetailOverviewCategory");
+  const meta = document.getElementById("componentDetailOverviewMeta");
+  const missingNodes = [];
+  if (!title) {
+    missingNodes.push("#componentDetailEditorTitle");
+  }
+  if (!nameInput) {
+    missingNodes.push("#componentDetailOverviewName");
+  }
+  if (!categoryInput) {
+    missingNodes.push("#componentDetailOverviewCategory");
+  }
+  if (!meta) {
+    missingNodes.push("#componentDetailOverviewMeta");
+  }
+
+  if (title) {
+    title.textContent = "Komponentredigerare: " + String(component.component_name || component.component_id || "");
+  }
+  if (nameInput) {
+    nameInput.value = String(component.component_name || component.component_id || "");
+  }
+  if (categoryInput) {
+    categoryInput.value = String(componentCategoryValue(component) || "");
+  }
+  if (meta) {
+    meta.textContent = "Komponent-ID: " + String(component.component_id || "");
+  }
+
+  showLoading("componentDetailOut");
+  applyComponentDetailDraftToForm(defaultComponentDetailDraft());
+  try {
+    const draft = await fetchComponentDetailDraft(idValue);
+    applyComponentDetailDraftToForm(draft);
+    setComponentDetailFeedback({ status: 200, data: { ok: true, message: "Component details loaded." } });
+  } catch (_error) {
+    applyComponentDetailDraftToForm(defaultComponentDetailDraft());
+    setComponentDetailFeedback({
+      status: 500,
+      data: { ok: false, message: "Could not load details from backend. Try again." },
+    });
+  }
+  setComponentDetailTab(_activeComponentDetailTab || "overview");
+  resetComponentDetailDirty();
+  openSimpleModal("componentDetailEditorModal");
+}
+
+async function saveActiveComponentDetailDraft() {
+  const idValue = String(_activeComponentDetailId || "").trim();
+  if (!idValue) {
+    return;
+  }
+  const draft = readComponentDetailFormDraft();
+  showLoading("componentDetailOut");
+  try {
+    const target = (_cachedLibraryComponents || []).find((entry) => String(entry.component_id || "") === idValue);
+    await saveComponentOverviewFromDetail(idValue);
+    const saved = await saveComponentDetailDraft(idValue, draft);
+    applyComponentDetailDraftToForm(saved);
+    if (target) {
+      target.tags = Array.isArray(saved.tags) ? saved.tags.slice() : [];
+    }
+    resetComponentDetailDirty();
+    setComponentDetailFeedback({ status: 200, data: { ok: true, message: "Component details saved." } });
+  } catch (_error) {
+    setComponentDetailFeedback({
+      status: 500,
+      data: { ok: false, message: "Save failed: backend persistence is unavailable." },
+    });
+  }
+}
+
+function currentComponentSearchQuery() {
+  const search = document.getElementById("libraryComponentsSearch");
+  return search ? String(search.value || "") : "";
+}
+
+function computeComponentCategoryCounts() {
+  const counts = {
+    all: 0,
+    main: 0,
+    side: 0,
+    sauce: 0,
+    dessert: 0,
+    ovrigt: 0,
+  };
+
+  for (const item of _cachedLibraryComponents || []) {
+    counts.all += 1;
+    const category = componentCategoryValue(item);
+    if (COMPONENT_RAIL_CATEGORY_OPTIONS.includes(category)) {
+      counts[category] += 1;
+    } else {
+      counts.ovrigt += 1;
+    }
+  }
+  return counts;
+}
+
+function updateComponentCategoryChipCounts() {
+  const counts = computeComponentCategoryCounts();
+  const homeUncategorizedEl = document.getElementById("homeUncategorizedComponentsCount");
+  if (homeUncategorizedEl) {
+    homeUncategorizedEl.textContent = String(Number(counts.uncategorized || 0));
+  }
+}
+
+function componentCategoryCatalog(items) {
+  return COMPONENT_DEFAULT_LIBRARY_CATEGORIES.slice();
+}
+
+function componentMatchesSearch(item, searchQuery) {
+  if (!searchQuery) {
+    return true;
+  }
+  const needle = String(searchQuery || "").trim().toLowerCase();
+  if (!needle) {
+    return true;
+  }
+  const name = String((item && (item.component_name || item.component_id)) || "").toLowerCase();
+  const category = componentCategoryValue(item);
+  const tags = Array.isArray(item && item.tags)
+    ? item.tags.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)
+    : [];
+  return name.includes(needle) || category.includes(needle) || tags.some((tag) => tag.includes(needle));
+}
+
+function componentTagValues(item) {
+  if (!item || !Array.isArray(item.tags)) {
+    return [];
+  }
+  return item.tags
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function componentTagCatalog(items) {
+  const list = Array.isArray(items) ? items : [];
+  const unique = new Set();
+  for (const item of list) {
+    for (const tag of componentTagValues(item)) {
+      unique.add(tag);
+    }
+  }
+  return Array.from(unique).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+}
+
+function renderComponentTagFilterOptions(selectEl, items, activeTag) {
+  if (!selectEl) {
+    return;
+  }
+  const tags = componentTagCatalog(items);
+  const validTagSet = new Set(tags);
+  const normalizedActiveTag = String(activeTag || "all").trim().toLowerCase();
+  const nextActiveTag = normalizedActiveTag !== "all" && !validTagSet.has(normalizedActiveTag)
+    ? "all"
+    : (normalizedActiveTag || "all");
+  _componentTagFilter = nextActiveTag;
+
+  selectEl.innerHTML = "";
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = "Alla taggar";
+  selectEl.appendChild(allOption);
+
+  for (const tag of tags) {
+    const option = document.createElement("option");
+    option.value = tag;
+    option.textContent = tag;
+    selectEl.appendChild(option);
+  }
+  selectEl.value = nextActiveTag;
+}
+
+function parseComponentTagsInput(value) {
+  return Array.from(new Set(
+    String(value || "")
+      .split(",")
+      .map((entry) => String(entry || "").trim().toLowerCase())
+      .filter(Boolean),
+  ));
+}
+
+function formatComponentTagsInput(tags) {
+  if (!Array.isArray(tags)) {
+    return "";
+  }
+  return tags
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(", ");
+}
+
+function renderComponentCategoryFilters(target, items, activeFilter) {
+  if (!target) {
+    return;
+  }
+  target.innerHTML = "";
+
+  const list = Array.isArray(items) ? items : [];
+  const counts = new Map();
+  counts.set("all", list.length);
+  for (const category of componentCategoryCatalog(list)) {
+    counts.set(category, 0);
+  }
+
+  for (const item of list) {
+    const key = componentCategoryValue(item) || "ovrigt";
+    counts.set(key, Number(counts.get(key) || 0) + 1);
+  }
+
+  const filters = ["all", ...componentCategoryCatalog(list)];
+  for (const filterKey of filters) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "builder-components-filter-chip";
+    button.dataset.categoryFilter = filterKey;
+    button.classList.toggle("is-active", filterKey === activeFilter);
+
+    const label = filterKey === "all"
+      ? "Alla"
+      : componentCategoryLabel(filterKey);
+    const count = Number(counts.get(filterKey) || 0);
+    button.textContent = label + " (" + String(count) + ")";
+    target.appendChild(button);
+  }
 }
 
 function applyComponentLibraryFilter(query) {
   const grid = document.getElementById("libraryComponentsGrid");
   const componentsMeta = document.getElementById("workspaceComponentsMeta");
+  const categoryNav = document.getElementById("libraryComponentsCategoryNav");
+  const tagFilterSelect = document.getElementById("libraryComponentsCategoryFilter");
   if (!grid) {
     return;
   }
 
   const q = String(query || "").trim().toLowerCase();
-  const scope = currentComponentScope();
-  let scopedItems = _cachedLibraryComponents;
-  if (scope === "recent" && _recentComponentIds.length > 0) {
-    const idSet = new Set(_recentComponentIds.map((value) => String(value || "")));
-    scopedItems = _cachedLibraryComponents.filter((item) => idSet.has(String(item.component_id || "")));
-  } else if (scope === "unused") {
-    const usedIds = new Set();
-    for (const composition of _cachedLibraryCompositions || []) {
-      const links = Array.isArray(composition.components) ? composition.components : [];
-      for (const link of links) {
-        const id = String((link && (link.component_id || link.id)) || "").trim();
-        if (id) {
-          usedIds.add(id);
-        }
-      }
-    }
-    scopedItems = _cachedLibraryComponents.filter((item) => !usedIds.has(String(item.component_id || "")));
-  }
+  const activeFilter = currentComponentCategoryFilter();
+  const activeTag = currentComponentTagFilter();
+  renderComponentCategoryFilters(categoryNav, _cachedLibraryComponents, activeFilter);
+  renderComponentTagFilterOptions(tagFilterSelect, _cachedLibraryComponents, activeTag);
 
-  const filtered = q
-    ? scopedItems.filter((item) =>
-        String(item.component_name || item.component_id || "").toLowerCase().includes(q),
-      )
-    : scopedItems;
+  const searchFiltered = (_cachedLibraryComponents || []).filter((item) => componentMatchesSearch(item, q));
+  const categoryFiltered = searchFiltered.filter((item) => {
+    if (activeFilter === "all") {
+      return true;
+    }
+    return componentCategoryValue(item) === activeFilter;
+  });
+  const filtered = categoryFiltered.filter((item) => {
+    if (activeTag === "all") {
+      return true;
+    }
+    const componentTags = componentTagValues(item);
+    return componentTags.includes(activeTag);
+  });
 
   grid.innerHTML = "";
 
   if (filtered.length === 0 && _cachedLibraryComponents.length > 0) {
-    const noMatch = document.createElement("p");
-    noMatch.className = "workspace-library-hint";
-    noMatch.textContent = q
-      ? 'No components match "' + q + '"'
-      : (scope === "recent"
-        ? "No recent components yet. Switch filter to All."
-        : "No components to show.");
+    const noMatch = document.createElement("div");
+    noMatch.className = "workspace-library-hint workspace-library-empty-state";
+    const message = document.createElement("p");
+    message.className = "workspace-library-empty-message";
+    message.textContent = "Inga komponenter matchar filtret.";
+    noMatch.appendChild(message);
     grid.appendChild(noMatch);
     if (componentsMeta) {
-      componentsMeta.textContent = "No components in current filter.";
+      componentsMeta.textContent = "Inga komponenter matchar filtret.";
     }
     return;
   }
 
-  const visible = filtered.slice(0, COMPONENT_RENDER_LIMIT);
-  renderComponentLibraryCards(visible, grid);
+  const visible = filtered
+    .slice()
+    .sort((left, right) => String(left.component_name || "").localeCompare(String(right.component_name || ""), undefined, { sensitivity: "base" }))
+    .slice(0, COMPONENT_RENDER_LIMIT);
+
+  renderComponentLibraryCards(visible, grid, { mode: "library-v2" });
 
   if (filtered.length > visible.length) {
     const clipped = document.createElement("p");
@@ -1857,79 +2966,222 @@ function applyComponentLibraryFilter(query) {
   }
 
   if (componentsMeta) {
+    const scopeLabel = activeFilter === "all" ? "all categories" : componentCategoryLabel(activeFilter);
+    const tagLabel = activeTag === "all" ? "alla taggar" : activeTag;
     componentsMeta.textContent =
       String(visible.length) + " shown" +
       (filtered.length > visible.length ? " of " + String(filtered.length) : "") +
-      " components (" + (scope === "recent" ? "recent" : "all") + " filter).";
+      " components (" + scopeLabel + ", " + tagLabel + "). Use Edit to update inline.";
   }
 }
 
-function renderComponentLibraryCards(items, targetGrid) {
+function deriveComponentTagHints(item) {
+  const name = String((item && (item.component_name || item.component_id)) || "").trim().toLowerCase();
+  const tags = [];
+  if (!name) {
+    return tags;
+  }
+
+  if (name.includes("fisk") || name.includes("lax") || name.includes("torsk")) {
+    tags.push("fisk");
+  }
+  if (name.includes("korv") || name.includes("sausage")) {
+    tags.push("korv");
+  }
+  if (name.includes("veg") || name.includes("tofu") || name.includes("lins") || name.includes("bona")) {
+    tags.push("vegetarisk");
+  }
+  if (name.includes("kaka") || name.includes("dessert") || name.includes("pudding")) {
+    tags.push("dessert");
+  }
+  if (name.includes("klass") || name.includes("traditional") || name.includes("classic")) {
+    tags.push("klassiker");
+  }
+
+  return tags.slice(0, 3);
+}
+
+async function setComponentCategory(componentId, category) {
+  const idValue = String(componentId || "").trim();
+  if (!idValue) {
+    return;
+  }
+  const categoryValue = String(category || "").trim().toLowerCase();
+  const target = (_cachedLibraryComponents || []).find((item) => String(item.component_id || "") === idValue);
+  const previousCategory = target ? componentCategoryValue(target) : "";
+  if (target) {
+    target.category = categoryValue || "";
+  }
+  updateComponentCategoryChipCounts();
+  const searchBefore = document.getElementById("libraryComponentsSearch");
+  const queryBefore = searchBefore ? String(searchBefore.value || "") : "";
+  filterLibraryComponents(queryBefore);
+
+  showLoading("libraryOut");
+  const result = await callApi(
+    "/api/builder/components/" + encodeURIComponent(idValue),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: { category: categoryValue || null },
+    },
+  );
+  showJson("libraryOut", result);
+  if (!(result && result.status < 400 && result.data && result.data.ok)) {
+    if (target) {
+      target.category = previousCategory || "";
+      updateComponentCategoryChipCounts();
+      filterLibraryComponents(queryBefore);
+    }
+    const message = String((result && result.data && (result.data.message || result.data.error)) || "Could not update category.");
+    window.alert(message);
+    return;
+  }
+  await loadLibrary();
+  const search = document.getElementById("libraryComponentsSearch");
+  const query = search ? String(search.value || "") : "";
+  filterLibraryComponents(query);
+}
+
+function cleanComponentInlineName(value) {
+  let cleaned = String(value || "").trim();
+  if (!cleaned) {
+    return "";
+  }
+  cleaned = cleaned.replace(/^\s*(Lunch|Kväll|Kvall|Dessert|Middag|Frukost)\s*:\s*/i, "").trim();
+  cleaned = cleaned.replace(/^\s*(Serveras(?:\s+med)?|Med)\s+/i, "").trim();
+  cleaned = cleaned.replace(/\s+serveras(?:\b.*)?$/i, "").trim();
+  return cleaned.replace(/\s+/g, " ").trim();
+}
+
+function selectedInlineComponentCategory(componentId) {
+  const select = document.getElementById("inlineComponentCategory_" + String(componentId || ""));
+  if (!select) {
+    return "";
+  }
+  return String(select.value || "").trim().toLowerCase();
+}
+
+async function saveInlineComponentEdit(componentId) {
+  const idValue = String(componentId || "").trim();
+  if (!idValue) {
+    return;
+  }
+
+  const nameInput = document.getElementById("inlineComponentName_" + idValue);
+  const nextName = cleanComponentInlineName(nameInput ? nameInput.value : "");
+  const nextCategory = selectedInlineComponentCategory(idValue);
+  if (!nextName) {
+    window.alert("Component name is required.");
+    return;
+  }
+
+  showLoading("libraryOut");
+  const result = await callApi(
+    "/api/builder/components/" + encodeURIComponent(idValue),
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: { name: nextName, category: nextCategory || null },
+    },
+  );
+  showJson("libraryOut", result);
+  if (!(result && result.status < 400 && result.data && result.data.ok)) {
+    const message = String((result && result.data && (result.data.message || result.data.error)) || "Could not save component.");
+    window.alert(message);
+    return;
+  }
+
+  const target = (_cachedLibraryComponents || []).find((entry) => String(entry.component_id || "") === idValue);
+  if (target) {
+    target.component_name = nextName;
+    target.category = nextCategory || "";
+  }
+  _componentInlineEditId = "";
+  _componentActionPopoverId = "";
+  updateComponentCategoryChipCounts();
+  const query = String((document.getElementById("libraryComponentsSearch") || {}).value || "");
+  filterLibraryComponents(query);
+}
+
+function closeComponentActionPopover() {
+  if (!_componentActionPopoverId && !_componentInlineEditId) {
+    return;
+  }
+  _componentActionPopoverId = "";
+  _componentInlineEditId = "";
+  filterLibraryComponents(currentComponentSearchQuery());
+}
+
+function closeComponentActionPopoverOnly() {
+  if (!_componentActionPopoverId) {
+    return false;
+  }
+  closeComponentActionPopover();
+  return true;
+}
+
+function renderComponentLibraryCards(items, targetGrid, options) {
   if (!targetGrid) {
     return;
   }
+  const settings = options || {};
+  const mode = String(settings.mode || "").trim().toLowerCase();
 
   for (const item of items) {
     const componentId = String(item.component_id || "");
     const componentName = String(item.component_name || item.component_id || "");
-    const hasPrimaryRecipe = Boolean(String(item.primary_recipe_id || "").trim());
-
+    const categoryTheme = resolveComponentCategoryThemeKey(item);
+    const detailSummary = componentDetailSummary(item);
     const card = document.createElement("article");
-    card.className = "component-library-card";
+    card.className = mode === "library-v2"
+      ? "builder-component-card builder-component-card-compact"
+      : "builder-component-card";
+    card.dataset.componentCardId = componentId;
+    card.dataset.componentId = componentId;
+    card.dataset.componentTile = "1";
+    card.dataset.categoryTheme = categoryTheme;
+    card.classList.add("builder-component-card-theme-" + categoryTheme);
 
-    const openSurface = document.createElement("button");
-    openSurface.type = "button";
-    openSurface.className = "component-library-card-surface";
-    openSurface.addEventListener("click", () => {
-      openRecipeModalForComponent(componentId, componentName);
-    });
-
-    const kicker = document.createElement("span");
-    kicker.className = "component-library-card-kicker";
-    kicker.textContent = "Component";
-
-    const topRow = document.createElement("div");
-    topRow.className = "component-library-card-row";
+    const surface = document.createElement("button");
+    surface.type = "button";
+    surface.className = "builder-component-card-surface";
+    surface.dataset.componentId = componentId;
+    surface.dataset.componentTile = "1";
+    surface.dataset.openComponentEditor = "1";
 
     const name = document.createElement("div");
     name.className = "component-library-card-name";
     name.textContent = componentName;
-
-    const chip = document.createElement("span");
-    chip.className = "component-library-card-status component-library-card-status-chip";
-    chip.textContent = hasPrimaryRecipe ? "Recipe ready" : "Needs recipe";
-    chip.classList.add(
-      hasPrimaryRecipe
-        ? "component-library-card-status-has-data"
-        : "component-library-card-status-no-data",
-    );
-
-    topRow.appendChild(name);
-    topRow.appendChild(chip);
-
-    const footer = document.createElement("p");
-    footer.className = "component-library-card-footer";
-    footer.textContent = "Open details to edit recipes, ingredients, scaling, and declarations.";
-
-    openSurface.appendChild(kicker);
-    openSurface.appendChild(topRow);
-    openSurface.appendChild(footer);
-
-    card.appendChild(openSurface);
-
-    const actions = document.createElement("div");
-    actions.className = "workspace-inline-actions library-card-actions";
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "library-danger-action";
-    removeBtn.textContent = "Remove";
-    removeBtn.addEventListener("click", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      await deleteComponentFromLibrary(componentId, componentName);
-    });
-    actions.appendChild(removeBtn);
-    card.appendChild(actions);
+    const badges = document.createElement("div");
+    badges.className = "builder-component-card-badges";
+    if (detailSummary.has_method_data) {
+      const methodIcon = document.createElement("span");
+      methodIcon.className = "builder-component-status-icon builder-component-status-icon-method";
+      methodIcon.textContent = "📖";
+      methodIcon.title = "Recept/metod finns";
+      methodIcon.setAttribute("aria-label", "Recept/metod finns");
+      badges.appendChild(methodIcon);
+    }
+    if (detailSummary.has_calculation_data) {
+      const calculationIcon = document.createElement("span");
+      calculationIcon.className = "builder-component-status-icon builder-component-status-icon-calculation";
+      calculationIcon.textContent = "💰";
+      calculationIcon.title = "Kalkyl finns";
+      calculationIcon.setAttribute("aria-label", "Kalkyl finns");
+      badges.appendChild(calculationIcon);
+    }
+    if (detailSummary.has_allergen_data) {
+      const allergenIcon = document.createElement("span");
+      allergenIcon.className = "builder-component-status-icon builder-component-status-icon-allergen";
+      allergenIcon.textContent = "🌾";
+      allergenIcon.title = "Allergen/kostinfo finns";
+      allergenIcon.setAttribute("aria-label", "Allergen/kostinfo finns");
+      badges.appendChild(allergenIcon);
+    }
+    surface.appendChild(name);
+    surface.appendChild(badges);
+    card.appendChild(surface);
 
     targetGrid.appendChild(card);
   }
@@ -1941,7 +3193,7 @@ async function deleteComponentFromLibrary(componentId, componentName) {
     return;
   }
   const name = String(componentName || componentId || "component");
-  if (!window.confirm('Remove component "' + name + '"?')) {
+  if (!window.confirm('Ta bort komponent "' + name + '"?')) {
     return;
   }
   showLoading("libraryOut");
@@ -1953,24 +3205,34 @@ async function deleteComponentFromLibrary(componentId, componentName) {
   if (result && result.status === 409) {
     const payload = (result && result.data) || {};
     const refs = payload.references || {};
-    const compositionIds = Array.isArray(refs.composition_ids) ? refs.composition_ids.map((value) => String(value || "")).filter(Boolean) : [];
-    const dishNames = compositionIds.map((id) => {
-      const match = (_cachedLibraryCompositions || []).find((entry) => String(entry.composition_id || "") === id);
-      return String((match && match.composition_name) || id);
-    });
-    const usedCount = compositionIds.length;
+    const compositionIds = Array.isArray(refs.composition_ids)
+      ? Array.from(new Set(refs.composition_ids.map((value) => String(value || "")).filter(Boolean)))
+      : [];
+    const referencedNames = Array.isArray(refs.composition_names)
+      ? refs.composition_names.map((value) => String(value || "")).filter(Boolean)
+      : [];
+    const dishNames = referencedNames.length > 0
+      ? referencedNames
+      : compositionIds.map((id) => {
+        const match = (_cachedLibraryCompositions || []).find((entry) => String(entry.composition_id || "") === id);
+        return String((match && match.composition_name) || id);
+      });
+    const uniqueDishNames = Array.from(new Set(dishNames));
+    const usedCount = uniqueDishNames.length > 0
+      ? uniqueDishNames.length
+      : (compositionIds.length > 0 ? compositionIds.length : Number(refs.composition_count || 0));
     const recipeCount = Number(refs.recipe_count || 0);
-    let msg = "Cannot delete component. " +
-      "This component is used in " + String(usedCount) + (usedCount === 1 ? " dish" : " dishes") + ".";
-    if (dishNames.length > 0) {
-      const preview = dishNames.slice(0, 5).join(", ");
-      const extra = dishNames.length > 5 ? " +" + String(dishNames.length - 5) + " more" : "";
-      msg += "\nUsed by: " + preview + extra + ".";
+    let msg = "Den här komponenten används i " + String(usedCount) + (usedCount === 1 ? " rätt" : " rätter") + " och kan inte tas bort direkt.";
+    if (uniqueDishNames.length > 0) {
+      const preview = uniqueDishNames.slice(0, 10).join("\n- ");
+      const extra = uniqueDishNames.length > 10 ? "\n- +" + String(uniqueDishNames.length - 10) + " fler" : "";
+      msg += "\n\nAnvänds i:\n- " + preview + extra;
     }
     if (recipeCount > 0) {
-      msg += "\nAlso linked to " + String(recipeCount) + (recipeCount === 1 ? " recipe." : " recipes.");
+      msg += "\n\nKopplad till " + String(recipeCount) + (recipeCount === 1 ? " recept." : " recept.");
     }
-    const fallback = String(payload.message || "Component is in use.");
+    msg += "\n\nNästa steg: öppna berörd rätt för att ta bort eller ersätta komponenten, eller byt namn på komponenten.";
+    const fallback = String(payload.message || "Komponenten används redan.");
     window.alert(msg || fallback);
     return;
   }
@@ -1979,6 +3241,11 @@ async function deleteComponentFromLibrary(componentId, componentName) {
     const search = document.getElementById("libraryComponentsSearch");
     const query = search ? String(search.value || "") : "";
     filterLibraryComponents(query);
+    if (String(_activeComponentDetailId || "") === idValue) {
+      closeModalById("componentDetailEditorModal");
+      _activeComponentDetailId = "";
+      resetComponentDetailDirty();
+    }
   }
 }
 
@@ -2014,7 +3281,7 @@ function buildLibraryStartEmptyState(targetGrid) {
   dishesAction.className = "workspace-library-start-action";
   dishesAction.innerHTML = "<strong>Open dishes</strong><span>See dishes and start combining components</span>";
   dishesAction.addEventListener("click", () => {
-    openSimpleModal("dishesLibraryModal");
+    setWorkspaceSurface("dishes");
   });
 
   actions.appendChild(createAction);
@@ -2028,14 +3295,19 @@ function buildLibraryStartEmptyState(targetGrid) {
 function renderLibrary(result) {
   const componentsGrid = document.getElementById("libraryComponentsGrid");
   const compositionsGrid = document.getElementById("libraryCompositionsGrid");
+  const compositionsModalGrid = document.getElementById("libraryCompositionsModalGrid");
   const componentsMeta = document.getElementById("workspaceComponentsMeta");
   const dishesMeta = document.getElementById("workspaceDishesMeta");
+  const dishesMetaModal = document.getElementById("workspaceDishesMetaModal");
   if (!componentsGrid || !compositionsGrid) {
     return;
   }
 
   componentsGrid.innerHTML = "";
   compositionsGrid.innerHTML = "";
+  if (compositionsModalGrid) {
+    compositionsModalGrid.innerHTML = "";
+  }
 
   const data = (result && result.data) || {};
   const components = Array.isArray(data.components) ? data.components : [];
@@ -2044,9 +3316,12 @@ function renderLibrary(result) {
 
   _cachedLibraryComponents = components;
   _cachedLibraryCompositions = compositions;
+  updateComponentCategoryChipCounts();
 
   const searchInput = document.getElementById("libraryComponentsSearch");
   const currentQuery = searchInput ? String(searchInput.value || "") : "";
+  const dishesSearchInput = document.getElementById("libraryDishesSearch");
+  const dishesQuery = dishesSearchInput ? String(dishesSearchInput.value || "").trim().toLowerCase() : "";
 
   if (componentsMeta && components.length === 0) {
     componentsMeta.textContent = "No components yet. Start by creating one or importing existing names.";
@@ -2054,6 +3329,12 @@ function renderLibrary(result) {
 
   if (dishesMeta) {
     dishesMeta.textContent =
+      compositions.length === 0
+        ? "No dishes yet. Create one or import to start building."
+        : String(compositions.length) + (compositions.length === 1 ? " dish" : " dishes") + " in library";
+  }
+  if (dishesMetaModal) {
+    dishesMetaModal.textContent =
       compositions.length === 0
         ? "No dishes yet. Create one or import to start building."
         : String(compositions.length) + (compositions.length === 1 ? " dish" : " dishes") + " in library";
@@ -2066,97 +3347,270 @@ function renderLibrary(result) {
       applyComponentLibraryFilter(currentQuery);
     }
   } else if (componentsMeta) {
-    componentsMeta.textContent =
-      String(components.length) +
-      (components.length === 1 ? " component available. Open Components to browse." : " components available. Open Components to browse.");
+    componentsMeta.textContent = "Open Components to browse and edit.";
   }
 
-  if (compositions.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "library-empty workspace-library-empty";
+  const dishesScope = currentDishesScope();
+  const scopeFilteredCompositions = compositions.filter((item) => {
+    if (dishesScope === "all") {
+      return true;
+    }
+    const linkedComponents = Array.isArray(item.components) ? item.components : [];
+    const derivedCategory = deriveDishCategoryKey(linkedComponents);
+    if (dishesScope === "needs_component_categories") {
+      return derivedCategory === "needs_component_categories";
+    }
+    if (dishesScope === "has_main_component") {
+      return derivedCategory === "main";
+    }
+    return true;
+  });
+  const visibleCompositions = dishesQuery
+    ? scopeFilteredCompositions.filter((item) =>
+      String(item.composition_name || item.composition_id || "").toLowerCase().includes(dishesQuery),
+    )
+    : scopeFilteredCompositions;
 
-    const title = document.createElement("p");
-    title.className = "workspace-library-empty-title";
-    title.textContent = "No dishes yet";
+  if (dishesMeta && compositions.length > 0) {
+    dishesMeta.textContent =
+      String(visibleCompositions.length) + " shown of " + String(compositions.length) + " dishes";
+  }
+  if (dishesMetaModal && compositions.length > 0) {
+    dishesMetaModal.textContent =
+      String(visibleCompositions.length) + " shown of " + String(compositions.length) + " dishes";
+  }
 
-    const copy = document.createElement("p");
-    copy.className = "workspace-library-empty-copy";
-    copy.textContent = "Create a dish manually, or import dish lines and continue editing from the library.";
+  const homeNeedsCategoryEl = document.getElementById("homeDishesNeedCategoryCount");
+  if (homeNeedsCategoryEl) {
+    const needsCount = compositions.filter((item) => {
+      const linkedComponents = Array.isArray(item.components) ? item.components : [];
+      return deriveDishCategoryKey(linkedComponents) === "needs_component_categories";
+    }).length;
+    homeNeedsCategoryEl.textContent = String(needsCount);
+  }
 
-    const actions = document.createElement("div");
-    actions.className = "workspace-inline-actions";
+  function renderDishCard(item, targetGrid) {
+    const compositionId = String(item.composition_id || "");
+    const compositionName = String(item.composition_name || item.composition_id || "");
+    const linkedComponents = Array.isArray(item.components) ? item.components : [];
 
-    const createBtn = document.createElement("button");
-    createBtn.type = "button";
-    createBtn.textContent = "Create dish";
-    createBtn.addEventListener("click", () => {
-      openSimpleModal("quickCreateModal");
-      const input = document.getElementById("freeDishName");
-      if (input) {
-        input.focus();
-      }
+    const card = document.createElement("article");
+    card.className = "builder-card builder-dish-card";
+
+    const openSurface = document.createElement("button");
+    openSurface.type = "button";
+    openSurface.className = "builder-dish-card-surface";
+    openSurface.addEventListener("click", async () => {
+      await openCompositionFromLibrary(compositionId);
     });
 
-    actions.appendChild(createBtn);
-    empty.appendChild(title);
-    empty.appendChild(copy);
-    empty.appendChild(actions);
-    compositionsGrid.appendChild(empty);
-  } else {
-    const visibleCompositions = compositions.slice(0, COMPONENT_RENDER_LIMIT);
-    for (const item of visibleCompositions) {
-      const compositionId = String(item.composition_id || "");
-      const compositionName = String(item.composition_name || item.composition_id || "");
+    const name = document.createElement("div");
+    name.className = "builder-dish-card-name";
+    name.textContent = compositionName;
 
-      const card = document.createElement("article");
-      card.className = "composition-library-card";
+    const status = document.createElement("div");
+    status.className = "builder-dish-card-meta";
+    status.textContent = "Reusable composition";
 
-      const openSurface = document.createElement("button");
-      openSurface.type = "button";
-      openSurface.className = "composition-library-card-surface";
-      openSurface.addEventListener("click", async () => {
-        await openCompositionFromLibrary(compositionId);
-      });
+    const categoryPreview = document.createElement("div");
+    categoryPreview.className = "builder-dish-card-meta";
+    categoryPreview.textContent = deriveDishCategoryPreview(linkedComponents);
 
-      const name = document.createElement("div");
-      name.className = "composition-library-card-name";
-      name.textContent = compositionName;
+    const dishStatus = document.createElement("div");
+    dishStatus.className = "builder-chip builder-dish-status-chip";
+    dishStatus.textContent = deriveDishCategoryKey(linkedComponents) === "needs_component_categories"
+      ? "Needs review"
+      : "Ready";
 
-      const status = document.createElement("div");
-      status.className = "composition-library-card-status";
-      status.textContent = "Reusable composition";
-
-      openSurface.appendChild(name);
-      openSurface.appendChild(status);
-
-      card.appendChild(openSurface);
-
-      const actions = document.createElement("div");
-      actions.className = "workspace-inline-actions library-card-actions";
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "library-danger-action";
-      removeBtn.textContent = "Remove";
-      removeBtn.addEventListener("click", async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        await deleteCompositionFromLibrary(compositionId, compositionName);
-      });
-      actions.appendChild(removeBtn);
-      card.appendChild(actions);
-
-      compositionsGrid.appendChild(card);
+    const summary = document.createElement("div");
+    summary.className = "builder-dish-component-preview";
+    if (linkedComponents.length === 0) {
+      summary.textContent = "Components need review";
+    } else {
+      const labels = linkedComponents
+        .slice(0, 3)
+        .map((entry) => String(entry.component_name || entry.component_id || "").trim())
+        .filter(Boolean);
+      for (const labelValue of labels) {
+        const chip = document.createElement("span");
+        chip.className = "builder-chip builder-chip-soft";
+        chip.textContent = labelValue;
+        summary.appendChild(chip);
+      }
+      if (linkedComponents.length > 3) {
+        const more = document.createElement("span");
+        more.className = "builder-chip builder-chip-soft";
+        more.textContent = "+" + String(linkedComponents.length - 3);
+        summary.appendChild(more);
+      }
     }
 
-    if (compositions.length > visibleCompositions.length) {
+    openSurface.appendChild(name);
+    openSurface.appendChild(status);
+    openSurface.appendChild(categoryPreview);
+    openSurface.appendChild(dishStatus);
+    openSurface.appendChild(summary);
+
+    card.appendChild(openSurface);
+
+    const actions = document.createElement("div");
+    actions.className = "builder-card-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "builder-button-secondary";
+    editBtn.textContent = "Edit dish";
+    editBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await openCompositionFromLibrary(compositionId);
+    });
+    actions.appendChild(editBtn);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "builder-button-ghost library-danger-action";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await deleteCompositionFromLibrary(compositionId, compositionName);
+    });
+    actions.appendChild(removeBtn);
+    card.appendChild(actions);
+
+    targetGrid.appendChild(card);
+  }
+
+  if (visibleCompositions.length === 0) {
+    function buildEmptyDishState() {
+      const empty = document.createElement("div");
+      empty.className = "library-empty workspace-library-empty";
+
+      const title = document.createElement("p");
+      title.className = "workspace-library-empty-title";
+      title.textContent = compositions.length === 0 ? "No dishes yet" : "No dishes match current filters";
+
+      const copy = document.createElement("p");
+      copy.className = "workspace-library-empty-copy";
+      copy.textContent = compositions.length === 0
+        ? "Create a dish manually, or import dish lines and continue editing from the library."
+        : "Try a broader search, or change scope to show more dishes.";
+
+      const actions = document.createElement("div");
+      actions.className = "workspace-inline-actions";
+
+      const createBtn = document.createElement("button");
+      createBtn.type = "button";
+      createBtn.textContent = "Create dish";
+      createBtn.addEventListener("click", () => {
+        openSimpleModal("quickCreateModal");
+        const input = document.getElementById("freeDishName");
+        if (input) {
+          input.focus();
+        }
+      });
+
+      actions.appendChild(createBtn);
+      empty.appendChild(title);
+      empty.appendChild(copy);
+      empty.appendChild(actions);
+      return empty;
+    }
+
+    compositionsGrid.appendChild(buildEmptyDishState());
+    if (compositionsModalGrid) {
+      compositionsModalGrid.appendChild(buildEmptyDishState());
+    }
+  } else {
+    const renderedCompositions = visibleCompositions.slice(0, COMPONENT_RENDER_LIMIT);
+    for (const item of renderedCompositions) {
+      renderDishCard(item, compositionsGrid);
+      if (compositionsModalGrid) {
+        renderDishCard(item, compositionsModalGrid);
+      }
+    }
+
+    if (visibleCompositions.length > renderedCompositions.length) {
       const clipped = document.createElement("p");
       clipped.className = "workspace-library-hint";
       clipped.textContent =
-        "Showing " + String(visibleCompositions.length) + " of " + String(compositions.length) +
+        "Showing " + String(renderedCompositions.length) + " of " + String(visibleCompositions.length) +
         " dishes. Open Menu Builder for structured menu output.";
       compositionsGrid.appendChild(clipped);
+      if (compositionsModalGrid) {
+        compositionsModalGrid.appendChild(clipped.cloneNode(true));
+      }
     }
   }
+}
+
+function deriveDishCategoryKey(components) {
+  const links = Array.isArray(components) ? components : [];
+  if (links.length === 0) {
+    return "needs_component_categories";
+  }
+
+  const categoryById = new Map();
+  for (const component of _cachedLibraryComponents || []) {
+    categoryById.set(String(component.component_id || ""), componentCategoryValue(component));
+  }
+
+  const counts = {
+    main: 0,
+    side: 0,
+    sauce: 0,
+    dessert: 0,
+  };
+
+  for (const link of links) {
+    const componentId = String((link && (link.component_id || link.id)) || "");
+    const linkedCategory = normalizeComponentUiCategoryKey(categoryById.get(componentId) || componentCategoryValue(link));
+    if (linkedCategory === "main") {
+      counts.main += 1;
+      continue;
+    }
+    if (linkedCategory === "side") {
+      counts.side += 1;
+      continue;
+    }
+    if (linkedCategory === "sauce") {
+      counts.sauce += 1;
+      continue;
+    }
+    if (linkedCategory === "dessert") {
+      counts.dessert += 1;
+    }
+  }
+
+  if (counts.main > 0) {
+    return "main";
+  }
+
+  let bestCategory = "";
+  let bestCount = 0;
+  for (const key of COMPONENT_CATEGORY_OPTIONS) {
+    const value = Number(counts[key] || 0);
+    if (value > bestCount) {
+      bestCategory = key;
+      bestCount = value;
+    }
+  }
+
+  if (!bestCategory) {
+    return "needs_component_categories";
+  }
+  return bestCategory;
+}
+
+function deriveDishCategoryPreview(components) {
+  const key = deriveDishCategoryKey(components);
+  if (key === "needs_component_categories") {
+    return "Needs component categories";
+  }
+  if (key === "main") {
+    return "Primary: Main";
+  }
+  return "Primary: " + componentCategoryLabel(key);
 }
 
 async function deleteCompositionFromLibrary(compositionId, compositionName) {
@@ -2201,14 +3655,17 @@ async function openCompositionFromLibrary(compositionId) {
       String(candidate.composition_id || "") === compositionIdValue,
   );
   if (full) {
-    closeSimpleModal("dishesLibraryModal");
     openBuilderModalForComposition(full);
   }
 }
 
 async function loadLibrary() {
+  const previousComponentIds = captureCurrentComponentIds();
+  const previousCompositionIds = captureCurrentCompositionIds();
   const result = await callApi("/api/builder/library", { method: "GET" });
   renderLibrary(result);
+  updateRecentComponentsFromSnapshot(previousComponentIds);
+  updateRecentCompositionsFromSnapshot(previousCompositionIds);
   await refreshWorkspaceOverviewCounts(result);
 }
 
@@ -2797,55 +4254,8 @@ function resetRecipePanel(message) {
   currentSelectedRecipe = null;
   currentSelectedRecipeLines = [];
 
-  const componentTitle = document.getElementById("componentDetailComponentTitle");
-  const primaryStatus = document.getElementById("recipePrimaryStatus");
-  const recipeList = document.getElementById("recipeList");
-  const selectedSummary = document.getElementById("recipeSelectedSummary");
-  const ingredientList = document.getElementById("recipeIngredientsList");
-  const setPrimaryBtn = document.getElementById("btnRecipeSetPrimary");
-  const addIngredientBtn = document.getElementById("btnRecipeIngredientAdd");
-  const editName = document.getElementById("recipeEditName");
-  const editYield = document.getElementById("recipeEditYieldPortions");
-  const editVisibility = document.getElementById("recipeEditVisibility");
-  const editNotes = document.getElementById("recipeEditNotes");
-
-  if (componentTitle) {
-    componentTitle.textContent = String(message || "Component: not selected");
-  }
-  if (primaryStatus) {
-    primaryStatus.textContent = "";
-  }
-  if (recipeList) {
-    recipeList.innerHTML = "";
-  }
-  if (selectedSummary) {
-    selectedSummary.textContent = "No recipe selected";
-  }
-  if (ingredientList) {
-    ingredientList.innerHTML = "";
-  }
-  if (editName) {
-    editName.value = "";
-  }
-  if (editYield) {
-    editYield.value = "";
-  }
-  if (editVisibility) {
-    editVisibility.value = "";
-  }
-  if (editNotes) {
-    editNotes.value = "";
-  }
-  if (setPrimaryBtn) {
-    setPrimaryBtn.disabled = true;
-  }
-  if (addIngredientBtn) {
-    addIngredientBtn.disabled = true;
-  }
   setRecipeEditControlsDisabled(true);
-  resetRecipeScalingPreview("Select a recipe to preview scaling.");
-  setComponentDetailTextPreview("No composition selected");
-  renderComponentDeclarationPreview({ declaration_enabled: false, readiness: null });
+  resetRecipeScalingPreview(String(message || "Select a recipe to preview scaling."));
 }
 
 function renderRecipeList() {
@@ -3024,108 +4434,65 @@ function renderRecipeIngredientLines(lines) {
   }
 }
 
-async function loadRecipesForComponent(componentId, componentName) {
-  const componentIdValue = String(componentId || "").trim();
-  if (!componentIdValue) {
-    resetRecipePanel("Invalid component id");
-    return;
-  }
-
-  showLoading("recipeOut");
-  const result = await callApi(
-    "/api/builder/components/" + encodeURIComponent(componentIdValue) + "/recipes",
-    { method: "GET" },
-  );
-  showJson("recipeOut", result);
-  if (!result || result.status >= 400 || !result.data || !result.data.ok) {
-    resetRecipePanel("Failed to load recipes for component");
-    return;
-  }
-
-  currentRecipeComponent = result.data.component || {
-    component_id: componentIdValue,
-    component_name: componentName,
-  };
-  currentRecipeList = Array.isArray(result.data.recipes) ? result.data.recipes : [];
-  currentSelectedRecipeId = null;
-
-  const componentTitle = document.getElementById("componentDetailComponentTitle");
-  const modalTitle = document.getElementById("componentDetailModalTitle");
-  const resolvedName = String(
-    currentRecipeComponent.component_name || componentName || componentIdValue,
-  );
-  if (modalTitle) {
-    modalTitle.textContent = "Component detail: " + resolvedName;
-  }
-  if (componentTitle) {
-    componentTitle.textContent = "Component: " + resolvedName;
-  }
-
-  const selectedSummary = document.getElementById("recipeSelectedSummary");
-  if (selectedSummary) {
-    selectedSummary.textContent = "No recipe selected";
-  }
-  const ingredientList = document.getElementById("recipeIngredientsList");
-  if (ingredientList) {
-    ingredientList.innerHTML = "";
-  }
-  const setPrimaryBtn = document.getElementById("btnRecipeSetPrimary");
-  const addIngredientBtn = document.getElementById("btnRecipeIngredientAdd");
-  if (setPrimaryBtn) {
-    setPrimaryBtn.disabled = true;
-  }
-  if (addIngredientBtn) {
-    addIngredientBtn.disabled = true;
-  }
-
-  resetRecipeScalingPreview("Select a recipe to preview scaling.");
-
-  try {
-    await loadComponentDeclarationPreview(componentIdValue);
-  } catch (_error) {
-    renderComponentDeclarationPreview({ declaration_enabled: false, readiness: null });
-  }
-
-  renderRecipeList();
-}
-
-function openRecipeModalForComponent(componentId, componentName) {
-  const componentDetailModal = document.getElementById("componentDetailModal");
-  if (!componentDetailModal) {
-    return;
-  }
-  componentDetailModal.classList.remove("hidden");
-  Promise.all([
-    loadRecipesForComponent(componentId, componentName),
-    loadCompositionTextPreviewForCurrentComposition(),
-  ]).catch((error) => {
-    showJson("recipeOut", {
-      status: 0,
-      data: { ok: false, error: String(error.message || error) },
-    });
-  });
-}
-
-function closeRecipeModal() {
-  const componentDetailModal = document.getElementById("componentDetailModal");
-  if (componentDetailModal) {
-    componentDetailModal.classList.add("hidden");
-  }
-  resetRecipePanel("Component: not selected");
-}
-
 function openSimpleModal(modalId) {
   const modal = document.getElementById(String(modalId || ""));
-  if (modal) {
-    modal.classList.remove("hidden");
+  if (!modal) {
+    console.error("[modal-open] missing modal", modalId);
+    return;
   }
+  const panel = modal.querySelector(".modal-content");
+  modal.classList.remove("hidden");
+  modal.removeAttribute("hidden");
+  modal.style.display = "";
+  modal.removeAttribute("aria-hidden");
+  modal.inert = false;
+  if (panel) {
+    panel.classList.remove("hidden");
+    panel.removeAttribute("hidden");
+    panel.style.display = "";
+    panel.removeAttribute("aria-hidden");
+    panel.inert = false;
+  }
+}
+
+function closeModalById(id) {
+  const modal = document.getElementById(String(id || ""));
+  if (!modal) {
+    return;
+  }
+  const activeElement = document.activeElement;
+  if (activeElement && modal.contains(activeElement) && typeof activeElement.blur === "function") {
+    activeElement.blur();
+  }
+  modal.classList.add("hidden");
+  modal.style.display = "";
+  modal.removeAttribute("aria-hidden");
+  modal.inert = false;
+  document.body.classList.remove("modal-open", "modal-locked");
+  document.documentElement.classList.remove("modal-open", "modal-locked");
 }
 
 function closeSimpleModal(modalId) {
-  const modal = document.getElementById(String(modalId || ""));
-  if (modal) {
-    modal.classList.add("hidden");
+  closeModalById(modalId);
+}
+
+function visibleLegacyBuilderModals() {
+  const modals = Array.from(document.querySelectorAll(".modal"));
+  return modals.filter((modal) => !modal.classList.contains("hidden"));
+}
+
+function closeTopVisibleLegacyBuilderModal() {
+  const visible = visibleLegacyBuilderModals();
+  if (visible.length === 0) {
+    return false;
   }
+  const topModal = visible[visible.length - 1];
+  const modalId = String(topModal.id || "");
+  if (!modalId) {
+    return false;
+  }
+  closeModalById(modalId);
+  return true;
 }
 
 async function loadRecipeDetail(recipeId) {
@@ -3446,15 +4813,11 @@ function renderBuilderPanel(composition) {
     dataIcon.type = "button";
     dataIcon.textContent = "R";
     dataIcon.title = hasRecipeData
-      ? "Open component details for this component (recipe data exists)"
-      : "Open component details for this component";
+      ? "Recipe data exists for this component"
+      : "Select component";
     dataIcon.classList.add(hasRecipeData ? "component-data-icon-has-data" : "component-data-icon-no-data");
     dataIcon.addEventListener("click", () => {
       selectComponentBlock(componentIdValue);
-      openRecipeModalForComponent(
-        componentIdValue,
-        String(component.component_name || component.component_id || ""),
-      );
     });
 
     const overflow = document.createElement("details");
@@ -3569,7 +4932,6 @@ function openBuilderModalForComposition(composition) {
     statusLine.textContent = "Adjust what should be included in this dish.";
     statusLine.classList.remove("hidden");
   }
-  closeRecipeModal();
   renderBuilderPanel(composition);
   modal.classList.remove("hidden");
   loadReusableComponents("").catch((error) => {
@@ -3586,7 +4948,6 @@ function closeResolveModal() {
     modal.classList.add("hidden");
   }
   currentBuilderComposition = null;
-  closeRecipeModal();
 }
 
 async function removeComponentFromCurrentComposition(componentId) {
@@ -3847,10 +5208,20 @@ function captureCurrentComponentIds() {
   return new Set((_cachedLibraryComponents || []).map((item) => String(item.component_id || "")));
 }
 
+function captureCurrentCompositionIds() {
+  return new Set((_cachedLibraryCompositions || []).map((item) => String(item.composition_id || "")));
+}
+
 function updateRecentComponentsFromSnapshot(previousSet) {
   const before = previousSet instanceof Set ? previousSet : new Set();
   const now = (_cachedLibraryComponents || []).map((item) => String(item.component_id || ""));
   _recentComponentIds = now.filter((id) => id && !before.has(id));
+}
+
+function updateRecentCompositionsFromSnapshot(previousSet) {
+  const before = previousSet instanceof Set ? previousSet : new Set();
+  const now = (_cachedLibraryCompositions || []).map((item) => String(item.composition_id || ""));
+  _recentCompositionIds = now.filter((id) => id && !before.has(id));
 }
 
 function setLastImportSession(importType, groups, note) {
@@ -3865,8 +5236,18 @@ function setLastImportSession(importType, groups, note) {
 function bindBuilderHandlers() {
   const openComponentCreateModalBtn = document.getElementById("openComponentCreateModalBtn");
   const openImportLibraryModalBtn = document.getElementById("openImportLibraryModalBtn");
+  const primaryCreateDishBtn = document.getElementById("primaryCreateDishBtn");
+  const homeActionImportBtn = document.getElementById("homeActionImportBtn");
+  const homeActionCreateComponentBtn = document.getElementById("homeActionCreateComponentBtn");
+  const homeActionCreateMenuBtn = document.getElementById("homeActionCreateMenuBtn");
+  const navHomeBtn = document.getElementById("navHomeBtn");
+  const navComponentsBtn = document.getElementById("navComponentsBtn");
+  const navDishesBtn = document.getElementById("navDishesBtn");
+  const navImportsBtn = document.getElementById("navImportsBtn");
+  const componentsBackHomeBtn = document.getElementById("componentsBackHomeBtn");
+  const dishesBackHomeBtn = document.getElementById("dishesBackHomeBtn");
+  const openNewDishFromDishesViewBtn = document.getElementById("openNewDishFromDishesViewBtn");
   const componentCreateModalCloseBtn = document.getElementById("componentCreateModalClose");
-  const openDishesLibraryModalBtn = document.getElementById("openDishesLibraryModalBtn");
   const openNewDishModalBtn = document.getElementById("openNewDishModalBtn");
   const dishesLibraryModalCloseBtn = document.getElementById("dishesLibraryModalClose");
   const quickCreateModalCloseBtn = document.getElementById("quickCreateModalClose");
@@ -3890,23 +5271,17 @@ function bindBuilderHandlers() {
   const importFileToggleIgnoredBtn = document.getElementById("btnImportPreviewToggleIgnored");
   const clearImportSummaryBtn = document.getElementById("btnClearImportSummary");
   const importFilePreviewList = document.getElementById("importFilePreviewList");
-  const openComponentsViewBtn = document.getElementById("openComponentsViewBtn");
-  const openDishesViewBtn = document.getElementById("openDishesViewBtn");
-  const openMenusViewBtn = document.getElementById("openMenusViewBtn");
   const openImportsViewBtn = document.getElementById("openImportsViewBtn");
+  const libraryDishesSearchInput = document.getElementById("libraryDishesSearch");
+  const libraryDishesScopeSelect = document.getElementById("libraryDishesScope");
   const importsInboxRefreshBtn = document.getElementById("btnImportsInboxRefresh");
   const importsInboxPublishSelectedBtn = document.getElementById("btnImportsInboxPublishSelected");
   const importsInboxIgnoreSelectedBtn = document.getElementById("btnImportsInboxIgnoreSelected");
   const importsInboxList = document.getElementById("importsInboxList");
   const importsInboxCards = document.getElementById("importsInboxCards");
-  const navComponentsBtn = document.getElementById("navComponentsBtn");
-  const navDishesBtn = document.getElementById("navDishesBtn");
-  const navImportsBtn = document.getElementById("navImportsBtn");
-  const openImportInboxBtn = document.getElementById("openImportInboxBtn");
   const importInboxModalClose = document.getElementById("importInboxModalClose");
   const importEditModalCloseBtn = document.getElementById("importEditModalClose");
   const btnImportEditSave = document.getElementById("btnImportEditSave");
-  const recipeModalCloseBtn = document.getElementById("componentDetailModalClose");
   const recipeCreateBtn = document.getElementById("btnRecipeCreate");
   const recipeSetPrimaryBtn = document.getElementById("btnRecipeSetPrimary");
   const recipeAddIngredientBtn = document.getElementById("btnRecipeIngredientAdd");
@@ -3914,11 +5289,57 @@ function bindBuilderHandlers() {
   const recipeDeleteBtn = document.getElementById("btnRecipeDelete");
   const recipeScalingPreviewBtn = document.getElementById("btnRecipeScalingPreview");
   const libraryComponentsSearchInput = document.getElementById("libraryComponentsSearch");
-  const libraryComponentsScopeSelect = document.getElementById("libraryComponentsScope");
+  const libraryComponentsGrid = document.getElementById("libraryComponentsGrid");
+  const libraryComponentsCategoryFilterSelect = document.getElementById("libraryComponentsCategoryFilter");
+  const libraryComponentsCategoryNav = document.getElementById("libraryComponentsCategoryNav");
+  const componentDetailEditorCloseBtn = document.getElementById("componentDetailEditorClose");
+  const componentDetailSaveChangesBtn = document.getElementById("componentDetailSaveChanges");
+  const componentDetailOverviewCleanBtn = document.getElementById("componentDetailOverviewClean");
+  const componentDetailOverviewDeleteBtn = document.getElementById("componentDetailOverviewDelete");
+  const componentDetailOverviewCategoryInput = document.getElementById("componentDetailOverviewCategory");
+  const componentDetailRecipeAddRowBtn = document.getElementById("componentDetailRecipeAddRow");
+  const componentDetailCalcSyncRowsBtn = document.getElementById("componentDetailCalcSyncRows");
+  const componentDetailTabs = document.getElementById("componentDetailTabs");
+
+  window.closeAllBuilderModals = function () {
+    document.querySelectorAll(".modal").forEach((modal) => {
+      modal.classList.add("hidden");
+      modal.style.display = "";
+      modal.removeAttribute("aria-hidden");
+      modal.inert = false;
+    });
+    document.body.classList.remove("modal-open", "modal-locked");
+    document.documentElement.classList.remove("modal-open", "modal-locked");
+  };
+
+  window.closeAllBuilderModals();
+
+  function resetGlobalModalSafetyState() {
+    document.body.classList.remove("modal-open", "modal-locked");
+    document.documentElement.classList.remove("modal-open", "modal-locked");
+    document.body.style.pointerEvents = "";
+    document.documentElement.style.pointerEvents = "";
+  }
+
+  resetGlobalModalSafetyState();
 
   function openComponentsSurface() {
+    _componentCategoryFilter = "all";
+    _componentTagFilter = "all";
+    _componentInlineEditId = "";
+    _componentActionPopoverId = "";
     setWorkspaceSurface("components");
+    const query = libraryComponentsSearchInput ? String(libraryComponentsSearchInput.value || "") : "";
+    filterLibraryComponents(query);
     const section = document.getElementById("componentsSection");
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function openDishesSurface() {
+    setWorkspaceSurface("dishes");
+    const section = document.getElementById("dishesSection");
     if (section) {
       section.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -3930,10 +5351,212 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (libraryComponentsScopeSelect) {
-    libraryComponentsScopeSelect.addEventListener("change", () => {
+  if (libraryComponentsGrid) {
+    libraryComponentsGrid.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) {
+        return;
+      }
+
+      const secondaryAction = target.closest("[data-component-secondary-action='1']");
+      if (secondaryAction) {
+        return;
+      }
+
+      const trigger = target.closest("[data-open-component-editor='1']");
+      if (!trigger) {
+        return;
+      }
+
+      const componentId = String(trigger.getAttribute("data-component-id") || "").trim();
+      if (!componentId) {
+        return;
+      }
+
+      event.preventDefault();
+      openComponentDetailEditor(componentId);
+    });
+
+    libraryComponentsGrid.addEventListener("keydown", (event) => {
+      const keyboardEvent = event;
+      const target = keyboardEvent.target instanceof Element ? keyboardEvent.target : null;
+      if (!target) {
+        return;
+      }
+
+      const trigger = target.closest("[data-open-component-editor='1']");
+      if (!trigger) {
+        return;
+      }
+
+      if (keyboardEvent.key !== "Enter" && keyboardEvent.key !== " ") {
+        return;
+      }
+
+      const componentId = String(trigger.getAttribute("data-component-id") || "").trim();
+      if (!componentId) {
+        return;
+      }
+
+      keyboardEvent.preventDefault();
+      openComponentDetailEditor(componentId);
+    });
+  }
+
+  if (libraryComponentsCategoryFilterSelect) {
+    libraryComponentsCategoryFilterSelect.addEventListener("change", () => {
+      _componentTagFilter = String(libraryComponentsCategoryFilterSelect.value || "all").trim().toLowerCase() || "all";
+      _componentInlineEditId = "";
+      _componentActionPopoverId = "";
       const query = libraryComponentsSearchInput ? String(libraryComponentsSearchInput.value || "") : "";
       filterLibraryComponents(query);
+    });
+  }
+
+  if (libraryComponentsCategoryNav) {
+    libraryComponentsCategoryNav.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target.closest("[data-category-filter]") : null;
+      if (!target) {
+        return;
+      }
+      const filterValue = String(target.getAttribute("data-category-filter") || "all").trim().toLowerCase();
+      _componentCategoryFilter = filterValue || "all";
+      _componentInlineEditId = "";
+      _componentActionPopoverId = "";
+      const query = libraryComponentsSearchInput ? String(libraryComponentsSearchInput.value || "") : "";
+      filterLibraryComponents(query);
+    });
+  }
+
+  if (componentDetailTabs) {
+    componentDetailTabs.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target.closest("[data-component-tab]") : null;
+      if (!target) {
+        return;
+      }
+      const tabValue = String(target.getAttribute("data-component-tab") || "overview");
+      setComponentDetailTab(tabValue);
+    });
+  }
+
+  if (componentDetailOverviewCleanBtn) {
+    componentDetailOverviewCleanBtn.addEventListener("click", () => {
+      const nameInput = document.getElementById("componentDetailOverviewName");
+      if (!nameInput) {
+        return;
+      }
+      nameInput.value = cleanComponentInlineName(nameInput.value);
+      markComponentDetailDirty();
+    });
+  }
+
+  if (componentDetailOverviewCategoryInput) {
+    componentDetailOverviewCategoryInput.addEventListener("change", () => {
+      markComponentDetailDirty();
+    });
+  }
+
+  if (componentDetailRecipeAddRowBtn) {
+    componentDetailRecipeAddRowBtn.addEventListener("click", () => {
+      const existingRows = readRecipeIngredientRowsFromForm();
+      existingRows.push(defaultRecipeIngredientRow());
+      renderRecipeIngredientRows(existingRows);
+      markComponentDetailDirty();
+    });
+  }
+
+  if (componentDetailCalcSyncRowsBtn) {
+    componentDetailCalcSyncRowsBtn.addEventListener("click", () => {
+      syncCalculationRowsFromRecipeRows();
+      markComponentDetailDirty();
+    });
+  }
+
+  if (componentDetailSaveChangesBtn) {
+    componentDetailSaveChangesBtn.addEventListener("click", async () => {
+      await saveActiveComponentDetailDraft();
+    });
+  }
+
+  if (componentDetailOverviewDeleteBtn) {
+    componentDetailOverviewDeleteBtn.addEventListener("click", async () => {
+      const idValue = String(_activeComponentDetailId || "").trim();
+      if (!idValue) {
+        return;
+      }
+      const nameInput = document.getElementById("componentDetailOverviewName");
+      const componentName = nameInput ? String(nameInput.value || "") : idValue;
+      await deleteComponentFromLibrary(idValue, componentName);
+    });
+  }
+
+  async function closeComponentDetailEditor() {
+    if (!_componentDetailDirty) {
+      closeModalById("componentDetailEditorModal");
+      _activeComponentDetailId = "";
+      return;
+    }
+    const shouldSave = window.confirm("Save changes before leaving?");
+    if (shouldSave) {
+      await saveActiveComponentDetailDraft();
+      closeModalById("componentDetailEditorModal");
+      _activeComponentDetailId = "";
+      resetComponentDetailDirty();
+      return;
+    }
+    const shouldDiscard = window.confirm("Discard changes and close?");
+    if (!shouldDiscard) {
+      return;
+    }
+    closeModalById("componentDetailEditorModal");
+    _activeComponentDetailId = "";
+    resetComponentDetailDirty();
+  }
+
+  if (componentDetailEditorCloseBtn) {
+    componentDetailEditorCloseBtn.addEventListener("click", async () => {
+      await closeComponentDetailEditor();
+    });
+  }
+
+  const componentDetailModal = document.getElementById("componentDetailEditorModal");
+  if (componentDetailModal) {
+    componentDetailModal.addEventListener("input", () => {
+      markComponentDetailDirty();
+    });
+    componentDetailModal.addEventListener("change", () => {
+      markComponentDetailDirty();
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    if (!_componentActionPopoverId) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      closeComponentActionPopover();
+      return;
+    }
+    if (target.closest("[data-component-popover-id]") || target.closest("[data-component-card-id]")) {
+      return;
+    }
+    closeComponentActionPopover();
+  });
+
+  if (libraryDishesSearchInput) {
+    libraryDishesSearchInput.addEventListener("input", () => {
+      if (_lastLibraryResult) {
+        renderLibrary(_lastLibraryResult);
+      }
+    });
+  }
+
+  if (libraryDishesScopeSelect) {
+    libraryDishesScopeSelect.addEventListener("change", () => {
+      if (_lastLibraryResult) {
+        renderLibrary(_lastLibraryResult);
+      }
     });
   }
 
@@ -3944,6 +5567,40 @@ function bindBuilderHandlers() {
       if (freeComponentNameEl) {
         freeComponentNameEl.focus();
       }
+    });
+  }
+
+  if (primaryCreateDishBtn) {
+    primaryCreateDishBtn.addEventListener("click", () => {
+      openSimpleModal("quickCreateModal");
+      const freeDishNameEl = document.getElementById("freeDishName");
+      if (freeDishNameEl) {
+        freeDishNameEl.focus();
+      }
+    });
+  }
+
+  if (homeActionImportBtn) {
+    homeActionImportBtn.addEventListener("click", () => {
+      openSimpleModal("importInboxModal");
+      loadImportsInboxSessions(currentImportSessionId).catch(() => null);
+    });
+  }
+
+  if (homeActionCreateComponentBtn) {
+    homeActionCreateComponentBtn.addEventListener("click", () => {
+      openSimpleModal("componentCreateModal");
+      const freeComponentNameEl = document.getElementById("freeComponentName");
+      if (freeComponentNameEl) {
+        freeComponentNameEl.focus();
+      }
+    });
+  }
+
+  if (homeActionCreateMenuBtn) {
+    homeActionCreateMenuBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      window.location.href = "/menu-builder-v1";
     });
   }
 
@@ -3959,31 +5616,7 @@ function bindBuilderHandlers() {
 
   if (componentCreateModalCloseBtn) {
     componentCreateModalCloseBtn.addEventListener("click", () => {
-      closeSimpleModal("componentCreateModal");
-    });
-  }
-
-  if (openDishesLibraryModalBtn) {
-    openDishesLibraryModalBtn.addEventListener("click", () => {
-      openSimpleModal("dishesLibraryModal");
-    });
-  }
-
-  if (openComponentsViewBtn) {
-    openComponentsViewBtn.addEventListener("click", () => {
-      openComponentsSurface();
-    });
-  }
-
-  if (openDishesViewBtn) {
-    openDishesViewBtn.addEventListener("click", () => {
-      openSimpleModal("dishesLibraryModal");
-    });
-  }
-
-  if (openMenusViewBtn) {
-    openMenusViewBtn.addEventListener("click", () => {
-      window.location.href = "/menu-builder-v1";
+      closeModalById("componentCreateModal");
     });
   }
 
@@ -3991,6 +5624,53 @@ function bindBuilderHandlers() {
     openImportsViewBtn.addEventListener("click", () => {
       openSimpleModal("importInboxModal");
       loadImportsInboxSessions(currentImportSessionId).catch(() => null);
+    });
+  }
+
+  if (openNewDishFromDishesViewBtn) {
+    openNewDishFromDishesViewBtn.addEventListener("click", () => {
+      openSimpleModal("quickCreateModal");
+      const freeDishNameEl = document.getElementById("freeDishName");
+      if (freeDishNameEl) {
+        freeDishNameEl.focus();
+      }
+    });
+  }
+
+  if (navHomeBtn) {
+    navHomeBtn.addEventListener("click", () => {
+      setWorkspaceSurface("home");
+    });
+  }
+
+  if (navComponentsBtn) {
+    navComponentsBtn.addEventListener("click", () => {
+      openComponentsSurface();
+    });
+  }
+
+  if (navDishesBtn) {
+    navDishesBtn.addEventListener("click", () => {
+      openDishesSurface();
+    });
+  }
+
+  if (navImportsBtn) {
+    navImportsBtn.addEventListener("click", () => {
+      openSimpleModal("importInboxModal");
+      loadImportsInboxSessions(currentImportSessionId).catch(() => null);
+    });
+  }
+
+  if (componentsBackHomeBtn) {
+    componentsBackHomeBtn.addEventListener("click", () => {
+      setWorkspaceSurface("home");
+    });
+  }
+
+  if (dishesBackHomeBtn) {
+    dishesBackHomeBtn.addEventListener("click", () => {
+      setWorkspaceSurface("home");
     });
   }
 
@@ -4004,41 +5684,15 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (navComponentsBtn) {
-    navComponentsBtn.addEventListener("click", () => {
-      openComponentsSurface();
-    });
-  }
-
-  if (navDishesBtn) {
-    navDishesBtn.addEventListener("click", () => {
-      openSimpleModal("dishesLibraryModal");
-    });
-  }
-
-  if (navImportsBtn) {
-    navImportsBtn.addEventListener("click", () => {
-      openSimpleModal("importInboxModal");
-      loadImportsInboxSessions(currentImportSessionId).catch(() => null);
-    });
-  }
-
-  if (openImportInboxBtn) {
-    openImportInboxBtn.addEventListener("click", () => {
-      openSimpleModal("importInboxModal");
-      loadImportsInboxSessions(currentImportSessionId).catch(() => null);
-    });
-  }
-
   if (importInboxModalClose) {
     importInboxModalClose.addEventListener("click", () => {
-      closeSimpleModal("importInboxModal");
+      closeModalById("importInboxModal");
     });
   }
 
   if (importEditModalCloseBtn) {
     importEditModalCloseBtn.addEventListener("click", () => {
-      closeSimpleModal("importEditModal");
+      closeModalById("importEditModal");
     });
   }
 
@@ -4050,19 +5704,19 @@ function bindBuilderHandlers() {
 
   if (dishesLibraryModalCloseBtn) {
     dishesLibraryModalCloseBtn.addEventListener("click", () => {
-      closeSimpleModal("dishesLibraryModal");
+      closeModalById("dishesLibraryModal");
     });
   }
 
   if (quickCreateModalCloseBtn) {
     quickCreateModalCloseBtn.addEventListener("click", () => {
-      closeSimpleModal("quickCreateModal");
+      closeModalById("quickCreateModal");
     });
   }
 
   if (importLibraryModalCloseBtn) {
     importLibraryModalCloseBtn.addEventListener("click", () => {
-      closeSimpleModal("importLibraryModal");
+      closeModalById("importLibraryModal");
     });
   }
 
@@ -4078,9 +5732,43 @@ function bindBuilderHandlers() {
 
   if (addComponentModalCloseBtn) {
     addComponentModalCloseBtn.addEventListener("click", () => {
-      closeSimpleModal("addComponentModal");
+      closeModalById("addComponentModal");
     });
   }
+
+  if (resolveCancelBtn) {
+    resolveCancelBtn.addEventListener("click", () => {
+      closeModalById("resolveModal");
+      closeResolveModal();
+    });
+  }
+
+  document.querySelectorAll(".modal").forEach((modal) => {
+    modal.addEventListener("click", async (event) => {
+      if (event.target === modal && modal.id) {
+        if (modal.id === "componentDetailEditorModal") {
+          await closeComponentDetailEditor();
+          return;
+        }
+        closeModalById(modal.id);
+      }
+    });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+      return;
+    }
+    const didClosePopover = closeComponentActionPopoverOnly();
+    if (didClosePopover) {
+      event.preventDefault();
+      return;
+    }
+    const didClose = closeTopVisibleLegacyBuilderModal();
+    if (didClose) {
+      event.preventDefault();
+    }
+  });
 
   if (createDishBtn) {
     createDishBtn.addEventListener("click", async () => {
@@ -4132,11 +5820,18 @@ function bindBuilderHandlers() {
         });
         showJson("createComponentOut", result);
         if (result && result.data && result.data.ok) {
+          const duplicateComponentId = result && result.data && result.data.duplicate
+            ? String(((result.data.component || {}).component_id) || "")
+            : "";
           closeSimpleModal("componentCreateModal");
           if (freeComponentNameEl) {
             freeComponentNameEl.value = "";
           }
           await loadLibrary();
+          if (duplicateComponentId) {
+            setWorkspaceSurface("components");
+            await openComponentDetailEditor(duplicateComponentId);
+          }
         }
       } catch (error) {
         showJson("createComponentOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
@@ -4476,18 +6171,6 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (resolveCancelBtn) {
-    resolveCancelBtn.addEventListener("click", () => {
-      closeResolveModal();
-    });
-  }
-
-  if (recipeModalCloseBtn) {
-    recipeModalCloseBtn.addEventListener("click", () => {
-      closeRecipeModal();
-    });
-  }
-
   if (newComponentInput) {
     newComponentInput.addEventListener("input", async () => {
       try {
@@ -4823,8 +6506,9 @@ function bindBuilderHandlers() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  console.info("Builder UI version: foundation-v1");
   bindBuilderHandlers();
-  setWorkspaceSurface("overview");
+  setWorkspaceSurface("home");
   try {
     await loadLibrary();
     await loadImportsInboxSessions("");

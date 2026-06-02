@@ -139,9 +139,133 @@ def test_create_standalone_component_endpoint() -> None:
     component = body.get("component") or {}
     assert component.get("component_id") == "mashed_potatoes"
     assert component.get("component_name") == "Mashed Potatoes"
+    assert component.get("category") == "ovrigt"
 
     compositions = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
     assert compositions.get("count") == 0
+
+
+def test_create_component_duplicate_normalized_name_reuses_existing_component_with_friendly_message() -> None:
+    client = _client()
+
+    first = client.post(
+        "/api/builder/components",
+        json={"component_name": "Potatismos"},
+        headers=HEADERS,
+    )
+    assert first.status_code == 201
+    first_component = (first.get_json() or {}).get("component") or {}
+    first_id = str(first_component.get("component_id") or "")
+    assert first_id
+
+    duplicate = client.post(
+        "/api/builder/components",
+        json={"component_name": " .. potatismos !! "},
+        headers=HEADERS,
+    )
+    assert duplicate.status_code == 200
+    body = duplicate.get_json() or {}
+    assert body.get("ok") is True
+    assert body.get("duplicate") is True
+    assert body.get("message") == "Komponenten finns redan: Potatismos"
+    component = body.get("component") or {}
+    assert str(component.get("component_id") or "") == first_id
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    listed_components = (listed.get_json() or {}).get("components") or []
+    names = [str(item.get("component_name") or "") for item in listed_components]
+    assert names.count("Potatismos") == 1
+
+
+def test_component_category_can_be_set_and_cleared() -> None:
+    client = _client()
+
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Tomatsoppa", "category": "main"},
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+    created_body = created.get_json() or {}
+    component = created_body.get("component") or {}
+    component_id = str(component.get("component_id") or "")
+    assert component.get("category") == "main"
+
+    patched = client.patch(
+        f"/api/builder/components/{component_id}",
+        json={"category": "sauce"},
+        headers=HEADERS,
+    )
+    assert patched.status_code == 200
+    patched_body = patched.get_json() or {}
+    assert ((patched_body.get("component") or {}).get("category")) == "sauce"
+
+    cleared = client.patch(
+        f"/api/builder/components/{component_id}",
+        json={"category": None},
+        headers=HEADERS,
+    )
+    assert cleared.status_code == 200
+    clear_body = cleared.get_json() or {}
+    assert ((clear_body.get("component") or {}).get("category")) == "ovrigt"
+
+
+def test_component_category_normalization_report_lists_raw_and_suggested_values() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/components",
+        json={"component_name": "Tomatsoppa", "category": "main"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/components",
+        json={"component_name": "Okänd kategori komponent"},
+        headers=HEADERS,
+    )
+
+    rv = client.get("/api/builder/components/category-normalization-report", headers=HEADERS)
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    entries = body.get("entries") or []
+    assert any(
+        (entry.get("current_category") == "main" and entry.get("suggested_category") == "main")
+        for entry in entries
+    )
+    assert any(
+        (entry.get("current_category") is None and entry.get("suggested_category") == "ovrigt")
+        for entry in entries
+    )
+
+
+def test_component_name_can_be_renamed_via_patch_name_field() -> None:
+    client = _client()
+
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Köttfärslimpa serveras"},
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    patched = client.patch(
+        f"/api/builder/components/{component_id}",
+        json={"name": "Köttfärslimpa"},
+        headers=HEADERS,
+    )
+    assert patched.status_code == 200
+    patched_body = patched.get_json() or {}
+    assert ((patched_body.get("component") or {}).get("component_name")) == "Köttfärslimpa"
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    listed_components = (listed.get_json() or {}).get("components") or []
+    match = next((item for item in listed_components if str(item.get("component_id") or "") == component_id), None)
+    assert match is not None
+    assert match.get("component_name") == "Köttfärslimpa"
 
 
 def test_create_standalone_component_endpoint_rejects_empty_name() -> None:
@@ -203,6 +327,43 @@ def test_delete_component_endpoint_blocks_when_component_is_used_by_composition(
     assert body.get("error") == "conflict"
     refs = body.get("references") or {}
     assert "plate_used" in (refs.get("composition_ids") or [])
+    assert "Used dish" in (refs.get("composition_names") or [])
+    assert int(refs.get("composition_count") or 0) == len(set(refs.get("composition_names") or []))
+
+
+def test_component_phrase_fragment_report_lists_links_without_mutating_data() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Med smak av dragon"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "dish_a", "composition_name": "Kycklinggryta"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/dish_a/components/attach",
+        json={"component_id": component_id},
+        headers=HEADERS,
+    )
+
+    rv = client.get("/api/builder/components/phrase-fragment-report", headers=HEADERS)
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    entries = body.get("entries") or []
+    target = next((item for item in entries if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    assert int(target.get("linked_composition_count") or 0) == 1
+    assert "Kycklinggryta" in (target.get("sample_linked_composition_names") or [])
+    paths = target.get("link_source_paths") or []
+    assert "POST /api/builder/import/publish-drafts" in paths
 
 
 def test_delete_composition_endpoint_removes_unreferenced_dish() -> None:
@@ -265,7 +426,85 @@ def test_list_reusable_components_endpoint_supports_listing_and_search() -> None
     search_body = search_rv.get_json() or {}
     assert list_body.get("ok") is True
     assert len(list_body.get("components") or []) == 2
+    first = (list_body.get("components") or [])[0]
+    assert "detail_summary" in first
+    assert isinstance(first.get("tags"), list)
+    summary = first.get("detail_summary") or {}
+    assert set(summary.keys()) == {"has_method_data", "has_calculation_data", "has_allergen_data"}
     assert [item.get("component_name") for item in (search_body.get("components") or [])] == ["Fish Sauce"]
+
+
+def test_component_list_includes_detail_summary_flags_from_component_details() -> None:
+    client = _sqlite_client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Laxsoppa"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json={
+            "method_text": "Sjud 10 min.",
+            "calculation_notes": "Batch x2",
+            "allergens": ["fish"],
+        },
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    body = listed.get_json() or {}
+    components = body.get("components") or []
+    target = next((item for item in components if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    summary = target.get("detail_summary") or {}
+    assert summary.get("has_method_data") is True
+    assert summary.get("has_calculation_data") is True
+    assert summary.get("has_allergen_data") is True
+
+
+def test_component_list_marks_calculation_flag_when_only_rows_are_present() -> None:
+    client = _sqlite_client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Kall sas"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json={
+            "calculation_rows": [
+                {
+                    "ingredient_name": "Majonnäs",
+                    "amount_value": "0.25",
+                    "amount_unit": "kg",
+                    "price_value": "80",
+                    "price_unit": "kr/kg",
+                    "calculated_cost": "20",
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    body = listed.get_json() or {}
+    components = body.get("components") or []
+    target = next((item for item in components if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    summary = target.get("detail_summary") or {}
+    assert summary.get("has_method_data") is False
+    assert summary.get("has_calculation_data") is True
+    assert summary.get("has_allergen_data") is False
 
 
 def test_component_alias_endpoints_create_and_list_aliases() -> None:
@@ -295,6 +534,373 @@ def test_component_alias_endpoints_create_and_list_aliases() -> None:
     listed_body = listed.get_json() or {}
     assert listed_body.get("count") == 1
     assert (listed_body.get("aliases") or [])[0].get("alias_text") == "potatis kokt"
+
+
+def test_component_details_get_patch_persists_in_backend() -> None:
+    client = _sqlite_client()
+
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Ugnsbakad lax"},
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    initial = client.get(f"/api/builder/components/{component_id}/details", headers=HEADERS)
+    assert initial.status_code == 200
+    initial_body = initial.get_json() or {}
+    assert initial_body.get("ok") is True
+    initial_details = initial_body.get("details") or {}
+    assert initial_details.get("recipe_ingredient_rows") == []
+    assert initial_details.get("recipe_ingredients_text") == ""
+    assert initial_details.get("method_text") == ""
+    assert initial_details.get("calculation_yield") == ""
+    assert initial_details.get("calculation_rows") == []
+    assert initial_details.get("allergens") == []
+    assert initial_details.get("tags") == []
+    assert initial_details.get("long_description") == ""
+
+    patch_payload = {
+        "recipe_ingredient_rows": [
+            {"ingredient_name": "Laxfile", "amount_value": "80", "amount_unit": "g"},
+            {"ingredient_name": "Mjolk", "amount_value": "60", "amount_unit": "g"},
+            {"ingredient_name": "Smor", "amount_value": "30", "amount_unit": "g"},
+        ],
+        "recipe_ingredients_text": "Laxfile\nCitron\nDill",
+        "method_text": "Baka i 180C i 12 minuter.",
+        "method_notes": "Anvand bleck med bakplattspapper.",
+        "calculation_yield": "12",
+        "calculation_cost": "320.50 SEK",
+        "calculation_notes": "Pris baserat pa vecka 22.",
+        "calculation_rows": [
+            {
+                "ingredient_name": "Lax",
+                "amount_value": "1.5",
+                "amount_unit": "kg",
+                "price_value": "149",
+                "price_unit": "kr/kg",
+                "calculated_cost": "223.50",
+            }
+        ],
+        "allergens": ["fish", "milk"],
+        "allergen_notes": "Kan innehalla spar av gluten.",
+        "tags": ["fish", "soup"],
+        "long_description": "Serveras varm med dill.",
+    }
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json=patch_payload,
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+    saved_body = saved.get_json() or {}
+    assert saved_body.get("ok") is True
+    saved_details = saved_body.get("details") or {}
+    assert saved_details.get("recipe_ingredient_rows") == patch_payload["recipe_ingredient_rows"]
+    assert saved_details.get("recipe_ingredients_text") == patch_payload["recipe_ingredients_text"]
+    assert saved_details.get("method_text") == patch_payload["method_text"]
+    assert saved_details.get("calculation_yield") == patch_payload["calculation_yield"]
+    assert saved_details.get("calculation_cost") == patch_payload["calculation_cost"]
+    assert saved_details.get("calculation_notes") == patch_payload["calculation_notes"]
+    assert saved_details.get("calculation_rows") == patch_payload["calculation_rows"]
+    assert saved_details.get("allergens") == ["fish", "milk"]
+    assert saved_details.get("allergen_notes") == patch_payload["allergen_notes"]
+    assert saved_details.get("tags") == patch_payload["tags"]
+    assert saved_details.get("long_description") == patch_payload["long_description"]
+
+    refreshed = client.get(f"/api/builder/components/{component_id}/details", headers=HEADERS)
+    assert refreshed.status_code == 200
+    refreshed_body = refreshed.get_json() or {}
+    assert refreshed_body.get("ok") is True
+    refreshed_details = refreshed_body.get("details") or {}
+    assert refreshed_details.get("recipe_ingredient_rows") == patch_payload["recipe_ingredient_rows"]
+    assert refreshed_details.get("recipe_ingredients_text") == patch_payload["recipe_ingredients_text"]
+    assert refreshed_details.get("method_text") == patch_payload["method_text"]
+    assert refreshed_details.get("method_notes") == patch_payload["method_notes"]
+    assert refreshed_details.get("calculation_yield") == patch_payload["calculation_yield"]
+    assert refreshed_details.get("calculation_cost") == patch_payload["calculation_cost"]
+    assert refreshed_details.get("calculation_notes") == patch_payload["calculation_notes"]
+    assert refreshed_details.get("calculation_rows") == patch_payload["calculation_rows"]
+    assert refreshed_details.get("allergens") == ["fish", "milk"]
+    assert refreshed_details.get("allergen_notes") == patch_payload["allergen_notes"]
+    assert refreshed_details.get("tags") == patch_payload["tags"]
+    assert refreshed_details.get("long_description") == patch_payload["long_description"]
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    components = (listed.get_json() or {}).get("components") or []
+    target = next((item for item in components if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    assert target.get("tags") == patch_payload["tags"]
+
+
+def test_component_list_marks_method_flag_when_only_recipe_rows_are_present() -> None:
+    client = _sqlite_client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Potatismos"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json={
+            "recipe_ingredient_rows": [
+                {
+                    "ingredient_name": "Potatis",
+                    "amount_value": "80",
+                    "amount_unit": "g",
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    body = listed.get_json() or {}
+    components = body.get("components") or []
+    target = next((item for item in components if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    summary = target.get("detail_summary") or {}
+    assert summary.get("has_method_data") is True
+    assert summary.get("has_calculation_data") is False
+
+
+def test_component_list_does_not_mark_method_flag_when_method_fields_are_empty() -> None:
+    client = _sqlite_client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Tomat"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json={
+            "method_text": "   ",
+            "method_notes": "\n\t",
+            "recipe_ingredient_rows": [],
+        },
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    components = (listed.get_json() or {}).get("components") or []
+    target = next((item for item in components if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    summary = target.get("detail_summary") or {}
+    assert summary.get("has_method_data") is False
+
+
+def test_component_details_normalizes_blank_recipe_rows_on_save() -> None:
+    client = _sqlite_client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Morot"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json={
+            "recipe_ingredient_rows": [
+                {"ingredient_name": "", "amount_value": "10", "amount_unit": "g"},
+                {"ingredient_name": "   ", "amount_value": "", "amount_unit": ""},
+                {"ingredient_name": "  Potatis  ", "amount_value": " 80 ", "amount_unit": " g "},
+            ]
+        },
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+    details = (saved.get_json() or {}).get("details") or {}
+    assert details.get("recipe_ingredient_rows") == [
+        {"ingredient_name": "Potatis", "amount_value": "80", "amount_unit": "g"}
+    ]
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    components = (listed.get_json() or {}).get("components") or []
+    target = next((item for item in components if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    summary = target.get("detail_summary") or {}
+    assert summary.get("has_method_data") is True
+
+
+def test_component_list_does_not_mark_method_flag_for_rows_with_empty_ingredient_name() -> None:
+    client = _sqlite_client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Paprika"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json={
+            "recipe_ingredient_rows": [
+                {"ingredient_name": "", "amount_value": "1", "amount_unit": "kg"}
+            ]
+        },
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+
+    details = (saved.get_json() or {}).get("details") or {}
+    assert details.get("recipe_ingredient_rows") == []
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    components = (listed.get_json() or {}).get("components") or []
+    target = next((item for item in components if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    summary = target.get("detail_summary") or {}
+    assert summary.get("has_method_data") is False
+
+
+def test_component_list_marks_method_flag_when_method_text_exists() -> None:
+    client = _sqlite_client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Broccoli"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json={"method_text": "Koka i 5 minuter."},
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    components = (listed.get_json() or {}).get("components") or []
+    target = next((item for item in components if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    summary = target.get("detail_summary") or {}
+    assert summary.get("has_method_data") is True
+
+
+def test_imported_component_without_recipe_data_does_not_get_method_flag() -> None:
+    client = _sqlite_client()
+
+    published = client.post(
+        "/api/builder/import/publish-drafts",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "component",
+                    "raw_text": "Kokt potatis",
+                    "name": "Kokt potatis",
+                    "components": [],
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+    assert published.status_code == 200
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    components = (listed.get_json() or {}).get("components") or []
+    target = next(
+        (item for item in components if str(item.get("component_name") or "").strip().lower() == "kokt potatis"),
+        None,
+    )
+    assert target is not None
+    summary = target.get("detail_summary") or {}
+    assert summary.get("has_method_data") is False
+
+
+def test_component_method_summary_report_lists_field_source_for_method_flag() -> None:
+    client = _sqlite_client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Ris"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json={
+            "method_text": "Sjuda i vatten",
+            "method_notes": "Ror om",
+            "recipe_ingredient_rows": [{"ingredient_name": "Ris", "amount_value": "100", "amount_unit": "g"}],
+            "recipe_ingredients_text": "Ris | 100 | g",
+        },
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+
+    report = client.get("/api/builder/components/method-summary-report", headers=HEADERS)
+    assert report.status_code == 200
+    body = report.get_json() or {}
+    entries = body.get("entries") or []
+    target = next((item for item in entries if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    assert target.get("has_method_data") is True
+    sources = target.get("method_sources") or []
+    assert "method_text" in sources
+    assert "method_notes" in sources
+    assert "recipe_ingredient_rows" in sources
+    assert "recipe_ingredients_text legacy" not in sources
+
+
+def test_component_method_summary_report_marks_legacy_recipe_text_when_intentionally_saved() -> None:
+    client = _sqlite_client()
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Legacy test"},
+        headers=HEADERS,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    saved = client.patch(
+        f"/api/builder/components/{component_id}/details",
+        json={
+            "recipe_ingredient_rows": [],
+            "recipe_ingredients_text": "Morot | 50 | g",
+            "method_text": "",
+            "method_notes": "",
+        },
+        headers=HEADERS,
+    )
+    assert saved.status_code == 200
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    components = (listed.get_json() or {}).get("components") or []
+    target = next((item for item in components if str(item.get("component_id") or "") == component_id), None)
+    assert target is not None
+    summary = target.get("detail_summary") or {}
+    assert summary.get("has_method_data") is True
+
+    report = client.get("/api/builder/components/method-summary-report", headers=HEADERS)
+    assert report.status_code == 200
+    entries = (report.get_json() or {}).get("entries") or []
+    target_report = next((item for item in entries if str(item.get("component_id") or "") == component_id), None)
+    assert target_report is not None
+    assert "recipe_ingredients_text legacy" in (target_report.get("method_sources") or [])
 
 
 def test_library_endpoint_returns_separate_sorted_components_and_compositions() -> None:
@@ -713,6 +1319,27 @@ def test_import_review_preview_exposes_cleaned_draft_items() -> None:
     assert "potatis" in [str(name).lower() for name in component_names]
 
 
+def test_import_review_preview_keeps_descriptor_line_as_dish_and_filters_phrase_fragment_component() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/import/preview-lines",
+        json={"lines": ["Kycklinggryta med smak av dragon"]},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    preview = (rv.get_json() or {}).get("preview") or {}
+    drafts = preview.get("draft_items") or []
+    assert len(drafts) == 1
+    draft = drafts[0] or {}
+    assert draft.get("item_type") == "dish"
+    components = draft.get("components") or []
+    names = [str(item.get("name") or "") for item in components]
+    assert "Kycklinggryta" in names
+    assert all("smak av" not in name.lower() for name in names)
+
+
 def test_import_sessions_create_list_and_open_detail() -> None:
     client = _client()
 
@@ -1048,6 +1675,111 @@ def test_import_review_publish_dish_decomposes_to_components_not_single_componen
     assert "Köttbullar" in component_names
     assert "Potatis" in component_names
     assert "Köttbullar med potatis" not in component_names
+
+
+def test_import_review_publish_reuses_existing_component_and_avoids_duplicates() -> None:
+    client = _client()
+
+    created = client.post(
+        "/api/builder/components",
+        json={"component_name": "Potatismos"},
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+
+    rv = client.post(
+        "/api/builder/import/publish-drafts",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "dish",
+                    "raw_text": "Köttfärslimpa med potatismos",
+                    "name": "Köttfärslimpa med potatismos",
+                    "components": [{"name": "Köttfärslimpa"}, {"name": "Potatismos"}, {"name": " Potatismos "}],
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    library = client.get("/api/builder/library", headers=HEADERS).get_json() or {}
+    components = library.get("components") or []
+    potatismos = [item for item in components if str(item.get("component_name") or "").strip().lower() == "potatismos"]
+    assert len(potatismos) == 1
+
+    compositions = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
+    items = compositions.get("compositions") or []
+    assert len(items) == 1
+    linked = items[0].get("components") or []
+    linked_ids = [str(item.get("component_id") or "") for item in linked if str(item.get("component_name") or "").strip().lower() == "potatismos"]
+    assert len(linked_ids) == 1
+
+
+def test_import_review_publish_skips_phrase_fragment_component_from_payload() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/import/publish-drafts",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "dish",
+                    "raw_text": "Kycklinggryta med smak av dragon",
+                    "name": "Kycklinggryta med smak av dragon",
+                    "components": [{"name": "Kycklinggryta"}, {"name": "Med smak av dragon"}],
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    compositions = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
+    items = compositions.get("compositions") or []
+    assert len(items) == 1
+    components = (items[0].get("components") or [])
+    component_names = [str(item.get("component_name") or "") for item in components]
+    assert "Kycklinggryta" in component_names
+    assert all("smak av" not in name.lower() for name in component_names)
+
+
+def test_import_review_publish_does_not_auto_link_existing_phrase_fragment_component() -> None:
+    client = _client()
+
+    existing = client.post(
+        "/api/builder/components",
+        json={"component_name": "Med smak av dragon"},
+        headers=HEADERS,
+    )
+    assert existing.status_code == 201
+
+    rv = client.post(
+        "/api/builder/import/publish-drafts",
+        json={
+            "items": [
+                {
+                    "selected": True,
+                    "item_type": "dish",
+                    "raw_text": "Kycklinggryta med smak av dragon",
+                    "name": "Kycklinggryta med smak av dragon",
+                    "components": [],
+                }
+            ]
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    compositions = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
+    items = compositions.get("compositions") or []
+    assert len(items) == 1
+    components = (items[0].get("components") or [])
+    names = [str(item.get("component_name") or "") for item in components]
+    assert "Kycklinggryta" in names
+    assert all("med smak av" not in value.lower() for value in names)
 
 
 def test_builder_file_import_preview_xlsx_supports_explicit_column_name() -> None:

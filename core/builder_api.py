@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import datetime, UTC
 from dataclasses import dataclass
@@ -14,10 +15,12 @@ from .app_authz import require_roles
 from .builder import BuilderFlow
 from .builder_menu_context_flow import BuilderMenuContextFlow
 from .builder.file_import import (
+    DEFAULT_COMPONENT_CATEGORIES,
     classify_builder_import_lines,
     parse_builder_import_file,
     sanitize_builder_import_text,
     suggest_component_category,
+    suggest_component_tags,
     suggest_components_from_import_dish_name,
 )
 from .builder_sqlite import (
@@ -78,6 +81,75 @@ def _optional_str(payload: dict[str, Any], field: str) -> str | None:
         return None
     value = str(raw).strip()
     return value or None
+
+
+def _looks_like_composite_dish_name(name: str) -> bool:
+    value = str(name or "").strip()
+    if not value:
+        return False
+    if len(value.split()) < 2:
+        return False
+    return bool(re.search(r"\b(?:med|och|serveras\s+med|with|and|served\s+with)\b", value, flags=re.IGNORECASE))
+
+
+def _normalize_component_category(value: str | None) -> str | None:
+    category = _canonical_component_category(value)
+    if not category:
+        return None
+    return category
+
+
+def _canonical_component_category(value: str | None) -> str:
+    folded = (
+        str(value or "")
+        .strip()
+        .lower()
+        .replace("å", "a")
+        .replace("ä", "a")
+        .replace("ö", "o")
+    )
+    if not folded:
+        return ""
+    if folded in {"main", "kott", "protein", "meat", "animal", "fish", "fisk", "vegetarian", "vegetarisk", "vegetariskt", "veg"}:
+        return "main"
+    if folded in {"side", "tillbehor"}:
+        return "side"
+    if folded in {"sauce", "sas", "sos"}:
+        return "sauce"
+    if folded in {"dessert"}:
+        return "dessert"
+    if folded in {"uncategorized", "unknown", "other", "ovrigt"}:
+        return "ovrigt"
+    return "ovrigt"
+
+
+def _is_descriptive_component_fragment(name: str) -> bool:
+    value = str(name or "").strip()
+    if not value:
+        return False
+    return bool(
+        re.match(
+            r"^(?:med\s+smak\s+av|smak\s+av|med\s+inslag\s+av|inslag\s+av|smaksatt(?:\s+med)?)\b",
+            value,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _component_raw_category_value(component) -> str | None:
+    categories = list(getattr(component, "categories", []) or [])
+    if not categories:
+        return None
+    value = str(categories[0] or "").strip().lower()
+    return value or None
+
+
+def _component_category_value(component) -> str | None:
+    raw = _component_raw_category_value(component)
+    normalized = _canonical_component_category(raw)
+    if normalized:
+        return normalized
+    return "ovrigt"
 
 
 def _maybe_int(value: Any, *, field: str) -> int | None:
@@ -289,11 +361,21 @@ def _serialize_rendered_composition_text(model) -> dict[str, Any]:
     }
 
 
-def _serialize_component(component) -> dict[str, Any]:
+def _serialize_component(component, *, detail_summary: dict[str, Any] | None = None) -> dict[str, Any]:
+    summary = detail_summary or _load_component_detail_summaries([str(component.component_id)]).get(
+        str(component.component_id),
+        _default_component_detail_summary(),
+    )
+    details = _load_component_details(str(component.component_id))
     return {
         "component_id": component.component_id,
         "component_name": component.canonical_name,
+        "category": _component_category_value(component),
+        "tags": list(details.get("tags") or []),
+        "default_categories": list(DEFAULT_COMPONENT_CATEGORIES),
         "primary_recipe_id": component.primary_recipe_id,
+        "category_color": None,
+        "detail_summary": summary,
     }
 
 
@@ -395,8 +477,9 @@ def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
         hints: list[dict[str, Any]] = []
         if is_importable and normalized_name:
             component_suggestions = suggest_components_from_import_dish_name(normalized_name)
-            item_type = "dish" if len(component_suggestions) >= 2 else "component"
+            item_type = "dish" if len(component_suggestions) >= 2 or _looks_like_composite_dish_name(normalized_name) else "component"
             components = [{"name": name} for name in component_suggestions]
+            suggested_tags = suggest_component_tags(normalized_name)
             for name in component_suggestions:
                 match = flow.match_component_name(name)
                 if str(match.status or "") in {"exact_match", "alias_match", "possible_match"}:
@@ -423,6 +506,7 @@ def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
                 "raw_text": item.raw_text,
                 "name": normalized_name,
                 "components": components,
+                "suggested_tags": suggested_tags if is_importable and normalized_name else [],
                 "hints": hints,
                 "classification": item.classification,
                 "reason": item.reason,
@@ -470,7 +554,17 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
         imported_count += 1
 
         if item_type == "component":
-            component = flow.create_standalone_component(name)
+            item_tags = suggest_component_tags(name)
+            component = flow.create_standalone_component(
+                name,
+                category=_normalize_component_category(suggest_component_category(name)),
+            )
+            if item_tags:
+                details = _load_component_details(component.component_id)
+                merged_tags = _coerce_tag_list(list(details.get("tags") or []) + list(item_tags))
+                if merged_tags != list(details.get("tags") or []):
+                    details["tags"] = merged_tags
+                    _save_component_details(component.component_id, details)
             if component.component_id in known_component_ids:
                 reused_component_count += 1
                 matched_via = "existing"
@@ -538,7 +632,22 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
 
             attached_ids: set[str] = set()
             for component_name in component_names:
-                component = flow.create_standalone_component(component_name)
+                if _is_descriptive_component_fragment(component_name):
+                    item_warnings.append(
+                        f'skipped descriptive fragment component "{component_name}"'
+                    )
+                    continue
+                component = flow.create_standalone_component(
+                    component_name,
+                    category=_normalize_component_category(suggest_component_category(component_name)),
+                )
+                component_tags = suggest_component_tags(component_name)
+                if component_tags:
+                    details = _load_component_details(component.component_id)
+                    merged_tags = _coerce_tag_list(list(details.get("tags") or []) + list(component_tags))
+                    if merged_tags != list(details.get("tags") or []):
+                        details["tags"] = merged_tags
+                        _save_component_details(component.component_id, details)
                 if component.component_id in attached_ids:
                     continue
                 attached_ids.add(component.component_id)
@@ -597,6 +706,411 @@ def _session_store() -> dict[str, Any]:
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _component_details_store() -> dict[str, dict[str, Any]]:
+    store = current_app.extensions.get("builder_component_details_store")
+    if isinstance(store, dict):
+        return store
+    created: dict[str, dict[str, Any]] = {}
+    current_app.extensions["builder_component_details_store"] = created
+    return created
+
+
+def _default_component_details_payload() -> dict[str, Any]:
+    return {
+        "tags": [],
+        "long_description": "",
+        "recipe_ingredient_rows": [],
+        "recipe_ingredients_text": "",
+        "recipe_ingredients_text_intentionally_saved": False,
+        "method_text": "",
+        "method_notes": "",
+        "calculation_yield": "",
+        "calculation_cost": "",
+        "calculation_notes": "",
+        "calculation_rows": [],
+        "allergens": [],
+        "allergen_notes": "",
+        "updated_at": None,
+    }
+
+
+def _default_component_detail_summary() -> dict[str, Any]:
+    return {
+        "has_method_data": False,
+        "has_calculation_data": False,
+        "has_allergen_data": False,
+    }
+
+
+def _has_text_value(value: Any) -> bool:
+    return bool(str(value or "").strip())
+
+
+def _normalize_recipe_ingredient_rows(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+
+    rows: list[dict[str, str]] = []
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+        ingredient_name = str(row.get("ingredient_name") or "").strip()
+        amount_value = str(row.get("amount_value") or "").strip()
+        amount_unit = str(row.get("amount_unit") or "").strip()
+        if not ingredient_name:
+            continue
+        rows.append(
+            {
+                "ingredient_name": ingredient_name,
+                "amount_value": amount_value,
+                "amount_unit": amount_unit,
+            }
+        )
+    return rows
+
+
+def _component_method_summary_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
+    method_text_present = _has_text_value(payload.get("method_text"))
+    method_notes_present = _has_text_value(payload.get("method_notes"))
+    recipe_rows = _normalize_recipe_ingredient_rows(payload.get("recipe_ingredient_rows"))
+    recipe_rows_present = bool(recipe_rows)
+    legacy_recipe_text_present = _has_text_value(payload.get("recipe_ingredients_text"))
+    legacy_recipe_text_intentionally_saved = bool(payload.get("recipe_ingredients_text_intentionally_saved"))
+    legacy_recipe_text_counts = (
+        legacy_recipe_text_present
+        and legacy_recipe_text_intentionally_saved
+        and not recipe_rows_present
+    )
+
+    method_sources: list[str] = []
+    if method_text_present:
+        method_sources.append("method_text")
+    if method_notes_present:
+        method_sources.append("method_notes")
+    if recipe_rows_present:
+        method_sources.append("recipe_ingredient_rows")
+    if legacy_recipe_text_counts:
+        method_sources.append("recipe_ingredients_text legacy")
+
+    return {
+        "has_method_data": bool(method_sources),
+        "method_sources": method_sources,
+        "method_text_present": method_text_present,
+        "method_notes_present": method_notes_present,
+        "recipe_ingredient_rows_present": recipe_rows_present,
+        "legacy_recipe_ingredients_text_present": legacy_recipe_text_present,
+        "legacy_recipe_ingredients_text_intentionally_saved": legacy_recipe_text_intentionally_saved,
+        "legacy_recipe_ingredients_text_counts": legacy_recipe_text_counts,
+    }
+
+
+def _coerce_allergen_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item or "").strip().lower() for item in value if str(item or "").strip()]
+
+
+def _coerce_tag_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    tags: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        tag = str(item or "").strip().lower()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        tags.append(tag)
+    return tags
+
+
+def _component_detail_summary_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    method_diagnostics = _component_method_summary_diagnostics(payload)
+    allergens = _coerce_allergen_list(payload.get("allergens"))
+    recipe_rows = _normalize_recipe_ingredient_rows(payload.get("recipe_ingredient_rows"))
+    calculation_rows = payload.get("calculation_rows") if isinstance(payload.get("calculation_rows"), list) else []
+    return {
+        "has_method_data": bool(method_diagnostics.get("has_method_data")),
+        "has_calculation_data": (
+            _has_text_value(payload.get("calculation_yield"))
+            or _has_text_value(payload.get("calculation_cost"))
+            or _has_text_value(payload.get("calculation_notes"))
+            or bool(calculation_rows)
+        ),
+        "has_allergen_data": bool(allergens) or _has_text_value(payload.get("allergen_notes")),
+    }
+
+
+def _load_component_detail_summaries(component_ids: list[str]) -> dict[str, dict[str, Any]]:
+    normalized_ids = [str(value or "").strip() for value in component_ids if str(value or "").strip()]
+    if not normalized_ids:
+        return {}
+
+    summaries = {
+        component_id: _default_component_detail_summary()
+        for component_id in normalized_ids
+    }
+
+    db_path = _builder_db_path()
+    if db_path:
+        sqlite_path = initialize_builder_sqlite(db_path)
+        placeholders = ", ".join("?" for _ in normalized_ids)
+        with sqlite3.connect(sqlite_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                f"""
+                SELECT component_id, method_text, method_notes, calculation_yield, calculation_cost,
+                    recipe_ingredients_text, recipe_ingredient_rows_json, recipe_ingredients_text_intent,
+                        calculation_notes, calculation_rows_json, allergens_json, allergen_notes
+                FROM component_details
+                WHERE component_id IN ({placeholders})
+                """,
+                tuple(normalized_ids),
+            ).fetchall()
+
+        for row in rows:
+            component_id = str(row["component_id"] or "").strip()
+            if not component_id:
+                continue
+            try:
+                recipe_rows = list(json.loads(str(row["recipe_ingredient_rows_json"] or "[]")))
+            except Exception:
+                recipe_rows = []
+            try:
+                allergens = list(json.loads(str(row["allergens_json"] or "[]")))
+            except Exception:
+                allergens = []
+            try:
+                calculation_rows = list(json.loads(str(row["calculation_rows_json"] or "[]")))
+            except Exception:
+                calculation_rows = []
+            payload = {
+                "recipe_ingredients_text": str(row["recipe_ingredients_text"] or ""),
+                "recipe_ingredient_rows": recipe_rows,
+                "recipe_ingredients_text_intentionally_saved": bool(row["recipe_ingredients_text_intent"]),
+                "method_text": str(row["method_text"] or ""),
+                "method_notes": str(row["method_notes"] or ""),
+                "calculation_yield": str(row["calculation_yield"] or ""),
+                "calculation_cost": str(row["calculation_cost"] or ""),
+                "calculation_notes": str(row["calculation_notes"] or ""),
+                "calculation_rows": calculation_rows,
+                "allergens": allergens,
+                "allergen_notes": str(row["allergen_notes"] or ""),
+            }
+            summaries[component_id] = _component_detail_summary_from_payload(payload)
+        return summaries
+
+    store = _component_details_store()
+    for component_id in normalized_ids:
+        entry = store.get(component_id)
+        if not isinstance(entry, dict):
+            continue
+        payload = {
+            "recipe_ingredients_text": entry.get("recipe_ingredients_text"),
+            "recipe_ingredient_rows": entry.get("recipe_ingredient_rows") if isinstance(entry.get("recipe_ingredient_rows"), list) else [],
+            "recipe_ingredients_text_intentionally_saved": bool(entry.get("recipe_ingredients_text_intentionally_saved")),
+            "method_text": entry.get("method_text"),
+            "method_notes": entry.get("method_notes"),
+            "calculation_yield": entry.get("calculation_yield"),
+            "calculation_cost": entry.get("calculation_cost"),
+            "calculation_notes": entry.get("calculation_notes"),
+            "calculation_rows": entry.get("calculation_rows") if isinstance(entry.get("calculation_rows"), list) else [],
+            "allergens": entry.get("allergens") if isinstance(entry.get("allergens"), list) else [],
+            "allergen_notes": entry.get("allergen_notes"),
+        }
+        summaries[component_id] = _component_detail_summary_from_payload(payload)
+    return summaries
+
+
+def _normalize_component_details_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    allergens_raw = payload.get("allergens")
+    allergens: list[str] = []
+    if isinstance(allergens_raw, list):
+        allergens = [
+            str(item or "").strip().lower()
+            for item in allergens_raw
+            if str(item or "").strip()
+        ]
+
+    recipe_ingredient_rows = _normalize_recipe_ingredient_rows(payload.get("recipe_ingredient_rows"))
+    recipe_ingredients_text = str(payload.get("recipe_ingredients_text") or "")
+    recipe_ingredients_text_intentionally_saved = bool(
+        payload.get("recipe_ingredients_text_intentionally_saved")
+    )
+    if recipe_ingredient_rows:
+        recipe_ingredients_text_intentionally_saved = False
+
+    calculation_rows_raw = payload.get("calculation_rows")
+    calculation_rows: list[dict[str, str]] = []
+    if isinstance(calculation_rows_raw, list):
+        for row in calculation_rows_raw:
+            if not isinstance(row, dict):
+                continue
+            calculation_rows.append(
+                {
+                    "ingredient_name": str(row.get("ingredient_name") or ""),
+                    "amount_value": str(row.get("amount_value") or ""),
+                    "amount_unit": str(row.get("amount_unit") or ""),
+                    "price_value": str(row.get("price_value") or ""),
+                    "price_unit": str(row.get("price_unit") or ""),
+                    "calculated_cost": str(row.get("calculated_cost") or ""),
+                }
+            )
+
+    return {
+        "tags": _coerce_tag_list(payload.get("tags")),
+        "long_description": str(payload.get("long_description") or ""),
+        "recipe_ingredient_rows": recipe_ingredient_rows,
+        "recipe_ingredients_text": recipe_ingredients_text,
+        "recipe_ingredients_text_intentionally_saved": recipe_ingredients_text_intentionally_saved,
+        "method_text": str(payload.get("method_text") or ""),
+        "method_notes": str(payload.get("method_notes") or ""),
+        "calculation_yield": str(payload.get("calculation_yield") or ""),
+        "calculation_cost": str(payload.get("calculation_cost") or ""),
+        "calculation_notes": str(payload.get("calculation_notes") or ""),
+        "calculation_rows": calculation_rows,
+        "allergens": allergens,
+        "allergen_notes": str(payload.get("allergen_notes") or ""),
+    }
+
+
+def _load_component_details(component_id: str) -> dict[str, Any]:
+    component_id_value = str(component_id or "").strip()
+    if not component_id_value:
+        return _default_component_details_payload()
+
+    db_path = _builder_db_path()
+    if db_path:
+        sqlite_path = initialize_builder_sqlite(db_path)
+        with sqlite3.connect(sqlite_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM component_details WHERE component_id = ?",
+                (component_id_value,),
+            ).fetchone()
+        if row is None:
+            return _default_component_details_payload()
+
+        return {
+            "tags": list(json.loads(str(row["tags_json"] or "[]"))),
+            "long_description": str(row["long_description_text"] or ""),
+            "recipe_ingredient_rows": list(json.loads(str(row["recipe_ingredient_rows_json"] or "[]"))),
+            "recipe_ingredients_text": str(row["recipe_ingredients_text"] or ""),
+            "recipe_ingredients_text_intentionally_saved": bool(row["recipe_ingredients_text_intent"]),
+            "method_text": str(row["method_text"] or ""),
+            "method_notes": str(row["method_notes"] or ""),
+            "calculation_yield": str(row["calculation_yield"] or ""),
+            "calculation_cost": str(row["calculation_cost"] or ""),
+            "calculation_notes": str(row["calculation_notes"] or ""),
+            "calculation_rows": list(json.loads(str(row["calculation_rows_json"] or "[]"))),
+            "allergens": list(json.loads(str(row["allergens_json"] or "[]"))),
+            "allergen_notes": str(row["allergen_notes"] or ""),
+            "updated_at": str(row["updated_at"] or "") or None,
+        }
+
+    store = _component_details_store()
+    entry = store.get(component_id_value)
+    if not isinstance(entry, dict):
+        return _default_component_details_payload()
+    details = _default_component_details_payload()
+    details.update(_normalize_component_details_payload(entry))
+    details["updated_at"] = str(entry.get("updated_at") or "") or None
+    return details
+
+
+def _save_component_details(component_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    component_id_value = str(component_id or "").strip()
+    if not component_id_value:
+        raise ValueError("component_id is required")
+
+    normalized = _normalize_component_details_payload(payload)
+    updated_at = _utc_now()
+
+    db_path = _builder_db_path()
+    if db_path:
+        sqlite_path = initialize_builder_sqlite(db_path)
+        with sqlite3.connect(sqlite_path) as conn:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute(
+                """
+                INSERT INTO component_details (
+                    component_id,
+                    recipe_ingredients_text,
+                    recipe_ingredient_rows_json,
+                    recipe_ingredients_text_intent,
+                    tags_json,
+                    long_description_text,
+                    method_text,
+                    method_notes,
+                    calculation_yield,
+                    calculation_cost,
+                    calculation_notes,
+                    calculation_rows_json,
+                    allergens_json,
+                    allergen_notes,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(component_id) DO UPDATE SET
+                    recipe_ingredients_text = excluded.recipe_ingredients_text,
+                    recipe_ingredient_rows_json = excluded.recipe_ingredient_rows_json,
+                    recipe_ingredients_text_intent = excluded.recipe_ingredients_text_intent,
+                    tags_json = excluded.tags_json,
+                    long_description_text = excluded.long_description_text,
+                    method_text = excluded.method_text,
+                    method_notes = excluded.method_notes,
+                    calculation_yield = excluded.calculation_yield,
+                    calculation_cost = excluded.calculation_cost,
+                    calculation_notes = excluded.calculation_notes,
+                    calculation_rows_json = excluded.calculation_rows_json,
+                    allergens_json = excluded.allergens_json,
+                    allergen_notes = excluded.allergen_notes,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    component_id_value,
+                    normalized["recipe_ingredients_text"],
+                    json.dumps(normalized["recipe_ingredient_rows"]),
+                    1 if normalized["recipe_ingredients_text_intentionally_saved"] else 0,
+                    json.dumps(normalized["tags"]),
+                    normalized["long_description"],
+                    normalized["method_text"],
+                    normalized["method_notes"],
+                    normalized["calculation_yield"],
+                    normalized["calculation_cost"],
+                    normalized["calculation_notes"],
+                    json.dumps(normalized["calculation_rows"]),
+                    json.dumps(normalized["allergens"]),
+                    normalized["allergen_notes"],
+                    updated_at,
+                ),
+            )
+        result = dict(normalized)
+        result["updated_at"] = updated_at
+        return result
+
+    store = _component_details_store()
+    saved = dict(normalized)
+    saved["updated_at"] = updated_at
+    store[component_id_value] = saved
+    return dict(saved)
+
+
+def _delete_component_details(component_id: str) -> None:
+    component_id_value = str(component_id or "").strip()
+    if not component_id_value:
+        return
+
+    db_path = _builder_db_path()
+    if db_path:
+        sqlite_path = initialize_builder_sqlite(db_path)
+        with sqlite3.connect(sqlite_path) as conn:
+            conn.execute("DELETE FROM component_details WHERE component_id = ?", (component_id_value,))
+        return
+
+    store = _component_details_store()
+    store.pop(component_id_value, None)
 
 
 def _summarize_session_items(items: list[dict[str, Any]]) -> dict[str, int]:
@@ -973,6 +1487,7 @@ def _reset_builder_state() -> dict[str, Any]:
         before_counts = {
             "builder_components": len(flow.list_library_components()),
             "builder_component_aliases": len(flow._component_alias_repository.list_all()),
+            "component_details": len(_component_details_store()),
             "builder_compositions": len(compositions),
             "builder_composition_aliases": len(flow._alias_repository.list_all()),
             "builder_composition_components": sum(len(item.components) for item in compositions),
@@ -993,6 +1508,7 @@ def _reset_builder_state() -> dict[str, Any]:
         "builder_menu_recipe_repository",
         "builder_menu_ingredient_repository",
         "builder_import_sessions_store",
+        "builder_component_details_store",
     ]:
         current_app.extensions.pop(extension_key, None)
 
@@ -1125,13 +1641,187 @@ def create_component():
 
     try:
         flow = _get_builder_flow()
+        component_name_value = _require_str(payload, "component_name")
+        normalized_key = flow._normalize_component_key(component_name_value)
+        existing_component = None
+        for item in flow.list_library_components():
+            if flow._normalize_component_key(str(item.canonical_name or "")) == normalized_key:
+                existing_component = item
+                break
+
+        if existing_component is not None:
+            return jsonify(
+                {
+                    "ok": True,
+                    "duplicate": True,
+                    "message": f"Komponenten finns redan: {existing_component.canonical_name}",
+                    "component": _serialize_component(existing_component),
+                }
+            ), 200
+
+        category_value = _normalize_component_category(_optional_str(payload, "category"))
         component = flow.create_standalone_component(
-            component_name=_require_str(payload, "component_name"),
+            component_name=component_name_value,
+            category=category_value,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
 
     return jsonify({"ok": True, "component": _serialize_component(component)}), 201
+
+
+@bp.patch("/components/<component_id>")
+@require_roles("editor", "admin", "superuser")
+def update_component(component_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        component_id_value = str(component_id or "")
+        component = None
+
+        has_name = "name" in payload or "component_name" in payload
+        has_category = "category" in payload
+        if not has_name and not has_category:
+            return _bad_request("name/component_name or category is required")
+
+        if has_name:
+            rename_value = _optional_str(payload, "name")
+            if rename_value is None:
+                rename_value = _optional_str(payload, "component_name")
+            component = flow.rename_component(
+                component_id=component_id_value,
+                component_name=str(rename_value or ""),
+            )
+
+        if has_category:
+            component = flow.set_component_category(
+                component_id=component_id_value,
+                category=_normalize_component_category(_optional_str(payload, "category")),
+            )
+
+        if component is None:
+            return _bad_request("name/component_name or category is required")
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "component": _serialize_component(component)})
+
+
+@bp.get("/components/<component_id>/details")
+@require_roles("editor", "admin", "superuser")
+def get_component_details(component_id: str):
+    component_id_value = str(component_id or "").strip()
+    if not component_id_value:
+        return _bad_request("component_id is required")
+
+    flow = _get_builder_flow()
+    component = flow._component_service.get_component(component_id_value)
+    if component is None:
+        return _bad_request(f"component not found: {component_id_value}")
+
+    details = _load_component_details(component_id_value)
+    return jsonify({"ok": True, "component_id": component_id_value, "details": details})
+
+
+@bp.patch("/components/<component_id>/details")
+@require_roles("editor", "admin", "superuser")
+def patch_component_details(component_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    component_id_value = str(component_id or "").strip()
+    if not component_id_value:
+        return _bad_request("component_id is required")
+
+    flow = _get_builder_flow()
+    component = flow._component_service.get_component(component_id_value)
+    if component is None:
+        return _bad_request(f"component not found: {component_id_value}")
+
+    allowed_fields = {
+        "tags",
+        "long_description",
+        "recipe_ingredient_rows",
+        "recipe_ingredients_text",
+        "method_text",
+        "method_notes",
+        "calculation_yield",
+        "calculation_cost",
+        "calculation_notes",
+        "calculation_rows",
+        "allergens",
+        "allergen_notes",
+    }
+    update_payload = {
+        key: payload[key]
+        for key in allowed_fields
+        if key in payload
+    }
+    if not update_payload:
+        return _bad_request("at least one detail field is required")
+
+    current = _load_component_details(component_id_value)
+    merged = dict(current)
+    merged.update(update_payload)
+    if "recipe_ingredients_text" in update_payload:
+        merged["recipe_ingredients_text_intentionally_saved"] = bool(
+            str(update_payload.get("recipe_ingredients_text") or "").strip()
+        )
+    if "recipe_ingredient_rows" in update_payload:
+        normalized_rows = _normalize_recipe_ingredient_rows(update_payload.get("recipe_ingredient_rows"))
+        if normalized_rows:
+            merged["recipe_ingredients_text_intentionally_saved"] = False
+
+    try:
+        details = _save_component_details(component_id_value, merged)
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "component_id": component_id_value, "details": details})
+
+
+@bp.get("/components/method-summary-report")
+@require_roles("editor", "admin", "superuser")
+def list_component_method_summary_report():
+    flow = _get_builder_flow()
+    components = flow.list_library_components()
+    details_map = {
+        str(component.component_id): _load_component_details(str(component.component_id))
+        for component in components
+    }
+
+    entries: list[dict[str, Any]] = []
+    for component in components:
+        component_id_value = str(component.component_id or "")
+        details = details_map.get(component_id_value, _default_component_details_payload())
+        diagnostics = _component_method_summary_diagnostics(details)
+        entries.append(
+            {
+                "component_id": component_id_value,
+                "component_name": str(component.canonical_name or ""),
+                "has_method_data": bool(diagnostics.get("has_method_data")),
+                "method_sources": list(diagnostics.get("method_sources") or []),
+                "method_text_present": bool(diagnostics.get("method_text_present")),
+                "method_notes_present": bool(diagnostics.get("method_notes_present")),
+                "recipe_ingredient_rows_present": bool(diagnostics.get("recipe_ingredient_rows_present")),
+                "legacy_recipe_ingredients_text_present": bool(
+                    diagnostics.get("legacy_recipe_ingredients_text_present")
+                ),
+                "legacy_recipe_ingredients_text_intentionally_saved": bool(
+                    diagnostics.get("legacy_recipe_ingredients_text_intentionally_saved")
+                ),
+            }
+        )
+
+    return jsonify({
+        "ok": True,
+        "count": len(entries),
+        "entries": entries,
+    })
 
 
 @bp.delete("/components/<component_id>")
@@ -1147,22 +1837,35 @@ def delete_component(component_id: str):
         if component is None:
             return _bad_request(f"component not found: {component_id_value}")
 
-        referenced_by = []
+        referenced_pairs: dict[str, str] = {}
         for composition in flow.list_library_compositions():
             if any(item.component_id == component_id_value for item in composition.components):
-                referenced_by.append(composition.composition_id)
+                referenced_pairs[str(composition.composition_id)] = str(composition.composition_name)
+
+        referenced_by = list(referenced_pairs.keys())
+        referenced_names: list[str] = []
+        seen_names: set[str] = set()
+        for composition_name in referenced_pairs.values():
+            if composition_name in seen_names:
+                continue
+            seen_names.add(composition_name)
+            referenced_names.append(composition_name)
 
         recipes = flow._recipe_service.list_recipes_for_component(component_id_value)
         if referenced_by or recipes:
+            composition_count = len(referenced_names) if referenced_names else len(referenced_by)
             return _conflict(
                 "Component is in use and cannot be removed.",
                 references={
                     "composition_ids": referenced_by,
+                    "composition_names": referenced_names,
+                    "composition_count": composition_count,
                     "recipe_count": len(recipes),
                 },
             )
 
         flow._component_alias_repository.delete_for_component(component_id_value)
+        _delete_component_details(component_id_value)
         flow._component_service.delete_component(component_id_value)
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -1177,6 +1880,10 @@ def list_reusable_components():
     try:
         flow = _get_builder_flow()
         components = flow.list_reusable_components_for_builder(query=query)
+        summaries = _load_component_detail_summaries([
+            str(component.component_id)
+            for component in components
+        ])
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -1184,9 +1891,100 @@ def list_reusable_components():
         {
             "ok": True,
             "count": len(components),
-            "components": [_serialize_component(component) for component in components],
+            "components": [
+                _serialize_component(
+                    component,
+                    detail_summary=summaries.get(str(component.component_id)),
+                )
+                for component in components
+            ],
         }
     )
+
+
+@bp.get("/components/category-normalization-report")
+@require_roles("editor", "admin", "superuser")
+def list_component_category_normalization_report():
+    flow = _get_builder_flow()
+    components = flow.list_library_components()
+    entries: list[dict[str, Any]] = []
+
+    for component in components:
+        raw = _component_raw_category_value(component)
+        suggested = _component_category_value(component)
+        entries.append(
+            {
+                "component_id": str(component.component_id or ""),
+                "component_name": str(component.canonical_name or ""),
+                "current_category": raw,
+                "suggested_category": suggested,
+                "needs_normalization": str(raw or "").strip().lower() != str(suggested or "").strip().lower(),
+            }
+        )
+
+    return jsonify({
+        "ok": True,
+        "count": len(entries),
+        "entries": entries,
+    })
+
+
+@bp.get("/components/phrase-fragment-report")
+@require_roles("editor", "admin", "superuser")
+def list_phrase_fragment_component_report():
+    flow = _get_builder_flow()
+    components = flow.list_library_components()
+    compositions = flow.list_library_compositions()
+
+    linked_by_component: dict[str, list[dict[str, str]]] = {}
+    for composition in compositions:
+        for linked in composition.components:
+            component_id_value = str(linked.component_id or "")
+            if not component_id_value:
+                continue
+            linked_by_component.setdefault(component_id_value, []).append(
+                {
+                    "composition_id": str(composition.composition_id or ""),
+                    "composition_name": str(composition.composition_name or ""),
+                }
+            )
+
+    entries: list[dict[str, Any]] = []
+    for component in components:
+        component_name = str(component.canonical_name or "")
+        if not _is_descriptive_component_fragment(component_name):
+            continue
+        component_id_value = str(component.component_id or "")
+        linked = linked_by_component.get(component_id_value, [])
+        unique_map: dict[str, str] = {}
+        for item in linked:
+            unique_map[str(item.get("composition_id") or "")] = str(item.get("composition_name") or "")
+        linked_rows = [
+            {
+                "composition_id": comp_id,
+                "composition_name": comp_name,
+            }
+            for comp_id, comp_name in unique_map.items()
+        ]
+        entries.append(
+            {
+                "component_id": component_id_value,
+                "component_name": component_name,
+                "linked_composition_count": len(linked_rows),
+                "linked_compositions": linked_rows,
+                "sample_linked_composition_names": [
+                    row.get("composition_name")
+                    for row in linked_rows[:10]
+                ],
+                "link_source_paths": [
+                    "POST /api/builder/import/publish-drafts",
+                    "POST /api/builder/import/sessions/<session_id>/publish-selected",
+                ],
+                "recommendation": "Review linked dishes, unlink fragment component, then delete or rename component.",
+            }
+        )
+
+    return jsonify({"ok": True, "count": len(entries), "entries": entries})
 
 
 @bp.get("/components/<component_id>/aliases")
@@ -1252,13 +2050,23 @@ def list_library():
         flow = _get_builder_flow()
         components = flow.list_library_components()
         compositions = flow.list_library_compositions()
+        summaries = _load_component_detail_summaries([
+            str(component.component_id)
+            for component in components
+        ])
     except ValueError as exc:
         return _bad_request(str(exc))
 
     return jsonify(
         {
             "ok": True,
-            "components": [_serialize_component(component) for component in components],
+            "components": [
+                _serialize_component(
+                    component,
+                    detail_summary=summaries.get(str(component.component_id)),
+                )
+                for component in components
+            ],
             "compositions": [
                 _serialize_library_composition(composition)
                 for composition in compositions

@@ -455,7 +455,8 @@ class BuilderFlow:
 
         self._recipe_service.delete_recipe(recipe_id_value)
 
-    def create_standalone_component(self, component_name: str) -> Component:
+    def create_standalone_component(self, component_name: str, *, category: str | None = None) -> Component:
+        category_value = str(category or "").strip().lower() or None
         name_value = self._normalize_component_name(component_name)
         if not name_value:
             raise ValueError("component_name must be non-empty")
@@ -464,11 +465,15 @@ class BuilderFlow:
         if match.status in {"exact_match", "alias_match"} and match.component_id:
             existing = self._component_service.get_component(match.component_id)
             if existing is not None:
+                if category_value and not list(existing.categories or []):
+                    return self._component_service.set_component_category(existing.component_id, category_value)
                 return existing
 
         normalized_key = self._normalize_component_key(name_value)
         for existing_item in self._component_service.list_components(active_only=False):
             if self._normalize_component_key(existing_item.canonical_name) == normalized_key:
+                if category_value and not list(existing_item.categories or []):
+                    return self._component_service.set_component_category(existing_item.component_id, category_value)
                 return existing_item
 
         base = self._slugify_component_name(name_value)
@@ -482,6 +487,8 @@ class BuilderFlow:
             if existing is None:
                 break
             if existing.canonical_name == name_value:
+                if category_value and not list(existing.categories or []):
+                    return self._component_service.set_component_category(existing.component_id, category_value)
                 return existing
             component_id = f"{base}_{suffix}"
             suffix += 1
@@ -489,7 +496,22 @@ class BuilderFlow:
         return self._component_service.create_component(
             component_id=component_id,
             canonical_name=name_value,
+            categories=[category_value] if category_value else [],
         )
+
+    def set_component_category(self, component_id: str, category: str | None) -> Component:
+        return self._component_service.set_component_category(component_id, category)
+
+    def rename_component(self, component_id: str, component_name: str) -> Component:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        name_value = self._normalize_component_name(component_name)
+        if not name_value:
+            raise ValueError("component_name must be non-empty")
+
+        return self._component_service.rename_component(component_id_value, name_value)
 
     def add_component_alias(
         self,
@@ -1165,7 +1187,11 @@ class BuilderFlow:
 
     @staticmethod
     def _normalize_component_key(value: str) -> str:
-        return " ".join(str(value or "").strip().lower().split())
+        raw = str(value or "").strip().lower()
+        if not raw:
+            return ""
+        trimmed = re.sub(r"^[\W_]+|[\W_]+$", "", raw, flags=re.UNICODE)
+        return " ".join(trimmed.split())
 
     @staticmethod
     def _capitalize_first(value: str) -> str:

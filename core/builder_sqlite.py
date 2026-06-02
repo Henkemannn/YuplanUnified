@@ -70,6 +70,25 @@ def initialize_builder_sqlite(path: str) -> str:
             CREATE INDEX IF NOT EXISTS idx_builder_component_alias_norm
                 ON builder_component_aliases(alias_norm);
 
+            CREATE TABLE IF NOT EXISTS component_details (
+                component_id TEXT PRIMARY KEY,
+                recipe_ingredients_text TEXT NOT NULL DEFAULT '',
+                recipe_ingredient_rows_json TEXT NOT NULL DEFAULT '[]',
+                recipe_ingredients_text_intent INTEGER NOT NULL DEFAULT 0,
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                long_description_text TEXT NOT NULL DEFAULT '',
+                method_text TEXT NOT NULL DEFAULT '',
+                method_notes TEXT NOT NULL DEFAULT '',
+                calculation_yield TEXT NOT NULL DEFAULT '',
+                calculation_cost TEXT NOT NULL DEFAULT '',
+                calculation_notes TEXT NOT NULL DEFAULT '',
+                calculation_rows_json TEXT NOT NULL DEFAULT '[]',
+                allergens_json TEXT NOT NULL DEFAULT '[]',
+                allergen_notes TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(component_id) REFERENCES builder_components(component_id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS builder_compositions (
                 composition_id TEXT PRIMARY KEY,
                 composition_name TEXT NOT NULL,
@@ -168,6 +187,23 @@ def initialize_builder_sqlite(path: str) -> str:
                 ON builder_import_session_items(session_id, item_order);
             """
         )
+
+        details_columns = {
+            str(row["name"])
+            for row in conn.execute("PRAGMA table_info('component_details')").fetchall()
+        }
+        if "recipe_ingredients_text" not in details_columns:
+            conn.execute("ALTER TABLE component_details ADD COLUMN recipe_ingredients_text TEXT NOT NULL DEFAULT ''")
+        if "recipe_ingredient_rows_json" not in details_columns:
+            conn.execute("ALTER TABLE component_details ADD COLUMN recipe_ingredient_rows_json TEXT NOT NULL DEFAULT '[]'")
+        if "recipe_ingredients_text_intent" not in details_columns:
+            conn.execute("ALTER TABLE component_details ADD COLUMN recipe_ingredients_text_intent INTEGER NOT NULL DEFAULT 0")
+        if "tags_json" not in details_columns:
+            conn.execute("ALTER TABLE component_details ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'")
+        if "long_description_text" not in details_columns:
+            conn.execute("ALTER TABLE component_details ADD COLUMN long_description_text TEXT NOT NULL DEFAULT ''")
+        if "calculation_rows_json" not in details_columns:
+            conn.execute("ALTER TABLE component_details ADD COLUMN calculation_rows_json TEXT NOT NULL DEFAULT '[]'")
     return db_path
 
 
@@ -184,6 +220,7 @@ def clear_builder_sqlite_data(path: str) -> dict[str, int]:
         "builder_composition_aliases",
         "builder_composition_components",
         "builder_compositions",
+        "component_details",
         "builder_component_aliases",
         "builder_components",
     ]
