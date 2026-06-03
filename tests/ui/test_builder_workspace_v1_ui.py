@@ -188,6 +188,13 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'Total portionskostnad' in html
     assert 'Kalkylanteckning' in html
     assert 'id="componentDetailCalcYield"' not in html
+    assert 'class="builder-component-allergen-layout"' in html
+    assert 'class="builder-component-allergen-card builder-component-allergen-card-list"' in html
+    assert 'class="builder-component-allergen-card builder-component-allergen-card-notes"' in html
+    assert 'class="builder-component-allergen-note-field"' in html
+    assert 'role="group" aria-label="EU14-allergener"' in html
+    assert 'Allergener' in html
+    assert 'Kostanteckning' in html
     assert 'Allergi-/kostanteckning' in html
     assert 'value="gluten_cereals"' in html
     assert 'value="crustaceans"' in html
@@ -205,11 +212,17 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'value="molluscs"' in html
     assert 'Glutenhaltiga spannmål' in html
     assert 'Kräftdjur' in html
+    assert 'Ägg' in html
+    assert 'Fisk' in html
     assert 'Jordnötter' in html
     assert 'Sojabönor' in html
     assert 'Mjölk/laktos' in html
+    assert 'Nötter' in html
+    assert 'Selleri' in html
+    assert 'Senap' in html
     assert 'Sesamfrön' in html
     assert 'Svaveldioxid och sulfiter' in html
+    assert 'Lupin' in html
     assert 'Blötdjur' in html
     assert 'value="gluten"' not in html
     assert 'value="milk"' not in html
@@ -999,9 +1012,45 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert detail_tabs_block is not None
     assert "display: flex;" in detail_tabs_block.group(0)
 
+    allergen_panel_block = re.search(r"#componentDetailPanelAllergens:not\(\.hidden\)\s*\{[^}]*\}", css, re.S)
+    assert allergen_panel_block is not None
+    assert "--builder-allergen-panel-bg:" in allergen_panel_block.group(0)
+    assert "--builder-allergen-card-bg:" in allergen_panel_block.group(0)
+    assert "--builder-allergen-card-border:" in allergen_panel_block.group(0)
+
+    allergen_layout_block = re.search(r"\.builder-component-allergen-layout\s*\{[^}]*\}", css, re.S)
+    assert allergen_layout_block is not None
+    assert "display: grid;" in allergen_layout_block.group(0)
+
+    allergen_card_block = re.search(r"\.builder-component-allergen-card\s*\{[^}]*\}", css, re.S)
+    assert allergen_card_block is not None
+    assert "border: 1px solid var(--builder-allergen-card-border);" in allergen_card_block.group(0)
+    assert "background: var(--builder-allergen-card-bg);" in allergen_card_block.group(0)
+    assert "box-shadow: var(--builder-allergen-card-shadow);" in allergen_card_block.group(0)
+
     allergen_grid_block = re.search(r"\.builder-component-allergen-grid\s*\{[^}]*\}", css, re.S)
     assert allergen_grid_block is not None
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in allergen_grid_block.group(0)
+    assert "grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));" in allergen_grid_block.group(0)
+
+    allergen_chip_block = re.search(r"\.builder-component-allergen-chip span\s*\{[^}]*\}", css, re.S)
+    assert allergen_chip_block is not None
+    assert "border: 1px solid var(--builder-allergen-input-border);" in allergen_chip_block.group(0)
+    assert "background: var(--builder-allergen-input-bg);" in allergen_chip_block.group(0)
+
+    allergen_checked_block = re.search(
+        r"\.builder-component-allergen-chip input\[type=\"checkbox\"\]:checked \+ span\s*\{[^}]*\}",
+        css,
+        re.S,
+    )
+    assert allergen_checked_block is not None
+    assert "border-color:" in allergen_checked_block.group(0)
+    assert "background:" in allergen_checked_block.group(0)
+    assert "font-weight: 600;" in allergen_checked_block.group(0)
+
+    allergen_notes_block = re.search(r"\.builder-component-allergen-note-field textarea\s*\{[^}]*\}", css, re.S)
+    assert allergen_notes_block is not None
+    assert "min-height: 78px;" in allergen_notes_block.group(0)
+    assert "max-height: 120px;" in allergen_notes_block.group(0)
 
     dish_grid_blocks = re.findall(r"\.builder-workspace-v1 \.composition-library-grid\s*\{[^}]*\}", css, re.S)
     assert dish_grid_blocks

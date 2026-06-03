@@ -476,25 +476,36 @@
 
       <section id="componentDetailPanelAllergens" class="workspace-modal-section-card component-detail-panel hidden" data-component-panel="allergens">
         <p class="modal-section-title">🌾 Allergener/kostinfo</p>
-        <div class="builder-component-allergen-grid">
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="gluten_cereals"> Glutenhaltiga spannmål</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="crustaceans"> Kräftdjur</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="eggs"> Ägg</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="fish"> Fisk</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="peanuts"> Jordnötter</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="soybeans"> Sojabönor</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="milk_lactose"> Mjölk/laktos</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="nuts"> Nötter</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="celery"> Selleri</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="mustard"> Senap</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="sesame"> Sesamfrön</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="sulphur_dioxide_sulphites"> Svaveldioxid och sulfiter</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="lupin"> Lupin</label>
-          <label><input type="checkbox" class="component-detail-allergen-checkbox" value="molluscs"> Blötdjur</label>
+        <div class="builder-component-allergen-layout">
+          <article class="builder-component-allergen-card builder-component-allergen-card-list" aria-label="Allergener">
+            <p class="builder-component-card-label">Allergener</p>
+            <p class="builder-component-allergen-helper">Markera allergener enligt EU14-listan.</p>
+            <div class="builder-component-allergen-grid" role="group" aria-label="EU14-allergener">
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="gluten_cereals"><span>Glutenhaltiga spannmål</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="crustaceans"><span>Kräftdjur</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="eggs"><span>Ägg</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="fish"><span>Fisk</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="peanuts"><span>Jordnötter</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="soybeans"><span>Sojabönor</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="milk_lactose"><span>Mjölk/laktos</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="nuts"><span>Nötter</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="celery"><span>Selleri</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="mustard"><span>Senap</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="sesame"><span>Sesamfrön</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="sulphur_dioxide_sulphites"><span>Svaveldioxid och sulfiter</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="lupin"><span>Lupin</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="molluscs"><span>Blötdjur</span></label>
+            </div>
+          </article>
+
+          <article class="builder-component-allergen-card builder-component-allergen-card-notes" aria-label="Kostanteckning">
+            <p class="builder-component-card-label">Kostanteckning</p>
+            <label class="builder-component-allergen-note-field">Allergi-/kostanteckning
+              <textarea id="componentDetailAllergenNotes" placeholder="Noteringar om allergi och kost"></textarea>
+            </label>
+            <p class="builder-component-allergen-helper">Komplettera med tydlig hanteringsinfo vid behov.</p>
+          </article>
         </div>
-        <label>Allergi-/kostanteckning
-          <textarea id="componentDetailAllergenNotes" placeholder="Noteringar om allergi och kost"></textarea>
-        </label>
       </section>
 
       <div id="componentDetailOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
