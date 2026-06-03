@@ -231,6 +231,18 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'class="builder-platform-layout builder-shell"' in html
     assert 'class="builder-platform-sidebar builder-sidebar"' in html
     assert 'class="builder-platform-primary builder-main"' in html
+    assert 'id="importLibraryModal"' in html
+    assert 'id="importContextType"' in html
+    assert 'id="importLibraryLines"' in html
+    assert 'id="importLibraryFile"' in html
+    assert 'id="btnImportLibraryPreview"' in html
+    assert 'id="btnImportLibrary"' in html
+    assert 'id="btnImportFilePreview"' in html
+    assert 'id="btnImportFileConfirm"' in html
+    assert 'id="importFilePreviewList"' in html
+    assert 'id="importOut"' in html
+    assert 'id="importRawInput"' not in html
+    assert 'id="importFileInput"' not in html
     assert 'id="libraryCompositionsGrid" class="composition-library-grid"' in html
     assert 'id="libraryDishesSearch"' in html
     assert 'id="libraryDishesScope"' in html
@@ -408,6 +420,13 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'openSimpleModal("componentDetailEditorModal");' in script
     assert 'openSimpleModal("componentDetailModal");' not in script
     assert 'const libraryComponentsGrid = document.getElementById("libraryComponentsGrid");' in script
+    assert 'const importLinesEl = document.getElementById("importLibraryLines");' in script
+    assert 'const fileInput = document.getElementById("importLibraryFile");' in script
+    assert 'const importLibraryBtn = document.getElementById("btnImportLibrary");' in script
+    assert 'const importLibraryPreviewBtn = document.getElementById("btnImportLibraryPreview");' in script
+    assert 'const importFilePreviewBtn = document.getElementById("btnImportFilePreview");' in script
+    assert 'const importFileConfirmBtn = document.getElementById("btnImportFileConfirm");' in script
+    assert 'const importFilePreviewList = document.getElementById("importFilePreviewList");' in script
     assert 'libraryComponentsGrid.addEventListener("click", (event) => {' in script
     assert 'const tabTargetTrigger = target.closest("[data-component-tab-target]");' in script
     assert 'event.stopPropagation();' in script
