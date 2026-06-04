@@ -1857,16 +1857,88 @@ function currentComponentTagFilter() {
   return value || "all";
 }
 
+const DISH_LIBRARY_GROUPS = [
+  { key: "all", label: "Alla" },
+  { key: "fisk", label: "Fisk" },
+  { key: "kott", label: "Kött" },
+  { key: "dessert", label: "Dessert" },
+  { key: "ovrigt", label: "Övrigt" },
+];
+
+let _dishCategoryFilter = "all";
+
+function normalizeDishCategoryKey(value) {
+  const folded = normalizeCategoryThemeValue(value).replace(/[^a-z0-9]+/g, "");
+  if (!folded) {
+    return "";
+  }
+  if (folded === "all") {
+    return "all";
+  }
+  if (folded === "fisk" || folded === "fish") {
+    return "fisk";
+  }
+  if (folded === "kott" || folded === "kottet" || folded === "kottt" || folded === "meat" || folded === "main") {
+    return "kott";
+  }
+  if (folded === "dessert" || folded === "desserter") {
+    return "dessert";
+  }
+  if (folded === "ovrigt" || folded === "ovriga" || folded === "other" || folded === "sauce" || folded === "sas" || folded === "side" || folded === "tillbehor") {
+    return "ovrigt";
+  }
+  return folded;
+}
+
+function currentDishCategoryFilter() {
+  const filterValue = normalizeDishCategoryKey(_dishCategoryFilter);
+  return filterValue || "all";
+}
+
+function dishCategoryValue(item) {
+  const value = normalizeDishCategoryKey((item && item.library_group) || "");
+  return value || "";
+}
+
+function dishCardThemeClass(item) {
+  const categoryKey = dishCategoryValue(item);
+  if (categoryKey === "fisk") {
+    return "builder-component-card-theme-fish";
+  }
+  if (categoryKey === "kott") {
+    return "builder-component-card-theme-main";
+  }
+  if (categoryKey === "dessert") {
+    return "builder-component-card-theme-dessert";
+  }
+  return "builder-component-card-theme-neutral";
+}
+
+function renderDishCategoryFilters(target, items, activeFilter) {
+  if (!target) {
+    return;
+  }
+  target.innerHTML = "";
+
+  const validFilters = new Set(DISH_LIBRARY_GROUPS.map((entry) => entry.key));
+  const nextActiveFilter = validFilters.has(normalizeDishCategoryKey(activeFilter))
+    ? normalizeDishCategoryKey(activeFilter)
+    : "all";
+  _dishCategoryFilter = nextActiveFilter;
+
+  for (const entry of DISH_LIBRARY_GROUPS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "builder-components-filter-chip";
+    button.dataset.categoryFilter = entry.key;
+    button.classList.toggle("is-active", entry.key === nextActiveFilter);
+    button.textContent = entry.label;
+    target.appendChild(button);
+  }
+}
+
 function currentDishesScope() {
-  const scopeEl = document.getElementById("libraryDishesScope");
-  const value = scopeEl ? String(scopeEl.value || "") : "";
-  if (value === "needs_component_categories") {
-    return "needs_component_categories";
-  }
-  if (value === "has_main_component") {
-    return "has_main_component";
-  }
-  return "all";
+  return currentDishCategoryFilter();
 }
 
 function componentCategoryValue(item) {
@@ -3461,22 +3533,21 @@ function renderLibrary(result) {
   const currentQuery = searchInput ? String(searchInput.value || "") : "";
   const dishesSearchInput = document.getElementById("libraryDishesSearch");
   const dishesQuery = dishesSearchInput ? String(dishesSearchInput.value || "").trim().toLowerCase() : "";
+  const dishesCategoryNav = document.getElementById("libraryDishesCategoryNav");
 
   if (componentsMeta && components.length === 0) {
     componentsMeta.textContent = "No components yet. Start by creating one or importing existing names.";
   }
 
   if (dishesMeta) {
-    dishesMeta.textContent =
-      compositions.length === 0
-        ? "No dishes yet. Create one or import to start building."
-        : String(compositions.length) + (compositions.length === 1 ? " dish" : " dishes") + " in library";
+    dishesMeta.textContent = compositions.length === 0
+      ? "Inga rätter ännu. Skapa en rätt för att börja."
+      : "Klicka på en rätt för att öppna den.";
   }
   if (dishesMetaModal) {
-    dishesMetaModal.textContent =
-      compositions.length === 0
-        ? "No dishes yet. Create one or import to start building."
-        : String(compositions.length) + (compositions.length === 1 ? " dish" : " dishes") + " in library";
+    dishesMetaModal.textContent = compositions.length === 0
+      ? "Inga rätter ännu. Skapa en rätt för att börja."
+      : "Klicka på en rätt för att öppna den.";
   }
 
   if (_workspaceSurface === "components") {
@@ -3489,35 +3560,19 @@ function renderLibrary(result) {
     componentsMeta.textContent = "Open Components to browse and edit.";
   }
 
-  const dishesScope = currentDishesScope();
+  const dishesScope = currentDishCategoryFilter();
+  renderDishCategoryFilters(dishesCategoryNav, compositions, dishesScope);
   const scopeFilteredCompositions = compositions.filter((item) => {
     if (dishesScope === "all") {
       return true;
     }
-    const linkedComponents = Array.isArray(item.components) ? item.components : [];
-    const derivedCategory = deriveDishCategoryKey(linkedComponents);
-    if (dishesScope === "needs_component_categories") {
-      return derivedCategory === "needs_component_categories";
-    }
-    if (dishesScope === "has_main_component") {
-      return derivedCategory === "main";
-    }
-    return true;
+    return dishCategoryValue(item) === dishesScope;
   });
   const visibleCompositions = dishesQuery
     ? scopeFilteredCompositions.filter((item) =>
       String(item.composition_name || item.composition_id || "").toLowerCase().includes(dishesQuery),
     )
     : scopeFilteredCompositions;
-
-  if (dishesMeta && compositions.length > 0) {
-    dishesMeta.textContent =
-      String(visibleCompositions.length) + " shown of " + String(compositions.length) + " dishes";
-  }
-  if (dishesMetaModal && compositions.length > 0) {
-    dishesMetaModal.textContent =
-      String(visibleCompositions.length) + " shown of " + String(compositions.length) + " dishes";
-  }
 
   const homeNeedsCategoryEl = document.getElementById("homeDishesNeedCategoryCount");
   if (homeNeedsCategoryEl) {
@@ -3531,91 +3586,28 @@ function renderLibrary(result) {
   function renderDishCard(item, targetGrid) {
     const compositionId = String(item.composition_id || "");
     const compositionName = String(item.composition_name || item.composition_id || "");
-    const linkedComponents = Array.isArray(item.components) ? item.components : [];
 
     const card = document.createElement("article");
-    card.className = "builder-card builder-dish-card";
+    card.className = "builder-component-card builder-component-card-compact builder-dish-card";
+    card.classList.add(dishCardThemeClass(item));
+    card.dataset.dishCard = "1";
+    card.dataset.compositionId = compositionId;
 
     const openSurface = document.createElement("button");
     openSurface.type = "button";
-    openSurface.className = "builder-dish-card-surface";
+    openSurface.className = "builder-component-card-surface builder-dish-card-surface";
+    openSurface.dataset.openDishEditor = "1";
     openSurface.addEventListener("click", async () => {
       await openCompositionFromLibrary(compositionId);
     });
 
     const name = document.createElement("div");
-    name.className = "builder-dish-card-name";
+    name.className = "component-library-card-name builder-dish-card-name";
     name.textContent = compositionName;
 
-    const status = document.createElement("div");
-    status.className = "builder-dish-card-meta";
-    status.textContent = "Reusable composition";
-
-    const categoryPreview = document.createElement("div");
-    categoryPreview.className = "builder-dish-card-meta";
-    categoryPreview.textContent = deriveDishCategoryPreview(linkedComponents);
-
-    const dishStatus = document.createElement("div");
-    dishStatus.className = "builder-chip builder-dish-status-chip";
-    dishStatus.textContent = deriveDishCategoryKey(linkedComponents) === "needs_component_categories"
-      ? "Needs review"
-      : "Ready";
-
-    const summary = document.createElement("div");
-    summary.className = "builder-dish-component-preview";
-    if (linkedComponents.length === 0) {
-      summary.textContent = "Components need review";
-    } else {
-      const labels = linkedComponents
-        .slice(0, 3)
-        .map((entry) => String(entry.component_name || entry.component_id || "").trim())
-        .filter(Boolean);
-      for (const labelValue of labels) {
-        const chip = document.createElement("span");
-        chip.className = "builder-chip builder-chip-soft";
-        chip.textContent = labelValue;
-        summary.appendChild(chip);
-      }
-      if (linkedComponents.length > 3) {
-        const more = document.createElement("span");
-        more.className = "builder-chip builder-chip-soft";
-        more.textContent = "+" + String(linkedComponents.length - 3);
-        summary.appendChild(more);
-      }
-    }
-
     openSurface.appendChild(name);
-    openSurface.appendChild(status);
-    openSurface.appendChild(categoryPreview);
-    openSurface.appendChild(dishStatus);
-    openSurface.appendChild(summary);
 
     card.appendChild(openSurface);
-
-    const actions = document.createElement("div");
-    actions.className = "builder-card-actions";
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "builder-button-secondary";
-    editBtn.textContent = "Edit dish";
-    editBtn.addEventListener("click", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      await openCompositionFromLibrary(compositionId);
-    });
-    actions.appendChild(editBtn);
-
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.className = "builder-button-ghost library-danger-action";
-    removeBtn.textContent = "Remove";
-    removeBtn.addEventListener("click", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      await deleteCompositionFromLibrary(compositionId, compositionName);
-    });
-    actions.appendChild(removeBtn);
-    card.appendChild(actions);
 
     targetGrid.appendChild(card);
   }
@@ -3627,20 +3619,20 @@ function renderLibrary(result) {
 
       const title = document.createElement("p");
       title.className = "workspace-library-empty-title";
-      title.textContent = compositions.length === 0 ? "No dishes yet" : "No dishes match current filters";
+      title.textContent = compositions.length === 0 ? "Inga rätter ännu" : "Inga rätter matchar filtret";
 
       const copy = document.createElement("p");
       copy.className = "workspace-library-empty-copy";
       copy.textContent = compositions.length === 0
-        ? "Create a dish manually, or import dish lines and continue editing from the library."
-        : "Try a broader search, or change scope to show more dishes.";
+        ? "Skapa en rätt för att börja bygga ditt bibliotek."
+        : "Prova en bredare sökning eller byt kategori.";
 
       const actions = document.createElement("div");
       actions.className = "workspace-inline-actions";
 
       const createBtn = document.createElement("button");
       createBtn.type = "button";
-      createBtn.textContent = "Create dish";
+      createBtn.textContent = "Skapa rätt";
       createBtn.addEventListener("click", () => {
         openSimpleModal("quickCreateModal");
         const input = document.getElementById("freeDishName");
@@ -3673,8 +3665,8 @@ function renderLibrary(result) {
       const clipped = document.createElement("p");
       clipped.className = "workspace-library-hint";
       clipped.textContent =
-        "Showing " + String(renderedCompositions.length) + " of " + String(visibleCompositions.length) +
-        " dishes. Open Menu Builder for structured menu output.";
+        "Visar " + String(renderedCompositions.length) + " av " + String(visibleCompositions.length) +
+        " rätter.";
       compositionsGrid.appendChild(clipped);
       if (compositionsModalGrid) {
         compositionsModalGrid.appendChild(clipped.cloneNode(true));
@@ -3744,12 +3736,12 @@ function deriveDishCategoryKey(components) {
 function deriveDishCategoryPreview(components) {
   const key = deriveDishCategoryKey(components);
   if (key === "needs_component_categories") {
-    return "Needs component categories";
+    return "Behöver översyn av komponenter";
   }
   if (key === "main") {
-    return "Primary: Main";
+    return "Huvudkomponent klar";
   }
-  return "Primary: " + componentCategoryLabel(key);
+  return "Främst " + componentCategoryLabel(key);
 }
 
 async function deleteCompositionFromLibrary(compositionId, compositionName) {
@@ -4286,21 +4278,22 @@ async function loadRecipeScalingPreview() {
   setRecipeScalingStatus("Scaling preview ready", false);
 }
 
-function setComponentDetailTextPreview(message) {
-  const preview = document.getElementById("componentDetailTextPreview");
+function setCompositionTextPreview(previewId, message) {
+  const preview = document.getElementById(String(previewId || ""));
   if (!preview) {
     return;
   }
   preview.textContent = String(message || "");
 }
 
-async function loadCompositionTextPreviewForCurrentComposition() {
+async function loadCompositionTextPreviewForCurrentComposition(previewId, emptyMessage, loadingMessage, unavailableMessage) {
+  const targetPreviewId = String(previewId || "").trim() || "dishTextPreview";
   if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
-    setComponentDetailTextPreview("No composition selected");
+    setCompositionTextPreview(targetPreviewId, emptyMessage || "Ingen rätt vald");
     return;
   }
 
-  setComponentDetailTextPreview("Loading composition text preview...");
+  setCompositionTextPreview(targetPreviewId, loadingMessage || "Läser textvy...");
   const result = await callApi(
     "/api/builder/compositions/" +
       encodeURIComponent(String(currentBuilderComposition.composition_id || "")) +
@@ -4308,12 +4301,12 @@ async function loadCompositionTextPreviewForCurrentComposition() {
     { method: "GET" },
   );
   if (!result || result.status >= 400 || !result.data || !result.data.ok) {
-    setComponentDetailTextPreview("Composition text preview unavailable");
+    setCompositionTextPreview(targetPreviewId, unavailableMessage || "Textvy saknas.");
     return;
   }
 
   const rendered = result.data.rendered || {};
-  setComponentDetailTextPreview(String(rendered.text || ""));
+  setCompositionTextPreview(targetPreviewId, String(rendered.text || ""));
 }
 
 function findCachedComponentById(componentId) {
@@ -4814,12 +4807,20 @@ function renderBuilderPanel(composition) {
   }
 
   currentBuilderComposition = composition;
-  resetRecipePanel("Component: not selected");
-  title.textContent = "Dish: " + String(composition.composition_name || "");
+  resetRecipePanel("Komponent: inte vald");
+  title.textContent = "Rätt: " + String(composition.composition_name || "");
   list.innerHTML = "";
 
   loadCompositionDeclarationPreview(String(composition.composition_id || "")).catch(() => {
     renderCompositionDeclarationPreview({ declaration_enabled: false, readiness: null });
+  });
+  loadCompositionTextPreviewForCurrentComposition(
+    "dishTextPreview",
+    "Ingen rätt vald",
+    "Läser textvy...",
+    "Textvy saknas."
+  ).catch(() => {
+    setCompositionTextPreview("dishTextPreview", "Textvy saknas.");
   });
 
   const components = Array.isArray(composition.components) ? composition.components : [];
@@ -4828,7 +4829,7 @@ function renderBuilderPanel(composition) {
     selectedComponentId = null;
     const li = document.createElement("li");
     li.className = "component-build-surface-empty";
-    li.textContent = "No components yet. Use Add component to start building this dish.";
+    li.textContent = "Inga komponenter ännu. Använd Lägg till komponent för att börja bygga rätten.";
     list.appendChild(li);
     renderComponentPalette();
     return;
@@ -5065,10 +5066,10 @@ function openBuilderModalForComposition(composition) {
     return;
   }
   if (modalTitle) {
-    modalTitle.textContent = "Edit dish: " + String(composition.composition_name || "");
+    modalTitle.textContent = "Bygg rätt: " + String(composition.composition_name || "");
   }
   if (statusLine) {
-    statusLine.textContent = "Adjust what should be included in this dish.";
+    statusLine.textContent = "Justera vad som ska ingå i rätten.";
     statusLine.classList.remove("hidden");
   }
   renderBuilderPanel(composition);
@@ -5412,7 +5413,7 @@ function bindBuilderHandlers() {
   const importFilePreviewList = document.getElementById("importFilePreviewList");
   const openImportsViewBtn = document.getElementById("openImportsViewBtn");
   const libraryDishesSearchInput = document.getElementById("libraryDishesSearch");
-  const libraryDishesScopeSelect = document.getElementById("libraryDishesScope");
+  const libraryDishesCategoryNav = document.getElementById("libraryDishesCategoryNav");
   const importsInboxRefreshBtn = document.getElementById("btnImportsInboxRefresh");
   const importsInboxPublishSelectedBtn = document.getElementById("btnImportsInboxPublishSelected");
   const importsInboxIgnoreSelectedBtn = document.getElementById("btnImportsInboxIgnoreSelected");
@@ -5481,7 +5482,11 @@ function bindBuilderHandlers() {
   }
 
   function openDishesSurface() {
+    _dishCategoryFilter = "all";
     setWorkspaceSurface("dishes");
+    if (_lastLibraryResult) {
+      renderLibrary(_lastLibraryResult);
+    }
     const section = document.getElementById("dishesSection");
     if (section) {
       section.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -5760,8 +5765,14 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (libraryDishesScopeSelect) {
-    libraryDishesScopeSelect.addEventListener("change", () => {
+  if (libraryDishesCategoryNav) {
+    libraryDishesCategoryNav.addEventListener("click", (event) => {
+      const target = event.target instanceof Element ? event.target.closest("[data-category-filter]") : null;
+      if (!target) {
+        return;
+      }
+      const filterValue = String(target.getAttribute("data-category-filter") || "all").trim().toLowerCase();
+      _dishCategoryFilter = normalizeDishCategoryKey(filterValue) || "all";
       if (_lastLibraryResult) {
         renderLibrary(_lastLibraryResult);
       }

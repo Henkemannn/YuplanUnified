@@ -31,7 +31,44 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="navImportsBtn"' in html
     assert 'id="importsSidebarBadge"' in html
 
-    # Home is action-first and does not render library walls.
+    assert 'id="libraryDishesCategoryNav"' in html
+    assert 'Rättkategorier' in html
+    assert 'Rättbibliotek' in html
+    assert 'id="libraryDishesSearch"' in html
+    assert 'id="dishesBackHomeBtn"' in html
+    assert '>Tillbaka<' in html
+    assert 'id="openNewDishFromDishesViewBtn"' in html
+    assert '>Skapa rätt<' in html
+
+    js_rv = client_admin.get("/static/js/builder.js")
+    assert js_rv.status_code == 200
+    js = js_rv.data.decode("utf-8")
+    assert 'Fisk' in js
+    assert 'Kött' in js
+    assert 'Dessert' in js
+    assert 'Övrigt' in js
+    render_start = js.find("function renderDishCard(item, targetGrid)")
+    derive_preview_start = js.find("function deriveDishCategoryPreview(components)")
+    assert render_start != -1 and derive_preview_start != -1 and render_start < derive_preview_start
+    render_dish_card_js = js[render_start:derive_preview_start]
+    assert 'Reusable composition' not in render_dish_card_js
+    assert 'Needs review' not in render_dish_card_js
+    assert 'builder-component-card builder-component-card-compact builder-dish-card' in render_dish_card_js
+    assert 'builder-component-card-surface builder-dish-card-surface' in render_dish_card_js
+    assert 'component-library-card-name builder-dish-card-name' in render_dish_card_js
+    assert 'builder-dish-card-actions' not in render_dish_card_js
+    assert 'builder-dish-card-open-btn' not in render_dish_card_js
+    assert 'builder-dish-card-remove-btn' not in render_dish_card_js
+    assert 'Components need review' not in render_dish_card_js
+    assert 'Needs component categories' not in render_dish_card_js
+    assert 'Behöver översyn' not in render_dish_card_js
+    assert 'Inga komponenter ännu' not in render_dish_card_js
+    assert '2 komponenter' not in render_dish_card_js
+    assert 'componentCountLabel' not in render_dish_card_js
+    assert 'status.textContent' not in render_dish_card_js
+    assert 'categoryPreview' not in render_dish_card_js
+    assert 'Öppna' not in render_dish_card_js
+    assert 'Ta bort' not in render_dish_card_js
     assert 'id="workspaceOverviewSection"' in html
     assert "What do you want to do today?" in html
     assert 'data-action-card="import-menu-recipes"' in html
@@ -243,11 +280,12 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="importOut"' in html
     assert 'id="importRawInput"' not in html
     assert 'id="importFileInput"' not in html
-    assert 'id="libraryCompositionsGrid" class="composition-library-grid"' in html
+    assert 'id="libraryCompositionsGrid"' in html
+    assert 'builder-dish-library-grid' in html
     assert 'id="libraryDishesSearch"' in html
-    assert 'id="libraryDishesScope"' in html
-    assert '<option value="needs_component_categories">Needs component categories</option>' in html
-    assert '<option value="has_main_component">Has main component</option>' in html
+    assert 'id="libraryDishesCategoryNav"' in html
+    assert 'Rättkategorier' in html
+    assert 'Rättbibliotek' in html
     assert 'id="componentWorkbenchTabs"' not in html
     assert 'id="componentWorkbenchName"' not in html
     assert 'id="componentWorkbenchOverlay"' not in html
