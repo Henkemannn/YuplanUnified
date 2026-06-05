@@ -18,7 +18,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     # Legacy modal identified in stuck screenshot should be present.
     assert 'id="addComponentModal"' in html
     assert '<p class="workspace-modal-kicker">Dish building</p>' in html
-    assert '<h3>Add component</h3>' in html
+    assert '<h3>Lägg till komponent</h3>' in html
     assert 'id="addComponentModalClose"' in html
 
     # Sidebar remains the primary navigation.
@@ -39,6 +39,20 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '>Tillbaka<' in html
     assert 'id="openNewDishFromDishesViewBtn"' in html
     assert '>Skapa rätt<' in html
+
+    assert 'id="resolveModal"' in html
+    resolve_start = html.find('id="resolveModal"')
+    add_component_start = html.find('id="addComponentModal"')
+    assert resolve_start != -1 and add_component_start != -1 and resolve_start < add_component_start
+    resolve_modal_html = html[resolve_start:add_component_start]
+    assert 'class="modal-content modal-content-dish modal-content-component-detail"' in resolve_modal_html
+    assert 'id="resolveModalTitle"' in resolve_modal_html
+    assert 'Klar' in resolve_modal_html
+    assert 'Textvy' in resolve_modal_html
+    assert 'Så visas rätten i meny' in resolve_modal_html
+    assert 'Lägg till komponent' in resolve_modal_html
+    assert 'btnCreateDish' not in resolve_modal_html
+    assert 'quickCreateModal' not in resolve_modal_html
 
     js_rv = client_admin.get("/static/js/builder.js")
     assert js_rv.status_code == 200
@@ -69,6 +83,22 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'categoryPreview' not in render_dish_card_js
     assert 'Öppna' not in render_dish_card_js
     assert 'Ta bort' not in render_dish_card_js
+    assert 'Byt namn' in js
+    assert 'Ändra roll' in js
+    assert 'Ta bort' in js
+    assert 'function cleanDishTextPreview(text) {' in js
+    assert r'replace(/\s*\(component\)/gi, "")' in js
+    assert 'setCompositionTextPreview(targetPreviewId, cleanDishTextPreview(rendered.text));' in js
+    builder_panel_start = js.find("function renderBuilderPanel(composition)")
+    builder_panel_end = js.find("async function updateComponentRoleInCurrentComposition(componentId, roleValue)")
+    assert builder_panel_start != -1 and builder_panel_end != -1 and builder_panel_start < builder_panel_end
+    builder_panel_js = js[builder_panel_start:builder_panel_end]
+    assert 'builder-component-card builder-component-card-compact dish-linked-component-card' in builder_panel_js
+    assert 'builder-component-card-surface' in builder_panel_js
+    assert 'component-library-card-name' in builder_panel_js
+    assert 'component-role-tag' not in builder_panel_js
+    assert 'component-data-icon' in builder_panel_js
+    assert 'component-conflict-badge' not in builder_panel_js
     assert 'id="workspaceOverviewSection"' in html
     assert "What do you want to do today?" in html
     assert 'data-action-card="import-menu-recipes"' in html
@@ -891,6 +921,17 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert "min-height: 40px;" in surface_block.group(0)
     assert "background: transparent;" in surface_block.group(0)
     assert "border-radius: 0;" in surface_block.group(0)
+
+    dish_block_list = re.search(r"\.builder-dish-view-card \.component-block-list\s*\{[^}]*\}", css, re.S)
+    assert dish_block_list is not None
+    assert "background: transparent;" in dish_block_list.group(0)
+    assert "border: 0;" in dish_block_list.group(0)
+
+    dish_block_override = re.search(r"\.builder-dish-view-card \.component-block\s*\{[^}]*\}", css, re.S)
+    assert dish_block_override is None
+
+    dish_overflow_override = re.search(r"\.builder-dish-view-card \.component-overflow summary\s*\{[^}]*\}", css, re.S)
+    assert dish_overflow_override is None
 
     tile_remove_block = re.search(r"\.builder-component-tile-remove\s*\{[^}]*\}", css, re.S)
     assert tile_remove_block is not None

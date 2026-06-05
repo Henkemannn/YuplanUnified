@@ -4286,6 +4286,10 @@ function setCompositionTextPreview(previewId, message) {
   preview.textContent = String(message || "");
 }
 
+function cleanDishTextPreview(text) {
+  return String(text || "").replace(/\s*\(component\)/gi, "");
+}
+
 async function loadCompositionTextPreviewForCurrentComposition(previewId, emptyMessage, loadingMessage, unavailableMessage) {
   const targetPreviewId = String(previewId || "").trim() || "dishTextPreview";
   if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
@@ -4306,7 +4310,7 @@ async function loadCompositionTextPreviewForCurrentComposition(previewId, emptyM
   }
 
   const rendered = result.data.rendered || {};
-  setCompositionTextPreview(targetPreviewId, String(rendered.text || ""));
+  setCompositionTextPreview(targetPreviewId, cleanDishTextPreview(rendered.text));
 }
 
 function findCachedComponentById(componentId) {
@@ -4846,49 +4850,51 @@ function renderBuilderPanel(composition) {
     const componentIdValue = String(component.component_id || "");
     const cached = findCachedComponentById(componentIdValue);
     const hasRecipeData = Boolean(cached && String(cached.primary_recipe_id || "").trim());
+    const categoryTheme = resolveComponentCategoryThemeKey(cached || component);
 
     const li = document.createElement("li");
     li.className = "component-list-item";
     if (!String(component.role || "").trim()) {
       li.classList.add("component-list-item-missing-role");
     }
-    const block = document.createElement("div");
-    block.className = "component-block";
-    block.dataset.componentId = componentIdValue;
-    block.draggable = true;
+    const card = document.createElement("article");
+    card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
+    card.classList.add("builder-component-card-theme-" + categoryTheme);
+    card.dataset.componentId = componentIdValue;
+    card.draggable = true;
     const entryKey = componentEntryKey(component);
-    block.dataset.entryKey = entryKey;
+    card.dataset.entryKey = entryKey;
 
     if (selectedComponentId === componentIdValue) {
-      block.classList.add("component-block-selected");
+      card.classList.add("component-block-selected");
     }
     if (pendingAddedPulseComponentId === componentIdValue) {
-      block.classList.add("component-block-just-added");
+      card.classList.add("component-block-just-added");
     }
     if (pendingSelectedPulseComponentId === componentIdValue) {
-      block.classList.add("component-block-just-selected");
+      card.classList.add("component-block-just-selected");
     }
     if (pendingReorderedPulseComponentId === componentIdValue) {
-      block.classList.add("component-block-just-reordered");
+      card.classList.add("component-block-just-reordered");
     }
 
-    block.addEventListener("dragstart", (event) => {
+    card.addEventListener("dragstart", (event) => {
       draggedComponentEntryKey = entryKey;
-      block.classList.add("component-block-dragging");
+      card.classList.add("component-block-dragging");
       if (event && event.dataTransfer) {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/plain", entryKey);
       }
     });
-    block.addEventListener("dragend", () => {
+    card.addEventListener("dragend", () => {
       draggedComponentEntryKey = null;
-      block.classList.remove("component-block-dragging");
+      card.classList.remove("component-block-dragging");
       const allBlocks = list.querySelectorAll(".component-block-drop-target");
       for (const element of allBlocks) {
         element.classList.remove("component-block-drop-target");
       }
     });
-    block.addEventListener("dragover", (event) => {
+    card.addEventListener("dragover", (event) => {
       if (!draggedComponentEntryKey || draggedComponentEntryKey === entryKey) {
         return;
       }
@@ -4896,14 +4902,14 @@ function renderBuilderPanel(composition) {
       if (event && event.dataTransfer) {
         event.dataTransfer.dropEffect = "move";
       }
-      block.classList.add("component-block-drop-target");
+      card.classList.add("component-block-drop-target");
     });
-    block.addEventListener("dragleave", () => {
-      block.classList.remove("component-block-drop-target");
+    card.addEventListener("dragleave", () => {
+      card.classList.remove("component-block-drop-target");
     });
-    block.addEventListener("drop", async (event) => {
+    card.addEventListener("drop", async (event) => {
       event.preventDefault();
-      block.classList.remove("component-block-drop-target");
+      card.classList.remove("component-block-drop-target");
       const fromKey = draggedComponentEntryKey || "";
       draggedComponentEntryKey = null;
       if (!fromKey || fromKey === entryKey) {
@@ -4923,30 +4929,57 @@ function renderBuilderPanel(composition) {
 
     const surface = document.createElement("button");
     surface.type = "button";
-    surface.className = "component-block-surface";
+    surface.className = "builder-component-card-surface";
     surface.addEventListener("click", () => {
       selectComponentBlock(componentIdValue);
     });
 
-    const left = document.createElement("div");
-    left.className = "component-row-left";
-
-    const name = document.createElement("span");
-    name.className = "component-name";
+    const name = document.createElement("div");
+    name.className = "component-library-card-name";
     name.textContent = String(component.component_name || component.component_id || "");
+    surface.appendChild(name);
 
-    const roleTag = document.createElement("span");
-    roleTag.className = "component-role-tag";
-    const roleValue = String(component.role || "").trim();
-    if (roleValue) {
-      roleTag.textContent = "role: " + roleValue;
-    } else {
-      roleTag.textContent = "missing role";
-      roleTag.classList.add("component-role-tag-missing");
-    }
-    left.appendChild(name);
-    left.appendChild(roleTag);
-    surface.appendChild(left);
+    const overflow = document.createElement("details");
+    overflow.className = "component-overflow";
+
+    const overflowSummary = document.createElement("summary");
+    overflowSummary.textContent = "...";
+
+    const menu = document.createElement("div");
+    menu.className = "component-overflow-menu";
+
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.textContent = "Byt namn";
+    renameBtn.addEventListener("click", () => {
+      overflow.removeAttribute("open");
+      renameComponentInCurrentComposition(
+        componentIdValue,
+        String(component.component_name || component.component_id || ""),
+      );
+    });
+
+    const roleBtn = document.createElement("button");
+    roleBtn.type = "button";
+    roleBtn.textContent = "Ändra roll";
+    roleBtn.addEventListener("click", async () => {
+      overflow.removeAttribute("open");
+      await setComponentRoleWithPrompt(component);
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.textContent = "Ta bort";
+    removeBtn.addEventListener("click", () => {
+      overflow.removeAttribute("open");
+      removeComponentFromCurrentComposition(componentIdValue);
+    });
+
+    menu.appendChild(renameBtn);
+    menu.appendChild(roleBtn);
+    menu.appendChild(removeBtn);
+    overflow.appendChild(overflowSummary);
+    overflow.appendChild(menu);
 
     const dataIcon = document.createElement("button");
     dataIcon.className = "component-data-icon";
@@ -4960,59 +4993,14 @@ function renderBuilderPanel(composition) {
       selectComponentBlock(componentIdValue);
     });
 
-    const overflow = document.createElement("details");
-    overflow.className = "component-overflow";
-
-    const overflowSummary = document.createElement("summary");
-    overflowSummary.textContent = "...";
-
-    const menu = document.createElement("div");
-    menu.className = "component-overflow-menu";
-
-    const renameBtn = document.createElement("button");
-    renameBtn.type = "button";
-    renameBtn.textContent = "Rename";
-    renameBtn.addEventListener("click", () => {
-      overflow.removeAttribute("open");
-      renameComponentInCurrentComposition(
-        componentIdValue,
-        String(component.component_name || component.component_id || ""),
-      );
-    });
-
-    const roleBtn = document.createElement("button");
-    roleBtn.type = "button";
-    roleBtn.textContent = "Set role";
-    roleBtn.addEventListener("click", async () => {
-      overflow.removeAttribute("open");
-      await setComponentRoleWithPrompt(component);
-    });
-
-    const removeBtn = document.createElement("button");
-    removeBtn.type = "button";
-    removeBtn.textContent = "Remove";
-    removeBtn.addEventListener("click", () => {
-      overflow.removeAttribute("open");
-      removeComponentFromCurrentComposition(componentIdValue);
-    });
-
-    menu.appendChild(renameBtn);
-    menu.appendChild(roleBtn);
-    menu.appendChild(removeBtn);
-    overflow.appendChild(overflowSummary);
-    overflow.appendChild(menu);
-
     const right = document.createElement("div");
     right.className = "component-row-right";
-    const conflictBadge = document.createElement("span");
-    conflictBadge.className = "component-conflict-badge hidden";
-    right.appendChild(conflictBadge);
     right.appendChild(dataIcon);
     right.appendChild(overflow);
 
-    block.appendChild(surface);
-    block.appendChild(right);
-    li.appendChild(block);
+    surface.appendChild(right);
+    card.appendChild(surface);
+    li.appendChild(card);
     list.appendChild(li);
   }
 

@@ -3727,6 +3727,22 @@ body:not(.builder-workspace-v1) ul {
   min-height: 56px;
 }
 
+.builder-dish-view-card .component-block-list {
+  display: grid;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.builder-dish-view-card .component-list-item {
+  margin: 0;
+}
+
+.builder-dish-view-card .dish-linked-component-card .component-data-icon {
+  display: none;
+}
+
 .builder-workspace-v1 .component-library-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));

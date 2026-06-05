@@ -514,13 +514,13 @@
   </div>
 
   <div id="resolveModal" class="modal hidden">
-    <div class="modal-content modal-content-dish">
+    <div class="modal-content modal-content-dish modal-content-component-detail">
       <div class="workspace-modal-header">
         <div>
           <p class="workspace-modal-kicker">Rättvy</p>
           <h3 id="resolveModalTitle">Bygg rätt</h3>
         </div>
-        <button id="resolveCancel" type="button">Done</button>
+        <button id="resolveCancel" type="button">Klar</button>
       </div>
       <p id="resolveStatusLine" class="modal-status-line hidden"></p>
 
@@ -531,12 +531,12 @@
             <div class="builder-dish-view-header">
               <div>
                 <p class="modal-section-title">Textvy</p>
-                <p class="builder-dish-view-note">Så visas rätten i meny.</p>
+                <p class="builder-dish-view-note">Så visas rätten i meny</p>
               </div>
-              <span class="builder-dish-view-badge">Read only</span>
+              <span class="builder-dish-view-badge">Textvy</span>
             </div>
             <pre id="dishTextPreview" class="builder-dish-text-preview">Ingen rätt vald</pre>
-            <p class="builder-dish-view-help">Bindeord och mer avancerad textredigering kommer senare.</p>
+            <p class="builder-dish-view-help">Textredigering kommer senare.</p>
           </div>
 
           <div class="workspace-modal-section-card builder-dish-view-card">
@@ -551,7 +551,7 @@
           </div>
 
           <div class="workspace-inline-actions workspace-builder-primary-actions">
-            <button id="openAddComponentModalBtn" type="button">Add component</button>
+            <button id="openAddComponentModalBtn" type="button">Lägg till komponent</button>
           </div>
 
           <div id="builderOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
@@ -565,25 +565,25 @@
       <div class="workspace-modal-header">
         <div>
           <p class="workspace-modal-kicker">Dish building</p>
-          <h3>Add component</h3>
+          <h3>Lägg till komponent</h3>
         </div>
-        <button id="addComponentModalClose" type="button">Done</button>
+        <button id="addComponentModalClose" type="button">Klar</button>
       </div>
 
       <div class="workspace-modal-section-card">
-        <p class="modal-section-title">Pick components from library</p>
-        <label>Search components
-          <input id="builderPaletteSearch" type="text" placeholder="Search reusable components">
+        <p class="modal-section-title">Välj komponenter från biblioteket</p>
+        <label>Sök komponenter
+          <input id="builderPaletteSearch" type="text" placeholder="Sök återanvändbara komponenter">
         </label>
         <div id="builderComponentPalette" class="component-palette"></div>
       </div>
 
       <details class="workspace-inline-create-details">
-        <summary>Or create a new component</summary>
+        <summary>Eller skapa en ny komponent</summary>
         <div class="workspace-modal-section-card workspace-inline-create-component">
-          <p class="modal-section-title">Create and add component</p>
-          <label>Role (optional)
-            <input id="newComponentRole" list="componentRoleSuggestions" type="text" placeholder="main, side, sauce ... or leave empty">
+          <p class="modal-section-title">Skapa och lägg till komponent</p>
+          <label>Roll (valfri)
+            <input id="newComponentRole" list="componentRoleSuggestions" type="text" placeholder="main, side, sauce ... eller lämna tomt">
             <datalist id="componentRoleSuggestions">
               <option value="main"></option>
               <option value="side"></option>
@@ -593,11 +593,11 @@
               <option value="other"></option>
             </datalist>
           </label>
-          <label>Component name
-            <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Type a new component name">
+          <label>Komponentnamn
+            <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Ange ett nytt komponentnamn">
             <datalist id="componentNameSuggestions"></datalist>
           </label>
-          <button id="btnAddComponent" type="button">Create and add component</button>
+          <button id="btnAddComponent" type="button">Skapa och lägg till komponent</button>
         </div>
       </details>
 
