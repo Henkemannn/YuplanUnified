@@ -926,12 +926,31 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
     assert dish_block_list is not None
     assert "background: transparent;" in dish_block_list.group(0)
     assert "border: 0;" in dish_block_list.group(0)
+    assert "gap: 6px;" in dish_block_list.group(0)
 
     dish_block_override = re.search(r"\.builder-dish-view-card \.component-block\s*\{[^}]*\}", css, re.S)
     assert dish_block_override is None
 
-    dish_overflow_override = re.search(r"\.builder-dish-view-card \.component-overflow summary\s*\{[^}]*\}", css, re.S)
-    assert dish_overflow_override is None
+    dish_linked_card_block = re.search(r"\.builder-dish-view-card \.dish-linked-component-card\s*\{[^}]*\}", css, re.S)
+    assert dish_linked_card_block is not None
+    assert "min-height: 38px;" in dish_linked_card_block.group(0)
+
+    dish_linked_surface_block = re.search(r"\.builder-dish-view-card \.dish-linked-component-card \.builder-component-card-surface\s*\{[^}]*\}", css, re.S)
+    assert dish_linked_surface_block is not None
+    assert "min-height: 38px;" in dish_linked_surface_block.group(0)
+    assert "padding: 4px 10px 4px 12px;" in dish_linked_surface_block.group(0)
+    assert "gap: 6px;" in dish_linked_surface_block.group(0)
+
+    dish_linked_right_block = re.search(r"\.builder-dish-view-card \.dish-linked-component-card \.component-row-right\s*\{[^}]*\}", css, re.S)
+    assert dish_linked_right_block is not None
+    assert "align-items: center;" in dish_linked_right_block.group(0)
+    assert "gap: 4px;" in dish_linked_right_block.group(0)
+
+    dish_overflow_summary_block = re.search(r"\.builder-dish-view-card \.dish-linked-component-card \.component-overflow summary\s*\{[^}]*\}", css, re.S)
+    assert dish_overflow_summary_block is not None
+    assert "min-width: 22px;" in dish_overflow_summary_block.group(0)
+    assert "min-height: 22px;" in dish_overflow_summary_block.group(0)
+    assert "border-radius: 999px;" in dish_overflow_summary_block.group(0)
 
     tile_remove_block = re.search(r"\.builder-component-tile-remove\s*\{[^}]*\}", css, re.S)
     assert tile_remove_block is not None

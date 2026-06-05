@@ -3729,7 +3729,7 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-dish-view-card .component-block-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   border: 0;
   padding: 0;
   background: transparent;
@@ -3741,6 +3741,37 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-dish-view-card .dish-linked-component-card .component-data-icon {
   display: none;
+}
+
+.builder-dish-view-card .dish-linked-component-card {
+  min-height: 38px;
+}
+
+.builder-dish-view-card .dish-linked-component-card .builder-component-card-surface {
+  min-height: 38px;
+  padding: 4px 10px 4px 12px;
+  gap: 6px;
+}
+
+.builder-dish-view-card .dish-linked-component-card .component-library-card-name {
+  line-height: 1.15;
+}
+
+.builder-dish-view-card .dish-linked-component-card .component-row-right {
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.builder-dish-view-card .dish-linked-component-card .component-overflow summary {
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border-color: #c8d5e0;
+  color: #5f7486;
+  font-size: 11px;
+  line-height: 18px;
 }
 
 .builder-workspace-v1 .component-library-grid {
