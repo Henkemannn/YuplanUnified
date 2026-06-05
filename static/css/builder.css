@@ -3677,7 +3677,7 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-dish-view-card {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .builder-dish-view-header {
@@ -3690,12 +3690,23 @@ body:not(.builder-workspace-v1) ul {
 .builder-dish-view-note {
   margin: 2px 0 0;
   color: #50687b;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .builder-dish-view-help {
   margin: 0;
   color: #6b7f90;
+  font-size: 12px;
+}
+
+.builder-dish-shell-chips {
+  margin: 0 0 6px;
+}
+
+.builder-dish-shell-chips .builder-chip {
+  min-height: 30px;
+  padding: 5px 10px;
+  gap: 5px;
   font-size: 12px;
 }
 
@@ -3715,16 +3726,16 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-dish-text-preview {
   margin: 0;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1px solid #d6e2ec;
-  background: #f8fbfd;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #dbe6ef;
+  background: #fbfdff;
   color: #1f3749;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 15px;
-  line-height: 1.45;
-  min-height: 56px;
+  font-size: 14px;
+  line-height: 1.35;
+  min-height: 44px;
 }
 
 .builder-dish-view-card .component-block-list {

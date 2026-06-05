@@ -5054,11 +5054,11 @@ function openBuilderModalForComposition(composition) {
     return;
   }
   if (modalTitle) {
-    modalTitle.textContent = "Bygg rätt: " + String(composition.composition_name || "");
+    modalTitle.textContent = "Redigera rätt: " + String(composition.composition_name || "");
   }
   if (statusLine) {
-    statusLine.textContent = "Justera vad som ska ingå i rätten.";
-    statusLine.classList.remove("hidden");
+    statusLine.textContent = "";
+    statusLine.classList.add("hidden");
   }
   renderBuilderPanel(composition);
   modal.classList.remove("hidden");
