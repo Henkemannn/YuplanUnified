@@ -53,8 +53,19 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'builder-dish-shell-chips' in resolve_modal_html
     assert '🧾 Översikt' in resolve_modal_html
     assert '🧩 Komponentklossar' in resolve_modal_html
+    assert 'Läsläge för rättens grunddata' in resolve_modal_html
+    assert 'Read-only' in resolve_modal_html
+    assert 'id="dishOverviewName"' in resolve_modal_html
+    assert 'id="dishOverviewCategory"' in resolve_modal_html
+    assert 'id="dishOverviewSummary"' in resolve_modal_html
+    assert 'Rättnamn' in resolve_modal_html
+    assert 'Kategori' in resolve_modal_html
+    assert 'Kort sammanfattning' in resolve_modal_html
+    assert 'Ej kategoriserad' in resolve_modal_html
+    assert 'Menytext / Textvy' in resolve_modal_html
     assert 'Textvy' in resolve_modal_html
     assert 'Så visas rätten i meny' in resolve_modal_html
+    assert 'Menytexten är read-only i Dishes v1.' in resolve_modal_html
     assert 'Lägg till komponent' in resolve_modal_html
     assert 'btnCreateDish' not in resolve_modal_html
     assert 'quickCreateModal' not in resolve_modal_html
@@ -95,6 +106,12 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'statusLine.classList.add("hidden");' in js
     assert 'Bygg rätt: ' not in js
     assert 'Justera vad som ska ingå i rätten.' not in js
+    assert 'function dishOverviewCategoryLabel(composition) {' in js
+    assert 'function dishOverviewSummaryText(composition) {' in js
+    assert 'function renderDishOverview(composition) {' in js
+    assert 'return "Ej kategoriserad";' in js
+    assert 'return String(count) + " komponentklossar";' in js
+    assert 'renderDishOverview(composition);' in js
     assert 'function cleanDishTextPreview(text) {' in js
     assert r'replace(/\s*\(component\)/gi, "")' in js
     assert 'setCompositionTextPreview(targetPreviewId, cleanDishTextPreview(rendered.text));' in js

@@ -3680,6 +3680,46 @@ body:not(.builder-workspace-v1) ul {
   gap: 8px;
 }
 
+.builder-dish-overview-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.builder-dish-overview-field {
+  margin: 0;
+  border: 1px solid #d7e2ec;
+  border-radius: 10px;
+  background: #f8fbfe;
+  padding: 8px 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.builder-dish-overview-field dt {
+  margin: 0;
+  font-size: 11px;
+  color: #557086;
+  font-weight: 600;
+}
+
+.builder-dish-overview-field dd {
+  margin: 0;
+  color: #1f3749;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.builder-dish-overview-field-wide {
+  grid-column: 1 / -1;
+}
+
+.builder-dish-overview-text-block {
+  display: grid;
+  gap: 2px;
+}
+
 .builder-dish-view-header {
   display: flex;
   align-items: flex-start;

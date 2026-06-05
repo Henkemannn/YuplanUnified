@@ -4286,6 +4286,42 @@ function setCompositionTextPreview(previewId, message) {
   preview.textContent = String(message || "");
 }
 
+function dishOverviewCategoryLabel(composition) {
+  const rawValue = String((composition && composition.library_group) || "").trim();
+  const key = normalizeDishCategoryKey(rawValue);
+  for (const entry of DISH_LIBRARY_GROUPS) {
+    if (entry.key === key && entry.key !== "all") {
+      return entry.label;
+    }
+  }
+  if (rawValue) {
+    return rawValue;
+  }
+  return "Ej kategoriserad";
+}
+
+function dishOverviewSummaryText(composition) {
+  const components = Array.isArray(composition && composition.components) ? composition.components : [];
+  const count = components.length;
+  if (count === 1) {
+    return "1 komponentkloss";
+  }
+  return String(count) + " komponentklossar";
+}
+
+function renderDishOverview(composition) {
+  const nameTarget = document.getElementById("dishOverviewName");
+  const categoryTarget = document.getElementById("dishOverviewCategory");
+  const summaryTarget = document.getElementById("dishOverviewSummary");
+  if (!nameTarget || !categoryTarget || !summaryTarget || !composition) {
+    return;
+  }
+
+  nameTarget.textContent = String(composition.composition_name || "").trim() || "-";
+  categoryTarget.textContent = dishOverviewCategoryLabel(composition);
+  summaryTarget.textContent = dishOverviewSummaryText(composition);
+}
+
 function cleanDishTextPreview(text) {
   return String(text || "").replace(/\s*\(component\)/gi, "");
 }
@@ -4813,6 +4849,7 @@ function renderBuilderPanel(composition) {
   currentBuilderComposition = composition;
   resetRecipePanel("Komponent: inte vald");
   title.textContent = "Rätt: " + String(composition.composition_name || "");
+  renderDishOverview(composition);
   list.innerHTML = "";
 
   loadCompositionDeclarationPreview(String(composition.composition_id || "")).catch(() => {
