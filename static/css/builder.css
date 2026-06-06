@@ -3877,6 +3877,69 @@ body:not(.builder-workspace-v1) ul {
   font-size: 12px;
 }
 
+#dishAllergensPanel .builder-dish-allergen-summary {
+  display: grid;
+  gap: 12px;
+}
+
+#dishAllergensPanel .builder-dish-allergen-summary-section {
+  display: grid;
+  gap: 8px;
+}
+
+#dishAllergensPanel .builder-dish-allergen-summary-section h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #31485c;
+}
+
+#dishAllergensPanel .builder-dish-allergen-summary-empty {
+  margin: 0;
+  color: #586c7e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+#dishAllergensPanel .builder-dish-allergen-grid,
+#dishAllergensPanel .builder-dish-allergen-marker-grid {
+  display: grid;
+  gap: 8px;
+}
+
+#dishAllergensPanel .builder-dish-allergen-card,
+#dishAllergensPanel .builder-dish-allergen-marker {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid #d5dee8;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+#dishAllergensPanel .builder-dish-allergen-chip,
+#dishAllergensPanel .builder-dish-allergen-marker-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef4f9;
+  border: 1px solid #d7e2ec;
+  color: #22394d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#dishAllergensPanel .builder-dish-allergen-source,
+#dishAllergensPanel .builder-dish-allergen-note,
+#dishAllergensPanel .builder-dish-allergen-marker-source {
+  margin: 0;
+  color: #586c7e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .builder-dish-view-card .dish-linked-component-card .component-data-icon {
   display: none;
 }

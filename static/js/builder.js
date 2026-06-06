@@ -3802,6 +3802,7 @@ async function loadLibrary() {
 
 let currentBuilderComposition = null;
 let currentBuilderDishTab = "overview";
+let currentDishAllergenSummaryToken = 0;
 let reusableComponentsCache = [];
 let selectedComponentId = null;
 let draggedComponentEntryKey = null;
@@ -3827,7 +3828,7 @@ function componentEntryKey(component) {
 
 function dishBuilderTabValue(value) {
   const key = String(value || "").trim().toLowerCase();
-  if (key === "components") {
+  if (key === "components" || key === "allergens" || key === "overview") {
     return key;
   }
   return "overview";
@@ -3867,6 +3868,251 @@ function setDishBuilderTab(tabValue) {
       panel.setAttribute("hidden", "hidden");
     }
   });
+
+  if (nextTab === "allergens") {
+    loadDishAllergenSummaryForCurrentComposition().catch(() => {
+      renderDishAllergenSummaryFailure();
+    });
+  }
+}
+
+function dishAllergenLabel(value) {
+  const key = String(value || "").trim().toLowerCase();
+  const meta = SIGNAL_TOKEN_META[key];
+  if (meta && meta.label) {
+    return meta.label;
+  }
+  if (!key) {
+    return "";
+  }
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function renderDishAllergenSummaryMessage(message) {
+  const host = document.getElementById("dishAllergensSummary");
+  if (!host) {
+    return;
+  }
+  host.innerHTML = "";
+  const text = document.createElement("p");
+  text.className = "builder-dish-allergen-summary-empty";
+  text.textContent = String(message || "");
+  host.appendChild(text);
+}
+
+function renderDishAllergenSummaryFailure() {
+  renderDishAllergenSummaryMessage("Kunde inte läsa komponenterna just nu.");
+}
+
+function renderDishAllergenSummaryEmpty() {
+  renderDishAllergenSummaryMessage("Inga allergener eller kostmarkörer registrerade på komponenterna.");
+}
+
+function renderDishAllergenSummaryLoading() {
+  renderDishAllergenSummaryMessage("Samlar information från komponenterna...");
+}
+
+function renderDishAllergenSummary(composition, componentDetails) {
+  const host = document.getElementById("dishAllergensSummary");
+  if (!host) {
+    return;
+  }
+
+  host.innerHTML = "";
+  const detailsList = Array.isArray(componentDetails) ? componentDetails : [];
+  const allergenMap = new Map();
+  const markerMap = new Map();
+
+  for (const entry of detailsList) {
+    const component = entry && entry.component ? entry.component : null;
+    const details = entry && entry.details ? entry.details : null;
+    const componentName = String((component && component.component_name) || (component && component.component_id) || "").trim();
+    const allergenNotes = String((details && details.allergen_notes) || "").trim();
+    const allergens = Array.isArray(details && details.allergens) ? details.allergens : [];
+    const tags = Array.isArray(details && details.tags) ? details.tags : [];
+
+    for (const allergen of allergens) {
+      const allergenKey = String(allergen || "").trim().toLowerCase();
+      if (!allergenKey) {
+        continue;
+      }
+      if (!allergenMap.has(allergenKey)) {
+        allergenMap.set(allergenKey, { components: [], notes: [] });
+      }
+      const bucket = allergenMap.get(allergenKey);
+      if (componentName && !bucket.components.includes(componentName)) {
+        bucket.components.push(componentName);
+      }
+      if (allergenNotes && !bucket.notes.includes(allergenNotes)) {
+        bucket.notes.push(allergenNotes);
+      }
+    }
+
+    for (const tag of tags) {
+      const tagKey = String(tag || "").trim().toLowerCase();
+      if (!tagKey) {
+        continue;
+      }
+      if (!markerMap.has(tagKey)) {
+        markerMap.set(tagKey, []);
+      }
+      const list = markerMap.get(tagKey);
+      if (componentName && !list.includes(componentName)) {
+        list.push(componentName);
+      }
+    }
+  }
+
+  if (allergenMap.size === 0 && markerMap.size === 0) {
+    renderDishAllergenSummaryEmpty();
+    return;
+  }
+
+  const allergenSection = document.createElement("section");
+  allergenSection.className = "builder-dish-allergen-summary-section";
+
+  const allergenTitle = document.createElement("h4");
+  allergenTitle.textContent = "Allergener";
+  allergenSection.appendChild(allergenTitle);
+
+  if (allergenMap.size === 0) {
+    const empty = document.createElement("p");
+    empty.className = "builder-dish-allergen-summary-empty";
+    empty.textContent = "Inga allergener registrerade på komponenterna.";
+    allergenSection.appendChild(empty);
+  } else {
+    const list = document.createElement("div");
+    list.className = "builder-dish-allergen-grid";
+    for (const [allergenKey, value] of allergenMap.entries()) {
+      const card = document.createElement("article");
+      card.className = "builder-dish-allergen-card";
+
+      const chip = document.createElement("div");
+      chip.className = "builder-dish-allergen-chip";
+      chip.textContent = dishAllergenLabel(allergenKey);
+      card.appendChild(chip);
+
+      const source = document.createElement("p");
+      source.className = "builder-dish-allergen-source";
+      source.textContent = value.components.length > 0
+        ? "Från: " + value.components.join(", ")
+        : "Från komponenterna";
+      card.appendChild(source);
+
+      if (value.notes.length > 0) {
+        const note = document.createElement("p");
+        note.className = "builder-dish-allergen-note";
+        note.textContent = value.notes.join(" | ");
+        card.appendChild(note);
+      }
+
+      list.appendChild(card);
+    }
+    allergenSection.appendChild(list);
+  }
+
+  const markerSection = document.createElement("section");
+  markerSection.className = "builder-dish-allergen-summary-section";
+
+  const markerTitle = document.createElement("h4");
+  markerTitle.textContent = "Kostmarkörer";
+  markerSection.appendChild(markerTitle);
+
+  if (markerMap.size === 0) {
+    const empty = document.createElement("p");
+    empty.className = "builder-dish-allergen-summary-empty";
+    empty.textContent = "Inga kostmarkörer registrerade på komponenterna.";
+    markerSection.appendChild(empty);
+  } else {
+    const markerList = document.createElement("div");
+    markerList.className = "builder-dish-allergen-marker-grid";
+    for (const [tagKey, sources] of markerMap.entries()) {
+      const chip = document.createElement("article");
+      chip.className = "builder-dish-allergen-marker";
+
+      const label = document.createElement("div");
+      label.className = "builder-dish-allergen-marker-label";
+      label.textContent = dishAllergenLabel(tagKey);
+      chip.appendChild(label);
+
+      const source = document.createElement("p");
+      source.className = "builder-dish-allergen-marker-source";
+      source.textContent = sources.length > 0 ? "Från: " + sources.join(", ") : "Från komponenterna";
+      chip.appendChild(source);
+
+      markerList.appendChild(chip);
+    }
+    markerSection.appendChild(markerList);
+  }
+
+  host.appendChild(allergenSection);
+  host.appendChild(markerSection);
+}
+
+async function loadDishAllergenSummaryForCurrentComposition() {
+  const composition = currentBuilderComposition;
+  const host = document.getElementById("dishAllergensSummary");
+  if (!host) {
+    return;
+  }
+  if (!composition || !composition.composition_id) {
+    renderDishAllergenSummaryEmpty();
+    return;
+  }
+
+  const compositionId = String(composition.composition_id || "").trim();
+  const linkedComponents = Array.isArray(composition.components) ? composition.components : [];
+  const linkedComponentIds = Array.from(new Set(
+    linkedComponents
+      .map((item) => String(item.component_id || "").trim())
+      .filter(Boolean),
+  ));
+
+  if (linkedComponentIds.length === 0) {
+    renderDishAllergenSummaryEmpty();
+    return;
+  }
+
+  const summaryToken = ++currentDishAllergenSummaryToken;
+  renderDishAllergenSummaryLoading();
+
+  const componentDetails = await Promise.all(linkedComponents.map(async (linkedComponent) => {
+    const componentIdValue = String(linkedComponent.component_id || "").trim();
+    if (!componentIdValue) {
+      return null;
+    }
+    try {
+      const details = await fetchComponentDetailDraft(componentIdValue);
+      return {
+        component: linkedComponent,
+        details,
+      };
+    } catch (error) {
+      return {
+        component: linkedComponent,
+        details: defaultComponentDetailDraft(),
+        error: String(error && error.message ? error.message : error || ""),
+      };
+    }
+  }));
+
+  if (summaryToken !== currentDishAllergenSummaryToken) {
+    return;
+  }
+  if (!currentBuilderComposition || String(currentBuilderComposition.composition_id || "").trim() !== compositionId) {
+    return;
+  }
+  if (currentBuilderDishTab !== "allergens") {
+    return;
+  }
+
+  const anyFailure = componentDetails.some((item) => item && item.error);
+  if (anyFailure && componentDetails.every((item) => !item || !item.details)) {
+    renderDishAllergenSummaryFailure();
+    return;
+  }
+
+  renderDishAllergenSummary(composition, componentDetails.filter(Boolean));
 }
 
 function componentsInDisplayOrder(composition) {
@@ -4954,6 +5200,9 @@ function renderBuilderPanel(composition) {
     li.textContent = "Inga komponenter ännu. Använd Lägg till komponent för att börja bygga rätten.";
     list.appendChild(li);
     renderComponentPalette();
+    if (currentBuilderDishTab === "allergens") {
+      renderDishAllergenSummaryEmpty();
+    }
     return;
   }
 
@@ -5130,6 +5379,11 @@ function renderBuilderPanel(composition) {
 
   updateComponentConflictBadgesDom();
   renderComponentPalette();
+  if (currentBuilderDishTab === "allergens") {
+    loadDishAllergenSummaryForCurrentComposition().catch(() => {
+      renderDishAllergenSummaryFailure();
+    });
+  }
   pendingAddedPulseComponentId = null;
   pendingSelectedPulseComponentId = null;
   pendingReorderedPulseComponentId = null;
@@ -5196,6 +5450,7 @@ function openBuilderModalForComposition(composition) {
 }
 
 function closeResolveModal() {
+  currentDishAllergenSummaryToken += 1;
   closeDishComponentOverflowMenus();
   const modal = document.getElementById("resolveModal");
   if (modal) {
