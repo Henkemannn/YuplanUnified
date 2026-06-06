@@ -525,12 +525,12 @@
 
       <div id="modalBuilderSection" class="workspace-modal-body workspace-modal-body-single modal-section">
         <div class="workspace-modal-column workspace-modal-column-primary workspace-modal-column-single">
-          <div class="builder-component-detail-tabs builder-dish-shell-chips" aria-label="Rättsektioner">
-            <button type="button" class="builder-chip is-active" aria-pressed="true">🧾 Översikt</button>
-            <button type="button" class="builder-chip" aria-pressed="false">🧩 Komponentklossar</button>
+          <div class="builder-component-detail-tabs builder-dish-shell-chips" role="tablist" aria-label="Rättsektioner">
+            <button id="dishOverviewTabBtn" type="button" class="builder-chip is-active" data-dish-tab="overview" aria-pressed="true" aria-selected="true">🧾 Översikt</button>
+            <button id="dishComponentsTabBtn" type="button" class="builder-chip" data-dish-tab="components" aria-pressed="false" aria-selected="false">🧩 Komponentklossar</button>
           </div>
 
-          <div class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-overview">
+          <div id="dishOverviewPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-overview" data-dish-panel="overview">
             <div class="builder-dish-view-header">
               <div>
                 <p class="modal-section-title">Översikt</p>
@@ -549,18 +549,23 @@
               <p class="builder-dish-view-note">Så visas rätten i menyer och utskrifter.</p>
             </div>
             <pre id="dishTextPreview" class="builder-dish-text-preview">Ingen rätt vald</pre>
+
+            <div class="builder-dish-overview-preview-block">
+              <p class="modal-section-title">Komponentklossar</p>
+              <ul id="dishOverviewKlossPreview" class="component-block-list builder-dish-overview-kloss-preview" aria-label="Förhandsvisning komponentklossar"></ul>
+            </div>
           </div>
 
-          <div class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-components">
+          <div id="dishComponentsPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-components hidden" data-dish-panel="components" hidden>
             <div class="builder-dish-view-header">
               <div>
                 <p class="modal-section-title">🧩 Komponentklossar</p>
-                <p class="builder-dish-view-note">Komponenterna som rätten består av.</p>
+                <p class="builder-dish-view-note">Bygg rätten av befintliga komponenter.</p>
               </div>
             </div>
             <ul id="builderComponentsList" class="component-block-list"></ul>
             <div class="workspace-inline-actions workspace-builder-primary-actions">
-              <button id="openAddComponentModalBtn" type="button" class="hidden" aria-hidden="true">Lägg till komponent</button>
+              <button id="openAddComponentModalBtn" type="button">Lägg till komponent</button>
             </div>
           </div>
 
