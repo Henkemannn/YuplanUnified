@@ -53,13 +53,16 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'builder-dish-shell-chips' in resolve_modal_html
     assert 'id="dishOverviewTabBtn" type="button" class="builder-chip is-active" data-dish-tab="overview" aria-pressed="true" aria-selected="true"' in resolve_modal_html
     assert 'id="dishComponentsTabBtn" type="button" class="builder-chip" data-dish-tab="components" aria-pressed="false" aria-selected="false"' in resolve_modal_html
+    assert 'id="dishCalculationTabBtn" type="button" class="builder-chip" data-dish-tab="calculation" aria-pressed="false" aria-selected="false"' in resolve_modal_html
     assert 'id="dishAllergensTabBtn" type="button" class="builder-chip" data-dish-tab="allergens" aria-pressed="false" aria-selected="false"' in resolve_modal_html
     assert '🧾 Översikt' in resolve_modal_html
     assert '🧩 Komponentklossar' in resolve_modal_html
+    assert '💰 Kalkyl' in resolve_modal_html
     assert '🌾 Allergener/kostinfo' in resolve_modal_html
     assert 'Endast visning' not in resolve_modal_html
     assert 'id="dishOverviewPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-overview" data-dish-panel="overview"' in resolve_modal_html
     assert 'id="dishComponentsPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-components hidden" data-dish-panel="components" hidden' in resolve_modal_html
+    assert 'id="dishCalculationPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-calculation hidden" data-dish-panel="calculation" hidden' in resolve_modal_html
     assert 'id="dishAllergensPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-allergens hidden" data-dish-panel="allergens" hidden' in resolve_modal_html
     assert 'builder-dish-view-card-overview hidden' not in resolve_modal_html
     assert 'id="dishOverviewCategory"' in resolve_modal_html
@@ -83,7 +86,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert components_section_start != -1
     allergens_section_start = resolve_modal_html.find('id="dishAllergensPanel"')
     assert allergens_section_start != -1 and allergens_section_start > components_section_start
-    components_section_end = allergens_section_start
+    calculation_section_start = resolve_modal_html.find('id="dishCalculationPanel"')
+    assert calculation_section_start != -1 and calculation_section_start > allergens_section_start
+    components_section_end = calculation_section_start
     assert components_section_end != -1 and components_section_end > components_section_start
     components_section_html = resolve_modal_html[components_section_start:components_section_end]
     assert 'Komponentklossarna bygger upp rätten.' not in components_section_html
@@ -93,7 +98,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="builderComponentsList"' in components_section_html
     assert 'id="openAddComponentModalBtn"' in components_section_html
     assert 'id="openAddComponentModalBtn" type="button"' in components_section_html
-    allergens_section_end = resolve_modal_html.find('id="builderOut"')
+    allergens_section_end = calculation_section_start
     assert allergens_section_end != -1 and allergens_section_end > allergens_section_start
     allergens_section_html = resolve_modal_html[allergens_section_start:allergens_section_end]
     assert 'Sammanställs från rättens komponenter.' in allergens_section_html
@@ -103,6 +108,11 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'componentDetailAllergenNotes' not in resolve_modal_html
     assert 'data-dish-tab="recipe"' not in resolve_modal_html
     assert 'data-dish-panel="recipe"' not in resolve_modal_html
+    assert 'id="dishCalculationSummary"' in resolve_modal_html
+    assert 'Sammanställs från rättens komponenter.' in resolve_modal_html
+    assert 'id="dishCalculationCost"' not in resolve_modal_html
+    assert 'id="dishCalculationNotes"' not in resolve_modal_html
+    assert 'id="dishCalculationYield"' not in resolve_modal_html
     assert 'Lägg till komponent' in components_section_html
     assert 'btnCreateDish' not in resolve_modal_html
     assert 'quickCreateModal' not in resolve_modal_html
@@ -145,10 +155,12 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'Justera vad som ska ingå i rätten.' not in js
     assert 'let currentBuilderDishTab = "overview";' in js
     assert 'function dishBuilderTabValue(value) {' in js
-    assert 'if (key === "components" || key === "allergens" || key === "overview") {' in js
+    assert 'if (key === "components" || key === "allergens" || key === "calculation" || key === "overview") {' in js
     assert 'function setDishBuilderTab(tabValue) {' in js
     assert 'panel.hidden = !active;' in js
     assert 'panel.setAttribute("aria-hidden", active ? "false" : "true");' in js
+    assert 'if (nextTab === "calculation") {' in js
+    assert 'loadDishCalculationSummaryForCurrentComposition().catch(() => {' in js
     assert 'function renderDishOverviewKlossPreview(composition) {' in js
     overview_preview_start = js.find("function renderDishOverviewKlossPreview(composition)")
     overview_preview_end = js.find("function renderBuilderPanel(composition)")
@@ -168,9 +180,23 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'renderDishOverview(composition);' in js
     assert 'function renderDishAllergenSummary(composition, componentDetails) {' in js
     assert 'function loadDishAllergenSummaryForCurrentComposition() {' in js
-    assert 'const linkedComponents = Array.isArray(composition.components) ? composition.components : [];' in js
-    assert 'Promise.all(linkedComponents.map(async (linkedComponent) => {' in js
+    assert 'function fetchDishLinkedComponentDetailsForCurrentComposition() {' in js
+    assert 'fetchComponentDetailDraft(componentIdValue)' in js
+    assert 'function renderDishCalculationSummary(composition, componentDetails) {' in js
+    assert 'function loadDishCalculationSummaryForCurrentComposition() {' in js
+    assert 'renderDishCalculationSummary(composition, componentDetails.filter(Boolean));' in js
+    assert 'Sparad kostnad' not in js
+    assert 'function parseDishCurrencyValue(value) {' in js
+    assert 'Saknar kalkyldata' in js
+    assert 'Ingen kalkyl registrerad på komponenterna.' in js
+    assert 'Komponentkostnad' in js
+    assert 'Total kalkyl för rätt' in js
+    assert 'Vissa komponenter saknar kalkyldata.' in js
+    assert 'formatDishCalculationAmount(' in js
+    assert 'formatDishCalculationRowCost(' in js
+    assert 'host.insertBefore(totalCard, host.firstChild);' in js
     assert 'id="dishAllergensPanel"' in html
+    assert 'id="dishCalculationPanel"' in html
     assert 'builderCompositionTitle' not in js
     assert 'Rätt: ' not in js
     assert 'function cleanDishTextPreview(text) {' in js
@@ -193,6 +219,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'if (currentBuilderDishTab === "allergens") {' in builder_panel_js
     assert 'renderDishAllergenSummaryEmpty();' in builder_panel_js
     assert 'loadDishAllergenSummaryForCurrentComposition().catch(() => {' in builder_panel_js
+    assert 'currentDishCalculationSummaryToken += 1;' in js
+    assert 'renderDishCalculationSummaryEmpty();' in js
+    assert 'loadDishCalculationSummaryForCurrentComposition().catch(() => {' in js
     assert 'target && target.closest(".component-row-right")' in builder_panel_js
     assert 'overflowSummary.addEventListener("click", (event) => {' in builder_panel_js
     assert 'closeDishComponentOverflowMenus(overflow);' in builder_panel_js
@@ -203,6 +232,8 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'const didCloseDishOverflow = closeDishComponentOverflowMenus();' in js
     assert 'if (nextTab === "allergens") {' in js
     assert 'loadDishAllergenSummaryForCurrentComposition().catch(() => {' in js
+    assert 'if (nextTab === "calculation") {' in js
+    assert 'loadDishCalculationSummaryForCurrentComposition().catch(() => {' in js
     assert 'Byt namn' not in builder_panel_js
     assert 'Ändra roll' not in builder_panel_js
     assert 'component-role-tag' not in builder_panel_js
@@ -233,6 +264,11 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '#dishAllergensPanel .builder-dish-allergen-card,' in css
     assert '#dishAllergensPanel .builder-dish-allergen-chip,' in css
     assert '#dishAllergensPanel .builder-dish-allergen-source,' in css
+    assert '#dishCalculationPanel .builder-dish-calculation-summary {' in css
+    assert '#dishCalculationPanel .builder-dish-calculation-card {' in css
+    assert '#dishCalculationPanel .builder-dish-calculation-row {' in css
+    assert '#dishCalculationPanel .builder-dish-calculation-total {' in css
+    assert '#dishCalculationPanel .builder-dish-calculation-summary-warning {' in css
     dish_list_block = re.search(r"\.builder-dish-view-card \.component-block-list\s*\{[^}]*\}", css, re.S)
     assert dish_list_block is not None
     assert 'gap: 6px;' in dish_list_block.group(0)

@@ -528,6 +528,7 @@
           <div class="builder-component-detail-tabs builder-dish-shell-chips" role="tablist" aria-label="Rättsektioner">
             <button id="dishOverviewTabBtn" type="button" class="builder-chip is-active" data-dish-tab="overview" aria-pressed="true" aria-selected="true">🧾 Översikt</button>
             <button id="dishComponentsTabBtn" type="button" class="builder-chip" data-dish-tab="components" aria-pressed="false" aria-selected="false">🧩 Komponentklossar</button>
+            <button id="dishCalculationTabBtn" type="button" class="builder-chip" data-dish-tab="calculation" aria-pressed="false" aria-selected="false">💰 Kalkyl</button>
             <button id="dishAllergensTabBtn" type="button" class="builder-chip" data-dish-tab="allergens" aria-pressed="false" aria-selected="false">🌾 Allergener/kostinfo</button>
           </div>
 
@@ -581,6 +582,19 @@
             <div id="dishAllergensSummary" class="builder-dish-allergen-summary" aria-live="polite">
               <p class="builder-dish-allergen-summary-empty">Inga allergener eller kostmarkörer registrerade på komponenterna.</p>
             </div>
+          </div>
+
+          <div id="dishCalculationPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-calculation hidden" data-dish-panel="calculation" hidden>
+            <div class="builder-dish-view-header">
+              <div>
+                <p class="modal-section-title">💰 Kalkyl</p>
+                <p class="builder-dish-view-help">Sammanställs från rättens komponenter.</p>
+              </div>
+            </div>
+            <div id="dishCalculationSummary" class="builder-dish-calculation-summary" aria-live="polite">
+              <p class="builder-dish-calculation-summary-empty">Samlar kalkyldata från komponenterna...</p>
+            </div>
+          </div>
           </div>
 
           <div id="builderOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
