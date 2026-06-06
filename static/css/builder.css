@@ -3689,6 +3689,10 @@ body:not(.builder-workspace-v1) ul {
   padding: 12px;
 }
 
+#resolveModal [data-dish-panel][hidden] {
+  display: none !important;
+}
+
 .builder-dish-overview-grid {
   margin: 0;
   display: grid;
@@ -3790,6 +3794,23 @@ body:not(.builder-workspace-v1) ul {
   font-size: 13px;
   line-height: 1.35;
   min-height: 32px;
+}
+
+.builder-dish-overview-preview-block {
+  display: grid;
+  gap: 4px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid #e2ebf2;
+}
+
+#dishOverviewKlossPreview {
+  max-height: 170px;
+}
+
+#dishOverviewKlossPreview .builder-component-card-surface {
+  cursor: default;
+  pointer-events: none;
 }
 
 .builder-dish-view-card-components .builder-dish-view-help {

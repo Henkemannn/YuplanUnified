@@ -51,9 +51,14 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'Redigera rätt' in resolve_modal_html
     assert 'Klar' in resolve_modal_html
     assert 'builder-dish-shell-chips' in resolve_modal_html
+    assert 'id="dishOverviewTabBtn" type="button" class="builder-chip is-active" data-dish-tab="overview" aria-pressed="true" aria-selected="true"' in resolve_modal_html
+    assert 'id="dishComponentsTabBtn" type="button" class="builder-chip" data-dish-tab="components" aria-pressed="false" aria-selected="false"' in resolve_modal_html
     assert '🧾 Översikt' in resolve_modal_html
     assert '🧩 Komponentklossar' in resolve_modal_html
     assert 'Endast visning' not in resolve_modal_html
+    assert 'id="dishOverviewPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-overview" data-dish-panel="overview"' in resolve_modal_html
+    assert 'id="dishComponentsPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-components hidden" data-dish-panel="components" hidden' in resolve_modal_html
+    assert 'builder-dish-view-card-overview hidden' not in resolve_modal_html
     assert 'id="dishOverviewCategory"' in resolve_modal_html
     assert 'Kategori' in resolve_modal_html
     assert 'Ej kategoriserad' in resolve_modal_html
@@ -61,14 +66,28 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'Menytext / Textvy' not in resolve_modal_html
     assert 'Så visas rätten i menyer och utskrifter.' in resolve_modal_html
     assert 'Menytexten kan redigeras senare.' not in resolve_modal_html
-    components_section_start = resolve_modal_html.find('<p class="modal-section-title">🧩 Komponentklossar</p>')
+    overview_section_start = resolve_modal_html.find('id="dishOverviewPanel"')
+    assert overview_section_start != -1
+    overview_section_end = resolve_modal_html.find('id="dishComponentsPanel"')
+    assert overview_section_end != -1 and overview_section_end > overview_section_start
+    overview_section_html = resolve_modal_html[overview_section_start:overview_section_end]
+    assert 'id="dishOverviewKlossPreview"' in overview_section_html
+    assert 'aria-label="Förhandsvisning komponentklossar"' in overview_section_html
+    assert 'id="openAddComponentModalBtn"' not in overview_section_html
+    assert 'Lägg till komponent' not in overview_section_html
+    assert 'component-overflow' not in overview_section_html
+    components_section_start = resolve_modal_html.find('id="dishComponentsPanel"')
     assert components_section_start != -1
-    components_section_html = resolve_modal_html[components_section_start:]
+    components_section_end = resolve_modal_html.find('id="builderOut"')
+    assert components_section_end != -1 and components_section_end > components_section_start
+    components_section_html = resolve_modal_html[components_section_start:components_section_end]
     assert 'Komponentklossarna bygger upp rätten.' not in components_section_html
     assert 'Lägg till, ta bort och ordna komponentklossarna här.' not in components_section_html
-    assert 'Komponenterna som rätten består av.' in components_section_html
+    assert 'Bygg rätten av befintliga komponenter.' in components_section_html
+    assert 'Komponenterna som rätten består av.' not in components_section_html
+    assert 'id="builderComponentsList"' in components_section_html
     assert 'id="openAddComponentModalBtn"' in components_section_html
-    assert 'id="openAddComponentModalBtn" type="button" class="hidden" aria-hidden="true"' in components_section_html
+    assert 'id="openAddComponentModalBtn" type="button"' in components_section_html
     assert 'Lägg till komponent' in components_section_html
     assert 'btnCreateDish' not in resolve_modal_html
     assert 'quickCreateModal' not in resolve_modal_html
@@ -110,6 +129,21 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'statusLine.classList.add("hidden");' in js
     assert 'Bygg rätt: ' not in js
     assert 'Justera vad som ska ingå i rätten.' not in js
+    assert 'let currentBuilderDishTab = "overview";' in js
+    assert 'function dishBuilderTabValue(value) {' in js
+    assert 'function setDishBuilderTab(tabValue) {' in js
+    assert 'panel.hidden = !active;' in js
+    assert 'panel.setAttribute("aria-hidden", active ? "false" : "true");' in js
+    assert 'function renderDishOverviewKlossPreview(composition) {' in js
+    overview_preview_start = js.find("function renderDishOverviewKlossPreview(composition)")
+    overview_preview_end = js.find("function renderBuilderPanel(composition)")
+    assert overview_preview_start != -1 and overview_preview_end != -1 and overview_preview_start < overview_preview_end
+    overview_preview_js = js[overview_preview_start:overview_preview_end]
+    assert 'dishOverviewKlossPreview' in overview_preview_js
+    assert 'component-overflow' not in overview_preview_js
+    assert 'openAddComponentModalBtn' not in overview_preview_js
+    assert 'data-dish-tab' in js
+    assert 'data-dish-panel' in js
     assert 'function dishOverviewCategoryLabel(composition) {' in js
     assert 'function renderDishOverview(composition) {' in js
     assert 'return "Ej kategoriserad";' in js
@@ -131,6 +165,15 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'component-role-tag' not in builder_panel_js
     assert 'component-data-icon' in builder_panel_js
     assert 'component-conflict-badge' not in builder_panel_js
+    css_rv = client_admin.get("/static/css/builder.css")
+    assert css_rv.status_code == 200
+    css = css_rv.data.decode("utf-8")
+    assert '#resolveModal [data-dish-panel][hidden] {' in css
+    assert 'display: none !important;' in css
+    assert '.builder-dish-overview-preview-block {' in css
+    assert '#dishOverviewKlossPreview {' in css
+    assert '#dishOverviewKlossPreview .builder-component-card-surface {' in css
+    assert 'pointer-events: none;' in css
     assert 'id="workspaceOverviewSection"' in html
     assert "What do you want to do today?" in html
     assert 'data-action-card="import-menu-recipes"' in html
