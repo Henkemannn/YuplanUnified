@@ -121,9 +121,8 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'categoryPreview' not in render_dish_card_js
     assert 'Öppna' not in render_dish_card_js
     assert 'Ta bort' not in render_dish_card_js
-    assert 'Byt namn' in js
-    assert 'Ändra roll' in js
-    assert 'Ta bort' in js
+    assert 'Öppna komponent' in js
+    assert 'Ta bort från rätt' in js
     assert 'modalTitle.textContent = String(composition.composition_name || "").trim() || "Redigera rätt";' in js
     assert 'Redigera rätt: ' not in js
     assert 'statusLine.classList.add("hidden");' in js
@@ -140,6 +139,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert overview_preview_start != -1 and overview_preview_end != -1 and overview_preview_start < overview_preview_end
     overview_preview_js = js[overview_preview_start:overview_preview_end]
     assert 'dishOverviewKlossPreview' in overview_preview_js
+    assert 'builder-component-card builder-component-card-compact dish-linked-component-card' in overview_preview_js
+    assert 'builder-component-card-surface' in overview_preview_js
+    assert 'component-library-card-name' in overview_preview_js
     assert 'component-overflow' not in overview_preview_js
     assert 'openAddComponentModalBtn' not in overview_preview_js
     assert 'data-dish-tab' in js
@@ -162,6 +164,20 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'builder-component-card builder-component-card-compact dish-linked-component-card' in builder_panel_js
     assert 'builder-component-card-surface' in builder_panel_js
     assert 'component-library-card-name' in builder_panel_js
+    assert 'component-overflow' in builder_panel_js
+    assert 'Öppna komponent' in builder_panel_js
+    assert 'Ta bort från rätt' in builder_panel_js
+    assert 'function closeDishComponentOverflowMenus(exceptElement = null) {' in js
+    assert 'target && target.closest(".component-row-right")' in builder_panel_js
+    assert 'overflowSummary.addEventListener("click", (event) => {' in builder_panel_js
+    assert 'closeDishComponentOverflowMenus(overflow);' in builder_panel_js
+    assert 'overflow.addEventListener("toggle", () => {' in builder_panel_js
+    assert 'menu.addEventListener("click", (event) => {' in builder_panel_js
+    assert 'event.stopPropagation();' in builder_panel_js
+    assert 'target.closest("#dishComponentsPanel .component-overflow")' in js
+    assert 'const didCloseDishOverflow = closeDishComponentOverflowMenus();' in js
+    assert 'Byt namn' not in builder_panel_js
+    assert 'Ändra roll' not in builder_panel_js
     assert 'component-role-tag' not in builder_panel_js
     assert 'component-data-icon' in builder_panel_js
     assert 'component-conflict-badge' not in builder_panel_js
@@ -174,6 +190,24 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '#dishOverviewKlossPreview {' in css
     assert '#dishOverviewKlossPreview .builder-component-card-surface {' in css
     assert 'pointer-events: none;' in css
+    assert '#dishComponentsPanel .component-block-list {' in css
+    assert 'overflow-y: visible;' in css
+    assert '#dishComponentsPanel .component-overflow {' in css
+    assert '#dishComponentsPanel .component-overflow[open] {' in css
+    assert '#dishComponentsPanel .component-overflow-menu {' in css
+    assert 'position: absolute;' in css
+    assert 'top: auto;' in css
+    assert 'bottom: calc(100% + 6px);' in css
+    assert 'z-index: 60;' in css
+    assert 'max-height: 140px;' in css
+    assert 'overflow-y: auto;' in css
+    assert '#dishComponentsPanel .component-overflow-menu button {' in css
+    dish_list_block = re.search(r"\.builder-dish-view-card \.component-block-list\s*\{[^}]*\}", css, re.S)
+    assert dish_list_block is not None
+    assert 'gap: 6px;' in dish_list_block.group(0)
+    assert '.builder-dish-view-card .dish-linked-component-card {' not in css
+    assert '.builder-dish-view-card .dish-linked-component-card .builder-component-card-surface {' not in css
+    assert '.builder-dish-view-card .dish-linked-component-card .component-library-card-name {' not in css
     assert 'id="workspaceOverviewSection"' in html
     assert "What do you want to do today?" in html
     assert 'data-action-card="import-menu-recipes"' in html
@@ -1005,16 +1039,6 @@ def test_builder_workspace_v1_layout_css_contracts(client_admin) -> None:
 
     dish_block_override = re.search(r"\.builder-dish-view-card \.component-block\s*\{[^}]*\}", css, re.S)
     assert dish_block_override is None
-
-    dish_linked_card_block = re.search(r"\.builder-dish-view-card \.dish-linked-component-card\s*\{[^}]*\}", css, re.S)
-    assert dish_linked_card_block is not None
-    assert "min-height: 38px;" in dish_linked_card_block.group(0)
-
-    dish_linked_surface_block = re.search(r"\.builder-dish-view-card \.dish-linked-component-card \.builder-component-card-surface\s*\{[^}]*\}", css, re.S)
-    assert dish_linked_surface_block is not None
-    assert "min-height: 38px;" in dish_linked_surface_block.group(0)
-    assert "padding: 4px 10px 4px 12px;" in dish_linked_surface_block.group(0)
-    assert "gap: 6px;" in dish_linked_surface_block.group(0)
 
     dish_linked_right_block = re.search(r"\.builder-dish-view-card \.dish-linked-component-card \.component-row-right\s*\{[^}]*\}", css, re.S)
     assert dish_linked_right_block is not None

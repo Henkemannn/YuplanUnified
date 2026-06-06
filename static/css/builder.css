@@ -3839,22 +3839,46 @@ body:not(.builder-workspace-v1) ul {
   margin: 0;
 }
 
+#dishComponentsPanel .component-block-list {
+  overflow-x: visible;
+  overflow-y: visible;
+}
+
+#dishComponentsPanel .component-list-item {
+  overflow: visible;
+}
+
+#dishComponentsPanel .component-overflow {
+  position: relative;
+  z-index: 4;
+}
+
+#dishComponentsPanel .component-overflow[open] {
+  z-index: 48;
+}
+
+#dishComponentsPanel .component-overflow-menu {
+  position: absolute;
+  top: auto;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 124px;
+  max-height: 140px;
+  padding: 3px;
+  gap: 3px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: 0 10px 22px rgba(20, 42, 57, 0.18);
+}
+
+#dishComponentsPanel .component-overflow-menu button {
+  padding: 3px 7px;
+  font-size: 12px;
+}
+
 .builder-dish-view-card .dish-linked-component-card .component-data-icon {
   display: none;
-}
-
-.builder-dish-view-card .dish-linked-component-card {
-  min-height: 38px;
-}
-
-.builder-dish-view-card .dish-linked-component-card .builder-component-card-surface {
-  min-height: 38px;
-  padding: 4px 10px 4px 12px;
-  gap: 6px;
-}
-
-.builder-dish-view-card .dish-linked-component-card .component-library-card-name {
-  line-height: 1.15;
 }
 
 .builder-dish-view-card .dish-linked-component-card .component-row-right {

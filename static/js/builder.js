@@ -3801,6 +3801,7 @@ async function loadLibrary() {
 }
 
 let currentBuilderComposition = null;
+let currentBuilderDishTab = "overview";
 let reusableComponentsCache = [];
 let selectedComponentId = null;
 let draggedComponentEntryKey = null;
@@ -3822,6 +3823,50 @@ function stageReorderedComponentPulse(componentId) {
 
 function componentEntryKey(component) {
   return String(component.component_id || "") + "::" + String(component.sort_order || 0);
+}
+
+function dishBuilderTabValue(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "components") {
+    return key;
+  }
+  return "overview";
+}
+
+function setDishBuilderTab(tabValue) {
+  const nextTab = dishBuilderTabValue(tabValue);
+  currentBuilderDishTab = nextTab;
+  if (nextTab !== "components") {
+    closeDishComponentOverflowMenus();
+  }
+  const modal = document.getElementById("resolveModal");
+  const tabButtons = modal
+    ? Array.from(modal.querySelectorAll("[data-dish-tab]"))
+    : Array.from(document.querySelectorAll("[data-dish-tab]"));
+  const tabPanels = modal
+    ? Array.from(modal.querySelectorAll("[data-dish-panel]"))
+    : Array.from(document.querySelectorAll("[data-dish-panel]"));
+
+  tabButtons.forEach((button) => {
+    const tab = String(button.getAttribute("data-dish-tab") || "").trim().toLowerCase();
+    const active = tab === nextTab;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  tabPanels.forEach((panel) => {
+    const tab = String(panel.getAttribute("data-dish-panel") || "").trim().toLowerCase();
+    const active = tab === nextTab;
+    panel.hidden = !active;
+    panel.classList.toggle("hidden", !active);
+    panel.setAttribute("aria-hidden", active ? "false" : "true");
+    if (active) {
+      panel.removeAttribute("hidden");
+    } else {
+      panel.setAttribute("hidden", "hidden");
+    }
+  });
 }
 
 function componentsInDisplayOrder(composition) {
@@ -4831,6 +4876,49 @@ async function loadReusableComponents(query) {
   }
 }
 
+function renderDishOverviewKlossPreview(composition) {
+  const previewList = document.getElementById("dishOverviewKlossPreview");
+  if (!previewList || !composition) {
+    return;
+  }
+
+  previewList.innerHTML = "";
+  const components = componentsInDisplayOrder(composition);
+
+  if (components.length === 0) {
+    const li = document.createElement("li");
+    li.className = "component-build-surface-empty";
+    li.textContent = "Inga komponenter ännu.";
+    previewList.appendChild(li);
+    return;
+  }
+
+  for (const component of components) {
+    const componentIdValue = String(component.component_id || "");
+    const cached = findCachedComponentById(componentIdValue);
+    const categoryTheme = resolveComponentCategoryThemeKey(cached || component);
+
+    const li = document.createElement("li");
+    li.className = "component-list-item";
+
+    const card = document.createElement("article");
+    card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
+    card.classList.add("builder-component-card-theme-" + categoryTheme);
+
+    const surface = document.createElement("div");
+    surface.className = "builder-component-card-surface";
+
+    const name = document.createElement("div");
+    name.className = "component-library-card-name";
+    name.textContent = String(component.component_name || component.component_id || "");
+
+    surface.appendChild(name);
+    card.appendChild(surface);
+    li.appendChild(card);
+    previewList.appendChild(li);
+  }
+}
+
 function renderBuilderPanel(composition) {
   const list = document.getElementById("builderComponentsList");
 
@@ -4839,8 +4927,10 @@ function renderBuilderPanel(composition) {
   }
 
   currentBuilderComposition = composition;
+  setDishBuilderTab(currentBuilderDishTab);
   resetRecipePanel("Komponent: inte vald");
   renderDishOverview(composition);
+  renderDishOverviewKlossPreview(composition);
   list.innerHTML = "";
 
   loadCompositionDeclarationPreview(String(composition.composition_id || "")).catch(() => {
@@ -4958,7 +5048,11 @@ function renderBuilderPanel(composition) {
     const surface = document.createElement("button");
     surface.type = "button";
     surface.className = "builder-component-card-surface";
-    surface.addEventListener("click", () => {
+    surface.addEventListener("click", (evt) => {
+      const target = evt.target instanceof Element ? evt.target : null;
+      if (target && target.closest(".component-row-right")) {
+        return;
+      }
       selectComponentBlock(componentIdValue);
     });
 
@@ -4972,39 +5066,41 @@ function renderBuilderPanel(composition) {
 
     const overflowSummary = document.createElement("summary");
     overflowSummary.textContent = "...";
+    overflowSummary.addEventListener("click", (event) => {
+      closeDishComponentOverflowMenus(overflow);
+      event.stopPropagation();
+    });
+
+    overflow.addEventListener("toggle", () => {
+      if (!overflow.open) {
+        return;
+      }
+      closeDishComponentOverflowMenus(overflow);
+    });
 
     const menu = document.createElement("div");
     menu.className = "component-overflow-menu";
-
-    const renameBtn = document.createElement("button");
-    renameBtn.type = "button";
-    renameBtn.textContent = "Byt namn";
-    renameBtn.addEventListener("click", () => {
-      overflow.removeAttribute("open");
-      renameComponentInCurrentComposition(
-        componentIdValue,
-        String(component.component_name || component.component_id || ""),
-      );
+    menu.addEventListener("click", (event) => {
+      event.stopPropagation();
     });
 
-    const roleBtn = document.createElement("button");
-    roleBtn.type = "button";
-    roleBtn.textContent = "Ändra roll";
-    roleBtn.addEventListener("click", async () => {
+    const openComponentBtn = document.createElement("button");
+    openComponentBtn.type = "button";
+    openComponentBtn.textContent = "Öppna komponent";
+    openComponentBtn.addEventListener("click", async () => {
       overflow.removeAttribute("open");
-      await setComponentRoleWithPrompt(component);
+      await openComponentDetailEditor(componentIdValue);
     });
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
-    removeBtn.textContent = "Ta bort";
+    removeBtn.textContent = "Ta bort från rätt";
     removeBtn.addEventListener("click", () => {
       overflow.removeAttribute("open");
       removeComponentFromCurrentComposition(componentIdValue);
     });
 
-    menu.appendChild(renameBtn);
-    menu.appendChild(roleBtn);
+    menu.appendChild(openComponentBtn);
     menu.appendChild(removeBtn);
     overflow.appendChild(overflowSummary);
     overflow.appendChild(menu);
@@ -5089,6 +5185,7 @@ function openBuilderModalForComposition(composition) {
     statusLine.classList.add("hidden");
   }
   renderBuilderPanel(composition);
+  setDishBuilderTab("overview");
   modal.classList.remove("hidden");
   loadReusableComponents("").catch((error) => {
     showJson("builderOut", {
@@ -5099,11 +5196,41 @@ function openBuilderModalForComposition(composition) {
 }
 
 function closeResolveModal() {
+  closeDishComponentOverflowMenus();
   const modal = document.getElementById("resolveModal");
   if (modal) {
     modal.classList.add("hidden");
   }
   currentBuilderComposition = null;
+  currentBuilderDishTab = "overview";
+}
+
+function closeDishComponentOverflowMenus(exceptElement = null) {
+  const panel = document.getElementById("dishComponentsPanel");
+  if (!panel) {
+    return false;
+  }
+
+  const keepOpen = exceptElement instanceof Element
+    ? exceptElement.closest(".component-overflow")
+    : null;
+
+  let didCloseAny = false;
+  const menus = panel.querySelectorAll(".component-overflow");
+  for (const menu of menus) {
+    if (!(menu instanceof HTMLElement)) {
+      continue;
+    }
+    if (keepOpen && menu === keepOpen) {
+      continue;
+    }
+    if (menu.hasAttribute("open")) {
+      menu.removeAttribute("open");
+      didCloseAny = true;
+    }
+  }
+
+  return didCloseAny;
 }
 
 async function removeComponentFromCurrentComposition(componentId) {
@@ -5965,6 +6092,13 @@ function bindBuilderHandlers() {
     });
   }
 
+  const dishTabButtons = document.querySelectorAll("[data-dish-tab]");
+  dishTabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setDishBuilderTab(button.getAttribute("data-dish-tab") || "overview");
+    });
+  });
+
   if (addComponentModalCloseBtn) {
     addComponentModalCloseBtn.addEventListener("click", () => {
       closeModalById("addComponentModal");
@@ -5994,6 +6128,11 @@ function bindBuilderHandlers() {
     if (event.key !== "Escape") {
       return;
     }
+    const didCloseDishOverflow = closeDishComponentOverflowMenus();
+    if (didCloseDishOverflow) {
+      event.preventDefault();
+      return;
+    }
     const didClosePopover = closeComponentActionPopoverOnly();
     if (didClosePopover) {
       event.preventDefault();
@@ -6003,6 +6142,23 @@ function bindBuilderHandlers() {
     if (didClose) {
       event.preventDefault();
     }
+  });
+
+  document.addEventListener("click", (event) => {
+    const panel = document.getElementById("dishComponentsPanel");
+    if (!panel || panel.classList.contains("hidden") || panel.hasAttribute("hidden")) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      closeDishComponentOverflowMenus();
+      return;
+    }
+    if (target.closest("#dishComponentsPanel .component-overflow")) {
+      return;
+    }
+    closeDishComponentOverflowMenus();
   });
 
   if (createDishBtn) {
