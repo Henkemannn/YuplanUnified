@@ -4300,30 +4300,23 @@ function dishOverviewCategoryLabel(composition) {
   return "Ej kategoriserad";
 }
 
-function dishOverviewSummaryText(composition) {
-  const components = Array.isArray(composition && composition.components) ? composition.components : [];
-  const count = components.length;
-  if (count === 1) {
-    return "1 komponentkloss";
-  }
-  return String(count) + " komponentklossar";
-}
-
 function renderDishOverview(composition) {
-  const nameTarget = document.getElementById("dishOverviewName");
   const categoryTarget = document.getElementById("dishOverviewCategory");
-  const summaryTarget = document.getElementById("dishOverviewSummary");
-  if (!nameTarget || !categoryTarget || !summaryTarget || !composition) {
+  if (!categoryTarget || !composition) {
     return;
   }
 
-  nameTarget.textContent = String(composition.composition_name || "").trim() || "-";
   categoryTarget.textContent = dishOverviewCategoryLabel(composition);
-  summaryTarget.textContent = dishOverviewSummaryText(composition);
 }
 
 function cleanDishTextPreview(text) {
-  return String(text || "").replace(/\s*\(component\)/gi, "");
+  const cleaned = String(text || "").replace(/\s*\(component\)/gi, "");
+  const colonIndex = cleaned.indexOf(":");
+  if (colonIndex === -1) {
+    return cleaned;
+  }
+  const menuFacing = cleaned.slice(0, colonIndex).trim();
+  return menuFacing || cleaned;
 }
 
 async function loadCompositionTextPreviewForCurrentComposition(previewId, emptyMessage, loadingMessage, unavailableMessage) {
@@ -4839,16 +4832,14 @@ async function loadReusableComponents(query) {
 }
 
 function renderBuilderPanel(composition) {
-  const title = document.getElementById("builderCompositionTitle");
   const list = document.getElementById("builderComponentsList");
 
-  if (!title || !list || !composition) {
+  if (!list || !composition) {
     return;
   }
 
   currentBuilderComposition = composition;
   resetRecipePanel("Komponent: inte vald");
-  title.textContent = "Rätt: " + String(composition.composition_name || "");
   renderDishOverview(composition);
   list.innerHTML = "";
 
@@ -5091,7 +5082,7 @@ function openBuilderModalForComposition(composition) {
     return;
   }
   if (modalTitle) {
-    modalTitle.textContent = "Redigera rätt: " + String(composition.composition_name || "");
+    modalTitle.textContent = String(composition.composition_name || "").trim() || "Redigera rätt";
   }
   if (statusLine) {
     statusLine.textContent = "";

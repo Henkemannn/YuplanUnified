@@ -517,7 +517,6 @@
     <div class="modal-content modal-content-dish modal-content-component-detail">
       <div class="workspace-modal-header">
         <div>
-          <p class="workspace-modal-kicker">RÄTTDETALJER</p>
           <h3 id="resolveModalTitle">Redigera rätt</h3>
         </div>
         <button id="resolveCancel" type="button">Klar</button>
@@ -526,58 +525,43 @@
 
       <div id="modalBuilderSection" class="workspace-modal-body workspace-modal-body-single modal-section">
         <div class="workspace-modal-column workspace-modal-column-primary workspace-modal-column-single">
-          <p id="builderCompositionTitle" class="workspace-modal-titleline"></p>
-
           <div class="builder-component-detail-tabs builder-dish-shell-chips" aria-label="Rättsektioner">
             <button type="button" class="builder-chip is-active" aria-pressed="true">🧾 Översikt</button>
             <button type="button" class="builder-chip" aria-pressed="false">🧩 Komponentklossar</button>
           </div>
 
-          <div class="workspace-modal-section-card builder-dish-view-card">
+          <div class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-overview">
             <div class="builder-dish-view-header">
               <div>
                 <p class="modal-section-title">Översikt</p>
-                <p class="builder-dish-view-note">Läsläge för rättens grunddata</p>
               </div>
-              <span class="builder-dish-view-badge">Read-only</span>
             </div>
 
             <dl class="builder-dish-overview-grid" aria-label="Rättöversikt">
               <div class="builder-dish-overview-field">
-                <dt>Rättnamn</dt>
-                <dd id="dishOverviewName">-</dd>
-              </div>
-              <div class="builder-dish-overview-field">
                 <dt>Kategori</dt>
                 <dd id="dishOverviewCategory">Ej kategoriserad</dd>
-              </div>
-              <div class="builder-dish-overview-field builder-dish-overview-field-wide">
-                <dt>Kort sammanfattning</dt>
-                <dd id="dishOverviewSummary">0 komponentklossar</dd>
               </div>
             </dl>
 
             <div class="builder-dish-overview-text-block">
-              <p class="modal-section-title">Menytext / Textvy</p>
-              <p class="builder-dish-view-note">Så visas rätten i meny</p>
+              <p class="modal-section-title">Menytext</p>
+              <p class="builder-dish-view-note">Så visas rätten i menyer och utskrifter.</p>
             </div>
             <pre id="dishTextPreview" class="builder-dish-text-preview">Ingen rätt vald</pre>
-            <p class="builder-dish-view-help">Menytexten är read-only i Dishes v1.</p>
           </div>
 
-          <div class="workspace-modal-section-card builder-dish-view-card">
+          <div class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-components">
             <div class="builder-dish-view-header">
               <div>
-                <p class="modal-section-title">Komponentklossar</p>
-                <p class="builder-dish-view-note">Komponentklossarna bygger upp rätten.</p>
+                <p class="modal-section-title">🧩 Komponentklossar</p>
+                <p class="builder-dish-view-note">Komponenterna som rätten består av.</p>
               </div>
             </div>
-            <p class="builder-dish-view-help">Lägg till, ta bort och ordna komponentklossarna här.</p>
             <ul id="builderComponentsList" class="component-block-list"></ul>
-          </div>
-
-          <div class="workspace-inline-actions workspace-builder-primary-actions">
-            <button id="openAddComponentModalBtn" type="button">Lägg till komponent</button>
+            <div class="workspace-inline-actions workspace-builder-primary-actions">
+              <button id="openAddComponentModalBtn" type="button" class="hidden" aria-hidden="true">Lägg till komponent</button>
+            </div>
           </div>
 
           <div id="builderOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>

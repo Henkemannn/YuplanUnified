@@ -46,27 +46,30 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert resolve_start != -1 and add_component_start != -1 and resolve_start < add_component_start
     resolve_modal_html = html[resolve_start:add_component_start]
     assert 'class="modal-content modal-content-dish modal-content-component-detail"' in resolve_modal_html
-    assert 'RÄTTDETALJER' in resolve_modal_html
+    assert 'RÄTTDETALJER' not in resolve_modal_html
     assert 'id="resolveModalTitle"' in resolve_modal_html
     assert 'Redigera rätt' in resolve_modal_html
     assert 'Klar' in resolve_modal_html
     assert 'builder-dish-shell-chips' in resolve_modal_html
     assert '🧾 Översikt' in resolve_modal_html
     assert '🧩 Komponentklossar' in resolve_modal_html
-    assert 'Läsläge för rättens grunddata' in resolve_modal_html
-    assert 'Read-only' in resolve_modal_html
-    assert 'id="dishOverviewName"' in resolve_modal_html
+    assert 'Endast visning' not in resolve_modal_html
     assert 'id="dishOverviewCategory"' in resolve_modal_html
-    assert 'id="dishOverviewSummary"' in resolve_modal_html
-    assert 'Rättnamn' in resolve_modal_html
     assert 'Kategori' in resolve_modal_html
-    assert 'Kort sammanfattning' in resolve_modal_html
     assert 'Ej kategoriserad' in resolve_modal_html
-    assert 'Menytext / Textvy' in resolve_modal_html
-    assert 'Textvy' in resolve_modal_html
-    assert 'Så visas rätten i meny' in resolve_modal_html
-    assert 'Menytexten är read-only i Dishes v1.' in resolve_modal_html
-    assert 'Lägg till komponent' in resolve_modal_html
+    assert 'Menytext' in resolve_modal_html
+    assert 'Menytext / Textvy' not in resolve_modal_html
+    assert 'Så visas rätten i menyer och utskrifter.' in resolve_modal_html
+    assert 'Menytexten kan redigeras senare.' not in resolve_modal_html
+    components_section_start = resolve_modal_html.find('<p class="modal-section-title">🧩 Komponentklossar</p>')
+    assert components_section_start != -1
+    components_section_html = resolve_modal_html[components_section_start:]
+    assert 'Komponentklossarna bygger upp rätten.' not in components_section_html
+    assert 'Lägg till, ta bort och ordna komponentklossarna här.' not in components_section_html
+    assert 'Komponenterna som rätten består av.' in components_section_html
+    assert 'id="openAddComponentModalBtn"' in components_section_html
+    assert 'id="openAddComponentModalBtn" type="button" class="hidden" aria-hidden="true"' in components_section_html
+    assert 'Lägg till komponent' in components_section_html
     assert 'btnCreateDish' not in resolve_modal_html
     assert 'quickCreateModal' not in resolve_modal_html
 
@@ -102,18 +105,21 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'Byt namn' in js
     assert 'Ändra roll' in js
     assert 'Ta bort' in js
-    assert 'Redigera rätt: ' in js
+    assert 'modalTitle.textContent = String(composition.composition_name || "").trim() || "Redigera rätt";' in js
+    assert 'Redigera rätt: ' not in js
     assert 'statusLine.classList.add("hidden");' in js
     assert 'Bygg rätt: ' not in js
     assert 'Justera vad som ska ingå i rätten.' not in js
     assert 'function dishOverviewCategoryLabel(composition) {' in js
-    assert 'function dishOverviewSummaryText(composition) {' in js
     assert 'function renderDishOverview(composition) {' in js
     assert 'return "Ej kategoriserad";' in js
-    assert 'return String(count) + " komponentklossar";' in js
     assert 'renderDishOverview(composition);' in js
+    assert 'builderCompositionTitle' not in js
+    assert 'Rätt: ' not in js
     assert 'function cleanDishTextPreview(text) {' in js
     assert r'replace(/\s*\(component\)/gi, "")' in js
+    assert 'const colonIndex = cleaned.indexOf(":");' in js
+    assert 'return menuFacing || cleaned;' in js
     assert 'setCompositionTextPreview(targetPreviewId, cleanDishTextPreview(rendered.text));' in js
     builder_panel_start = js.find("function renderBuilderPanel(composition)")
     builder_panel_end = js.find("async function updateComponentRoleInCurrentComposition(componentId, roleValue)")

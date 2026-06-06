@@ -3677,14 +3677,24 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-dish-view-card {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+}
+
+#modalBuilderSection .workspace-modal-column-single {
+  gap: 10px;
+}
+
+.builder-dish-view-card-overview,
+.builder-dish-view-card-components {
+  padding: 12px;
 }
 
 .builder-dish-overview-grid {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+  align-items: stretch;
 }
 
 .builder-dish-overview-field {
@@ -3692,9 +3702,10 @@ body:not(.builder-workspace-v1) ul {
   border: 1px solid #d7e2ec;
   border-radius: 10px;
   background: #f8fbfe;
-  padding: 8px 10px;
+  padding: 6px 8px;
   display: grid;
-  gap: 3px;
+  gap: 2px;
+  min-height: 42px;
 }
 
 .builder-dish-overview-field dt {
@@ -3717,7 +3728,10 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-dish-overview-text-block {
   display: grid;
-  gap: 2px;
+  gap: 1px;
+  margin-top: 1px;
+  padding-top: 5px;
+  border-top: 1px solid #e2ebf2;
 }
 
 .builder-dish-view-header {
@@ -3728,7 +3742,7 @@ body:not(.builder-workspace-v1) ul {
 }
 
 .builder-dish-view-note {
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   color: #50687b;
   font-size: 12px;
 }
@@ -3740,7 +3754,7 @@ body:not(.builder-workspace-v1) ul {
 }
 
 .builder-dish-shell-chips {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
 }
 
 .builder-dish-shell-chips .builder-chip {
@@ -3766,16 +3780,24 @@ body:not(.builder-workspace-v1) ul {
 
 .builder-dish-text-preview {
   margin: 0;
-  padding: 10px 12px;
+  padding: 7px 9px;
   border-radius: 12px;
-  border: 1px solid #dbe6ef;
-  background: #fbfdff;
+  border: 1px solid #deE8ef;
+  background: #f7fafd;
   color: #1f3749;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.35;
-  min-height: 44px;
+  min-height: 32px;
+}
+
+.builder-dish-view-card-components .builder-dish-view-help {
+  margin-bottom: 1px;
+}
+
+.builder-dish-view-card-components .workspace-builder-primary-actions {
+  margin-top: 2px;
 }
 
 .builder-dish-view-card .component-block-list {
@@ -3784,6 +3806,12 @@ body:not(.builder-workspace-v1) ul {
   border: 0;
   padding: 0;
   background: transparent;
+  min-height: 0;
+  max-height: 190px;
+}
+
+#modalBuilderSection .workspace-builder-primary-actions {
+  margin-top: 0;
 }
 
 .builder-dish-view-card .component-list-item {
