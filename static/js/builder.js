@@ -3810,6 +3810,7 @@ let draggedComponentEntryKey = null;
 let pendingAddedPulseComponentId = null;
 let pendingSelectedPulseComponentId = null;
 let pendingReorderedPulseComponentId = null;
+const VALID_DISH_LIBRARY_GROUPS = new Set(["fisk", "kott", "dessert", "ovrigt"]);
 
 function stageAddedComponentPulse(componentId) {
   pendingAddedPulseComponentId = String(componentId || "").trim() || null;
@@ -3825,6 +3826,41 @@ function stageReorderedComponentPulse(componentId) {
 
 function componentEntryKey(component) {
   return String(component.component_id || "") + "::" + String(component.sort_order || 0);
+}
+
+function normalizeDishLibraryGroupValue(value) {
+  const key = normalizeDishCategoryKey(value);
+  return VALID_DISH_LIBRARY_GROUPS.has(key) ? key : "";
+}
+
+function setDishOverviewStatus(message, isError = false) {
+  const statusLine = document.getElementById("resolveStatusLine");
+  if (!statusLine) {
+    return;
+  }
+  const value = String(message || "").trim();
+  statusLine.textContent = value;
+  statusLine.classList.toggle("hidden", !value);
+  statusLine.dataset.state = value ? (isError ? "error" : "success") : "idle";
+}
+
+function syncDishModalHeader(composition) {
+  const modalTitle = document.getElementById("resolveModalTitle");
+  if (!modalTitle) {
+    return;
+  }
+  modalTitle.textContent = String((composition && composition.composition_name) || "").trim() || "Redigera rätt";
+}
+
+function syncDishOverviewInputs(composition) {
+  const nameInput = document.getElementById("dishOverviewName");
+  const categorySelect = document.getElementById("dishOverviewCategorySelect");
+  if (nameInput) {
+    nameInput.value = String((composition && composition.composition_name) || "");
+  }
+  if (categorySelect) {
+    categorySelect.value = normalizeDishLibraryGroupValue((composition && composition.library_group) || "ovrigt") || "ovrigt";
+  }
 }
 
 function dishBuilderTabValue(value) {
@@ -4919,12 +4955,12 @@ function dishOverviewCategoryLabel(composition) {
 }
 
 function renderDishOverview(composition) {
-  const categoryTarget = document.getElementById("dishOverviewCategory");
-  if (!categoryTarget || !composition) {
+  if (!composition) {
     return;
   }
 
-  categoryTarget.textContent = dishOverviewCategoryLabel(composition);
+  syncDishModalHeader(composition);
+  syncDishOverviewInputs(composition);
 }
 
 function cleanDishTextPreview(text) {
@@ -5751,7 +5787,67 @@ async function updateComponentRoleInCurrentComposition(componentId, roleValue) {
   }
 }
 
-function openBuilderModalForComposition(composition) {
+async function saveDishOverviewMetadata() {
+  if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
+    setDishOverviewStatus("Ingen rätt vald.", true);
+    return;
+  }
+
+  const nameInput = document.getElementById("dishOverviewName");
+  const categorySelect = document.getElementById("dishOverviewCategorySelect");
+  const composition_name = String((nameInput && nameInput.value) || "").trim();
+  const library_group = normalizeDishLibraryGroupValue((categorySelect && categorySelect.value) || "");
+
+  if (!composition_name) {
+    setDishOverviewStatus("Rättnamn måste fyllas i.", true);
+    return;
+  }
+  if (!library_group) {
+    setDishOverviewStatus("Välj en giltig kategori.", true);
+    return;
+  }
+
+  showLoading("builderOut");
+  try {
+    const result = await callApi(
+      "/api/builder/compositions/" +
+        encodeURIComponent(String(currentBuilderComposition.composition_id || "")),
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: {
+          composition_name,
+          library_group,
+        },
+      },
+    );
+
+    showJson("builderOut", result);
+    if (!(result && result.status < 400 && result.data && result.data.ok && result.data.composition)) {
+      const message = String((result && result.data && (result.data.message || result.data.error)) || "Unable to save dish metadata");
+      setDishOverviewStatus(message, true);
+      return;
+    }
+
+    currentBuilderComposition = result.data.composition;
+    syncDishModalHeader(currentBuilderComposition);
+    syncDishOverviewInputs(currentBuilderComposition);
+    setDishOverviewStatus("Ändringarna sparades.");
+    loadCompositionTextPreviewForCurrentComposition(
+      "dishTextPreview",
+      "Ingen rätt vald",
+      "Läser textvy...",
+      "Textvy saknas.",
+    ).catch(() => {
+      setCompositionTextPreview("dishTextPreview", "Textvy saknas.");
+    });
+    await loadLibrary();
+  } catch (error) {
+    setDishOverviewStatus(String(error.message || error), true);
+  }
+}
+
+function openBuilderModalForComposition(composition, initialTab = "overview") {
   const modal = document.getElementById("resolveModal");
   const modalTitle = document.getElementById("resolveModalTitle");
   const statusLine = document.getElementById("resolveStatusLine");
@@ -5765,8 +5861,9 @@ function openBuilderModalForComposition(composition) {
     statusLine.textContent = "";
     statusLine.classList.add("hidden");
   }
+  setDishOverviewStatus("");
   renderBuilderPanel(composition);
-  setDishBuilderTab("overview");
+  setDishBuilderTab(initialTab);
   modal.classList.remove("hidden");
   loadReusableComponents("").catch((error) => {
     showJson("builderOut", {
@@ -6682,6 +6779,27 @@ function bindBuilderHandlers() {
     });
   });
 
+  const dishOverviewSaveBtn = document.getElementById("btnDishOverviewSave");
+  if (dishOverviewSaveBtn) {
+    dishOverviewSaveBtn.addEventListener("click", async () => {
+      await saveDishOverviewMetadata();
+    });
+  }
+
+  const dishOverviewNameInput = document.getElementById("dishOverviewName");
+  if (dishOverviewNameInput) {
+    dishOverviewNameInput.addEventListener("input", () => {
+      setDishOverviewStatus("");
+    });
+  }
+
+  const dishOverviewCategorySelect = document.getElementById("dishOverviewCategorySelect");
+  if (dishOverviewCategorySelect) {
+    dishOverviewCategorySelect.addEventListener("change", () => {
+      setDishOverviewStatus("");
+    });
+  }
+
   if (addComponentModalCloseBtn) {
     addComponentModalCloseBtn.addEventListener("click", () => {
       closeModalById("addComponentModal");
@@ -6747,7 +6865,9 @@ function bindBuilderHandlers() {
   if (createDishBtn) {
     createDishBtn.addEventListener("click", async () => {
       const freeDishNameEl = document.getElementById("freeDishName");
+      const freeDishCategoryEl = document.getElementById("freeDishCategory");
       const composition_name = freeDishNameEl ? String(freeDishNameEl.value || "").trim() : "";
+      const library_group = freeDishCategoryEl ? String(freeDishCategoryEl.value || "").trim() : "ovrigt";
       if (!composition_name) {
         showJson("createDishOut", { status: 0, data: { ok: false, error: "dish name is required" } });
         return;
@@ -6758,15 +6878,22 @@ function bindBuilderHandlers() {
         const result = await callApi("/api/builder/compositions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: { composition_name },
+          body: {
+            composition_name,
+            library_group,
+            seed_components: false,
+          },
         });
         showJson("createDishOut", result);
         if (result && result.data && result.data.ok && result.data.composition) {
           closeSimpleModal("dishesLibraryModal");
           closeSimpleModal("quickCreateModal");
-          openBuilderModalForComposition(result.data.composition);
+          openBuilderModalForComposition(result.data.composition, "components");
           if (freeDishNameEl) {
             freeDishNameEl.value = "";
+          }
+          if (freeDishCategoryEl) {
+            freeDishCategoryEl.value = "ovrigt";
           }
           await loadLibrary();
         }

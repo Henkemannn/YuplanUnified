@@ -97,6 +97,156 @@ def test_create_composition_endpoint_supports_generated_id_without_menu_context(
     assert components[0].get("component_name") == "Free Dish"
 
 
+def test_create_composition_endpoint_supports_empty_shell_when_seed_components_false() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/compositions",
+        json={
+            "composition_name": "Open shell",
+            "library_group": "kott",
+            "seed_components": False,
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    composition = body.get("composition") or {}
+    assert composition.get("composition_name") == "Open shell"
+    assert composition.get("library_group") == "kott"
+    assert composition.get("components") == []
+
+
+def test_create_composition_endpoint_accepts_legacy_library_group() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/compositions",
+        json={
+            "composition_name": "Open shell",
+            "library_group": "weekly",
+            "seed_components": False,
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 201
+    data = rv.get_json()
+    assert data["ok"] is True
+    assert data["composition"]["library_group"] == "weekly"
+    assert data["composition"]["components"] == []
+
+
+def test_create_composition_endpoint_rejects_empty_name() -> None:
+    client = _client()
+
+    rv = client.post(
+        "/api/builder/compositions",
+        json={
+            "composition_name": "",
+            "seed_components": False,
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("error") == "bad_request"
+
+
+def test_patch_composition_metadata_endpoint_updates_name_and_category_without_changing_components() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/compositions",
+        json={
+            "composition_id": "plate_patch_meta",
+            "composition_name": "Original Plate",
+            "library_group": "ovrigt",
+        },
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+    client.post(
+        "/api/builder/compositions/plate_patch_meta/components",
+        json={"component_name": "Fisk", "role": "main"},
+        headers=HEADERS,
+    )
+    before = client.get("/api/builder/compositions", headers=HEADERS).get_json() or {}
+    before_comp = next(item for item in (before.get("compositions") or []) if item.get("composition_id") == "plate_patch_meta")
+    before_components = before_comp.get("components") or []
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_patch_meta",
+        json={
+            "composition_name": "Updated Plate",
+            "library_group": "fisk",
+        },
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 200
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    composition = body.get("composition") or {}
+    assert composition.get("composition_name") == "Updated Plate"
+    assert composition.get("library_group") == "fisk"
+    assert (composition.get("components") or []) == before_components
+
+
+def test_patch_composition_metadata_endpoint_rejects_empty_name() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_patch_empty", "composition_name": "Original"},
+        headers=HEADERS,
+    )
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_patch_empty",
+        json={"composition_name": "   "},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("error") == "bad_request"
+
+
+def test_patch_composition_metadata_endpoint_rejects_invalid_library_group() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_patch_bad_group", "composition_name": "Original"},
+        headers=HEADERS,
+    )
+
+    rv = client.patch(
+        "/api/builder/compositions/plate_patch_bad_group",
+        json={"library_group": "weekly"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 400
+    body = rv.get_json() or {}
+    assert body.get("error") == "bad_request"
+
+
+def test_patch_composition_metadata_endpoint_returns_not_found_for_unknown_composition() -> None:
+    client = _client()
+
+    rv = client.patch(
+        "/api/builder/compositions/missing_plate",
+        json={"composition_name": "Updated"},
+        headers=HEADERS,
+    )
+
+    assert rv.status_code == 404
+    body = rv.get_json() or {}
+    assert body.get("error") == "not_found"
+
+
 def test_free_create_composition_seeds_persisted_component_links_and_reuses_existing() -> None:
     client = _client()
     existing = client.post(

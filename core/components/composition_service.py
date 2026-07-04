@@ -41,6 +41,26 @@ class CompositionService:
             return self._repository.list_all()
         return self._repository.list_by_group(group_name)
 
+    def update_composition_metadata(
+        self,
+        composition_id: str,
+        *,
+        composition_name: str | None = None,
+        library_group: str | None = None,
+    ) -> Composition:
+        composition = self._require_composition(composition_id)
+        if composition_name is None and library_group is None:
+            raise ValueError("at least one composition field must be provided")
+
+        updated = Composition(
+            composition_id=composition.composition_id,
+            composition_name=composition_name if composition_name is not None else composition.composition_name,
+            library_group=library_group if library_group is not None else composition.library_group,
+            components=list(composition.components),
+        )
+        self._repository.update(updated)
+        return updated
+
     def delete_composition(self, composition_id: str) -> None:
         composition_id_value = str(composition_id or "").strip()
         if not composition_id_value:

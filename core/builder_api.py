@@ -55,6 +55,10 @@ def _bad_request(message: str):
     return jsonify({"ok": False, "error": "bad_request", "message": str(message)}), 400
 
 
+def _not_found(message: str):
+    return jsonify({"ok": False, "error": "not_found", "message": str(message)}), 404
+
+
 def _conflict(message: str, **payload):
     body = {"ok": False, "error": "conflict", "message": str(message)}
     body.update(payload)
@@ -81,6 +85,38 @@ def _optional_str(payload: dict[str, Any], field: str) -> str | None:
         return None
     value = str(raw).strip()
     return value or None
+
+
+VALID_DISH_LIBRARY_GROUPS = {"fisk", "kott", "dessert", "ovrigt"}
+
+
+def _require_dish_library_group(payload: dict[str, Any]) -> str | None:
+    if "library_group" not in payload:
+        return None
+
+    library_group_value = _optional_str(payload, "library_group")
+    if library_group_value is None:
+        raise ValueError("library_group is required")
+    if library_group_value not in VALID_DISH_LIBRARY_GROUPS:
+        raise ValueError("library_group must be one of fisk, kott, dessert, ovrigt")
+    return library_group_value
+
+
+def _optional_bool(payload: dict[str, Any], field: str) -> bool | None:
+    raw = payload.get(field)
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)) and raw in {0, 1}:
+        return bool(raw)
+    if isinstance(raw, str):
+        value = raw.strip().lower()
+        if value in {"true", "1", "yes", "y", "on"}:
+            return True
+        if value in {"false", "0", "no", "n", "off"}:
+            return False
+    raise ValueError(f"{field} must be a boolean")
 
 
 def _looks_like_composite_dish_name(name: str) -> bool:
@@ -1577,6 +1613,7 @@ def create_composition():
         composition_name = _require_str(payload, "composition_name")
         composition_id = _optional_str(payload, "composition_id")
         library_group = _optional_str(payload, "library_group")
+        seed_components = _optional_bool(payload, "seed_components")
 
         if composition_id:
             composition = flow.create_composition(
@@ -1585,10 +1622,11 @@ def create_composition():
                 library_group=library_group,
             )
         else:
+            should_seed_components = True if seed_components is None else bool(seed_components)
             composition = flow.create_composition_with_generated_id(
                 composition_name=composition_name,
                 library_group=library_group,
-                seed_components=True,
+                seed_components=should_seed_components,
             )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -1630,6 +1668,42 @@ def delete_composition(composition_id: str):
         return _bad_request(str(exc))
 
     return jsonify({"ok": True, "composition_id": composition_id_value})
+
+
+@bp.patch("/compositions/<composition_id>")
+@require_roles("editor", "admin", "superuser")
+def update_composition_metadata(composition_id: str):
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            return _bad_request("composition_id is required")
+
+        composition_name = None
+        if "composition_name" in payload:
+            composition_name = _require_str(payload, "composition_name")
+
+        library_group = _require_dish_library_group(payload)
+
+        if composition_name is None and library_group is None:
+            return _bad_request("At least one of composition_name or library_group is required")
+
+        flow = _get_builder_flow()
+        composition = flow._composition_service.update_composition_metadata(
+            composition_id_value,
+            composition_name=composition_name,
+            library_group=library_group,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("composition not found:"):
+            return _not_found(message)
+        return _bad_request(message)
+
+    return jsonify({"ok": True, "composition": _serialize_composition(composition)})
 
 
 @bp.post("/components")

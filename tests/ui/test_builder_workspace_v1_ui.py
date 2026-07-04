@@ -40,6 +40,25 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="openNewDishFromDishesViewBtn"' in html
     assert '>Skapa rätt<' in html
 
+    quick_create_start = html.find('id="quickCreateModal"')
+    dishes_library_start = html.find('id="dishesLibraryModal"')
+    assert quick_create_start != -1 and dishes_library_start != -1 and quick_create_start < dishes_library_start
+    quick_create_html = html[quick_create_start:dishes_library_start]
+    assert '<p class="workspace-modal-kicker">Skapa rätt</p>' in quick_create_html
+    assert '<h3>Skapa rätt</h3>' in quick_create_html
+    assert 'Rättnamn' in quick_create_html
+    assert 'id="freeDishName"' in quick_create_html
+    assert 'Kategori' in quick_create_html
+    assert 'id="freeDishCategory"' in quick_create_html
+    assert '<option value="ovrigt" selected>Övrigt</option>' in quick_create_html
+    assert '<option value="fisk">Fisk</option>' in quick_create_html
+    assert '<option value="kott">Kött</option>' in quick_create_html
+    assert '<option value="dessert">Dessert</option>' in quick_create_html
+    assert 'id="btnCreateDish" type="button">Skapa rätt</button>' in quick_create_html
+    assert 'recipe' not in quick_create_html.lower()
+    assert 'calculation' not in quick_create_html.lower()
+    assert 'allergen' not in quick_create_html.lower()
+
     assert 'id="resolveModal"' in html
     resolve_start = html.find('id="resolveModal"')
     add_component_start = html.find('id="addComponentModal"')
@@ -65,9 +84,15 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="dishCalculationPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-calculation hidden" data-dish-panel="calculation" hidden' in resolve_modal_html
     assert 'id="dishAllergensPanel" class="workspace-modal-section-card builder-dish-view-card builder-dish-view-card-allergens hidden" data-dish-panel="allergens" hidden' in resolve_modal_html
     assert 'builder-dish-view-card-overview hidden' not in resolve_modal_html
-    assert 'id="dishOverviewCategory"' in resolve_modal_html
+    assert 'id="dishOverviewName"' in resolve_modal_html
+    assert 'id="dishOverviewCategorySelect"' in resolve_modal_html
+    assert 'id="btnDishOverviewSave"' in resolve_modal_html
+    assert 'Rättnamn' in resolve_modal_html
     assert 'Kategori' in resolve_modal_html
-    assert 'Ej kategoriserad' in resolve_modal_html
+    assert '<option value="ovrigt">Övrigt</option>' in resolve_modal_html
+    assert '<option value="fisk">Fisk</option>' in resolve_modal_html
+    assert '<option value="kott">Kött</option>' in resolve_modal_html
+    assert '<option value="dessert">Dessert</option>' in resolve_modal_html
     assert 'Menytext' in resolve_modal_html
     assert 'Menytext / Textvy' not in resolve_modal_html
     assert 'Så visas rätten i menyer och utskrifter.' in resolve_modal_html
@@ -79,6 +104,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     overview_section_html = resolve_modal_html[overview_section_start:overview_section_end]
     assert 'id="dishOverviewKlossPreview"' in overview_section_html
     assert 'aria-label="Förhandsvisning komponentklossar"' in overview_section_html
+    assert 'id="dishOverviewRecipe"' not in overview_section_html
+    assert 'id="dishOverviewCalculation"' not in overview_section_html
+    assert 'id="dishOverviewAllergens"' not in overview_section_html
     assert 'id="openAddComponentModalBtn"' not in overview_section_html
     assert 'Lägg till komponent' not in overview_section_html
     assert 'component-overflow' not in overview_section_html
@@ -174,9 +202,12 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'openAddComponentModalBtn' not in overview_preview_js
     assert 'data-dish-tab' in js
     assert 'data-dish-panel' in js
-    assert 'function dishOverviewCategoryLabel(composition) {' in js
+    assert 'const VALID_DISH_LIBRARY_GROUPS = new Set(["fisk", "kott", "dessert", "ovrigt"]);' in js
+    assert 'function normalizeDishLibraryGroupValue(value) {' in js
+    assert 'function syncDishModalHeader(composition) {' in js
+    assert 'function syncDishOverviewInputs(composition) {' in js
     assert 'function renderDishOverview(composition) {' in js
-    assert 'return "Ej kategoriserad";' in js
+    assert 'function saveDishOverviewMetadata() {' in js
     assert 'renderDishOverview(composition);' in js
     assert 'function renderDishAllergenSummary(composition, componentDetails) {' in js
     assert 'function loadDishAllergenSummaryForCurrentComposition() {' in js
@@ -239,6 +270,12 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'component-role-tag' not in builder_panel_js
     assert 'component-data-icon' in builder_panel_js
     assert 'component-conflict-badge' not in builder_panel_js
+    assert 'async function saveDishOverviewMetadata() {' in js
+    assert '"/api/builder/compositions/" +' in js
+    assert 'method: "PATCH"' in js
+    assert 'composition_name,' in js
+    assert 'library_group,' in js
+    assert 'setDishOverviewStatus("Ändringarna sparades.");' in js
     css_rv = client_admin.get("/static/css/builder.css")
     assert css_rv.status_code == 200
     css = css_rv.data.decode("utf-8")
@@ -731,6 +768,17 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'message: "Komponentdetaljer sparade."' in script
     assert 'message: "Component details loaded."' not in script
     assert 'message: "Component details saved."' not in script
+    assert 'function openBuilderModalForComposition(composition, initialTab = "overview") {' in script
+    assert 'setDishBuilderTab(initialTab);' in script
+    assert 'const freeDishCategoryEl = document.getElementById("freeDishCategory");' in script
+    assert 'const library_group = freeDishCategoryEl ? String(freeDishCategoryEl.value || "").trim() : "ovrigt";' in script
+    assert 'seed_components: false,' in script
+    assert 'openBuilderModalForComposition(result.data.composition, "components");' in script
+    assert 'freeDishCategoryEl.value = "ovrigt";' in script
+    assert 'body: { composition_name },' not in script
+    assert 'Create dish' not in script
+    assert 'Dish creation' not in script
+    assert 'Done' not in script
 
     assert 'console.error("[modal-open] missing modal", modalId);' in script
     assert 'modal.classList.remove("hidden");' in script

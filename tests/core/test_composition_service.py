@@ -68,6 +68,28 @@ def test_list_compositions_by_group() -> None:
     assert {composition.composition_id for composition in lunch} == {"a", "c"}
 
 
+def test_update_composition_metadata_updates_name_and_group_without_touching_components() -> None:
+    service = CompositionService()
+    service.create_composition(composition_id="plate", composition_name="Plate", library_group="ovrigt")
+    service.add_component_to_composition(
+        composition_id="plate",
+        component_id="fish",
+        component_name="Fish",
+        role="main",
+        sort_order=10,
+    )
+
+    updated = service.update_composition_metadata(
+        composition_id="plate",
+        composition_name="Updated Plate",
+        library_group="fisk",
+    )
+
+    assert updated.composition_name == "Updated Plate"
+    assert updated.library_group == "fisk"
+    assert [item.component_id for item in updated.components] == ["fish"]
+
+
 def test_duplicate_component_allowed_when_sort_order_differs() -> None:
     service = CompositionService()
     service.create_composition(composition_id="plate", composition_name="Plate")
