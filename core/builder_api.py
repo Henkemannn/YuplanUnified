@@ -430,6 +430,7 @@ def _serialize_library_composition(composition) -> dict[str, Any]:
     return {
         "composition_id": composition.composition_id,
         "composition_name": composition.composition_name,
+        "library_group": composition.library_group,
     }
 
 
