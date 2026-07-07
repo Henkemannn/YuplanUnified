@@ -130,6 +130,9 @@ let _activeComponentDetailId = "";
 let _activeComponentDetailTab = "overview";
 let _componentDetailDirty = false;
 let _componentDetailTagsDraft = [];
+let pendingComponentCreateForCompositionId = null;
+let pendingComponentCreateForCompositionName = null;
+let pendingComponentCreateReturnTab = "components";
 window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";
 console.log("Builder JS active: builder-modal-system-reset-1");
 
@@ -2806,6 +2809,7 @@ async function openComponentDetailEditor(componentId, initialTab) {
   setComponentDetailTab(requestedTab || "overview");
   resetComponentDetailDirty();
   openSimpleModal("componentDetailEditorModal");
+  updateComponentDetailReturnAction();
 }
 
 async function saveActiveComponentDetailDraft() {
@@ -2831,6 +2835,25 @@ async function saveActiveComponentDetailDraft() {
       data: { ok: false, message: "Save failed: backend persistence is unavailable." },
     });
   }
+}
+
+function updateComponentDetailReturnAction() {
+  const button = document.getElementById("componentDetailReturnToDishBtn");
+  if (!button) {
+    return;
+  }
+
+  const compositionName = String(pendingComponentCreateForCompositionName || "").trim();
+  if (!compositionName) {
+    button.classList.add("hidden");
+    button.setAttribute("hidden", "hidden");
+    button.textContent = "";
+    return;
+  }
+
+  button.textContent = "Lägg till i " + compositionName;
+  button.classList.remove("hidden");
+  button.removeAttribute("hidden");
 }
 
 function currentComponentSearchQuery() {
@@ -5946,11 +5969,12 @@ async function removeComponentFromCurrentComposition(componentId) {
 
 async function attachExistingComponentToCurrentComposition(componentId) {
   if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
-    showJson("builderOut", {
+    const failure = {
       status: 0,
       data: { ok: false, error: "no_composition_selected" },
-    });
-    return;
+    };
+    showJson("builderOut", failure);
+    return failure;
   }
 
   const compositionId = String(currentBuilderComposition.composition_id);
@@ -5981,12 +6005,88 @@ async function attachExistingComponentToCurrentComposition(componentId) {
       closeSimpleModal("addComponentModal");
       renderBuilderPanel(result.data.composition);
     }
+    return result;
   } catch (error) {
-    showJson("builderOut", {
+    const failure = {
       status: 0,
       data: { ok: false, error: String(error.message || error) },
-    });
+    };
+    showJson("builderOut", failure);
+    return failure;
   }
+}
+
+function setPendingComponentCreateForCurrentComposition() {
+  if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
+    pendingComponentCreateForCompositionId = null;
+    pendingComponentCreateForCompositionName = null;
+    pendingComponentCreateReturnTab = "components";
+    updateComponentDetailReturnAction();
+    return;
+  }
+
+  pendingComponentCreateForCompositionId = String(currentBuilderComposition.composition_id || "").trim() || null;
+  pendingComponentCreateForCompositionName = String(currentBuilderComposition.composition_name || "").trim() || null;
+  pendingComponentCreateReturnTab = "components";
+  updateComponentDetailReturnAction();
+}
+
+function clearPendingComponentCreateForComposition() {
+  pendingComponentCreateForCompositionId = null;
+  pendingComponentCreateForCompositionName = null;
+  pendingComponentCreateReturnTab = "components";
+  updateComponentDetailReturnAction();
+}
+
+async function attachComponentToPendingComposition(componentId) {
+  const compositionId = String(pendingComponentCreateForCompositionId || "").trim();
+  if (!compositionId) {
+    return null;
+  }
+
+  const currentComposition = currentBuilderComposition;
+  const currentCompositionId = currentComposition && currentComposition.composition_id
+    ? String(currentComposition.composition_id)
+    : "";
+  if (!currentCompositionId || currentCompositionId !== compositionId) {
+    const result = await loadAllCompositions();
+    const compositions = (result && result.data && result.data.compositions) || [];
+    const matching = compositions.find((item) => String(item.composition_id || "") === compositionId) || null;
+    if (matching) {
+      openBuilderModalForComposition(matching, "components");
+    }
+  }
+
+  const attachResult = await attachExistingComponentToCurrentComposition(componentId);
+  if (attachResult && attachResult.data && attachResult.data.ok && attachResult.data.composition) {
+    await loadLibrary();
+    clearPendingComponentCreateForComposition();
+    return attachResult;
+  }
+
+  return attachResult;
+}
+
+async function reopenPendingCompositionForReturn() {
+  const compositionId = String(pendingComponentCreateForCompositionId || "").trim();
+  if (!compositionId) {
+    return null;
+  }
+
+  if (currentBuilderComposition && String(currentBuilderComposition.composition_id || "").trim() === compositionId) {
+    openBuilderModalForComposition(currentBuilderComposition, pendingComponentCreateReturnTab || "components");
+    return currentBuilderComposition;
+  }
+
+  const result = await loadAllCompositions();
+  const compositions = (result && result.data && result.data.compositions) || [];
+  const matching = compositions.find((item) => String(item.composition_id || "") === compositionId) || null;
+  if (!matching) {
+    return null;
+  }
+
+  openBuilderModalForComposition(matching, pendingComponentCreateReturnTab || "components");
+  return matching;
 }
 
 async function renameComponentInCurrentComposition(componentId, currentName) {
@@ -6555,6 +6655,42 @@ function bindBuilderHandlers() {
     });
   }
 
+  const componentDetailReturnToDishBtn = document.getElementById("componentDetailReturnToDishBtn");
+  if (componentDetailReturnToDishBtn) {
+    componentDetailReturnToDishBtn.addEventListener("click", async () => {
+      const componentId = String(_activeComponentDetailId || "").trim();
+      if (!componentId || !pendingComponentCreateForCompositionId) {
+        return;
+      }
+
+      if (_componentDetailDirty) {
+        await saveActiveComponentDetailDraft();
+      }
+
+      if (_componentDetailDirty) {
+        return;
+      }
+
+      const reopenedComposition = await reopenPendingCompositionForReturn();
+      if (!reopenedComposition) {
+        showJson("componentDetailOut", {
+          status: 0,
+          data: { ok: false, error: "pending composition not found" },
+        });
+        return;
+      }
+
+      const attachResult = await attachExistingComponentToCurrentComposition(componentId);
+      if (attachResult && attachResult.data && attachResult.data.ok && attachResult.data.composition) {
+        await loadLibrary();
+        clearPendingComponentCreateForComposition();
+        closeModalById("componentDetailEditorModal");
+        _activeComponentDetailId = "";
+        resetComponentDetailDirty();
+      }
+    });
+  }
+
   const componentDetailModal = document.getElementById("componentDetailEditorModal");
   if (componentDetailModal) {
     componentDetailModal.addEventListener("input", () => {
@@ -6604,6 +6740,7 @@ function bindBuilderHandlers() {
 
   if (openComponentCreateModalBtn) {
     openComponentCreateModalBtn.addEventListener("click", () => {
+      clearPendingComponentCreateForComposition();
       openSimpleModal("componentCreateModal");
       const freeComponentNameEl = document.getElementById("freeComponentName");
       if (freeComponentNameEl) {
@@ -6631,6 +6768,7 @@ function bindBuilderHandlers() {
 
   if (homeActionCreateComponentBtn) {
     homeActionCreateComponentBtn.addEventListener("click", () => {
+      clearPendingComponentCreateForComposition();
       openSimpleModal("componentCreateModal");
       const freeComponentNameEl = document.getElementById("freeComponentName");
       if (freeComponentNameEl) {
@@ -6658,6 +6796,7 @@ function bindBuilderHandlers() {
 
   if (componentCreateModalCloseBtn) {
     componentCreateModalCloseBtn.addEventListener("click", () => {
+      clearPendingComponentCreateForComposition();
       closeModalById("componentCreateModal");
     });
   }
@@ -6802,6 +6941,7 @@ function bindBuilderHandlers() {
 
   if (addComponentModalCloseBtn) {
     addComponentModalCloseBtn.addEventListener("click", () => {
+      clearPendingComponentCreateForComposition();
       closeModalById("addComponentModal");
     });
   }
@@ -6921,17 +7061,17 @@ function bindBuilderHandlers() {
         });
         showJson("createComponentOut", result);
         if (result && result.data && result.data.ok) {
-          const duplicateComponentId = result && result.data && result.data.duplicate
-            ? String(((result.data.component || {}).component_id) || "")
-            : "";
+          const createdComponentId = String((((result || {}).data || {}).component || {}).component_id || "").trim();
           closeSimpleModal("componentCreateModal");
           if (freeComponentNameEl) {
             freeComponentNameEl.value = "";
           }
           await loadLibrary();
-          if (duplicateComponentId) {
+          if (createdComponentId && pendingComponentCreateForCompositionId) {
+            await openComponentDetailEditor(createdComponentId);
+          } else if (createdComponentId && result.data.duplicate) {
             setWorkspaceSurface("components");
-            await openComponentDetailEditor(duplicateComponentId);
+            await openComponentDetailEditor(createdComponentId);
           }
         }
       } catch (error) {
@@ -7294,54 +7434,13 @@ function bindBuilderHandlers() {
         showJson("builderOut", { status: 0, data: { ok: false, error: "no_composition_selected" } });
         return;
       }
-
-      const newComponentNameEl = document.getElementById("newComponentName");
-      const component_name = newComponentNameEl ? String(newComponentNameEl.value || "").trim() : "";
-      const role = newComponentRoleInput ? String(newComponentRoleInput.value || "").trim() : "";
-      if (!component_name) {
-        showJson("builderOut", { status: 0, data: { ok: false, error: "component_name is required" } });
-        return;
-      }
-
-      const beforeIds = new Set(
-        (Array.isArray(currentBuilderComposition.components) ? currentBuilderComposition.components : []).map((item) =>
-          String(item.component_id || ""),
-        ),
-      );
-
-      showLoading("builderOut");
-      try {
-        const result = await callApi(
-          "/api/builder/compositions/" + encodeURIComponent(String(currentBuilderComposition.composition_id)) + "/components",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: { component_name, role },
-          },
-        );
-        showJson("builderOut", result);
-        if (result && result.data && result.data.ok && result.data.composition) {
-          const nextComponents = Array.isArray(result.data.composition.components)
-            ? result.data.composition.components
-            : [];
-          const addedComponent = nextComponents.find((item) => !beforeIds.has(String(item.component_id || "")));
-          if (addedComponent) {
-            const addedId = String(addedComponent.component_id || "").trim();
-            selectedComponentId = addedId || selectedComponentId;
-            stageAddedComponentPulse(addedId);
-            stageSelectedComponentPulse(addedId);
-          }
-          closeSimpleModal("addComponentModal");
-          renderBuilderPanel(result.data.composition);
-          if (newComponentNameEl) {
-            newComponentNameEl.value = "";
-          }
-          if (newComponentRoleInput) {
-            newComponentRoleInput.value = "";
-          }
-        }
-      } catch (error) {
-        showJson("builderOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
+      setPendingComponentCreateForCurrentComposition();
+      closeModalById("addComponentModal");
+      closeResolveModal();
+      openSimpleModal("componentCreateModal");
+      const freeComponentNameEl = document.getElementById("freeComponentName");
+      if (freeComponentNameEl) {
+        freeComponentNameEl.focus();
       }
     });
   }

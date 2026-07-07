@@ -20,6 +20,12 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '<p class="workspace-modal-kicker">Dish building</p>' in html
     assert '<h3>Lägg till komponent</h3>' in html
     assert 'id="addComponentModalClose"' in html
+    assert 'id="btnAddComponent" type="button">Skapa ny komponent</button>' in html
+    assert 'id="newComponentRole"' not in html
+    assert 'id="newComponentName"' not in html
+    assert 'id="componentRoleSuggestions"' not in html
+    assert 'id="componentNameSuggestions"' not in html
+    assert 'id="componentDetailReturnToDishBtn"' in html
 
     # Sidebar remains the primary navigation.
     assert 'id="navHomeBtn"' in html
@@ -770,6 +776,25 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'message: "Component details saved."' not in script
     assert 'function openBuilderModalForComposition(composition, initialTab = "overview") {' in script
     assert 'setDishBuilderTab(initialTab);' in script
+    assert 'let pendingComponentCreateReturnTab = "components";' in script
+    assert 'function updateComponentDetailReturnAction() {' in script
+    add_component_handler_start = script.find('if (addComponentBtn) {')
+    add_component_handler_end = script.find('if (recipeCreateBtn) {')
+    assert add_component_handler_start != -1 and add_component_handler_end != -1 and add_component_handler_start < add_component_handler_end
+    add_component_handler_js = script[add_component_handler_start:add_component_handler_end]
+    assert 'setPendingComponentCreateForCurrentComposition();' in add_component_handler_js
+    assert 'closeModalById("addComponentModal");' in add_component_handler_js
+    assert 'closeResolveModal();' in add_component_handler_js
+    assert 'openSimpleModal("componentCreateModal");' in add_component_handler_js
+    assert 'await openComponentDetailEditor(createdComponentId);' in script
+    assert 'await attachComponentToPendingComposition(createdComponentId);' not in script
+    assert 'if (createdComponentId && pendingComponentCreateForCompositionId)' in script
+    assert 'else if (createdComponentId && result.data.duplicate)' in script
+    assert 'componentDetailReturnToDishBtn' in script
+    assert 'Lägg till i ' in script
+    assert 'await reopenPendingCompositionForReturn();' in script
+    assert 'clearPendingComponentCreateForComposition();' in script
+    assert 'await loadLibrary();' in script
     assert 'const freeDishCategoryEl = document.getElementById("freeDishCategory");' in script
     assert 'const library_group = freeDishCategoryEl ? String(freeDishCategoryEl.value || "").trim() : "ovrigt";' in script
     assert 'seed_components: false,' in script

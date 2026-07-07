@@ -362,6 +362,7 @@
         </div>
         <div class="workspace-inline-actions">
           <button id="componentDetailSaveChanges" type="button">Spara ändringar</button>
+          <button id="componentDetailReturnToDishBtn" type="button" class="builder-button-secondary hidden" hidden>Lägg till i dish</button>
           <button id="componentDetailEditorClose" type="button">Tillbaka till komponenter</button>
         </div>
       </div>
@@ -642,29 +643,9 @@
         </label>
         <div id="builderComponentPalette" class="component-palette"></div>
       </div>
-
-      <details class="workspace-inline-create-details">
-        <summary>Eller skapa en ny komponent</summary>
-        <div class="workspace-modal-section-card workspace-inline-create-component">
-          <p class="modal-section-title">Skapa och lägg till komponent</p>
-          <label>Roll (valfri)
-            <input id="newComponentRole" list="componentRoleSuggestions" type="text" placeholder="main, side, sauce ... eller lämna tomt">
-            <datalist id="componentRoleSuggestions">
-              <option value="main"></option>
-              <option value="side"></option>
-              <option value="sauce"></option>
-              <option value="garnish"></option>
-              <option value="beverage"></option>
-              <option value="other"></option>
-            </datalist>
-          </label>
-          <label>Komponentnamn
-            <input id="newComponentName" list="componentNameSuggestions" type="text" placeholder="Ange ett nytt komponentnamn">
-            <datalist id="componentNameSuggestions"></datalist>
-          </label>
-          <button id="btnAddComponent" type="button">Skapa och lägg till komponent</button>
-        </div>
-      </details>
+      <div class="workspace-inline-actions workspace-builder-primary-actions">
+        <button id="btnAddComponent" type="button">Skapa ny komponent</button>
+      </div>
 
     </div>
   </div>
