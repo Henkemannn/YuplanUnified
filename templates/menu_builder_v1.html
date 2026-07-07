@@ -6,25 +6,39 @@
   <title>Menu Builder v1</title>
   <link rel="stylesheet" href="/static/css/builder.css">
   <style>
+    :root {
+      --menu-ink: #203243;
+      --menu-muted: #5a6d7d;
+      --menu-border: #d9e4ec;
+      --menu-surface: #ffffff;
+      --menu-surface-alt: #f7fafc;
+      --menu-accent: #2f5872;
+      --menu-accent-soft: #eaf2f7;
+    }
     body {
       font-family: Georgia, "Times New Roman", serif;
       margin: 0;
       padding: 20px;
-      background: linear-gradient(180deg, #f7f3ec 0%, #f2f6f8 100%);
-      color: #213243;
+      background:
+        radial-gradient(circle at top left, rgba(255,255,255,0.95) 0, rgba(255,255,255,0) 28%),
+        linear-gradient(180deg, #f8f4ee 0%, #eef4f7 100%);
+      color: var(--menu-ink);
     }
     .menu-shell {
       display: grid;
-      gap: 14px;
+      gap: 16px;
       max-width: 1180px;
       margin: 0 auto;
     }
     .menu-card {
-      border: 1px solid #d5e0ea;
+      border: 1px solid var(--menu-border);
       border-radius: 16px;
-      background: #ffffff;
-      padding: 14px;
-      box-shadow: 0 8px 20px rgba(35, 56, 74, 0.08);
+      background: var(--menu-surface);
+      padding: 16px;
+      box-shadow: 0 10px 24px rgba(35, 56, 74, 0.07);
+    }
+    .menu-card.is-compact {
+      padding: 12px 14px;
     }
     .menu-topbar {
       display: flex;
@@ -37,6 +51,22 @@
     .menu-card h2,
     .menu-card h3 {
       margin: 0;
+    }
+    .menu-topbar h1 {
+      font-size: clamp(30px, 4vw, 42px);
+      letter-spacing: 0.2px;
+    }
+    .menu-topbar .menu-meta {
+      max-width: 760px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--menu-muted);
+    }
+    .menu-active-line {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--menu-accent);
+      font-weight: 600;
     }
     .menu-inline {
       display: flex;
@@ -59,10 +89,31 @@
       align-items: center;
       flex-wrap: wrap;
     }
+    .menu-top-actions button,
+    .menu-inline button,
+    .menu-library-item button,
+    .menu-picker-item button,
+    .menu-dish-row button {
+      width: auto;
+      margin: 0;
+      border-radius: 999px;
+      border: 1px solid var(--menu-border);
+      background: #fff;
+      color: var(--menu-ink);
+      padding: 9px 14px;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.65) inset;
+    }
+    .menu-top-actions button,
+    .menu-inline button {
+      background: var(--menu-accent-soft);
+      color: var(--menu-accent);
+      border-color: #cad9e4;
+      font-weight: 600;
+    }
     .menu-meta {
-      margin-top: 6px;
+      margin-top: 8px;
       font-size: 12px;
-      color: #4c6174;
+      color: var(--menu-muted);
     }
     .menu-start-grid {
       display: grid;
@@ -70,18 +121,21 @@
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       margin-top: 10px;
     }
+    .menu-start-wrap.hidden {
+      display: none;
+    }
     .menu-start-block {
-      border: 1px solid #d7e2eb;
+      border: 1px solid var(--menu-border);
       border-radius: 12px;
-      background: #fbfdff;
+      background: var(--menu-surface-alt);
       padding: 12px;
       display: grid;
       gap: 10px;
     }
     .menu-start-block h3 {
       margin: 0;
-      font-size: 18px;
-      color: #20384a;
+      font-size: 16px;
+      color: var(--menu-ink);
     }
     .menu-stack {
       display: grid;
@@ -91,7 +145,7 @@
       display: grid;
       gap: 4px;
       font-size: 12px;
-      color: #4f6273;
+      color: var(--menu-muted);
     }
     .menu-stack input,
     .menu-stack select {
@@ -104,10 +158,11 @@
       margin-top: 10px;
     }
     .menu-section {
-      border: 1px solid #d8e2ea;
+      border: 1px solid var(--menu-border);
       border-radius: 12px;
-      background: #fbfdff;
-      padding: 10px;
+      background: var(--menu-surface-alt);
+      padding: 14px;
+      box-shadow: 0 4px 14px rgba(35, 56, 74, 0.05);
     }
     .menu-section-header {
       display: flex;
@@ -118,9 +173,10 @@
       margin-bottom: 8px;
     }
     .menu-section-name {
-      font-size: 16px;
+      font-size: 17px;
       font-weight: 600;
       margin: 0;
+      color: var(--menu-ink);
     }
     .menu-section-actions {
       display: flex;
@@ -128,67 +184,37 @@
       flex-wrap: wrap;
     }
     .menu-section-actions button {
-      width: auto;
-      margin: 0;
-      padding: 7px 10px;
+      padding: 8px 12px;
     }
     .menu-dish-list {
       display: grid;
       gap: 8px;
-    }
-    .menu-slot-row {
-      border: 1px solid #dde6ee;
-      border-radius: 10px;
-      background: #fff;
-      padding: 8px;
-      display: grid;
-      gap: 8px;
-    }
-    .menu-slot-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .menu-slot-name {
-      font-size: 14px;
-      font-weight: 600;
-      color: #2a4256;
-      margin: 0;
-    }
-    .menu-slot-actions {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .menu-slot-actions button {
-      width: auto;
-      margin: 0;
-      padding: 6px 10px;
+      margin-top: 8px;
     }
     .menu-dish-row {
       border: 1px solid #dde6ee;
-      border-radius: 10px;
+      border-radius: 12px;
       background: #fff;
-      padding: 8px;
+      padding: 8px 10px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
     }
+    .menu-dish-row button {
+      padding: 4px 8px;
+      min-width: 28px;
+      line-height: 1;
+      font-size: 14px;
+    }
     .menu-dish-label {
       font-weight: 600;
+      color: var(--menu-ink);
     }
     .menu-dish-meta {
       font-size: 12px;
-      color: #5b6f80;
+      color: var(--menu-muted);
       margin-top: 3px;
-    }
-    .menu-dish-row button {
-      width: auto;
-      margin: 0;
-      padding: 6px 10px;
     }
     .menu-empty {
       border: 1px dashed #cad7e3;
@@ -204,23 +230,18 @@
       margin-top: 8px;
     }
     .menu-library-item {
-      border: 1px solid #d7e1e9;
+      border: 1px solid var(--menu-border);
       border-radius: 10px;
       background: #fff;
-      padding: 8px;
+      padding: 10px 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
     }
-    .menu-library-item button {
-      width: auto;
-      margin: 0;
-      padding: 6px 10px;
-    }
     .menu-library-item-meta {
       font-size: 12px;
-      color: #5b6f80;
+      color: var(--menu-muted);
       margin-top: 3px;
     }
     .menu-picker-list {
@@ -231,19 +252,14 @@
       overflow-y: auto;
     }
     .menu-picker-item {
-      border: 1px solid #d8e1ea;
+      border: 1px solid var(--menu-border);
       border-radius: 10px;
       background: #fff;
-      padding: 8px;
+      padding: 10px 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-    }
-    .menu-picker-item button {
-      width: auto;
-      margin: 0;
-      padding: 6px 10px;
     }
     .menu-feedback {
       margin-top: 10px;
@@ -281,74 +297,50 @@
     .menu-template-wrap.hidden {
       display: none;
     }
+    .menu-top-actions button:hover,
+    .menu-inline button:hover,
+    .menu-library-item button:hover,
+    .menu-picker-item button:hover,
+    .menu-dish-row button:hover {
+      transform: translateY(-1px);
+    }
   </style>
 </head>
 <body>
   <div class="menu-shell">
     <section class="menu-card menu-topbar">
       <div>
-        <h1>Menu Builder v1.1</h1>
-        <p class="menu-meta">Build your menu step by step: create or open, shape structure, add dishes, then view and print.</p>
+        <h1>Bygg meny</h1>
+        <p class="menu-meta">Skapa en enkel meny av befintliga rätter och kopiera texten till valfritt program.</p>
+        <p id="activeMenuMeta" class="menu-active-line">Aktiv meny: ingen vald ännu.</p>
       </div>
       <div class="menu-top-actions">
-        <button id="btnNewMenu" type="button">Start new</button>
-        <button id="btnViewPrintActive" type="button" disabled>View / Print menu</button>
+        <button id="btnNewMenu" type="button">Ny meny</button>
+        <button id="btnOpenMenuPanel" type="button">Öppna meny</button>
+        <button id="btnViewPrintActive" type="button" disabled>Visa / skriv ut</button>
       </div>
     </section>
 
-    <section class="menu-card">
-      <h2>Create or Open Menu</h2>
-      <p class="menu-meta" id="activeMenuMeta">Create a menu or open one to start.</p>
+    <section id="menuStartWrap" class="menu-card is-compact menu-start-wrap">
+      <h2>Skapa eller öppna meny</h2>
       <div class="menu-start-grid">
         <div class="menu-start-block">
-          <h3>New menu</h3>
+          <h3>Ny meny</h3>
           <div class="menu-stack">
-            <label>Menu name
-              <input id="menuTitle" type="text" placeholder="Spring event menu">
+            <label>Menynamn
+              <input id="menuTitle" type="text" placeholder="Vårmeny">
             </label>
-            <label>Start with
-              <select id="menuStartMode">
-                <option value="blank" selected>Blank menu</option>
-                <option value="template">Template builder</option>
-              </select>
-            </label>
-          </div>
-
-          <div id="menuTemplateWrap" class="menu-template-wrap hidden">
-            <p class="menu-meta">Template builder</p>
-            <div class="menu-template-grid">
-              <label>What kind of menu?
-                <select id="menuTemplateType">
-                  <option value="weekly_lunch">Weekly lunch menu</option>
-                  <option value="free_menu">Free menu</option>
-                  <option value="event_proposal">Event/proposal menu</option>
-                  <option value="a_la_carte">A la carte menu</option>
-                </select>
-              </label>
-              <label>How many sections or days?
-                <input id="menuTemplateSectionCount" type="number" min="1" max="30" value="3">
-              </label>
-              <label>How many options per section?
-                <input id="menuTemplateSlotCount" type="number" min="1" max="20" value="2">
-              </label>
-            </div>
-            <div class="menu-inline" style="margin-top:8px;">
-              <button id="btnApplyTemplateBuilder" type="button">Create menu structure</button>
-            </div>
           </div>
 
           <div class="menu-inline">
-            <button id="btnCreateMenu" type="button">Create menu</button>
+            <button id="btnCreateMenu" type="button">Skapa meny</button>
           </div>
-          <div id="menuTemplateOut" class="menu-feedback" aria-live="polite"></div>
           <div id="createMenuOut" class="menu-feedback" aria-live="polite"></div>
         </div>
 
         <div class="menu-start-block">
-          <h3>Open existing menu</h3>
-          <div class="menu-inline">
-            <button id="btnRefreshMenuLibrary" type="button">Show latest menus</button>
-          </div>
+          <h3>Öppna befintlig meny</h3>
+          <div class="menu-inline"></div>
           <div id="menuLibraryList" class="menu-library-list"></div>
           <div id="menuLibraryOut" class="menu-feedback" aria-live="polite"></div>
         </div>
@@ -358,13 +350,12 @@
     <section class="menu-card">
       <div class="menu-topbar">
         <div>
-          <h2>Menu sections</h2>
-          <p id="menuSaveStatus" class="menu-meta">Changes are saved automatically while you edit.</p>
+          <h2>Menysektioner</h2>
+          <p id="menuSaveStatus" class="menu-meta">Ändringar sparas automatiskt medan du bygger.</p>
         </div>
         <div class="menu-inline">
-          <input id="newSectionName" type="text" placeholder="New section name (for example Monday lunch)">
-          <button id="btnAddSection" type="button">Add section</button>
-          <button id="btnRefreshSections" type="button">Show latest changes</button>
+          <input id="newSectionName" type="text" placeholder="Ny sektion, t.ex. Förrätt, Varmrätt, Måndag lunch">
+          <button id="btnAddSection" type="button">Lägg till</button>
         </div>
       </div>
       <div id="menuSections" class="menu-sections"></div>
@@ -376,15 +367,14 @@
     <div class="modal-content modal-content-components">
       <div class="workspace-modal-header">
         <div>
-          <p class="workspace-modal-kicker">Dish picker</p>
-          <h3>Add dish to slot</h3>
+          <p class="workspace-modal-kicker">Rättväljare</p>
+          <h3>Lägg till rätt</h3>
         </div>
-        <button id="dishPickerClose" type="button">Done</button>
+        <button id="dishPickerClose" type="button">Klar</button>
       </div>
       <p class="menu-meta" id="dishPickerSectionMeta"></p>
-      <p class="menu-meta" id="dishPickerSlotMeta"></p>
-      <label>Search dishes
-        <input id="dishPickerSearch" type="text" placeholder="Search dish by name">
+      <label>Sök rätter
+        <input id="dishPickerSearch" type="text" placeholder="Sök rätt på namn">
       </label>
       <div id="dishPickerList" class="menu-picker-list"></div>
       <div id="dishPickerOut" class="menu-feedback" aria-live="polite"></div>

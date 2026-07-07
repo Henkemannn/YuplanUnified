@@ -129,9 +129,17 @@ function setActiveMenu(menu) {
   const meta = document.getElementById("activeMenuMeta");
   const saveStatus = document.getElementById("menuSaveStatus");
   const viewPrintBtn = document.getElementById("btnViewPrintActive");
+  const startWrap = document.getElementById("menuStartWrap");
 
   if (viewPrintBtn) {
     viewPrintBtn.disabled = !activeMenuId;
+  }
+  if (startWrap) {
+    if (activeMenuId) {
+      startWrap.classList.add("hidden");
+    } else {
+      startWrap.classList.remove("hidden");
+    }
   }
 
   if (!meta) {
@@ -139,15 +147,15 @@ function setActiveMenu(menu) {
   }
   if (!activeMenuId) {
     if (saveStatus) {
-      saveStatus.textContent = "Create or open a menu to start saving your changes.";
+      saveStatus.textContent = "Skapa eller öppna en meny för att börja spara ändringar.";
     }
-    meta.textContent = "Create a menu or open one to start.";
+    meta.textContent = "Skapa en meny eller öppna en befintlig för att börja.";
     return;
   }
   if (saveStatus) {
-    saveStatus.textContent = "Saved automatically while you edit.";
+    saveStatus.textContent = "Sparas automatiskt medan du bygger.";
   }
-  meta.textContent = "Now editing: " + (activeMenuTitle || "Untitled menu");
+  meta.textContent = "Aktiv meny: " + (activeMenuTitle || "Namnlös meny");
 }
 
 function rowsToSlotMap(rows) {
@@ -313,7 +321,7 @@ async function resequenceSectionRows(sectionName) {
       },
     );
     if (!result || !result.data || !result.data.ok) {
-      throw new Error("Could not resequence section rows.");
+      throw new Error("Kunde inte ordna om sektionsrader.");
     }
   }
 }
@@ -329,7 +337,7 @@ function renderSections() {
   if (sections.length === 0) {
     const empty = document.createElement("div");
     empty.className = "menu-empty";
-    empty.textContent = "No sections yet. Add a section or create menu structure.";
+    empty.textContent = "Inga sektioner ännu. Lägg till en sektion för att börja.";
     host.appendChild(empty);
     return;
   }
@@ -350,34 +358,26 @@ function renderSections() {
 
     const addDishBtn = document.createElement("button");
     addDishBtn.type = "button";
-    addDishBtn.textContent = "Add dish";
+    addDishBtn.textContent = "Lägg till rätt";
     addDishBtn.addEventListener("click", () => {
       openDishPicker(section.name, nextEmptySlotIndex(section));
     });
 
-    const addSlotBtn = document.createElement("button");
-    addSlotBtn.type = "button";
-    addSlotBtn.textContent = "Add slot";
-    addSlotBtn.addEventListener("click", () => {
-      addSlotToSection(section.name);
-    });
-
     const renameBtn = document.createElement("button");
     renameBtn.type = "button";
-    renameBtn.textContent = "Rename";
+    renameBtn.textContent = "Byt namn";
     renameBtn.addEventListener("click", async () => {
       await renameSection(section.name);
     });
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
-    removeBtn.textContent = "Remove section";
+    removeBtn.textContent = "Ta bort";
     removeBtn.addEventListener("click", async () => {
       await removeSection(section.name);
     });
 
     actions.appendChild(addDishBtn);
-  actions.appendChild(addSlotBtn);
     actions.appendChild(renameBtn);
     actions.appendChild(removeBtn);
 
@@ -389,94 +389,47 @@ function renderSections() {
     list.className = "menu-dish-list";
 
     for (const slot of section.slots) {
-      const slotRow = document.createElement("div");
-      slotRow.className = "menu-slot-row";
-
-      const slotTop = document.createElement("div");
-      slotTop.className = "menu-slot-top";
-
-      const slotName = document.createElement("p");
-      slotName.className = "menu-slot-name";
-      slotName.textContent = slot.label;
-
-      const slotActions = document.createElement("div");
-      slotActions.className = "menu-slot-actions";
-
-      const renameSlotBtn = document.createElement("button");
-      renameSlotBtn.type = "button";
-      renameSlotBtn.textContent = "Rename slot";
-      renameSlotBtn.addEventListener("click", () => {
-        renameSlot(section.name, slot.index);
-      });
-
-      const pickDishBtn = document.createElement("button");
-      pickDishBtn.type = "button";
-      pickDishBtn.textContent = "Choose dish";
-      pickDishBtn.addEventListener("click", () => {
-        openDishPicker(section.name, slot.index);
-      });
-
-      const typeDishBtn = document.createElement("button");
-      typeDishBtn.type = "button";
-      typeDishBtn.textContent = "Type dish";
-      typeDishBtn.addEventListener("click", async () => {
-        await addFreeTextDish(section.name, slot.index);
-      });
-
-      slotActions.appendChild(renameSlotBtn);
-      slotActions.appendChild(pickDishBtn);
-      slotActions.appendChild(typeDishBtn);
-
-      if (slot.row) {
-        const removeDishBtn = document.createElement("button");
-        removeDishBtn.type = "button";
-        removeDishBtn.textContent = "Remove dish";
-        removeDishBtn.addEventListener("click", async () => {
-          await removeDish(slot.row.menu_detail_id);
-        });
-        slotActions.appendChild(removeDishBtn);
-      }
-
-      const removeSlotBtn = document.createElement("button");
-      removeSlotBtn.type = "button";
-      removeSlotBtn.textContent = "Remove slot";
-      removeSlotBtn.addEventListener("click", async () => {
-        await removeSlot(section.name, slot.index);
-      });
-      slotActions.appendChild(removeSlotBtn);
-
-      slotTop.appendChild(slotName);
-      slotTop.appendChild(slotActions);
-      slotRow.appendChild(slotTop);
-
       if (!slot.row) {
-        const empty = document.createElement("div");
-        empty.className = "menu-empty";
-        empty.textContent = "No dish yet. Choose dish or type dish.";
-        slotRow.appendChild(empty);
-      } else {
-        const dishRow = document.createElement("div");
-        dishRow.className = "menu-dish-row";
-
-        const left = document.createElement("div");
-        const label = document.createElement("div");
-        label.className = "menu-dish-label";
-        label.textContent = String(slot.row.composition_name || slot.row.composition_id || "Dish");
-
-        const meta = document.createElement("div");
-        meta.className = "menu-dish-meta";
-        meta.textContent = "Option " + String(slot.index + 1);
-
-        left.appendChild(label);
-        left.appendChild(meta);
-        dishRow.appendChild(left);
-        slotRow.appendChild(dishRow);
+        continue;
       }
 
-      list.appendChild(slotRow);
+      const dishRow = document.createElement("div");
+      dishRow.className = "menu-dish-row";
+
+      const left = document.createElement("div");
+      const label = document.createElement("div");
+      label.className = "menu-dish-label";
+      label.textContent = String(slot.row.composition_name || slot.row.composition_id || "Rätt");
+
+      const meta = document.createElement("div");
+      meta.className = "menu-dish-meta";
+      meta.textContent = "";
+
+      left.appendChild(label);
+      left.appendChild(meta);
+      dishRow.appendChild(left);
+
+      const removeDishBtn = document.createElement("button");
+      removeDishBtn.type = "button";
+      removeDishBtn.textContent = "×";
+      removeDishBtn.setAttribute("aria-label", "Ta bort rätt");
+      removeDishBtn.title = "Ta bort rätt";
+      removeDishBtn.addEventListener("click", async () => {
+        await removeDish(slot.row.menu_detail_id);
+      });
+      dishRow.appendChild(removeDishBtn);
+
+      list.appendChild(dishRow);
     }
 
-    block.appendChild(list);
+    if (list.childElementCount === 0) {
+      const empty = document.createElement("div");
+      empty.className = "menu-empty";
+      empty.textContent = "Ingen rätt ännu. Välj rätt för att lägga till.";
+      block.appendChild(empty);
+    } else {
+      block.appendChild(list);
+    }
     host.appendChild(block);
   }
 }
@@ -536,7 +489,7 @@ function renderDishPicker() {
 
     const addBtn = document.createElement("button");
     addBtn.type = "button";
-    addBtn.textContent = "Add to slot";
+    addBtn.textContent = "Lägg till";
     addBtn.addEventListener("click", async () => {
       await attachDishToSection(String(dish.composition_id || ""));
     });
@@ -549,7 +502,7 @@ function renderDishPicker() {
 
 function openDishPicker(sectionName, slotIndex) {
   if (!activeMenuId) {
-    showText("menuSectionsOut", "Create or open a menu first.");
+    showText("menuSectionsOut", "Skapa eller öppna en meny först.");
     return;
   }
 
@@ -557,13 +510,13 @@ function openDishPicker(sectionName, slotIndex) {
   pickerOpenSlotIndex = Number.isInteger(Number(slotIndex)) ? Math.max(0, Number(slotIndex)) : null;
   const meta = document.getElementById("dishPickerSectionMeta");
   if (meta) {
-    meta.textContent = "Section: " + pickerOpenSection;
+    meta.textContent = "Sektion: " + pickerOpenSection;
   }
   const slotMeta = document.getElementById("dishPickerSlotMeta");
   if (slotMeta) {
     slotMeta.textContent = pickerOpenSlotIndex === null
-      ? "Slot: next available"
-      : "Slot: " + String(pickerOpenSlotIndex + 1);
+      ? "Plats: nästa lediga"
+      : "Plats: " + String(pickerOpenSlotIndex + 1);
   }
   const search = document.getElementById("dishPickerSearch");
   if (search) {
@@ -627,7 +580,7 @@ async function attachCompositionToSlot(sectionName, slotIndex, compositionId) {
 
 async function attachDishToSection(compositionId) {
   if (!activeMenuId) {
-    showText("dishPickerOut", "Create or open a menu first.");
+    showText("dishPickerOut", "Skapa eller öppna en meny först.");
     return;
   }
 
@@ -639,7 +592,7 @@ async function attachDishToSection(compositionId) {
 
   const sectionName = normalize(pickerOpenSection);
   if (!sectionName) {
-    showText("dishPickerOut", "Section is required.");
+    showText("dishPickerOut", "Sektion krävs.");
     return;
   }
 
@@ -650,12 +603,12 @@ async function attachDishToSection(compositionId) {
   showLoading("dishPickerOut");
   const result = await attachCompositionToSlot(sectionName, slotIndex, compositionIdValue);
   if (!result || !result.ok) {
-    showText("dishPickerOut", "Could not add dish to slot.");
+    showText("dishPickerOut", "Kunde inte lägga till rätt.");
     return;
   }
 
-  showText("dishPickerOut", result.mode === "updated" ? "Dish updated." : "Dish added.");
-  showText("menuSaveStatus", "Saved automatically while you edit.");
+  showText("dishPickerOut", result.mode === "updated" ? "Rätt uppdaterad." : "Rätt tillagd.");
+  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
   await refreshRows();
   closeModal("dishPickerModal");
 }
@@ -677,14 +630,14 @@ async function removeDish(menuDetailId, options) {
   );
   if (!result || !result.data || !result.data.ok) {
     if (!config.quiet) {
-      showText("menuSectionsOut", "Could not remove dish.");
+      showText("menuSectionsOut", "Kunde inte ta bort rätt.");
     }
     return;
   }
   if (!config.quiet) {
-    showText("menuSectionsOut", "Dish removed.");
+    showText("menuSectionsOut", "Rätt borttagen.");
   }
-  showText("menuSaveStatus", "Saved automatically while you edit.");
+  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
   if (!config.skipRefresh) {
     await refreshRows();
   }
@@ -727,7 +680,7 @@ async function renameSection(oldName) {
       },
     );
     if (!result || !result.data || !result.data.ok) {
-      showText("menuSectionsOut", "Could not rename section.");
+      showText("menuSectionsOut", "Kunde inte byta namn på sektionen.");
       return;
     }
   }
@@ -736,8 +689,8 @@ async function renameSection(oldName) {
   if (draftIndex >= 0) {
     sectionDrafts[draftIndex].name = nextValue;
   }
-  showText("menuSectionsOut", "Section renamed.");
-  showText("menuSaveStatus", "Saved automatically while you edit.");
+  showText("menuSectionsOut", "Sektionens namn uppdaterat.");
+  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
   await refreshRows();
 }
 
@@ -765,14 +718,14 @@ async function removeSection(sectionName) {
       { method: "DELETE" },
     );
     if (!result || !result.data || !result.data.ok) {
-      showText("menuSectionsOut", "Could not remove section.");
+      showText("menuSectionsOut", "Kunde inte ta bort sektionen.");
       return;
     }
   }
 
   sectionDrafts = sectionDrafts.filter((item) => normalizeLower(item.name) !== normalizeLower(sectionValue));
-  showText("menuSectionsOut", "Section removed.");
-  showText("menuSaveStatus", "Saved automatically while you edit.");
+  showText("menuSectionsOut", "Sektion borttagen.");
+  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
   await refreshRows();
 }
 
@@ -801,7 +754,7 @@ function renameSlot(sectionName, slotIndex) {
   }
   ensureSlotLabel(sectionValue, slotIndex);
   const currentLabel = draft.slotLabels[slotIndex] || defaultSlotLabel(slotIndex);
-  const next = normalize(window.prompt("Rename slot", currentLabel));
+  const next = normalize(window.prompt("Byt namn på plats", currentLabel));
   if (!next || normalizeLower(next) === normalizeLower(currentLabel)) {
     return;
   }
@@ -833,58 +786,16 @@ async function removeSlot(sectionName, slotIndex) {
     await resequenceSectionRows(sectionValue);
     await refreshRows();
   } catch (_err) {
-    showText("menuSectionsOut", "Could not re-order slots after removal.");
+    showText("menuSectionsOut", "Kunde inte ordna om platserna efter borttagning.");
     return;
   }
 
-  showText("menuSectionsOut", "Slot removed.");
-  showText("menuSaveStatus", "Saved automatically while you edit.");
+  showText("menuSectionsOut", "Plats borttagen.");
+  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
 }
 
 async function addFreeTextDish(sectionName, slotIndex) {
-  if (!activeMenuId) {
-    showText("menuSectionsOut", "Create or open a menu first.");
-    return;
-  }
-
-  const name = normalize(window.prompt("Type new dish name", ""));
-  if (!name) {
-    return;
-  }
-
-  showLoading("menuSectionsOut");
-  const created = await callApi("/api/builder/compositions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: { composition_name: name },
-  });
-
-  if (!created || !created.data || !created.data.ok || !created.data.composition) {
-    showText("menuSectionsOut", "Could not create dish from text.");
-    return;
-  }
-
-  const composition = created.data.composition;
-  const compositionId = normalize(composition.composition_id);
-  if (!compositionId) {
-    showText("menuSectionsOut", "Dish created without id.");
-    return;
-  }
-
-  allDishes.unshift({
-    composition_id: compositionId,
-    composition_name: normalize(composition.composition_name) || compositionId,
-  });
-
-  const attached = await attachCompositionToSlot(sectionName, slotIndex, compositionId);
-  if (!attached || !attached.ok) {
-    showText("menuSectionsOut", "Dish was created but could not be attached.");
-    return;
-  }
-
-  await refreshRows();
-  showText("menuSectionsOut", "Dish created and attached.");
-  showText("menuSaveStatus", "Saved automatically while you edit.");
+  showText("menuSectionsOut", "Direkt skapande av rätt är avstängt i v1A.");
 }
 
 async function refreshRows() {
@@ -900,7 +811,7 @@ async function refreshRows() {
   );
 
   if (!result || !result.data || !result.data.ok) {
-    showText("menuSectionsOut", "Could not load sections.");
+    showText("menuSectionsOut", "Kunde inte läsa in sektioner.");
     return;
   }
 
@@ -927,7 +838,7 @@ function renderMenuLibrary(menus) {
   if (items.length === 0) {
     const empty = document.createElement("div");
     empty.className = "menu-empty";
-    empty.textContent = "No menus yet.";
+    empty.textContent = "Inga menyer ännu.";
     host.appendChild(empty);
     return;
   }
@@ -941,22 +852,22 @@ function renderMenuLibrary(menus) {
     name.textContent = String(menu.title || menu.menu_id || "");
     const meta = document.createElement("div");
     meta.className = "menu-library-item-meta";
-    meta.textContent = "Ready to open";
+    meta.textContent = "Klar att öppna";
     left.appendChild(name);
     left.appendChild(meta);
 
     const openBtn = document.createElement("button");
     openBtn.type = "button";
-    openBtn.textContent = "Open";
+    openBtn.textContent = "Öppna";
     openBtn.addEventListener("click", async () => {
       setActiveMenu(menu);
-      showText("menuLibraryOut", "Menu opened.");
+      showText("menuLibraryOut", "Meny öppnad.");
       await refreshRows();
     });
 
     const outputBtn = document.createElement("button");
     outputBtn.type = "button";
-    outputBtn.textContent = "View/Print";
+    outputBtn.textContent = "Visa / skriv ut";
     outputBtn.addEventListener("click", () => {
       const id = String(menu.menu_id || "");
       if (!id) {
@@ -980,11 +891,11 @@ async function refreshMenuLibrary() {
   showLoading("menuLibraryOut");
   const result = await callApi("/api/builder/menus", { method: "GET" });
   if (!result || !result.data || !result.data.ok) {
-    showText("menuLibraryOut", "Could not load menus.");
+    showText("menuLibraryOut", "Kunde inte läsa in menyer.");
     return;
   }
   renderMenuLibrary(result.data.menus);
-  showText("menuLibraryOut", "Menus are up to date.");
+  showText("menuLibraryOut", "Menyer uppdaterade.");
 }
 
 function selectedStartMode() {
@@ -1009,7 +920,7 @@ async function createMenu() {
   const titleInput = document.getElementById("menuTitle");
   const title = titleInput ? normalize(titleInput.value) : "";
   if (!title) {
-    showText("createMenuOut", "Menu name is required.");
+    showText("createMenuOut", "Menynamn krävs.");
     return;
   }
 
@@ -1025,22 +936,16 @@ async function createMenu() {
   });
 
   if (!result || !result.data || !result.data.ok) {
-    showText("createMenuOut", "Could not create menu.");
+    showText("createMenuOut", "Kunde inte skapa meny.");
     return;
   }
 
   setActiveMenu(result.data.menu || {});
   sectionDrafts = [];
-  showText("createMenuOut", "Menu created.");
-  showText("menuSaveStatus", "Saved automatically while you edit.");
-  showText("menuTemplateOut", "");
+  showText("createMenuOut", "Meny skapad.");
+  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
 
-  if (selectedStartMode() === "template") {
-    generateTemplateStructure();
-    showText("createMenuOut", "Menu created. Structure is ready.");
-  } else {
-    showText("menuSectionsOut", "Add a section to begin building your menu.");
-  }
+  showText("menuSectionsOut", "Lägg till en sektion för att börja bygga menyn.");
 
   await refreshRows();
   await refreshMenuLibrary();
@@ -1050,18 +955,18 @@ function addSectionDraft() {
   const input = document.getElementById("newSectionName");
   const name = input ? normalize(input.value) : "";
   if (!name) {
-    showText("menuSectionsOut", "Section name is required.");
+    showText("menuSectionsOut", "Sektionens namn krävs.");
     return;
   }
   if (!activeMenuId) {
-    showText("menuSectionsOut", "Create or open a menu first.");
+    showText("menuSectionsOut", "Skapa eller öppna en meny först.");
     return;
   }
 
   const existsInRows = currentRows.some((row) => normalizeLower(row.day) === normalizeLower(name));
   const existsInDrafts = sectionDrafts.some((section) => normalizeLower(section.name) === normalizeLower(name));
   if (existsInRows || existsInDrafts) {
-    showText("menuSectionsOut", "Section already exists.");
+    showText("menuSectionsOut", "Sektionen finns redan.");
     return;
   }
 
@@ -1070,12 +975,12 @@ function addSectionDraft() {
     input.value = "";
   }
   renderSections();
-  showText("menuSectionsOut", "Section added. Add dishes to persist it.");
+  showText("menuSectionsOut", "Sektion tillagd. Lägg till rätt för att spara.");
 }
 
 function generateTemplateStructure() {
   if (!activeMenuId) {
-    showText("menuTemplateOut", "Create or open a menu first.");
+    showText("menuTemplateOut", "Skapa eller öppna en meny först.");
     return;
   }
 
@@ -1100,19 +1005,18 @@ function generateTemplateStructure() {
   renderSections();
   showText(
     "menuTemplateOut",
-    "Menu structure ready: " + String(sectionCount) + " sections with " + String(slotCount) + " options each.",
+    "Menystruktur klar: " + String(sectionCount) + " sektioner med " + String(slotCount) + " alternativ vardera.",
   );
-  showText("menuSectionsOut", "Structure ready. Choose dishes from library or type dish names.");
+  showText("menuSectionsOut", "Strukturen är klar. Välj rätter från biblioteket.");
 }
 
 function bindHandlers() {
   const btnNewMenu = document.getElementById("btnNewMenu");
+  const btnOpenMenuPanel = document.getElementById("btnOpenMenuPanel");
   const btnCreateMenu = document.getElementById("btnCreateMenu");
   const btnAddSection = document.getElementById("btnAddSection");
   const btnRefreshSections = document.getElementById("btnRefreshSections");
   const btnRefreshMenuLibrary = document.getElementById("btnRefreshMenuLibrary");
-  const btnApplyTemplateBuilder = document.getElementById("btnApplyTemplateBuilder");
-  const menuStartMode = document.getElementById("menuStartMode");
   const btnViewPrintActive = document.getElementById("btnViewPrintActive");
   const dishPickerClose = document.getElementById("dishPickerClose");
   const dishPickerSearch = document.getElementById("dishPickerSearch");
@@ -1124,13 +1028,7 @@ function bindHandlers() {
       sectionDrafts = [];
       showText("menuTemplateOut", "");
       renderSections();
-      showText("createMenuOut", "Enter a menu name, choose a start mode, and create.");
-    });
-  }
-
-  if (menuStartMode) {
-    menuStartMode.addEventListener("change", () => {
-      updateTemplateBuilderVisibility();
+      showText("createMenuOut", "Ange menynamn och skapa en ny meny.");
     });
   }
 
@@ -1158,12 +1056,6 @@ function bindHandlers() {
     });
   }
 
-  if (btnApplyTemplateBuilder) {
-    btnApplyTemplateBuilder.addEventListener("click", () => {
-      generateTemplateStructure();
-    });
-  }
-
   if (dishPickerClose) {
     dishPickerClose.addEventListener("click", () => {
       closeModal("dishPickerModal");
@@ -1184,11 +1076,20 @@ function bindHandlers() {
       window.location.href = "/menu-output-v1?menu_id=" + encodeURIComponent(activeMenuId);
     });
   }
+
+  if (btnOpenMenuPanel) {
+    btnOpenMenuPanel.addEventListener("click", () => {
+      const startWrap = document.getElementById("menuStartWrap");
+      if (startWrap) {
+        startWrap.classList.remove("hidden");
+        startWrap.scrollIntoView({ block: "start", behavior: "smooth" });
+      }
+    });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindHandlers();
-  updateTemplateBuilderVisibility();
   setActiveMenu({ menu_id: "", title: "" });
   await loadDishes();
   await refreshMenuLibrary();
