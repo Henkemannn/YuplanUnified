@@ -9,6 +9,7 @@ def test_menu_output_ui_includes_print_and_export_controls(client_admin) -> None
     assert "Menu Output v1" in html
     assert 'id="menuOutputSelect"' in html
     assert 'id="btnOpenMenuOutput"' in html
+    assert 'id="btnCopyMenuOutput"' in html
     assert 'id="btnPrintMenuOutput"' in html
     assert 'id="btnExportPdfMenuOutput"' in html
     assert 'id="menuOutputTitle"' in html
@@ -18,6 +19,7 @@ def test_menu_output_ui_includes_print_and_export_controls(client_admin) -> None
     assert 'id="menuOutputSections"' in html
     assert "Choose a menu above to view a clean printable output." in html
     assert "Print / Save as PDF" in html
+    assert "Kopiera menytext" in html
     assert "@media print" in html
     assert "@page" in html
     assert ".print-hidden" in html
@@ -30,6 +32,7 @@ def test_menu_output_script_contains_menu_render_and_print_flow(client_admin) ->
     assert rv.status_code == 200
     script = rv.data.decode("utf-8")
     assert "function renderSections(rows)" in script
+    assert "function buildPlainTextMenu(menuTitle, rows)" in script
     assert "function fillMenuSelect(menus, selectedMenuId)" in script
     assert "function renderSelectedMenu()" in script
     assert "/api/builder/menus" in script
@@ -39,4 +42,6 @@ def test_menu_output_script_contains_menu_render_and_print_flow(client_admin) ->
     assert "Could not load menu rows. Try opening the menu again." in script
     assert "Choose a menu above to view a clean printable output." in script
     assert "Generated: " in script
+    assert "navigator.clipboard.writeText" in script
+    assert "Menu text copied to clipboard." in script
     assert "window.print()" in script

@@ -126,6 +126,48 @@ function renderSections(rows) {
   setState("", "");
 }
 
+function buildPlainTextMenu(menuTitle, rows) {
+  const items = Array.isArray(rows) ? rows : [];
+  const lines = [];
+  const title = String(menuTitle || "Menu").trim() || "Menu";
+  lines.push(title);
+  lines.push("");
+
+  const grouped = {};
+  const order = [];
+  for (const row of items) {
+    const section = String(row.day || "").trim() || "Section";
+    if (!grouped[section]) {
+      grouped[section] = [];
+      order.push(section);
+    }
+    grouped[section].push(row);
+  }
+
+  for (const sectionName of order) {
+    lines.push(sectionName);
+    const rowsInSection = grouped[sectionName].slice().sort((left, right) => {
+      const leftSort = Number(left.sort_order || 0);
+      const rightSort = Number(right.sort_order || 0);
+      if (leftSort !== rightSort) {
+        return leftSort - rightSort;
+      }
+      return String(left.menu_detail_id || "").localeCompare(String(right.menu_detail_id || ""));
+    });
+
+    for (const row of rowsInSection) {
+      const dishName = String(row.composition_name || row.composition_id || "Dish").trim() || "Dish";
+      lines.push("- " + dishName);
+    }
+    lines.push("");
+  }
+
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines.join("\n");
+}
+
 function fillMenuSelect(menus, selectedMenuId) {
   const select = document.getElementById("menuOutputSelect");
   if (!select) {
@@ -200,17 +242,41 @@ async function renderSelectedMenu() {
   }
 
   updateGeneratedAtLabel();
-  renderSections(rowsResult.data.rows || []);
+  const rows = Array.isArray(rowsResult.data.rows) ? rowsResult.data.rows : [];
+  renderSections(rows);
+  return { menu, rows };
 }
 
 function bindHandlers() {
   const openBtn = document.getElementById("btnOpenMenuOutput");
+  const copyBtn = document.getElementById("btnCopyMenuOutput");
   const printBtn = document.getElementById("btnPrintMenuOutput");
   const exportPdfBtn = document.getElementById("btnExportPdfMenuOutput");
 
   if (openBtn) {
     openBtn.addEventListener("click", async () => {
       await renderSelectedMenu();
+    });
+  }
+
+  if (copyBtn) {
+    copyBtn.addEventListener("click", async () => {
+      const rendered = await renderSelectedMenu();
+      const title = rendered && rendered.menu ? String(rendered.menu.title || rendered.menu.menu_id || "Menu") : "Menu";
+      const text = buildPlainTextMenu(title, rendered && rendered.rows ? rendered.rows : []);
+      if (!text.trim()) {
+        setState("error", "No text to copy yet.");
+        return;
+      }
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+          throw new Error("Clipboard not available");
+        }
+        await navigator.clipboard.writeText(text);
+        setState("info", "Menu text copied to clipboard.");
+      } catch (_err) {
+        setState("error", "Could not copy menu text. Use print instead.");
+      }
     });
   }
 
