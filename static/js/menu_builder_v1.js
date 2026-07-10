@@ -33,6 +33,7 @@ let currentRows = [];
 let sectionDrafts = [];
 let pickerOpenSection = "";
 let pickerOpenSlotIndex = null;
+let activeDishFilter = "all";
 
 function makeSectionDraft(name, slotLabels) {
   return {
@@ -123,6 +124,126 @@ function normalizeLower(value) {
   return normalize(value).toLowerCase();
 }
 
+const DISH_FILTERS = [
+  { key: "all", label: "Alla", terms: [] },
+  { key: "fish", label: "Fisk", terms: ["fisk", "fish"] },
+  { key: "meat", label: "Kött", terms: ["kött", "kott", "meat", "beef", "pork"] },
+  { key: "dessert", label: "Dessert", terms: ["dessert"] },
+  { key: "vegetarian", label: "Vegetariskt", terms: ["veget", "veg", "vegetar", "vegetarian"] },
+  { key: "soup", label: "Soppa", terms: ["soppa", "soup"] },
+];
+
+function uniqueStrings(values) {
+  const output = [];
+  const seen = new Set();
+  for (const value of values || []) {
+    const text = dishValueText(value);
+    if (!text) {
+      continue;
+    }
+    const key = normalizeLower(text);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    output.push(text);
+  }
+  return output;
+}
+
+function dishValueText(value) {
+  if (value && typeof value === "object") {
+    return normalize(value.name || value.label || value.text || value.title || value.value || "");
+  }
+  return normalize(value);
+}
+
+function dishMetadataItems(dish) {
+  const items = [];
+  const tags = Array.isArray(dish && dish.tags) ? dish.tags : [];
+  const categories = Array.isArray(dish && dish.categories) ? dish.categories : [];
+  const componentCategories = Array.isArray(dish && dish.component_categories) ? dish.component_categories : [];
+
+  if (dish && dish.library_group) {
+    items.push(dish.library_group);
+  }
+  if (dish && dish.category) {
+    items.push(dish.category);
+  }
+  items.push(...tags);
+  items.push(...categories);
+  items.push(...componentCategories);
+  return uniqueStrings(items).slice(0, 4);
+}
+
+function dishSearchText(dish) {
+  const fields = [
+    dishValueText(dish && dish.composition_id),
+    dishValueText(dish && dish.composition_name),
+    dishValueText(dish && dish.library_group),
+    dishValueText(dish && dish.category),
+  ];
+  const tags = Array.isArray(dish && dish.tags) ? dish.tags : [];
+  const categories = Array.isArray(dish && dish.categories) ? dish.categories : [];
+  const componentCategories = Array.isArray(dish && dish.component_categories) ? dish.component_categories : [];
+  fields.push(...tags, ...categories, ...componentCategories);
+  return normalizeLower(fields.join(" "));
+}
+
+function dishMatchesFilter(dish, filterKey) {
+  const filter = DISH_FILTERS.find((item) => item.key === filterKey) || DISH_FILTERS[0];
+  if (!filter || filter.key === "all") {
+    return true;
+  }
+  const text = dishSearchText(dish);
+  return filter.terms.some((term) => text.includes(normalizeLower(term)));
+}
+
+function renderDishFilters() {
+  const host = document.getElementById("dishBrowserFilters");
+  if (!host) {
+    return;
+  }
+
+  host.innerHTML = "";
+  const filters = DISH_FILTERS.filter((filter) => {
+    if (filter.key === "all") {
+      return true;
+    }
+    return Array.isArray(allDishes) && allDishes.some((dish) => dishMatchesFilter(dish, filter.key));
+  });
+
+  if (!filters.some((filter) => filter.key === activeDishFilter)) {
+    activeDishFilter = "all";
+  }
+
+  for (const filter of filters) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "menu-filter-chip" + (filter.key === activeDishFilter ? " is-active" : "");
+    button.textContent = filter.label;
+    button.setAttribute("aria-pressed", String(filter.key === activeDishFilter));
+    button.addEventListener("click", () => {
+      activeDishFilter = filter.key;
+      renderDishFilters();
+      renderDishBrowser();
+    });
+    host.appendChild(button);
+  }
+}
+
+function setMenuSaveStatus(message) {
+  showText("menuSaveStatus", message || "Menyn uppdaterad.");
+}
+
+function updateMenuDocumentTitle() {
+  const title = document.getElementById("menuDocumentTitle");
+  if (!title) {
+    return;
+  }
+  title.textContent = activeMenuId ? (activeMenuTitle || "Namnlös meny") : "Bygg meny";
+}
+
 function setActiveMenu(menu) {
   activeMenuId = String((menu && menu.menu_id) || "");
   activeMenuTitle = String((menu && menu.title) || "");
@@ -130,6 +251,7 @@ function setActiveMenu(menu) {
   const saveStatus = document.getElementById("menuSaveStatus");
   const viewPrintBtn = document.getElementById("btnViewPrintActive");
   const startWrap = document.getElementById("menuStartWrap");
+  updateMenuDocumentTitle();
 
   if (viewPrintBtn) {
     viewPrintBtn.disabled = !activeMenuId;
@@ -147,13 +269,13 @@ function setActiveMenu(menu) {
   }
   if (!activeMenuId) {
     if (saveStatus) {
-      saveStatus.textContent = "Skapa eller öppna en meny för att börja spara ändringar.";
+      saveStatus.textContent = "Öppna en meny för att fortsätta.";
     }
-    meta.textContent = "Skapa en meny eller öppna en befintlig för att börja.";
+    meta.textContent = "Öppna en meny för att fortsätta.";
     return;
   }
   if (saveStatus) {
-    saveStatus.textContent = "Sparas automatiskt medan du bygger.";
+    saveStatus.textContent = "Menyn uppdaterad.";
   }
   meta.textContent = "Aktiv meny: " + (activeMenuTitle || "Namnlös meny");
 }
@@ -337,7 +459,7 @@ function renderSections() {
   if (sections.length === 0) {
     const empty = document.createElement("div");
     empty.className = "menu-empty";
-    empty.textContent = "Inga sektioner ännu. Lägg till en sektion för att börja.";
+    empty.textContent = "Lägg till en sektion för att börja bygga menyn.";
     host.appendChild(empty);
     return;
   }
@@ -358,6 +480,7 @@ function renderSections() {
 
     const addDishBtn = document.createElement("button");
     addDishBtn.type = "button";
+    addDishBtn.className = "menu-section-action-btn";
     addDishBtn.textContent = "Lägg till rätt";
     addDishBtn.addEventListener("click", () => {
       openDishPicker(section.name, nextEmptySlotIndex(section));
@@ -365,6 +488,7 @@ function renderSections() {
 
     const renameBtn = document.createElement("button");
     renameBtn.type = "button";
+    renameBtn.className = "menu-section-action-btn";
     renameBtn.textContent = "Byt namn";
     renameBtn.addEventListener("click", async () => {
       await renameSection(section.name);
@@ -372,6 +496,7 @@ function renderSections() {
 
     const removeBtn = document.createElement("button");
     removeBtn.type = "button";
+    removeBtn.className = "menu-section-action-btn";
     removeBtn.textContent = "Ta bort";
     removeBtn.addEventListener("click", async () => {
       await removeSection(section.name);
@@ -414,6 +539,7 @@ function renderSections() {
       removeDishBtn.textContent = "×";
       removeDishBtn.setAttribute("aria-label", "Ta bort rätt");
       removeDishBtn.title = "Ta bort rätt";
+      removeDishBtn.className = "menu-row-remove-btn menu-dish-remove";
       removeDishBtn.addEventListener("click", async () => {
         await removeDish(slot.row.menu_detail_id);
       });
@@ -452,14 +578,105 @@ function closeModal(id) {
 
 function filterDishes(query) {
   const q = normalizeLower(query);
-  if (!q) {
-    return allDishes;
-  }
+  const filterKey = normalizeLower(activeDishFilter) || "all";
   return allDishes.filter((item) => {
-    const id = normalizeLower(item.composition_id);
-    const name = normalizeLower(item.composition_name);
-    return id.includes(q) || name.includes(q);
+    if (!dishMatchesFilter(item, filterKey)) {
+      return false;
+    }
+    if (!q) {
+      return true;
+    }
+    return dishSearchText(item).includes(q);
   });
+}
+
+function renderDishList(host, query, options) {
+  if (!host) {
+    return;
+  }
+
+  const allowAttach = Boolean(options && options.allowAttach);
+  host.innerHTML = "";
+  const filtered = filterDishes(query);
+  if (filtered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "menu-empty";
+    empty.textContent = "Inga rätter matchar filtret.";
+    host.appendChild(empty);
+    return;
+  }
+
+  for (const dish of filtered) {
+    const pill = document.createElement("button");
+    pill.className = allowAttach ? "menu-dish-picker-pill menu-dish-picker-pill--picker" : "menu-dish-picker-pill menu-browser-pill";
+    pill.type = "button";
+    const fullName = String(dish.composition_name || dish.composition_id || "");
+    pill.title = fullName;
+    if (allowAttach) {
+      pill.addEventListener("click", async () => {
+        await attachDishToSection(String(dish.composition_id || ""));
+      });
+    } else {
+      pill.addEventListener("click", async () => {
+        if (!pickerOpenSection) {
+          showText("menuSectionsOut", "Välj Lägg till rätt i en sektion först.");
+          return;
+        }
+        await attachDishToSection(String(dish.composition_id || ""));
+      });
+    }
+
+    const main = document.createElement("div");
+    main.className = "menu-dish-picker-pill-main";
+
+    const name = document.createElement("div");
+    name.className = "menu-dish-picker-name";
+    name.textContent = fullName;
+    name.title = fullName;
+
+    main.appendChild(name);
+
+    const metaItems = dishMetadataItems(dish);
+    if (metaItems.length > 0) {
+      const chips = document.createElement("div");
+      chips.className = "menu-dish-card-chips";
+      for (const item of metaItems) {
+        const chip = document.createElement("span");
+        chip.className = "menu-dish-chip";
+        chip.textContent = item;
+        chips.appendChild(chip);
+      }
+      main.appendChild(chips);
+    }
+
+    if (allowAttach) {
+      const category = document.createElement("span");
+      category.className = "menu-dish-picker-category";
+      category.textContent = String(dish.library_group || "");
+      if (!category.textContent) {
+        category.hidden = true;
+      }
+
+      pill.appendChild(main);
+      pill.appendChild(category);
+    } else {
+      pill.appendChild(main);
+    }
+
+    host.appendChild(pill);
+  }
+}
+
+function renderDishBrowser() {
+  const host = document.getElementById("dishBrowserList");
+  const search = document.getElementById("dishBrowserSearch");
+  if (!host) {
+    return;
+  }
+
+  renderDishFilters();
+  const query = search ? String(search.value || "") : "";
+  renderDishList(host, query, { allowAttach: false });
 }
 
 function renderDishPicker() {
@@ -469,35 +686,8 @@ function renderDishPicker() {
     return;
   }
 
-  host.innerHTML = "";
   const query = search ? String(search.value || "") : "";
-  const filtered = filterDishes(query);
-  if (filtered.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "menu-empty";
-    empty.textContent = "No dishes found.";
-    host.appendChild(empty);
-    return;
-  }
-
-  for (const dish of filtered) {
-    const row = document.createElement("div");
-    row.className = "menu-picker-item";
-
-    const name = document.createElement("div");
-    name.textContent = String(dish.composition_name || dish.composition_id || "");
-
-    const addBtn = document.createElement("button");
-    addBtn.type = "button";
-    addBtn.textContent = "Lägg till";
-    addBtn.addEventListener("click", async () => {
-      await attachDishToSection(String(dish.composition_id || ""));
-    });
-
-    row.appendChild(name);
-    row.appendChild(addBtn);
-    host.appendChild(row);
-  }
+  renderDishList(host, query, { allowAttach: true });
 }
 
 function openDishPicker(sectionName, slotIndex) {
@@ -586,7 +776,7 @@ async function attachDishToSection(compositionId) {
 
   const compositionIdValue = normalize(compositionId);
   if (!compositionIdValue) {
-    showText("dishPickerOut", "Choose a dish first.");
+    showText("dishPickerOut", "Välj en rätt först.");
     return;
   }
 
@@ -608,7 +798,7 @@ async function attachDishToSection(compositionId) {
   }
 
   showText("dishPickerOut", result.mode === "updated" ? "Rätt uppdaterad." : "Rätt tillagd.");
-  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
+  setMenuSaveStatus("Menyn uppdaterad.");
   await refreshRows();
   closeModal("dishPickerModal");
 }
@@ -637,7 +827,7 @@ async function removeDish(menuDetailId, options) {
   if (!config.quiet) {
     showText("menuSectionsOut", "Rätt borttagen.");
   }
-  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
+  setMenuSaveStatus("Menyn uppdaterad.");
   if (!config.skipRefresh) {
     await refreshRows();
   }
@@ -690,7 +880,7 @@ async function renameSection(oldName) {
     sectionDrafts[draftIndex].name = nextValue;
   }
   showText("menuSectionsOut", "Sektionens namn uppdaterat.");
-  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
+  setMenuSaveStatus("Menyn uppdaterad.");
   await refreshRows();
 }
 
@@ -725,7 +915,7 @@ async function removeSection(sectionName) {
 
   sectionDrafts = sectionDrafts.filter((item) => normalizeLower(item.name) !== normalizeLower(sectionValue));
   showText("menuSectionsOut", "Sektion borttagen.");
-  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
+  setMenuSaveStatus("Menyn uppdaterad.");
   await refreshRows();
 }
 
@@ -791,7 +981,7 @@ async function removeSlot(sectionName, slotIndex) {
   }
 
   showText("menuSectionsOut", "Plats borttagen.");
-  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
+  setMenuSaveStatus("Menyn uppdaterad.");
 }
 
 async function addFreeTextDish(sectionName, slotIndex) {
@@ -818,6 +1008,7 @@ async function refreshRows() {
   currentRows = Array.isArray(result.data.rows) ? result.data.rows : [];
   syncDraftsWithRows(currentRows);
   renderSections();
+  setMenuSaveStatus("Menyn uppdaterad.");
 }
 
 async function loadDishes() {
@@ -825,6 +1016,7 @@ async function loadDishes() {
   allDishes = result && result.data && Array.isArray(result.data.compositions)
     ? result.data.compositions
     : [];
+  renderDishFilters();
 }
 
 function renderMenuLibrary(menus) {
@@ -845,19 +1037,21 @@ function renderMenuLibrary(menus) {
 
   for (const menu of items) {
     const row = document.createElement("div");
-    row.className = "menu-library-item";
+    const isActive = String(menu.menu_id || "") === activeMenuId;
+    row.className = "menu-library-item" + (isActive ? " is-active" : "");
 
     const left = document.createElement("div");
     const name = document.createElement("div");
     name.textContent = String(menu.title || menu.menu_id || "");
     const meta = document.createElement("div");
     meta.className = "menu-library-item-meta";
-    meta.textContent = "Klar att öppna";
+    meta.textContent = isActive ? "Aktiv meny" : "Öppna för att fortsätta";
     left.appendChild(name);
     left.appendChild(meta);
 
     const openBtn = document.createElement("button");
     openBtn.type = "button";
+    openBtn.className = "menu-library-action-btn";
     openBtn.textContent = "Öppna";
     openBtn.addEventListener("click", async () => {
       setActiveMenu(menu);
@@ -867,6 +1061,7 @@ function renderMenuLibrary(menus) {
 
     const outputBtn = document.createElement("button");
     outputBtn.type = "button";
+    outputBtn.className = "menu-library-action-btn";
     outputBtn.textContent = "Visa / skriv ut";
     outputBtn.addEventListener("click", () => {
       const id = String(menu.menu_id || "");
@@ -895,7 +1090,7 @@ async function refreshMenuLibrary() {
     return;
   }
   renderMenuLibrary(result.data.menus);
-  showText("menuLibraryOut", "Menyer uppdaterade.");
+  showText("menuLibraryOut", "Menybibliotek uppdaterat.");
 }
 
 function selectedStartMode() {
@@ -943,7 +1138,7 @@ async function createMenu() {
   setActiveMenu(result.data.menu || {});
   sectionDrafts = [];
   showText("createMenuOut", "Meny skapad.");
-  showText("menuSaveStatus", "Sparas automatiskt medan du bygger.");
+  setMenuSaveStatus("Menyn uppdaterad.");
 
   showText("menuSectionsOut", "Lägg till en sektion för att börja bygga menyn.");
 
@@ -1019,6 +1214,7 @@ function bindHandlers() {
   const btnRefreshMenuLibrary = document.getElementById("btnRefreshMenuLibrary");
   const btnViewPrintActive = document.getElementById("btnViewPrintActive");
   const dishPickerClose = document.getElementById("dishPickerClose");
+  const dishBrowserSearch = document.getElementById("dishBrowserSearch");
   const dishPickerSearch = document.getElementById("dishPickerSearch");
 
   if (btnNewMenu) {
@@ -1028,7 +1224,7 @@ function bindHandlers() {
       sectionDrafts = [];
       showText("menuTemplateOut", "");
       renderSections();
-      showText("createMenuOut", "Ange menynamn och skapa en ny meny.");
+      showText("createMenuOut", "Skriv ett namn för en ny meny.");
     });
   }
 
@@ -1053,6 +1249,12 @@ function bindHandlers() {
   if (btnRefreshMenuLibrary) {
     btnRefreshMenuLibrary.addEventListener("click", async () => {
       await refreshMenuLibrary();
+    });
+  }
+
+  if (dishBrowserSearch) {
+    dishBrowserSearch.addEventListener("input", () => {
+      renderDishBrowser();
     });
   }
 
@@ -1092,6 +1294,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindHandlers();
   setActiveMenu({ menu_id: "", title: "" });
   await loadDishes();
+  renderDishBrowser();
   await refreshMenuLibrary();
   renderSections();
 });

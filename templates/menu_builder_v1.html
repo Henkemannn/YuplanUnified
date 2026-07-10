@@ -5,362 +5,78 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Menu Builder v1</title>
   <link rel="stylesheet" href="/static/css/builder.css">
-  <style>
-    :root {
-      --menu-ink: #203243;
-      --menu-muted: #5a6d7d;
-      --menu-border: #d9e4ec;
-      --menu-surface: #ffffff;
-      --menu-surface-alt: #f7fafc;
-      --menu-accent: #2f5872;
-      --menu-accent-soft: #eaf2f7;
-    }
-    body {
-      font-family: Georgia, "Times New Roman", serif;
-      margin: 0;
-      padding: 20px;
-      background:
-        radial-gradient(circle at top left, rgba(255,255,255,0.95) 0, rgba(255,255,255,0) 28%),
-        linear-gradient(180deg, #f8f4ee 0%, #eef4f7 100%);
-      color: var(--menu-ink);
-    }
-    .menu-shell {
-      display: grid;
-      gap: 16px;
-      max-width: 1180px;
-      margin: 0 auto;
-    }
-    .menu-card {
-      border: 1px solid var(--menu-border);
-      border-radius: 16px;
-      background: var(--menu-surface);
-      padding: 16px;
-      box-shadow: 0 10px 24px rgba(35, 56, 74, 0.07);
-    }
-    .menu-card.is-compact {
-      padding: 12px 14px;
-    }
-    .menu-topbar {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .menu-topbar h1,
-    .menu-card h2,
-    .menu-card h3 {
-      margin: 0;
-    }
-    .menu-topbar h1 {
-      font-size: clamp(30px, 4vw, 42px);
-      letter-spacing: 0.2px;
-    }
-    .menu-topbar .menu-meta {
-      max-width: 760px;
-      font-size: 14px;
-      line-height: 1.45;
-      color: var(--menu-muted);
-    }
-    .menu-active-line {
-      margin-top: 6px;
-      font-size: 13px;
-      color: var(--menu-accent);
-      font-weight: 600;
-    }
-    .menu-inline {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .menu-inline button,
-    .menu-inline input,
-    .menu-inline select {
-      width: auto;
-      margin: 0;
-    }
-    .menu-inline input {
-      min-width: 220px;
-    }
-    .menu-top-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .menu-top-actions button,
-    .menu-inline button,
-    .menu-library-item button,
-    .menu-picker-item button,
-    .menu-dish-row button {
-      width: auto;
-      margin: 0;
-      border-radius: 999px;
-      border: 1px solid var(--menu-border);
-      background: #fff;
-      color: var(--menu-ink);
-      padding: 9px 14px;
-      box-shadow: 0 1px 0 rgba(255,255,255,0.65) inset;
-    }
-    .menu-top-actions button,
-    .menu-inline button {
-      background: var(--menu-accent-soft);
-      color: var(--menu-accent);
-      border-color: #cad9e4;
-      font-weight: 600;
-    }
-    .menu-meta {
-      margin-top: 8px;
-      font-size: 12px;
-      color: var(--menu-muted);
-    }
-    .menu-start-grid {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      margin-top: 10px;
-    }
-    .menu-start-wrap.hidden {
-      display: none;
-    }
-    .menu-start-block {
-      border: 1px solid var(--menu-border);
-      border-radius: 12px;
-      background: var(--menu-surface-alt);
-      padding: 12px;
-      display: grid;
-      gap: 10px;
-    }
-    .menu-start-block h3 {
-      margin: 0;
-      font-size: 16px;
-      color: var(--menu-ink);
-    }
-    .menu-stack {
-      display: grid;
-      gap: 8px;
-    }
-    .menu-stack label {
-      display: grid;
-      gap: 4px;
-      font-size: 12px;
-      color: var(--menu-muted);
-    }
-    .menu-stack input,
-    .menu-stack select {
-      width: 100%;
-      margin: 0;
-    }
-    .menu-sections {
-      display: grid;
-      gap: 12px;
-      margin-top: 10px;
-    }
-    .menu-section {
-      border: 1px solid var(--menu-border);
-      border-radius: 12px;
-      background: var(--menu-surface-alt);
-      padding: 14px;
-      box-shadow: 0 4px 14px rgba(35, 56, 74, 0.05);
-    }
-    .menu-section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-bottom: 8px;
-    }
-    .menu-section-name {
-      font-size: 17px;
-      font-weight: 600;
-      margin: 0;
-      color: var(--menu-ink);
-    }
-    .menu-section-actions {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .menu-section-actions button {
-      padding: 8px 12px;
-    }
-    .menu-dish-list {
-      display: grid;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    .menu-dish-row {
-      border: 1px solid #dde6ee;
-      border-radius: 12px;
-      background: #fff;
-      padding: 8px 10px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .menu-dish-row button {
-      padding: 4px 8px;
-      min-width: 28px;
-      line-height: 1;
-      font-size: 14px;
-    }
-    .menu-dish-label {
-      font-weight: 600;
-      color: var(--menu-ink);
-    }
-    .menu-dish-meta {
-      font-size: 12px;
-      color: var(--menu-muted);
-      margin-top: 3px;
-    }
-    .menu-empty {
-      border: 1px dashed #cad7e3;
-      border-radius: 10px;
-      background: #f7fbff;
-      color: #536778;
-      padding: 10px;
-      font-size: 13px;
-    }
-    .menu-library-list {
-      display: grid;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    .menu-library-item {
-      border: 1px solid var(--menu-border);
-      border-radius: 10px;
-      background: #fff;
-      padding: 10px 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .menu-library-item-meta {
-      font-size: 12px;
-      color: var(--menu-muted);
-      margin-top: 3px;
-    }
-    .menu-picker-list {
-      display: grid;
-      gap: 8px;
-      margin-top: 10px;
-      max-height: 340px;
-      overflow-y: auto;
-    }
-    .menu-picker-item {
-      border: 1px solid var(--menu-border);
-      border-radius: 10px;
-      background: #fff;
-      padding: 10px 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .menu-feedback {
-      margin-top: 10px;
-      border: 1px solid #dde5ed;
-      border-radius: 10px;
-      background: #f6f8fb;
-      color: #475868;
-      font-size: 12px;
-      white-space: pre-wrap;
-      padding: 8px 10px;
-    }
-    .menu-feedback:empty {
-      display: none;
-    }
-    .hidden {
-      display: none;
-    }
-    .menu-template-grid {
-      display: grid;
-      gap: 8px;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      margin-top: 8px;
-    }
-    .menu-template-grid label {
-      display: grid;
-      gap: 4px;
-      font-size: 12px;
-      color: #4f6273;
-    }
-    .menu-template-grid input,
-    .menu-template-grid select {
-      width: 100%;
-      margin: 0;
-    }
-    .menu-template-wrap.hidden {
-      display: none;
-    }
-    .menu-top-actions button:hover,
-    .menu-inline button:hover,
-    .menu-library-item button:hover,
-    .menu-picker-item button:hover,
-    .menu-dish-row button:hover {
-      transform: translateY(-1px);
-    }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/menu_builder_v1.css') }}">
 </head>
 <body>
-  <div class="menu-shell">
-    <section class="menu-card menu-topbar">
-      <div>
-        <h1>Bygg meny</h1>
-        <p class="menu-meta">Skapa en enkel meny av befintliga rätter och kopiera texten till valfritt program.</p>
-        <p id="activeMenuMeta" class="menu-active-line">Aktiv meny: ingen vald ännu.</p>
+  <div class="menu-composer-shell menu-composer-grid">
+    <aside class="menu-dish-panel">
+      <div class="menu-panel-header">
+        <h2>Rätter</h2>
+        <p class="menu-panel-hint">Sök och välj befintliga rätter till menyn.</p>
       </div>
-      <div class="menu-top-actions">
-        <button id="btnNewMenu" type="button">Ny meny</button>
-        <button id="btnOpenMenuPanel" type="button">Öppna meny</button>
-        <button id="btnViewPrintActive" type="button" disabled>Visa / skriv ut</button>
+      <div class="menu-browser-search">
+        <label for="dishBrowserSearch">Sök rätt, tagg eller kategori…</label>
+        <input id="dishBrowserSearch" type="search" placeholder="Sök rätt, tagg eller kategori…">
       </div>
-    </section>
+      <div id="dishBrowserFilters" class="menu-browser-filters"></div>
+      <div id="dishBrowserList" class="menu-dish-list"></div>
+    </aside>
 
-    <section id="menuStartWrap" class="menu-card is-compact menu-start-wrap">
-      <h2>Skapa eller öppna meny</h2>
-      <div class="menu-start-grid">
-        <div class="menu-start-block">
-          <h3>Ny meny</h3>
-          <div class="menu-stack">
-            <label>Menynamn
+    <main class="menu-canvas-panel">
+      <section class="menu-card menu-topbar">
+        <div class="menu-topbar-copy">
+          <a href="/builder-workspace-v1" class="menu-back-link">← Till Builder</a>
+          <p class="menu-document-kicker">Meny</p>
+          <h1 id="menuDocumentTitle">Bygg meny</h1>
+          <p class="menu-meta">Bygg en meny av befintliga rätter och fortsätt där du slutade.</p>
+          <p id="activeMenuMeta" class="menu-active-line">Öppna en meny för att fortsätta.</p>
+        </div>
+        <div class="menu-top-actions menu-action-row">
+          <button id="btnNewMenu" class="menu-top-action-btn" type="button">Ny meny</button>
+          <button id="btnOpenMenuPanel" class="menu-top-action-btn" type="button">Öppna meny</button>
+          <button id="btnViewPrintActive" class="menu-top-action-btn" type="button" disabled>Visa / skriv ut</button>
+        </div>
+      </section>
+
+      <section id="menuStartWrap" class="menu-card is-compact menu-start-wrap">
+        <div class="menu-start-grid">
+          <div class="menu-start-block">
+            <h3>Ny meny</h3>
+            <label class="menu-stack">Menynamn
               <input id="menuTitle" type="text" placeholder="Vårmeny">
             </label>
+            <button id="btnCreateMenu" class="menu-inline-action-btn" type="button">Skapa meny</button>
+            <div id="createMenuOut" class="menu-feedback" aria-live="polite"></div>
           </div>
 
-          <div class="menu-inline">
-            <button id="btnCreateMenu" type="button">Skapa meny</button>
+          <div class="menu-start-block">
+            <h3>Menybibliotek</h3>
+            <div id="menuLibraryList" class="menu-library-list"></div>
+            <div id="menuLibraryOut" class="menu-feedback" aria-live="polite"></div>
           </div>
-          <div id="createMenuOut" class="menu-feedback" aria-live="polite"></div>
         </div>
+      </section>
 
-        <div class="menu-start-block">
-          <h3>Öppna befintlig meny</h3>
-          <div class="menu-inline"></div>
-          <div id="menuLibraryList" class="menu-library-list"></div>
-          <div id="menuLibraryOut" class="menu-feedback" aria-live="polite"></div>
+      <section class="menu-document">
+        <div class="menu-document-header">
+          <div>
+            <p class="menu-document-kicker">Meny</p>
+            <h2 class="menu-document-title">Dokument</h2>
+            <p id="menuSaveStatus" class="menu-document-status">Öppna en meny för att fortsätta.</p>
+          </div>
+          <div class="menu-document-controls">
+            <label class="menu-document-section-input">Ny sektion
+              <input id="newSectionName" type="text" placeholder="Ny sektion, t.ex. Förrätt, Varmrätt, Måndag lunch">
+            </label>
+            <button id="btnAddSection" class="menu-inline-action-btn" type="button">Lägg till</button>
+          </div>
         </div>
-      </div>
-    </section>
-
-    <section class="menu-card">
-      <div class="menu-topbar">
-        <div>
-          <h2>Menysektioner</h2>
-          <p id="menuSaveStatus" class="menu-meta">Ändringar sparas automatiskt medan du bygger.</p>
+        <div class="menu-document-body">
+          <div id="menuSections" class="menu-sections"></div>
+          <div id="menuSectionsOut" class="menu-feedback" aria-live="polite"></div>
         </div>
-        <div class="menu-inline">
-          <input id="newSectionName" type="text" placeholder="Ny sektion, t.ex. Förrätt, Varmrätt, Måndag lunch">
-          <button id="btnAddSection" type="button">Lägg till</button>
-        </div>
-      </div>
-      <div id="menuSections" class="menu-sections"></div>
-      <div id="menuSectionsOut" class="menu-feedback" aria-live="polite"></div>
-    </section>
+      </section>
+    </main>
   </div>
 
   <div id="dishPickerModal" class="modal hidden">
