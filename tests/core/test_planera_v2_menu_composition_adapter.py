@@ -74,6 +74,42 @@ def test_adapter_resolves_menu_row_to_composition_components_and_roles() -> None
     assert [item["role"] for item in composition["components"]] == ["main", "sauce"]
 
 
+def test_adapter_keeps_resolved_row_identity_when_composition_name_changes() -> None:
+    menu_service, composition_service, composition_repository = _build_services()
+
+    composition_service.create_composition(composition_id="plate_1", composition_name="Fish Plate")
+    menu = menu_service.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    menu_service.add_menu_detail(
+        menu_detail_id="menu_1-row-1",
+        menu_id="menu_1",
+        day="monday",
+        meal_slot="lunch",
+        composition_ref_type="composition",
+        composition_id="plate_1",
+        sort_order=10,
+    )
+
+    composition_service.update_composition_metadata(
+        "plate_1",
+        composition_name="Fish Plate Updated",
+    )
+
+    payload = build_menu_composition_payload(
+        menu=menu,
+        menu_details=menu_service.list_menu_details("menu_1"),
+        composition_repository=composition_repository,
+    )
+
+    row = payload["rows"][0]
+    assert row["menu_detail"]["day"] == "monday"
+    assert row["menu_detail"]["meal_slot"] == "lunch"
+    assert row["menu_detail"]["sort_order"] == 10
+    assert row["resolution"]["kind"] == "composition"
+    composition = row["resolution"]["composition"]
+    assert composition["composition_id"] == "plate_1"
+    assert composition["composition_name"] == "Fish Plate Updated"
+
+
 def test_adapter_handles_unresolved_row_explicitly_and_safely() -> None:
     menu_service, _, composition_repository = _build_services()
 
@@ -98,6 +134,53 @@ def test_adapter_handles_unresolved_row_explicitly_and_safely() -> None:
     assert row["resolution"]["kind"] == "unresolved"
     assert row["resolution"]["composition"] is None
     assert row["resolution"]["unresolved_text"] == "Unknown dish"
+
+
+def test_grouped_adapter_keeps_resolved_and_unresolved_rows_visible_in_same_menu() -> None:
+    menu_service, composition_service, composition_repository = _build_services()
+
+    composition_service.create_composition(composition_id="plate_1", composition_name="Fish Plate")
+    menu = menu_service.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+    menu_service.add_menu_detail(
+        menu_detail_id="menu_1-row-1",
+        menu_id="menu_1",
+        day="monday",
+        meal_slot="lunch",
+        composition_ref_type="composition",
+        composition_id="plate_1",
+        sort_order=10,
+    )
+    menu_service.add_menu_detail(
+        menu_detail_id="menu_1-row-2",
+        menu_id="menu_1",
+        day="tuesday",
+        meal_slot="dinner",
+        composition_ref_type="unresolved",
+        unresolved_text="Stekt fisk med kall sås och potatis",
+        sort_order=20,
+    )
+
+    payload = build_menu_composition_grouped_payload(
+        menu=menu,
+        menu_details=menu_service.list_menu_details("menu_1"),
+        composition_repository=composition_repository,
+    )
+
+    assert payload["count"] == 2
+    assert [(day["day"], [meal["meal_slot"] for meal in day["meals"]]) for day in payload["days"]] == [
+        ("monday", ["lunch"]),
+        ("tuesday", ["dinner"]),
+    ]
+
+    monday_row = payload["days"][0]["meals"][0]["rows"][0]
+    tuesday_row = payload["days"][1]["meals"][0]["rows"][0]
+    assert monday_row["resolution"]["kind"] == "composition"
+    assert monday_row["resolution"]["composition"]["composition_id"] == "plate_1"
+    assert monday_row["resolution"]["composition"]["composition_name"] == "Fish Plate"
+    assert tuesday_row["resolution"]["kind"] == "unresolved"
+    assert tuesday_row["resolution"]["unresolved_text"] == "Stekt fisk med kall sås och potatis"
+    assert monday_row["menu_detail"]["sort_order"] == 10
+    assert tuesday_row["menu_detail"]["sort_order"] == 20
 
 
 def test_adapter_readiness_counts_resolved_unresolved_and_roles() -> None:

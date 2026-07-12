@@ -107,6 +107,19 @@ def test_disable_and_enable_cycle():
     assert reg.enabled("menus")
 
 
+def test_future_commun_flags_default_to_disabled_when_unseeded():
+    reg = FeatureRegistry(seed=())
+    for name in [
+        "commun.builder.linkage_v0",
+        "commun.builder.projection_shadow_v0",
+        "commun.builder.canonical_import_v0",
+        "commun.builder.reader_v0",
+        "commun.builder.publication_v0",
+    ]:
+        assert reg.has(name) is False
+        assert reg.enabled(name) is False
+
+
 def test_list_sorted_and_modes_preserved():
     reg = FeatureRegistry(seed=())
     reg.add({"name": "b_flag", "mode": "simple"})

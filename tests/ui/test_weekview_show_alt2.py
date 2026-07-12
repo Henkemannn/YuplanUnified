@@ -27,9 +27,11 @@ def test_weekview_shows_alt2_lunch_highlight(client_admin):
     from core.db import create_all, get_session
     from sqlalchemy import text
     from core.admin_repo import SitesRepo, DepartmentsRepo
+    from core.weekview.repo import WeekviewRepo
 
     with app.app_context():
         create_all()
+        WeekviewRepo()._ensure_schema()
         # Use repos to ensure proper tenant/site linkage
         srepo = SitesRepo()
         site, _ = srepo.create_site("Alt2 Demo Site")

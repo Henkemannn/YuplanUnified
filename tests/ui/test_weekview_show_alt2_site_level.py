@@ -32,9 +32,11 @@ def test_site_level_weekview_shows_alt2_on_lunch_cell(client_admin):
     from core.db import create_all, get_session
     from sqlalchemy import text
     from core.admin_repo import SitesRepo, DepartmentsRepo, DietTypesRepo
+    from core.weekview.repo import WeekviewRepo
 
     with app.app_context():
         create_all()
+        WeekviewRepo()._ensure_schema()
         # Create site and a department with fixed resident counts
         srepo = SitesRepo()
         site, _ = srepo.create_site("Alt2 Site-Level Demo")
