@@ -107,17 +107,14 @@ def test_disable_and_enable_cycle():
     assert reg.enabled("menus")
 
 
-def test_future_commun_flags_default_to_disabled_when_unseeded():
-    reg = FeatureRegistry(seed=())
-    for name in [
-        "commun.builder.linkage_v0",
-        "commun.builder.projection_shadow_v0",
-        "commun.builder.canonical_import_v0",
-        "commun.builder.reader_v0",
-        "commun.builder.publication_v0",
-    ]:
-        assert reg.has(name) is False
-        assert reg.enabled(name) is False
+def test_commun_builder_linkage_flag_is_registered_and_off(client_admin):
+    reg = client_admin.application.feature_registry
+    assert reg.has("commun.builder.linkage_v0") is True
+    assert reg.enabled("commun.builder.linkage_v0") is False
+    reg.set("commun.builder.linkage_v0", True)
+    assert reg.enabled("commun.builder.linkage_v0") is True
+    reg.set("commun.builder.linkage_v0", False)
+    assert reg.enabled("commun.builder.linkage_v0") is False
 
 
 def test_list_sorted_and_modes_preserved():

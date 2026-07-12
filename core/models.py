@@ -1,18 +1,21 @@
 """SQLAlchemy model skeletons (no relationships wired yet)"""
 
 from datetime import UTC, date, datetime
+import uuid
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
-    String,
     Text,
+    String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from typing import Optional
@@ -111,6 +114,43 @@ class Menu(Base):
     year: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), default="draft")
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+
+def _new_link_id() -> str:
+    return str(uuid.uuid4())
+
+
+class CommunBuilderMenuLink(Base):
+    __tablename__ = "commun_builder_menu_links"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_new_link_id)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    legacy_menu_id: Mapped[int | None] = mapped_column(
+        ForeignKey("menus.id", ondelete="SET NULL"), nullable=True
+    )
+    builder_menu_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    builder_menu_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(24), nullable=False)
+    projection_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "site_id", "year", "week", name="uq_commun_builder_menu_links_tenant_site_year_week"),
+        CheckConstraint("year > 0", name="ck_commun_builder_menu_links_year_positive"),
+        CheckConstraint("week BETWEEN 1 AND 53", name="ck_commun_builder_menu_links_week_range"),
+        CheckConstraint("length(trim(builder_menu_id)) > 0", name="ck_commun_builder_menu_links_builder_menu_id_not_empty"),
+        CheckConstraint("builder_menu_version > 0", name="ck_commun_builder_menu_links_builder_menu_version_positive"),
+        CheckConstraint("projection_version > 0", name="ck_commun_builder_menu_links_projection_version_positive"),
+        CheckConstraint("lower(source) IN ('manual', 'import', 'migration', 'pilot')", name="ck_commun_builder_menu_links_source_allowed"),
+    )
 
 
 class MenuVariant(Base):
