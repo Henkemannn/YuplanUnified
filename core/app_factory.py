@@ -636,6 +636,12 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         feature_registry.set("commun.builder.linkage_v0", False)
     except Exception:
         pass
+    if not feature_registry.has("commun.builder.projection_shadow_v0"):
+        feature_registry.add("commun.builder.projection_shadow_v0")
+    try:
+        feature_registry.set("commun.builder.projection_shadow_v0", False)
+    except Exception:
+        pass
     # Auto-enable admin module when running under TESTING or simple staging auth flag.
     try:
         if app.config.get("TESTING") or os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
@@ -695,6 +701,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         if override_val is not None:
             return bool(override_val)
         return bool(feature_registry.enabled(name))
+
+    app.feature_enabled = feature_enabled  # type: ignore[attr-defined]
 
     @app.context_processor
     def inject_role_helpers() -> dict[str, Any]:  # pragma: no cover - template helper

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import TypedDict
+from dataclasses import dataclass
+from typing import Any, TypedDict
 
 import os
 
 from sqlalchemy import text
+from flask import current_app, g, has_app_context
 
 from .db import get_new_session
 from .models import Dish, Menu, MenuVariant
@@ -13,6 +15,16 @@ from sqlalchemy.exc import IntegrityError
 
 
 _MISMATCH_LOGGED: set[str] = set()
+
+
+@dataclass(frozen=True)
+class _LegacyWeekViewRow:
+    day: str
+    meal: str
+    variant_type: str
+    dish_id: int | None
+    dish_name: str | None
+    sort_order: int | None = None
 
 
 class _VariantInfo(TypedDict, total=False):
@@ -118,6 +130,81 @@ class MenuServiceDB:
             return ""
         return DAY_KEYS[iso_weekday - 1]
 
+    def _feature_enabled(self, name: str) -> bool:
+        try:
+            if not has_app_context():
+                return False
+            helper = getattr(current_app, "feature_enabled", None)
+            if callable(helper):
+                return bool(helper(name))
+            registry = getattr(current_app, "feature_registry", None)
+            return bool(registry.enabled(name)) if registry else False
+        except Exception:
+            return False
+
+    def _maybe_run_builder_shadow_projection(self, *, tenant_id: int, site_id: str, week: int, year: int, legacy_payload: dict[str, Any]) -> None:
+        if not self._feature_enabled("commun.builder.projection_shadow_v0"):
+            return
+        try:
+            from .commun_builder_projection import get_shadow_projection_reader
+
+            reader = get_shadow_projection_reader()
+            result = reader.compare_with_legacy(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                year=year,
+                week=week,
+                legacy_weekview=legacy_payload,
+            )
+            try:
+                g.commun_builder_projection_shadow = result
+            except Exception:
+                pass
+            try:
+                current_app.logger.info(
+                    {
+                        "event": "commun_builder_projection_shadow",
+                        "tenant_id": tenant_id,
+                        "site_id": site_id,
+                        "year": year,
+                        "week": week,
+                        "builder_menu_id": getattr(result, "builder_menu_id", None),
+                        "linked_version": getattr(result, "linked_version", None),
+                        "current_builder_version": getattr(result, "current_version", None),
+                        "comparison_status": getattr(result, "status", None),
+                        "legacy_row_count": getattr(result, "legacy_row_count", None),
+                        "builder_row_count": getattr(result, "builder_row_count", None),
+                        "difference_count": getattr(result, "difference_count", None),
+                    }
+                )
+            except Exception:
+                pass
+        except Exception as exc:
+            try:
+                current_app.logger.warning(
+                    {
+                        "event": "commun_builder_projection_shadow_error",
+                        "tenant_id": tenant_id,
+                        "site_id": site_id,
+                        "year": year,
+                        "week": week,
+                        "error": str(exc),
+                    }
+                )
+            except Exception:
+                pass
+            try:
+                g.commun_builder_projection_shadow = {
+                    "status": "projection_error",
+                    "error": str(exc),
+                    "tenant_id": tenant_id,
+                    "site_id": site_id,
+                    "year": year,
+                    "week": week,
+                }
+            except Exception:
+                pass
+
     def get_today_menu_for_site(self, tid: int, site_id: str, value: date) -> dict[str, str]:
         try:
             iso = value.isocalendar()
@@ -144,6 +231,7 @@ class MenuServiceDB:
                 return str(val)
 
             def _meal_obj(day: dict, meal_key: str) -> dict:
+            
                 meal = day.get(meal_key) or day.get(meal_key.capitalize()) or {}
                 if isinstance(meal, dict):
                     return meal
@@ -512,7 +600,15 @@ class MenuServiceDB:
                     .first()
                 )
             if not menu:
-                return {"menu_id": None, "menu_status": None, "updated_at": None, "days": {}}  # type: ignore[return-value]
+                payload = {"menu_id": None, "menu_status": None, "updated_at": None, "days": {}}
+                self._maybe_run_builder_shadow_projection(
+                    tenant_id=tenant_id,
+                    site_id=site_id,
+                    week=week,
+                    year=year,
+                    legacy_payload=payload,
+                )
+                return payload  # type: ignore[return-value]
             # Ensure updated_at populated (older seed data may have NULL)
             if menu.updated_at is None:
                 menu.updated_at = datetime.now(timezone.utc)
@@ -530,6 +626,14 @@ class MenuServiceDB:
                     "dish_id": mv.dish_id,
                     "dish_name": dish.name if dish else None,
                 }
-            return {"menu_id": menu.id, "menu_status": menu.status, "updated_at": menu.updated_at, "days": structure}  # type: ignore[return-value]
+            payload = {"menu_id": menu.id, "menu_status": menu.status, "updated_at": menu.updated_at, "days": structure}
+            self._maybe_run_builder_shadow_projection(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                week=week,
+                year=year,
+                legacy_payload=payload,
+            )
+            return payload  # type: ignore[return-value]
         finally:
             db.close()
