@@ -127,6 +127,17 @@ def test_commun_builder_projection_shadow_flag_is_registered_and_off(client_admi
     assert reg.enabled("commun.builder.projection_shadow_v0") is False
 
 
+def test_commun_builder_canonical_import_flag_is_registered_and_off(client_admin):
+    reg = client_admin.application.feature_registry
+    assert reg.has("commun.builder.canonical_import_v0") is True
+    reg.set("commun.builder.canonical_import_v0", False)
+    assert reg.enabled("commun.builder.canonical_import_v0") is False
+    reg.set("commun.builder.canonical_import_v0", True)
+    assert reg.enabled("commun.builder.canonical_import_v0") is True
+    reg.set("commun.builder.canonical_import_v0", False)
+    assert reg.enabled("commun.builder.canonical_import_v0") is False
+
+
 def test_list_sorted_and_modes_preserved():
     reg = FeatureRegistry(seed=())
     reg.add({"name": "b_flag", "mode": "simple"})

@@ -41,6 +41,11 @@ class InMemoryMenuRepository:
             raise ValueError(f"menu not found: {menu.menu_id}")
         self._menus[menu.menu_id] = menu
 
+    def delete(self, menu_id: str) -> None:
+        if menu_id not in self._menus:
+            raise ValueError(f"menu not found: {menu_id}")
+        del self._menus[menu_id]
+
 
 class InMemoryMenuDetailRepository:
     def __init__(self) -> None:

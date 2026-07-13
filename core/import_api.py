@@ -14,6 +14,10 @@ from werkzeug.datastructures import FileStorage
 
 from .api_types import ImportErrorResponse, ImportOkResponse
 from .app_authz import AuthzError, require_roles
+from .commun_builder_import import (
+    CommunBuilderCanonicalImportError,
+    import_menu_result_to_builder_canonical,
+)
 from .importers.csv_importer import parse_csv
 from .importers.validate import ImportValidationError, validate_and_normalize
 from .rate_limit import RateLimitExceeded, allow, rate_limited_response
@@ -277,4 +281,71 @@ def import_menu():  # dynamic Response
         )
     ok_payload = _ok(rows, fmt="menu", dry_run=dry_run)
     ok_payload["diff"] = diff  # type: ignore[index]
+
+    if not dry_run and _commun_builder_canonical_import_enabled():
+        try:
+            canonical_import = _run_commun_builder_canonical_import(result)
+        except CommunBuilderCanonicalImportError as exc:
+            failed_payload = dict(ok_payload)
+            failed_payload["canonical_import"] = {
+                "status": "failed",
+                "reason": str(exc),
+                "recovery_state": dict(getattr(exc, "recovery_state", {}) or {}),
+            }
+            failed_payload["ok"] = False
+            failed_payload["error"] = "canonical_import_failed"
+            failed_payload["message"] = str(exc)
+            return jsonify(failed_payload), 500
+        else:
+            ok_payload["canonical_import"] = canonical_import  # type: ignore[index]
     return jsonify(ok_payload)
+
+
+def _commun_builder_canonical_import_enabled() -> bool:
+    feature_enabled = getattr(current_app, "feature_enabled", None)
+    if callable(feature_enabled):
+        try:
+            return bool(feature_enabled("commun.builder.canonical_import_v0"))
+        except Exception:
+            return False
+    return False
+
+
+def _run_commun_builder_canonical_import(result: Any) -> list[dict[str, Any]] | None:
+    tenant_id = session.get("tenant_id")
+    site_id = str(session.get("site_id") or "").strip()
+    if tenant_id is None or not site_id:
+        return [
+            {
+                "status": "skipped",
+                "reason": "missing tenant/site context",
+            }
+        ]
+
+    try:
+        outcomes = import_menu_result_to_builder_canonical(
+            result,
+            tenant_id=int(tenant_id),
+            site_id=site_id,
+            import_type="menu",
+        )
+    except CommunBuilderCanonicalImportError:
+        raise
+    except Exception as exc:
+        current_app.logger.exception("builder canonical menu import failed")
+        raise CommunBuilderCanonicalImportError(str(exc)) from exc
+
+    return [
+        {
+            "status": outcome.status,
+            "menu_id": outcome.menu_id,
+            "year": outcome.year,
+            "week": outcome.week,
+            "imported_count": outcome.imported_count,
+            "resolved_count": outcome.resolved_count,
+            "unresolved_count": outcome.unresolved_count,
+            "builder_menu_version": outcome.builder_menu_version,
+            "warnings": list(outcome.warnings),
+        }
+        for outcome in outcomes
+    ]

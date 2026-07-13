@@ -52,6 +52,37 @@ class MenuService:
     def list_menus(self) -> list[Menu]:
         return self._menu_repository.list_all()
 
+    def update_menu(
+        self,
+        menu_id: str,
+        *,
+        title: str | None = None,
+        site_id: str | None = None,
+        week_key: str | None = None,
+        version: int | None = None,
+        status: str | None = None,
+    ) -> Menu:
+        current = self.get_menu(menu_id)
+        if current is None:
+            raise ValueError(f"menu not found: {menu_id}")
+
+        updated = Menu(
+            menu_id=current.menu_id,
+            title=current.title if title is None else (str(title).strip() or None),
+            site_id=current.site_id if site_id is None else str(site_id).strip(),
+            week_key=current.week_key if week_key is None else str(week_key).strip(),
+            version=current.version if version is None else int(version),
+            status=current.status if status is None else (str(status).strip() or current.status),
+        )
+        self._menu_repository.update(updated)
+        return updated
+
+    def delete_menu(self, menu_id: str) -> None:
+        details = list(self._menu_detail_repository.list_for_menu(menu_id))
+        for detail in details:
+            self._menu_detail_repository.remove(detail.menu_detail_id)
+        self._menu_repository.delete(menu_id)
+
     def add_menu_detail(
         self,
         menu_detail_id: str,

@@ -109,7 +109,7 @@ def test_projection_reader_explicit_slots_map_directly(app_session):
         builder_flow.add_composition_menu_row(
             menu_id="builder-menu-1",
             day="monday",
-            meal_slot="lunch_alt1",
+            meal_slot="lunch_main",
             composition_id="comp_1",
             sort_order=10,
         )
@@ -123,7 +123,7 @@ def test_projection_reader_explicit_slots_map_directly(app_session):
         builder_flow.add_composition_menu_row(
             menu_id="builder-menu-1",
             day="tuesday",
-            meal_slot="dinner_dessert",
+            meal_slot="dinner_main",
             composition_id="comp_3",
             sort_order=30,
         )
@@ -144,9 +144,9 @@ def test_projection_reader_explicit_slots_map_directly(app_session):
     assert result.projection.builder_menu_id == "builder-menu-1"
     assert result.projection.builder_menu_version == 1
     assert [(row.day, row.meal, row.variant_type) for row in result.projection.rows] == [
-        ("monday", "lunch", "alt1"),
+        ("monday", "lunch", "main"),
         ("monday", "lunch", "alt2"),
-        ("tuesday", "dinner", "dessert"),
+        ("tuesday", "dinner", "main"),
     ]
     assert [row.builder_menu_row_id for row in result.projection.rows] == [
         "builder-menu-1-row-1",

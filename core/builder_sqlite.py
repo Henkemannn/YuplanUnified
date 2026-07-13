@@ -662,6 +662,24 @@ class SQLiteMenuRepository:
             if result.rowcount == 0:
                 raise ValueError(f"menu not found: {menu.menu_id}")
 
+    def delete(self, menu_id: str) -> None:
+        with _connect(self.db_path) as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM builder_menus WHERE menu_id = ?",
+                (menu_id,),
+            ).fetchone()
+            if exists is None:
+                raise ValueError(f"menu not found: {menu_id}")
+
+            conn.execute(
+                "DELETE FROM builder_menu_rows WHERE menu_id = ?",
+                (menu_id,),
+            )
+            conn.execute(
+                "DELETE FROM builder_menus WHERE menu_id = ?",
+                (menu_id,),
+            )
+
 
 @dataclass
 class SQLiteMenuDetailRepository:
