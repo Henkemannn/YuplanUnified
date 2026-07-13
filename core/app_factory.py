@@ -648,6 +648,12 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         feature_registry.set("commun.builder.canonical_import_v0", False)
     except Exception:
         pass
+    if not feature_registry.has("commun.builder.reader_v0"):
+        feature_registry.add("commun.builder.reader_v0")
+    try:
+        feature_registry.set("commun.builder.reader_v0", False)
+    except Exception:
+        pass
     # Auto-enable admin module when running under TESTING or simple staging auth flag.
     try:
         if app.config.get("TESTING") or os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):

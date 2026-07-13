@@ -293,59 +293,50 @@ class CommunBuilderMenuProjectionReader:
     def __init__(self, *, linkage_service: CommunBuilderMenuLinkService | None = None) -> None:
         self._linkage_service = linkage_service or CommunBuilderMenuLinkService()
 
-    def get_projection(
+    def _get_projection_for_menu(
         self,
         *,
         tenant_id: int,
         site_id: str,
         year: int,
         week: int,
+        builder_menu_id: str,
+        builder_menu_version: int,
     ) -> CommunBuilderProjectionOutcome:
-        link = self._linkage_service.get_link_for_week(
-            tenant_id=tenant_id,
-            site_id=site_id,
-            year=year,
-            week=week,
-        )
-        if link is None:
-            return CommunBuilderProjectionOutcome(status="no_link")
-
         flow = _get_builder_menu_context_flow()
         if flow is None:
             return CommunBuilderProjectionOutcome(
                 status="projection_error",
-                builder_menu_id=link.builder_menu_id,
-                linked_version=int(link.builder_menu_version),
+                builder_menu_id=builder_menu_id,
+                linked_version=int(builder_menu_version),
                 error="builder_menu_context_flow_unavailable",
             )
 
         menus = flow.list_menus()
-        menu = next((item for item in menus if str(getattr(item, "menu_id", "")).strip() == link.builder_menu_id), None)
+        menu = next((item for item in menus if str(getattr(item, "menu_id", "")).strip() == builder_menu_id), None)
         if menu is None:
             return CommunBuilderProjectionOutcome(
                 status="projection_error",
-                builder_menu_id=link.builder_menu_id,
-                linked_version=int(link.builder_menu_version),
+                builder_menu_id=builder_menu_id,
+                linked_version=int(builder_menu_version),
                 error="builder_menu_not_found",
             )
 
         current_version = int(getattr(menu, "version", 0) or 0)
-        if current_version != int(link.builder_menu_version):
+        if current_version != int(builder_menu_version):
             return CommunBuilderProjectionOutcome(
                 status="version_mismatch",
-                builder_menu_id=link.builder_menu_id,
-                linked_version=int(link.builder_menu_version),
+                builder_menu_id=builder_menu_id,
+                linked_version=int(builder_menu_version),
                 current_version=current_version,
                 error="version_mismatch",
             )
 
-        rows_raw = flow.list_menu_rows(link.builder_menu_id)
+        rows_raw = flow.list_menu_rows(builder_menu_id)
         rows_out: list[CommunMenuProjectionRow] = []
         composition_repository = getattr(flow, "_composition_repository", None)
         row_errors: list[str] = []
         for row in rows_raw:
-            # Builder day/meal row order is not kommun Alt identity.
-            # Explicit variant metadata is required for safe mapping.
             day = _normalize_day(str(row.get("day") or ""))
             meal_slot_value = str(row.get("meal_slot") or "")
             meal, explicit_variant = _normalize_builder_meal_slot(meal_slot_value)
@@ -379,8 +370,8 @@ class CommunBuilderMenuProjectionReader:
                     meal=meal,
                     variant_type=variant_type,
                     sort_order=int(row.get("sort_order") or 0),
-                    builder_menu_id=link.builder_menu_id,
-                    builder_menu_version=int(link.builder_menu_version),
+                    builder_menu_id=builder_menu_id,
+                    builder_menu_version=int(builder_menu_version),
                     builder_menu_row_id=str(row.get("menu_detail_id") or ""),
                     composition_id=composition_id,
                     resolved=resolved,
@@ -397,18 +388,62 @@ class CommunBuilderMenuProjectionReader:
             site_id=str(site_id),
             year=int(year),
             week=int(week),
-            builder_menu_id=link.builder_menu_id,
-            builder_menu_version=int(link.builder_menu_version),
+            builder_menu_id=builder_menu_id,
+            builder_menu_version=int(builder_menu_version),
             builder_status=str(getattr(menu, "status", "") or "draft").strip() or "draft",
             rows=rows_out,
         )
         return CommunBuilderProjectionOutcome(
             status="projection_error" if row_errors else "ok",
             projection=projection,
-            builder_menu_id=link.builder_menu_id,
-            linked_version=int(link.builder_menu_version),
+            builder_menu_id=builder_menu_id,
+            linked_version=int(builder_menu_version),
             current_version=current_version,
             error=row_errors[0] if row_errors else None,
+        )
+
+    def get_projection_for_pinned_menu(
+        self,
+        *,
+        tenant_id: int,
+        site_id: str,
+        year: int,
+        week: int,
+        builder_menu_id: str,
+        builder_menu_version: int,
+    ) -> CommunBuilderProjectionOutcome:
+        return self._get_projection_for_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id=builder_menu_id,
+            builder_menu_version=builder_menu_version,
+        )
+
+    def get_projection(
+        self,
+        *,
+        tenant_id: int,
+        site_id: str,
+        year: int,
+        week: int,
+    ) -> CommunBuilderProjectionOutcome:
+        link = self._linkage_service.get_link_for_week(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=year,
+            week=week,
+        )
+        if link is None:
+            return CommunBuilderProjectionOutcome(status="no_link")
+        return self._get_projection_for_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id=link.builder_menu_id,
+            builder_menu_version=int(link.builder_menu_version),
         )
 
     def compare_with_legacy(

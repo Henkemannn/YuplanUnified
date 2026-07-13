@@ -153,6 +153,37 @@ class CommunBuilderMenuLink(Base):
     )
 
 
+class CommunBuilderPublicationPin(Base):
+    __tablename__ = "commun_builder_publication_pins"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_new_link_id)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    legacy_menu_id: Mapped[int | None] = mapped_column(
+        ForeignKey("menus.id", ondelete="SET NULL"), nullable=True
+    )
+    builder_menu_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    builder_menu_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "site_id", "year", "week", name="uq_commun_builder_publication_pins_tenant_site_year_week"),
+        CheckConstraint("year > 0", name="ck_commun_builder_publication_pins_year_positive"),
+        CheckConstraint("week BETWEEN 1 AND 53", name="ck_commun_builder_publication_pins_week_range"),
+        CheckConstraint("length(trim(builder_menu_id)) > 0", name="ck_commun_builder_publication_pins_builder_menu_id_not_empty"),
+        CheckConstraint("builder_menu_version > 0", name="ck_commun_builder_publication_pins_builder_menu_version_positive"),
+        CheckConstraint("lower(source) IN ('manual', 'import', 'migration', 'pilot')", name="ck_commun_builder_publication_pins_source_allowed"),
+    )
+
+
 class MenuVariant(Base):
     __tablename__ = "menu_variants"
     id: Mapped[int] = mapped_column(primary_key=True)

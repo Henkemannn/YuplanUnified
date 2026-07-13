@@ -80,6 +80,89 @@ def _format_announcement_display(event_date: _date, event_time: _time | None, me
     return text
 
 
+def _apply_builder_reader_weekview_overview(vm: dict, *, tenant_id: int, site_id: str, year: int, week: int) -> bool:
+    try:
+        from flask import current_app as _current_app
+
+        helper = getattr(_current_app, "feature_enabled", None)
+        enabled = bool(helper("commun.builder.reader_v0")) if callable(helper) else False
+    except Exception:
+        enabled = False
+    if not enabled:
+        return False
+
+    try:
+        from .commun_builder_publication import CommunBuilderPublicationService
+        from .commun_builder_projection import get_shadow_projection_reader
+        from .weekview.service import DAY_KEYS
+
+        publication = CommunBuilderPublicationService().get_publication_for_week(
+            tenant_id=int(tenant_id),
+            site_id=str(site_id),
+            year=int(year),
+            week=int(week),
+        )
+        if publication is None:
+            return False
+
+        reader = get_shadow_projection_reader()
+        outcome = reader.get_projection_for_pinned_menu(
+            tenant_id=int(tenant_id),
+            site_id=str(site_id),
+            year=int(year),
+            week=int(week),
+            builder_menu_id=publication.builder_menu_id,
+            builder_menu_version=publication.builder_menu_version,
+        )
+        if outcome.status != "ok" or outcome.projection is None:
+            return False
+        if any(bool(row.error) for row in outcome.projection.rows):
+            return False
+
+        day_map: dict[str, dict[str, dict[str, str]]] = {}
+        for row in outcome.projection.rows:
+            slot = None
+            if row.variant_type in {"main", "alt1"}:
+                slot = "alt1"
+            elif row.variant_type == "alt2":
+                slot = "alt2"
+            elif row.variant_type == "dessert":
+                slot = "dessert"
+            if slot is None:
+                continue
+            day_map.setdefault(row.day, {}).setdefault(row.meal, {})[slot] = row.text
+
+        for department in vm.get("departments", []) or []:
+            for day in department.get("days", []) or []:
+                day_index = int(day.get("day_of_week") or 0)
+                if day_index < 1 or day_index > 7:
+                    continue
+                day_key = DAY_KEYS[day_index - 1]
+                menu_for_day = day_map.get(day_key)
+                if not menu_for_day:
+                    continue
+                menu_texts = day.setdefault("menu", {})
+                lunch = menu_for_day.get("lunch") or {}
+                dinner = menu_for_day.get("dinner") or {}
+                if lunch:
+                    menu_texts["lunch_alt1"] = lunch.get("alt1")
+                    menu_texts["lunch_alt2"] = lunch.get("alt2")
+                    menu_texts["lunch_dessert"] = lunch.get("dessert")
+                if dinner:
+                    menu_texts["dinner_alt1"] = dinner.get("alt1")
+                    menu_texts["dinner_alt2"] = dinner.get("alt2")
+                day["has_menu_icon"] = bool(
+                    menu_texts.get("lunch_alt1")
+                    or menu_texts.get("lunch_alt2")
+                    or menu_texts.get("lunch_dessert")
+                    or menu_texts.get("dinner_alt1")
+                    or menu_texts.get("dinner_alt2")
+                )
+        return True
+    except Exception:
+        return False
+
+
 def _build_dashboard_announcements(site_id: str | None, *, kitchen_only: bool) -> list[dict]:
     if not site_id:
         return []
@@ -1684,6 +1767,7 @@ def weekview_ui():
         if not site_id:
             return jsonify({"error": "bad_request", "message": "Missing site"}), 400
         vm_all = build_weekview_vm(site_id=site_id, year=year, week=week, tenant_id=tid)
+        _apply_builder_reader_weekview_overview(vm_all, tenant_id=int(tid), site_id=site_id, year=year, week=week)
         vm_all.update(
             {
                 "current_year": current_year,

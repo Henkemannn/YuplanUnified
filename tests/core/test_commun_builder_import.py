@@ -10,6 +10,7 @@ from core.commun_builder_import import (
     build_canonical_menu_id,
     import_menu_result_to_builder_canonical,
 )
+from core.commun_builder_publication import CommunBuilderPublicationService
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.commun_builder_projection import CommunBuilderMenuProjectionReader
 from core.components import (
@@ -316,3 +317,81 @@ def test_canonical_import_end_to_end_projection_roundtrip(app_session, monkeypat
         )
         assert comparison.status == "match"
         assert comparison.difference_count == 0
+
+        publication_service = CommunBuilderPublicationService()
+        publication_service.publish_week(
+            tenant_id=1,
+            site_id="site-a",
+            year=2026,
+            week=21,
+            legacy_menu_id=None,
+        )
+        publication = publication_service.get_publication_for_week(
+            tenant_id=1,
+            site_id="site-a",
+            year=2026,
+            week=21,
+        )
+        assert publication is not None
+        assert publication.builder_menu_version == 1
+
+        updated_result = MenuImportResult(
+            weeks=[
+                WeekImport(
+                    year=2026,
+                    week=21,
+                    items=[
+                        ImportedMenuItem(day="monday", meal="lunch", variant_type="main", dish_name="Fish Plate"),
+                        ImportedMenuItem(day="monday", meal="lunch", variant_type="alt1", dish_name="Unknown Salad"),
+                        ImportedMenuItem(day="tuesday", meal="dinner", variant_type="main", dish_name="Soup Deluxe"),
+                    ],
+                )
+            ]
+        )
+        updated_outcome = import_menu_result_to_builder_canonical(updated_result, tenant_id=1, site_id="site-a")[0]
+        assert updated_outcome.status == "updated"
+        assert updated_outcome.builder_menu_version == 2
+
+        link_after_update = CommunBuilderMenuLinkService().get_link_for_week(
+            tenant_id=1,
+            site_id="site-a",
+            year=2026,
+            week=21,
+        )
+        assert link_after_update is not None
+        assert int(link_after_update.builder_menu_version) == 2
+
+        publication_after_update = publication_service.get_publication_for_week(
+            tenant_id=1,
+            site_id="site-a",
+            year=2026,
+            week=21,
+        )
+        assert publication_after_update is not None
+        assert publication_after_update.builder_menu_version == 1
+
+        pinned_projection = CommunBuilderMenuProjectionReader().get_projection_for_pinned_menu(
+            tenant_id=1,
+            site_id="site-a",
+            year=2026,
+            week=21,
+            builder_menu_id=publication_after_update.builder_menu_id,
+            builder_menu_version=publication_after_update.builder_menu_version,
+        )
+        assert pinned_projection.status == "version_mismatch"
+
+        publication_service.republish_week(
+            tenant_id=1,
+            site_id="site-a",
+            year=2026,
+            week=21,
+            legacy_menu_id=None,
+        )
+        republished = publication_service.get_publication_for_week(
+            tenant_id=1,
+            site_id="site-a",
+            year=2026,
+            week=21,
+        )
+        assert republished is not None
+        assert republished.builder_menu_version == 2

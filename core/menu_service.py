@@ -514,6 +514,22 @@ class MenuServiceDB:
                         )
             if int(menu.tenant_id or 0) != int(tenant_id):
                 raise ValueError("menu_tenant_mismatch")
+            if menu.site_id is not None:
+                from .commun_builder_publication import CommunBuilderPublicationService
+
+                publication_service = CommunBuilderPublicationService()
+                publication_args = dict(
+                    tenant_id=int(menu.tenant_id or tenant_id),
+                    site_id=str(menu.site_id),
+                    year=int(menu.year),
+                    week=int(menu.week),
+                    legacy_menu_id=int(menu.id),
+                    db=db,
+                )
+                if str(menu.status or "").strip().lower() == "published":
+                    publication_service.republish_week(**publication_args)
+                else:
+                    publication_service.publish_week(**publication_args)
             menu.status = "published"
             menu.updated_at = datetime.now(timezone.utc)
             db.commit()
@@ -549,6 +565,16 @@ class MenuServiceDB:
                         )
             if int(menu.tenant_id or 0) != int(tenant_id):
                 raise ValueError("menu_tenant_mismatch")
+            if menu.site_id is not None:
+                from .commun_builder_publication import CommunBuilderPublicationService
+
+                CommunBuilderPublicationService().unpublish_week(
+                    tenant_id=int(menu.tenant_id or tenant_id),
+                    site_id=str(menu.site_id),
+                    year=int(menu.year),
+                    week=int(menu.week),
+                    db=db,
+                )
             menu.status = "draft"
             menu.updated_at = datetime.now(timezone.utc)
             db.commit()
