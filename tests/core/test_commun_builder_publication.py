@@ -57,6 +57,17 @@ def _seed_menu_and_link(site_id: str, year: int, week: int, builder_menu_id: str
     return menu.id
 
 
+def _mark_menu_published(menu_id: int) -> None:
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        db.execute(text("UPDATE menus SET status='published' WHERE id=:id"), {"id": menu_id})
+        db.commit()
+    finally:
+        db.close()
+
+
 def test_publish_mirrors_builder_publication_pin(app_session, monkeypatch):
     site_id = "site-publication-1"
     year = 2025
@@ -84,6 +95,70 @@ def test_publish_mirrors_builder_publication_pin(app_session, monkeypatch):
         ).fetchone()
         assert pin is not None
         assert pin[0] == "builder-menu-a"
+        assert int(pin[1]) == 1
+        assert int(pin[2]) == int(menu_id)
+    finally:
+        db.close()
+
+
+def test_publish_legacy_published_menu_without_builder_link_keeps_legacy_published_without_pin(app_session, monkeypatch):
+    site_id = "site-publication-legacy-only"
+    year = 2025
+    week = 47
+    _seed_site(app_session, site_id=site_id)
+
+    from core.menu_service import MenuServiceDB
+    menu_id = MenuServiceDB().create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year).id
+    _mark_menu_published(menu_id)
+
+    monkeypatch.setattr(CommunBuilderPublicationService, "get_publication_for_week", lambda self, **kwargs: None)
+
+    MenuServiceDB().publish_menu(tenant_id=1, menu_id=menu_id)
+
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        menu_status = db.execute(text("SELECT status FROM menus WHERE id=:id"), {"id": menu_id}).fetchone()
+        pin = db.execute(
+            text("SELECT 1 FROM commun_builder_publication_pins WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"),
+            {"tid": 1, "sid": site_id, "year": year, "week": week},
+        ).fetchone()
+        assert menu_status is not None and menu_status[0] == "published"
+        assert pin is None
+    finally:
+        db.close()
+
+
+def test_publish_legacy_published_menu_with_link_but_no_pin_creates_first_pin_and_is_idempotent(app_session, monkeypatch):
+    site_id = "site-publication-first-pin"
+    year = 2025
+    week = 48
+    _seed_site(app_session, site_id=site_id)
+    menu_id = _seed_menu_and_link(site_id, year, week, "builder-menu-first", 1)
+    _mark_menu_published(menu_id)
+
+    monkeypatch.setattr(CommunBuilderPublicationService, "_verify_projection", lambda self, **kwargs: None)
+
+    svc = MenuServiceDB()
+    svc.publish_menu(tenant_id=1, menu_id=menu_id)
+    svc.publish_menu(tenant_id=1, menu_id=menu_id)
+
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        menu_status = db.execute(text("SELECT status FROM menus WHERE id=:id"), {"id": menu_id}).fetchone()
+        pin = db.execute(
+            text(
+                "SELECT builder_menu_id, builder_menu_version, legacy_menu_id FROM commun_builder_publication_pins "
+                "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
+            ),
+            {"tid": 1, "sid": site_id, "year": year, "week": week},
+        ).fetchone()
+        assert menu_status is not None and menu_status[0] == "published"
+        assert pin is not None
+        assert pin[0] == "builder-menu-first"
         assert int(pin[1]) == 1
         assert int(pin[2]) == int(menu_id)
     finally:
@@ -196,6 +271,40 @@ def test_republish_failure_keeps_previous_pin(app_session, monkeypatch):
         ).fetchone()
         assert pin is not None
         assert int(pin[0]) == 1
+    finally:
+        db.close()
+
+
+def test_unpublish_legacy_published_menu_without_pin_keeps_builder_metadata_intact(app_session):
+    site_id = "site-publication-unpublish"
+    year = 2025
+    week = 49
+    _seed_site(app_session, site_id=site_id)
+    menu_id = _seed_menu_and_link(site_id, year, week, "builder-menu-unpublish", 1)
+    _mark_menu_published(menu_id)
+
+    svc = MenuServiceDB()
+    svc.unpublish_menu(tenant_id=1, menu_id=menu_id)
+
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        menu_row = db.execute(
+            text("SELECT status FROM menus WHERE id=:id"),
+            {"id": menu_id},
+        ).fetchone()
+        link_row = db.execute(
+            text("SELECT builder_menu_id FROM commun_builder_menu_links WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"),
+            {"tid": 1, "sid": site_id, "year": year, "week": week},
+        ).fetchone()
+        pin_row = db.execute(
+            text("SELECT 1 FROM commun_builder_publication_pins WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"),
+            {"tid": 1, "sid": site_id, "year": year, "week": week},
+        ).fetchone()
+        assert menu_row is not None and menu_row[0] == "draft"
+        assert link_row is not None and link_row[0] == "builder-menu-unpublish"
+        assert pin_row is None
     finally:
         db.close()
 

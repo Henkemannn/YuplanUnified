@@ -526,7 +526,13 @@ class MenuServiceDB:
                     legacy_menu_id=int(menu.id),
                     db=db,
                 )
-                if str(menu.status or "").strip().lower() == "published":
+                publication_state = publication_service.get_publication_for_week(
+                    tenant_id=int(menu.tenant_id or tenant_id),
+                    site_id=str(menu.site_id),
+                    year=int(menu.year),
+                    week=int(menu.week),
+                )
+                if publication_state is not None:
                     publication_service.republish_week(**publication_args)
                 else:
                     publication_service.publish_week(**publication_args)
