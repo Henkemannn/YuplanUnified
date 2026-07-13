@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from flask import current_app, g
+from sqlalchemy import text
 
 from core.admin_repo import SitesRepo
 from core.builder import BuilderFlow
@@ -54,7 +55,11 @@ def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, Composit
     return builder_flow, composition_service, composition_repository
 
 
+_SITE_SEQUENCE = 0
+
+
 def _seed_tenant_and_site(app_session):
+    global _SITE_SEQUENCE
     with app_session.app_context():
         db = get_session()
         try:
@@ -67,7 +72,8 @@ def _seed_tenant_and_site(app_session):
             tenant_id = int(tenant.id)
         finally:
             db.close()
-            site, _ = SitesRepo().create_site("Projection Site", tenant_id=tenant_id)
+            _SITE_SEQUENCE += 1
+            site, _ = SitesRepo().create_site(f"Projection Site {_SITE_SEQUENCE}", tenant_id=tenant_id)
             return tenant_id, site["id"]
 
 
@@ -94,6 +100,35 @@ def _create_legacy_menu_rows(tenant_id: int, site_id: str, year: int, week: int,
         return int(menu.id)
     finally:
         db.close()
+
+
+@pytest.fixture(autouse=True)
+def _restore_projection_test_state(app_session):
+    with app_session.app_context():
+        feature_registry = current_app.feature_registry
+        feature_registry.set("commun.builder.projection_shadow_v0", False)
+        feature_registry.set("commun.builder.linkage_v0", False)
+        current_app.extensions.pop("builder_menu_context_flow", None)
+        current_app.extensions.pop("commun_builder_projection_reader", None)
+        db = get_session()
+        try:
+            for table in [
+                "menu_variants",
+                "commun_builder_publication_pins",
+                "commun_builder_menu_links",
+                "menus",
+                "dishes",
+            ]:
+                db.execute(text(f"DELETE FROM {table}"))
+            db.commit()
+        finally:
+            db.close()
+    yield
+    with app_session.app_context():
+        current_app.extensions.pop("builder_menu_context_flow", None)
+        current_app.extensions.pop("commun_builder_projection_reader", None)
+        current_app.feature_registry.set("commun.builder.projection_shadow_v0", False)
+        current_app.feature_registry.set("commun.builder.linkage_v0", False)
 
 
 def test_projection_reader_explicit_slots_map_directly(app_session):
@@ -562,22 +597,18 @@ def test_projection_reader_duplicate_comparison_detects_missing_in_builder(app_s
             builder_menu_id="builder-menu-1",
             source="manual",
         )
-        _create_legacy_menu_rows(
-            tenant_id,
-            site_id,
-            2026,
-            16,
-            [
-                ("monday", "lunch", "alt1", "Soup"),
-                ("monday", "lunch", "alt1", "Bread"),
-            ],
-        )
+        legacy_weekview = {
+            "rows": [
+                {"day": "monday", "meal": "lunch", "variant_type": "alt1", "sort_order": 10, "text": "Soup"},
+                {"day": "monday", "meal": "lunch", "variant_type": "alt1", "sort_order": 20, "text": "Bread"},
+            ]
+        }
         comparison = CommunBuilderMenuProjectionReader().compare_with_legacy(
             tenant_id=tenant_id,
             site_id=site_id,
             year=2026,
             week=16,
-            legacy_weekview=current_app.menu_service.get_week_view(tenant_id, site_id, 16, 2026),
+            legacy_weekview=legacy_weekview,
         )
 
     assert comparison.status == "difference"
