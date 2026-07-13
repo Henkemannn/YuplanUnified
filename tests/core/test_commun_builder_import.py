@@ -395,3 +395,81 @@ def test_canonical_import_end_to_end_projection_roundtrip(app_session, monkeypat
         )
         assert republished is not None
         assert republished.builder_menu_version == 2
+
+
+def test_canonical_import_resolves_safe_alias_and_reimport_stays_stable(app_session, monkeypatch):
+    flow = _build_flow()
+    monkeypatch.setattr(CommunBuilderMenuLinkService, "_validate_site_tenant_access", lambda self, tenant_id, site_id: None)
+    monkeypatch.setattr(CommunBuilderMenuLinkService, "get_link_for_week", lambda self, **kwargs: None)
+    monkeypatch.setattr(CommunBuilderMenuLinkService, "create_or_replace_link", lambda self, **kwargs: None)
+
+    with app_session.app_context():
+        current_app.extensions["builder_menu_context_flow"] = flow
+
+        flow._library_flow.create_composition(composition_id="plate_1", composition_name="Fish Plate")
+        flow._library_flow.create_composition(composition_id="plate_2", composition_name="Unknown Salad")
+        create_composition_alias(
+            alias_repository=flow._library_flow._alias_repository,
+            alias_id="alias_fish",
+            composition_id="plate_1",
+            alias_text="Fish Plate",
+            composition_repository=flow._composition_repository,
+        )
+        create_composition_alias(
+            alias_repository=flow._library_flow._alias_repository,
+            alias_id="alias_soup_deluxe",
+            composition_id="plate_2",
+            alias_text="Soup Deluxe",
+            composition_repository=flow._composition_repository,
+        )
+
+        lookup = flow._alias_repository.find_by_alias_norm("soup deluxe")
+        assert len(lookup) == 1
+        assert lookup[0].composition_id == "plate_2"
+
+        first = import_menu_result_to_builder_canonical(
+            MenuImportResult(
+                weeks=[
+                    WeekImport(
+                        year=2026,
+                        week=22,
+                        items=[
+                            ImportedMenuItem(day="monday", meal="lunch", variant_type="alt1", dish_name="Soup Deluxe"),
+                        ],
+                    )
+                ]
+            ),
+            tenant_id=1,
+            site_id="site-a",
+        )[0]
+        assert first.status == "created"
+        assert first.resolved_count == 1
+        assert first.unresolved_count == 0
+
+        menu_id = first.menu_id
+        first_row = flow.list_menu_rows(menu_id)[0]
+        assert first_row["composition_id"] == "plate_2"
+        assert first_row["unresolved_text"] is None
+
+        second = import_menu_result_to_builder_canonical(
+            MenuImportResult(
+                weeks=[
+                    WeekImport(
+                        year=2026,
+                        week=22,
+                        items=[
+                            ImportedMenuItem(day="monday", meal="lunch", variant_type="alt1", dish_name="Soup Deluxe"),
+                        ],
+                    )
+                ]
+            ),
+            tenant_id=1,
+            site_id="site-a",
+        )[0]
+        assert second.status == "unchanged"
+        assert second.builder_menu_version == 1
+        assert second.resolved_count == 1
+        assert second.unresolved_count == 0
+        second_row = flow.list_menu_rows(menu_id)[0]
+        assert second_row["composition_id"] == "plate_2"
+        assert second_row["unresolved_text"] is None

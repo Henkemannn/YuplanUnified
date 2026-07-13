@@ -140,14 +140,6 @@ def _seed_builder_import(
                 )
             except ValueError:
                 pass
-        if any(item.dish_name == "Soup Deluxe" for item in items):
-            create_composition_alias(
-                alias_repository=flow._library_flow._alias_repository,
-                alias_id="alias_alt1_soup_deluxe",
-                composition_id="comp_alt1",
-                alias_text="Soup Deluxe",
-                composition_repository=flow._composition_repository,
-            )
         outcome = import_menu_result_to_builder_canonical(
             MenuImportResult(weeks=[WeekImport(year=year, week=week, items=items)]),
             tenant_id=1,
@@ -520,6 +512,7 @@ def test_parity_realistic_transition_flow(parity_app):
             current_app.extensions["builder_menu_context_flow"] = flow
             flow._library_flow.create_composition(composition_id="comp_main", composition_name="Fish Plate")
             flow._library_flow.create_composition(composition_id="comp_alt1", composition_name="Unknown Salad")
+            flow._library_flow.create_composition(composition_id="comp_alt2", composition_name="Soup Deluxe")
             from core.menu import create_composition_alias
 
             create_composition_alias(
@@ -527,6 +520,13 @@ def test_parity_realistic_transition_flow(parity_app):
                 alias_id="alias_main",
                 composition_id="comp_main",
                 alias_text="Fish Plate",
+                composition_repository=flow._composition_repository,
+            )
+            create_composition_alias(
+                alias_repository=flow._library_flow._alias_repository,
+                alias_id="alias_alt2",
+                composition_id="comp_alt2",
+                alias_text="Soup Deluxe",
                 composition_repository=flow._composition_repository,
             )
 
@@ -550,7 +550,7 @@ def test_parity_realistic_transition_flow(parity_app):
             svc.set_variant(tenant_id, legacy_menu.id, "mon", "lunch", "main", main_id)
             svc.set_variant(tenant_id, legacy_menu.id, "mon", "lunch", "alt1", alt1_id)
 
-            import_menu_result_to_builder_canonical(
+            v2_outcome = import_menu_result_to_builder_canonical(
                 MenuImportResult(
                     weeks=[
                         WeekImport(
@@ -565,7 +565,7 @@ def test_parity_realistic_transition_flow(parity_app):
                 ),
                 tenant_id=tenant_id,
                 site_id=site_id,
-            )
+            )[0]
             svc.publish_menu(tenant_id=tenant_id, menu_id=legacy_menu.id)
             evaluator = CommunBuilderParityEvaluator()
             v1 = evaluator.evaluate_week(tenant_id=tenant_id, site_id=site_id, year=year, week=week)
@@ -588,7 +588,10 @@ def test_parity_realistic_transition_flow(parity_app):
                 ),
                 tenant_id=tenant_id,
                 site_id=site_id,
-            )
+            )[0]
+            builder_rows = current_app.extensions["builder_menu_context_flow"].list_menu_rows(v2_outcome.menu_id)
+            assert [row["composition_id"] for row in builder_rows] == ["comp_main", "comp_alt2"]
+            assert [row["unresolved_text"] for row in builder_rows] == [None, None]
             from core.db import get_session
 
             db = get_session()
@@ -622,11 +625,12 @@ def test_parity_realistic_transition_flow(parity_app):
 
             svc.publish_menu(tenant_id=tenant_id, menu_id=legacy_menu.id)
             match_again = evaluator.evaluate_week(tenant_id=tenant_id, site_id=site_id, year=year, week=week)
-            assert match_again.status == "match_with_warnings"
-            assert match_again.warnings == ["unresolved_rows_present"]
-            assert match_again.non_blocking_differences[0].detail == {"unresolved_row_count": 1}
+            assert match_again.status == "match"
+            assert match_again.warnings == []
+            assert match_again.non_blocking_differences == []
             assert match_again.publication_state == "published_current"
-            assert evaluator.gate(match_again).go is False
+            assert match_again.go is True
+            assert evaluator.gate(match_again).go is True
 
             svc.unpublish_menu(tenant_id=tenant_id, menu_id=legacy_menu.id)
             unpublished = evaluator.evaluate_week(tenant_id=tenant_id, site_id=site_id, year=year, week=week)
