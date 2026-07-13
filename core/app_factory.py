@@ -648,6 +648,12 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         feature_registry.set("commun.builder.canonical_import_v0", False)
     except Exception:
         pass
+    if not feature_registry.has("commun.builder.admin_import_preview_reader_v0"):
+        feature_registry.add("commun.builder.admin_import_preview_reader_v0")
+    try:
+        feature_registry.set("commun.builder.admin_import_preview_reader_v0", False)
+    except Exception:
+        pass
     if not feature_registry.has("commun.builder.reader_v0"):
         feature_registry.add("commun.builder.reader_v0")
     try:

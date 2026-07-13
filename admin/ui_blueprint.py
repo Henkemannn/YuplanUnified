@@ -852,7 +852,21 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
         return redirect(url_for("admin_ui.admin_menu_import"))
 
     menu_service = MenuServiceDB()
-    week_view = menu_service.get_week_view(int(site_tenant_id), str(site_id), week, year)
+    legacy_week_view = menu_service.get_week_view(int(site_tenant_id), str(site_id), week, year)
+    week_view = legacy_week_view
+    try:
+        from core.commun_builder_admin_import_preview import read_admin_import_week_preview
+
+        preview_result = read_admin_import_week_preview(
+            tenant_id=int(site_tenant_id),
+            site_id=str(site_id),
+            year=int(year),
+            week=int(week),
+            legacy_preview=legacy_week_view,
+        )
+        week_view = preview_result.payload
+    except Exception:
+        week_view = legacy_week_view
     raw_status = (week_view or {}).get("menu_status") or getattr(menu, "status", None)
     menu_status = str(raw_status or "draft").strip().lower()
     

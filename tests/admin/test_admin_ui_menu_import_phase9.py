@@ -1,6 +1,8 @@
 """Admin UI menu import Phase 9 tests - Menu editing functionality."""
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 import re
 from sqlalchemy import text
@@ -622,3 +624,288 @@ def test_week_nav_disables_right_on_last_imported_week(seeded_week_nav_cross_yea
 
     assert re.search(r'data-week-nav="next"[^>]*disabled', html)
     assert re.search(r'data-week-nav="prev"(?![^>]*disabled)', html)
+
+
+def test_week_view_uses_adapter_payload_when_builder_reader_is_selected(seeded_week_48, client_admin, monkeypatch):
+    """The route should render the payload returned by the preview reader adapter."""
+    from core.commun_builder_admin_import_preview import AdminImportPreviewReadResult
+
+    builder_payload = {
+        "menu_id": 100,
+        "menu_status": "published",
+        "updated_at": None,
+        "days": {
+            "monday": {
+                "lunch": {
+                    "alt1": {"dish_name": "Builder Köttbullar"},
+                    "alt2": {"dish_name": "Fiskgratäng"},
+                    "dessert": {"dish_name": "Glass"},
+                },
+                "kväll": {"kvall": {"dish_name": "Builder Smörgåsar"}},
+            }
+        },
+    }
+
+    def fake_reader(*args, **kwargs):
+        return AdminImportPreviewReadResult(source="builder", payload=builder_payload)
+
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.read_admin_import_week_preview", fake_reader)
+
+    response = client_admin.get("/ui/admin/menu-import/week/2025/48", headers=ADMIN_HEADERS)
+
+    assert response.status_code == 200
+    html = response.data.decode("utf-8")
+
+    assert "Builder Köttbullar" in html
+    assert "Builder Smörgåsar" in html
+    assert "Köttbullar med potatis" not in html
+
+
+def test_admin_import_preview_reader_falls_back_when_parity_blocks(seeded_week_48, monkeypatch):
+    """The adapter must stay fail-closed and return legacy payload when parity does not go."""
+    from core.commun_builder_admin_import_preview import read_admin_import_week_preview
+    from core.menu_service import MenuServiceDB
+
+    class DummyParityResult:
+        status = "blocked"
+        reasons = ["version_mismatch"]
+        warnings = []
+        blocking_differences = [SimpleNamespace(kind="version_mismatch")]
+        latest_builder_version = 7
+        published_builder_version = 6
+
+    class DummyParityEvaluator:
+        def evaluate_week(self, **kwargs):
+            return DummyParityResult()
+
+        def gate(self, result, **kwargs):
+            return SimpleNamespace(go=False, reasons=["version_mismatch"])
+
+    monkeypatch.setattr("core.commun_builder_admin_import_preview._feature_enabled", lambda name: True)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderParityEvaluator", DummyParityEvaluator)
+
+    legacy_preview = MenuServiceDB().get_week_view(1, "site-import-9", 48, 2025)
+    result = read_admin_import_week_preview(
+        tenant_id=1,
+        site_id="site-import-9",
+        year=2025,
+        week=48,
+        legacy_preview=legacy_preview,
+    )
+
+    assert result.source == "legacy"
+    assert result.fallback_reason == "version_mismatch"
+    assert result.payload == legacy_preview
+
+
+def test_admin_import_preview_reader_flag_off_returns_legacy_without_builder_calls(seeded_week_48, monkeypatch):
+    """When the new consumer flag is off, the adapter must return legacy untouched and skip Builder reads."""
+    from core.commun_builder_admin_import_preview import read_admin_import_week_preview
+    from core.menu_service import MenuServiceDB
+
+    legacy_preview = MenuServiceDB().get_week_view(1, "site-import-9", 48, 2025)
+
+    class FailIfCalled:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("Builder path should not be entered when feature flag is off")
+
+    monkeypatch.setattr("core.commun_builder_admin_import_preview._feature_enabled", lambda name: False)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderParityEvaluator", FailIfCalled)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderPublicationService", FailIfCalled)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderMenuProjectionReader", FailIfCalled)
+
+    result = read_admin_import_week_preview(
+        tenant_id=1,
+        site_id="site-import-9",
+        year=2025,
+        week=48,
+        legacy_preview=legacy_preview,
+    )
+
+    assert result.source == "legacy"
+    assert result.fallback_reason == "feature_flag_off"
+    assert result.payload == legacy_preview
+
+
+def test_admin_import_preview_reader_draft_menu_falls_back_before_publication_lookup(seeded_week_48, monkeypatch):
+    """Draft admin preview must stay on legacy even if parity GO is available."""
+    from core.commun_builder_admin_import_preview import read_admin_import_week_preview
+    from core.menu_service import MenuServiceDB
+
+    legacy_preview = MenuServiceDB().get_week_view(1, "site-import-9", 48, 2025)
+    legacy_preview = dict(legacy_preview)
+    legacy_preview["menu_status"] = "draft"
+
+    class DummyParityResult:
+        status = "match"
+        reasons = []
+        warnings = []
+        blocking_differences = []
+        latest_builder_version = 7
+        published_builder_version = 7
+
+    class DummyParityEvaluator:
+        def evaluate_week(self, **kwargs):
+            return DummyParityResult()
+
+        def gate(self, result, **kwargs):
+            return SimpleNamespace(go=True, reasons=[])
+
+    class FailIfCalled:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("Publication and projection must not run for draft previews")
+
+    monkeypatch.setattr("core.commun_builder_admin_import_preview._feature_enabled", lambda name: True)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderParityEvaluator", DummyParityEvaluator)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderPublicationService", FailIfCalled)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderMenuProjectionReader", FailIfCalled)
+
+    result = read_admin_import_week_preview(
+        tenant_id=1,
+        site_id="site-import-9",
+        year=2025,
+        week=48,
+        legacy_preview=legacy_preview,
+    )
+
+    assert result.source == "legacy"
+    assert result.fallback_reason == "draft_preview_legacy_only"
+    assert result.payload == legacy_preview
+
+
+def test_admin_import_preview_reader_published_go_returns_builder_shape(seeded_week_48, monkeypatch):
+    """Published preview with clean parity should use Builder rows while preserving the legacy shape."""
+    from core.commun_builder_admin_import_preview import read_admin_import_week_preview
+    from core.menu_service import MenuServiceDB
+
+    legacy_preview = MenuServiceDB().get_week_view(1, "site-import-9", 48, 2025)
+    legacy_preview = dict(legacy_preview)
+    legacy_preview["menu_status"] = "published"
+
+    class DummyParityResult:
+        status = "match"
+        reasons = []
+        warnings = []
+        blocking_differences = []
+        latest_builder_version = 8
+        published_builder_version = 8
+
+    class DummyParityEvaluator:
+        def evaluate_week(self, **kwargs):
+            return DummyParityResult()
+
+        def gate(self, result, **kwargs):
+            return SimpleNamespace(go=True, reasons=[])
+
+    class DummyPublicationService:
+        def get_publication_for_week(self, **kwargs):
+            return SimpleNamespace(builder_menu_id="builder-100", builder_menu_version=8)
+
+    class DummyProjectionReader:
+        def get_projection_for_pinned_menu(self, **kwargs):
+            row = SimpleNamespace(
+                error=None,
+                resolved=True,
+                day="monday",
+                meal="lunch",
+                variant_type="alt1",
+                text="Builder Köttbullar",
+            )
+            projection = SimpleNamespace(rows=[row])
+            return SimpleNamespace(status="ok", projection=projection, error=None)
+
+    monkeypatch.setattr("core.commun_builder_admin_import_preview._feature_enabled", lambda name: True)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderParityEvaluator", DummyParityEvaluator)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderPublicationService", DummyPublicationService)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderMenuProjectionReader", DummyProjectionReader)
+
+    result = read_admin_import_week_preview(
+        tenant_id=1,
+        site_id="site-import-9",
+        year=2025,
+        week=48,
+        legacy_preview=legacy_preview,
+    )
+
+    assert result.source == "builder"
+    assert result.fallback_reason is None
+    assert set(result.payload.keys()) == set(legacy_preview.keys())
+    assert result.payload["menu_status"] == legacy_preview["menu_status"]
+    assert result.payload["menu_id"] == legacy_preview["menu_id"]
+    assert result.payload["days"]["monday"]["lunch"]["alt1"]["dish_name"] == "Builder Köttbullar"
+    assert "builder_menu_id" not in result.payload
+
+
+def test_admin_import_preview_reader_parity_exception_falls_back_to_legacy(seeded_week_48, monkeypatch):
+    """Parity evaluator exceptions must fail closed to the legacy preview."""
+    from core.commun_builder_admin_import_preview import read_admin_import_week_preview
+    from core.menu_service import MenuServiceDB
+
+    legacy_preview = MenuServiceDB().get_week_view(1, "site-import-9", 48, 2025)
+
+    class ExplodingParityEvaluator:
+        def evaluate_week(self, **kwargs):
+            raise RuntimeError("boom")
+
+        def gate(self, result, **kwargs):
+            return SimpleNamespace(go=False, reasons=["boom"])
+
+    monkeypatch.setattr("core.commun_builder_admin_import_preview._feature_enabled", lambda name: True)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderParityEvaluator", ExplodingParityEvaluator)
+
+    result = read_admin_import_week_preview(
+        tenant_id=1,
+        site_id="site-import-9",
+        year=2025,
+        week=48,
+        legacy_preview=legacy_preview,
+    )
+
+    assert result.source == "legacy"
+    assert result.fallback_reason.startswith("parity_exception:")
+    assert result.payload == legacy_preview
+
+
+def test_admin_import_preview_reader_publication_lookup_exception_falls_back_to_legacy(seeded_week_48, monkeypatch):
+    """Publication lookup exceptions must fail closed to the legacy preview."""
+    from core.commun_builder_admin_import_preview import read_admin_import_week_preview
+    from core.menu_service import MenuServiceDB
+
+    legacy_preview = MenuServiceDB().get_week_view(1, "site-import-9", 48, 2025)
+    legacy_preview = dict(legacy_preview)
+    legacy_preview["menu_status"] = "published"
+
+    class DummyParityResult:
+        status = "match"
+        reasons = []
+        warnings = []
+        blocking_differences = []
+        latest_builder_version = 8
+        published_builder_version = 8
+
+    class DummyParityEvaluator:
+        def evaluate_week(self, **kwargs):
+            return DummyParityResult()
+
+        def gate(self, result, **kwargs):
+            return SimpleNamespace(go=True, reasons=[])
+
+    class ExplodingPublicationService:
+        def get_publication_for_week(self, **kwargs):
+            raise RuntimeError("publication boom")
+
+    monkeypatch.setattr("core.commun_builder_admin_import_preview._feature_enabled", lambda name: True)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderParityEvaluator", DummyParityEvaluator)
+    monkeypatch.setattr("core.commun_builder_admin_import_preview.CommunBuilderPublicationService", ExplodingPublicationService)
+
+    result = read_admin_import_week_preview(
+        tenant_id=1,
+        site_id="site-import-9",
+        year=2025,
+        week=48,
+        legacy_preview=legacy_preview,
+    )
+
+    assert result.source == "legacy"
+    assert result.fallback_reason.startswith("publication_lookup_exception:")
+    assert result.payload == legacy_preview

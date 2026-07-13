@@ -138,6 +138,16 @@ def test_commun_builder_canonical_import_flag_is_registered_and_off(client_admin
     assert reg.enabled("commun.builder.canonical_import_v0") is False
 
 
+def test_commun_builder_admin_import_preview_reader_flag_is_registered_and_off(client_admin):
+    reg = client_admin.application.feature_registry
+    assert reg.has("commun.builder.admin_import_preview_reader_v0") is True
+    assert reg.enabled("commun.builder.admin_import_preview_reader_v0") is False
+    reg.set("commun.builder.admin_import_preview_reader_v0", True)
+    assert reg.enabled("commun.builder.admin_import_preview_reader_v0") is True
+    reg.set("commun.builder.admin_import_preview_reader_v0", False)
+    assert reg.enabled("commun.builder.admin_import_preview_reader_v0") is False
+
+
 def test_list_sorted_and_modes_preserved():
     reg = FeatureRegistry(seed=())
     reg.add({"name": "b_flag", "mode": "simple"})
