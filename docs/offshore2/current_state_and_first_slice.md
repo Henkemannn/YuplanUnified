@@ -1,7 +1,7 @@
 # Offshore 2.0 - Current State And First Slice
 
 ## Executive Summary
-Offshore 2.0 should become a business adapter on top of Builder and Planera 2.0, not a parallel menu system. The current codebase already has a real production engine in `core/planera_v2`, a real Builder menu/composition context in `core/builder_menu_context_flow.py`, and legacy Offshore-only remnants in `modules/offshore/views.py` plus old architecture docs. The first useful slice should be read-only: take a published Builder menu assignment, normalize it into Planera 2.0 input, and render a weekly production projection for offshore use.
+Offshore 2.0 should become a business adapter on top of Builder and Planera 2.0, not a parallel menu system. The current codebase already has a real production engine in `core/planera_v2`, a real Builder menu/composition context in `core/builder_menu_context_flow.py`, and legacy Offshore-only remnants in `modules/offshore/views.py`, `core/legacy_offshore_ui.py`, plus old architecture docs. The product decision for the next code ticket is the Offshore foundation/app shell, not a read-only projection slice.
 
 ## 1. Current Code Inventory
 
@@ -357,22 +357,21 @@ Current contracts that matter:
 Critical rule: name matching must never be permanent identity.
 
 ## 7. First Implementation Slice
-The smallest useful first slice is:
+The current technical inventory points to the shell and context layer as the first coded step, because Offshore still does not exist as a real module.
 
-Builder Menu assignment -> Offshore weekly production projection -> read-only lunch/dinner plan.
-
-Concretely, next ticket should build:
-1. a read-only Offshore adapter that selects a Builder publication pin for a rig/site and a week/rotation week
-2. a normalized input projection built from Builder production-shape/menu rows
-3. a Planera 2.0 request payload for lunch/dinner totals and deviations
-4. a read-only output view or API response, with unresolved rows visible
+The next ticket should build:
+1. a new Offshore app shell and `/offshore` entry point
+2. installation and tenant/site context handling
+3. a professional empty dashboard and navigation scaffold
+4. a settings skeleton that can later host menu cycle and period setup
 
 What it should not do yet:
-- write prep tasks
-- write freezer picks
-- auto-republish Builder data
-- create a new Offshore UI
-- add new tables
+- implement the period model
+- implement menu cycle assignment
+- implement Builder projection logic
+- write prep or freezer data
+- write handover data
+- add new production tables
 
 ## 8. Persistence Assessment
 These future concepts are likely needed, but not all in the first slice:
