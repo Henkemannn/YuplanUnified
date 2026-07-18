@@ -660,6 +660,12 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         feature_registry.set("commun.builder.reader_v0", False)
     except Exception:
         pass
+    if not feature_registry.has("offshore.v2.enabled"):
+        feature_registry.add("offshore.v2.enabled")
+    try:
+        feature_registry.set("offshore.v2.enabled", False)
+    except Exception:
+        pass
     # Auto-enable admin module when running under TESTING or simple staging auth flag.
     try:
         if app.config.get("TESTING") or os.getenv("STAGING_SIMPLE_AUTH", "0").lower() in ("1", "true", "yes"):
@@ -1302,6 +1308,13 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         app.register_blueprint(legacy_kommun_ui_bp)
     except Exception:  # pragma: no cover
         app.logger.warning("Legacy kommun UI blueprint not loaded", exc_info=True)
+
+    try:
+        from modules.offshore2.routes import bp as offshore2_bp
+
+        app.register_blueprint(offshore2_bp)
+    except Exception:  # pragma: no cover
+        app.logger.warning("Offshore v2 blueprint not loaded", exc_info=True)
 
     # Dynamic module blueprints
     for mod in cfg.default_enabled_modules:

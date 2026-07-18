@@ -1,0 +1,99 @@
+/* Offshore Foundation styles: token-driven, theme-safe, and compatible with the existing app shell. */
+
+.offshore-shell {
+  --offshore-surface: var(--yp-color-bg-elevated);
+  --offshore-surface-alt: var(--yp-color-bg-alt);
+  --offshore-border: var(--yp-color-border);
+  --offshore-text: var(--yp-color-text);
+  --offshore-text-muted: var(--yp-color-text-muted);
+  --offshore-accent: var(--yp-color-primary);
+}
+
+.offshore-shell__topbar {
+  backdrop-filter: blur(18px);
+}
+
+.offshore-shell__banner {
+  margin: 8px 16px;
+}
+
+.offshore-shell__sidebar-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+  font-size: var(--yp-font-size-xs);
+  color: var(--offshore-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.offshore-page__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.offshore-empty-state {
+  min-height: 240px;
+}
+
+.offshore-empty-state__note {
+  margin: 0;
+  color: var(--offshore-text-muted);
+  font-size: var(--yp-font-size-base);
+}
+
+.offshore-placeholder-block {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.offshore-placeholder-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--yp-radius-full);
+  background: var(--offshore-surface-alt);
+  color: var(--offshore-text-muted);
+  border: 1px solid var(--offshore-border);
+  font-size: var(--yp-font-size-sm);
+}
+
+.offshore-roadmap-list,
+.offshore-settings-grid {
+  gap: 16px;
+}
+
+.offshore-roadmap-item {
+  padding-block: 2px;
+}
+
+.offshore-roadmap-pill,
+.offshore-settings-pill {
+  background: color-mix(in srgb, var(--offshore-accent) 12%, var(--offshore-surface));
+  color: var(--offshore-accent);
+  border: 1px solid color-mix(in srgb, var(--offshore-accent) 30%, var(--offshore-border));
+}
+
+.offshore-settings-card__footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 0.5rem;
+}
+
+.offshore-settings-summary {
+  margin-top: 20px;
+}
+
+.offshore-page .app-shell__card-title {
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 900px) {
+  .offshore-shell__sidebar-footer {
+    justify-content: flex-start;
+  }
+}

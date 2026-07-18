@@ -1,0 +1,58 @@
+{% extends "offshore2/base.html" %}
+
+{% block page_title %}{{ vm.page_title }} – Yuplan Offshore{% endblock %}
+
+{% block content %}
+  <div class="app-page offshore-page">
+    <section class="app-shell__page-header offshore-page__header">
+      <div>
+        <h1 class="app-shell__title">{{ vm.page_title }}</h1>
+        <p class="app-shell__subtitle">{{ vm.page_subtitle }}</p>
+      </div>
+      <div class="offshore-page__meta">
+        <span class="app-shell__env-badge">{{ vm.labels['offshore.topbar.installation'] }}: {{ vm.site_name or '—' }}</span>
+      </div>
+    </section>
+
+    <section class="app-shell__grid offshore-grid">
+      <article class="app-shell__card offshore-empty-state" data-testid="offshore-empty-state">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">{{ vm.empty_title }}</h2>
+            <p class="app-shell__card-text">{{ vm.empty_body }}</p>
+          </div>
+          {% if vm.can_manage %}
+            <a class="yp-button yp-button-primary" href="{{ url_for('offshore2.settings') }}">{{ vm.cta_label }}</a>
+          {% endif %}
+        </div>
+        <div class="app-shell__card-body">
+          <p class="offshore-empty-state__note">Ingen aktiv Offshoreperiod finns ännu.</p>
+        </div>
+      </article>
+
+      <article class="app-shell__card offshore-today-card">
+        <h2 class="app-shell__card-title">Dagens yta</h2>
+        <p class="app-shell__card-text">{{ vm.today_placeholder }}</p>
+        <div class="offshore-placeholder-block">
+          <span class="offshore-placeholder-label">Meny</span>
+          <span class="offshore-placeholder-label">Prep</span>
+          <span class="offshore-placeholder-label">Frysplock</span>
+        </div>
+      </article>
+
+      <article class="app-shell__card offshore-roadmap-card">
+        <h2 class="app-shell__card-title">{{ vm.roadmap_title }}</h2>
+        <div class="app-shell__list offshore-roadmap-list">
+          {% for item in vm.roadmap_items %}
+            <div class="app-shell__list-item offshore-roadmap-item">
+              <div class="app-shell__list-main">
+                <span class="app-shell__list-title">{{ item }}</span>
+                <span class="yp-pill offshore-roadmap-pill">Kommer senare</span>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+  </div>
+{% endblock %}

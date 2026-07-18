@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="{{ vm.lang or 'sv' }}" data-theme="{{ vm.theme or 'light' }}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="application-name" content="Yuplan Offshore" />
+  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+  <title>{% block page_title %}{{ vm.page_title or 'Offshore' }}{% endblock %}</title>
+  {% set icon_version = asset_version|default('icon-20260310') %}
+  <link rel="manifest" href="/manifest.webmanifest?v={{ icon_version }}">
+  <link rel="icon" href="/favicon.ico?v={{ icon_version }}">
+  <link rel="shortcut icon" href="/favicon.ico?v={{ icon_version }}">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
+  <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app_shell.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='unified_ui.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='offshore2/offshore.css') }}" />
+  <script src="{{ url_for('static', filename='js/app_shell.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='unified_ui.js') }}" defer></script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="app-shell app-shell--full offshore-shell" aria-label="Yuplan Offshore shell" data-testid="app-shell">
+    <header class="app-shell__topbar offshore-shell__topbar">
+      <div class="app-shell__brand">
+        <img class="app-shell__logo" src="{{ url_for('static', filename='img/logo-proposal.svg') }}" alt="Yuplan" />
+        <span class="app-shell__brand-text">{{ vm.labels['offshore.brand'] }}</span>
+      </div>
+      <div class="app-shell__topbar-actions">
+        <span class="app-shell__env-badge">{{ vm.labels['offshore.topbar.organization'] }}: {{ vm.tenant_name or '—' }}</span>
+        <span class="app-shell__env-badge">{{ vm.labels['offshore.topbar.installation'] }}: {{ vm.site_name or '—' }}</span>
+        <span class="app-shell__env-badge">Offshore</span>
+        {% if vm.allow_site_switch %}
+          <a class="app-shell__user-pill" href="{{ url_for('ui.select_site', next=request.full_path or request.path) }}">Byt site</a>
+        {% endif %}
+        <button class="app-shell__theme-toggle" type="button" aria-label="Toggle dark mode" aria-pressed="false" data-theme-toggle>
+          <span data-theme-icon>🌙</span>
+        </button>
+        <div class="app-shell__user-menu" data-user-menu>
+          <button class="app-shell__user-pill" type="button" aria-haspopup="menu" aria-expanded="false" data-user-menu-trigger>
+            {{ vm.user_name }}
+          </button>
+          <div class="app-shell__user-dropdown" role="menu" aria-label="Användarmeny">
+            <a class="app-shell__user-item" role="menuitem" href="{{ url_for('ui.account_page') }}">{{ vm.labels['offshore.topbar.profile'] }}</a>
+            <a class="app-shell__user-item" role="menuitem" href="mailto:support@yuplan.se">{{ vm.labels['offshore.topbar.support'] }}</a>
+            <form method="post" action="{{ url_for('ui.ui_logout') }}" class="app-shell__user-item-form">
+              {{ csrf_token_input()|safe }}
+              <button class="app-shell__user-item app-shell__user-item-button" role="menuitem" type="submit">{{ vm.labels['offshore.topbar.logout'] }}</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    {% if g and g.site_context_banner %}
+      <div class="ua-flash ua-flash-warning offshore-shell__banner" role="alert">Du har bytt arbetsplats i en annan flik. Ladda om för att se aktuell arbetsplats.</div>
+    {% endif %}
+
+    {% if g and g.host_mismatch_banner %}
+      <div class="ua-flash ua-flash-warning offshore-shell__banner" role="alert">Du använder flera hosts i dev. Använd en stabil host för cookies.</div>
+    {% endif %}
+
+    <div class="app-shell__body offshore-shell__body">
+      <aside class="app-shell__sidebar offshore-shell__sidebar" aria-label="Huvudnavigering">
+        <div class="app-shell__sidebar-panel offshore-shell__sidebar-panel">
+          <nav class="app-shell__nav offshore-shell__nav">
+            {% set current_path = request.path or '' %}
+            {% for item in vm.nav_items %}
+              <a class="app-shell__nav-item {% if current_path == item.path or current_path.startswith(item.path ~ '/') %}app-shell__nav-item--active{% endif %}" href="{{ item.path }}">{{ item.label }}</a>
+            {% endfor %}
+          </nav>
+          <div class="offshore-shell__sidebar-footer">
+            <span>Yuplan</span>
+            <span>Offshore</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="app-shell__main offshore-shell__main">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

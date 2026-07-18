@@ -1,0 +1,32 @@
+{% extends "offshore2/base.html" %}
+
+{% block page_title %}{{ vm.page_title }} – Yuplan Offshore{% endblock %}
+
+{% block content %}
+  <div class="app-page offshore-page">
+    <section class="app-shell__page-header offshore-page__header">
+      <div>
+        <h1 class="app-shell__title">{{ vm.page_title }}</h1>
+        <p class="app-shell__subtitle">{{ vm.page_subtitle }}</p>
+      </div>
+    </section>
+
+    <section class="app-shell__grid offshore-settings-grid">
+      {% for section in vm.sections %}
+        <article class="app-shell__card offshore-settings-card" data-testid="offshore-settings-card">
+          <h2 class="app-shell__card-title">{{ section.title }}</h2>
+          <p class="app-shell__card-text">{{ section.body }}</p>
+          <div class="offshore-settings-card__footer">
+            <span class="yp-pill offshore-settings-pill">{{ section.status }}</span>
+          </div>
+        </article>
+      {% endfor %}
+    </section>
+
+    <section class="app-shell__card offshore-settings-summary">
+      <h2 class="app-shell__card-title">Virtuella arbetspositioner</h2>
+      <p class="app-shell__card-text">Kokk 1, Kokk 2, Dagkock A och Nattkock B är planerade domänkoncept.</p>
+      <p class="app-shell__card-text">Den här vyn visar endast skelettet för framtida konfiguration.</p>
+    </section>
+  </div>
+{% endblock %}
