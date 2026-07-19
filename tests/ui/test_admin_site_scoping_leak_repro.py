@@ -1,6 +1,30 @@
 from flask.testing import FlaskClient
 from sqlalchemy import text
 
+import pytest
+
+from core import db as db_mod
+
+
+@pytest.fixture(autouse=True)
+def _remove_scoped_session_after_test(client: FlaskClient):
+    try:
+        yield
+    finally:
+        try:
+            with client.session_transaction() as sess:
+                sess.pop("site_id", None)
+                sess.pop("tenant_id", None)
+                sess.pop("role", None)
+                sess.pop("user_id", None)
+        except Exception:
+            pass
+        try:
+            if db_mod._SessionFactory is not None:
+                db_mod._SessionFactory.remove()
+        except Exception:
+            pass
+
 
 def _create_superuser_and_tenants(app_session):
     from core.db import get_session
@@ -114,106 +138,140 @@ def _get_diet_type_id(app_session, site_id: str, name: str) -> str:
 
 
 def test_admin_isolation_leak_repro(app_session, client: FlaskClient):
-    # Seed superuser + two tenants
-    tid_a, tid_b = _create_superuser_and_tenants(app_session)
+    tid_a = tid_b = None
+    site_a = site_b = None
+    dept_a = dept_b = None
+    dt_a_id = dt_b_id = None
+    try:
+        # Seed superuser + two tenants
+        tid_a, tid_b = _create_superuser_and_tenants(app_session)
 
-    # Login as superuser
-    client.post(
-        "/ui/login",
-        data={"email": "sa-leak-repro@example.com", "password": "superpass"},
-        follow_redirects=True,
-    )
+        # Login as superuser
+        client.post(
+            "/ui/login",
+            data={"email": "sa-leak-repro@example.com", "password": "superpass"},
+            follow_redirects=True,
+        )
 
-    # Create two sites with names forcing LIMIT 1 fallback to pick Site B
-    _create_site(client, tid_a, name="zzz Site A", admin_email="admin.a@example.com")
-    _create_site(client, tid_b, name="aaa Site B", admin_email="admin.b@example.com")
+        # Create two sites with names forcing LIMIT 1 fallback to pick Site B
+        _create_site(client, tid_a, name="zzz Site A", admin_email="admin.a@example.com")
+        _create_site(client, tid_b, name="aaa Site B", admin_email="admin.b@example.com")
 
-    site_a = _get_site_id_by_name(app_session, "zzz Site A")
-    site_b = _get_site_id_by_name(app_session, "aaa Site B")
+        site_a = _get_site_id_by_name(app_session, "zzz Site A")
+        site_b = _get_site_id_by_name(app_session, "aaa Site B")
 
-    # Switch to Site A admin
-    resp = client.get(f"/ui/systemadmin/switch-site/{site_a}", follow_redirects=True)
-    assert resp.status_code == 200
-    # Ensure session site context is set to Site A (guard can clear on tenant switch)
-    with client.session_transaction() as sess:
-        sess["site_id"] = site_a
+        # Switch to Site A admin
+        resp = client.get(f"/ui/systemadmin/switch-site/{site_a}", follow_redirects=True)
+        assert resp.status_code == 200
+        # Ensure session site context is set to Site A (guard can clear on tenant switch)
+        with client.session_transaction() as sess:
+            sess["site_id"] = site_a
 
-    # Create Department A under Site A
-    _create_department(client, app_session, site_a, "Avd A")
-    dept_a = _get_department_id(app_session, site_a, "Avd A")
+        # Create Department A under Site A
+        _create_department(client, app_session, site_a, "Avd A")
+        dept_a = _get_department_id(app_session, site_a, "Avd A")
 
-    # Create Diet A via site-admin route (strictly uses active site)
-    resp = client.post(
-        "/ui/admin/specialkost/new",
-        data={"name": "Diet A"},
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
-    dt_a_id = _get_diet_type_id(app_session, site_a, "Diet A")
+        # Create Diet A via site-admin route (strictly uses active site)
+        resp = client.post(
+            "/ui/admin/specialkost/new",
+            data={"name": "Diet A"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        dt_a_id = _get_diet_type_id(app_session, site_a, "Diet A")
 
-    # Link Diet A default to Department A
-    resp = client.post(
-        f"/ui/admin/departments/{dept_a}/edit",
-        data={
-            "name": "Avd A",
-            "resident_count": "12",
-            f"diet_default_{dt_a_id}": "3",
-        },
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
+        # Link Diet A default to Department A
+        resp = client.post(
+            f"/ui/admin/departments/{dept_a}/edit",
+            data={
+                "name": "Avd A",
+                "resident_count": "12",
+                f"diet_default_{dt_a_id}": "3",
+            },
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
 
-    # Switch to Site B admin
-    resp = client.get(f"/ui/systemadmin/switch-site/{site_b}", follow_redirects=True)
-    assert resp.status_code == 200
-    with client.session_transaction() as sess:
-        sess["site_id"] = site_b
+        # Switch to Site B admin
+        resp = client.get(f"/ui/systemadmin/switch-site/{site_b}", follow_redirects=True)
+        assert resp.status_code == 200
+        with client.session_transaction() as sess:
+            sess["site_id"] = site_b
 
-    # Create Department B and Diet B
-    _create_department(client, app_session, site_b, "Avd B")
-    dept_b = _get_department_id(app_session, site_b, "Avd B")
-    resp = client.post(
-        "/ui/admin/specialkost/new",
-        data={"name": "Diet B"},
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
-    dt_b_id = _get_diet_type_id(app_session, site_b, "Diet B")
+        # Create Department B and Diet B
+        _create_department(client, app_session, site_b, "Avd B")
+        dept_b = _get_department_id(app_session, site_b, "Avd B")
+        resp = client.post(
+            "/ui/admin/specialkost/new",
+            data={"name": "Diet B"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        dt_b_id = _get_diet_type_id(app_session, site_b, "Diet B")
 
-    # Link Diet B default to Department B
-    resp = client.post(
-        f"/ui/admin/departments/{dept_b}/edit",
-        data={
-            "name": "Avd B",
-            "resident_count": "10",
-            f"diet_default_{dt_b_id}": "2",
-        },
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
+        # Link Diet B default to Department B
+        resp = client.post(
+            f"/ui/admin/departments/{dept_b}/edit",
+            data={
+                "name": "Avd B",
+                "resident_count": "10",
+                f"diet_default_{dt_b_id}": "2",
+            },
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
 
-    # Assert isolation via UI: on Site B, list shows only Avd B and Diet B
-    page = client.get("/ui/admin/departments", follow_redirects=True)
-    assert b"Avd B" in page.data and b"Avd A" not in page.data
-    # Repro leakage: request args should NOT override active site; current bug uses request args fallback
-    page = client.get(f"/ui/admin/specialkost?site_id={site_a}", follow_redirects=True)
-    # Expectation: still see Diet B (active site), NOT Diet A
-    assert b"Diet B" in page.data and b"Diet A" not in page.data
+        # Assert isolation via UI: on Site B, list shows only Avd B and Diet B
+        page = client.get("/ui/admin/departments", follow_redirects=True)
+        assert b"Avd B" in page.data and b"Avd A" not in page.data
+        # Repro leakage: request args should NOT override active site; current bug uses request args fallback
+        page = client.get(f"/ui/admin/specialkost?site_id={site_a}", follow_redirects=True)
+        # Expectation: still see Diet B (active site), NOT Diet A
+        assert b"Diet B" in page.data and b"Diet A" not in page.data
 
-    # Assert topbar context shows Site B name
-    page = client.get("/ui/admin", follow_redirects=True)
-    assert b"aaa Site B" in page.data
+        # Assert topbar context shows Site B name
+        page = client.get("/ui/admin", follow_redirects=True)
+        assert b"aaa Site B" in page.data
 
-    # DB assertions: departments site_id differ and diets are site-scoped
-    from core.db import get_session
-    with app_session.app_context():
-        db = get_session()
-        try:
-            ra = db.execute(text("SELECT site_id FROM departments WHERE id=:i"), {"i": dept_a}).fetchone()
-            rb = db.execute(text("SELECT site_id FROM departments WHERE id=:i"), {"i": dept_b}).fetchone()
-            assert ra and rb and str(ra[0]) != str(rb[0])
-            da = db.execute(text("SELECT site_id FROM dietary_types WHERE name='Diet A'"), {}).fetchone()
-            db_row_b = db.execute(text("SELECT site_id FROM dietary_types WHERE name='Diet B'"), {}).fetchone()
-            assert da and db_row_b and str(da[0]) != str(db_row_b[0])
-        finally:
-            db.close()
+        # DB assertions: departments site_id differ and diets are site-scoped
+        from core.db import get_session
+        with app_session.app_context():
+            db = get_session()
+            try:
+                ra = db.execute(text("SELECT site_id FROM departments WHERE id=:i"), {"i": dept_a}).fetchone()
+                rb = db.execute(text("SELECT site_id FROM departments WHERE id=:i"), {"i": dept_b}).fetchone()
+                assert ra and rb and str(ra[0]) != str(rb[0])
+                da = db.execute(text("SELECT site_id FROM dietary_types WHERE name='Diet A'"), {}).fetchone()
+                db_row_b = db.execute(text("SELECT site_id FROM dietary_types WHERE name='Diet B'"), {}).fetchone()
+                assert da and db_row_b and str(da[0]) != str(db_row_b[0])
+            finally:
+                db.close()
+    finally:
+        from core.db import get_session
+
+        with app_session.app_context():
+            db = get_session()
+            try:
+                if site_a or site_b:
+                    if site_a:
+                        db.execute(text("DELETE FROM site_feature_flags WHERE site_id=:sid"), {"sid": site_a})
+                    if site_b:
+                        db.execute(text("DELETE FROM site_feature_flags WHERE site_id=:sid"), {"sid": site_b})
+                for table, column, value in [
+                    ("departments", "site_id", site_a),
+                    ("departments", "site_id", site_b),
+                    ("dietary_types", "site_id", site_a),
+                    ("dietary_types", "site_id", site_b),
+                    ("sites", "id", site_a),
+                    ("sites", "id", site_b),
+                ]:
+                    if value:
+                        db.execute(text(f"DELETE FROM {table} WHERE {column}=:v"), {"v": value})
+                for email in ["sa-leak-repro@example.com", "admin.a@example.com", "admin.b@example.com"]:
+                    db.execute(text("DELETE FROM users WHERE email=:email"), {"email": email})
+                for tenant_id in [tid_a, tid_b]:
+                    if tenant_id:
+                        db.execute(text("DELETE FROM tenants WHERE id=:tid"), {"tid": tenant_id})
+                db.commit()
+            finally:
+                db.close()

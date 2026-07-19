@@ -61,6 +61,16 @@
       <div class="ua-flash ua-flash-warning offshore-shell__banner" role="alert">Du använder flera hosts i dev. Använd en stabil host för cookies.</div>
     {% endif %}
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="ua-flashes offshore-shell__flashes">
+          {% for category, message in messages %}
+            <div class="ua-flash ua-flash-{{ category }}">{{ vm.labels.get(message, message) }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
     <div class="app-shell__body offshore-shell__body">
       <aside class="app-shell__sidebar offshore-shell__sidebar" aria-label="Huvudnavigering">
         <div class="app-shell__sidebar-panel offshore-shell__sidebar-panel">

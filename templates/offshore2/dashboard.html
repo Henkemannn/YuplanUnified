@@ -26,7 +26,20 @@
           {% endif %}
         </div>
         <div class="app-shell__card-body">
-          <p class="offshore-empty-state__note">Ingen aktiv Offshoreperiod finns ännu.</p>
+          <div class="offshore-dashboard-statuses">
+            <div class="offshore-dashboard-status">
+              <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.settings.installation'] }}</span>
+              <span class="yp-pill">{{ vm.installation_status }}</span>
+            </div>
+            <div class="offshore-dashboard-status">
+              <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.settings.work_positions'] }}</span>
+              <span class="yp-pill">{{ vm.work_positions_status }}</span>
+            </div>
+            <div class="offshore-dashboard-status">
+              <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.settings.menu_cycle'] }}</span>
+              <span class="yp-pill">{{ vm.menu_cycle_status }}</span>
+            </div>
+          </div>
         </div>
       </article>
 

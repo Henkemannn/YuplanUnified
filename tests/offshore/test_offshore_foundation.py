@@ -147,9 +147,9 @@ def test_offshore_site_override_and_settings_access():
     r = client.get("/offshore/settings", headers=_h("admin"))
     assert r.status_code == 200
     html = r.get_data(as_text=True)
-    assert "Virtuella arbetspositioner" in html
-    assert "Kokk 1" in html
-    assert "Periodmallar" in html or "Period templates" in html
+    assert "Arbetspositioner" in html or "Work positions" in html
+    assert "Namn" in html or "Name" in html
+    assert "Menycykel" in html
 
 
 def test_offshore_viewer_gets_dashboard_but_not_settings():

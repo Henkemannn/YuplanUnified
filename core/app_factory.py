@@ -74,6 +74,12 @@ try:
 except Exception:  # pragma: no cover
     portal_department_bp = None  # type: ignore
 
+# Ensure Offshore v2 models are registered in Base.metadata before any create_all() path runs.
+try:
+    from modules.offshore2 import models as _offshore2_models  # noqa: F401
+except Exception:  # pragma: no cover
+    _offshore2_models = None  # type: ignore
+
 # Map of module key -> import path:attr blueprint (for dynamic registration)
 MODULE_IMPORTS = {
     "municipal": "modules.municipal.views:bp",
@@ -698,25 +704,25 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
             return
         db = get_session()
         try:
-            if sid:
-                try:
-                    rows = db.execute(text("SELECT name, enabled FROM site_feature_flags WHERE site_id=:sid"), {"sid": sid}).fetchall()
-                    g.tenant_feature_flags = {str(r[0]): bool(int(r[1])) for r in rows}
-                except Exception:
-                    # Fall back to tenant-level flags if site-level not available
-                    rows = (
-                        db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
-                        .filter(TenantFeatureFlag.tenant_id == tid)
-                        .all()
-                    )
-                    g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
-            else:
+            if tid:
                 rows = (
                     db.query(TenantFeatureFlag.name, TenantFeatureFlag.enabled)
                     .filter(TenantFeatureFlag.tenant_id == tid)
                     .all()
                 )
                 g.tenant_feature_flags = {r[0]: bool(r[1]) for r in rows}
+            if sid:
+                try:
+                    from sqlalchemy import text as _sa_text
+
+                    rows = db.execute(
+                        _sa_text("SELECT name, enabled FROM site_feature_flags WHERE site_id=:sid"),
+                        {"sid": sid},
+                    ).fetchall()
+                    g.tenant_feature_flags.update({str(r[0]): bool(int(r[1])) for r in rows})
+                except Exception:
+                    # Keep tenant-level flags already loaded when site-specific lookup fails.
+                    pass
         finally:
             db.close()
 
