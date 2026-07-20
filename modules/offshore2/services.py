@@ -588,6 +588,14 @@ def build_dashboard_vm(locale: str, theme: str, role: str | None, tenant_id: int
     cycles = state["cycles"]
     active_cycle = state["active_cycle"]
     active_slots = state["cycle_slots"].get(active_cycle.id, []) if active_cycle else []
+    period_summary = None
+    if tenant_id is not None and site_id:
+        try:
+            from .periods import period_dashboard_payload
+
+            period_summary = period_dashboard_payload(tenant_id, site_id, locale=locale)
+        except Exception:
+            period_summary = None
     vm.update(
         {
             "page_title": vm["labels"]["offshore.dashboard.title"],
@@ -607,6 +615,11 @@ def build_dashboard_vm(locale: str, theme: str, role: str | None, tenant_id: int
             "active_work_positions": positions,
             "active_menu_cycle_slots": active_slots,
             "has_installation": bool(settings),
+            "current_period": period_summary.get("current_period") if period_summary else None,
+            "next_period": period_summary.get("next_period") if period_summary else None,
+            "upcoming_service_events": int(period_summary.get("upcoming_event_count") or 0) if period_summary else 0,
+            "has_period_templates": bool(period_summary.get("has_templates")) if period_summary else False,
+            "period_overlap_warnings": period_summary.get("overlap_warnings") if period_summary else [],
         }
     )
     if active_cycle:

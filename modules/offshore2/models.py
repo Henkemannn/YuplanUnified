@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.models import Base
@@ -109,4 +109,126 @@ class OffshoreMenuCycleSlot(Base):
         Index("ix_offshore_menu_cycle_slots_tenant_site", "tenant_id", "site_id"),
         CheckConstraint("cycle_index >= 1", name="ck_offshore_menu_cycle_slots_cycle_index_positive"),
         CheckConstraint("length(trim(label)) > 0", name="ck_offshore_menu_cycle_slots_label_not_empty"),
+    )
+
+
+class OffshorePeriodTemplate(Base):
+    __tablename__ = "offshore_period_templates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    duration_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_weekday: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "site_id", "name", "active", name="uq_offshore_period_templates_tenant_site_name_active"),
+        Index("ix_offshore_period_templates_tenant_site_active_sort", "tenant_id", "site_id", "active", "sort_order"),
+        Index("ix_offshore_period_templates_tenant_site_name", "tenant_id", "site_id", "name"),
+        CheckConstraint("length(trim(name)) > 0", name="ck_offshore_period_templates_name_not_empty"),
+        CheckConstraint("duration_days >= 1", name="ck_offshore_period_templates_duration_positive"),
+        CheckConstraint("start_weekday IS NULL OR start_weekday BETWEEN 0 AND 6", name="ck_offshore_period_templates_start_weekday_range"),
+    )
+
+
+class OffshorePeriodTemplateEvent(Base):
+    __tablename__ = "offshore_period_template_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    period_template_id: Mapped[int] = mapped_column(ForeignKey("offshore_period_templates.id", ondelete="CASCADE"), nullable=False)
+    day_offset: Mapped[int] = mapped_column(Integer, nullable=False)
+    local_time: Mapped[object] = mapped_column(Time, nullable=False)
+    service_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    work_position_id: Mapped[int | None] = mapped_column(ForeignKey("offshore_work_positions.id"), nullable=True)
+    default_portions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "period_template_id",
+            "day_offset",
+            "local_time",
+            "service_code",
+            name="uq_offshore_period_template_events_template_day_time_code",
+        ),
+        Index("ix_offshore_period_template_events_template_sort", "period_template_id", "sort_order"),
+        Index("ix_offshore_period_template_events_tenant_site", "tenant_id", "site_id"),
+        CheckConstraint("day_offset >= 0", name="ck_offshore_period_template_events_day_offset_nonnegative"),
+        CheckConstraint("length(trim(service_code)) > 0", name="ck_offshore_period_template_events_service_code_not_empty"),
+        CheckConstraint("length(trim(display_name)) > 0", name="ck_offshore_period_template_events_display_name_not_empty"),
+        CheckConstraint("default_portions IS NULL OR default_portions >= 0", name="ck_offshore_period_template_events_default_portions_nonnegative"),
+    )
+
+
+class OffshoreWorkPeriod(Base):
+    __tablename__ = "offshore_work_periods"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    period_template_id: Mapped[int | None] = mapped_column(ForeignKey("offshore_period_templates.id"), nullable=True)
+    menu_cycle_id: Mapped[int | None] = mapped_column(ForeignKey("offshore_menu_cycles.id"), nullable=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+
+    __table_args__ = (
+        Index("ix_offshore_work_periods_tenant_site_starts_at", "tenant_id", "site_id", "starts_at"),
+        Index("ix_offshore_work_periods_tenant_site_ends_at", "tenant_id", "site_id", "ends_at"),
+        Index("ix_offshore_work_periods_tenant_site_status", "tenant_id", "site_id", "status"),
+        CheckConstraint("length(trim(name)) > 0", name="ck_offshore_work_periods_name_not_empty"),
+        CheckConstraint("starts_at < ends_at", name="ck_offshore_work_periods_starts_before_ends"),
+        CheckConstraint(
+            "lower(status) IN ('draft', 'planned', 'active', 'completed', 'cancelled')",
+            name="ck_offshore_work_periods_status_allowed",
+        ),
+    )
+
+
+class OffshoreServiceEvent(Base):
+    __tablename__ = "offshore_service_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    work_period_id: Mapped[int] = mapped_column(ForeignKey("offshore_work_periods.id", ondelete="CASCADE"), nullable=False)
+    source_template_event_id: Mapped[int | None] = mapped_column(ForeignKey("offshore_period_template_events.id"), nullable=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    service_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    work_position_id: Mapped[int | None] = mapped_column(ForeignKey("offshore_work_positions.id"), nullable=True)
+    expected_portions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+
+    __table_args__ = (
+        UniqueConstraint("work_period_id", "source_template_event_id", name="uq_offshore_service_events_period_source_template"),
+        Index("ix_offshore_service_events_work_period_starts_at", "work_period_id", "starts_at"),
+        Index("ix_offshore_service_events_tenant_site_status", "tenant_id", "site_id", "status"),
+        CheckConstraint("length(trim(service_code)) > 0", name="ck_offshore_service_events_service_code_not_empty"),
+        CheckConstraint("length(trim(display_name)) > 0", name="ck_offshore_service_events_display_name_not_empty"),
+        CheckConstraint("expected_portions IS NULL OR expected_portions >= 0", name="ck_offshore_service_events_expected_portions_nonnegative"),
+        CheckConstraint(
+            "lower(status) IN ('planned', 'confirmed', 'completed', 'cancelled')",
+            name="ck_offshore_service_events_status_allowed",
+        ),
     )

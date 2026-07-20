@@ -66,6 +66,44 @@
           {% endfor %}
         </div>
       </article>
+
+      <article class="app-shell__card offshore-period-card">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">{{ vm.labels['offshore.periods.current'] }}</h2>
+            <p class="app-shell__card-text">{{ vm.labels['offshore.period_templates.subtitle'] }}</p>
+          </div>
+          {% if vm.can_manage and not vm.has_period_templates %}
+            <a class="yp-button yp-button-primary" href="{{ url_for('offshore2.period_templates') }}">{{ vm.labels['offshore.dashboard.create_template'] }}</a>
+          {% endif %}
+        </div>
+        <div class="app-shell__card-body offshore-period-summary">
+          <div class="offshore-dashboard-statuses">
+            <div class="offshore-dashboard-status">
+              <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.periods.current'] }}</span>
+              <span class="yp-pill">{{ vm.current_period.name if vm.current_period else vm.labels['offshore.dashboard.no_active_period'] }}</span>
+            </div>
+            <div class="offshore-dashboard-status">
+              <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.periods.next'] }}</span>
+              <span class="yp-pill">{{ vm.next_period.name if vm.next_period else vm.labels['offshore.dashboard.no_active_period'] }}</span>
+            </div>
+            <div class="offshore-dashboard-status">
+              <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.dashboard.upcoming_events'] }}</span>
+              <span class="yp-pill">{{ vm.upcoming_service_events }}</span>
+            </div>
+          </div>
+          {% if not vm.has_period_templates %}
+            <p class="offshore-empty-state__note">{{ vm.labels['offshore.dashboard.no_templates'] }}</p>
+          {% endif %}
+          {% if vm.period_overlap_warnings %}
+            <div class="offshore-overlap-warning-list">
+              {% for warning in vm.period_overlap_warnings %}
+                <div class="yp-pill offshore-roadmap-pill">{{ warning.left.name }} ↔ {{ warning.right.name }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      </article>
     </section>
   </div>
 {% endblock %}

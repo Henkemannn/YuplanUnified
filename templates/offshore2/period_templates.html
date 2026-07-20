@@ -1,0 +1,279 @@
+{% extends "offshore2/base.html" %}
+
+{% block page_title %}{{ vm.page_title }} – Yuplan Offshore{% endblock %}
+
+{% block content %}
+  <div class="app-page offshore-page">
+    <section class="app-shell__page-header offshore-page__header">
+      <div>
+        <h1 class="app-shell__title">{{ vm.page_title }}</h1>
+        <p class="app-shell__subtitle">{{ vm.page_subtitle }}</p>
+      </div>
+      <div class="offshore-page__meta">
+        <span class="app-shell__env-badge">{{ vm.labels['offshore.topbar.installation'] }}: {{ vm.site_name or '—' }}</span>
+        <span class="app-shell__env-badge">{{ vm.labels['offshore.period_templates.title'] }}</span>
+      </div>
+    </section>
+
+    <section class="app-shell__card offshore-settings-card">
+      <div class="app-shell__card-header">
+        <div>
+          <h2 class="app-shell__card-title">{{ vm.labels['offshore.period_templates.create'] }}</h2>
+          <p class="app-shell__card-text">{{ vm.labels['offshore.period_templates.subtitle'] }}</p>
+        </div>
+        <span class="yp-pill offshore-settings-pill">{{ vm.template_options|length }}</span>
+      </div>
+
+      <form method="post" action="{{ url_for('offshore2.create_period_template') }}" class="offshore-form offshore-form--stacked offshore-card-block">
+        {{ csrf_token_input()|safe }}
+        <div class="offshore-form__grid offshore-form__grid--three">
+          <label class="offshore-field">
+            <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.name'] }}</span>
+            <input class="offshore-input" type="text" name="name" required>
+          </label>
+          <label class="offshore-field">
+            <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.duration_days'] }}</span>
+            <input class="offshore-input" type="number" name="duration_days" min="1" value="7" required>
+          </label>
+          <label class="offshore-field">
+            <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.start_weekday'] }}</span>
+            <select class="offshore-input" name="start_weekday">
+              <option value="">—</option>
+              {% for weekday in range(7) %}
+                <option value="{{ weekday }}">{{ vm.labels['offshore.weekday.' ~ weekday] }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </div>
+        <label class="offshore-field">
+          <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.description'] }}</span>
+          <textarea class="offshore-input offshore-textarea" name="description" rows="2"></textarea>
+        </label>
+        <div class="offshore-form__grid offshore-form__grid--three">
+          <label class="offshore-field offshore-field--checkbox">
+            <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.active'] }}</span>
+            <input type="checkbox" name="active" value="1" checked>
+          </label>
+          <label class="offshore-field">
+            <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.sort_order'] }}</span>
+            <input class="offshore-input" type="number" name="sort_order" min="0" placeholder="0">
+          </label>
+          <div class="offshore-field"></div>
+        </div>
+        <div class="offshore-form__actions">
+          <button class="yp-button yp-button-primary" type="submit">{{ vm.labels['offshore.period_templates.create'] }}</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="app-shell__grid offshore-settings-grid">
+      <article class="app-shell__card offshore-settings-card">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">{{ vm.labels['offshore.period_templates.title'] }}</h2>
+            <p class="app-shell__card-text">{{ vm.labels['offshore.period_templates.empty'] if not vm.template_options else vm.labels['offshore.period_templates.subtitle'] }}</p>
+          </div>
+        </div>
+        <div class="offshore-list">
+          {% for template in vm.template_options %}
+            <article class="offshore-list-item {% if not template.active %}offshore-list-item--inactive{% endif %}">
+              <div class="offshore-form offshore-form--inline-card">
+                <div class="offshore-form__grid offshore-form__grid--three">
+                  <div class="offshore-field">
+                    <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.name'] }}</span>
+                    <a href="{{ url_for('offshore2.period_template_detail', template_id=template.id) }}">{{ template.name }}</a>
+                  </div>
+                  <div class="offshore-field">
+                    <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.duration_days'] }}</span>
+                    <span class="yp-pill">{{ template.duration_days }}</span>
+                  </div>
+                  <div class="offshore-field">
+                    <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.start_weekday'] }}</span>
+                    <span class="yp-pill">{{ template.start_weekday_label or '—' }}</span>
+                  </div>
+                </div>
+                <div class="offshore-inline-meta">
+                  <span class="yp-pill">{{ vm.labels['offshore.period_templates.events'] }}: {{ template.events|length }}</span>
+                  <span class="yp-pill">{{ vm.labels['offshore.period_templates.active'] }}: {% if template.active %}{{ vm.labels['offshore.dashboard.installation.configured'] }}{% else %}{{ vm.labels['offshore.dashboard.installation.not_configured'] }}{% endif %}</span>
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="app-shell__card offshore-settings-card">
+        {% if vm.selected_template %}
+          <div class="app-shell__card-header">
+            <div>
+              <h2 class="app-shell__card-title">{{ vm.selected_template.name }}</h2>
+              <p class="app-shell__card-text">{{ vm.selected_template.description or vm.labels['offshore.period_templates.subtitle'] }}</p>
+            </div>
+            <span class="yp-pill offshore-settings-pill">{{ vm.selected_template.duration_days }} {{ vm.labels['offshore.period_templates.duration_days']|lower }}</span>
+          </div>
+
+          <form method="post" action="{{ url_for('offshore2.update_period_template', template_id=vm.selected_template.id) }}" class="offshore-form offshore-form--stacked offshore-card-block">
+            {{ csrf_token_input()|safe }}
+            <div class="offshore-form__grid offshore-form__grid--three">
+              <label class="offshore-field">
+                <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.name'] }}</span>
+                <input class="offshore-input" type="text" name="name" value="{{ vm.selected_template.name }}" required>
+              </label>
+              <label class="offshore-field">
+                <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.duration_days'] }}</span>
+                <input class="offshore-input" type="number" name="duration_days" min="1" value="{{ vm.selected_template.duration_days }}" required>
+              </label>
+              <label class="offshore-field">
+                <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.start_weekday'] }}</span>
+                <select class="offshore-input" name="start_weekday">
+                  <option value="">—</option>
+                  {% for weekday in range(7) %}
+                    <option value="{{ weekday }}" {% if vm.selected_template.start_weekday is not none and vm.selected_template.start_weekday == weekday %}selected{% endif %}>{{ vm.labels['offshore.weekday.' ~ weekday] }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
+            <label class="offshore-field">
+              <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.description'] }}</span>
+              <textarea class="offshore-input offshore-textarea" name="description" rows="2">{{ vm.selected_template.description or '' }}</textarea>
+            </label>
+            <div class="offshore-form__grid offshore-form__grid--three">
+              <label class="offshore-field offshore-field--checkbox">
+                <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.active'] }}</span>
+                <input type="checkbox" name="active" value="1" {% if vm.selected_template.active %}checked{% endif %}>
+              </label>
+              <label class="offshore-field">
+                <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.sort_order'] }}</span>
+                <input class="offshore-input" type="number" name="sort_order" min="0" value="{{ vm.selected_template.sort_order }}">
+              </label>
+              <div class="offshore-field"></div>
+            </div>
+              <div class="offshore-form__actions offshore-form__actions--split">
+              <button class="yp-button yp-button-primary" type="submit">{{ vm.labels['offshore.period_templates.save'] }}</button>
+              <button class="yp-button yp-button-secondary" type="submit" formaction="{{ url_for('offshore2.archive_period_template', template_id=vm.selected_template.id) }}">{{ vm.labels['offshore.period_templates.archive'] }}</button>
+            </div>
+          </form>
+
+          <section class="offshore-cycle-slots offshore-card-block">
+            <h3 class="offshore-cycle-slots__title">{{ vm.labels['offshore.period_templates.add_event'] }}</h3>
+            <form method="post" action="{{ url_for('offshore2.create_period_template_event', template_id=vm.selected_template.id) }}" class="offshore-form offshore-form--stacked">
+              {{ csrf_token_input()|safe }}
+              <div class="offshore-form__grid offshore-form__grid--three">
+                <label class="offshore-field">
+                  <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.day_offset'] }}</span>
+                  <input class="offshore-input" type="number" name="day_offset" min="0" max="{{ vm.selected_template.duration_days - 1 }}" value="0" required>
+                </label>
+                <label class="offshore-field">
+                  <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.local_time'] }}</span>
+                  <input class="offshore-input" type="time" name="local_time" value="08:00" required>
+                </label>
+                <label class="offshore-field">
+                  <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.service_code'] }}</span>
+                  <input class="offshore-input" type="text" name="service_code" placeholder="breakfast" required>
+                </label>
+              </div>
+              <div class="offshore-form__grid offshore-form__grid--three">
+                <label class="offshore-field">
+                  <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.display_name'] }}</span>
+                  <input class="offshore-input" type="text" name="display_name" placeholder="Frukost" required>
+                </label>
+                <label class="offshore-field">
+                  <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.work_position'] }}</span>
+                  <select class="offshore-input" name="work_position_id">
+                    <option value="">—</option>
+                    {% for position in vm.work_positions %}
+                      <option value="{{ position.id }}">{{ position.name }} ({{ position.code }})</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="offshore-field">
+                  <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.default_portions'] }}</span>
+                  <input class="offshore-input" type="number" name="default_portions" min="0">
+                </label>
+              </div>
+              <label class="offshore-field">
+                <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.notes'] }}</span>
+                <textarea class="offshore-input offshore-textarea" name="notes" rows="2"></textarea>
+              </label>
+              <div class="offshore-form__actions">
+                <button class="yp-button yp-button-primary" type="submit">{{ vm.labels['offshore.period_templates.create_event'] }}</button>
+              </div>
+            </form>
+          </section>
+
+          <div class="offshore-list offshore-card-block">
+            {% for event in vm.selected_template.events %}
+              <article class="offshore-list-item">
+                <form method="post" action="{{ url_for('offshore2.update_period_template_event', template_id=vm.selected_template.id, event_id=event.id) }}" class="offshore-form offshore-form--inline-card">
+                  {{ csrf_token_input()|safe }}
+                  <div class="offshore-form__grid offshore-form__grid--three">
+                    <label class="offshore-field">
+                      <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.day_offset'] }}</span>
+                      <input class="offshore-input" type="number" name="day_offset" min="0" max="{{ vm.selected_template.duration_days - 1 }}" value="{{ event.day_offset }}" required>
+                    </label>
+                    <label class="offshore-field">
+                      <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.local_time'] }}</span>
+                      <input class="offshore-input" type="time" name="local_time" value="{{ event.local_time }}" required>
+                    </label>
+                    <label class="offshore-field">
+                      <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.service_code'] }}</span>
+                      <input class="offshore-input" type="text" name="service_code" value="{{ event.service_code }}" required>
+                    </label>
+                  </div>
+                  <div class="offshore-form__grid offshore-form__grid--three">
+                    <label class="offshore-field">
+                      <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.display_name'] }}</span>
+                      <input class="offshore-input" type="text" name="display_name" value="{{ event.display_name }}" required>
+                    </label>
+                    <label class="offshore-field">
+                      <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.work_position'] }}</span>
+                      <select class="offshore-input" name="work_position_id">
+                        <option value="">—</option>
+                        {% for position in vm.work_positions %}
+                          <option value="{{ position.id }}" {% if event.work_position_id == position.id %}selected{% endif %}>{{ position.name }} ({{ position.code }})</option>
+                        {% endfor %}
+                      </select>
+                    </label>
+                    <label class="offshore-field">
+                      <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.default_portions'] }}</span>
+                      <input class="offshore-input" type="number" name="default_portions" min="0" value="{{ event.default_portions if event.default_portions is not none else '' }}">
+                    </label>
+                  </div>
+                  <div class="offshore-form__grid offshore-form__grid--three">
+                    <label class="offshore-field offshore-field--checkbox">
+                      <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.active'] }}</span>
+                      <input type="checkbox" name="active" value="1" {% if event.active %}checked{% endif %}>
+                    </label>
+                    <label class="offshore-field">
+                      <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.sort_order'] }}</span>
+                      <input class="offshore-input" type="number" name="sort_order" min="0" value="{{ event.sort_order }}">
+                    </label>
+                    <div class="offshore-field">
+                      <span class="offshore-field__label">{{ event.day_label }}</span>
+                      <span class="yp-pill">{{ event.local_time }}</span>
+                    </div>
+                  </div>
+                  <label class="offshore-field">
+                    <span class="offshore-field__label">{{ vm.labels['offshore.period_templates.notes'] }}</span>
+                    <textarea class="offshore-input offshore-textarea" name="notes" rows="2">{{ event.notes or '' }}</textarea>
+                  </label>
+                  <div class="offshore-form__actions offshore-form__actions--split">
+                    <button class="yp-button yp-button-primary" type="submit">{{ vm.labels['offshore.period_templates.save'] }}</button>
+                    <button class="yp-button yp-button-secondary" type="submit" formaction="{{ url_for('offshore2.delete_period_template_event', template_id=vm.selected_template.id, event_id=event.id) }}">{{ vm.labels['offshore.period_templates.remove_event'] }}</button>
+                  </div>
+                </form>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="app-shell__card-header">
+            <div>
+              <h2 class="app-shell__card-title">{{ vm.labels['offshore.period_templates.empty'] }}</h2>
+              <p class="app-shell__card-text">{{ vm.labels['offshore.dashboard.no_templates'] }}</p>
+            </div>
+          </div>
+        {% endif %}
+      </article>
+    </section>
+  </div>
+{% endblock %}

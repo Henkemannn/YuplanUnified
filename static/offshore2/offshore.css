@@ -95,6 +95,17 @@
   border: 1px solid color-mix(in srgb, var(--offshore-accent) 30%, var(--offshore-border));
 }
 
+.offshore-overlap-warning-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.offshore-period-summary {
+  gap: 14px;
+}
+
 .offshore-settings-card__footer {
   display: flex;
   justify-content: flex-start;

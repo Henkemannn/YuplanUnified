@@ -13,6 +13,18 @@ NAV_ITEMS = (
         "label_key": "offshore.nav.settings",
         "path": "/offshore/settings",
     },
+    {
+        "key": "period_templates",
+        "endpoint": "offshore2.period_templates",
+        "label_key": "offshore.nav.period_templates",
+        "path": "/offshore/period-templates",
+    },
+    {
+        "key": "periods",
+        "endpoint": "offshore2.periods",
+        "label_key": "offshore.nav.periods",
+        "path": "/offshore/periods",
+    },
 )
 
 ROADMAP_ITEMS = (
