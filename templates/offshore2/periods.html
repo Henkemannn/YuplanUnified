@@ -60,6 +60,15 @@
             </select>
           </label>
           <label class="offshore-field">
+            <span class="offshore-field__label">Start slot</span>
+            <select class="offshore-input" name="start_menu_cycle_slot_id">
+              <option value="">—</option>
+              {% for slot in vm.menu_cycle_slots %}
+                <option value="{{ slot.id }}">#{{ slot.cycle_index }} {{ slot.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="offshore-field">
             <span class="offshore-field__label">{{ vm.labels['offshore.periods.notes'] }}</span>
             <input class="offshore-input" type="text" name="notes" placeholder="{{ vm.labels['offshore.periods.notes'] }}">
           </label>
@@ -143,6 +152,15 @@
                   {% endfor %}
                 </select>
               </label>
+              <label class="offshore-field">
+                <span class="offshore-field__label">Start slot</span>
+                <select class="offshore-input" name="start_menu_cycle_slot_id">
+                  <option value="">—</option>
+                  {% for slot in vm.menu_cycle_slots %}
+                    <option value="{{ slot.id }}" {% if vm.selected_period.start_menu_cycle_slot_id == slot.id %}selected{% endif %}>#{{ slot.cycle_index }} {{ slot.label }}</option>
+                  {% endfor %}
+                </select>
+              </label>
             </div>
             <div class="offshore-form__grid offshore-form__grid--three">
               <label class="offshore-field">
@@ -217,12 +235,31 @@
                       <span class="yp-pill">{{ event.source_template_event_id or '—' }}</span>
                     </div>
                   </div>
+                  {% set context = vm.period_event_context_by_event_id.get(event.id) %}
+                  <div class="offshore-inline-meta">
+                    <span class="yp-pill">{{ context.resolution_status if context else 'unavailable' }}</span>
+                    <span class="yp-pill">{{ context.assignment_source if context else 'automatic' }}</span>
+                    {% if context and context.menu_cycle_index %}
+                      <span class="yp-pill">Slot #{{ context.menu_cycle_index }}</span>
+                    {% endif %}
+                    {% if context and context.builder_menu_id %}
+                      <a class="yp-pill" href="{{ url_for('offshore2.period_service_event_menu_context', period_id=vm.selected_period.id, event_id=event.id) }}">{{ context.builder_menu_id }}</a>
+                    {% endif %}
+                  </div>
+                  {% if context and context.resolution_reason %}
+                    <p class="offshore-empty-state__note">{{ context.resolution_reason }}</p>
+                  {% endif %}
                   <label class="offshore-field">
                     <span class="offshore-field__label">{{ vm.labels['offshore.periods.event_notes'] }}</span>
                     <textarea class="offshore-input offshore-textarea" name="notes" rows="2">{{ event.notes or '' }}</textarea>
                   </label>
                   <div class="offshore-form__actions">
                     <button class="yp-button yp-button-primary" type="submit">{{ vm.labels['offshore.periods.event_save'] }}</button>
+                    {% if vm.user_role in ['admin', 'superuser', 'editor'] %}
+                      <button class="yp-button yp-button-secondary" type="submit" formaction="{{ url_for('offshore2.refresh_period_service_event_menu_context', period_id=vm.selected_period.id, event_id=event.id) }}">Refresh</button>
+                      <button class="yp-button yp-button-secondary" type="submit" formaction="{{ url_for('offshore2.manual_period_service_event_menu_context', period_id=vm.selected_period.id, event_id=event.id) }}">Manual</button>
+                      <button class="yp-button yp-button-secondary" type="submit" formaction="{{ url_for('offshore2.clear_period_service_event_menu_context', period_id=vm.selected_period.id, event_id=event.id) }}">Clear</button>
+                    {% endif %}
                   </div>
                 </form>
               </article>

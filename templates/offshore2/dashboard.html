@@ -46,6 +46,21 @@
       <article class="app-shell__card offshore-today-card">
         <h2 class="app-shell__card-title">Dagens yta</h2>
         <p class="app-shell__card-text">{{ vm.today_placeholder }}</p>
+        <div class="offshore-dashboard-statuses">
+          <div class="offshore-dashboard-status">
+            <span class="offshore-dashboard-status__label">Next service</span>
+            <span class="yp-pill">{{ vm.next_service.title if vm.next_service else '—' }}</span>
+          </div>
+          <div class="offshore-dashboard-status">
+            <span class="offshore-dashboard-status__label">Menu context</span>
+            <span class="yp-pill">{{ vm.next_service.menu_context_status if vm.next_service else 'unavailable' }}</span>
+          </div>
+          <div class="offshore-dashboard-status">
+            <span class="offshore-dashboard-status__label">Unresolved</span>
+            <span class="yp-pill">{{ vm.unresolved_count }}</span>
+          </div>
+        </div>
+        <p class="offshore-empty-state__note">{{ vm.setup_guidance or 'Menu context is ready for future services.' }}</p>
         <div class="offshore-placeholder-block">
           <span class="offshore-placeholder-label">Meny</span>
           <span class="offshore-placeholder-label">Prep</span>

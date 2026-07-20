@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.models import Base
@@ -181,6 +181,9 @@ class OffshoreWorkPeriod(Base):
     site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
     period_template_id: Mapped[int | None] = mapped_column(ForeignKey("offshore_period_templates.id"), nullable=True)
     menu_cycle_id: Mapped[int | None] = mapped_column(ForeignKey("offshore_menu_cycles.id"), nullable=True)
+    start_menu_cycle_slot_id: Mapped[int | None] = mapped_column(
+        ForeignKey("offshore_menu_cycle_slots.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -231,4 +234,54 @@ class OffshoreServiceEvent(Base):
             "lower(status) IN ('planned', 'confirmed', 'completed', 'cancelled')",
             name="ck_offshore_service_events_status_allowed",
         ),
+    )
+
+
+class OffshoreServiceEventMenuContext(Base):
+    __tablename__ = "offshore_service_event_menu_contexts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    work_period_id: Mapped[int] = mapped_column(ForeignKey("offshore_work_periods.id", ondelete="CASCADE"), nullable=False)
+    service_event_id: Mapped[int] = mapped_column(
+        ForeignKey("offshore_service_events.id", ondelete="CASCADE"), nullable=False
+    )
+    service_date: Mapped[date] = mapped_column(Date, nullable=False)
+    menu_cycle_id: Mapped[int | None] = mapped_column(ForeignKey("offshore_menu_cycles.id"), nullable=True)
+    start_menu_cycle_slot_id: Mapped[int | None] = mapped_column(
+        ForeignKey("offshore_menu_cycle_slots.id", ondelete="SET NULL"), nullable=True
+    )
+    menu_cycle_slot_id: Mapped[int | None] = mapped_column(
+        ForeignKey("offshore_menu_cycle_slots.id", ondelete="SET NULL"), nullable=True
+    )
+    menu_cycle_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    service_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    resolution_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    assignment_source: Mapped[str] = mapped_column(String(20), nullable=False)
+    match_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    resolution_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    manual_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    builder_publication_pin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("commun_builder_publication_pins.id", ondelete="SET NULL"), nullable=True
+    )
+    builder_publication_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    builder_publication_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    builder_menu_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    builder_menu_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+
+    __table_args__ = (
+        UniqueConstraint("service_event_id", name="uq_offshore_service_event_menu_contexts_service_event_id"),
+        Index("ix_offshore_service_event_menu_contexts_tenant_site_date", "tenant_id", "site_id", "service_date"),
+        Index("ix_offshore_service_event_menu_contexts_work_period", "work_period_id", "service_date"),
+        Index("ix_offshore_service_event_menu_contexts_tenant_site_status", "tenant_id", "site_id", "resolution_status"),
+        CheckConstraint("builder_publication_year > 0", name="ck_offshore_service_event_menu_contexts_publication_year_positive"),
+        CheckConstraint("builder_publication_week BETWEEN 1 AND 53", name="ck_offshore_service_event_menu_contexts_publication_week_range"),
+        CheckConstraint("menu_cycle_index IS NULL OR menu_cycle_index > 0", name="ck_offshore_service_event_menu_contexts_cycle_index_positive"),
+        CheckConstraint("builder_menu_version IS NULL OR builder_menu_version > 0", name="ck_offshore_service_event_menu_contexts_builder_menu_version_positive"),
+        CheckConstraint("lower(resolution_status) IN ('resolved', 'unresolved', 'unavailable', 'manual')", name="ck_offshore_service_event_menu_contexts_resolution_status_allowed"),
+        CheckConstraint("lower(assignment_source) IN ('automatic', 'manual')", name="ck_offshore_service_event_menu_contexts_assignment_source_allowed"),
+        CheckConstraint("match_status IS NULL OR lower(match_status) IN ('matched', 'missing', 'ambiguous', 'withdrawn')", name="ck_offshore_service_event_menu_contexts_match_status_allowed"),
     )

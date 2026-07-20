@@ -15,12 +15,14 @@ from .i18n import copy_for, t
 from .models import (
     OffshoreInstallationSettings,
     OffshoreMenuCycle,
+    OffshoreMenuCycleSlot,
     OffshorePeriodTemplate,
     OffshorePeriodTemplateEvent,
     OffshoreServiceEvent,
     OffshoreWorkPeriod,
     OffshoreWorkPosition,
 )
+from .menu_context import _service as _menu_context_service
 
 
 PERIOD_TEMPLATE_EVENT_STATUSES = ("planned", "confirmed", "completed", "cancelled")
@@ -190,6 +192,27 @@ class OffshorePeriodService:
         if row is None:
             raise LookupError("offshore.validation.cross_site")
 
+    def _ensure_menu_cycle_slot_scope(self, db, tenant_id: int, site_id: str, menu_cycle_slot_id: int | None, menu_cycle_id: int | None = None) -> None:
+        if menu_cycle_slot_id is None:
+            return
+        query = self._base_query(db, OffshoreMenuCycleSlot, tenant_id, site_id).filter(OffshoreMenuCycleSlot.id == int(menu_cycle_slot_id))
+        if menu_cycle_id is not None:
+            query = query.filter(OffshoreMenuCycleSlot.menu_cycle_id == int(menu_cycle_id))
+        row = query.first()
+        if row is None:
+            raise LookupError("offshore.validation.cross_site")
+
+    def _default_menu_cycle_slot_id(self, db, tenant_id: int, site_id: str, menu_cycle_id: int | None) -> int | None:
+        if menu_cycle_id is None:
+            return None
+        row = (
+            self._base_query(db, OffshoreMenuCycleSlot, tenant_id, site_id)
+            .filter(OffshoreMenuCycleSlot.menu_cycle_id == int(menu_cycle_id), OffshoreMenuCycleSlot.is_active.is_(True))
+            .order_by(OffshoreMenuCycleSlot.cycle_index.asc(), OffshoreMenuCycleSlot.sort_order.asc(), OffshoreMenuCycleSlot.id.asc())
+            .first()
+        )
+        return int(row.id) if row is not None else None
+
     def _get_template(self, db, tenant_id: int, site_id: str, template_id: int) -> OffshorePeriodTemplate | None:
         return self._base_query(db, OffshorePeriodTemplate, tenant_id, site_id).filter(OffshorePeriodTemplate.id == int(template_id)).first()
 
@@ -236,6 +259,17 @@ class OffshorePeriodService:
                 .order_by(OffshoreMenuCycle.is_active.desc(), OffshoreMenuCycle.name.asc(), OffshoreMenuCycle.id.asc())
                 .all()
             )
+        finally:
+            db.close()
+
+    def list_menu_cycle_slots(self, tenant_id: int | None, site_id: str | None, menu_cycle_id: int | None = None) -> list[OffshoreMenuCycleSlot]:
+        db = get_session()
+        try:
+            _validate_scope(db, tenant_id, site_id)
+            query = self._base_query(db, OffshoreMenuCycleSlot, int(tenant_id), str(site_id))
+            if menu_cycle_id is not None:
+                query = query.filter(OffshoreMenuCycleSlot.menu_cycle_id == int(menu_cycle_id))
+            return query.order_by(OffshoreMenuCycleSlot.menu_cycle_id.asc(), OffshoreMenuCycleSlot.cycle_index.asc(), OffshoreMenuCycleSlot.sort_order.asc(), OffshoreMenuCycleSlot.id.asc()).all()
         finally:
             db.close()
 
@@ -562,6 +596,7 @@ class OffshorePeriodService:
         ends_at: datetime | str,
         period_template_id: int | None = None,
         menu_cycle_id: int | None = None,
+        start_menu_cycle_slot_id: int | None = None,
         status: str = "planned",
         notes: str | None = None,
     ) -> OffshoreWorkPeriod:
@@ -573,6 +608,9 @@ class OffshorePeriodService:
                 if template is None:
                     raise LookupError("offshore.validation.cross_site")
             self._ensure_menu_cycle_scope(db, int(tenant_id), str(site_id), menu_cycle_id)
+            self._ensure_menu_cycle_slot_scope(db, int(tenant_id), str(site_id), start_menu_cycle_slot_id, int(menu_cycle_id) if menu_cycle_id is not None else None)
+            if start_menu_cycle_slot_id is None:
+                start_menu_cycle_slot_id = self._default_menu_cycle_slot_id(db, int(tenant_id), str(site_id), menu_cycle_id)
             starts_local = _ensure_local_datetime(starts_at, _site_timezone_name(db, tenant_id, site_id))
             ends_local = _ensure_local_datetime(ends_at, _site_timezone_name(db, tenant_id, site_id))
             if _utc_datetime(starts_local) >= _utc_datetime(ends_local):
@@ -582,6 +620,7 @@ class OffshorePeriodService:
                 site_id=str(site_id),
                 period_template_id=int(period_template_id) if period_template_id is not None else None,
                 menu_cycle_id=int(menu_cycle_id) if menu_cycle_id is not None else None,
+                start_menu_cycle_slot_id=int(start_menu_cycle_slot_id) if start_menu_cycle_slot_id is not None else None,
                 name=_validate_name(name),
                 starts_at=_utc_datetime(starts_local),
                 ends_at=_utc_datetime(ends_local),
@@ -642,6 +681,13 @@ class OffshorePeriodService:
                 else:
                     self._ensure_menu_cycle_scope(db, int(tenant_id), str(site_id), int(menu_cycle_id))
                     row.menu_cycle_id = int(menu_cycle_id)
+            if "start_menu_cycle_slot_id" in payload:
+                start_menu_cycle_slot_id = payload.get("start_menu_cycle_slot_id")
+                if start_menu_cycle_slot_id is None:
+                    row.start_menu_cycle_slot_id = None
+                else:
+                    self._ensure_menu_cycle_slot_scope(db, int(tenant_id), str(site_id), int(start_menu_cycle_slot_id), int(row.menu_cycle_id) if row.menu_cycle_id is not None else None)
+                    row.start_menu_cycle_slot_id = int(start_menu_cycle_slot_id)
             row.updated_at = _now()
             db.commit()
             db.refresh(row)
@@ -692,6 +738,13 @@ class OffshorePeriodService:
             if "notes" in payload:
                 row.notes = _clean(payload.get("notes")) or None
             row.updated_at = _now()
+            _menu_context_service.sync_service_event_context(
+                tenant_id=int(tenant_id),
+                site_id=str(site_id),
+                work_period_id=int(work_period_id),
+                service_event_id=int(event_id),
+                db=db,
+            )
             db.commit()
             db.refresh(row)
             return row
@@ -745,6 +798,23 @@ class OffshorePeriodService:
                 .count()
             )
             overlaps = self.detect_period_overlaps(tenant_id, site_id)
+            unresolved_count = 0
+            next_service = None
+            for period in [current_period, next_period]:
+                if period is None:
+                    continue
+                contexts = _menu_context_service.list_contexts_for_period(tenant_id=tenant_id, site_id=site_id, work_period_id=int(period.id))
+                unresolved_count += len([row for row in contexts if str(row.resolution_status).lower() != "resolved"])
+                if next_service is None:
+                    events = self.list_service_events(tenant_id, site_id, int(period.id))
+                    if events:
+                        context = next((row for row in contexts if int(row.service_event_id) == int(events[0].id)), None)
+                        next_service = {
+                            "service_event_id": events[0].id,
+                            "starts_at": events[0].starts_at,
+                            "title": events[0].display_name,
+                            "menu_context_status": getattr(context, "resolution_status", None),
+                        }
             return {
                 "has_templates": bool(templates),
                 "template_count": len(templates),
@@ -752,6 +822,9 @@ class OffshorePeriodService:
                 "next_period": next_period,
                 "upcoming_event_count": int(upcoming_event_count),
                 "overlap_warnings": overlaps,
+                "unresolved_count": unresolved_count,
+                "next_service": next_service,
+                "setup_guidance": "Configure a menu cycle and publication pin to resolve menu context." if not templates else None,
             }
         finally:
             db.close()
@@ -765,6 +838,7 @@ class OffshorePeriodService:
         starts_at: datetime | str,
         name: str | None = None,
         menu_cycle_id: int | None = None,
+        start_menu_cycle_slot_id: int | None = None,
         notes: str | None = None,
     ) -> OffshorePeriodGeneration:
         db = get_new_session()
@@ -774,6 +848,10 @@ class OffshorePeriodService:
             if template is None or not bool(template.active):
                 raise LookupError("offshore.validation.cross_site")
             self._ensure_menu_cycle_scope(db, int(tenant_id), str(site_id), menu_cycle_id)
+            self._ensure_menu_cycle_slot_scope(db, int(tenant_id), str(site_id), start_menu_cycle_slot_id, int(menu_cycle_id) if menu_cycle_id is not None else None)
+            from .menu_context import _service as _menu_context_service
+            if start_menu_cycle_slot_id is None:
+                start_menu_cycle_slot_id = self._default_menu_cycle_slot_id(db, int(tenant_id), str(site_id), menu_cycle_id)
             timezone_name = _site_timezone_name(db, tenant_id, site_id)
             starts_local = _ensure_local_datetime(starts_at, timezone_name)
             ends_local = datetime.combine(starts_local.date() + timedelta(days=int(template.duration_days)), starts_local.timetz().replace(tzinfo=None), tzinfo=starts_local.tzinfo)
@@ -798,12 +876,21 @@ class OffshorePeriodService:
                     .order_by(OffshoreServiceEvent.starts_at.asc(), OffshoreServiceEvent.id.asc())
                     .all()
                 )
+                for event in existing_events:
+                    _menu_context_service.sync_service_event_context(
+                        tenant_id=int(tenant_id),
+                        site_id=str(site_id),
+                        work_period_id=int(existing.id),
+                        service_event_id=int(event.id),
+                        db=db,
+                    )
                 return OffshorePeriodGeneration(work_period=existing, service_events=existing_events)
             period = OffshoreWorkPeriod(
                 tenant_id=int(tenant_id),
                 site_id=str(site_id),
                 period_template_id=int(period_template_id),
                 menu_cycle_id=int(menu_cycle_id) if menu_cycle_id is not None else None,
+                start_menu_cycle_slot_id=int(start_menu_cycle_slot_id) if start_menu_cycle_slot_id is not None else None,
                 name=period_name,
                 starts_at=starts_utc,
                 ends_at=ends_utc,
@@ -838,7 +925,15 @@ class OffshorePeriodService:
                     updated_at=_now(),
                 )
                 db.add(event)
+                db.flush()
                 generated_events.append(event)
+                _menu_context_service.sync_service_event_context(
+                    tenant_id=int(tenant_id),
+                    site_id=str(site_id),
+                    work_period_id=int(period.id),
+                    service_event_id=int(event.id),
+                    db=db,
+                )
             db.commit()
             db.refresh(period)
             for event in generated_events:
@@ -903,6 +998,7 @@ def serialize_period(period: OffshoreWorkPeriod, locale: str, timezone_name: str
         "site_id": period.site_id,
         "period_template_id": period.period_template_id,
         "menu_cycle_id": period.menu_cycle_id,
+        "start_menu_cycle_slot_id": period.start_menu_cycle_slot_id,
         "name": period.name,
         "starts_at": period.starts_at,
         "ends_at": period.ends_at,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
 from core.auth import require_roles
 from core.http_errors import forbidden, not_found
@@ -20,6 +20,7 @@ from .periods import (
     site_timezone_name,
     _service as _period_service,
 )
+from .menu_context import _service as _menu_context_service
 from .services import (
     _service,
     build_dashboard_vm,
@@ -430,6 +431,10 @@ def _period_page_vm(result: dict[str, object]) -> dict[str, object]:
             {"id": row.id, "name": row.name, "is_active": bool(row.is_active)}
             for row in _period_service.list_menu_cycles(tenant_id, site_id)
         ],
+        "menu_cycle_slots": [
+            {"id": slot.id, "menu_cycle_id": slot.menu_cycle_id, "cycle_index": slot.cycle_index, "label": slot.label, "is_active": bool(slot.is_active)}
+            for slot in _period_service.list_menu_cycle_slots(tenant_id, site_id)
+        ],
         "period_status_options": [
             {"value": value, "label": labels.get(f"offshore.periods.status.{value}", value)}
             for value in WORK_PERIOD_STATUSES
@@ -446,7 +451,6 @@ def _period_page_vm(result: dict[str, object]) -> dict[str, object]:
         "has_templates": summary.get("has_templates"),
         "overlap_warnings": summary.get("overlap_warnings"),
     }
-
 
 def _template_page_vm(result: dict[str, object], *, template_id: int | None = None) -> dict[str, object]:
     tenant_id, site_id, timezone_name, labels = _period_scope(result)
@@ -683,6 +687,7 @@ def create_period():
                 starts_at=datetime.fromisoformat(f"{request.form.get('start_date')}T{request.form.get('start_time')}"),
                 name=request.form.get("name"),
                 menu_cycle_id=request.form.get("menu_cycle_id") or None,
+                start_menu_cycle_slot_id=request.form.get("start_menu_cycle_slot_id") or None,
                 notes=request.form.get("notes"),
             )
             _flash_success("offshore.success.work_period_created")
@@ -694,6 +699,7 @@ def create_period():
             starts_at=datetime.fromisoformat(f"{request.form.get('start_date')}T{request.form.get('start_time')}"),
             ends_at=datetime.fromisoformat(f"{request.form.get('end_date')}T{request.form.get('end_time')}"),
             menu_cycle_id=request.form.get("menu_cycle_id") or None,
+            start_menu_cycle_slot_id=request.form.get("start_menu_cycle_slot_id") or None,
             status=request.form.get("status") or "planned",
             notes=request.form.get("notes"),
         )
@@ -716,10 +722,54 @@ def period_detail(period_id: int):
     if period is None:
         return not_found("offshore.validation.cross_site")
     events = _period_service.list_service_events(tenant_id, site_id, period_id)
+    contexts = _menu_context_service.list_contexts_for_period(tenant_id=tenant_id, site_id=site_id, work_period_id=period_id)
     vm = _period_page_vm(result)
     vm.update({
         "selected_period": serialize_period(period, resolve_locale(), timezone_name, events),
         "period_events": [serialize_service_event(event, resolve_locale(), timezone_name) for event in events],
+        "period_event_context_by_event_id": {
+            context.service_event_id: {
+                "service_date": context.service_date.isoformat(),
+                "menu_cycle_id": context.menu_cycle_id,
+                "start_menu_cycle_slot_id": context.start_menu_cycle_slot_id,
+                "menu_cycle_slot_id": context.menu_cycle_slot_id,
+                "menu_cycle_index": context.menu_cycle_index,
+                "service_key": context.service_key,
+                "resolution_status": context.resolution_status,
+                "assignment_source": context.assignment_source,
+                "match_status": context.match_status,
+                "resolution_reason": context.resolution_reason,
+                "manual_note": context.manual_note,
+                "builder_publication_pin_id": context.builder_publication_pin_id,
+                "builder_publication_year": context.builder_publication_year,
+                "builder_publication_week": context.builder_publication_week,
+                "builder_menu_id": context.builder_menu_id,
+                "builder_menu_version": context.builder_menu_version,
+            }
+            for context in contexts
+        },
+        "period_event_contexts": [
+            {
+                "service_event_id": context.service_event_id,
+                "service_date": context.service_date.isoformat(),
+                "menu_cycle_id": context.menu_cycle_id,
+                "start_menu_cycle_slot_id": context.start_menu_cycle_slot_id,
+                "menu_cycle_slot_id": context.menu_cycle_slot_id,
+                "menu_cycle_index": context.menu_cycle_index,
+                "service_key": context.service_key,
+                "resolution_status": context.resolution_status,
+                "assignment_source": context.assignment_source,
+                "match_status": context.match_status,
+                "resolution_reason": context.resolution_reason,
+                "manual_note": context.manual_note,
+                "builder_publication_pin_id": context.builder_publication_pin_id,
+                "builder_publication_year": context.builder_publication_year,
+                "builder_publication_week": context.builder_publication_week,
+                "builder_menu_id": context.builder_menu_id,
+                "builder_menu_version": context.builder_menu_version,
+            }
+            for context in contexts
+        ],
         "overlap_warnings": _period_service.detect_period_overlaps(tenant_id, site_id),
     })
     return render_template("offshore2/periods.html", vm=vm)
@@ -744,6 +794,7 @@ def update_period(period_id: int):
                 "ends_at": datetime.fromisoformat(f"{request.form.get('end_date')}T{request.form.get('end_time')}") if request.form.get("end_date") and request.form.get("end_time") else None,
                 "period_template_id": request.form.get("period_template_id") or None,
                 "menu_cycle_id": request.form.get("menu_cycle_id") or None,
+                "start_menu_cycle_slot_id": request.form.get("start_menu_cycle_slot_id") or None,
             },
         )
         _flash_success("offshore.success.work_period_saved")
@@ -782,3 +833,153 @@ def update_period_service_event(period_id: int, event_id: int):
         return not_found("offshore.validation.cross_site")
     except ValueError as exc:
         return _handle_validation_error(exc)
+
+
+@bp.get("/periods/<int:period_id>/service-events/<int:event_id>/menu-context")
+@require_roles(*VIEWER_ROLES)
+def period_service_event_menu_context(period_id: int, event_id: int):
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        context = _menu_context_service.resolve_context(
+            tenant_id=result.get("tenant_id"),
+            site_id=result.get("site_id"),
+            work_period_id=period_id,
+            service_event_id=event_id,
+        )
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+
+    return jsonify(
+        {
+            "ok": True,
+            "context": {
+                "service_date": context.service_date.isoformat(),
+                "menu_cycle_id": context.menu_cycle_id,
+                "start_menu_cycle_slot_id": context.start_menu_cycle_slot_id,
+                "menu_cycle_slot_id": context.menu_cycle_slot_id,
+                "menu_cycle_index": context.menu_cycle_index,
+                "service_key": context.service_key,
+                "resolution_status": context.resolution_status,
+                "assignment_source": context.assignment_source,
+                "match_status": context.match_status,
+                "resolution_reason": context.resolution_reason,
+                "manual_note": context.manual_note,
+                "builder_publication_pin_id": context.builder_publication_pin_id,
+                "builder_publication_year": context.builder_publication_year,
+                "builder_publication_week": context.builder_publication_week,
+                "builder_menu_id": context.builder_menu_id,
+                "builder_menu_version": context.builder_menu_version,
+            },
+        }
+    )
+
+
+@bp.get("/periods/<int:period_id>/service-events/<int:event_id>/calendar-readiness")
+@require_roles(*VIEWER_ROLES)
+def period_service_event_calendar_readiness(period_id: int, event_id: int):
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        period = _period_service.get_work_period(result.get("tenant_id"), result.get("site_id"), period_id)
+        event = _period_service.list_service_events(result.get("tenant_id"), result.get("site_id"), period_id)
+        selected_event = next((row for row in event if int(row.id) == int(event_id)), None)
+        context = _menu_context_service.resolve_context(
+            tenant_id=result.get("tenant_id"),
+            site_id=result.get("site_id"),
+            work_period_id=period_id,
+            service_event_id=event_id,
+        )
+        if period is None or selected_event is None:
+            return not_found("offshore.validation.cross_site")
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+
+    editable = (request.headers.get("X-User-Role") or "").strip().lower() in ("admin", "superuser", "editor") and getattr(period, "status", "") != "completed"
+    category = "service"
+    return jsonify(
+        {
+            "source_module": "modules.offshore2",
+            "source_type": "service_event",
+            "source_id": str(event_id),
+            "tenant_id": result.get("tenant_id"),
+            "site_id": result.get("site_id"),
+            "starts_at": selected_event.starts_at.isoformat(),
+            "title": selected_event.display_name,
+            "category": category,
+            "status": selected_event.status,
+            "menu_context_status": context.resolution_status,
+            "detail_url": url_for("offshore2.period_detail", period_id=period_id),
+            "editable": editable,
+        }
+    )
+
+
+@bp.post("/periods/<int:period_id>/service-events/<int:event_id>/menu-context/refresh")
+@require_roles("editor", "admin", "superuser")
+def refresh_period_service_event_menu_context(period_id: int, event_id: int):
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        context = _menu_context_service.sync_service_event_context(
+            tenant_id=result.get("tenant_id"),
+            site_id=result.get("site_id"),
+            work_period_id=period_id,
+            service_event_id=event_id,
+            source="automatic",
+        )
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+    return jsonify({"ok": True, "context": {"resolution_status": context.resolution_status, "assignment_source": context.assignment_source}})
+
+
+@bp.post("/periods/<int:period_id>/service-events/<int:event_id>/menu-context/manual")
+@require_roles("editor", "admin", "superuser")
+def manual_period_service_event_menu_context(period_id: int, event_id: int):
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        context = _menu_context_service.sync_service_event_context(
+            tenant_id=result.get("tenant_id"),
+            site_id=result.get("site_id"),
+            work_period_id=period_id,
+            service_event_id=event_id,
+            source="manual",
+            manual_note=request.form.get("manual_note"),
+            force=True,
+        )
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+    return jsonify({"ok": True, "context": {"resolution_status": context.resolution_status, "assignment_source": context.assignment_source}})
+
+
+@bp.post("/periods/<int:period_id>/service-events/<int:event_id>/menu-context/clear")
+@require_roles("editor", "admin", "superuser")
+def clear_period_service_event_menu_context(period_id: int, event_id: int):
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        context = _menu_context_service.clear_manual_assignment(
+            tenant_id=result.get("tenant_id"),
+            site_id=result.get("site_id"),
+            work_period_id=period_id,
+            service_event_id=event_id,
+        )
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+    return jsonify({"ok": True, "context": {"resolution_status": context.resolution_status, "assignment_source": context.assignment_source}})
