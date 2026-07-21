@@ -1,0 +1,193 @@
+{% extends "offshore2/base.html" %}
+
+{% block page_title %}{{ vm.page_title }} – Yuplan Offshore{% endblock %}
+
+{% block content %}
+  <div class="app-page offshore-page offshore-operations-page">
+    <section class="app-shell__page-header offshore-page__header">
+      <div>
+        <h1 class="app-shell__title">{{ vm.page_title }}</h1>
+        <p class="app-shell__subtitle">{{ vm.page_subtitle }}</p>
+      </div>
+      <div class="offshore-page__meta">
+        <span class="app-shell__env-badge">{{ vm.labels['offshore.topbar.installation'] }}: {{ vm.site_name or '—' }}</span>
+        <span class="app-shell__env-badge">{{ vm.labels['offshore.operations.selected_date'] }}: {{ vm.selected_date_label }}</span>
+      </div>
+    </section>
+
+    <section class="app-shell__card offshore-operations-nav-card">
+      <div class="app-shell__card-header">
+        <div>
+          <h2 class="app-shell__card-title">{{ vm.labels['offshore.operations.title'] }}</h2>
+          <p class="app-shell__card-text">{{ vm.labels['offshore.operations.subtitle'] }}</p>
+        </div>
+        <a class="yp-button yp-button-primary" href="{{ vm.operations_url }}">{{ vm.labels['offshore.operations.open_today'] }}</a>
+      </div>
+      <div class="offshore-operations-date-nav" role="navigation" aria-label="{{ vm.labels['offshore.operations.date_navigation'] }}">
+        <a class="yp-button yp-button-secondary" href="{{ url_for('offshore2.operations', date=vm.previous_date) }}">{{ vm.labels['offshore.operations.previous_day'] }}</a>
+        <a class="yp-button yp-button-secondary" href="{{ vm.operations_url }}">{{ vm.labels['offshore.operations.today'] }}</a>
+        <a class="yp-button yp-button-secondary" href="{{ url_for('offshore2.operations', date=vm.next_date) }}">{{ vm.labels['offshore.operations.next_day'] }}</a>
+      </div>
+    </section>
+
+    <section class="app-shell__grid offshore-operations-grid">
+      <article class="app-shell__card offshore-operations-period-card">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">
+              {% if vm.current_period_summary %}
+                {{ vm.labels['offshore.operations.current_period'] }}
+              {% elif vm.upcoming_period_summary %}
+                {{ vm.labels['offshore.operations.upcoming_period'] }}
+              {% else %}
+                {{ vm.state_title }}
+              {% endif %}
+            </h2>
+            <p class="app-shell__card-text">
+              {% if vm.current_period_summary %}
+                {{ vm.labels['offshore.operations.current_period_body'] }}
+              {% elif vm.upcoming_period_summary %}
+                {{ vm.labels['offshore.operations.upcoming_period_body'] }}
+              {% else %}
+                {{ vm.state_body }}
+              {% endif %}
+            </p>
+          </div>
+          {% if vm.can_manage and vm.current_period_summary and vm.current_period_summary.manage_url %}
+            <a class="yp-button yp-button-primary" href="{{ vm.current_period_summary.manage_url }}">{{ vm.labels['offshore.operations.open_period_management'] }}</a>
+          {% elif vm.can_manage and vm.upcoming_period_summary and vm.upcoming_period_summary.manage_url %}
+            <a class="yp-button yp-button-primary" href="{{ vm.upcoming_period_summary.manage_url }}">{{ vm.labels['offshore.operations.open_period_management'] }}</a>
+          {% elif vm.can_manage and vm.state_key == 'no_installation' %}
+            <a class="yp-button yp-button-primary" href="{{ url_for('offshore2.settings') }}">{{ vm.labels['offshore.operations.open_settings'] }}</a>
+          {% endif %}
+        </div>
+
+        {% if vm.current_period_summary or vm.upcoming_period_summary %}
+          {% set period = vm.current_period_summary or vm.upcoming_period_summary %}
+          <div class="app-shell__card-body offshore-operations-period-summary">
+            <div class="offshore-dashboard-statuses">
+              <div class="offshore-dashboard-status">
+                <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.operations.period_name'] }}</span>
+                <span class="yp-pill">{{ period.name or vm.labels['offshore.operations.no_applicable_period'] }}</span>
+              </div>
+              <div class="offshore-dashboard-status">
+                <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.periods.status'] }}</span>
+                <span class="yp-pill">{{ vm.labels.get('offshore.periods.status.' ~ period.status, period.status or '—') }}</span>
+              </div>
+              <div class="offshore-dashboard-status">
+                <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.operations.period_range'] }}</span>
+                <span class="yp-pill">{{ period.starts_at_local }} → {{ period.ends_at_local }}</span>
+              </div>
+            </div>
+            {% if period.position_labels %}
+              <p class="offshore-empty-state__note">{{ vm.labels['offshore.operations.period_positions'] }}: {{ period.position_labels|join(', ') }}</p>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="app-shell__card-body">
+            <h3 class="app-shell__card-title">{{ vm.state_title }}</h3>
+            <p class="offshore-empty-state__note">{{ vm.state_body }}</p>
+          </div>
+        {% endif %}
+      </article>
+
+      <article class="app-shell__card offshore-operations-day-card">
+        <div class="app-shell__card-header">
+          <div>
+            <h2 class="app-shell__card-title">{{ vm.day.label }}</h2>
+            <p class="app-shell__card-text">{{ vm.labels['offshore.operations.day_view'] }}</p>
+          </div>
+          <span class="yp-pill">{{ vm.day.service_count }}</span>
+        </div>
+
+        {% if vm.day.services %}
+          <div class="app-shell__list offshore-operations-service-list">
+            {% for item in vm.day.services %}
+              <article class="app-shell__list-item offshore-operations-service-card">
+                <div class="app-shell__list-main">
+                  <div>
+                    <h3 class="app-shell__list-title">{{ item.local_start_time }} · {{ item.service_label }}</h3>
+                    <p class="app-shell__list-text">{{ item.work_period_name }} · {{ item.work_period_status }}</p>
+                  </div>
+                  <div class="offshore-service-status-row">
+                    <span class="yp-pill">{{ vm.labels.get('offshore.event.status.' ~ item.event_status, item.event_status) }}</span>
+                    <span class="yp-pill">{{ vm.labels.get('offshore.operations.menu_' ~ item.menu_context_status, item.menu_context_status or vm.labels['offshore.operations.menu_not_connected']) }}</span>
+                  </div>
+                </div>
+                <div class="offshore-service-meta">
+                  <span>{{ item.service_code }}</span>
+                  {% if item.work_position_label %}<span>{{ item.work_position_label }}</span>{% endif %}
+                  {% if item.menu_title %}<span>{{ item.menu_title }}</span>{% endif %}
+                  {% if item.builder_menu_identity %}<span>{{ item.builder_menu_identity }}</span>{% endif %}
+                  {% if item.assignment_source %}<span>{{ item.assignment_source }}</span>{% endif %}
+                  {% if item.resolution_reason %}<span>{{ item.resolution_reason }}</span>{% endif %}
+                </div>
+                <div class="offshore-service-actions">
+                  <a class="yp-button yp-button-secondary" href="{{ item.detail_url }}">{{ vm.labels['offshore.operations.open_period'] }}</a>
+                  {% if item.manage_url %}
+                    <a class="yp-button yp-button-secondary" href="{{ item.manage_url }}">{{ vm.labels['offshore.operations.open_period_management'] }}</a>
+                  {% endif %}
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="app-shell__card-body">
+            <h3 class="app-shell__card-title">{{ vm.day.state_title }}</h3>
+            <p class="app-shell__card-text">{{ vm.day.state_body }}</p>
+            {% if vm.can_manage and vm.current_period_summary and vm.current_period_summary.manage_url %}
+              <a class="yp-button yp-button-primary" href="{{ vm.current_period_summary.manage_url }}">{{ vm.labels['offshore.operations.open_period_management'] }}</a>
+            {% elif vm.can_manage and vm.state_key == 'no_installation' %}
+              <a class="yp-button yp-button-primary" href="{{ url_for('offshore2.settings') }}">{{ vm.labels['offshore.operations.open_settings'] }}</a>
+            {% endif %}
+          </div>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="app-shell__card offshore-operations-upcoming-card">
+      <div class="app-shell__card-header">
+        <div>
+          <h2 class="app-shell__card-title">{{ vm.labels['offshore.operations.upcoming'] }}</h2>
+          <p class="app-shell__card-text">{{ vm.labels['offshore.operations.upcoming_body'] }}</p>
+        </div>
+        <span class="yp-pill">{{ vm.upcoming_days|length }}</span>
+      </div>
+
+      {% if vm.upcoming_days %}
+        <div class="offshore-upcoming-days">
+          {% for day in vm.upcoming_days %}
+            <article class="app-shell__card offshore-upcoming-day-card">
+              <div class="app-shell__card-header">
+                <div>
+                  <h3 class="app-shell__card-title">{{ day.label }}</h3>
+                  <p class="app-shell__card-text">{{ day.local_date }}</p>
+                </div>
+                <span class="yp-pill">{{ day.service_count }}</span>
+              </div>
+              <div class="app-shell__list offshore-operations-service-list">
+                {% for item in day.services %}
+                  <div class="app-shell__list-item offshore-operations-upcoming-item">
+                    <div class="app-shell__list-main">
+                      <span class="app-shell__list-title">{{ item.local_start_time }} · {{ item.service_label }}</span>
+                      <span class="yp-pill">{{ vm.labels.get('offshore.event.status.' ~ item.event_status, item.event_status) }}</span>
+                    </div>
+                    <div class="offshore-service-meta">
+                      {% if item.menu_title %}<span>{{ item.menu_title }}</span>{% endif %}
+                      {% if item.menu_context_status %}<span>{{ item.menu_context_status }}</span>{% endif %}
+                      {% if item.resolution_reason %}<span>{{ item.resolution_reason }}</span>{% endif %}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="app-shell__card-body">
+          <p class="offshore-empty-state__note">{{ vm.labels['offshore.operations.empty_upcoming'] }}</p>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

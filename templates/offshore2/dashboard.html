@@ -21,9 +21,12 @@
             <h2 class="app-shell__card-title">{{ vm.empty_title }}</h2>
             <p class="app-shell__card-text">{{ vm.empty_body }}</p>
           </div>
-          {% if vm.can_manage %}
-            <a class="yp-button yp-button-primary" href="{{ url_for('offshore2.settings') }}">{{ vm.cta_label }}</a>
-          {% endif %}
+          <div class="offshore-dashboard-cta-group">
+            <a class="yp-button yp-button-primary" href="{{ url_for('offshore2.operations') }}">{{ vm.labels['offshore.operations.open_today'] }}</a>
+            {% if vm.can_manage %}
+              <a class="yp-button yp-button-secondary" href="{{ url_for('offshore2.settings') }}">{{ vm.cta_label }}</a>
+            {% endif %}
+          </div>
         </div>
         <div class="app-shell__card-body">
           <div class="offshore-dashboard-statuses">

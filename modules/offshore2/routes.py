@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date as _date, datetime
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 
@@ -21,6 +21,7 @@ from .periods import (
     _service as _period_service,
 )
 from .menu_context import _service as _menu_context_service
+from .operations import _service as _operations_service
 from .services import (
     _service,
     build_dashboard_vm,
@@ -111,6 +112,32 @@ def dashboard():
         site_name=result.get("site_name"),
     )
     return render_template("offshore2/dashboard.html", vm=vm)
+
+
+@bp.get("/operations")
+@require_roles(*VIEWER_ROLES)
+def operations():
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    raw_date = (request.args.get("date") or "").strip()
+    selected_date = None
+    if raw_date:
+        try:
+            selected_date = _date.fromisoformat(raw_date)
+        except ValueError:
+            return redirect(url_for("offshore2.operations"))
+    vm = _operations_service.build_view_model(
+        tenant_id=result.get("tenant_id"),
+        site_id=result.get("site_id"),
+        selected_date=selected_date,
+        locale=resolve_locale(),
+        theme=resolve_theme(),
+        role=current_app.config.get("_offshore_role") or request.headers.get("X-User-Role") or None,
+        tenant_name=result.get("tenant_name"),
+        site_name=result.get("site_name"),
+    )
+    return render_template("offshore2/operations.html", vm=vm)
 
 
 @bp.get("/settings")

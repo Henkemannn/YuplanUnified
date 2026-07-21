@@ -8,6 +8,12 @@ NAV_ITEMS = (
         "path": "/offshore",
     },
     {
+        "key": "operations",
+        "endpoint": "offshore2.operations",
+        "label_key": "offshore.nav.operations",
+        "path": "/offshore/operations",
+    },
+    {
         "key": "settings",
         "endpoint": "offshore2.settings",
         "label_key": "offshore.nav.settings",
