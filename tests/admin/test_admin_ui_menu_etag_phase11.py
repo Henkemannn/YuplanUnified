@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
 
 
@@ -318,3 +318,20 @@ def test_concurrent_edit_scenario(seeded_menu_with_updated_at):
     assert response_b_save.status_code == 302
     response_b_redirect = client.get(response_b_save.location, headers=ADMIN_HEADERS)
     assert b"Konflikt:" in response_b_redirect.data
+
+
+def test_next_menu_updated_at_advances_at_least_one_millisecond(monkeypatch):
+    from admin import ui_blueprint
+
+    base = datetime(2025, 1, 1, 12, 0, 0, 123000, tzinfo=timezone.utc)
+
+    class FrozenDatetime:
+        @staticmethod
+        def now(tz=None):
+            return base
+
+    monkeypatch.setattr(ui_blueprint, "datetime", FrozenDatetime)
+
+    bumped = ui_blueprint._next_menu_updated_at(base)
+
+    assert bumped >= base + timedelta(milliseconds=1)

@@ -9,8 +9,18 @@ from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 from core.models import Tenant, User
 from core.impersonation import start_impersonation
+from datetime import datetime, timedelta, timezone
 
 admin_ui_bp = Blueprint("admin_ui", __name__)
+
+
+def _next_menu_updated_at(previous_updated_at: datetime | None) -> datetime:
+    now = datetime.now(timezone.utc)
+    if previous_updated_at is None:
+        return now
+    minimum_next = previous_updated_at + timedelta(milliseconds=1)
+    return now if now > minimum_next else minimum_next
+
 @admin_ui_bp.route("/ui/systemadmin/dashboard", methods=["GET", "POST"])  # accept accidental POST
 @require_roles("superuser")
 def systemadmin_dashboard():
@@ -1325,8 +1335,7 @@ def admin_menu_import_week_save(year: int, week: int) -> str:  # type: ignore[ov
         # Update menu's updated_at timestamp
         menu = db.query(Menu).filter_by(id=menu_id).first()
         if menu:
-            from datetime import datetime, timezone
-            menu.updated_at = datetime.now(timezone.utc)
+            menu.updated_at = _next_menu_updated_at(menu.updated_at)
         db.commit()
     finally:
         db.close()
