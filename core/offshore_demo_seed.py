@@ -57,7 +57,8 @@ def _normalize(value: object | None) -> str:
 def _table_exists(table_name: str) -> bool:
     db = get_new_session()
     try:
-        if not _db_url_looks_local_sqlite(current_app):
+        dialect_name = getattr(getattr(db.bind, "dialect", None), "name", "")
+        if dialect_name != "sqlite":
             try:
                 row = db.execute(text("SELECT to_regclass(:name)"), {"name": table_name}).fetchone()
                 return bool(row and row[0])
@@ -79,6 +80,35 @@ def _table_columns(table_name: str) -> set[str]:
         return {str(row[1]) for row in rows}
     finally:
         db.close()
+
+
+def _current_alembic_version() -> str:
+    db = get_new_session()
+    try:
+        row = db.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).fetchone()
+        return str(row[0]) if row and row[0] else "unknown"
+    except Exception:
+        return "unknown"
+    finally:
+        db.close()
+
+
+def _require_commun_builder_schema() -> None:
+    required_tables = ("commun_builder_menu_links", "commun_builder_publication_pins")
+    missing = [table for table in required_tables if not _table_exists(table)]
+    if not missing:
+        return
+
+    version = _current_alembic_version()
+    missing_list = ", ".join(missing)
+    raise click.UsageError(
+        "Offshore demo seed cannot run because the local database is schema-drifted: "
+        f"missing required table(s): {missing_list}. "
+        f"The database reports alembic_version={version}. "
+        "Repair the local dev database by backing it up, then run: "
+        "python -m alembic stamp 0023_scope_service_addons_by_site && python -m alembic upgrade head. "
+        "Do not stamp head without upgrading; that leaves the schema incomplete."
+    )
 
 
 def _db_url_looks_local_sqlite(app: Flask) -> bool:
@@ -675,6 +705,7 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
     iso_year, iso_week, *_ = anchor_day.isocalendar()
     _ensure_tenant_and_site()
     _ensure_feature_flags()
+    _require_commun_builder_schema()
     if reset_only:
         _clear_scoped_offshore_rows()
         _clear_scoped_builder_rows()

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import text
+from sqlalchemy import create_engine
 
 from core.app_factory import create_app
 
@@ -17,10 +20,13 @@ def _build_app(tmp_path: Path, *, env: str = "testing"):
             "APP_ENV": env,
             "SECRET_KEY": "test-secret-key-0123456789abcdef0123456789abcdef",
             "JWT_SECRET": "test-jwt-secret-0123456789abcdef0123456789abcdef",
-            "database_url": f"sqlite:///{db_path}",
+            "database_url": f"sqlite:///{db_path.as_posix()}",
             "BUILDER_DB_PATH": str(builder_db_path),
         }
     )
+    with app.app_context():
+        from core.db import init_engine
+        init_engine(str(app.config["SQLALCHEMY_DATABASE_URI"]), force=True)
     with app.app_context():
         from core.db import create_all
 
@@ -40,6 +46,12 @@ def _count_rows(table: str, where_sql: str = "", params: dict[str, object] | Non
         return int(row[0] or 0) if row else 0
     finally:
         db.close()
+
+
+def _alembic_cfg(db_url: str) -> Config:
+    cfg = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    return cfg
 
 
 def test_offshore_demo_seed_cli_creates_idempotent_demo_rows(tmp_path: Path) -> None:
@@ -77,3 +89,53 @@ def test_offshore_demo_seed_cli_refuses_in_production(tmp_path: Path) -> None:
     result = runner.invoke(args=["offshore-demo-seed"])
     assert result.exit_code != 0
     assert "refusing to seed" in result.output
+
+
+def test_offshore_demo_seed_cli_upgrade_creates_required_linkage_tables(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "head.db"
+    db_url = f"sqlite:///{db_path.as_posix()}"
+
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    command.upgrade(_alembic_cfg(db_url), "head")
+
+    engine = create_engine(db_url)
+    with engine.connect() as conn:
+        menu_links = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='commun_builder_menu_links'"))
+        publication_pins = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='commun_builder_publication_pins'"))
+        assert menu_links.fetchone() is not None
+        assert publication_pins.fetchone() is not None
+
+
+def test_offshore_demo_seed_cli_refuses_head_database_missing_linkage_tables(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "drifted.db"
+    builder_db_path = tmp_path / "drifted-builder.db"
+    db_url = f"sqlite:///{db_path.as_posix()}"
+
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    command.upgrade(_alembic_cfg(db_url), "head")
+
+    engine = create_engine(db_url)
+    with engine.begin() as conn:
+        conn.exec_driver_sql("PRAGMA foreign_keys = OFF")
+        conn.exec_driver_sql("DROP TABLE IF EXISTS commun_builder_menu_links")
+        conn.exec_driver_sql("DROP TABLE IF EXISTS commun_builder_publication_pins")
+        conn.exec_driver_sql("PRAGMA foreign_keys = ON")
+
+    app = create_app(
+        {
+            "TESTING": False,
+            "ENV": "development",
+            "APP_ENV": "development",
+            "SECRET_KEY": "test-secret-key-0123456789abcdef0123456789abcdef",
+            "JWT_SECRET": "test-jwt-secret-0123456789abcdef0123456789abcdef",
+            "database_url": db_url,
+            "BUILDER_DB_PATH": str(builder_db_path),
+        }
+    )
+    runner = app.test_cli_runner()
+
+    result = runner.invoke(args=["offshore-demo-seed"])
+    assert result.exit_code != 0
+    assert "schema-drifted" in result.output
+    assert "commun_builder_menu_links" in result.output
+    assert "0023_scope_service_addons_by_site" in result.output
