@@ -63,6 +63,7 @@ from .tasks_api import bp as tasks_bp
 from .turnus_api import bp as turnus_api_bp
 from .weekview_api import bp as weekview_api_bp
 from .planera_api import bp as planera_api_bp
+from .offshore_demo_seed import register_offshore_demo_seed_cli
 from .report_api import bp as report_api_bp
 from .weekview_report_api import bp as weekview_report_bp  # skeleton Phase 2.E
 from .ui_blueprint import ui_bp
@@ -1321,6 +1322,8 @@ def create_app(config_override: dict[str, Any] | None = None) -> Flask:
         app.register_blueprint(offshore2_bp)
     except Exception:  # pragma: no cover
         app.logger.warning("Offshore v2 blueprint not loaded", exc_info=True)
+
+    register_offshore_demo_seed_cli(app)
 
     # Dynamic module blueprints
     for mod in cfg.default_enabled_modules:
