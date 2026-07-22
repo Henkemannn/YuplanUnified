@@ -21,7 +21,10 @@
           <h2 class="app-shell__card-title">{{ vm.labels['offshore.operations.title'] }}</h2>
           <p class="app-shell__card-text">{{ vm.labels['offshore.operations.subtitle'] }}</p>
         </div>
-        <a class="yp-button yp-button-primary" href="{{ vm.operations_url }}">{{ vm.labels['offshore.operations.open_today'] }}</a>
+        <div class="offshore-operations-nav-actions">
+          <a class="yp-button yp-button-secondary" href="{{ url_for('offshore2.operations_prep', date=vm.selected_date) }}">{{ vm.labels['offshore.operations.prep_open'] }}</a>
+          <a class="yp-button yp-button-primary" href="{{ vm.operations_url }}">{{ vm.labels['offshore.operations.open_today'] }}</a>
+        </div>
       </div>
       <div class="offshore-operations-date-nav" role="navigation" aria-label="{{ vm.labels['offshore.operations.date_navigation'] }}">
         <a class="yp-button yp-button-secondary" href="{{ url_for('offshore2.operations', date=vm.previous_date) }}">{{ vm.labels['offshore.operations.previous_day'] }}</a>
@@ -127,7 +130,11 @@
                   {% if item.manage_url %}
                     <a class="yp-button yp-button-secondary" href="{{ item.manage_url }}">{{ vm.labels['offshore.operations.open_period_management'] }}</a>
                   {% endif %}
+                  <a class="yp-button yp-button-secondary" href="{{ item.prep_url }}">{{ vm.labels['offshore.operations.prep_open'] }}</a>
                 </div>
+                <p class="offshore-empty-state__note">
+                  {{ vm.labels['offshore.operations.prep_counts'].format(planned=item.prep_planned_count, in_progress=item.prep_in_progress_count, completed=item.prep_completed_count) }}
+                </p>
               </article>
             {% endfor %}
           </div>

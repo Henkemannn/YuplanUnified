@@ -237,6 +237,43 @@ class OffshoreServiceEvent(Base):
     )
 
 
+class OffshorePrepTask(Base):
+    __tablename__ = "offshore_prep_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    work_period_id: Mapped[int] = mapped_column(ForeignKey("offshore_work_periods.id", ondelete="CASCADE"), nullable=False)
+    service_event_id: Mapped[int] = mapped_column(ForeignKey("offshore_service_events.id", ondelete="CASCADE"), nullable=False)
+    builder_component_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    component_name_snapshot: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    planned_date: Mapped[date] = mapped_column(Date, nullable=False)
+    planned_time: Mapped[object | None] = mapped_column(Time, nullable=True)
+    work_position_id: Mapped[int | None] = mapped_column(ForeignKey("offshore_work_positions.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="planned", server_default="planned")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    completed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+
+    __table_args__ = (
+        Index("ix_offshore_prep_tasks_tenant_site_date_status", "tenant_id", "site_id", "planned_date", "status", "sort_order"),
+        Index("ix_offshore_prep_tasks_service_event_sort", "service_event_id", "sort_order"),
+        Index("ix_offshore_prep_tasks_work_period_date", "work_period_id", "planned_date"),
+        Index("ix_offshore_prep_tasks_work_position", "work_position_id"),
+        CheckConstraint("length(trim(title)) > 0", name="ck_offshore_prep_tasks_title_not_empty"),
+        CheckConstraint("sort_order >= 0", name="ck_offshore_prep_tasks_sort_order_nonnegative"),
+        CheckConstraint(
+            "lower(status) IN ('planned', 'in_progress', 'completed', 'cancelled')",
+            name="ck_offshore_prep_tasks_status_allowed",
+        ),
+    )
+
+
 class OffshoreServiceEventMenuContext(Base):
     __tablename__ = "offshore_service_event_menu_contexts"
 

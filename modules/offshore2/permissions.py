@@ -10,6 +10,7 @@ from core.http_errors import not_found
 FEATURE_FLAG = "offshore.v2.enabled"
 VIEWER_ROLES = ("admin", "superuser", "cook", "editor", "viewer")
 MANAGER_ROLES = ("admin", "superuser")
+PREP_WRITE_ROLES = ("cook", "editor", "admin", "superuser")
 
 
 def feature_enabled() -> bool:
@@ -85,3 +86,7 @@ def active_site_context() -> tuple[int | None, str | None]:
 
 def can_manage(role: str | None) -> bool:
     return (role or "").strip().lower() in MANAGER_ROLES
+
+
+def can_write_prep(role: str | None) -> bool:
+    return (role or "").strip().lower() in PREP_WRITE_ROLES

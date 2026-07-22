@@ -20,6 +20,7 @@ from .models import (
     OffshoreWorkPeriod,
     OffshoreWorkPosition,
 )
+from .prep_tasks import _service as _prep_service
 from .periods import _local_zone, site_timezone_name
 
 
@@ -155,6 +156,11 @@ class OffshoreOperationalServiceItem:
     editable: bool
     has_menu_context: bool
     calendar_item: CalendarItemRead
+    prep_url: str | None = None
+    prep_planned_count: int = 0
+    prep_in_progress_count: int = 0
+    prep_completed_count: int = 0
+    prep_total_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,6 +332,7 @@ class OffshoreOperationsService:
         menu_title_map: dict[str, str | None],
         labels: dict[str, str],
         can_manage: bool,
+        prep_summary: object | None = None,
     ) -> OffshoreOperationalServiceItem:
         starts_local = event.starts_at.astimezone(zone)
         status = str(context.resolution_status if context is not None else "missing")
@@ -343,6 +350,11 @@ class OffshoreOperationsService:
             resolution_reason = labels["offshore.operations.resolution_unresolved_reason"]
         elif status == "unavailable" and not resolution_reason:
             resolution_reason = labels["offshore.operations.resolution_unavailable_reason"]
+
+        prep_planned = int(getattr(prep_summary, "planned_count", 0) or 0)
+        prep_in_progress = int(getattr(prep_summary, "in_progress_count", 0) or 0)
+        prep_completed = int(getattr(prep_summary, "completed_count", 0) or 0)
+        prep_total = int(getattr(prep_summary, "total_count", 0) or 0)
 
         calendar_item = CalendarItemRead(
             source_module="offshore",
@@ -387,6 +399,11 @@ class OffshoreOperationsService:
             editable=bool(can_manage and str(period.status).lower() != "completed"),
             has_menu_context=context is not None,
             calendar_item=calendar_item,
+            prep_url=_safe_url("offshore2.operations_prep", date=str(starts_local.date()), service_event_id=int(event.id)),
+            prep_planned_count=prep_planned,
+            prep_in_progress_count=prep_in_progress,
+            prep_completed_count=prep_completed,
+            prep_total_count=prep_total,
         )
 
     def build_view_model(
@@ -484,6 +501,15 @@ class OffshoreOperationsService:
             if context is not None and _clean(context.builder_menu_id)
         }
         menu_title_map = _resolve_builder_menu_titles(builder_menu_ids)
+        prep_summaries = (
+            _prep_service.summarize_service_events(
+                tenant_id=int(tenant_id or 0),
+                site_id=str(site_id or ""),
+                service_event_ids={int(event.id) for event in events},
+            )
+            if tenant_id is not None and site_id and events
+            else {}
+        )
 
         selected_period = relevant_period
         day_service_items = [
@@ -496,6 +522,7 @@ class OffshoreOperationsService:
                 menu_title_map=menu_title_map,
                 labels=labels,
                 can_manage=can_manage,
+                prep_summary=prep_summaries.get(int(event.id)),
             )
             for event in day_events
         ]
@@ -509,6 +536,7 @@ class OffshoreOperationsService:
                 menu_title_map=menu_title_map,
                 labels=labels,
                 can_manage=can_manage,
+                prep_summary=prep_summaries.get(int(event.id)),
             )
             for event in upcoming_events
         ]
@@ -612,6 +640,7 @@ class OffshoreOperationsService:
             "current_period_summary": current_period_summary,
             "upcoming_period_summary": upcoming_period_summary,
             "upcoming_days": tuple(upcoming_days),
+            "prep_summaries": prep_summaries,
             "state_key": state_key,
             "state_title": {
                 "no_installation": labels["offshore.operations.no_installation_title"],
@@ -641,6 +670,13 @@ class OffshoreOperationsService:
             }.get(state_key, labels["offshore.operations.resolved_day_body"]),
             "today_service_count": len(day_service_items),
             "unresolved_count": len([item for item in day_service_items if item.menu_context_status not in (None, "resolved")]),
+            "prep_today_summary": _prep_service.summarize_service_events(
+                tenant_id=int(tenant_id or 0),
+                site_id=str(site_id or ""),
+                service_event_ids={int(event.id) for event in day_events},
+            )
+            if tenant_id is not None and site_id and day_events
+            else {},
             "current_period_kind": period_kind,
         }
         return view_model

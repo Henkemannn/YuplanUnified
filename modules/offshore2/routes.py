@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from datetime import date as _date, datetime
 
-from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 
 from core.auth import require_roles
+from core.db import get_session
 from core.http_errors import forbidden, not_found
 
 from .i18n import copy_for, normalize_locale
-from .permissions import FEATURE_FLAG, VIEWER_ROLES, MANAGER_ROLES, gate_or_404
+from .models import OffshoreServiceEvent
+from .permissions import FEATURE_FLAG, PREP_WRITE_ROLES, VIEWER_ROLES, MANAGER_ROLES, gate_or_404
 from .periods import (
     PERIOD_TEMPLATE_EVENT_STATUSES,
     WORK_PERIOD_STATUSES,
@@ -22,6 +24,7 @@ from .periods import (
 )
 from .menu_context import _service as _menu_context_service
 from .operations import _service as _operations_service
+from .prep_tasks import _service as _prep_service
 from .services import (
     _service,
     build_dashboard_vm,
@@ -138,6 +141,152 @@ def operations():
         site_name=result.get("site_name"),
     )
     return render_template("offshore2/operations.html", vm=vm)
+
+
+@bp.get("/operations/prep")
+@require_roles(*VIEWER_ROLES)
+def operations_prep():
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    raw_date = (request.args.get("date") or "").strip()
+    selected_date = None
+    if raw_date:
+        try:
+            selected_date = _date.fromisoformat(raw_date)
+        except ValueError:
+            return redirect(url_for("offshore2.operations_prep"))
+    focus_service_event_id = request.args.get("service_event_id")
+    focus_id = int(focus_service_event_id) if isinstance(focus_service_event_id, str) and focus_service_event_id.isdigit() else None
+    vm = _prep_service.build_day_view(
+        tenant_id=result.get("tenant_id"),
+        site_id=result.get("site_id"),
+        selected_date=selected_date,
+        locale=resolve_locale(),
+        role=current_app.config.get("_offshore_role") or request.headers.get("X-User-Role") or None,
+        user_id=int(session.get("user_id")) if session.get("user_id") is not None else None,
+        focus_service_event_id=focus_id,
+    )
+    return render_template("offshore2/prep_tasks.html", vm=vm)
+
+
+@bp.post("/operations/prep/tasks")
+@require_roles(*PREP_WRITE_ROLES)
+def create_operations_prep_task():
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        _prep_service.create_task(
+            tenant_id=int(result.get("tenant_id") or 0),
+            site_id=str(result.get("site_id") or ""),
+            service_event_id=int(request.form.get("service_event_id") or 0),
+            actor_user_id=_get_actor_user_id(),
+            role=current_app.config.get("_offshore_role") or request.headers.get("X-User-Role") or None,
+            payload={
+                "title": request.form.get("title"),
+                "instructions": request.form.get("instructions"),
+                "planned_date": request.form.get("planned_date"),
+                "planned_time": request.form.get("planned_time"),
+                "work_position_id": request.form.get("work_position_id") or None,
+                "sort_order": request.form.get("sort_order"),
+                "builder_component_id": request.form.get("builder_component_id"),
+                "component_name_snapshot": request.form.get("component_name_snapshot"),
+            },
+        )
+        _flash_success("offshore.success.prep_saved")
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except PermissionError:
+        return forbidden("forbidden", problem_type="https://example.com/problems/offshore-prep-forbidden")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+    return redirect(url_for("offshore2.operations_prep", date=request.form.get("planned_date") or None, service_event_id=request.form.get("service_event_id")))
+
+
+@bp.post("/operations/prep/tasks/<int:task_id>/update")
+@require_roles(*PREP_WRITE_ROLES)
+def update_operations_prep_task(task_id: int):
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        _prep_service.update_task(
+            tenant_id=int(result.get("tenant_id") or 0),
+            site_id=str(result.get("site_id") or ""),
+            task_id=task_id,
+            actor_user_id=_get_actor_user_id(),
+            role=current_app.config.get("_offshore_role") or request.headers.get("X-User-Role") or None,
+            payload={
+                "title": request.form.get("title"),
+                "instructions": request.form.get("instructions"),
+                "planned_date": request.form.get("planned_date"),
+                "planned_time": request.form.get("planned_time"),
+                "work_position_id": request.form.get("work_position_id") or None,
+                "sort_order": request.form.get("sort_order"),
+                "builder_component_id": request.form.get("builder_component_id"),
+                "component_name_snapshot": request.form.get("component_name_snapshot"),
+                "updated_at": request.form.get("updated_at"),
+            },
+        )
+        _flash_success("offshore.success.prep_saved")
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except PermissionError:
+        return forbidden("forbidden", problem_type="https://example.com/problems/offshore-prep-forbidden")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+    return redirect(url_for("offshore2.operations_prep", date=request.form.get("planned_date") or None, service_event_id=request.form.get("service_event_id")))
+
+
+@bp.post("/operations/prep/tasks/<int:task_id>/transition")
+@require_roles(*PREP_WRITE_ROLES)
+def transition_operations_prep_task(task_id: int):
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        _prep_service.transition_task(
+            tenant_id=int(result.get("tenant_id") or 0),
+            site_id=str(result.get("site_id") or ""),
+            task_id=task_id,
+            actor_user_id=_get_actor_user_id(),
+            role=current_app.config.get("_offshore_role") or request.headers.get("X-User-Role") or None,
+            new_status=request.form.get("status") or "",
+            expected_updated_at=request.form.get("expected_updated_at"),
+        )
+        _flash_success("offshore.success.prep_saved")
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except PermissionError:
+        return forbidden("forbidden", problem_type="https://example.com/problems/offshore-prep-forbidden")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+    return redirect(url_for("offshore2.operations_prep", date=request.form.get("planned_date") or None, service_event_id=request.form.get("service_event_id")))
+
+
+@bp.get("/service-events/<int:service_event_id>/prep")
+@require_roles(*VIEWER_ROLES)
+def service_event_prep(service_event_id: int):
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    db = get_session()
+    try:
+        event = db.query(OffshoreServiceEvent).filter(
+            OffshoreServiceEvent.tenant_id == int(result.get("tenant_id") or 0),
+            OffshoreServiceEvent.site_id == str(result.get("site_id") or ""),
+            OffshoreServiceEvent.id == int(service_event_id),
+        ).first()
+        if event is None:
+            return forbidden("forbidden", problem_type="https://example.com/problems/offshore-site-mismatch")
+        timezone_name = site_timezone_name(int(result.get("tenant_id") or 0), str(result.get("site_id") or ""))
+        from .periods import _local_zone
+
+        event_date = event.starts_at.astimezone(_local_zone(timezone_name)).date().isoformat()
+    finally:
+        db.close()
+    return redirect(url_for("offshore2.operations_prep", date=event_date, service_event_id=service_event_id))
 
 
 @bp.get("/settings")

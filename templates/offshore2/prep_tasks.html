@@ -1,0 +1,177 @@
+{% extends "offshore2/base.html" %}
+
+{% block page_title %}{{ vm.state_title }} – Yuplan Offshore{% endblock %}
+
+{% block content %}
+  <div class="app-page offshore-page offshore-prep-page">
+    <section class="app-shell__page-header offshore-page__header">
+      <div>
+        <h1 class="app-shell__title">{{ vm.labels['offshore.prep.title'] }}</h1>
+        <p class="app-shell__subtitle">{{ vm.labels['offshore.prep.subtitle'] }}</p>
+      </div>
+      <div class="offshore-page__meta">
+        <span class="app-shell__env-badge">{{ vm.labels['offshore.prep.planned_date'] }}: {{ vm.selected_date_label }}</span>
+        <a class="yp-button yp-button-secondary" href="{{ url_for('offshore2.operations', date=vm.selected_date) }}">{{ vm.labels['offshore.operations.open_today'] }}</a>
+      </div>
+    </section>
+
+    <section class="app-shell__card offshore-prep-summary-card">
+      <div class="app-shell__card-header">
+        <div>
+          <h2 class="app-shell__card-title">{{ vm.state_title }}</h2>
+          <p class="app-shell__card-text">{{ vm.state_body }}</p>
+        </div>
+        <div class="offshore-dashboard-statuses">
+          <div class="offshore-dashboard-status">
+            <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.prep.status.planned'] }}</span>
+            <span class="yp-pill">{{ vm.summary.planned_count }}</span>
+          </div>
+          <div class="offshore-dashboard-status">
+            <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.prep.status.in_progress'] }}</span>
+            <span class="yp-pill">{{ vm.summary.in_progress_count }}</span>
+          </div>
+          <div class="offshore-dashboard-status">
+            <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.prep.status.completed'] }}</span>
+            <span class="yp-pill">{{ vm.summary.completed_count }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="app-shell__card-body">
+        <p class="offshore-empty-state__note">{{ vm.labels['offshore.prep.empty'] if not vm.service_groups else vm.summary.total_count ~ ' ' ~ vm.labels['offshore.operations.prep_summary'] }}</p>
+      </div>
+    </section>
+
+    {% if vm.service_groups %}
+      <section class="app-shell__list offshore-prep-service-list">
+        {% for group in vm.service_groups %}
+          <article class="app-shell__card offshore-prep-service-card" id="service-event-{{ group.service_event_id }}">
+            <div class="app-shell__card-header">
+              <div>
+                <h2 class="app-shell__card-title">{{ group.local_start_time }} · {{ group.service_label }}</h2>
+                <p class="app-shell__card-text">{{ group.work_period_name }} · {{ group.work_period_status }}</p>
+              </div>
+              <div class="offshore-dashboard-statuses">
+                <div class="offshore-dashboard-status">
+                  <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.prep.status.planned'] }}</span>
+                  <span class="yp-pill">{{ group.summary.planned_count }}</span>
+                </div>
+                <div class="offshore-dashboard-status">
+                  <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.prep.status.in_progress'] }}</span>
+                  <span class="yp-pill">{{ group.summary.in_progress_count }}</span>
+                </div>
+                <div class="offshore-dashboard-status">
+                  <span class="offshore-dashboard-status__label">{{ vm.labels['offshore.prep.status.completed'] }}</span>
+                  <span class="yp-pill">{{ group.summary.completed_count }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="app-shell__card-body">
+              <div class="offshore-service-actions">
+                <a class="yp-button yp-button-secondary" href="{{ group.detail_url }}">{{ vm.labels['offshore.prep.open_service'] }}</a>
+                {% if group.can_write %}
+                  <a class="yp-button yp-button-primary" href="#create-task-{{ group.service_event_id }}">{{ vm.labels['offshore.prep.add_task'] }}</a>
+                {% endif %}
+              </div>
+              {% if group.tasks %}
+                <div class="app-shell__list offshore-prep-task-list">
+                  {% for task in group.tasks %}
+                    <article class="app-shell__list-item offshore-prep-task-card">
+                      <div class="app-shell__list-main">
+                        <div>
+                          <h3 class="app-shell__list-title">{{ task.title }}</h3>
+                          <p class="app-shell__list-text">{{ task.component_label or task.work_position_label or task.planned_date }}</p>
+                        </div>
+                        <div class="offshore-service-status-row">
+                          <span class="yp-pill">{{ vm.labels.get('offshore.prep.status.' ~ task.status, task.status) }}</span>
+                          {% if task.planned_time %}<span class="yp-pill">{{ task.planned_time }}</span>{% endif %}
+                        </div>
+                      </div>
+                      {% if task.instructions %}
+                        <p class="offshore-empty-state__note">{{ task.instructions }}</p>
+                      {% endif %}
+                      <div class="offshore-service-actions">
+                        {% if task.can_start %}
+                          <form method="post" action="{{ url_for('offshore2.transition_operations_prep_task', task_id=task.id) }}">
+                            <input type="hidden" name="status" value="in_progress">
+                            <input type="hidden" name="service_event_id" value="{{ group.service_event_id }}">
+                            <input type="hidden" name="planned_date" value="{{ vm.selected_date }}">
+                            <button class="yp-button yp-button-secondary" type="submit">{{ vm.labels['offshore.prep.status.start'] }}</button>
+                          </form>
+                        {% endif %}
+                        {% if task.can_complete %}
+                          <form method="post" action="{{ url_for('offshore2.transition_operations_prep_task', task_id=task.id) }}">
+                            <input type="hidden" name="status" value="completed">
+                            <input type="hidden" name="service_event_id" value="{{ group.service_event_id }}">
+                            <input type="hidden" name="planned_date" value="{{ vm.selected_date }}">
+                            <button class="yp-button yp-button-secondary" type="submit">{{ vm.labels['offshore.prep.status.finish'] }}</button>
+                          </form>
+                        {% endif %}
+                        {% if task.can_reopen %}
+                          <form method="post" action="{{ url_for('offshore2.transition_operations_prep_task', task_id=task.id) }}">
+                            <input type="hidden" name="status" value="planned">
+                            <input type="hidden" name="service_event_id" value="{{ group.service_event_id }}">
+                            <input type="hidden" name="planned_date" value="{{ vm.selected_date }}">
+                            <button class="yp-button yp-button-secondary" type="submit">{{ vm.labels['offshore.prep.status.reopen'] }}</button>
+                          </form>
+                        {% endif %}
+                        {% if task.can_cancel %}
+                          <form method="post" action="{{ url_for('offshore2.transition_operations_prep_task', task_id=task.id) }}">
+                            <input type="hidden" name="status" value="cancelled">
+                            <input type="hidden" name="service_event_id" value="{{ group.service_event_id }}">
+                            <input type="hidden" name="planned_date" value="{{ vm.selected_date }}">
+                            <button class="yp-button yp-button-secondary" type="submit">{{ vm.labels['offshore.prep.status.cancel'] }}</button>
+                          </form>
+                        {% endif %}
+                      </div>
+                    </article>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <p class="offshore-empty-state__note">{{ vm.labels['offshore.prep.empty'] }}</p>
+              {% endif %}
+
+              {% if group.can_write %}
+                <form class="offshore-prep-create-form" method="post" action="{{ url_for('offshore2.create_operations_prep_task') }}" id="create-task-{{ group.service_event_id }}">
+                  <input type="hidden" name="service_event_id" value="{{ group.service_event_id }}">
+                  <input type="hidden" name="planned_date" value="{{ vm.selected_date }}">
+                  <label>
+                    {{ vm.labels['offshore.prep.title_field'] }}
+                    <input type="text" name="title" required>
+                  </label>
+                  <label>
+                    {{ vm.labels['offshore.prep.instructions'] }}
+                    <textarea name="instructions" rows="3"></textarea>
+                  </label>
+                  <div class="offshore-prep-inline-grid">
+                    <label>
+                      {{ vm.labels['offshore.prep.planned_time'] }}
+                      <input type="time" name="planned_time">
+                    </label>
+                    <label>
+                      {{ vm.labels['offshore.prep.sort_order'] }}
+                      <input type="number" name="sort_order" min="0" value="0">
+                    </label>
+                  </div>
+                  <label>
+                    {{ vm.labels['offshore.prep.component_snapshot'] }}
+                    <input type="text" name="component_name_snapshot">
+                  </label>
+                  <div class="offshore-service-actions">
+                    <button class="yp-button yp-button-primary" type="submit">{{ vm.labels['offshore.prep.save'] }}</button>
+                  </div>
+                </form>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </section>
+    {% else %}
+      <section class="app-shell__card offshore-prep-empty-card">
+        <div class="app-shell__card-body">
+          <h2 class="app-shell__card-title">{{ vm.state_title }}</h2>
+          <p class="offshore-empty-state__note">{{ vm.state_body }}</p>
+        </div>
+      </section>
+    {% endif %}
+  </div>
+{% endblock %}
