@@ -51,6 +51,19 @@ def _sqlite_db_path(engine: Engine | None) -> str | None:
         return None
 
 
+def _engine_matches_url(engine: Engine | None, database_url: str) -> bool:
+    try:
+        if engine is None:
+            return False
+        requested_db_path = sqlite_file_path_from_url(database_url)
+        existing_db_path = _sqlite_db_path(engine)
+        if requested_db_path is not None or existing_db_path is not None:
+            return requested_db_path == existing_db_path
+        return _normalize_url(str(engine.url)) == _normalize_url(database_url)
+    except Exception:
+        return False
+
+
 def _is_dev_db_path(db_path: str) -> bool:
     try:
         norm = os.path.normcase(os.path.normpath(db_path))
@@ -106,17 +119,16 @@ def ensure_sqlite_file_ready(database_url: str) -> str | None:
 def init_engine(database_url: str, force: bool = False) -> Engine:
     """Initialize global engine (idempotent) or reinitialize when force=True."""
     global _engine, _SessionFactory
+    database_url = _normalize_url(database_url)
     if _engine is None:
-        database_url = _normalize_url(database_url)
         ensure_sqlite_file_ready(database_url)
         _engine = create_engine(database_url, future=True, echo=False)
         _SessionFactory = scoped_session(
             sessionmaker(bind=_engine, autoflush=False, autocommit=False)
         )
         return _engine
-    if force:
+    if force or not _engine_matches_url(_engine, database_url):
         _engine.dispose()
-        database_url = _normalize_url(database_url)
         ensure_sqlite_file_ready(database_url)
         _engine = create_engine(database_url, future=True, echo=False)
         if _SessionFactory is not None:

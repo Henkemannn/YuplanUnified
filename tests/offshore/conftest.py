@@ -48,8 +48,12 @@ def _restore_core_db_singletons() -> None:
         if current_engine is not None and current_engine is not previous_engine:
             with suppress(Exception):
                 current_engine.dispose()
-        db_mod._engine = previous_engine
-        db_mod._SessionFactory = previous_session_factory
+
+        preserve_previous_engine = bool(previous_engine and not (
+            previous_engine.dialect.name == "sqlite" and previous_engine.url.database == ":memory:"
+        ))
+        db_mod._engine = previous_engine if preserve_previous_engine else None
+        db_mod._SessionFactory = previous_session_factory if preserve_previous_engine else None
         _restore_logger("metrics", previous_metrics_logger)
         _restore_logger("unified", previous_unified_logger)
         _restore_logger("core.app_factory", previous_app_factory_logger)

@@ -9,6 +9,7 @@ from flask import current_app, has_app_context, request, url_for
 
 from core.db import get_session
 
+from .effective_menu import _service as _effective_menu_service
 from .i18n import copy_for, t
 from .navigation import NAV_ITEMS
 from .menu_context import _service as _menu_context_service
@@ -150,6 +151,96 @@ class OffshoreWorkMenuDayView:
     meals: tuple[OffshoreWorkMenuMealView, ...] = ()
 
 
+def _build_work_menu_view_model_from_context(*, context, labels: dict[str, str], locale: str, theme: str, role: str | None, tenant_name: str | None, site_name: str | None) -> dict[str, object]:
+    vm: dict[str, object] = {
+        "lang": locale,
+        "theme": theme,
+        "labels": labels,
+        "tenant_id": context.tenant_id,
+        "site_id": context.installation_id,
+        "tenant_name": tenant_name,
+        "site_name": site_name,
+        "user_name": request.headers.get("X-User-Name") or request.headers.get("X-Username") or "Inloggad",
+        "user_role": role,
+        "allow_site_switch": (role or "").strip().lower() in ("admin", "superuser"),
+        "page_title": labels["offshore.work_menu.title"],
+        "page_subtitle": labels["offshore.work_menu.subtitle"],
+        "nav_items": [{**item, "label": t(locale, item["label_key"])} for item in NAV_ITEMS],
+        "work_period": context.work_period,
+        "days": (),
+        "track_groups": context.track_groups,
+        "track_visibility": {},
+        "has_menu": bool(context.service_events),
+        "is_managed_role": (role or "").strip().lower() in ("admin", "superuser", "cook", "editor"),
+        "empty_title": labels["offshore.work_menu.empty_title"],
+        "empty_body": labels["offshore.work_menu.empty_body"],
+        "composition_options": tuple({"value": option.value, "label": option.label} for option in context.composition_options),
+    }
+
+    if not context.service_events:
+        if context.work_period is not None:
+            vm.update({"empty_title": labels["offshore.work_menu.no_services_title"], "empty_body": labels["offshore.work_menu.no_services_body"]})
+        return vm
+
+    day_map: dict[str, list[OffshoreWorkMenuMealView]] = {}
+    day_order: list[str] = []
+    for event in context.service_events:
+        day_key = event.service_date
+        if day_key not in day_map:
+            day_map[day_key] = []
+            day_order.append(day_key)
+        meal_tracks: list[OffshoreWorkMenuTrackView] = []
+        for item in event.items:
+            if item.row_state == "empty":
+                effective_source_label = labels["offshore.work_menu.source.empty"]
+            elif item.source_type.value == "published_builder_item":
+                effective_source_label = labels["offshore.work_menu.source.published"]
+            elif item.source_type.value == "operational_builder_override":
+                effective_source_label = item.decision_label or labels["offshore.work_menu.decision.use_builder_composition"]
+            else:
+                effective_source_label = item.decision_label or labels["offshore.work_menu.decision.use_free_text"]
+            meal_tracks.append(
+                OffshoreWorkMenuTrackView(
+                    track_key=item.track_key,
+                    track_label=item.track_label,
+                    track_group=item.track_group,
+                    published_title=item.published_title,
+                    effective_title=item.effective_title,
+                    effective_source_label=effective_source_label,
+                    decision_type=item.decision_type,
+                    decision_label=item.decision_label,
+                    builder_composition_id=(item.operational_decision_reference.builder_composition_id if item.operational_decision_reference is not None else None),
+                    free_text=(item.operational_decision_reference.free_text if item.operational_decision_reference is not None else None),
+                    row_state=item.row_state,
+                )
+            )
+        day_map[day_key].append(
+            OffshoreWorkMenuMealView(
+                service_event_id=event.service_event_id,
+                meal_slot=event.meal_slot,
+                meal_label=labels[f"offshore.work_menu.meal_slot.{event.meal_slot}"],
+                local_time=event.local_time,
+                service_label=event.service_label,
+                menu_context_status=event.menu_context_status,
+                menu_title=event.menu_title,
+                tracks=tuple(meal_tracks),
+            )
+        )
+
+    days: list[OffshoreWorkMenuDayView] = []
+    for day_key in day_order:
+        meals = tuple(sorted(day_map.get(day_key, []), key=lambda meal: (meal.meal_slot, meal.local_time, meal.service_event_id)))
+        try:
+            local_date = _date.fromisoformat(day_key)
+            label = t(locale, f"offshore.weekday.{local_date.weekday()}")
+        except Exception:
+            label = day_key.title()
+        days.append(OffshoreWorkMenuDayView(local_date=day_key, label=label, meals=meals))
+
+    vm["days"] = tuple(days)
+    return vm
+
+
 class OffshoreWorkMenuService:
     def _load_period(self, db, tenant_id: int, site_id: str) -> OffshoreWorkPeriod | None:
         settings = (
@@ -196,194 +287,20 @@ class OffshoreWorkMenuService:
 
     def build_view_model(self, *, tenant_id: int | None, site_id: str | None, locale: str, theme: str, role: str | None, tenant_name: str | None, site_name: str | None) -> dict[str, object]:
         labels = copy_for(locale)
-        vm: dict[str, object] = {
-            "lang": locale,
-            "theme": theme,
-            "labels": labels,
-            "tenant_id": tenant_id,
-            "site_id": site_id,
-            "tenant_name": tenant_name,
-            "site_name": site_name,
-            "user_name": request.headers.get("X-User-Name") or request.headers.get("X-Username") or "Inloggad",
-            "user_role": role,
-            "allow_site_switch": (role or "").strip().lower() in ("admin", "superuser"),
-            "page_title": labels["offshore.work_menu.title"],
-            "page_subtitle": labels["offshore.work_menu.subtitle"],
-            "nav_items": [{**item, "label": t(locale, item["label_key"])} for item in NAV_ITEMS],
-            "work_period": None,
-            "days": (),
-            "track_groups": (),
-            "track_visibility": {},
-            "has_menu": False,
-            "is_managed_role": (role or "").strip().lower() in ("admin", "superuser", "cook", "editor"),
-            "empty_title": labels["offshore.work_menu.empty_title"],
-            "empty_body": labels["offshore.work_menu.empty_body"],
-        }
-
-        if tenant_id is None or not site_id:
-            return vm
-
-        db = get_session()
-        try:
-            period = self._load_period(db, int(tenant_id), str(site_id))
-            if period is None:
-                return vm
-
-            settings = (
-                db.query(OffshoreInstallationSettings)
-                .filter(OffshoreInstallationSettings.tenant_id == int(tenant_id), OffshoreInstallationSettings.site_id == str(site_id))
-                .first()
-            )
-            context_by_event_id = self._load_contexts(db, int(tenant_id), str(site_id), int(period.id))
-            service_events = (
-                db.query(OffshoreServiceEvent)
-                .filter(
-                    OffshoreServiceEvent.tenant_id == int(tenant_id),
-                    OffshoreServiceEvent.site_id == str(site_id),
-                    OffshoreServiceEvent.work_period_id == int(period.id),
-                )
-                .order_by(OffshoreServiceEvent.starts_at.asc(), OffshoreServiceEvent.id.asc())
-                .all()
-            )
-            if not service_events:
-                vm.update({"work_period": period, "empty_title": labels["offshore.work_menu.no_services_title"], "empty_body": labels["offshore.work_menu.no_services_body"]})
-                return vm
-
-            visibility = _parse_visibility_json(getattr(settings, "menu_track_visibility_json", None) if settings is not None else None, locale)
-            all_tracks = tuple((str(group_key), tuple(tracks)) for group_key, tracks in visibility.items())
-
-            builder_flow = current_app.extensions.get("builder_menu_context_flow") if has_app_context() else None
-            menus_by_id: dict[str, str] = {}
-            rows_by_menu_id: dict[str, list[dict[str, object]]] = {}
-            composition_options: list[dict[str, str]] = []
-            if builder_flow is not None:
-                try:
-                    for menu in builder_flow.list_menus():
-                        menu_id = _clean(getattr(menu, "menu_id", None))
-                        if menu_id:
-                            menus_by_id[menu_id] = _safe_title(getattr(menu, "title", None)) or menu_id
-                except Exception:
-                    menus_by_id = {}
-                try:
-                    for composition in builder_flow.list_compositions():
-                        composition_id = _clean(getattr(composition, "composition_id", None))
-                        if not composition_id:
-                            continue
-                        composition_options.append(
-                            {
-                                "value": composition_id,
-                                "label": _safe_title(getattr(composition, "composition_name", None)) or composition_id,
-                            }
-                        )
-                except Exception:
-                    composition_options = []
-
-            decision_rows = (
-                db.query(OffshoreWorkMenuDecision)
-                .filter(
-                    OffshoreWorkMenuDecision.tenant_id == int(tenant_id),
-                    OffshoreWorkMenuDecision.site_id == str(site_id),
-                    OffshoreWorkMenuDecision.service_event_id.in_([int(event.id) for event in service_events]),
-                )
-                .all()
-            )
-            decisions_by_event_and_track = {(int(row.service_event_id), str(row.menu_track_key)): row for row in decision_rows}
-
-            day_map: dict[str, list[OffshoreWorkMenuMealView]] = {}
-            day_order: list[str] = []
-            zone = _local_zone(site_timezone_name(int(tenant_id), str(site_id)))
-
-            for event in service_events:
-                local_date = event.starts_at.astimezone(zone).date()
-                day_key = _weekday_key(local_date)
-                meal_slot = _resolve_service_slot(event)
-                event_context = context_by_event_id.get(int(event.id))
-                builder_menu_id = _clean(getattr(event_context, "builder_menu_id", None)) if event_context is not None else ""
-                if builder_menu_id and builder_menu_id not in rows_by_menu_id and builder_flow is not None:
-                    rows_by_menu_id[builder_menu_id] = self._load_menu_rows(builder_flow, builder_menu_id)
-                menu_rows = rows_by_menu_id.get(builder_menu_id, [])
-                matching_rows = [row for row in menu_rows if _clean(row.get("day")) == day_key and _clean(row.get("meal_slot")) == meal_slot]
-                meal_label = labels[f"offshore.work_menu.meal_slot.{meal_slot}"]
-                service_label = _safe_title(getattr(event, "display_name", None)) or meal_label
-                menu_title = menus_by_id.get(builder_menu_id)
-                meal_tracks: list[OffshoreWorkMenuTrackView] = []
-
-                ordered_tracks = [track for group_key, track_group in all_tracks for track in track_group]
-                for index, track in enumerate(ordered_tracks):
-                    published_row = matching_rows[index] if index < len(matching_rows) else None
-                    published_title = _publication_title(published_row)
-                    decision = decisions_by_event_and_track.get((int(event.id), track["key"]))
-                    decision_type = _clean(getattr(decision, "decision_type", None)) or None
-                    effective_source_label = labels["offshore.work_menu.source.published"]
-                    effective_title = published_title
-                    row_state = "published"
-                    if decision is not None:
-                        effective_source_label = _decision_label(locale, decision_type or "use_published")
-                        row_state = decision_type or "use_published"
-                        if decision_type == "use_builder_composition":
-                            effective_title = _resolve_builder_composition_title(builder_flow, getattr(decision, "selected_builder_composition_id", None)) or published_title
-                        elif decision_type == "use_free_text":
-                            effective_title = _safe_title(getattr(decision, "free_text", None)) or published_title
-                        else:
-                            effective_title = published_title
-                    elif published_title is None:
-                        effective_source_label = labels["offshore.work_menu.source.empty"]
-                        row_state = "empty"
-
-                    meal_tracks.append(
-                        OffshoreWorkMenuTrackView(
-                            track_key=track["key"],
-                            track_label=track["label"],
-                            track_group=str(track.get("group") or "primary"),
-                            published_title=published_title,
-                            effective_title=effective_title,
-                            effective_source_label=effective_source_label,
-                            decision_type=decision_type,
-                            decision_label=_decision_label(locale, decision_type) if decision_type else None,
-                            builder_composition_id=_clean(getattr(decision, "selected_builder_composition_id", None)) or None,
-                            free_text=_safe_title(getattr(decision, "free_text", None)),
-                            row_state=row_state,
-                        )
-                    )
-
-                meal_vm = OffshoreWorkMenuMealView(
-                    service_event_id=int(event.id),
-                    meal_slot=meal_slot,
-                    meal_label=meal_label,
-                    local_time=event.starts_at.astimezone(zone).strftime("%H:%M"),
-                    service_label=service_label,
-                    menu_context_status=_clean(getattr(event_context, "resolution_status", None)) or labels["offshore.work_menu.context_status.missing"],
-                    menu_title=menu_title,
-                    tracks=tuple(meal_tracks),
-                )
-                day_map.setdefault(day_key, [])
-                if day_key not in day_order:
-                    day_order.append(day_key)
-                day_map[day_key].append(meal_vm)
-
-            days: list[OffshoreWorkMenuDayView] = []
-            for day_key in day_order:
-                meals = tuple(sorted(day_map.get(day_key, []), key=lambda meal: (meal.meal_slot, meal.local_time, meal.service_event_id)))
-                first_event = next((event for event in service_events if _weekday_key(event.starts_at.astimezone(zone).date()) == day_key), None)
-                local_date = first_event.starts_at.astimezone(zone).date().isoformat() if first_event is not None else day_key
-                label = t(locale, f"offshore.weekday.{_date.fromisoformat(local_date).weekday()}") if first_event is not None else day_key.title()
-                days.append(OffshoreWorkMenuDayView(local_date=local_date, label=label, meals=meals))
-
-            vm.update(
-                {
-                    "work_period": period,
-                    "days": tuple(days),
-                    "track_groups": all_tracks,
-                    "track_visibility": visibility,
-                    "composition_options": tuple(sorted(composition_options, key=lambda row: row["label"])),
-                    "has_menu": True,
-                    "empty_title": labels["offshore.work_menu.title"],
-                    "empty_body": labels["offshore.work_menu.subtitle"],
-                }
-            )
-            return vm
-        finally:
-            db.close()
+        context = _effective_menu_service.build_context(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            locale=locale,
+        )
+        return _build_work_menu_view_model_from_context(
+            context=context,
+            labels=labels,
+            locale=locale,
+            theme=theme,
+            role=role,
+            tenant_name=tenant_name,
+            site_name=site_name,
+        )
 
     def save_decision(self, *, tenant_id: int | None, site_id: str | None, work_period_id: int, service_event_id: int, menu_track_key: str, decision_type: str, selected_builder_composition_id: str | None, free_text: str | None, actor_user_id: int | None = None) -> OffshoreWorkMenuDecision:
         db = get_session()
