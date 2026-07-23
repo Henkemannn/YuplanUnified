@@ -24,6 +24,7 @@ from .periods import (
 )
 from .menu_context import _service as _menu_context_service
 from .operations import _service as _operations_service
+from .work_menu import _service as _work_menu_service
 from .prep_tasks import _service as _prep_service
 from .services import (
     _service,
@@ -117,6 +118,52 @@ def dashboard():
     return render_template("offshore2/dashboard.html", vm=vm)
 
 
+@bp.get("/work-menu")
+@require_roles(*VIEWER_ROLES)
+def work_menu():
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    vm = _work_menu_service.build_view_model(
+        tenant_id=result.get("tenant_id"),
+        site_id=result.get("site_id"),
+        locale=resolve_locale(),
+        theme=resolve_theme(),
+        role=current_app.config.get("_offshore_role") or request.headers.get("X-User-Role") or None,
+        tenant_name=result.get("tenant_name"),
+        site_name=result.get("site_name"),
+    )
+    return render_template("offshore2/work_menu.html", vm=vm)
+
+
+@bp.post("/work-menu/decisions")
+@require_roles(*PREP_WRITE_ROLES)
+def save_work_menu_decision():
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        _work_menu_service.save_decision(
+            tenant_id=int(result.get("tenant_id") or 0),
+            site_id=str(result.get("site_id") or ""),
+            work_period_id=int(request.form.get("work_period_id") or 0),
+            service_event_id=int(request.form.get("service_event_id") or 0),
+            menu_track_key=str(request.form.get("menu_track_key") or ""),
+            decision_type=str(request.form.get("decision_type") or ""),
+            selected_builder_composition_id=request.form.get("selected_builder_composition_id") or None,
+            free_text=request.form.get("free_text") or None,
+            actor_user_id=_get_actor_user_id(),
+        )
+        _flash_success("offshore.success.work_menu_saved")
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except PermissionError:
+        return forbidden("forbidden", problem_type="https://example.com/problems/offshore-work-menu-forbidden")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+    return redirect(url_for("offshore2.work_menu"))
+
+
 @bp.get("/operations")
 @require_roles(*VIEWER_ROLES)
 def operations():
@@ -165,6 +212,8 @@ def operations_prep():
         locale=resolve_locale(),
         role=current_app.config.get("_offshore_role") or request.headers.get("X-User-Role") or None,
         user_id=int(session.get("user_id")) if session.get("user_id") is not None else None,
+        tenant_name=result.get("tenant_name"),
+        site_name=result.get("site_name"),
         focus_service_event_id=focus_id,
     )
     return render_template("offshore2/prep_tasks.html", vm=vm)

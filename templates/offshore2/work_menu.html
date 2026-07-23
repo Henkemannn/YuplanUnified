@@ -1,0 +1,127 @@
+{% extends "offshore2/base.html" %}
+
+{% block page_title %}{{ vm.page_title }} – Yuplan Offshore{% endblock %}
+
+{% block content %}
+  <div class="app-page offshore-page offshore-work-menu-page">
+    <section class="app-shell__page-header offshore-page__header">
+      <div>
+        <h1 class="app-shell__title">{{ vm.page_title }}</h1>
+        <p class="app-shell__subtitle">{{ vm.page_subtitle }}</p>
+      </div>
+      <div class="offshore-page__meta">
+        <span class="app-shell__env-badge">{{ vm.labels['offshore.topbar.installation'] }}: {{ vm.site_name or '—' }}</span>
+        {% if vm.work_period %}
+          <span class="app-shell__env-badge">{{ vm.work_period.name }}</span>
+        {% endif %}
+      </div>
+    </section>
+
+    {% if not vm.has_menu %}
+      <section class="app-shell__grid offshore-grid">
+        <article class="app-shell__card offshore-empty-state" data-testid="offshore-work-menu-empty">
+          <div class="app-shell__card-header">
+            <div>
+              <h2 class="app-shell__card-title">{{ vm.empty_title }}</h2>
+              <p class="app-shell__card-text">{{ vm.empty_body }}</p>
+            </div>
+            <a class="yp-button yp-button-primary" href="{{ url_for('offshore2.operations') }}">{{ vm.labels['offshore.operations.open_today'] }}</a>
+          </div>
+        </article>
+      </section>
+    {% else %}
+      <section class="app-shell__card offshore-work-menu-legend">
+        <div class="offshore-inline-meta">
+          {% for group_key, tracks in vm.track_groups %}
+            <span class="yp-pill offshore-roadmap-pill">{{ vm.labels['offshore.work_menu.track.' ~ group_key] }}: {{ tracks | map(attribute='label') | join(', ') }}</span>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="offshore-work-menu-days">
+        {% for day in vm.days %}
+          <article class="app-shell__card offshore-work-menu-day-card">
+            <div class="app-shell__card-header">
+              <div>
+                <h2 class="app-shell__card-title">{{ day.label }}</h2>
+                <p class="app-shell__card-text">{{ day.local_date }}</p>
+              </div>
+            </div>
+            <div class="offshore-work-menu-meals">
+              {% for meal in day.meals %}
+                <section class="offshore-work-menu-meal">
+                  <div class="offshore-work-menu-meal__header">
+                    <div>
+                      <h3 class="offshore-work-menu-meal__title">{{ meal.meal_label }}</h3>
+                      <p class="offshore-work-menu-meal__meta">{{ meal.service_label }} · {{ meal.local_time }}</p>
+                    </div>
+                    <span class="yp-pill">{{ meal.menu_context_status }}</span>
+                  </div>
+
+                  <div class="offshore-work-menu-tracks">
+                    {% for track in meal.tracks %}
+                      <article class="offshore-work-menu-track">
+                        <div class="offshore-work-menu-track__header">
+                          <div>
+                            <h4 class="offshore-work-menu-track__title">{{ track.track_label }}</h4>
+                            <p class="offshore-work-menu-track__meta">{{ track.effective_source_label }}</p>
+                          </div>
+                          <span class="yp-pill offshore-roadmap-pill">{{ vm.labels['offshore.work_menu.track.' ~ track.track_group] }}</span>
+                        </div>
+                        <div class="offshore-work-menu-track__bodies">
+                          <div class="offshore-work-menu-track__line">
+                            <span>Publicerat</span>
+                            <strong>{{ track.published_title or '—' }}</strong>
+                          </div>
+                          <div class="offshore-work-menu-track__line">
+                            <span>Effektivt</span>
+                            <strong>{{ track.effective_title or '—' }}</strong>
+                          </div>
+                        </div>
+
+                        {% if vm.is_managed_role %}
+                          <form class="offshore-form offshore-work-menu-form" method="post" action="{{ url_for('offshore2.save_work_menu_decision') }}">
+                            {{ csrf_token_input()|safe }}
+                            <input type="hidden" name="work_period_id" value="{{ vm.work_period.id }}" />
+                            <input type="hidden" name="service_event_id" value="{{ meal.service_event_id }}" />
+                            <input type="hidden" name="menu_track_key" value="{{ track.track_key }}" />
+                            <div class="offshore-form__grid offshore-form__grid--two">
+                              <label class="offshore-field">
+                                <span class="offshore-field__label">{{ vm.labels['offshore.work_menu.decision.use_published'] }}</span>
+                                <select class="offshore-input" name="decision_type">
+                                  <option value="use_published" {% if not track.decision_type or track.decision_type == 'use_published' %}selected{% endif %}>{{ vm.labels['offshore.work_menu.decision.use_published'] }}</option>
+                                  <option value="use_builder_composition" {% if track.decision_type == 'use_builder_composition' %}selected{% endif %}>{{ vm.labels['offshore.work_menu.decision.use_builder_composition'] }}</option>
+                                  <option value="use_free_text" {% if track.decision_type == 'use_free_text' %}selected{% endif %}>{{ vm.labels['offshore.work_menu.decision.use_free_text'] }}</option>
+                                </select>
+                              </label>
+                              <label class="offshore-field">
+                                <span class="offshore-field__label">Builder-komposition</span>
+                                <select class="offshore-input" name="selected_builder_composition_id">
+                                  <option value="">Välj komposition</option>
+                                  {% for option in vm.composition_options %}
+                                    <option value="{{ option.value }}" {% if track.builder_composition_id == option.value %}selected{% endif %}>{{ option.label }}</option>
+                                  {% endfor %}
+                                </select>
+                              </label>
+                            </div>
+                            <label class="offshore-field">
+                              <span class="offshore-field__label">Fri text</span>
+                              <input class="offshore-input" type="text" name="free_text" value="{{ track.free_text or '' }}" placeholder="{{ track.effective_title or track.published_title or '' }}" />
+                            </label>
+                            <div class="offshore-form__actions">
+                              <button class="yp-button yp-button-primary" type="submit">Spara val</button>
+                            </div>
+                          </form>
+                        {% endif %}
+                      </article>
+                    {% endfor %}
+                  </div>
+                </section>
+              {% endfor %}
+            </div>
+          </article>
+        {% endfor %}
+      </section>
+    {% endif %}
+  </div>
+{% endblock %}

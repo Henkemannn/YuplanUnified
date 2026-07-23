@@ -95,6 +95,8 @@ class OffshorePrepDay:
     labels: dict[str, str]
     selected_date: str
     selected_date_label: str
+    tenant_name: str | None
+    site_name: str | None
     service_groups: tuple[OffshorePrepServiceGroup, ...]
     summary: OffshorePrepSummary
     state_key: str
@@ -420,6 +422,8 @@ class OffshorePrepTaskService:
         locale: str | None,
         role: str | None,
         user_id: int | None,
+        tenant_name: str | None = None,
+        site_name: str | None = None,
         focus_service_event_id: int | None = None,
     ) -> OffshorePrepDay:
         locale_value = normalize_locale(locale or "sv")
@@ -468,6 +472,8 @@ class OffshorePrepTaskService:
                 labels=labels,
                 selected_date=day_value.isoformat(),
                 selected_date_label=day_value.isoformat(),
+                tenant_name=tenant_name,
+                site_name=site_name,
                 service_groups=(),
                 summary=OffshorePrepSummary(),
                 state_key="no_installation",
@@ -481,6 +487,8 @@ class OffshorePrepTaskService:
                 labels=labels,
                 selected_date=day_value.isoformat(),
                 selected_date_label=day_value.isoformat(),
+                tenant_name=tenant_name,
+                site_name=site_name,
                 service_groups=(),
                 summary=OffshorePrepSummary(),
                 state_key="no_installation",
@@ -494,6 +502,8 @@ class OffshorePrepTaskService:
                 labels=labels,
                 selected_date=day_value.isoformat(),
                 selected_date_label=day_value.isoformat(),
+                tenant_name=tenant_name,
+                site_name=site_name,
                 service_groups=(),
                 summary=OffshorePrepSummary(),
                 state_key="no_period",
@@ -507,6 +517,8 @@ class OffshorePrepTaskService:
                 labels=labels,
                 selected_date=day_value.isoformat(),
                 selected_date_label=day_value.isoformat(),
+                tenant_name=tenant_name,
+                site_name=site_name,
                 service_groups=(),
                 summary=OffshorePrepSummary(),
                 state_key="no_service_events",
@@ -576,6 +588,8 @@ class OffshorePrepTaskService:
             labels=labels,
             selected_date=day_value.isoformat(),
             selected_date_label=day_value.isoformat(),
+            tenant_name=tenant_name,
+            site_name=site_name,
             service_groups=tuple(service_groups),
             summary=total_summary,
             state_key=state_key,

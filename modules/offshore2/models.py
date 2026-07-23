@@ -22,6 +22,7 @@ class OffshoreInstallationSettings(Base):
     default_locale: Mapped[str] = mapped_column(String(8), nullable=False, default="sv", server_default="sv")
     default_theme: Mapped[str] = mapped_column(String(16), nullable=False, default="system", server_default="system")
     default_portions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    menu_track_visibility_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
@@ -271,6 +272,41 @@ class OffshorePrepTask(Base):
             "lower(status) IN ('planned', 'in_progress', 'completed', 'cancelled')",
             name="ck_offshore_prep_tasks_status_allowed",
         ),
+    )
+
+
+class OffshoreWorkMenuDecision(Base):
+    __tablename__ = "offshore_work_menu_decisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    service_event_id: Mapped[int] = mapped_column(ForeignKey("offshore_service_events.id", ondelete="CASCADE"), nullable=False)
+    menu_track_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    decision_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    selected_builder_composition_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    free_text: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    source_publication_pin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("commun_builder_publication_pins.id", ondelete="SET NULL"), nullable=True
+    )
+    source_publication_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_publication_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "site_id", "service_event_id", "menu_track_key", name="uq_offshore_work_menu_decisions_event_track"),
+        Index("ix_offshore_work_menu_decisions_tenant_site_event", "tenant_id", "site_id", "service_event_id"),
+        Index("ix_offshore_work_menu_decisions_tenant_site_track", "tenant_id", "site_id", "menu_track_key"),
+        CheckConstraint("length(trim(menu_track_key)) > 0", name="ck_offshore_work_menu_decisions_menu_track_key_not_empty"),
+        CheckConstraint(
+            "lower(decision_type) IN ('use_published', 'use_builder_composition', 'use_free_text')",
+            name="ck_offshore_work_menu_decisions_decision_type_allowed",
+        ),
+        CheckConstraint("source_publication_year > 0", name="ck_offshore_work_menu_decisions_publication_year_positive"),
+        CheckConstraint("source_publication_week BETWEEN 1 AND 53", name="ck_offshore_work_menu_decisions_publication_week_range"),
     )
 
 

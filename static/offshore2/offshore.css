@@ -237,6 +237,81 @@
   letter-spacing: -0.01em;
 }
 
+.offshore-work-menu-legend {
+  margin-bottom: 16px;
+}
+
+.offshore-work-menu-days {
+  display: grid;
+  gap: 16px;
+}
+
+.offshore-work-menu-day-card,
+.offshore-work-menu-meal,
+.offshore-work-menu-track {
+  display: grid;
+  gap: 12px;
+}
+
+.offshore-work-menu-meals,
+.offshore-work-menu-tracks {
+  display: grid;
+  gap: 14px;
+}
+
+.offshore-work-menu-meal,
+.offshore-work-menu-track {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--offshore-border);
+  background: color-mix(in srgb, var(--offshore-surface) 94%, transparent);
+}
+
+.offshore-work-menu-meal__header,
+.offshore-work-menu-track__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.offshore-work-menu-meal__title,
+.offshore-work-menu-track__title {
+  margin: 0;
+  font-size: var(--yp-font-size-lg);
+}
+
+.offshore-work-menu-meal__meta,
+.offshore-work-menu-track__meta {
+  margin: 0.2rem 0 0;
+  color: var(--offshore-text-muted);
+  font-size: var(--yp-font-size-sm);
+}
+
+.offshore-work-menu-track__bodies {
+  display: grid;
+  gap: 8px;
+}
+
+.offshore-work-menu-track__line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--yp-font-size-sm);
+}
+
+.offshore-work-menu-track__line span {
+  color: var(--offshore-text-muted);
+}
+
+.offshore-work-menu-form {
+  margin-top: 4px;
+}
+
+.offshore-work-menu-form .offshore-field__label {
+  font-weight: 600;
+}
+
 @media (max-width: 900px) {
   .offshore-shell__sidebar-footer {
     justify-content: flex-start;
@@ -252,5 +327,12 @@
     align-items: flex-start;
     justify-content: flex-start;
     flex-direction: column;
+  }
+
+  .offshore-work-menu-meal__header,
+  .offshore-work-menu-track__header,
+  .offshore-work-menu-track__line {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

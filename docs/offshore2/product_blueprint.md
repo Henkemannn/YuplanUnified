@@ -89,6 +89,7 @@ Offshore v1.0 should have a small, practical navigation. It should not expose em
 - Översikt
 - Periodplan
 - Menycykel
+- Operativ arbetsmeny
 - Prep
 - Frysplock
 - Husk att bestill
@@ -119,6 +120,14 @@ Offshore v1.0 should have a small, practical navigation. It should not expose em
 - Main action: assign or replace the menu for a cycle week.
 - Mobile: read-only summary and limited reassignment.
 - Desktop/iPad: cycle matrix with week mapping.
+- Needed in v1.0: yes.
+
+#### Operativ arbetsmeny
+- User question: Which Builder composition should be used for this service event and track?
+- Important information: day, meal, track groups, available Builder compositions, local decision.
+- Main action: choose a Builder composition or record a local free-text decision when needed.
+- Mobile: compact decision form per track.
+- Desktop/iPad: grouped cards with visible composition options.
 - Needed in v1.0: yes.
 
 #### Prep

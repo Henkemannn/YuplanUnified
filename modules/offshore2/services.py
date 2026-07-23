@@ -254,6 +254,7 @@ class OffshoreService:
             default_locale = _validate_locale(payload.get("default_locale"))
             default_theme = _validate_theme(payload.get("default_theme"))
             default_portions = _validate_portions(payload.get("default_portions"))
+            menu_track_visibility_json = _clean(payload.get("menu_track_visibility_json")) or None
             is_active = str(payload.get("is_active") or "").strip().lower() not in ("0", "false", "off", "no")
             row = self._base_query(db, OffshoreInstallationSettings, int(tenant_id), str(site_id)).first()
             if row is None:
@@ -264,6 +265,7 @@ class OffshoreService:
                     default_locale=default_locale,
                     default_theme=default_theme,
                     default_portions=default_portions,
+                    menu_track_visibility_json=menu_track_visibility_json,
                     is_active=is_active,
                     created_by_user_id=actor_user_id,
                     updated_by_user_id=actor_user_id,
@@ -276,6 +278,7 @@ class OffshoreService:
                 row.default_locale = default_locale
                 row.default_theme = default_theme
                 row.default_portions = default_portions
+                row.menu_track_visibility_json = menu_track_visibility_json
                 row.is_active = is_active
                 row.updated_by_user_id = actor_user_id
                 row.updated_at = _now()

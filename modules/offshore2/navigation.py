@@ -8,6 +8,12 @@ NAV_ITEMS = (
         "path": "/offshore",
     },
     {
+        "key": "work_menu",
+        "endpoint": "offshore2.work_menu",
+        "label_key": "offshore.nav.work_menu",
+        "path": "/offshore/work-menu",
+    },
+    {
         "key": "operations",
         "endpoint": "offshore2.operations",
         "label_key": "offshore.nav.operations",

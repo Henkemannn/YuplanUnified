@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+import json
 from zoneinfo import ZoneInfo
 
 import click
@@ -22,6 +23,7 @@ from core.db import get_new_session, get_session
 from core.menu_service import MenuServiceDB
 from core.week_key import week_key_from_date
 from modules.offshore2.menu_context import _service as menu_context_service
+from modules.offshore2.models import OffshoreWorkMenuDecision
 from modules.offshore2.periods import _service as period_service
 from modules.offshore2.prep_tasks import _service as prep_service
 from modules.offshore2.services import _service as offshore_service
@@ -400,46 +402,33 @@ def _ensure_builder_content(*, week_key: str) -> dict[str, str]:
     menu_flow = _builder_menu_context_flow()
 
     component_names = [
-        "Demo Offshore Fish",
-        "Demo Offshore Root Vegetables",
-        "Demo Offshore Herb Sauce",
-        "Demo Offshore Green Prep",
+        "Demo Offshore Kött",
+        "Demo Offshore Fisk",
+        "Demo Offshore Soppa",
+        "Demo Offshore Vegetariskt",
     ]
     components = {name: builder_flow.create_standalone_component(name).component_id for name in component_names}
 
-    lunch_composition = builder_flow._composition_repository.get("demo_offshore_lunch_plate")
-    if lunch_composition is None:
-        lunch_composition = builder_flow.create_composition(
-            "demo_offshore_lunch_plate",
-            "Demo Offshore Lunch Plate",
-            library_group="demo-offshore",
-        )
-    else:
-        lunch_composition = builder_flow._composition_service.update_composition_metadata(
-            "demo_offshore_lunch_plate",
-            composition_name="Demo Offshore Lunch Plate",
-            library_group="demo-offshore",
-        )
-
-    dinner_composition = builder_flow._composition_repository.get("demo_offshore_dinner_plate")
-    if dinner_composition is None:
-        dinner_composition = builder_flow.create_composition(
-            "demo_offshore_dinner_plate",
-            "Demo Offshore Dinner Plate",
-            library_group="demo-offshore",
-        )
-    else:
-        dinner_composition = builder_flow._composition_service.update_composition_metadata(
-            "demo_offshore_dinner_plate",
-            composition_name="Demo Offshore Dinner Plate",
-            library_group="demo-offshore",
-        )
-
-    for composition_id, required_names in {
-        lunch_composition.composition_id: ["Demo Offshore Fish", "Demo Offshore Herb Sauce"],
-        dinner_composition.composition_id: ["Demo Offshore Root Vegetables", "Demo Offshore Green Prep"],
-    }.items():
+    composition_specs = {
+        "demo_offshore_kott": ("Demo Offshore Kött", ["Demo Offshore Kött"]),
+        "demo_offshore_fisk": ("Demo Offshore Fisk", ["Demo Offshore Fisk"]),
+        "demo_offshore_soppa": ("Demo Offshore Soppa", ["Demo Offshore Soppa"]),
+        "demo_offshore_vegetariskt": ("Demo Offshore Vegetariskt", ["Demo Offshore Vegetariskt"]),
+    }
+    for composition_id, (composition_name, required_names) in composition_specs.items():
         composition = builder_flow._composition_repository.get(composition_id)
+        if composition is None:
+            composition = builder_flow.create_composition(
+                composition_id,
+                composition_name,
+                library_group="demo-offshore",
+            )
+        else:
+            composition = builder_flow._composition_service.update_composition_metadata(
+                composition_id,
+                composition_name=composition_name,
+                library_group="demo-offshore",
+            )
         existing_ids = {item.component_id for item in list(composition.components)} if composition else set()
         for name in required_names:
             component_id = components[name]
@@ -464,14 +453,41 @@ def _ensure_builder_content(*, week_key: str) -> dict[str, str]:
         version=1,
         status="draft",
     )
-    menu_flow.add_composition_menu_row(menu_id=menu_id, day="monday", meal_slot="lunch", composition_id="demo_offshore_lunch_plate", menu_detail_id="demo_offshore_week_menu_row_1", sort_order=1)
-    menu_flow.add_composition_menu_row(menu_id=menu_id, day="tuesday", meal_slot="lunch", composition_id="demo_offshore_dinner_plate", menu_detail_id="demo_offshore_week_menu_row_2", sort_order=2)
-    menu_flow.add_composition_menu_row(menu_id=menu_id, day="wednesday", meal_slot="dinner", composition_id="demo_offshore_lunch_plate", menu_detail_id="demo_offshore_week_menu_row_3", sort_order=3)
+    weekday_rows = (
+        ("monday", "lunch"),
+        ("monday", "dinner"),
+        ("tuesday", "lunch"),
+        ("tuesday", "dinner"),
+        ("wednesday", "lunch"),
+        ("wednesday", "dinner"),
+        ("thursday", "lunch"),
+        ("thursday", "dinner"),
+        ("friday", "lunch"),
+        ("friday", "dinner"),
+        ("saturday", "lunch"),
+        ("saturday", "dinner"),
+        ("sunday", "lunch"),
+        ("sunday", "dinner"),
+    )
+    row_index = 1
+    for day, meal_slot in weekday_rows:
+        for sort_order, composition_id in enumerate(("demo_offshore_kott", "demo_offshore_fisk", "demo_offshore_soppa", "demo_offshore_vegetariskt"), start=1):
+            menu_flow.add_composition_menu_row(
+                menu_id=menu_id,
+                day=day,
+                meal_slot=meal_slot,
+                composition_id=composition_id,
+                menu_detail_id=f"demo_offshore_week_menu_row_{row_index}",
+                sort_order=sort_order,
+            )
+            row_index += 1
 
     return {
         "menu_id": menu_id,
-        "lunch_composition_id": "demo_offshore_lunch_plate",
-        "dinner_composition_id": "demo_offshore_dinner_plate",
+        "kott_composition_id": "demo_offshore_kott",
+        "fisk_composition_id": "demo_offshore_fisk",
+        "soppa_composition_id": "demo_offshore_soppa",
+        "vegetariskt_composition_id": "demo_offshore_vegetariskt",
     }
 
 
@@ -525,6 +541,19 @@ def _ensure_offshore_domain(*, anchor_day: date) -> tuple[int, int, int]:
             "default_locale": "sv",
             "default_theme": "system",
             "default_portions": 120,
+            "menu_track_visibility_json": json.dumps(
+                {
+                    "primary": [
+                        {"key": "koett", "label": "Kött"},
+                        {"key": "fisk", "label": "Fisk"},
+                    ],
+                    "secondary": [
+                        {"key": "soppa", "label": "Soppa"},
+                        {"key": "vegetariskt", "label": "Vegetariskt"},
+                    ],
+                },
+                ensure_ascii=False,
+            ),
             "is_active": True,
         },
     )
@@ -568,7 +597,7 @@ def _ensure_offshore_domain(*, anchor_day: date) -> tuple[int, int, int]:
             tenant_id=DEMO_TENANT_ID,
             site_id=DEMO_SITE_ID,
             name="Demo Offshore Week",
-            duration_days=4,
+            duration_days=7,
             description="Demo period template for offshore smoke testing",
             start_weekday=0,
             active=True,
@@ -580,7 +609,7 @@ def _ensure_offshore_domain(*, anchor_day: date) -> tuple[int, int, int]:
             site_id=DEMO_SITE_ID,
             template_id=int(template.id),
             name="Demo Offshore Week",
-            duration_days=4,
+            duration_days=7,
             description="Demo period template for offshore smoke testing",
             start_weekday=0,
             active=True,
@@ -588,15 +617,11 @@ def _ensure_offshore_domain(*, anchor_day: date) -> tuple[int, int, int]:
         )
 
     template_events = period_service.list_template_events(DEMO_TENANT_ID, DEMO_SITE_ID, int(template.id))
-    existing_keys = {(int(row.day_offset), str(row.service_code)) for row in template_events}
-    template_event_specs = [
-        (1, time(7, 0), "prep_breakfast", "Breakfast prep", positions[0].id),
-        (1, time(11, 30), "prep_lunch", "Lunch prep", positions[1].id),
-        (2, time(7, 0), "prep_breakfast", "Breakfast prep", positions[0].id),
-        (2, time(11, 30), "prep_lunch", "Lunch prep", positions[1].id),
-        (3, time(7, 0), "prep_breakfast", "Breakfast prep", positions[0].id),
-        (3, time(11, 30), "prep_lunch", "Lunch prep", positions[2].id),
-    ]
+    existing_keys = {(str(row.day_offset), str(row.service_code)) for row in template_events}
+    template_event_specs = []
+    for day_offset in range(7):
+        template_event_specs.append((str(day_offset), time(11, 30), "lunch", "Lunch", positions[1].id if day_offset % 2 == 0 else positions[0].id))
+        template_event_specs.append((str(day_offset), time(17, 30), "dinner", "Dinner", positions[2].id if day_offset % 2 == 0 else positions[1].id))
     for day_offset, local_time, service_code, display_name, work_position_id in template_event_specs:
         if (day_offset, service_code) in existing_keys:
             continue
@@ -628,6 +653,67 @@ def _ensure_offshore_domain(*, anchor_day: date) -> tuple[int, int, int]:
     return int(cycle.id), int(template.id), int(generation.work_period.id)
 
 
+def _ensure_work_menu_decisions(work_period_id: int) -> int:
+    db = get_session()
+    try:
+        service_events = (
+            db.execute(
+                text("SELECT id, starts_at, display_name, service_code FROM offshore_service_events WHERE tenant_id = :tenant_id AND site_id = :site_id ORDER BY starts_at ASC, id ASC"),
+                {"tenant_id": DEMO_TENANT_ID, "site_id": DEMO_SITE_ID},
+            ).fetchall()
+        )
+        context_rows = {
+            int(row.service_event_id): row
+            for row in db.execute(
+                text(
+                    "SELECT service_event_id, builder_publication_pin_id, builder_publication_year, builder_publication_week "
+                    "FROM offshore_service_event_menu_contexts WHERE tenant_id = :tenant_id AND site_id = :site_id AND work_period_id = :work_period_id"
+                ),
+                {"tenant_id": DEMO_TENANT_ID, "site_id": DEMO_SITE_ID, "work_period_id": work_period_id},
+            ).fetchall()
+        }
+        existing = {
+            (int(row.service_event_id), str(row.menu_track_key))
+            for row in db.execute(
+                text("SELECT service_event_id, menu_track_key FROM offshore_work_menu_decisions WHERE tenant_id = :tenant_id AND site_id = :site_id"),
+                {"tenant_id": DEMO_TENANT_ID, "site_id": DEMO_SITE_ID},
+            ).fetchall()
+        }
+        created = 0
+        for index, event in enumerate(service_events):
+            local_index = index % 7
+            service_slot = "lunch" if str(event.service_code).lower() == "lunch" or "lunch" in str(event.display_name).lower() else "dinner"
+            decision_matrix = [
+                ("koett", "use_published", None, None),
+                ("fisk", "use_builder_composition", "demo_offshore_fisk", None),
+                ("soppa", "use_free_text", None, f"Demo {service_slot} soppa dag {local_index + 1}"),
+                ("vegetariskt", "use_published" if local_index % 2 == 0 else "use_builder_composition", "demo_offshore_vegetariskt" if local_index % 2 == 1 else None, None),
+            ]
+            for track_key, decision_type, selected_builder_composition_id, free_text in decision_matrix:
+                if (int(event.id), track_key) in existing:
+                    continue
+                context_row = context_rows.get(int(event.id))
+                db.add(
+                    OffshoreWorkMenuDecision(
+                        tenant_id=DEMO_TENANT_ID,
+                        site_id=DEMO_SITE_ID,
+                        service_event_id=int(event.id),
+                        menu_track_key=track_key,
+                        decision_type=decision_type,
+                        selected_builder_composition_id=selected_builder_composition_id,
+                        free_text=free_text,
+                        source_publication_pin_id=str(getattr(context_row, "builder_publication_pin_id", None) or "") or None,
+                        source_publication_year=int(getattr(context_row, "builder_publication_year", 0) or 0),
+                        source_publication_week=int(getattr(context_row, "builder_publication_week", 0) or 0),
+                    )
+                )
+                created += 1
+        db.commit()
+        return created
+    finally:
+        db.close()
+
+
 def _ensure_prep_tasks() -> int:
     db = get_session()
     try:
@@ -642,10 +728,10 @@ def _ensure_prep_tasks() -> int:
 
     builder_flow = _builder_flow()
     component_names = [
-        "Demo Offshore Fish",
-        "Demo Offshore Root Vegetables",
-        "Demo Offshore Herb Sauce",
-        "Demo Offshore Green Prep",
+        "Demo Offshore Kött",
+        "Demo Offshore Fisk",
+        "Demo Offshore Soppa",
+        "Demo Offshore Vegetariskt",
     ]
     component_ids = [builder_flow.create_standalone_component(name).component_id for name in component_names]
 
@@ -735,6 +821,7 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
     legacy_menu_id = _ensure_legacy_menu_and_publication(builder_menu_id, year=int(iso_year), week=int(iso_week))
 
     _, _, work_period_id = _ensure_offshore_domain(anchor_day=anchor_day)
+    _ensure_work_menu_decisions(work_period_id)
     prep_task_count = _ensure_prep_tasks()
     service_event_count = len(period_service.list_service_events(DEMO_TENANT_ID, DEMO_SITE_ID, work_period_id))
 

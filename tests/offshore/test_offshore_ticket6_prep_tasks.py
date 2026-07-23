@@ -346,3 +346,47 @@ def test_offshore_service_event_prep_redirects_to_day_view():
     response = client.get(f"/offshore/service-events/{event.id}/prep", headers=_headers("viewer"))
     assert response.status_code in (302, 303)
     assert "/offshore/operations/prep?" in response.headers.get("Location", "")
+
+
+def test_offshore_operations_prep_keeps_active_context_and_rejects_cross_tenant_request():
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    other_site_id = _seed_site(app, tenant_id=2, name="Rig B")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    generation = _seed_period(app, tenant_id=1, site_id=site_id, start_iso="2026-07-20T08:00:00", status="active")
+
+    with app.app_context():
+        db = get_session()
+        try:
+            event = db.query(OffshoreServiceEvent).filter_by(work_period_id=generation.work_period.id).order_by(OffshoreServiceEvent.id.asc()).first()
+            assert event is not None
+            menu_context_service.sync_service_event_context(
+                tenant_id=1,
+                site_id=site_id,
+                work_period_id=generation.work_period.id,
+                service_event_id=event.id,
+            )
+        finally:
+            db.close()
+
+    client = app.test_client()
+    _login(client, tenant_id=1, site_id=site_id, role="viewer")
+
+    direct = client.get("/offshore/operations/prep?date=2026-07-20", headers=_headers("viewer"))
+    assert direct.status_code == 200
+    direct_html = direct.get_data(as_text=True)
+    assert "Organisation: Tenant One" in direct_html
+    assert "Installation: Rig A" in direct_html
+
+    operations = client.get("/offshore/operations?date=2026-07-20", headers=_headers("viewer"))
+    assert operations.status_code == 200
+    assert "/offshore/operations/prep?date=2026-07-20" in operations.get_data(as_text=True)
+
+    linked = client.get("/offshore/operations/prep?date=2026-07-20", headers=_headers("viewer"))
+    assert linked.status_code == 200
+    linked_html = linked.get_data(as_text=True)
+    assert "Organisation: Tenant One" in linked_html
+    assert "Installation: Rig A" in linked_html
+
+    cross_tenant = client.get(f"/offshore/operations/prep?date=2026-07-20&site_id={other_site_id}", headers=_headers("viewer"))
+    assert cross_tenant.status_code in (302, 403)

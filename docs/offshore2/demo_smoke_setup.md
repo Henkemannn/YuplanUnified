@@ -33,6 +33,7 @@ Manual smoke flow after seeding:
 
 1. Open `/offshore` and confirm the demo tenant/site is available.
 2. Open `/offshore/operations` and check that the current period and Builder-linked summary render.
-3. Open `/offshore/operations/prep` and verify the prep groups and task transitions are visible.
+3. Open `/offshore/work-menu` and verify the track groups, Builder composition choices, and decision form render for the seeded service events.
+4. Open `/offshore/operations/prep` and verify the prep groups and task transitions are visible.
 
 The command uses the existing Offshore services and Builder persistence layer. It does not depend on startup seeding or ad-hoc fixtures.
