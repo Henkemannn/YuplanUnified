@@ -145,14 +145,24 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
 
     client = app.test_client()
     _login(client, tenant_id=1, site_id=site_id, role="cook")
-    response = client.get("/offshore/work-menu?lang=en", headers=_headers("cook"))
+    response = client.get("/offshore/work-menu", headers=_headers("cook"))
     html = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert "Work menu" in html
+    assert "Arbetsmeny" in html
+    assert "Visa på korten" in html
     assert "Kött" in html
     assert "Fisk" in html
     assert "Soppa" in html
     assert "Vegetariskt" in html
+    assert "data-work-menu-root" in html
+    assert "offshore-work-menu-day-row" in html
+    assert "offshore-work-menu-day-marker" in html
+    assert "data-work-menu-meal-open" in html
+    assert "data-work-menu-track-toggle" in html
+    assert "data-work-menu-expand-toggle" in html
+    assert "offshoreWorkMenuModal" in html
+    assert "offshore-work-menu-meal__status" not in html
+    assert "offshore-work-menu-meal__meta" not in html
 
     with app.app_context():
         db = get_session()
@@ -184,6 +194,60 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert after == before + 1
 
 
+def test_offshore_work_menu_reset_deletes_decision():
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    _seed_builder_menu(app)
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=date(2026, 7, 20), builder_menu_id="builder-menu-1")
+    period_id = _seed_period(app, tenant_id=1, site_id=site_id)
+    with app.app_context():
+        events = period_service.list_service_events(1, site_id, period_id)
+        menu_context_service.sync_service_event_context(tenant_id=1, site_id=site_id, work_period_id=period_id, service_event_id=events[0].id)
+
+    client = app.test_client()
+    _login(client, tenant_id=1, site_id=site_id, role="cook")
+    client.post(
+        "/offshore/work-menu/decisions",
+        data={
+            "work_period_id": str(period_id),
+            "service_event_id": str(events[0].id),
+            "menu_track_key": "fisk",
+            "decision_type": "use_free_text",
+            "free_text": "Today\'s fish",
+        },
+        headers=_headers("cook"),
+        follow_redirects=True,
+    )
+
+    with app.app_context():
+        db = get_session()
+        try:
+            before = db.query(OffshoreWorkMenuDecision).count()
+        finally:
+            db.close()
+
+    response = client.post(
+        "/offshore/work-menu/decisions/reset",
+        data={
+            "work_period_id": str(period_id),
+            "service_event_id": str(events[0].id),
+            "menu_track_key": "fisk",
+        },
+        headers=_headers("cook"),
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        db = get_session()
+        try:
+            after = db.query(OffshoreWorkMenuDecision).count()
+        finally:
+            db.close()
+    assert after == before - 1
+
+
 def test_offshore_work_menu_preserves_unknown_track_groups():
     app = _mk_app()
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
@@ -203,6 +267,24 @@ def test_offshore_work_menu_preserves_unknown_track_groups():
     html = response.get_data(as_text=True)
     assert response.status_code == 200
     assert "Late night" in html
+    assert "data-work-menu-track-toggle" in html
+
+
+def test_offshore_work_menu_hides_editor_controls_for_read_only_role():
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    _seed_builder_menu(app)
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=date(2026, 7, 20), builder_menu_id="builder-menu-1")
+    _seed_period(app, tenant_id=1, site_id=site_id)
+
+    client = app.test_client()
+    _login(client, tenant_id=1, site_id=site_id, role="viewer")
+    response = client.get("/offshore/work-menu", headers=_headers("viewer"))
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "data-work-menu-save-form" not in html
+    assert "data-work-menu-decision-type" not in html
 
 
 def test_offshore_work_menu_rejects_ambiguous_builder_decision():

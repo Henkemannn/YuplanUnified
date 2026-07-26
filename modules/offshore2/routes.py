@@ -164,6 +164,31 @@ def save_work_menu_decision():
     return redirect(url_for("offshore2.work_menu"))
 
 
+@bp.post("/work-menu/decisions/reset")
+@require_roles(*PREP_WRITE_ROLES)
+def reset_work_menu_decision():
+    result = _context_or_redirect()
+    if not isinstance(result, dict):
+        return result
+    try:
+        _work_menu_service.reset_decision(
+            tenant_id=int(result.get("tenant_id") or 0),
+            site_id=str(result.get("site_id") or ""),
+            work_period_id=int(request.form.get("work_period_id") or 0),
+            service_event_id=int(request.form.get("service_event_id") or 0),
+            menu_track_key=str(request.form.get("menu_track_key") or ""),
+            actor_user_id=_get_actor_user_id(),
+        )
+        _flash_success("offshore.success.work_menu_saved")
+    except LookupError:
+        return not_found("offshore.validation.cross_site")
+    except PermissionError:
+        return forbidden("forbidden", problem_type="https://example.com/problems/offshore-work-menu-forbidden")
+    except ValueError as exc:
+        return _handle_validation_error(exc)
+    return redirect(url_for("offshore2.work_menu"))
+
+
 @bp.get("/operations")
 @require_roles(*VIEWER_ROLES)
 def operations():

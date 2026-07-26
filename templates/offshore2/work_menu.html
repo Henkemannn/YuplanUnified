@@ -2,9 +2,20 @@
 
 {% block page_title %}{{ vm.page_title }} – Yuplan Offshore{% endblock %}
 
+{% block head_extra %}
+  <script src="{{ url_for('static', filename='offshore2/work_menu.js') }}" defer></script>
+{% endblock %}
+
 {% block content %}
-  <div class="app-page offshore-page offshore-work-menu-page">
-    <section class="app-shell__page-header offshore-page__header">
+  <div
+    class="app-page offshore-page offshore-work-menu-page"
+    data-work-menu-root
+    data-site-id="{{ vm.site_id }}"
+    data-managed-role="{{ 'true' if vm.is_managed_role else 'false' }}"
+    data-storage-key="{{ vm.track_visibility_storage_key }}"
+    data-default-visible-keys="{{ vm.default_visible_track_keys | join(',') }}"
+  >
+    <section class="app-shell__page-header offshore-page__header offshore-work-menu-page__header">
       <div>
         <h1 class="app-shell__title">{{ vm.page_title }}</h1>
         <p class="app-shell__subtitle">{{ vm.page_subtitle }}</p>
@@ -30,98 +41,198 @@
         </article>
       </section>
     {% else %}
-      <section class="app-shell__card offshore-work-menu-legend">
-        <div class="offshore-inline-meta">
+      <section class="app-shell__card offshore-work-menu-controls" aria-label="{{ vm.labels['offshore.work_menu.visible_tracks'] }}">
+        <div class="offshore-work-menu-controls__header">
+          <div>
+            <h2 class="app-shell__card-title">{{ vm.labels['offshore.work_menu.visible_tracks'] }}</h2>
+            <p class="app-shell__card-text">{{ vm.page_subtitle }}</p>
+          </div>
+          <span class="yp-pill offshore-roadmap-pill">{{ vm.site_name or '—' }}</span>
+        </div>
+        <div class="offshore-work-menu-track-filter" data-work-menu-track-filter>
           {% for group_key, tracks in vm.track_groups %}
-            <span class="yp-pill offshore-roadmap-pill">{{ vm.labels['offshore.work_menu.track.' ~ group_key] }}: {{ tracks | map(attribute='label') | join(', ') }}</span>
+            {% for track in tracks %}
+              <label class="offshore-work-menu-track-chip" data-track-key="{{ track.track_key }}" data-track-group="{{ group_key }}">
+                <input
+                  type="checkbox"
+                  class="offshore-work-menu-track-chip__input"
+                  data-work-menu-track-toggle
+                  data-track-key="{{ track.track_key }}"
+                  data-track-label="{{ track.track_label }}"
+                  {% if track.track_key in vm.default_visible_track_keys %}checked{% endif %}
+                />
+                <span class="offshore-work-menu-track-chip__label">{{ track.track_label or vm.labels.get('offshore.work_menu.track.unknown', track.track_key) }}</span>
+              </label>
+            {% endfor %}
           {% endfor %}
         </div>
       </section>
 
-      <section class="offshore-work-menu-days">
+      <section class="offshore-work-menu-days" aria-label="Arbetsmeny dagar">
         {% for day in vm.days %}
-          <article class="app-shell__card offshore-work-menu-day-card">
-            <div class="app-shell__card-header">
-              <div>
-                <h2 class="app-shell__card-title">{{ day.label }}</h2>
-                <p class="app-shell__card-text">{{ day.local_date }}</p>
-              </div>
+          <article class="offshore-work-menu-day-row {% if day.is_today %}offshore-work-menu-day-row--today{% endif %}" id="day-{{ day.local_date }}" data-work-menu-day="{{ day.local_date }}">
+            <div class="offshore-work-menu-day-marker">
+              <span class="offshore-work-menu-day-marker__label">{{ day.label }}</span>
+              <span class="offshore-work-menu-day-marker__date">{{ day.local_date }}</span>
+              {% if day.is_today %}
+                <span class="offshore-work-menu-day-marker__pill">Idag</span>
+              {% endif %}
             </div>
-            <div class="offshore-work-menu-meals">
+            <div class="offshore-work-menu-day-meals">
               {% for meal in day.meals %}
-                <section class="offshore-work-menu-meal">
+                {% set meal_dom_id = 'meal-' ~ day.local_date ~ '-' ~ meal.service_event_id ~ '-' ~ meal.meal_slot %}
+                <section class="offshore-work-menu-meal" data-work-menu-meal data-work-menu-meal-open data-meal-id="{{ meal_dom_id }}" data-service-event-id="{{ meal.service_event_id }}" data-service-date="{{ day.local_date }}" data-meal-slot="{{ meal.meal_slot }}">
                   <div class="offshore-work-menu-meal__header">
-                    <div>
-                      <h3 class="offshore-work-menu-meal__title">{{ meal.meal_label }}</h3>
-                      <p class="offshore-work-menu-meal__meta">{{ meal.service_label }} · {{ meal.local_time }}</p>
-                    </div>
-                    <span class="yp-pill">{{ meal.menu_context_status }}</span>
+                    <div class="offshore-work-menu-meal__label">{{ meal.meal_label }}</div>
                   </div>
 
-                  <div class="offshore-work-menu-tracks">
+                  <div class="offshore-work-menu-track-list" id="{{ meal_dom_id }}-tracks" data-work-menu-track-list>
                     {% for track in meal.tracks %}
-                      <article class="offshore-work-menu-track">
-                        <div class="offshore-work-menu-track__header">
-                          <div>
-                            <h4 class="offshore-work-menu-track__title">{{ track.track_label }}</h4>
-                            <p class="offshore-work-menu-track__meta">{{ track.effective_source_label }}</p>
-                          </div>
-                          <span class="yp-pill offshore-roadmap-pill">{{ vm.labels['offshore.work_menu.track.' ~ track.track_group] }}</span>
-                        </div>
-                        <div class="offshore-work-menu-track__bodies">
-                          <div class="offshore-work-menu-track__line">
-                            <span>Publicerat</span>
-                            <strong>{{ track.published_title or '—' }}</strong>
-                          </div>
-                          <div class="offshore-work-menu-track__line">
-                            <span>Effektivt</span>
-                            <strong>{{ track.effective_title or '—' }}</strong>
-                          </div>
-                        </div>
-
-                        {% if vm.is_managed_role %}
-                          <form class="offshore-form offshore-work-menu-form" method="post" action="{{ url_for('offshore2.save_work_menu_decision') }}">
-                            {{ csrf_token_input()|safe }}
-                            <input type="hidden" name="work_period_id" value="{{ vm.work_period.id }}" />
-                            <input type="hidden" name="service_event_id" value="{{ meal.service_event_id }}" />
-                            <input type="hidden" name="menu_track_key" value="{{ track.track_key }}" />
-                            <div class="offshore-form__grid offshore-form__grid--two">
-                              <label class="offshore-field">
-                                <span class="offshore-field__label">{{ vm.labels['offshore.work_menu.decision.use_published'] }}</span>
-                                <select class="offshore-input" name="decision_type">
-                                  <option value="use_published" {% if not track.decision_type or track.decision_type == 'use_published' %}selected{% endif %}>{{ vm.labels['offshore.work_menu.decision.use_published'] }}</option>
-                                  <option value="use_builder_composition" {% if track.decision_type == 'use_builder_composition' %}selected{% endif %}>{{ vm.labels['offshore.work_menu.decision.use_builder_composition'] }}</option>
-                                  <option value="use_free_text" {% if track.decision_type == 'use_free_text' %}selected{% endif %}>{{ vm.labels['offshore.work_menu.decision.use_free_text'] }}</option>
-                                </select>
-                              </label>
-                              <label class="offshore-field">
-                                <span class="offshore-field__label">Builder-komposition</span>
-                                <select class="offshore-input" name="selected_builder_composition_id">
-                                  <option value="">Välj komposition</option>
-                                  {% for option in vm.composition_options %}
-                                    <option value="{{ option.value }}" {% if track.builder_composition_id == option.value %}selected{% endif %}>{{ option.label }}</option>
-                                  {% endfor %}
-                                </select>
-                              </label>
-                            </div>
-                            <label class="offshore-field">
-                              <span class="offshore-field__label">Fri text</span>
-                              <input class="offshore-input" type="text" name="free_text" value="{{ track.free_text or '' }}" placeholder="{{ track.effective_title or track.published_title or '' }}" />
-                            </label>
-                            <div class="offshore-form__actions">
-                              <button class="yp-button yp-button-primary" type="submit">Spara val</button>
-                            </div>
-                          </form>
+                      {% set has_visible_override = track.effective_title or track.free_text %}
+                      {% set badge = None %}
+                      {% if has_visible_override and track.decision_type == 'use_builder_composition' %}
+                        {% set badge = vm.labels['offshore.work_menu.badge.local_change'] %}
+                      {% elif has_visible_override and track.decision_type == 'use_free_text' %}
+                        {% set badge = vm.labels['offshore.work_menu.badge.free_text'] %}
+                      {% elif track.row_state == 'empty' %}
+                        {% set badge = vm.labels['offshore.work_menu.badge.incomplete'] %}
+                      {% endif %}
+                      <button
+                        type="button"
+                        class="offshore-work-menu-track-row"
+                        data-work-menu-track-open
+                        data-service-event-id="{{ meal.service_event_id }}"
+                        data-service-date="{{ day.local_date }}"
+                        data-meal-slot="{{ meal.meal_slot }}"
+                        data-meal-label="{{ meal.meal_label }}"
+                        data-meal-title="{{ meal.service_label }}"
+                        data-meal-time="{{ meal.local_time }}"
+                        data-track-key="{{ track.track_key }}"
+                        data-track-label="{{ track.track_label }}"
+                        data-track-group="{{ track.track_group }}"
+                        data-public-title="{{ track.published_title or '' }}"
+                        data-effective-title="{{ track.effective_title or '' }}"
+                        data-source-label="{{ track.effective_source_label }}"
+                        data-decision-type="{{ track.decision_type or '' }}"
+                        data-decision-label="{{ track.decision_label or '' }}"
+                        data-builder-composition-id="{{ track.builder_composition_id or '' }}"
+                        data-free-text="{{ track.free_text or '' }}"
+                        data-row-state="{{ track.row_state }}"
+                        data-badge-label="{{ badge or '' }}"
+                      >
+                        <span class="offshore-work-menu-track-row__track">{{ track.track_label or vm.labels.get('offshore.work_menu.track.unknown', track.track_key) }}</span>
+                        <span class="offshore-work-menu-track-row__title">{{ track.effective_title or track.published_title or vm.labels['offshore.work_menu.no_dish'] }}</span>
+                        {% if badge %}
+                          <span class="offshore-work-menu-track-row__badge">{{ badge }}</span>
                         {% endif %}
-                      </article>
+                      </button>
                     {% endfor %}
                   </div>
+                  {% if meal.tracks|length > vm.default_visible_track_keys|length %}
+                    <button
+                      type="button"
+                      class="offshore-work-menu-meal__toggle"
+                      aria-expanded="false"
+                      aria-controls="{{ meal_dom_id }}-tracks"
+                      aria-label="{{ vm.labels['offshore.work_menu.show_all_tracks'] }}"
+                      data-work-menu-expand-toggle
+                      data-expanded-label="{{ vm.labels['offshore.work_menu.hide_extra_tracks'] }}"
+                      data-collapsed-label="{{ vm.labels['offshore.work_menu.show_all_tracks'] }}"
+                    >
+                      <span aria-hidden="true">+</span>
+                    </button>
+                  {% endif %}
                 </section>
               {% endfor %}
             </div>
           </article>
         {% endfor %}
       </section>
+
+      <div class="offshore-work-menu-modal" id="offshoreWorkMenuModal" hidden aria-hidden="true" data-work-menu-modal>
+        <div class="offshore-work-menu-modal__backdrop" data-work-menu-modal-close></div>
+        <div class="offshore-work-menu-modal__panel" role="dialog" aria-modal="true" aria-labelledby="offshoreWorkMenuModalTitle" tabindex="-1">
+          <div class="offshore-work-menu-modal__header">
+            <div>
+              <p class="offshore-work-menu-modal__kicker">{{ vm.page_title }}</p>
+              <h2 id="offshoreWorkMenuModalTitle" class="offshore-work-menu-modal__title"></h2>
+            </div>
+            <button type="button" class="offshore-work-menu-modal__close" aria-label="{{ vm.labels['offshore.work_menu.close'] }}" data-work-menu-modal-close>×</button>
+          </div>
+
+          <div class="offshore-work-menu-modal__summary">
+            <div class="offshore-work-menu-modal__summary-line" data-work-menu-modal-summary></div>
+            <div class="offshore-work-menu-modal__facts">
+              <div>
+                <span class="offshore-work-menu-modal__fact-label">{{ vm.labels['offshore.work_menu.published_title'] }}</span>
+                <strong data-work-menu-modal-published>{{ vm.labels['offshore.work_menu.no_dish'] }}</strong>
+              </div>
+              <div>
+                <span class="offshore-work-menu-modal__fact-label">{{ vm.labels['offshore.work_menu.effective_title'] }}</span>
+                <strong data-work-menu-modal-effective>{{ vm.labels['offshore.work_menu.no_dish'] }}</strong>
+              </div>
+              <div>
+                <span class="offshore-work-menu-modal__fact-label">Källa</span>
+                <strong data-work-menu-modal-source></strong>
+              </div>
+            </div>
+            <div class="offshore-work-menu-modal__badges" data-work-menu-modal-badges></div>
+          </div>
+
+          {% if vm.is_managed_role %}
+            <form class="offshore-work-menu-modal__form" method="post" action="{{ url_for('offshore2.save_work_menu_decision') }}" data-work-menu-save-form>
+              {{ csrf_token_input()|safe }}
+              <input type="hidden" name="work_period_id" value="{{ vm.work_period.id }}" />
+              <input type="hidden" name="service_event_id" value="" data-work-menu-field="service_event_id" />
+              <input type="hidden" name="menu_track_key" value="" data-work-menu-field="menu_track_key" />
+              <input type="hidden" name="service_date" value="" data-work-menu-field="service_date" />
+
+              <div class="offshore-form__grid offshore-form__grid--two offshore-work-menu-modal__decision-grid">
+                <label class="offshore-field">
+                  <span class="offshore-field__label">{{ vm.labels['offshore.work_menu.action.use_published'] }}</span>
+                  <select class="offshore-input" name="decision_type" data-work-menu-decision-type>
+                    <option value="use_published">{{ vm.labels['offshore.work_menu.action.use_published'] }}</option>
+                    <option value="use_builder_composition">{{ vm.labels['offshore.work_menu.action.choose_builder'] }}</option>
+                    <option value="use_free_text">{{ vm.labels['offshore.work_menu.action.write_free_text'] }}</option>
+                  </select>
+                </label>
+                <label class="offshore-field" data-work-menu-field-wrapper="builder">
+                  <span class="offshore-field__label">Builder-komposition</span>
+                  <select class="offshore-input" name="selected_builder_composition_id" data-work-menu-builder-select>
+                    <option value="">Välj komposition</option>
+                    {% for option in vm.composition_options %}
+                      <option value="{{ option.value }}">{{ option.label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+              </div>
+
+              <label class="offshore-field" data-work-menu-field-wrapper="free-text">
+                <span class="offshore-field__label">{{ vm.labels['offshore.work_menu.action.write_free_text'] }}</span>
+                <input class="offshore-input" type="text" name="free_text" value="" placeholder="{{ vm.labels['offshore.work_menu.no_dish'] }}" data-work-menu-free-text />
+              </label>
+
+              <div class="offshore-work-menu-modal__actions">
+                <button class="yp-button yp-button-primary" type="submit">{{ vm.labels['offshore.work_menu.save'] }}</button>
+                <button class="yp-button yp-button-secondary" type="button" data-work-menu-modal-close>{{ vm.labels['offshore.work_menu.cancel'] }}</button>
+              </div>
+            </form>
+
+            <form class="offshore-work-menu-modal__reset-form" method="post" action="{{ url_for('offshore2.reset_work_menu_decision') }}" data-work-menu-reset-form>
+              {{ csrf_token_input()|safe }}
+              <input type="hidden" name="work_period_id" value="{{ vm.work_period.id }}" data-work-menu-field="work_period_id" />
+              <input type="hidden" name="service_event_id" value="" data-work-menu-field="service_event_id" />
+              <input type="hidden" name="menu_track_key" value="" data-work-menu-field="menu_track_key" />
+              <input type="hidden" name="service_date" value="" data-work-menu-field="service_date" />
+              <button class="yp-button yp-button-ghost" type="submit">{{ vm.labels['offshore.work_menu.action.use_published'] }}</button>
+            </form>
+          {% else %}
+            <div class="offshore-work-menu-modal__readonly">
+              <span class="yp-pill">Read only</span>
+            </div>
+          {% endif %}
+        </div>
+      </div>
     {% endif %}
   </div>
 {% endblock %}

@@ -89,6 +89,21 @@ def _parse_visibility_json(raw_value: str | None, locale: str) -> dict[str, tupl
     return groups
 
 
+def _default_visible_track_keys(track_groups: tuple[tuple[str, tuple[object, ...]], ...]) -> tuple[str, ...]:
+    primary_keys: list[str] = []
+    fallback_keys: list[str] = []
+    for group_key, tracks in track_groups:
+        for track in tracks:
+            track_key = _clean(getattr(track, "track_key", None))
+            if not track_key:
+                continue
+            fallback_keys.append(track_key)
+            if str(group_key) == "primary":
+                primary_keys.append(track_key)
+    chosen = primary_keys or fallback_keys[:2]
+    return tuple(dict.fromkeys(chosen))
+
+
 def _publication_title(row: dict[str, object] | None) -> str | None:
     if not row:
         return None
@@ -148,10 +163,12 @@ class OffshoreWorkMenuMealView:
 class OffshoreWorkMenuDayView:
     local_date: str
     label: str
+    is_today: bool = False
     meals: tuple[OffshoreWorkMenuMealView, ...] = ()
 
 
 def _build_work_menu_view_model_from_context(*, context, labels: dict[str, str], locale: str, theme: str, role: str | None, tenant_name: str | None, site_name: str | None) -> dict[str, object]:
+    default_visible_track_keys = _default_visible_track_keys(context.track_groups)
     vm: dict[str, object] = {
         "lang": locale,
         "theme": theme,
@@ -169,6 +186,8 @@ def _build_work_menu_view_model_from_context(*, context, labels: dict[str, str],
         "work_period": context.work_period,
         "days": (),
         "track_groups": context.track_groups,
+        "default_visible_track_keys": default_visible_track_keys,
+        "track_visibility_storage_key": f"offshore.work_menu.visible_tracks:{context.tenant_id or tenant_name or 'tenant'}:{context.installation_id or site_name or 'site'}",
         "track_visibility": {},
         "has_menu": bool(context.service_events),
         "is_managed_role": (role or "").strip().lower() in ("admin", "superuser", "cook", "editor"),
@@ -182,8 +201,14 @@ def _build_work_menu_view_model_from_context(*, context, labels: dict[str, str],
             vm.update({"empty_title": labels["offshore.work_menu.no_services_title"], "empty_body": labels["offshore.work_menu.no_services_body"]})
         return vm
 
+    meal_slot_order = {"lunch": 0, "dinner": 1}
     day_map: dict[str, list[OffshoreWorkMenuMealView]] = {}
     day_order: list[str] = []
+    try:
+        zone = _local_zone(site_timezone_name(int(context.tenant_id), str(context.installation_id)))
+        today = datetime.now(zone).date()
+    except Exception:
+        today = None
     for event in context.service_events:
         day_key = event.service_date
         if day_key not in day_map:
@@ -229,13 +254,13 @@ def _build_work_menu_view_model_from_context(*, context, labels: dict[str, str],
 
     days: list[OffshoreWorkMenuDayView] = []
     for day_key in day_order:
-        meals = tuple(sorted(day_map.get(day_key, []), key=lambda meal: (meal.meal_slot, meal.local_time, meal.service_event_id)))
+        meals = tuple(sorted(day_map.get(day_key, []), key=lambda meal: (meal_slot_order.get(meal.meal_slot, 99), meal.local_time, meal.service_event_id)))
         try:
             local_date = _date.fromisoformat(day_key)
             label = t(locale, f"offshore.weekday.{local_date.weekday()}")
         except Exception:
             label = day_key.title()
-        days.append(OffshoreWorkMenuDayView(local_date=day_key, label=label, meals=meals))
+        days.append(OffshoreWorkMenuDayView(local_date=day_key, label=label, is_today=bool(today and local_date == today), meals=meals))
 
     vm["days"] = tuple(days)
     return vm
@@ -400,6 +425,45 @@ class OffshoreWorkMenuService:
             db.commit()
             db.refresh(existing)
             return existing
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def reset_decision(self, *, tenant_id: int | None, site_id: str | None, work_period_id: int, service_event_id: int, menu_track_key: str, actor_user_id: int | None = None) -> bool:
+        db = get_session()
+        try:
+            if tenant_id is None or not site_id:
+                raise ValueError("offshore.validation.missing_context")
+            event = (
+                db.query(OffshoreServiceEvent)
+                .filter(
+                    OffshoreServiceEvent.tenant_id == int(tenant_id),
+                    OffshoreServiceEvent.site_id == str(site_id),
+                    OffshoreServiceEvent.work_period_id == int(work_period_id),
+                    OffshoreServiceEvent.id == int(service_event_id),
+                )
+                .first()
+            )
+            if event is None:
+                raise LookupError("offshore.validation.cross_site")
+            track_key = _clean(menu_track_key)
+            existing = (
+                db.query(OffshoreWorkMenuDecision)
+                .filter(
+                    OffshoreWorkMenuDecision.tenant_id == int(tenant_id),
+                    OffshoreWorkMenuDecision.site_id == str(site_id),
+                    OffshoreWorkMenuDecision.service_event_id == int(service_event_id),
+                    OffshoreWorkMenuDecision.menu_track_key == track_key,
+                )
+                .first()
+            )
+            if existing is None:
+                return False
+            db.delete(existing)
+            db.commit()
+            return True
         except Exception:
             db.rollback()
             raise

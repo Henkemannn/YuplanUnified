@@ -231,7 +231,11 @@ def test_offshore_operations_access_scope_and_dashboard_entry():
     _login(client, tenant_id=1, site_id=site_id, role="admin")
     admin = client.get("/offshore/operations", headers=_headers("admin"))
     assert admin.status_code == 200
-    assert "/offshore/periods/" in admin.get_data(as_text=True)
+    assert "Dagens tjänster" in admin.get_data(as_text=True) or "Today's services" in admin.get_data(as_text=True)
+
+    current_day = client.get("/offshore/operations?date=2026-07-20", headers=_headers("admin"))
+    assert current_day.status_code == 200
+    assert "/offshore/periods/" in current_day.get_data(as_text=True)
 
     dashboard = client.get("/offshore", headers=_headers("admin"))
     assert dashboard.status_code == 200

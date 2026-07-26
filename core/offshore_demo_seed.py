@@ -792,9 +792,9 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
     _ensure_tenant_and_site()
     _ensure_feature_flags()
     _require_commun_builder_schema()
+    _clear_scoped_offshore_rows()
+    _clear_scoped_builder_rows()
     if reset_only:
-        _clear_scoped_offshore_rows()
-        _clear_scoped_builder_rows()
         return DemoSeedSummary(
             tenant_id=DEMO_TENANT_ID,
             site_id=DEMO_SITE_ID,
