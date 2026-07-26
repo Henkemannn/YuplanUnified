@@ -7712,6 +7712,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await loadLibrary();
     await loadImportsInboxSessions("");
+    const url = new URL(window.location.href);
+    const compositionId = String(url.searchParams.get("composition_id") || "").trim();
+    const componentId = String(url.searchParams.get("component_id") || "").trim();
+    if (compositionId) {
+      await openCompositionFromLibrary(compositionId);
+      setWorkspaceSurface("dishes");
+    } else if (componentId) {
+      setWorkspaceSurface("components");
+      await openComponentDetailEditor(componentId);
+    }
   } catch (error) {
     showJson("libraryOut", {
       status: 0,

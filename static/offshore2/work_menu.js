@@ -58,6 +58,11 @@
     const modalEffective = root.querySelector('[data-work-menu-modal-effective]');
     const modalSource = root.querySelector('[data-work-menu-modal-source]');
     const modalBadges = root.querySelector('[data-work-menu-modal-badges]');
+    const modalBridge = root.querySelector('[data-work-menu-builder-bridge]');
+    const modalBridgeTitle = root.querySelector('[data-work-menu-builder-bridge-title]');
+    const modalBridgeSummary = root.querySelector('[data-work-menu-builder-bridge-summary]');
+    const modalBridgeComponents = root.querySelector('[data-work-menu-builder-bridge-components]');
+    const modalBridgeLink = root.querySelector('[data-work-menu-builder-bridge-link]');
     const saveForm = root.querySelector('[data-work-menu-save-form]');
     const resetForm = root.querySelector('[data-work-menu-reset-form]');
     const decisionTypeField = root.querySelector('[data-work-menu-decision-type]');
@@ -193,6 +198,76 @@
       }
     }
 
+    function syncBuilderBridge(trackButton) {
+      if (!modalBridge || !modalBridgeTitle || !modalBridgeSummary || !modalBridgeComponents || !modalBridgeLink) {
+        return;
+      }
+
+      modalBridge.hidden = true;
+      modalBridgeTitle.textContent = '';
+      modalBridgeSummary.textContent = '';
+      modalBridgeComponents.innerHTML = '';
+      modalBridgeLink.href = '#';
+      modalBridgeLink.textContent = 'Öppna i Menu Builder';
+      modalBridgeLink.removeAttribute('aria-disabled');
+
+      const rawBridge = trackButton.dataset.builderBridge || '';
+      if (!rawBridge) {
+        return;
+      }
+
+      let bridge = null;
+      try {
+        bridge = JSON.parse(rawBridge);
+      } catch (error) {
+        return;
+      }
+      if (!bridge || !bridge.composition_id) {
+        return;
+      }
+
+      modalBridgeTitle.textContent = bridge.composition_name || bridge.composition_id;
+      const componentCount = Number.isFinite(Number(bridge.component_count)) ? Number(bridge.component_count) : 0;
+      modalBridgeSummary.textContent = componentCount > 0
+        ? `${componentCount} komponenter från den kanoniska Builder-kompositionen.`
+        : 'Ingen komponentdata finns ännu för den här Builder-kompositionen.';
+
+      const components = Array.isArray(bridge.components) ? bridge.components : [];
+      components.forEach((component) => {
+        const item = document.createElement('li');
+        const parts = [];
+        if (Number.isFinite(Number(component.sort_order))) {
+          parts.push(String(component.sort_order));
+        }
+        parts.push(component.component_name || component.component_id || 'Okänd komponent');
+        if (component.role) {
+          parts.push(component.role);
+        }
+        const link = document.createElement('a');
+        link.href = component.details_url || bridge.builder_url || '#';
+        link.target = '_blank';
+        link.rel = 'noreferrer noopener';
+        link.textContent = parts.join(' · ');
+        item.appendChild(link);
+        modalBridgeComponents.appendChild(item);
+      });
+      if (!components.length) {
+        const item = document.createElement('li');
+        item.textContent = 'Inga komponenter är kopplade.';
+        modalBridgeComponents.appendChild(item);
+      }
+
+      if (bridge.builder_url) {
+        modalBridgeLink.href = bridge.builder_url;
+      } else if (bridge.render_url) {
+        modalBridgeLink.href = bridge.render_url;
+      }
+      if (bridge.readiness_url) {
+        modalBridgeLink.setAttribute('data-readiness-url', bridge.readiness_url);
+      }
+      modalBridge.hidden = false;
+    }
+
     function openModalFromTrack(trackButton) {
       if (!modal || !modalPanel || !modalTitle || !modalSummary || !modalPublished || !modalEffective || !modalSource || !modalBadges) {
         return;
@@ -237,6 +312,8 @@
         badge.textContent = 'Ofullständig data';
         modalBadges.appendChild(badge);
       }
+
+      syncBuilderBridge(trackButton);
 
       if (managedRole && saveForm && resetForm) {
         syncModalFields(trackButton);

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from flask import current_app, has_app_context, request, url_for
 
 from core.db import get_session
+from core.offshore_builder_bridge import _service as _builder_bridge_service
 
 from .effective_menu import _service as _effective_menu_service
 from .i18n import copy_for, t
@@ -143,6 +144,7 @@ class OffshoreWorkMenuTrackView:
     decision_type: str | None
     decision_label: str | None
     builder_composition_id: str | None
+    builder_bridge: dict[str, object] | None
     free_text: str | None
     row_state: str
 
@@ -224,6 +226,17 @@ def _build_work_menu_view_model_from_context(*, context, labels: dict[str, str],
                 effective_source_label = item.decision_label or labels["offshore.work_menu.decision.use_builder_composition"]
             else:
                 effective_source_label = item.decision_label or labels["offshore.work_menu.decision.use_free_text"]
+
+            builder_reference = item.builder_composition_reference or (
+                item.operational_decision_reference and item.operational_decision_reference.builder_composition_id
+            )
+            builder_bridge = None
+            if item.builder_composition_reference is not None:
+                builder_bridge = _builder_bridge_service.build_composition_bridge(
+                    tenant_id=context.tenant_id,
+                    composition_reference=item.builder_composition_reference,
+                    component_references=item.component_references,
+                )
             meal_tracks.append(
                 OffshoreWorkMenuTrackView(
                     track_key=item.track_key,
@@ -234,7 +247,8 @@ def _build_work_menu_view_model_from_context(*, context, labels: dict[str, str],
                     effective_source_label=effective_source_label,
                     decision_type=item.decision_type,
                     decision_label=item.decision_label,
-                    builder_composition_id=(item.operational_decision_reference.builder_composition_id if item.operational_decision_reference is not None else None),
+                    builder_composition_id=(builder_reference.composition_id if hasattr(builder_reference, "composition_id") else builder_reference),
+                    builder_bridge=builder_bridge,
                     free_text=(item.operational_decision_reference.free_text if item.operational_decision_reference is not None else None),
                     row_state=item.row_state,
                 )

@@ -222,6 +222,9 @@ def test_effective_menu_adapter_resolves_published_override_and_free_text() -> N
     assert first_items["koett"].readiness == EffectiveMenuReadiness.STRUCTURED
     assert first_items["fisk"].source_type == EffectiveMenuSourceType.OPERATIONAL_BUILDER_OVERRIDE
     assert first_items["fisk"].builder_composition_reference is not None
+    assert first_items["fisk"].builder_composition_reference.composition_id == "demo_offshore_fisk"
+    assert len(first_items["fisk"].component_references) == 1
+    assert first_items["fisk"].component_references[0].component_name == "Demo Offshore Fisk"
     assert first_items["soppa"].source_type == EffectiveMenuSourceType.PUBLISHED_BUILDER_ITEM
     assert first_items["soppa"].published_title is not None
 
@@ -229,6 +232,34 @@ def test_effective_menu_adapter_resolves_published_override_and_free_text() -> N
     assert second_items["soppa"].source_type == EffectiveMenuSourceType.OPERATIONAL_FREE_TEXT
     assert second_items["soppa"].readiness == EffectiveMenuReadiness.UNRESOLVED
     assert "free_text_item" in second_items["soppa"].warnings
+    assert second_items["soppa"].component_references == ()
+
+    with app.app_context():
+        db = get_session()
+        try:
+            events = period_service.list_service_events(1, site_id, period_id)
+            first_event = events[0]
+        finally:
+            db.close()
+
+    client.post(
+        "/offshore/work-menu/decisions/reset",
+        data={
+            "work_period_id": str(period_id),
+            "service_event_id": str(first_event.id),
+            "menu_track_key": "fisk",
+        },
+        headers={"X-User-Role": "cook", "X-Tenant-Id": "1", "X-User-Id": "42"},
+    )
+
+    with app.app_context():
+        reset_context = effective_menu_service.build_context(tenant_id=1, site_id=site_id, locale="sv", work_period_id=period_id)
+
+    reset_first_items = {item.track_key: item for item in reset_context.service_events[0].items}
+    assert reset_first_items["fisk"].source_type == EffectiveMenuSourceType.PUBLISHED_BUILDER_ITEM
+    assert reset_first_items["fisk"].builder_composition_reference is not None
+    assert reset_first_items["fisk"].builder_composition_reference.composition_id == "demo_offshore_fisk"
+    assert reset_first_items["fisk"].component_references[0].component_name == "Demo Offshore Fisk"
 
     payload = build_planera_input_from_effective_menu_context(context)
     request = build_plan_request_from_adapter_payload(payload)
@@ -236,6 +267,25 @@ def test_effective_menu_adapter_resolves_published_override_and_free_text() -> N
     assert request.units == []
     assert request.context["adapter_version"] == "effective-menu-adapter/v1"
     assert request.context["service_events"][0]["items"][0]["stable_item_id"]
+
+
+def test_effective_menu_adapter_marks_empty_state_when_publication_is_missing() -> None:
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    _seed_builder_menu(app)
+    period_id = _seed_period(app, tenant_id=1, site_id=site_id)
+
+    with app.app_context():
+        events = period_service.list_service_events(1, site_id, period_id)
+        menu_context_service.sync_service_event_context(tenant_id=1, site_id=site_id, work_period_id=period_id, service_event_id=events[0].id)
+        context = effective_menu_service.build_context(tenant_id=1, site_id=site_id, locale="sv", work_period_id=period_id)
+
+    first_item = context.service_events[0].items[0]
+    assert first_item.row_state == "empty"
+    assert first_item.published_title is None
+    assert first_item.effective_title is None
+    assert first_item.builder_composition_reference is None
 
 
 def test_effective_menu_adapter_rejects_cross_tenant_scope() -> None:

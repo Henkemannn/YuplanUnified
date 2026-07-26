@@ -599,6 +599,36 @@
   gap: 8px;
 }
 
+.offshore-work-menu-modal__builder-bridge {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--offshore-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--offshore-surface) 94%, transparent);
+}
+
+.offshore-work-menu-modal__builder-bridge-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.offshore-work-menu-modal__builder-bridge-summary {
+  margin: 0;
+  color: var(--offshore-text-muted);
+  font-size: var(--yp-font-size-sm);
+}
+
+.offshore-work-menu-modal__builder-bridge-components {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 6px;
+}
+
 .offshore-work-menu-modal__decision-grid,
 .offshore-work-menu-modal__actions,
 .offshore-work-menu-modal__reset-form {

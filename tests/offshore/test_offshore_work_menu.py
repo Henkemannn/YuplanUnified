@@ -161,6 +161,8 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "data-work-menu-track-toggle" in html
     assert "data-work-menu-expand-toggle" in html
     assert "offshoreWorkMenuModal" in html
+    assert "data-work-menu-builder-bridge" in html
+    assert "/api/builder/compositions/demo_offshore_kott/render/text" in html
     assert "offshore-work-menu-meal__status" not in html
     assert "offshore-work-menu-meal__meta" not in html
 

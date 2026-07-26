@@ -117,6 +117,17 @@ def _resolve_builder_composition_title(builder_flow, composition_id: str | None)
     return _safe_title(getattr(composition, "composition_name", None)), components
 
 
+def _normalize_builder_meal_slot(value: str) -> str:
+    slot = _clean(value).lower()
+    if not slot:
+        return ""
+    if slot.startswith("lunch"):
+        return "lunch"
+    if slot.startswith("dinner"):
+        return "dinner"
+    return slot
+
+
 def _load_period(db, tenant_id: int, site_id: str) -> OffshoreWorkPeriod | None:
     settings = (
         db.query(OffshoreInstallationSettings)
@@ -254,7 +265,14 @@ class OffshoreEffectiveMenuService:
 
             zone = _local_zone(site_timezone_name(int(tenant_id), str(site_id)))
             track_groups = _parse_visibility_json(getattr(settings, "menu_track_visibility_json", None) if settings is not None else None, locale_value)
-            builder_flow = current_app.extensions.get("builder_menu_context_flow") if has_app_context() else None
+            builder_flow = None
+            if has_app_context():
+                from core.builder_menu_context_api import _get_menu_context_flow
+
+                try:
+                    builder_flow = _get_menu_context_flow()
+                except Exception:
+                    builder_flow = current_app.extensions.get("builder_menu_context_flow")
             composition_options = _build_composition_options(builder_flow)
 
             contexts = _menu_context_service.list_contexts_for_period(tenant_id=tenant_id, site_id=site_id, work_period_id=int(period.id))
@@ -308,7 +326,12 @@ class OffshoreEffectiveMenuService:
                     except Exception:
                         rows_by_menu_id[builder_menu_id] = []
                 menu_rows = rows_by_menu_id.get(builder_menu_id, [])
-                matching_rows = [row for row in menu_rows if _clean(row.get("day")) == _weekday_key(local_date) and _clean(row.get("meal_slot")) == meal_slot]
+                matching_rows = [
+                    row
+                    for row in menu_rows
+                    if _clean(row.get("day")) == _weekday_key(local_date)
+                    and _normalize_builder_meal_slot(str(row.get("meal_slot") or "")) == meal_slot
+                ]
                 ordered_tracks = [track for _, track_group in track_groups for track in track_group]
                 meal_items: list[EffectivePlanningMenuItem] = []
                 service_warnings: list[str] = []

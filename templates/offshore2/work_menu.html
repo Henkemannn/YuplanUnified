@@ -116,6 +116,7 @@
                         data-decision-type="{{ track.decision_type or '' }}"
                         data-decision-label="{{ track.decision_label or '' }}"
                         data-builder-composition-id="{{ track.builder_composition_id or '' }}"
+                        data-builder-bridge='{{ track.builder_bridge | tojson if track.builder_bridge else "" }}'
                         data-free-text="{{ track.free_text or '' }}"
                         data-row-state="{{ track.row_state }}"
                         data-badge-label="{{ badge or '' }}"
@@ -178,6 +179,18 @@
             </div>
             <div class="offshore-work-menu-modal__badges" data-work-menu-modal-badges></div>
           </div>
+
+          <section class="offshore-work-menu-modal__builder-bridge" data-work-menu-builder-bridge hidden>
+            <div class="offshore-work-menu-modal__builder-bridge-header">
+              <div>
+                <p class="offshore-work-menu-modal__fact-label">Builder-komposition</p>
+                <strong data-work-menu-builder-bridge-title></strong>
+              </div>
+              <a class="yp-button yp-button-secondary" href="#" target="_blank" rel="noreferrer noopener" data-work-menu-builder-bridge-link>Öppna i Menu Builder</a>
+            </div>
+            <p class="offshore-work-menu-modal__builder-bridge-summary" data-work-menu-builder-bridge-summary></p>
+            <ul class="offshore-work-menu-modal__builder-bridge-components" data-work-menu-builder-bridge-components></ul>
+          </section>
 
           {% if vm.is_managed_role %}
             <form class="offshore-work-menu-modal__form" method="post" action="{{ url_for('offshore2.save_work_menu_decision') }}" data-work-menu-save-form>
