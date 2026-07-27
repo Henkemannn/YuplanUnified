@@ -10,6 +10,7 @@ from modules.offshore2.menu_context import _service as menu_context_service
 from modules.offshore2.models import OffshoreInstallationSettings, OffshoreWorkMenuDecision
 from modules.offshore2.periods import _service as period_service
 from modules.offshore2.services import _service as offshore_service
+from modules.offshore2.work_menu import _service as offshore_work_menu_service
 from core.builder_api import _get_builder_flow
 from core.builder_menu_context_api import _get_menu_context_flow
 
@@ -112,6 +113,11 @@ def _seed_builder_menu(app, *, menu_id: str = "builder-menu-1") -> None:
         ]:
             if flow._composition_repository.get(composition_id) is None:
                 flow.create_composition(composition_id, composition_name, library_group="demo-offshore")
+            flow.add_component_to_composition(
+                composition_id=composition_id,
+                component_name=composition_name,
+                role="main",
+            )
         menu_flow.create_menu(menu_id=menu_id, site_id="demo-site", week_key="demo-week", title="Demo Offshore Builder Menu", version=1, status="draft")
         for day in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"):
             for meal_slot in ("lunch", "dinner"):
@@ -162,9 +168,28 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "data-work-menu-expand-toggle" in html
     assert "offshoreWorkMenuModal" in html
     assert "data-work-menu-builder-bridge" in html
-    assert "/api/builder/compositions/demo_offshore_kott/render/text" in html
+    assert "/builder-workspace-v1?composition_id=demo_offshore_kott" in html
     assert "offshore-work-menu-meal__status" not in html
     assert "offshore-work-menu-meal__meta" not in html
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook")):
+        vm = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+        )
+
+    first_day = (vm.get("days") or [])[0]
+    first_meal = (first_day.meals or [])[0]
+    first_track = (first_meal.tracks or [])[0]
+    assert first_track.builder_bridge is not None
+    assert first_track.builder_bridge["composition_name"] == "Demo Offshore Kött"
+    assert first_track.builder_bridge["component_count"] == 1
+    assert [item["component_name"] for item in first_track.builder_bridge["components"]] == ["Demo Offshore Kött"]
 
     with app.app_context():
         db = get_session()

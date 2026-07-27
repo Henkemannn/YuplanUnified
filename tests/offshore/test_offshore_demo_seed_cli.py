@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy import create_engine
 
 from core.app_factory import create_app
+from modules.offshore2.work_menu import _service as work_menu_service
 
 
 def _build_app(tmp_path: Path, *, env: str = "testing"):
@@ -79,8 +80,8 @@ def test_offshore_demo_seed_cli_creates_idempotent_demo_rows(tmp_path: Path) -> 
         assert _count_rows("offshore_service_event_menu_contexts", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
         assert _count_rows("offshore_work_menu_decisions", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 56
         assert _count_rows("offshore_prep_tasks", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
-        assert _count_rows("commun_builder_menu_links", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
-        assert _count_rows("commun_builder_publication_pins", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
+        assert _count_rows("commun_builder_menu_links", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
+        assert _count_rows("commun_builder_publication_pins", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
 
 
 def test_offshore_demo_seed_cli_refuses_in_production(tmp_path: Path) -> None:
@@ -140,3 +141,76 @@ def test_offshore_demo_seed_cli_refuses_head_database_missing_linkage_tables(tmp
     assert "schema-drifted" in result.output
     assert "commun_builder_menu_links" in result.output
     assert "0023_scope_service_addons_by_site" in result.output
+
+
+def test_offshore_demo_seed_reaches_work_menu_titles(tmp_path: Path) -> None:
+    app = _build_app(tmp_path)
+    runner = app.test_cli_runner()
+
+    result = runner.invoke(args=["offshore-demo-seed"])
+    assert result.exit_code == 0, result.output
+
+    with app.app_context():
+        from core.db import get_session
+        from modules.offshore2.menu_context import _service as menu_context_service
+        from modules.offshore2.models import OffshoreServiceEventMenuContext
+        from modules.offshore2.periods import _service as period_service
+
+        db = get_session()
+        try:
+            contexts = (
+                db.query(OffshoreServiceEventMenuContext)
+                .filter_by(tenant_id=9001, site_id="demo-offshore")
+                .order_by(OffshoreServiceEventMenuContext.service_event_id.asc())
+                .all()
+            )
+            assert contexts
+            first_context = contexts[0]
+            service_events = period_service.list_service_events(9001, "demo-offshore", int(first_context.work_period_id))
+            assert service_events
+            menu_context_service.sync_service_event_context(
+                tenant_id=9001,
+                site_id="demo-offshore",
+                work_period_id=int(first_context.work_period_id),
+                service_event_id=int(service_events[0].id),
+            )
+        finally:
+            db.close()
+
+        with app.test_request_context(
+            "/offshore/work-menu",
+            headers={"X-User-Role": "cook", "X-User-Name": "Henrik"},
+        ):
+            vm = work_menu_service.build_view_model(
+                tenant_id=9001,
+                site_id="demo-offshore",
+                locale="sv",
+                theme="system",
+                role="cook",
+                tenant_name="Demo Offshore",
+                site_name="Demo Offshore Site",
+            )
+
+    lunch_titles: list[str] = []
+    lunch_bridges: dict[str, dict[str, object]] = {}
+    for day in vm.get("days", ()):
+        for meal in getattr(day, "meals", ()):
+            if getattr(meal, "meal_slot", "") != "lunch":
+                continue
+            for track in getattr(meal, "tracks", ()):
+                if getattr(track, "track_key", "") in {"koett", "fisk"}:
+                    title = getattr(track, "published_title", None)
+                    if title:
+                        lunch_titles.append(title)
+                    bridge = getattr(track, "builder_bridge", None)
+                    if bridge:
+                        lunch_bridges[str(getattr(track, "track_key", ""))] = dict(bridge)
+
+    assert any(title == "Pork sweetnsour" for title in lunch_titles)
+    assert any(title == "Plukkfisk med purre og bacon" for title in lunch_titles)
+    assert lunch_bridges["koett"]["composition_id"] != "demo_offshore_fisk"
+    assert int(lunch_bridges["koett"]["component_count"]) >= 1
+    assert str(lunch_bridges["koett"]["builder_url"]).startswith("/builder-workspace-v1?composition_id=")
+    assert lunch_bridges["fisk"]["composition_id"] != "demo_offshore_fisk"
+    assert int(lunch_bridges["fisk"]["component_count"]) >= 1
+    assert str(lunch_bridges["fisk"]["builder_url"]).startswith("/builder-workspace-v1?composition_id=")

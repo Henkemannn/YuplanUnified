@@ -220,6 +220,11 @@ def test_effective_menu_adapter_resolves_published_override_and_free_text() -> N
     first_items = {item.track_key: item for item in context.service_events[0].items}
     assert first_items["koett"].source_type == EffectiveMenuSourceType.PUBLISHED_BUILDER_ITEM
     assert first_items["koett"].readiness == EffectiveMenuReadiness.STRUCTURED
+    assert first_items["koett"].builder_composition_reference is not None
+    assert first_items["koett"].builder_composition_reference.composition_id == "demo_offshore_kott"
+    assert first_items["koett"].builder_composition_reference.composition_name == "Demo Offshore Kött"
+    assert len(first_items["koett"].component_references) == 1
+    assert first_items["koett"].component_references[0].component_name == "Demo Offshore Kött"
     assert first_items["fisk"].source_type == EffectiveMenuSourceType.OPERATIONAL_BUILDER_OVERRIDE
     assert first_items["fisk"].builder_composition_reference is not None
     assert first_items["fisk"].builder_composition_reference.composition_id == "demo_offshore_fisk"

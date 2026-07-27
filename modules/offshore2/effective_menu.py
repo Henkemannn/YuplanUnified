@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from flask import current_app, has_app_context
 
 from core.db import get_session
+from core.menu import resolve_composition_reference
 from core.planera_v2.contracts import (
     EffectiveMenuReadiness,
     EffectiveMenuSourceType,
@@ -100,6 +101,9 @@ def _resolve_builder_composition_title(builder_flow, composition_id: str | None)
         return None, ()
     repository = getattr(builder_flow, "_composition_repository", None)
     if repository is None:
+        library_flow = getattr(builder_flow, "_library_flow", None)
+        repository = getattr(library_flow, "_composition_repository", None)
+    if repository is None:
         return None, ()
     composition = repository.get(composition_id)
     if composition is None:
@@ -115,6 +119,46 @@ def _resolve_builder_composition_title(builder_flow, composition_id: str | None)
         if _clean(getattr(item, "component_id", None))
     )
     return _safe_title(getattr(composition, "composition_name", None)), components
+
+
+def _resolve_builder_composition_details(
+    builder_flow,
+    *,
+    composition_id: str | None,
+    composition_title: str | None = None,
+) -> tuple[PlanningCompositionReference | None, tuple[PlanningComponentReference, ...]]:
+    if builder_flow is None:
+        return None, ()
+    repository = getattr(builder_flow, "_composition_repository", None)
+    if repository is None:
+        library_flow = getattr(builder_flow, "_library_flow", None)
+        repository = getattr(library_flow, "_composition_repository", None)
+    alias_repository = getattr(builder_flow, "_alias_repository", None)
+    if alias_repository is None:
+        library_flow = getattr(builder_flow, "_library_flow", None)
+        alias_repository = getattr(library_flow, "_alias_repository", None)
+    if repository is None:
+        return None, ()
+
+    resolved_id = _clean(composition_id)
+    if not resolved_id and _clean(composition_title):
+        try:
+            resolution = resolve_composition_reference(str(composition_title), repository, alias_repository)
+        except Exception:
+            resolution = None
+        if resolution is not None and resolution.kind == "composition" and resolution.composition_id:
+            resolved_id = _clean(resolution.composition_id)
+
+    if not resolved_id:
+        return None, ()
+
+    effective_title, component_refs = _resolve_builder_composition_title(builder_flow, resolved_id)
+    if not effective_title and _clean(composition_title):
+        effective_title = _safe_title(composition_title)
+    if not effective_title:
+        return None, ()
+
+    return PlanningCompositionReference(composition_id=resolved_id, composition_name=effective_title), component_refs
 
 
 def _normalize_builder_meal_slot(value: str) -> str:
@@ -339,6 +383,14 @@ class OffshoreEffectiveMenuService:
                 for index, track in enumerate(ordered_tracks):
                     published_row = matching_rows[index] if index < len(matching_rows) else None
                     published_title = _publication_title(published_row)
+                    published_builder_reference: PlanningCompositionReference | None = None
+                    published_component_refs: tuple[PlanningComponentReference, ...] = ()
+                    if published_title is not None:
+                        published_builder_reference, published_component_refs = _resolve_builder_composition_details(
+                            builder_flow,
+                            composition_id=published_row.get("composition_id"),
+                            composition_title=published_title,
+                        )
                     decision = decisions_by_event_and_track.get((int(event.id), track.track_key))
                     decision_type = _clean(getattr(decision, "decision_type", None)) or None
                     source_type = EffectiveMenuSourceType.PUBLISHED_BUILDER_ITEM
@@ -372,12 +424,21 @@ class OffshoreEffectiveMenuService:
                         )
                         if decision_type == "use_builder_composition":
                             source_type = EffectiveMenuSourceType.OPERATIONAL_BUILDER_OVERRIDE
-                            effective_title, component_refs = _resolve_builder_composition_title(builder_flow, getattr(decision, "selected_builder_composition_id", None))
-                            builder_reference = None if not _clean(getattr(decision, "selected_builder_composition_id", None)) else PlanningCompositionReference(
-                                composition_id=_clean(getattr(decision, "selected_builder_composition_id", None)),
-                                composition_name=effective_title or _clean(getattr(decision, "selected_builder_composition_id", None)),
-                            )
+                            selected_builder_composition_id = _clean(getattr(decision, "selected_builder_composition_id", None))
+                            selected_title, selected_component_refs = _resolve_builder_composition_title(builder_flow, selected_builder_composition_id)
+                            effective_title = selected_title or published_title
                             display_name = effective_title or published_title
+                            if published_builder_reference is not None:
+                                builder_reference = published_builder_reference
+                                component_refs = published_component_refs
+                            elif selected_builder_composition_id:
+                                builder_reference = PlanningCompositionReference(
+                                    composition_id=selected_builder_composition_id,
+                                    composition_name=selected_title or selected_builder_composition_id,
+                                )
+                                component_refs = selected_component_refs
+                            else:
+                                builder_reference = None
                             if builder_reference is None:
                                 warnings.append("missing_builder_composition")
                             if not component_refs:
@@ -394,24 +455,36 @@ class OffshoreEffectiveMenuService:
                         else:
                             effective_title = published_title
                             display_name = published_title
+                            builder_reference = published_builder_reference
+                            component_refs = published_component_refs
+                            if builder_reference is not None:
+                                effective_title = builder_reference.composition_name
+                                display_name = effective_title or published_title
+                                source_type = EffectiveMenuSourceType.PUBLISHED_BUILDER_ITEM
+                                if component_refs:
+                                    readiness = EffectiveMenuReadiness.STRUCTURED
+                                else:
+                                    warnings.append("composition_without_components")
+                                    readiness = EffectiveMenuReadiness.PARTIALLY_STRUCTURED
+                            else:
+                                warnings.append("incomplete_structured_data")
                     else:
                         if published_title is None:
                             warnings.append("missing_publication_reference")
-                        elif _clean(published_row.get("composition_id")):
-                            effective_title, component_refs = _resolve_builder_composition_title(builder_flow, published_row.get("composition_id"))
-                            builder_reference = PlanningCompositionReference(
-                                composition_id=_clean(published_row.get("composition_id")),
-                                composition_name=effective_title or _clean(published_row.get("composition_id")),
-                            )
-                            display_name = effective_title or published_title
-                            source_type = EffectiveMenuSourceType.PUBLISHED_BUILDER_ITEM
-                            if component_refs:
-                                readiness = EffectiveMenuReadiness.STRUCTURED
-                            else:
-                                warnings.append("composition_without_components")
-                                readiness = EffectiveMenuReadiness.PARTIALLY_STRUCTURED
                         else:
-                            warnings.append("incomplete_structured_data")
+                            builder_reference = published_builder_reference
+                            component_refs = published_component_refs
+                            if builder_reference is not None:
+                                effective_title = builder_reference.composition_name
+                                display_name = effective_title or published_title
+                                source_type = EffectiveMenuSourceType.PUBLISHED_BUILDER_ITEM
+                                if component_refs:
+                                    readiness = EffectiveMenuReadiness.STRUCTURED
+                                else:
+                                    warnings.append("composition_without_components")
+                                    readiness = EffectiveMenuReadiness.PARTIALLY_STRUCTURED
+                            else:
+                                warnings.append("incomplete_structured_data")
 
                     if track.track_group not in {"primary", "secondary"}:
                         warnings.append("unknown_track")
