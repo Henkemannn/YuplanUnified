@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 import json
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import click
@@ -10,7 +11,10 @@ from flask import Flask, current_app
 from sqlalchemy import text
 
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
+from core.commun_builder_import import import_menu_result_to_builder_canonical
 from core.commun_builder_publication import CommunBuilderPublicationRepository
+from core.commun_builder_publication import CommunBuilderPublicationService
+from core.builder_api import _build_import_review_drafts, _publish_review_drafts
 from core.builder_sqlite import (
     SQLiteComponentAliasRepository,
     SQLiteComponentRepository,
@@ -20,6 +24,8 @@ from core.builder_sqlite import (
     initialize_builder_sqlite,
 )
 from core.db import get_new_session, get_session
+from core.offshore_demo_menu_seed import build_demo_menu_import_result
+from core.offshore_demo_menu_seed import demo_menu_csv_path
 from core.menu_service import MenuServiceDB
 from core.week_key import week_key_from_date
 from modules.offshore2.menu_context import _service as menu_context_service
@@ -38,6 +44,18 @@ DEMO_MENU_TITLE = "Demo Offshore Smoke Menu"
 DEMO_BUILDER_MENU_ID = "demo_offshore_builder_week_menu"
 DEMO_BUILDER_MENU_TITLE = "Demo Offshore Builder Menu"
 DEMO_WEEK_KEY = "demo-offshore-week"
+DEMO_MENU_TRACK_VISIBILITY_JSON = json.dumps(
+    {
+        "primary": [
+            {"key": "koett", "label": "Kött"},
+            {"key": "fisk", "label": "Fisk"},
+        ],
+        "secondary": [
+            {"key": "soppa", "label": "Soppa"},
+        ],
+    },
+    ensure_ascii=False,
+)
 
 
 @dataclass(frozen=True)
@@ -319,15 +337,18 @@ def _clear_scoped_builder_rows() -> None:
     component_repository = SQLiteComponentRepository(db_path=db_path)
     component_alias_repository = SQLiteComponentAliasRepository(db_path=db_path)
 
-    menu_id = DEMO_BUILDER_MENU_ID
-    if menu_repository.get(menu_id) is not None:
+    for menu in list(menu_repository.list_all()):
+        menu_id = str(getattr(menu, "menu_id", "") or "").strip()
+        if not menu_id.startswith("builder-menu-9001-demo-offshore-") and menu_id != DEMO_BUILDER_MENU_ID:
+            continue
         try:
             menu_repository.delete(menu_id)
         except Exception:
             pass
 
-    for composition_id in ("demo_offshore_lunch_plate", "demo_offshore_dinner_plate"):
-        if composition_repository.get(composition_id) is None:
+    for composition in list(composition_repository.list_by_group("demo-offshore")):
+        composition_id = str(getattr(composition, "composition_id", "") or "").strip()
+        if not composition_id:
             continue
         composition_alias_repository.delete_for_composition(composition_id)
         try:
@@ -335,52 +356,24 @@ def _clear_scoped_builder_rows() -> None:
         except Exception:
             pass
 
-    demo_component_names = {
-        "Demo Offshore Fish",
-        "Demo Offshore Root Vegetables",
-        "Demo Offshore Herb Sauce",
-        "Demo Offshore Green Prep",
-    }
-    for component in component_repository.list_all():
-        if str(component.canonical_name or "") not in demo_component_names:
-            continue
-        component_id = str(component.component_id)
-        component_alias_repository.delete_for_component(component_id)
-        try:
-            component_repository.delete(component_id)
-        except Exception:
-            pass
-
     builder_flow = _builder_flow()
     menu_flow = _builder_menu_context_flow()
 
-    try:
-        menu_flow._menu_service.delete_menu(DEMO_BUILDER_MENU_ID)
-    except Exception:
-        pass
-
-    for composition_id in ("demo_offshore_lunch_plate", "demo_offshore_dinner_plate"):
-        try:
-            builder_flow._composition_service.delete_composition(composition_id)
-        except Exception:
-            pass
-
-    demo_component_names = {
-        "Demo Offshore Fish",
-        "Demo Offshore Root Vegetables",
-        "Demo Offshore Herb Sauce",
-        "Demo Offshore Green Prep",
-    }
-    for component in list(builder_flow.list_library_components()):
-        component_name = str(getattr(component, "canonical_name", "") or "").strip()
-        if component_name not in demo_component_names:
+    for menu in list(menu_flow.list_menus()):
+        menu_id = str(getattr(menu, "menu_id", "") or "").strip()
+        if not menu_id.startswith("builder-menu-9001-demo-offshore-") and menu_id != DEMO_BUILDER_MENU_ID:
             continue
         try:
-            builder_flow._component_alias_repository.delete_for_component(str(component.component_id))
+            menu_flow._menu_service.delete_menu(menu_id)
         except Exception:
             pass
+
+    for composition in list(builder_flow.list_compositions(group_name="demo-offshore")):
+        composition_id = str(getattr(composition, "composition_id", "") or "").strip()
+        if not composition_id:
+            continue
         try:
-            builder_flow._component_service.delete_component(str(component.component_id))
+            builder_flow._composition_service.delete_composition(composition_id)
         except Exception:
             pass
 
@@ -397,98 +390,31 @@ def _builder_flow():
     return _get_builder_flow()
 
 
-def _ensure_builder_content(*, week_key: str) -> dict[str, str]:
-    builder_flow = _builder_flow()
-    menu_flow = _builder_menu_context_flow()
-
-    component_names = [
-        "Demo Offshore Kött",
-        "Demo Offshore Fisk",
-        "Demo Offshore Soppa",
-        "Demo Offshore Vegetariskt",
-    ]
-    components = {name: builder_flow.create_standalone_component(name).component_id for name in component_names}
-
-    composition_specs = {
-        "demo_offshore_kott": ("Demo Offshore Kött", ["Demo Offshore Kött"]),
-        "demo_offshore_fisk": ("Demo Offshore Fisk", ["Demo Offshore Fisk"]),
-        "demo_offshore_soppa": ("Demo Offshore Soppa", ["Demo Offshore Soppa"]),
-        "demo_offshore_vegetariskt": ("Demo Offshore Vegetariskt", ["Demo Offshore Vegetariskt"]),
-    }
-    for composition_id, (composition_name, required_names) in composition_specs.items():
-        composition = builder_flow._composition_repository.get(composition_id)
-        if composition is None:
-            composition = builder_flow.create_composition(
-                composition_id,
-                composition_name,
-                library_group="demo-offshore",
-            )
-        else:
-            composition = builder_flow._composition_service.update_composition_metadata(
-                composition_id,
-                composition_name=composition_name,
-                library_group="demo-offshore",
-            )
-        existing_ids = {item.component_id for item in list(composition.components)} if composition else set()
-        for name in required_names:
-            component_id = components[name]
-            if component_id not in existing_ids:
-                builder_flow._composition_service.add_component_to_composition(
-                    composition_id,
-                    component_id,
-                    component_name=name,
-                    role="component",
-                )
-
-    menu_id = DEMO_BUILDER_MENU_ID
-    try:
-        menu_flow._menu_service.delete_menu(menu_id)
-    except Exception:
-        pass
-    menu_flow.create_menu(
-        menu_id=menu_id,
+def _ensure_builder_content(*, anchor_day: date):
+    import_result = build_demo_menu_import_result(csv_path=demo_menu_csv_path(), anchor_day=anchor_day)
+    _materialize_demo_builder_library(import_result)
+    return import_menu_result_to_builder_canonical(
+        import_result,
+        tenant_id=DEMO_TENANT_ID,
         site_id=DEMO_SITE_ID,
-        week_key=week_key,
-        title=DEMO_BUILDER_MENU_TITLE,
-        version=1,
-        status="draft",
+        import_type="menu",
     )
-    weekday_rows = (
-        ("monday", "lunch"),
-        ("monday", "dinner"),
-        ("tuesday", "lunch"),
-        ("tuesday", "dinner"),
-        ("wednesday", "lunch"),
-        ("wednesday", "dinner"),
-        ("thursday", "lunch"),
-        ("thursday", "dinner"),
-        ("friday", "lunch"),
-        ("friday", "dinner"),
-        ("saturday", "lunch"),
-        ("saturday", "dinner"),
-        ("sunday", "lunch"),
-        ("sunday", "dinner"),
-    )
-    row_index = 1
-    for day, meal_slot in weekday_rows:
-        for sort_order, composition_id in enumerate(("demo_offshore_kott", "demo_offshore_fisk", "demo_offshore_soppa", "demo_offshore_vegetariskt"), start=1):
-            menu_flow.add_composition_menu_row(
-                menu_id=menu_id,
-                day=day,
-                meal_slot=meal_slot,
-                composition_id=composition_id,
-                menu_detail_id=f"demo_offshore_week_menu_row_{row_index}",
-                sort_order=sort_order,
-            )
-            row_index += 1
 
-    return {
-        "menu_id": menu_id,
-        "kott_composition_id": "demo_offshore_kott",
-        "fisk_composition_id": "demo_offshore_fisk",
-        "soppa_composition_id": "demo_offshore_soppa",
-        "vegetariskt_composition_id": "demo_offshore_vegetariskt",
-    }
+
+def _materialize_demo_builder_library(import_result):
+    lines = [str(item.dish_name or "").strip() for week in import_result.weeks for item in week.items if str(item.dish_name or "").strip()]
+    drafts = _build_import_review_drafts(lines)
+    selected_items = [
+        {
+            **draft,
+            "selected": True,
+            "item_type": "dish" if draft.get("classification") == "importable_dish" else "ignore",
+        }
+        for draft in drafts
+        if draft.get("classification") == "importable_dish"
+    ]
+    if selected_items:
+        _publish_review_drafts(selected_items)
 
 
 def _ensure_legacy_menu_and_publication(builder_menu_id: str, *, year: int, week: int) -> int:
@@ -541,19 +467,7 @@ def _ensure_offshore_domain(*, anchor_day: date) -> tuple[int, int, int]:
             "default_locale": "sv",
             "default_theme": "system",
             "default_portions": 120,
-            "menu_track_visibility_json": json.dumps(
-                {
-                    "primary": [
-                        {"key": "koett", "label": "Kött"},
-                        {"key": "fisk", "label": "Fisk"},
-                    ],
-                    "secondary": [
-                        {"key": "soppa", "label": "Soppa"},
-                        {"key": "vegetariskt", "label": "Vegetariskt"},
-                    ],
-                },
-                ensure_ascii=False,
-            ),
+            "menu_track_visibility_json": DEMO_MENU_TRACK_VISIBILITY_JSON,
             "is_active": True,
         },
     )
@@ -787,7 +701,6 @@ def _ensure_prep_tasks() -> int:
 
 def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
     anchor_day = _next_monday(datetime.now(UTC).astimezone(ZoneInfo("Europe/Oslo")).date())
-    week_key = week_key_from_date(anchor_day)
     iso_year, iso_week, *_ = anchor_day.isocalendar()
     _ensure_tenant_and_site()
     _ensure_feature_flags()
@@ -798,7 +711,7 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
         return DemoSeedSummary(
             tenant_id=DEMO_TENANT_ID,
             site_id=DEMO_SITE_ID,
-            week_key=week_key,
+            week_key=week_key_from_date(anchor_day),
             menu_id=DEMO_MENU_ID,
             builder_menu_id=DEMO_BUILDER_MENU_ID,
             work_period_id=0,
@@ -806,31 +719,30 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
             prep_task_count=0,
         )
 
-    _ensure_builder_content(week_key=week_key)
-    builder_menu_id = DEMO_BUILDER_MENU_ID
-    menu_flow = _builder_menu_context_flow()
-    if menu_flow._menu_service.get_menu(builder_menu_id) is None:
-        menu_flow.create_menu(
-            menu_id=builder_menu_id,
+    outcomes = _ensure_builder_content(anchor_day=anchor_day)
+    publication_service = CommunBuilderPublicationService()
+    for outcome in outcomes:
+        publication_service.publish_week(
+            tenant_id=DEMO_TENANT_ID,
             site_id=DEMO_SITE_ID,
-            week_key=week_key,
-            title=DEMO_BUILDER_MENU_TITLE,
-            version=1,
-            status="draft",
+            year=int(outcome.year),
+            week=int(outcome.week),
+            legacy_menu_id=None,
         )
-    legacy_menu_id = _ensure_legacy_menu_and_publication(builder_menu_id, year=int(iso_year), week=int(iso_week))
 
     _, _, work_period_id = _ensure_offshore_domain(anchor_day=anchor_day)
     _ensure_work_menu_decisions(work_period_id)
     prep_task_count = _ensure_prep_tasks()
     service_event_count = len(period_service.list_service_events(DEMO_TENANT_ID, DEMO_SITE_ID, work_period_id))
 
+    first_outcome = outcomes[0] if outcomes else None
+
     return DemoSeedSummary(
         tenant_id=DEMO_TENANT_ID,
         site_id=DEMO_SITE_ID,
-        week_key=week_key,
-        menu_id=str(legacy_menu_id),
-        builder_menu_id=builder_menu_id,
+        week_key=week_key_from_date(anchor_day),
+        menu_id=str(first_outcome.menu_id if first_outcome is not None else DEMO_MENU_ID),
+        builder_menu_id=str(first_outcome.menu_id if first_outcome is not None else DEMO_BUILDER_MENU_ID),
         work_period_id=work_period_id,
         service_event_count=service_event_count,
         prep_task_count=prep_task_count,

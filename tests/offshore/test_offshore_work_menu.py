@@ -15,6 +15,9 @@ from core.builder_api import _get_builder_flow
 from core.builder_menu_context_api import _get_menu_context_flow
 
 
+TEST_WORK_MENU_DAY = datetime.now(UTC).date()
+
+
 def _headers(role: str, tenant_id: int = 1):
     return {"X-User-Role": role, "X-Tenant-Id": str(tenant_id), "X-User-Id": "42", "X-User-Name": "Henrik"}
 
@@ -133,7 +136,7 @@ def _seed_period(app, *, tenant_id: int, site_id: str):
         for day_offset in range(7):
             period_service.add_template_event(tenant_id=tenant_id, site_id=site_id, template_id=template.id, day_offset=str(day_offset), local_time=time(11, 30), service_code="lunch", display_name="Lunch", work_position_id=position.id, default_portions=40, active=True)
             period_service.add_template_event(tenant_id=tenant_id, site_id=site_id, template_id=template.id, day_offset=str(day_offset), local_time=time(17, 30), service_code="dinner", display_name="Dinner", work_position_id=position.id, default_portions=40, active=True)
-        generation = period_service.create_work_period_from_template(tenant_id=tenant_id, site_id=site_id, period_template_id=template.id, starts_at=datetime(2026, 7, 20, 8, 0, tzinfo=UTC), menu_cycle_id=cycle.id, name="Week")
+        generation = period_service.create_work_period_from_template(tenant_id=tenant_id, site_id=site_id, period_template_id=template.id, starts_at=datetime.combine(TEST_WORK_MENU_DAY, time(8, 0), tzinfo=UTC), menu_cycle_id=cycle.id, name="Week")
         period_service.update_work_period(tenant_id=tenant_id, site_id=site_id, period_id=generation.work_period.id, payload={"status": "active"})
         return generation.work_period.id
 
@@ -143,7 +146,7 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
     _seed_installation(app, tenant_id=1, site_id=site_id)
     _seed_builder_menu(app)
-    _seed_publication(app, tenant_id=1, site_id=site_id, day=date(2026, 7, 20), builder_menu_id="builder-menu-1")
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
     period_id = _seed_period(app, tenant_id=1, site_id=site_id)
     with app.app_context():
         events = period_service.list_service_events(1, site_id, period_id)
@@ -226,7 +229,7 @@ def test_offshore_work_menu_reset_deletes_decision():
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
     _seed_installation(app, tenant_id=1, site_id=site_id)
     _seed_builder_menu(app)
-    _seed_publication(app, tenant_id=1, site_id=site_id, day=date(2026, 7, 20), builder_menu_id="builder-menu-1")
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
     period_id = _seed_period(app, tenant_id=1, site_id=site_id)
     with app.app_context():
         events = period_service.list_service_events(1, site_id, period_id)
@@ -285,7 +288,7 @@ def test_offshore_work_menu_preserves_unknown_track_groups():
         visibility_json='{"primary":[{"key":"koett","label":"Kött"}],"secondary":[{"key":"soppa","label":"Soppa"}],"late-night":[{"key":"night","label":"Late night"}]}',
     )
     _seed_builder_menu(app)
-    _seed_publication(app, tenant_id=1, site_id=site_id, day=date(2026, 7, 20), builder_menu_id="builder-menu-1")
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
     _seed_period(app, tenant_id=1, site_id=site_id)
 
     client = app.test_client()
@@ -302,7 +305,7 @@ def test_offshore_work_menu_hides_editor_controls_for_read_only_role():
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
     _seed_installation(app, tenant_id=1, site_id=site_id)
     _seed_builder_menu(app)
-    _seed_publication(app, tenant_id=1, site_id=site_id, day=date(2026, 7, 20), builder_menu_id="builder-menu-1")
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
     _seed_period(app, tenant_id=1, site_id=site_id)
 
     client = app.test_client()
@@ -319,7 +322,7 @@ def test_offshore_work_menu_rejects_ambiguous_builder_decision():
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
     _seed_installation(app, tenant_id=1, site_id=site_id)
     _seed_builder_menu(app)
-    _seed_publication(app, tenant_id=1, site_id=site_id, day=date(2026, 7, 20), builder_menu_id="builder-menu-1")
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
     period_id = _seed_period(app, tenant_id=1, site_id=site_id)
     with app.app_context():
         events = period_service.list_service_events(1, site_id, period_id)
@@ -349,7 +352,7 @@ def test_offshore_work_menu_rejects_unknown_builder_composition():
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
     _seed_installation(app, tenant_id=1, site_id=site_id)
     _seed_builder_menu(app)
-    _seed_publication(app, tenant_id=1, site_id=site_id, day=date(2026, 7, 20), builder_menu_id="builder-menu-1")
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
     period_id = _seed_period(app, tenant_id=1, site_id=site_id)
     with app.app_context():
         events = period_service.list_service_events(1, site_id, period_id)
@@ -377,7 +380,7 @@ def test_offshore_work_menu_rejects_cross_tenant_request():
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
     _seed_installation(app, tenant_id=1, site_id=site_id)
     _seed_builder_menu(app)
-    _seed_publication(app, tenant_id=1, site_id=site_id, day=date(2026, 7, 20), builder_menu_id="builder-menu-1")
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
     _seed_period(app, tenant_id=1, site_id=site_id)
 
     client = app.test_client()
