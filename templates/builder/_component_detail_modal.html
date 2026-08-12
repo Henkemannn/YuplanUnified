@@ -1,0 +1,168 @@
+  <div id="componentDetailEditorModal" class="modal hidden" data-builder-modal-root="component-detail">
+    <div class="modal-content modal-content-component-detail">
+      <div class="workspace-modal-header">
+        <div>
+          <p class="workspace-modal-kicker">Komponentdetaljer</p>
+          <h3 id="componentDetailEditorTitle">Komponentredigerare</h3>
+        </div>
+        <div class="workspace-inline-actions">
+          <button id="componentDetailSaveChanges" type="button">Spara ändringar</button>
+          <button id="componentDetailReturnToDishBtn" type="button" class="builder-button-secondary hidden" hidden>Lägg till i dish</button>
+          <button id="componentDetailEditorClose" type="button">Tillbaka till komponenter</button>
+        </div>
+      </div>
+
+      <div class="builder-component-detail-tabs" id="componentDetailTabs" role="tablist" aria-label="Komponentdetaljer sektioner">
+        <button id="componentDetailTabOverview" type="button" class="builder-chip is-active" data-component-tab="overview" role="tab" aria-selected="true">Översikt</button>
+        <button id="componentDetailTabRecipe" type="button" class="builder-chip" data-component-tab="recipe" role="tab" aria-selected="false">📖 Recept &amp; metod</button>
+        <button id="componentDetailTabCalculation" type="button" class="builder-chip" data-component-tab="calculation" role="tab" aria-selected="false">💰 Kalkyl</button>
+        <button id="componentDetailTabAllergens" type="button" class="builder-chip" data-component-tab="allergens" role="tab" aria-selected="false">🌾 Allergener/kostinfo</button>
+      </div>
+
+      <section id="componentDetailPanelOverview" class="workspace-modal-section-card component-detail-panel" data-component-panel="overview" aria-label="Översikt">
+        <div class="builder-component-overview-grid" aria-label="Översikt kort">
+          <article class="builder-component-overview-card overview-card-identity" aria-label="Namn och kategori">
+            <label class="builder-component-overview-field builder-component-overview-field-name">Komponentnamn
+              <input id="componentDetailOverviewName" type="text" placeholder="Ange komponentnamn">
+            </label>
+            <label class="builder-component-overview-field builder-component-overview-field-category">Kategori
+              <select id="componentDetailOverviewCategory" class="builder-component-overview-select">
+                <option value="main">Huvudkomponent</option>
+                <option value="side">Tillbehör</option>
+                <option value="sauce">Sås</option>
+                <option value="dessert">Dessert</option>
+                <option value="ovrigt">Övrigt</option>
+              </select>
+            </label>
+            <div class="workspace-inline-actions builder-component-overview-inline-actions">
+              <button id="componentDetailOverviewClean" type="button" class="builder-button-ghost">Rensa namn</button>
+            </div>
+          </article>
+
+          <article class="builder-component-overview-card overview-card-tags" aria-label="Taggar">
+            <label class="builder-component-overview-field builder-component-overview-field-tags">Taggar
+              <div id="componentDetailTagsEditor" class="builder-component-tags-editor">
+                <div id="componentDetailTagsChips" class="builder-component-tags-chips" aria-live="polite"></div>
+                <input id="componentDetailTagsInput" type="text" list="componentDetailTagsSuggestions" placeholder="Lägg till tagg">
+                <datalist id="componentDetailTagsSuggestions"></datalist>
+              </div>
+              <input id="componentDetailOverviewTags" type="hidden" value="">
+              <p class="builder-component-tags-helper">Tagga för råvara, stil eller sökning.</p>
+            </label>
+          </article>
+
+          <article class="builder-component-overview-card overview-card-description" aria-label="Beskrivning">
+            <label class="builder-component-overview-field builder-component-overview-field-description">Beskrivning / längre namn
+              <textarea id="componentDetailOverviewLongDescription" placeholder="Beskrivning för kök och planering"></textarea>
+            </label>
+          </article>
+
+          <article class="builder-component-overview-card overview-card-system" aria-label="System">
+            <p id="componentDetailOverviewMeta" class="builder-component-overview-meta">Komponent-ID: -</p>
+            <div class="workspace-inline-actions builder-component-overview-danger-actions">
+              <button id="componentDetailOverviewDelete" type="button" class="builder-button-secondary library-danger-action">Ta bort komponent</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="componentDetailPanelRecipe" class="workspace-modal-section-card component-detail-panel hidden" data-component-panel="recipe">
+        <p class="modal-section-title">📖 Recept &amp; metod</p>
+        <div class="builder-component-recipe-layout">
+          <article class="builder-component-recipe-card builder-component-recipe-card-ingredients" aria-label="Ingredienser">
+            <p class="builder-component-card-label">Ingredienser</p>
+            <div class="builder-component-recipe-header" aria-hidden="true">
+              <span>Ingrediens</span>
+              <span>Mängd</span>
+              <span>Enhet</span>
+              <span></span>
+            </div>
+            <div id="componentDetailRecipeIngredientRows" class="builder-component-recipe-rows"></div>
+            <div class="workspace-inline-actions builder-component-recipe-actions">
+              <button id="componentDetailRecipeAddRow" type="button" class="builder-button-ghost">Lägg till ingrediens</button>
+            </div>
+            <textarea id="componentDetailRecipeIngredients" class="hidden" aria-hidden="true"></textarea>
+          </article>
+
+          <article class="builder-component-recipe-card builder-component-recipe-card-method" aria-label="Metod och anteckning">
+            <p class="builder-component-card-label">Metod &amp; anteckning</p>
+            <div class="builder-component-recipe-notes-grid">
+              <label class="builder-component-recipe-note-field">Metod
+                <textarea id="componentDetailMethodText" placeholder="Beskriv arbetsgång och tillagning"></textarea>
+              </label>
+              <label class="builder-component-recipe-note-field">Köksanteckning
+                <textarea id="componentDetailMethodNotes" placeholder="Anteckningar för köket"></textarea>
+              </label>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="componentDetailPanelCalculation" class="workspace-modal-section-card component-detail-panel hidden" data-component-panel="calculation">
+        <p class="modal-section-title">💰 Kalkyl</p>
+        <div class="builder-component-calc-layout">
+          <article class="builder-component-calc-card builder-component-calc-card-main" aria-label="Portionskalkyl">
+            <p class="builder-component-card-label">Portionskalkyl</p>
+            <div class="builder-component-calc-header builder-component-grid-head builder-component-grid-head-calc" aria-hidden="true">
+              <span>Ingrediens</span>
+              <span>Mängd</span>
+              <span>Enhet</span>
+              <span>Pris</span>
+              <span>Prisenhet</span>
+              <span>Kostnad</span>
+            </div>
+            <div id="componentDetailCalculationRows" class="builder-component-calc-rows"></div>
+            <div class="workspace-inline-actions builder-component-calc-actions">
+              <button id="componentDetailCalcSyncRows" type="button" class="builder-button-ghost">Synka från recept</button>
+            </div>
+            <label class="builder-component-calc-total">Total portionskostnad
+              <input id="componentDetailCalcCost" type="text" placeholder="0.00" readonly>
+            </label>
+          </article>
+
+          <article class="builder-component-calc-card builder-component-calc-card-notes" aria-label="Kalkylanteckning">
+            <p class="builder-component-card-label">Kalkylanteckning</p>
+            <label class="builder-component-calc-note-field">Kalkylanteckning
+              <textarea id="componentDetailCalcNotes" placeholder="Antaganden för portionskostnad"></textarea>
+            </label>
+          </article>
+        </div>
+      </section>
+
+      <section id="componentDetailPanelAllergens" class="workspace-modal-section-card component-detail-panel hidden" data-component-panel="allergens">
+        <p class="modal-section-title">🌾 Allergener/kostinfo</p>
+        <div class="builder-component-allergen-layout">
+          <article class="builder-component-allergen-card builder-component-allergen-card-list" aria-label="Allergener">
+            <p class="builder-component-card-label">Allergener</p>
+            <p class="builder-component-allergen-helper">Markera allergener enligt EU14-listan.</p>
+            <div class="builder-component-allergen-grid" role="group" aria-label="EU14-allergener">
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="gluten_cereals"><span>Glutenhaltiga spannmål</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="crustaceans"><span>Kräftdjur</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="eggs"><span>Ägg</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="fish"><span>Fisk</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="peanuts"><span>Jordnötter</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="soybeans"><span>Sojabönor</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="milk_lactose"><span>Mjölk/laktos</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="nuts"><span>Nötter</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="celery"><span>Selleri</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="mustard"><span>Senap</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="sesame"><span>Sesamfrön</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="sulphur_dioxide_sulphites"><span>Svaveldioxid och sulfiter</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="lupin"><span>Lupin</span></label>
+              <label class="builder-component-allergen-chip"><input type="checkbox" class="component-detail-allergen-checkbox" value="molluscs"><span>Blötdjur</span></label>
+            </div>
+          </article>
+
+          <article class="builder-component-allergen-card builder-component-allergen-card-notes" aria-label="Kostanteckning">
+            <p class="builder-component-card-label">Kostanteckning</p>
+            <label class="builder-component-allergen-note-field">Allergi-/kostanteckning
+              <textarea id="componentDetailAllergenNotes" placeholder="Noteringar om allergi och kost"></textarea>
+            </label>
+            <p class="builder-component-allergen-helper">Komplettera med tydlig hanteringsinfo vid behov.</p>
+          </article>
+        </div>
+      </section>
+
+      <div id="componentDetailOut" class="workspace-feedback workspace-feedback-inline" aria-live="polite"></div>
+    </div>
+  </div>

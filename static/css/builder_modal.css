@@ -1,0 +1,200 @@
+/*
+ * Builder Modal CSS
+ * Builder-owned modal styles for Dish (resolveModal) and Component detail (componentDetailEditorModal).
+ *
+ * This file contains rules that are safe to consume by any future user of the shared
+ * Builder modal controller without conflicting with the consumer's base layout.
+ *
+ * Included rules are scoped to specific Builder modal panel IDs:
+ *   - #componentDetailEditorModal
+ *   - #dishAllergensPanel
+ *   - #dishCalculationPanel
+ *
+ * Base .modal shell, .modal-content, workspace-modal-* and builder-dish-* classes
+ * remain in builder.css for now. Full separation is a planned follow-up item.
+ *
+ * IMPORTANT: Do not add generic selectors (button, label, input, .modal, .hidden)
+ * to this file. Scope all rules to the builder modal roots.
+ */
+
+/* ── Component detail: panel hide/show ──────────────────────────────────── */
+
+#componentDetailEditorModal .component-detail-panel[hidden],
+#componentDetailEditorModal .component-detail-panel.hidden {
+  display: none !important;
+}
+
+/* ── Dish allergens panel ──────────────────────────────────────────────── */
+
+#dishAllergensPanel .builder-dish-allergen-summary {
+  display: grid;
+  gap: 12px;
+}
+
+#dishAllergensPanel .builder-dish-allergen-summary-section {
+  display: grid;
+  gap: 8px;
+}
+
+#dishAllergensPanel .builder-dish-allergen-summary-section h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #31485c;
+}
+
+#dishAllergensPanel .builder-dish-allergen-summary-empty {
+  margin: 0;
+  color: #586c7e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+#dishAllergensPanel .builder-dish-allergen-grid,
+#dishAllergensPanel .builder-dish-allergen-marker-grid {
+  display: grid;
+  gap: 8px;
+}
+
+#dishAllergensPanel .builder-dish-allergen-card,
+#dishAllergensPanel .builder-dish-allergen-marker {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid #d5dee8;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+#dishAllergensPanel .builder-dish-allergen-chip,
+#dishAllergensPanel .builder-dish-allergen-marker-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef4f9;
+  border: 1px solid #d7e2ec;
+  color: #22394d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#dishAllergensPanel .builder-dish-allergen-source,
+#dishAllergensPanel .builder-dish-allergen-note,
+#dishAllergensPanel .builder-dish-allergen-marker-source {
+  margin: 0;
+  color: #586c7e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ── Dish calculation panel ─────────────────────────────────────────────── */
+
+#dishCalculationPanel .builder-dish-calculation-summary {
+  display: grid;
+  gap: 10px;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-empty {
+  margin: 0;
+  color: #586c7e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+#dishCalculationPanel .builder-dish-calculation-total,
+#dishCalculationPanel .builder-dish-calculation-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #d5dee8;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+#dishCalculationPanel .builder-dish-calculation-total {
+  border-color: #bfd4e5;
+  background: #f4f8fc;
+}
+
+#dishCalculationPanel .builder-dish-calculation-total-label,
+#dishCalculationPanel .builder-dish-calculation-card-title {
+  color: #31485c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#dishCalculationPanel .builder-dish-calculation-total-value {
+  color: #163044;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-warning {
+  margin: 0;
+  color: #7b5a12;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#dishCalculationPanel .builder-dish-calculation-summary-missing {
+  color: #8a4f12;
+}
+
+#dishCalculationPanel .builder-dish-calculation-meta {
+  display: grid;
+  gap: 6px;
+}
+
+#dishCalculationPanel .builder-dish-calculation-meta-item {
+  display: grid;
+  gap: 1px;
+}
+
+#dishCalculationPanel .builder-dish-calculation-meta-label {
+  color: #5a7083;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#dishCalculationPanel .builder-dish-calculation-meta-value {
+  color: #1f3749;
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+#dishCalculationPanel .builder-dish-calculation-rows {
+  display: grid;
+  gap: 5px;
+}
+
+#dishCalculationPanel .builder-dish-calculation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 0.8fr);
+  gap: 6px;
+  align-items: start;
+}
+
+#dishCalculationPanel .builder-dish-calculation-row-head {
+  padding: 0 2px 1px;
+}
+
+#dishCalculationPanel .builder-dish-calculation-row-head .builder-dish-calculation-row-value {
+  color: #5a7083;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#dishCalculationPanel .builder-dish-calculation-row-value {
+  color: #20384b;
+  font-size: 12px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+#dishCalculationPanel .builder-dish-calculation-row-value-cost {
+  text-align: right;
+  font-weight: 700;
+}

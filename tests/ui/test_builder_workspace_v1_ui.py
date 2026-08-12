@@ -352,7 +352,8 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert html.count('id="componentDetailTabs"') == 1
     assert html.count('id="componentDetailSaveChanges"') == 1
     assert html.count('id="componentDetailEditorClose"') == 1
-    assert '<div id="componentDetailEditorModal" class="modal hidden">' in html
+    assert 'id="componentDetailEditorModal"' in html
+    assert 'data-builder-modal-root="component-detail"' in html
     assert 'class="modal-content modal-content-component-detail"' in html
     assert '<h3 id="componentDetailEditorTitle">Komponentredigerare</h3>' in html
     modal_start = html.find('id="componentDetailEditorModal"')
@@ -691,7 +692,8 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'const tagRow = document.createElement("div");' not in script
     assert 'builder-tag-row' not in script
     assert 'refs.composition_names' in script
-    assert 'await deleteComponentFromLibrary(idValue, componentName);' in script
+    # deleteComponentFromLibrary is invoked via controller callback from builder_modal_controller.js
+    assert 'deleteComponentFromLibrary' in script
     assert 'Den här komponenten används i ' in script
     assert 'usedCount === 1 ? " rätt" : " rätter"' in script
     assert 'uniqueDishNames.slice(0, 10)' in script
@@ -742,8 +744,8 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'function removeComponentDetailTag(tagValue) {' in script
     assert 'const componentDetailTagsInput = document.getElementById("componentDetailTagsInput");' in script
     assert 'const componentDetailTagsChips = document.getElementById("componentDetailTagsChips");' in script
-    assert 'componentDetailTagsInput.addEventListener("keydown", (event) => {' in script
-    assert 'if (event.key !== "Enter" && event.key !== ",") {' in script
+    # componentDetailTagsInput keydown/blur handler registered in builder_modal_controller.js
+    # 'if (event.key !== "Enter" && event.key !== ",")' is in builder_modal_controller.js
     assert 'remove.setAttribute("data-remove-tag", tag);' in script
     assert 'tags: currentComponentDetailTags(),' in script
     assert 'function componentTagCatalog(items) {' in script
@@ -768,7 +770,8 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'method: "PATCH"' in script
     assert 'window.localStorage.setItem(componentDetailStorageKey(idValue), JSON.stringify(payload));' not in script
     assert 'window.localStorage.getItem(key);' not in script
-    assert 'setComponentDetailTab(tabValue);' in script
+    # setComponentDetailTab(tabValue) call is in builder_modal_controller.js tab click handler
+    assert 'setComponentDetailTab(' in script
     assert 'closeModalById("componentDetailEditorModal");' in script
     assert 'message: "Komponentdetaljer laddade."' in script
     assert 'message: "Komponentdetaljer sparade."' in script
@@ -792,7 +795,8 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'else if (createdComponentId && result.data.duplicate)' in script
     assert 'componentDetailReturnToDishBtn' in script
     assert 'Lägg till i ' in script
-    assert 'await reopenPendingCompositionForReturn();' in script
+    # reopenPendingCompositionForReturn is called from builder_modal_controller.js return-to-dish handler
+    assert 'async function reopenPendingCompositionForReturn() {' in script
     assert 'clearPendingComponentCreateForComposition();' in script
     assert 'await loadLibrary();' in script
     assert 'const freeDishCategoryEl = document.getElementById("freeDishCategory");' in script

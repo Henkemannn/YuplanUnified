@@ -1,0 +1,307 @@
+"""
+Architecture guard tests for Builder B1 — shared modal extraction.
+
+These tests verify:
+1. Builder Workspace includes shared Composition partial.
+2. Builder Workspace includes shared Component partial.
+3. #resolveModal rendered exactly once.
+4. #componentDetailEditorModal rendered exactly once.
+5. Shared modal controller JS is loaded.
+6. builder.js initializes the shared controller.
+7. Modal controller implementation is NOT duplicated in builder.js.
+8. Shared controller has repeated-init guard.
+9. Dish -> Component -> Dish flow belongs to shared controller.
+10. Dish has no recipe/method field.
+11. Component has recipe/method.
+12. Engine Ownership Contract document exists.
+13. Workspace callbacks are explicitly separated.
+"""
+from __future__ import annotations
+
+import os
+import re
+
+
+# ── Fixtures ─────────────────────────────────────────────────────────────────
+
+
+def _workspace_html(client_admin) -> str:
+    rv = client_admin.get(
+        "/builder-workspace-v1",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert rv.status_code == 200
+    return rv.data.decode("utf-8")
+
+
+def _builder_js(client_admin) -> str:
+    rv = client_admin.get("/static/js/builder.js")
+    assert rv.status_code == 200
+    return rv.data.decode("utf-8")
+
+
+def _controller_js(client_admin) -> str:
+    rv = client_admin.get("/static/js/builder_modal_controller.js")
+    assert rv.status_code == 200
+    return rv.data.decode("utf-8")
+
+
+def _composition_partial() -> str:
+    path = os.path.join("templates", "builder", "_composition_modal.html")
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def _component_partial() -> str:
+    path = os.path.join("templates", "builder", "_component_detail_modal.html")
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+# ── Guard 1-2: Template includes shared partials ─────────────────────────────
+
+
+def test_builder_workspace_includes_composition_partial(client_admin) -> None:
+    """Builder Workspace renders the shared Composition modal partial."""
+    html = _workspace_html(client_admin)
+    assert 'id="resolveModal"' in html, "resolveModal not rendered"
+    # Template source uses {% include %}
+    workspace_path = os.path.join("templates", "builder_workspace_v1.html")
+    with open(workspace_path, encoding="utf-8") as f:
+        source = f.read()
+    assert '{% include "builder/_composition_modal.html" %}' in source
+
+
+def test_builder_workspace_includes_component_partial(client_admin) -> None:
+    """Builder Workspace renders the shared Component detail modal partial."""
+    html = _workspace_html(client_admin)
+    assert 'id="componentDetailEditorModal"' in html, "componentDetailEditorModal not rendered"
+    workspace_path = os.path.join("templates", "builder_workspace_v1.html")
+    with open(workspace_path, encoding="utf-8") as f:
+        source = f.read()
+    assert '{% include "builder/_component_detail_modal.html" %}' in source
+
+
+# ── Guard 3-4: Single modal instances ────────────────────────────────────────
+
+
+def test_resolve_modal_rendered_exactly_once(client_admin) -> None:
+    """#resolveModal appears exactly once in the rendered HTML."""
+    html = _workspace_html(client_admin)
+    assert html.count('id="resolveModal"') == 1
+
+
+def test_component_detail_modal_rendered_exactly_once(client_admin) -> None:
+    """#componentDetailEditorModal appears exactly once in the rendered HTML."""
+    html = _workspace_html(client_admin)
+    assert html.count('id="componentDetailEditorModal"') == 1
+
+
+# ── Guard 5: Controller script loaded ────────────────────────────────────────
+
+
+def test_shared_modal_controller_script_loaded(client_admin) -> None:
+    """builder_modal_controller.js is served and included before builder.js."""
+    html = _workspace_html(client_admin)
+    assert 'builder_modal_controller.js' in html, "controller script not in template"
+    ctrl_pos = html.find("builder_modal_controller.js")
+    builder_pos = html.find("builder.js")
+    assert ctrl_pos < builder_pos, "controller must be loaded before builder.js"
+
+    rv = client_admin.get("/static/js/builder_modal_controller.js")
+    assert rv.status_code == 200
+    assert rv.content_type.startswith("application/javascript") or "javascript" in rv.content_type
+
+
+# ── Guard 6: builder.js initializes the shared controller ────────────────────
+
+
+def test_builder_js_initializes_shared_controller(client_admin) -> None:
+    """builder.js calls createBuilderModalController() to initialize the modal engine."""
+    script = _builder_js(client_admin)
+    assert "_builderModalController = createBuilderModalController({" in script
+    assert "compositionRoot:" in script
+    assert "componentRoot:" in script
+
+
+# ── Guard 7: No duplicate modal implementation in builder.js ─────────────────
+
+
+def test_modal_controller_not_duplicated_in_builder_js(client_admin) -> None:
+    """The modal controller implementation lives only in builder_modal_controller.js."""
+    script = _builder_js(client_admin)
+    controller = _controller_js(client_admin)
+
+    # createBuilderModalController is DEFINED in controller, not builder.js
+    assert "function createBuilderModalController(" in controller
+    assert "function createBuilderModalController(" not in script
+
+    # Controller registers its own listeners (not duplicated in builder.js)
+    # Tags input keydown handler is in the controller only
+    assert 'tagsInput.addEventListener("keydown"' in controller
+    assert 'componentDetailTagsInput.addEventListener("keydown"' not in script
+
+    # dishTabButtons listener is in the controller only
+    assert 'data-dish-tab]")' in controller or 'data-dish-tab]' in controller
+    assert (
+        'dishTabButtons.forEach((button) => {' not in script
+    ), "dishTabButtons forEach listener must be in controller, not builder.js"
+
+
+# ── Guard 8: Repeated-init guard prevents double registration ────────────────
+
+
+def test_shared_controller_has_repeated_init_guard(client_admin) -> None:
+    """createBuilderModalController has a guard preventing duplicate listener registration."""
+    controller = _controller_js(client_admin)
+    assert "_listenersAttached" in controller
+    assert "if (_listenersAttached) {" in controller or "if (_listenersAttached)" in controller
+    assert "_listenersAttached = true" in controller
+
+
+# ── Guard 9: Dish → Component → Dish flow in controller ──────────────────────
+
+
+def test_dish_component_dish_return_flow_in_controller(client_admin) -> None:
+    """The Dish → Component → Dish return flow is owned by the controller."""
+    controller = _controller_js(client_admin)
+    # Controller handles componentDetailReturnToDishBtn
+    assert "componentDetailReturnToDishBtn" in controller
+    # Controller calls reopenPendingCompositionForReturn (the global)
+    assert "reopenPendingCompositionForReturn" in controller
+    # Controller calls attachExistingComponentToCurrentComposition
+    assert "attachExistingComponentToCurrentComposition" in controller
+
+
+# ── Guard 10: Dish has no recipe/method field ─────────────────────────────────
+
+
+def test_dish_modal_has_no_recipe_method_field(client_admin) -> None:
+    """The Dish (resolveModal) partial contains no recipe or method fields."""
+    partial = _composition_partial()
+    assert 'data-dish-tab="recipe"' not in partial
+    assert 'data-dish-panel="recipe"' not in partial
+    assert 'id="dishOverviewRecipe"' not in partial
+    assert "ingredient" not in partial.lower() or "componentDetailRecipeIngredients" not in partial
+
+
+def test_dish_rendered_modal_has_no_recipe_tab(client_admin) -> None:
+    """Rendered Dish modal HTML contains no recipe tab."""
+    html = _workspace_html(client_admin)
+    resolve_start = html.find('id="resolveModal"')
+    add_component_start = html.find('id="addComponentModal"')
+    assert resolve_start != -1 and add_component_start != -1
+    resolve_html = html[resolve_start:add_component_start]
+    assert 'data-dish-tab="recipe"' not in resolve_html
+    assert 'data-dish-panel="recipe"' not in resolve_html
+
+
+# ── Guard 11: Component has recipe/method ─────────────────────────────────────
+
+
+def test_component_modal_has_recipe_method_tab(client_admin) -> None:
+    """The Component detail partial contains recipe/method tab and content."""
+    partial = _component_partial()
+    assert 'data-component-tab="recipe"' in partial
+    assert 'id="componentDetailPanelRecipe"' in partial
+    assert 'id="componentDetailMethodText"' in partial
+    assert 'id="componentDetailRecipeIngredientRows"' in partial
+
+
+# ── Guard 12: Engine Ownership Contract exists ────────────────────────────────
+
+
+def test_engine_ownership_document_exists() -> None:
+    """docs/architecture/engine-ownership.md exists and contains required sections."""
+    path = os.path.join("docs", "architecture", "engine-ownership.md")
+    assert os.path.isfile(path), "engine-ownership.md not found"
+    with open(path, encoding="utf-8") as f:
+        content = f.read()
+    assert "Builder Engine owns" in content
+    assert "Planera 2.0 Engine owns" in content
+    assert "Business Modules own" in content
+    assert "Forbidden" in content
+    assert "Mandatory checklist" in content or "Mandatory" in content
+
+
+# ── Guard 13: Workspace callbacks are explicitly separated ────────────────────
+
+
+def test_workspace_callbacks_explicitly_separated(client_admin) -> None:
+    """The controller receives workspace callbacks through config, not by accessing globals."""
+    controller = _controller_js(client_admin)
+    script = _builder_js(client_admin)
+
+    # Controller receives loadLibrary as a callback
+    assert "loadLibrary:" in controller or "config.loadLibrary" in controller
+    # builder.js passes loadLibrary to the controller
+    assert "loadLibrary: loadLibrary" in script
+
+    # Controller receives updateComponentCategoryChipCounts as callback
+    assert "updateComponentCategoryChipCounts" in controller
+    assert "updateComponentCategoryChipCounts: updateComponentCategoryChipCounts" in script
+
+    # Controller should NOT directly call loadLibrary() without going through callbacks
+    # (it should use _callbacks.loadLibrary or config.loadLibrary)
+    assert "loadLibrary();" not in controller or "_callbacks.loadLibrary" in controller
+
+
+# ── Guard: Modal CSS is separated for shared consumption ─────────────────────
+
+
+def test_builder_modal_css_loaded(client_admin) -> None:
+    """builder_modal.css is included in the Builder Workspace template."""
+    html = _workspace_html(client_admin)
+    assert "builder_modal.css" in html
+
+    rv = client_admin.get("/static/css/builder_modal.css")
+    assert rv.status_code == 200
+
+
+def test_builder_modal_css_scoped_to_modal_ids() -> None:
+    """builder_modal.css rules are scoped to specific modal IDs, not generic selectors."""
+    path = os.path.join("static", "css", "builder_modal.css")
+    assert os.path.isfile(path), "builder_modal.css not found"
+    with open(path, encoding="utf-8") as f:
+        content = f.read()
+    # Must not contain broad-scope standalone rules
+    assert "\n.modal {" not in content, "builder_modal.css must not redefine generic .modal"
+    assert "\n.hidden {" not in content, "builder_modal.css must not define standalone .hidden"
+    # Must contain scoped rules
+    assert "#componentDetailEditorModal" in content
+    assert "#dishAllergensPanel" in content or "#dishCalculationPanel" in content
+
+
+# ── Guard: Modal roots have data-builder-modal-root attribute ─────────────────
+
+
+def test_modal_roots_have_builder_modal_root_attribute(client_admin) -> None:
+    """Both modal roots carry data-builder-modal-root for future CSS scoping."""
+    html = _workspace_html(client_admin)
+    assert 'data-builder-modal-root="component-detail"' in html
+    assert 'data-builder-modal-root="composition"' in html
+
+
+# ── Guard: Offshore files untouched ──────────────────────────────────────────
+
+
+def test_offshore_files_not_modified() -> None:
+    """No Offshore-owned files were modified by this ticket."""
+    import subprocess
+    result = subprocess.run(
+        ["git", "diff", "--name-only", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    changed = set(result.stdout.strip().split("\n")) if result.stdout.strip() else set()
+    offshore_files = [
+        "templates/offshore2/",
+        "static/offshore2/",
+        "modules/offshore2/",
+        "core/offshore_builder_bridge.py",
+    ]
+    for offshore_path in offshore_files:
+        for changed_file in changed:
+            assert not changed_file.startswith(offshore_path), (
+                f"Offshore file modified: {changed_file}"
+            )

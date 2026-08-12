@@ -136,6 +136,9 @@ let pendingComponentCreateReturnTab = "components";
 window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";
 console.log("Builder JS active: builder-modal-system-reset-1");
 
+/** @type {ReturnType<typeof createBuilderModalController>|null} */
+let _builderModalController = null;
+
 const IMPORT_LEADING_LABEL_RE = /^([A-Za-zÅÄÖåäö\s]+):\s*/;
 const IMPORT_LEADING_LABEL_TOKENS = new Set([
   "dessert",
@@ -5502,9 +5505,13 @@ async function loadReusableComponents(query) {
   const items = (result && result.data && result.data.components) || [];
   reusableComponentsCache = Array.isArray(items) ? items : [];
   renderExistingComponentSuggestions(reusableComponentsCache);
-  renderComponentPalette();
-  if (currentBuilderComposition) {
-    renderBuilderPanel(currentBuilderComposition);
+  if (_builderModalController) {
+    _builderModalController.onReusableComponentsRefreshed();
+  } else {
+    renderComponentPalette();
+    if (currentBuilderComposition) {
+      renderBuilderPanel(currentBuilderComposition);
+    }
   }
 }
 
@@ -5900,10 +5907,7 @@ function closeResolveModal() {
   currentDishAllergenSummaryToken += 1;
   currentDishCalculationSummaryToken += 1;
   closeDishComponentOverflowMenus();
-  const modal = document.getElementById("resolveModal");
-  if (modal) {
-    modal.classList.add("hidden");
-  }
+  closeModalById("resolveModal");
   currentBuilderComposition = null;
   currentBuilderDishTab = "overview";
 }
@@ -6296,6 +6300,29 @@ function setLastImportSession(importType, groups, note) {
   };
 }
 
+async function closeComponentDetailEditor() {
+  if (!_componentDetailDirty) {
+    closeModalById("componentDetailEditorModal");
+    _activeComponentDetailId = "";
+    return;
+  }
+  const shouldSave = window.confirm("Save changes before leaving?");
+  if (shouldSave) {
+    await saveActiveComponentDetailDraft();
+    closeModalById("componentDetailEditorModal");
+    _activeComponentDetailId = "";
+    resetComponentDetailDirty();
+    return;
+  }
+  const shouldDiscard = window.confirm("Discard changes and close?");
+  if (!shouldDiscard) {
+    return;
+  }
+  closeModalById("componentDetailEditorModal");
+  _activeComponentDetailId = "";
+  resetComponentDetailDirty();
+}
+
 function bindBuilderHandlers() {
   const openComponentCreateModalBtn = document.getElementById("openComponentCreateModalBtn");
   const openImportLibraryModalBtn = document.getElementById("openImportLibraryModalBtn");
@@ -6389,6 +6416,19 @@ function bindBuilderHandlers() {
   }
 
   resetGlobalModalSafetyState();
+
+  // ── Builder Modal Controller ─────────────────────────────────────────────
+  // Shared modal controller owns modal lifecycle and provides public API.
+  // Event listeners for modal interactions are registered inside the controller.
+  _builderModalController = createBuilderModalController({
+    compositionRoot: document.getElementById("resolveModal"),
+    componentRoot: document.getElementById("componentDetailEditorModal"),
+    loadLibrary: loadLibrary,
+    updateComponentCategoryChipCounts: updateComponentCategoryChipCounts,
+    filterLibraryComponents: filterLibraryComponents,
+    currentComponentSearchQuery: currentComponentSearchQuery,
+  });
+  // ─────────────────────────────────────────────────────────────────────────
 
   function openComponentsSurface() {
     _componentCategoryFilter = "all";
@@ -6526,180 +6566,6 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (componentDetailTabs) {
-    componentDetailTabs.addEventListener("click", (event) => {
-      const target = event.target instanceof Element ? event.target.closest("[data-component-tab]") : null;
-      if (!target) {
-        return;
-      }
-      const tabValue = String(target.getAttribute("data-component-tab") || "overview");
-      setComponentDetailTab(tabValue);
-    });
-  }
-
-  if (componentDetailOverviewCleanBtn) {
-    componentDetailOverviewCleanBtn.addEventListener("click", () => {
-      const nameInput = document.getElementById("componentDetailOverviewName");
-      if (!nameInput) {
-        return;
-      }
-      nameInput.value = cleanComponentInlineName(nameInput.value);
-      markComponentDetailDirty();
-    });
-  }
-
-  if (componentDetailOverviewCategoryInput) {
-    componentDetailOverviewCategoryInput.addEventListener("change", () => {
-      markComponentDetailDirty();
-    });
-  }
-
-  if (componentDetailTagsInput) {
-    componentDetailTagsInput.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== ",") {
-        return;
-      }
-      event.preventDefault();
-      const didAdd = addComponentDetailTagsFromInput(componentDetailTagsInput.value);
-      componentDetailTagsInput.value = "";
-      if (didAdd) {
-        markComponentDetailDirty();
-      }
-    });
-    componentDetailTagsInput.addEventListener("blur", () => {
-      const didAdd = addComponentDetailTagsFromInput(componentDetailTagsInput.value);
-      componentDetailTagsInput.value = "";
-      if (didAdd) {
-        markComponentDetailDirty();
-      }
-    });
-  }
-
-  if (componentDetailTagsChips) {
-    componentDetailTagsChips.addEventListener("click", (event) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) {
-        return;
-      }
-      const removeBtn = target.closest("[data-remove-tag]");
-      if (!removeBtn) {
-        return;
-      }
-      const tagValue = String(removeBtn.getAttribute("data-remove-tag") || "");
-      if (removeComponentDetailTag(tagValue)) {
-        markComponentDetailDirty();
-      }
-    });
-  }
-
-  if (componentDetailRecipeAddRowBtn) {
-    componentDetailRecipeAddRowBtn.addEventListener("click", () => {
-      const existingRows = readRecipeIngredientRowsFromForm();
-      existingRows.push(defaultRecipeIngredientRow());
-      renderRecipeIngredientRows(existingRows);
-      markComponentDetailDirty();
-    });
-  }
-
-  if (componentDetailCalcSyncRowsBtn) {
-    componentDetailCalcSyncRowsBtn.addEventListener("click", () => {
-      syncCalculationRowsFromRecipeRows();
-      markComponentDetailDirty();
-    });
-  }
-
-  if (componentDetailSaveChangesBtn) {
-    componentDetailSaveChangesBtn.addEventListener("click", async () => {
-      await saveActiveComponentDetailDraft();
-    });
-  }
-
-  if (componentDetailOverviewDeleteBtn) {
-    componentDetailOverviewDeleteBtn.addEventListener("click", async () => {
-      const idValue = String(_activeComponentDetailId || "").trim();
-      if (!idValue) {
-        return;
-      }
-      const nameInput = document.getElementById("componentDetailOverviewName");
-      const componentName = nameInput ? String(nameInput.value || "") : idValue;
-      await deleteComponentFromLibrary(idValue, componentName);
-    });
-  }
-
-  async function closeComponentDetailEditor() {
-    if (!_componentDetailDirty) {
-      closeModalById("componentDetailEditorModal");
-      _activeComponentDetailId = "";
-      return;
-    }
-    const shouldSave = window.confirm("Save changes before leaving?");
-    if (shouldSave) {
-      await saveActiveComponentDetailDraft();
-      closeModalById("componentDetailEditorModal");
-      _activeComponentDetailId = "";
-      resetComponentDetailDirty();
-      return;
-    }
-    const shouldDiscard = window.confirm("Discard changes and close?");
-    if (!shouldDiscard) {
-      return;
-    }
-    closeModalById("componentDetailEditorModal");
-    _activeComponentDetailId = "";
-    resetComponentDetailDirty();
-  }
-
-  if (componentDetailEditorCloseBtn) {
-    componentDetailEditorCloseBtn.addEventListener("click", async () => {
-      await closeComponentDetailEditor();
-    });
-  }
-
-  const componentDetailReturnToDishBtn = document.getElementById("componentDetailReturnToDishBtn");
-  if (componentDetailReturnToDishBtn) {
-    componentDetailReturnToDishBtn.addEventListener("click", async () => {
-      const componentId = String(_activeComponentDetailId || "").trim();
-      if (!componentId || !pendingComponentCreateForCompositionId) {
-        return;
-      }
-
-      if (_componentDetailDirty) {
-        await saveActiveComponentDetailDraft();
-      }
-
-      if (_componentDetailDirty) {
-        return;
-      }
-
-      const reopenedComposition = await reopenPendingCompositionForReturn();
-      if (!reopenedComposition) {
-        showJson("componentDetailOut", {
-          status: 0,
-          data: { ok: false, error: "pending composition not found" },
-        });
-        return;
-      }
-
-      const attachResult = await attachExistingComponentToCurrentComposition(componentId);
-      if (attachResult && attachResult.data && attachResult.data.ok && attachResult.data.composition) {
-        await loadLibrary();
-        clearPendingComponentCreateForComposition();
-        closeModalById("componentDetailEditorModal");
-        _activeComponentDetailId = "";
-        resetComponentDetailDirty();
-      }
-    });
-  }
-
-  const componentDetailModal = document.getElementById("componentDetailEditorModal");
-  if (componentDetailModal) {
-    componentDetailModal.addEventListener("input", () => {
-      markComponentDetailDirty();
-    });
-    componentDetailModal.addEventListener("change", () => {
-      markComponentDetailDirty();
-    });
-  }
 
   document.addEventListener("click", (event) => {
     if (!_componentActionPopoverId) {
@@ -6911,33 +6777,13 @@ function bindBuilderHandlers() {
     });
   }
 
-  const dishTabButtons = document.querySelectorAll("[data-dish-tab]");
-  dishTabButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      setDishBuilderTab(button.getAttribute("data-dish-tab") || "overview");
-    });
-  });
 
-  const dishOverviewSaveBtn = document.getElementById("btnDishOverviewSave");
-  if (dishOverviewSaveBtn) {
-    dishOverviewSaveBtn.addEventListener("click", async () => {
-      await saveDishOverviewMetadata();
-    });
-  }
 
-  const dishOverviewNameInput = document.getElementById("dishOverviewName");
-  if (dishOverviewNameInput) {
-    dishOverviewNameInput.addEventListener("input", () => {
-      setDishOverviewStatus("");
-    });
-  }
 
-  const dishOverviewCategorySelect = document.getElementById("dishOverviewCategorySelect");
-  if (dishOverviewCategorySelect) {
-    dishOverviewCategorySelect.addEventListener("change", () => {
-      setDishOverviewStatus("");
-    });
-  }
+
+
+
+
 
   if (addComponentModalCloseBtn) {
     addComponentModalCloseBtn.addEventListener("click", () => {
@@ -6946,12 +6792,7 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (resolveCancelBtn) {
-    resolveCancelBtn.addEventListener("click", () => {
-      closeModalById("resolveModal");
-      closeResolveModal();
-    });
-  }
+
 
   document.querySelectorAll(".modal").forEach((modal) => {
     modal.addEventListener("click", async (event) => {
