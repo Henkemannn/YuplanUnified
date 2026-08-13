@@ -61,6 +61,25 @@ function createBuilderModalController(config) {
     currentComponentSearchQuery: config.currentComponentSearchQuery || null,
   };
 
+  const _state = {
+    currentBuilderComposition: null,
+    currentBuilderDishTab: "overview",
+    currentDishAllergenSummaryToken: 0,
+    currentDishCalculationSummaryToken: 0,
+    selectedComponentId: null,
+    pendingComponentCreateForCompositionId: null,
+    pendingComponentCreateForCompositionName: null,
+    pendingComponentCreateReturnTab: "components",
+    _activeComponentDetailId: "",
+    _activeComponentDetailTab: "overview",
+    _componentDetailDirty: false,
+    _componentDetailTagsDraft: [],
+  };
+
+  if (config.initialState && typeof config.initialState === "object") {
+    Object.assign(_state, config.initialState);
+  }
+
   // ── Duplicate-initialization guard ────────────────────────────────────
   let _listenersAttached = false;
 
@@ -71,23 +90,17 @@ function createBuilderModalController(config) {
   function _closeComponentDetailEditorSafe() {
     // Mirrors the inner closeComponentDetailEditor() from bindBuilderHandlers.
     // Defined here to keep modal backdrop and Escape handling in one place.
-    if (typeof _componentDetailDirty !== "undefined" && !_componentDetailDirty) {
+    if (!_state._componentDetailDirty) {
       closeModalById("componentDetailEditorModal");
-      if (typeof _activeComponentDetailId !== "undefined") {
-        _activeComponentDetailId = "";
-      }
+      _state._activeComponentDetailId = "";
       return Promise.resolve();
     }
     const shouldSave = window.confirm("Save changes before leaving?");
     if (shouldSave) {
       return saveActiveComponentDetailDraft().then(() => {
         closeModalById("componentDetailEditorModal");
-        if (typeof _activeComponentDetailId !== "undefined") {
-          _activeComponentDetailId = "";
-        }
-        if (typeof resetComponentDetailDirty === "function") {
-          resetComponentDetailDirty();
-        }
+        _state._activeComponentDetailId = "";
+        _state._componentDetailDirty = false;
       });
     }
     const shouldDiscard = window.confirm("Discard changes and close?");
@@ -95,12 +108,8 @@ function createBuilderModalController(config) {
       return Promise.resolve();
     }
     closeModalById("componentDetailEditorModal");
-    if (typeof _activeComponentDetailId !== "undefined") {
-      _activeComponentDetailId = "";
-    }
-    if (typeof resetComponentDetailDirty === "function") {
-      resetComponentDetailDirty();
-    }
+    _state._activeComponentDetailId = "";
+    _state._componentDetailDirty = false;
     return Promise.resolve();
   }
 
@@ -148,16 +157,14 @@ function createBuilderModalController(config) {
     const componentDetailReturnBtn = componentRoot.querySelector("#componentDetailReturnToDishBtn");
     if (componentDetailReturnBtn) {
       componentDetailReturnBtn.addEventListener("click", async () => {
-        const componentId = typeof _activeComponentDetailId !== "undefined"
-          ? String(_activeComponentDetailId || "").trim()
-          : "";
-        if (!componentId || !pendingComponentCreateForCompositionId) {
+        const componentId = String(_state._activeComponentDetailId || "").trim();
+        if (!componentId || !_state.pendingComponentCreateForCompositionId) {
           return;
         }
-        if (typeof _componentDetailDirty !== "undefined" && _componentDetailDirty) {
+        if (_state._componentDetailDirty) {
           await saveActiveComponentDetailDraft();
         }
-        if (typeof _componentDetailDirty !== "undefined" && _componentDetailDirty) {
+        if (_state._componentDetailDirty) {
           return;
         }
         const reopenedComposition = await reopenPendingCompositionForReturn();
@@ -172,12 +179,8 @@ function createBuilderModalController(config) {
           }
           clearPendingComponentCreateForComposition();
           closeModalById("componentDetailEditorModal");
-          if (typeof _activeComponentDetailId !== "undefined") {
-            _activeComponentDetailId = "";
-          }
-          if (typeof resetComponentDetailDirty === "function") {
-            resetComponentDetailDirty();
-          }
+          _state._activeComponentDetailId = "";
+          _state._componentDetailDirty = false;
         }
       });
     }
@@ -207,9 +210,7 @@ function createBuilderModalController(config) {
     const overviewDeleteBtn = componentRoot.querySelector("#componentDetailOverviewDelete");
     if (overviewDeleteBtn) {
       overviewDeleteBtn.addEventListener("click", async () => {
-        const idValue = typeof _activeComponentDetailId !== "undefined"
-          ? String(_activeComponentDetailId || "").trim()
-          : "";
+        const idValue = String(_state._activeComponentDetailId || "").trim();
         if (!idValue) {
           return;
         }
@@ -462,7 +463,27 @@ function createBuilderModalController(config) {
      * @returns {object|null}
      */
     getCurrentComposition() {
-      return typeof currentBuilderComposition !== "undefined" ? currentBuilderComposition : null;
+      return _state.currentBuilderComposition;
+    },
+
+    /**
+     * Read a modal-owned state value.
+     * @param {string} key
+     * @returns {*}
+     */
+    getState(key) {
+      return _state[key];
+    },
+
+    /**
+     * Update a modal-owned state value.
+     * @param {string} key
+     * @param {*} value
+     * @returns {*}
+     */
+    setState(key, value) {
+      _state[key] = value;
+      return value;
     },
 
     /**
@@ -471,8 +492,8 @@ function createBuilderModalController(config) {
      */
     onReusableComponentsRefreshed() {
       renderComponentPalette();
-      if (typeof currentBuilderComposition !== "undefined" && currentBuilderComposition) {
-        renderBuilderPanel(currentBuilderComposition);
+      if (_state.currentBuilderComposition) {
+        renderBuilderPanel(_state.currentBuilderComposition);
       }
     },
 

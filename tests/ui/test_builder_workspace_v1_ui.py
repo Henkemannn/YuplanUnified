@@ -187,7 +187,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'statusLine.classList.add("hidden");' in js
     assert 'Bygg rätt: ' not in js
     assert 'Justera vad som ska ingå i rätten.' not in js
-    assert 'let currentBuilderDishTab = "overview";' in js
+    assert 'defineBuilderModalStateAccessor("currentBuilderDishTab");' in js
     assert 'function dishBuilderTabValue(value) {' in js
     assert 'if (key === "components" || key === "allergens" || key === "calculation" || key === "overview") {' in js
     assert 'function setDishBuilderTab(tabValue) {' in js
@@ -779,7 +779,7 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'message: "Component details saved."' not in script
     assert 'function openBuilderModalForComposition(composition, initialTab = "overview") {' in script
     assert 'setDishBuilderTab(initialTab);' in script
-    assert 'let pendingComponentCreateReturnTab = "components";' in script
+    assert 'defineBuilderModalStateAccessor("pendingComponentCreateReturnTab");' in script
     assert 'function updateComponentDetailReturnAction() {' in script
     add_component_handler_start = script.find('if (addComponentBtn) {')
     add_component_handler_end = script.find('if (recipeCreateBtn) {')

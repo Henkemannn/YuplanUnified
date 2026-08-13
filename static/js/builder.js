@@ -126,19 +126,67 @@ let _componentCategoryFilter = "all";
 let _componentTagFilter = "all";
 let _componentInlineEditId = "";
 let _componentActionPopoverId = "";
-let _activeComponentDetailId = "";
-let _activeComponentDetailTab = "overview";
-let _componentDetailDirty = false;
-let _componentDetailTagsDraft = [];
-let pendingComponentCreateForCompositionId = null;
-let pendingComponentCreateForCompositionName = null;
-let pendingComponentCreateReturnTab = "components";
+let _builderModalController = null;
+
+const _builderModalShadowState = {
+  currentBuilderComposition: null,
+  currentBuilderDishTab: "overview",
+  currentDishAllergenSummaryToken: 0,
+  currentDishCalculationSummaryToken: 0,
+  selectedComponentId: null,
+  pendingComponentCreateForCompositionId: null,
+  pendingComponentCreateForCompositionName: null,
+  pendingComponentCreateReturnTab: "components",
+  _activeComponentDetailId: "",
+  _activeComponentDetailTab: "overview",
+  _componentDetailDirty: false,
+  _componentDetailTagsDraft: [],
+};
+
+function getBuilderModalState(key) {
+  if (_builderModalController && typeof _builderModalController.getState === "function") {
+    return _builderModalController.getState(key);
+  }
+  return _builderModalShadowState[key];
+}
+
+function setBuilderModalState(key, value) {
+  _builderModalShadowState[key] = value;
+  if (_builderModalController && typeof _builderModalController.setState === "function") {
+    return _builderModalController.setState(key, value);
+  }
+  return value;
+}
+
+function defineBuilderModalStateAccessor(key) {
+  Object.defineProperty(globalThis, key, {
+    configurable: true,
+    enumerable: false,
+    get() {
+      return getBuilderModalState(key);
+    },
+    set(value) {
+      setBuilderModalState(key, value);
+    },
+  });
+}
+
+defineBuilderModalStateAccessor("currentBuilderComposition");
+defineBuilderModalStateAccessor("currentBuilderDishTab");
+defineBuilderModalStateAccessor("currentDishAllergenSummaryToken");
+defineBuilderModalStateAccessor("currentDishCalculationSummaryToken");
+defineBuilderModalStateAccessor("selectedComponentId");
+defineBuilderModalStateAccessor("pendingComponentCreateForCompositionId");
+defineBuilderModalStateAccessor("pendingComponentCreateForCompositionName");
+defineBuilderModalStateAccessor("pendingComponentCreateReturnTab");
+defineBuilderModalStateAccessor("_activeComponentDetailId");
+defineBuilderModalStateAccessor("_activeComponentDetailTab");
+defineBuilderModalStateAccessor("_componentDetailDirty");
+defineBuilderModalStateAccessor("_componentDetailTagsDraft");
 window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";
 console.log("Builder JS active: builder-modal-system-reset-1");
 
 /** @type {ReturnType<typeof createBuilderModalController>|null} */
-let _builderModalController = null;
-
 const IMPORT_LEADING_LABEL_RE = /^([A-Za-zÅÄÖåäö\s]+):\s*/;
 const IMPORT_LEADING_LABEL_TOKENS = new Set([
   "dessert",
@@ -3826,12 +3874,7 @@ async function loadLibrary() {
   await refreshWorkspaceOverviewCounts(result);
 }
 
-let currentBuilderComposition = null;
-let currentBuilderDishTab = "overview";
-let currentDishAllergenSummaryToken = 0;
-let currentDishCalculationSummaryToken = 0;
 let reusableComponentsCache = [];
-let selectedComponentId = null;
 let draggedComponentEntryKey = null;
 let pendingAddedPulseComponentId = null;
 let pendingSelectedPulseComponentId = null;
@@ -6427,6 +6470,7 @@ function bindBuilderHandlers() {
     updateComponentCategoryChipCounts: updateComponentCategoryChipCounts,
     filterLibraryComponents: filterLibraryComponents,
     currentComponentSearchQuery: currentComponentSearchQuery,
+    initialState: _builderModalShadowState,
   });
   // ─────────────────────────────────────────────────────────────────────────
 

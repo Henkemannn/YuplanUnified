@@ -122,6 +122,48 @@ def test_builder_js_initializes_shared_controller(client_admin) -> None:
     assert "_builderModalController = createBuilderModalController({" in script
     assert "compositionRoot:" in script
     assert "componentRoot:" in script
+    assert "initialState: _builderModalShadowState" in script
+
+
+def test_modal_state_is_owned_by_controller(client_admin) -> None:
+    """Modal-local state is stored on the controller instance, not as top-level builder.js declarations."""
+    script = _builder_js(client_admin)
+    controller = _controller_js(client_admin)
+
+    # Controller owns the modal state container and state accessors.
+    assert "const _state = {" in controller
+    assert "getState(key)" in controller
+    assert "setState(key, value)" in controller
+    assert "currentBuilderComposition: null" in controller
+    assert "_componentDetailDirty: false" in controller
+
+    # builder.js no longer declares modal-local state as top-level let bindings.
+    assert "let currentBuilderComposition = null;" not in script
+    assert "let currentBuilderDishTab = \"overview\";" not in script
+    assert "let currentDishAllergenSummaryToken = 0;" not in script
+    assert "let currentDishCalculationSummaryToken = 0;" not in script
+    assert "let selectedComponentId = null;" not in script
+    assert "let pendingComponentCreateForCompositionId = null;" not in script
+    assert "let pendingComponentCreateForCompositionName = null;" not in script
+    assert "let pendingComponentCreateReturnTab = \"components\";" not in script
+    assert "let _activeComponentDetailId = \"\";" not in script
+    assert "let _activeComponentDetailTab = \"overview\";" not in script
+    assert "let _componentDetailDirty = false;" not in script
+    assert "let _componentDetailTagsDraft = [];" not in script
+
+
+def test_workspace_state_stays_in_builder_js(client_admin) -> None:
+    """Builder workspace state remains in builder.js and is not absorbed by the modal controller."""
+    script = _builder_js(client_admin)
+    controller = _controller_js(client_admin)
+
+    assert "let reusableComponentsCache = [];" in script
+    assert "let _workspaceSurface = \"home\";" in script
+    assert "let _cachedLibraryComponents = [];" in script
+    assert "let _cachedLibraryCompositions = [];" in script
+    assert "_workspaceSurface" not in controller
+    assert "_cachedLibraryComponents" not in controller
+    assert "_cachedLibraryCompositions" not in controller
 
 
 # ── Guard 7: No duplicate modal implementation in builder.js ─────────────────
