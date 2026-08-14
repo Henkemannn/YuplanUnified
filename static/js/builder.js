@@ -5987,23 +5987,6 @@ function bindBuilderHandlers() {
     }
   });
 
-  document.addEventListener("click", (event) => {
-    const panel = document.getElementById("dishComponentsPanel");
-    if (!panel || panel.classList.contains("hidden") || panel.hasAttribute("hidden")) {
-      return;
-    }
-
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      closeDishComponentOverflowMenus();
-      return;
-    }
-    if (target.closest("#dishComponentsPanel .component-overflow")) {
-      return;
-    }
-    closeDishComponentOverflowMenus();
-  });
-
   if (createDishBtn) {
     createDishBtn.addEventListener("click", async () => {
       const freeDishNameEl = document.getElementById("freeDishName");

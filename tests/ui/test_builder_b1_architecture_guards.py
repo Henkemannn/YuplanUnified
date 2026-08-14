@@ -200,6 +200,18 @@ def test_modal_controller_not_duplicated_in_builder_js(client_admin) -> None:
     ), "dishTabButtons forEach listener must be in controller, not builder.js"
 
 
+def test_dish_overflow_outside_click_handler_is_controller_owned(client_admin) -> None:
+    """The Dish component overflow outside-click handler is registered only by the controller."""
+    script = _builder_js(client_admin)
+    controller = _controller_js(client_admin)
+
+    assert controller.count('document.addEventListener("click", (event) => {') >= 1
+    assert 'const panel = compositionRoot.querySelector("#dishComponentsPanel");' in controller
+    assert controller.count('target.closest("#dishComponentsPanel .component-overflow")') >= 1
+
+    assert 'target.closest("#dishComponentsPanel .component-overflow")' not in script
+
+
 # ── Guard 8: Repeated-init guard prevents double registration ────────────────
 
 

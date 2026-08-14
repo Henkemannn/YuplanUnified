@@ -270,7 +270,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'overflow.addEventListener("toggle", () => {' in builder_panel_js
     assert 'menu.addEventListener("click", (event) => {' in builder_panel_js
     assert 'event.stopPropagation();' in builder_panel_js
-    assert 'target.closest("#dishComponentsPanel .component-overflow")' in js
+    assert 'target.closest("#dishComponentsPanel .component-overflow")' not in js
     assert 'const didCloseDishOverflow = closeDishComponentOverflowMenus();' in js
     assert 'if (nextTab === "allergens") {' in js
     assert 'loadDishAllergenSummaryForCurrentComposition().catch(() => {' in js
