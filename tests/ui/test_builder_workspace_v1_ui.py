@@ -13,7 +13,12 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert "Yuplan Builder" in html
     assert "UI foundation v1 active" in html
     assert 'id="builderUiVersionMarker"' in html
+    assert '<script src="/static/js/builder_component_editor.js"></script>' in html
     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' in html
+    ce_pos = html.find("builder_component_editor.js")
+    ctrl_pos = html.find("builder_modal_controller.js")
+    builder_pos = html.find("builder.js?v=")
+    assert ce_pos < ctrl_pos < builder_pos
 
     # Legacy modal identified in stuck screenshot should be present.
     assert 'id="addComponentModal"' in html
@@ -672,41 +677,16 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'if (modal.id === "componentDetailEditorModal") {' in script
     assert 'await closeComponentDetailEditor();' in script
     assert 'function renderRecipeIngredientRows(rows) {' in script
-    assert 'ingredient.placeholder = "Ingrediens";' in script
-    assert 'amountValue.placeholder = "Mängd";' in script
-    assert 'amountUnit.placeholder = "Enhet (g/ml/dl/kg/l/st)";' in script
-    assert 'removeBtn.setAttribute("aria-label", "Ta bort ingrediensrad");' in script
-    assert 'function buildCalculationRowsFromRecipeRows(recipeRows, existingCalculationRows) {' in script
     assert 'function syncCalculationRowsFromRecipeRows() {' in script
-    assert 'renderCalculationRows(buildCalculationRowsFromRecipeRows(recipeRows, existing));' in script
-    assert 'function renderCalculationRows(rows) {' in script
-    assert 'priceUnit.placeholder = "Prisenhet (kr/kg, kr/l, kr/st)";' in script
-    assert 'calcCost.placeholder = "Kostnad";' in script
-    assert 'function recalculateCalculationRowsCost() {' in script
-    assert 'removeBtn.className = "builder-row-remove-icon";' in script
-    assert 'removeBtn.textContent = "x";' in script
-    assert 'removeBtn.textContent = "Remove row";' not in script
-    assert 'if (amountUnit === "dl") {' in script
-    assert 'if (amountUnit === "g") {' in script
+    assert 'deleteComponentFromLibrary' in script
     assert 'actions.appendChild(categorySelect);' not in script
     assert 'const tagRow = document.createElement("div");' not in script
     assert 'builder-tag-row' not in script
-    assert 'refs.composition_names' in script
-    # deleteComponentFromLibrary is invoked via controller callback from builder_modal_controller.js
-    assert 'deleteComponentFromLibrary' in script
-    assert 'Den här komponenten används i ' in script
-    assert 'usedCount === 1 ? " rätt" : " rätter"' in script
-    assert 'uniqueDishNames.slice(0, 10)' in script
-    assert 'uniqueDishNames.length > 10 ? "\\n- +" + String(uniqueDishNames.length - 10) + " fler" : ""' in script
-    assert 'Används i:' in script
-    assert 'Nästa steg: öppna berörd rätt för att ta bort eller ersätta komponenten, eller byt namn på komponenten.' in script
 
     # Home/Components are separate views, not one stacked mixed page.
     assert 'overview.classList.toggle("hidden", _workspaceSurface !== "home");' in script
     assert 'components.classList.toggle("hidden", _workspaceSurface !== "components");' in script
     assert 'function openComponentDetailEditor(componentId, initialTab) {' in script
-    assert 'const requestedTab = componentDetailTabValue(initialTab || "overview");' in script
-    assert 'openSimpleModal("componentDetailEditorModal");' in script
     assert 'openSimpleModal("componentDetailModal");' not in script
     assert 'const libraryComponentsGrid = document.getElementById("libraryComponentsGrid");' in script
     assert 'const importLinesEl = document.getElementById("importLibraryLines");' in script
@@ -729,25 +709,11 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'keyboardEvent.stopPropagation();' in script
     assert 'target.closest("[data-component-secondary-action=\'1\']")' in script
     assert 'function saveActiveComponentDetailDraft() {' in script
-    assert 'const modal = document.getElementById("componentDetailEditorModal");' in script
-    assert 'const tabButtons = modal' in script
-    assert 'const tabPanels = modal' in script
-    assert 'modal.querySelectorAll(".component-detail-panel[data-component-panel]")' in script
     assert 'panel.classList.toggle("hidden", !active);' in script
     assert 'panel.setAttribute("hidden", "hidden");' in script
     assert 'panel.removeAttribute("hidden");' in script
-    assert 'function parseComponentTagsInput(value) {' in script
-    assert 'function formatComponentTagsInput(tags) {' in script
-    assert 'function renderComponentDetailTagChips() {' in script
-    assert 'function renderComponentDetailTagSuggestions() {' in script
-    assert 'function addComponentDetailTagsFromInput(rawValue) {' in script
-    assert 'function removeComponentDetailTag(tagValue) {' in script
     assert 'const componentDetailTagsInput = document.getElementById("componentDetailTagsInput");' in script
     assert 'const componentDetailTagsChips = document.getElementById("componentDetailTagsChips");' in script
-    # componentDetailTagsInput keydown/blur handler registered in builder_modal_controller.js
-    # 'if (event.key !== "Enter" && event.key !== ",")' is in builder_modal_controller.js
-    assert 'remove.setAttribute("data-remove-tag", tag);' in script
-    assert 'tags: currentComponentDetailTags(),' in script
     assert 'function componentTagCatalog(items) {' in script
     assert 'function renderComponentTagFilterOptions(selectEl, items, activeTag) {' in script
     assert 'const tagFilterSelect = document.getElementById("libraryComponentsCategoryFilter");' in script
@@ -765,18 +731,14 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'const unique = new Set();' in script
     assert 'for (const tag of componentTagValues(item)) {' in script
     assert '.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }))' in script
-    assert '"/api/builder/components/" + encodeURIComponent(idValue) + "/details"' in script
+    # Component API persistence bodies now live in builder_component_editor.js, not builder.js.
+    assert '"/api/builder/components/" + encodeURIComponent(idValue) + "/details"' not in script
     assert 'method: "GET"' in script
     assert 'method: "PATCH"' in script
     assert 'window.localStorage.setItem(componentDetailStorageKey(idValue), JSON.stringify(payload));' not in script
     assert 'window.localStorage.getItem(key);' not in script
-    # setComponentDetailTab(tabValue) call is in builder_modal_controller.js tab click handler
     assert 'setComponentDetailTab(' in script
     assert 'closeModalById("componentDetailEditorModal");' in script
-    assert 'message: "Komponentdetaljer laddade."' in script
-    assert 'message: "Komponentdetaljer sparade."' in script
-    assert 'message: "Component details loaded."' not in script
-    assert 'message: "Component details saved."' not in script
     assert 'function openBuilderModalForComposition(composition, initialTab = "overview") {' in script
     assert 'setDishBuilderTab(initialTab);' in script
     assert 'defineBuilderModalStateAccessor("pendingComponentCreateReturnTab");' in script
@@ -793,9 +755,7 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'await attachComponentToPendingComposition(createdComponentId);' not in script
     assert 'if (createdComponentId && pendingComponentCreateForCompositionId)' in script
     assert 'else if (createdComponentId && result.data.duplicate)' in script
-    assert 'componentDetailReturnToDishBtn' in script
-    assert 'Lägg till i ' in script
-    # reopenPendingCompositionForReturn is called from builder_modal_controller.js return-to-dish handler
+    # Dish return orchestration stays in builder.js; Component editor receives it as a callback.
     assert 'async function reopenPendingCompositionForReturn() {' in script
     assert 'clearPendingComponentCreateForComposition();' in script
     assert 'await loadLibrary();' in script
@@ -821,9 +781,6 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'panel.style.display = "";' in script
     assert 'panel.removeAttribute("aria-hidden");' in script
     assert 'panel.inert = false;' in script
-    assert 'recipe_ingredient_rows: recipeIngredientRows,' in script
-    assert 'calculation_rows: normalizeCalculationRows(calculationRows),' in script
-    assert 'allergens,' in script
 
     # Existing builder foundation behavior should still be present.
     assert 'console.info("Builder UI version: foundation-v1");' in script

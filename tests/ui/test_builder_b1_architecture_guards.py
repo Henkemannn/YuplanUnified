@@ -15,6 +15,10 @@ These tests verify:
 11. Component has recipe/method.
 12. Engine Ownership Contract document exists.
 13. Workspace callbacks are explicitly separated.
+14. [C1] builder_component_editor.js exists, is loaded before controller, and owns real Component implementation.
+15. [C1] builder.js does not contain extracted Component implementation bodies.
+16. [C1] controller instantiates component editor via factory.
+17. [C1] no builder_modal_runtime.js exists.
 """
 from __future__ import annotations
 
@@ -42,6 +46,12 @@ def _builder_js(client_admin) -> str:
 
 def _controller_js(client_admin) -> str:
     rv = client_admin.get("/static/js/builder_modal_controller.js")
+    assert rv.status_code == 200
+    return rv.data.decode("utf-8")
+
+
+def _component_editor_js(client_admin) -> str:
+    rv = client_admin.get("/static/js/builder_component_editor.js")
     assert rv.status_code == 200
     return rv.data.decode("utf-8")
 
@@ -347,3 +357,112 @@ def test_offshore_files_not_modified() -> None:
             assert not changed_file.startswith(offshore_path), (
                 f"Offshore file modified: {changed_file}"
             )
+
+
+# ── Guard C1-1: Component editor file exists and is served ───────────────────
+
+
+def test_component_editor_script_served(client_admin) -> None:
+    """builder_component_editor.js is served and defines createBuilderComponentEditor."""
+    editor = _component_editor_js(client_admin)
+    assert "function createBuilderComponentEditor(" in editor
+
+
+def test_component_editor_loaded_before_controller(client_admin) -> None:
+    """builder_component_editor.js is loaded before the controller and builder.js."""
+    html = _workspace_html(client_admin)
+    assert "builder_component_editor.js" in html
+    editor_pos = html.find("builder_component_editor.js")
+    ctrl_pos = html.find("builder_modal_controller.js")
+    builder_pos = html.find("builder.js")
+    assert editor_pos < ctrl_pos < builder_pos, (
+        "builder_component_editor.js must load before controller, which must load before builder.js"
+    )
+
+
+# ── Guard C1-2: Real Component implementation lives in the editor file ────────
+
+
+def test_component_editor_owns_real_implementation(client_admin) -> None:
+    """The real Component editor behavior lives in builder_component_editor.js."""
+    editor = _component_editor_js(client_admin)
+    assert "function fetchComponentDetailDraft(componentId)" in editor
+    assert '"/api/builder/components/" + encodeURIComponent(idValue) + "/details"' in editor
+    assert "function renderRecipeIngredientRows(rows)" in editor
+    assert "function syncCalculationRowsFromRecipeRows()" in editor
+    assert "function addComponentDetailTagsFromInput(rawValue)" in editor
+    assert "function deleteComponentFromLibrary(componentId, componentName)" in editor
+    assert "function saveActiveComponentDetailDraft()" in editor
+    assert "Recept" in editor or "recipe" in editor.lower()
+
+
+def test_component_editor_owns_recipe_method(client_admin) -> None:
+    """Recept & metod implementation lives only in builder_component_editor.js."""
+    editor = _component_editor_js(client_admin)
+    assert "componentDetailMethodText" in editor
+    assert "componentDetailMethodNotes" in editor
+    assert "componentDetailRecipeIngredientRows" in editor
+
+
+# ── Guard C1-3: builder.js does not retain extracted implementation bodies ────
+
+
+def test_builder_js_no_component_detail_api_bodies(client_admin) -> None:
+    """builder.js does not contain the Component detail API persistence bodies."""
+    script = _builder_js(client_admin)
+    assert '"/api/builder/components/" + encodeURIComponent(idValue) + "/details"' not in script
+    assert "normalizeComponentDetailDraft" not in script
+    assert "defaultComponentDetailDraft" not in script
+
+
+def test_builder_js_no_recipe_render_bodies(client_admin) -> None:
+    """builder.js does not contain recipe row render or calculation sync bodies."""
+    script = _builder_js(client_admin)
+    assert "normalizeRecipeIngredientRows" not in script
+    assert "parseLegacyRecipeIngredientText" not in script
+    assert "recipeIngredientRowsToLegacyText" not in script
+    assert "recalculateCalculationRowsCost" not in script
+    assert "renderCalculationRows" not in script or "_getBuilderComponentEditor" in script
+
+
+def test_builder_js_no_tag_implementation(client_admin) -> None:
+    """builder.js does not contain Component tag management bodies."""
+    script = _builder_js(client_admin)
+    assert "parseComponentTagsInput" not in script
+    assert "normalizeComponentDetailTagValue" not in script
+    assert "renderComponentDetailTagChips" not in script
+    assert "setComponentDetailTags" not in script
+
+
+# ── Guard C1-4: Controller instantiates the component editor via factory ─────
+
+
+def test_controller_instantiates_component_editor(client_admin) -> None:
+    """The controller creates a component editor instance at initialization."""
+    controller = _controller_js(client_admin)
+    assert "_componentEditorFactory" in controller
+    assert "_componentEditor" in controller
+    assert "createBuilderComponentEditor" in controller
+    assert "getComponentEditor()" in controller
+
+
+def test_builder_js_passes_editor_factory_to_controller(client_admin) -> None:
+    """builder.js passes createBuilderComponentEditor as a factory to the controller."""
+    script = _builder_js(client_admin)
+    assert "componentEditorFactory: createBuilderComponentEditor" in script
+    assert "getCachedComponents: () => _cachedLibraryComponents" in script
+    assert "getCachedCompositions: () => _cachedLibraryCompositions" in script
+
+
+# ── Guard C1-5: No builder_modal_runtime.js ───────────────────────────────────
+
+
+def test_no_builder_modal_runtime_file() -> None:
+    """builder_modal_runtime.js must not exist."""
+    assert not os.path.isfile(os.path.join("static", "js", "builder_modal_runtime.js"))
+
+
+def test_no_builder_modal_runtime_in_template(client_admin) -> None:
+    """builder_modal_runtime.js must not appear in the workspace template."""
+    html = _workspace_html(client_admin)
+    assert "builder_modal_runtime" not in html

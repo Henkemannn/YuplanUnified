@@ -83,13 +83,40 @@ function createBuilderModalController(config) {
   // ── Duplicate-initialization guard ────────────────────────────────────
   let _listenersAttached = false;
 
+  // ── Component editor instance ─────────────────────────────────────────
+  const _componentEditorFactory =
+    typeof config.componentEditorFactory === "function"
+      ? config.componentEditorFactory
+      : (typeof createBuilderComponentEditor === "function" ? createBuilderComponentEditor : null);
+
+  const _componentEditor = _componentEditorFactory
+    ? _componentEditorFactory({
+        callApi: config.callApi,
+        state: {
+          get: (key) => _state[key],
+          set: (key, value) => { _state[key] = value; return value; },
+        },
+        getCachedComponents: config.getCachedComponents,
+        getCachedCompositions: config.getCachedCompositions,
+        loadLibrary: _callbacks.loadLibrary,
+        filterLibraryComponents: _callbacks.filterLibraryComponents,
+        updateComponentCategoryChipCounts: _callbacks.updateComponentCategoryChipCounts,
+        currentComponentSearchQuery: _callbacks.currentComponentSearchQuery,
+        showLoading: config.showLoading,
+        showJson: config.showJson,
+        closeModalById: config.closeModalById,
+        openSimpleModal: config.openSimpleModal,
+        reopenPendingCompositionForReturn: config.reopenPendingCompositionForReturn,
+        attachExistingComponentToCurrentComposition: config.attachExistingComponentToCurrentComposition,
+        clearPendingComponentCreateForComposition: config.clearPendingComponentCreateForComposition,
+      })
+    : null;
+
   // ════════════════════════════════════════════════════════════════════════
-  // PRIVATE HELPERS — delegate to builder.js globals
+  // PRIVATE HELPERS
   // ════════════════════════════════════════════════════════════════════════
 
   function _closeComponentDetailEditorSafe() {
-    // Mirrors the inner closeComponentDetailEditor() from bindBuilderHandlers.
-    // Defined here to keep modal backdrop and Escape handling in one place.
     if (!_state._componentDetailDirty) {
       closeModalById("componentDetailEditorModal");
       _state._activeComponentDetailId = "";
@@ -97,7 +124,10 @@ function createBuilderModalController(config) {
     }
     const shouldSave = window.confirm("Save changes before leaving?");
     if (shouldSave) {
-      return saveActiveComponentDetailDraft().then(() => {
+      const savePromise = _componentEditor
+        ? _componentEditor.saveActiveComponentDetailDraft()
+        : Promise.resolve();
+      return savePromise.then(() => {
         closeModalById("componentDetailEditorModal");
         _state._activeComponentDetailId = "";
         _state._componentDetailDirty = false;
@@ -133,7 +163,7 @@ function createBuilderModalController(config) {
         if (!target) {
           return;
         }
-        setComponentDetailTab(String(target.getAttribute("data-component-tab") || "overview"));
+        if (_componentEditor) _componentEditor.setComponentDetailTab(String(target.getAttribute("data-component-tab") || "overview"));
       });
     }
 
@@ -141,7 +171,7 @@ function createBuilderModalController(config) {
     const componentDetailSaveBtn = componentRoot.querySelector("#componentDetailSaveChanges");
     if (componentDetailSaveBtn) {
       componentDetailSaveBtn.addEventListener("click", async () => {
-        await saveActiveComponentDetailDraft();
+        if (_componentEditor) await _componentEditor.saveActiveComponentDetailDraft();
       });
     }
 
@@ -162,7 +192,7 @@ function createBuilderModalController(config) {
           return;
         }
         if (_state._componentDetailDirty) {
-          await saveActiveComponentDetailDraft();
+          if (_componentEditor) await _componentEditor.saveActiveComponentDetailDraft();
         }
         if (_state._componentDetailDirty) {
           return;
@@ -193,8 +223,8 @@ function createBuilderModalController(config) {
         if (!nameInput) {
           return;
         }
-        nameInput.value = cleanComponentInlineName(nameInput.value);
-        markComponentDetailDirty();
+        nameInput.value = _componentEditor ? _componentEditor.cleanComponentInlineName(nameInput.value) : nameInput.value;
+        if (_componentEditor) _componentEditor.markComponentDetailDirty();
       });
     }
 
@@ -202,7 +232,7 @@ function createBuilderModalController(config) {
     const overviewCategoryInput = componentRoot.querySelector("#componentDetailOverviewCategory");
     if (overviewCategoryInput) {
       overviewCategoryInput.addEventListener("change", () => {
-        markComponentDetailDirty();
+        if (_componentEditor) _componentEditor.markComponentDetailDirty();
       });
     }
 
@@ -216,7 +246,7 @@ function createBuilderModalController(config) {
         }
         const nameInput = componentRoot.querySelector("#componentDetailOverviewName");
         const componentName = nameInput ? String(nameInput.value || "") : idValue;
-        await deleteComponentFromLibrary(idValue, componentName);
+        if (_componentEditor) await _componentEditor.deleteComponentFromLibrary(idValue, componentName);
       });
     }
 
@@ -228,17 +258,17 @@ function createBuilderModalController(config) {
           return;
         }
         event.preventDefault();
-        const didAdd = addComponentDetailTagsFromInput(tagsInput.value);
+        const didAdd = _componentEditor ? _componentEditor.addComponentDetailTagsFromInput(tagsInput.value) : false;
         tagsInput.value = "";
         if (didAdd) {
-          markComponentDetailDirty();
+          if (_componentEditor) _componentEditor.markComponentDetailDirty();
         }
       });
       tagsInput.addEventListener("blur", () => {
-        const didAdd = addComponentDetailTagsFromInput(tagsInput.value);
+        const didAdd = _componentEditor ? _componentEditor.addComponentDetailTagsFromInput(tagsInput.value) : false;
         tagsInput.value = "";
         if (didAdd) {
-          markComponentDetailDirty();
+          if (_componentEditor) _componentEditor.markComponentDetailDirty();
         }
       });
     }
@@ -256,8 +286,8 @@ function createBuilderModalController(config) {
           return;
         }
         const tagValue = String(removeBtn.getAttribute("data-remove-tag") || "");
-        if (removeComponentDetailTag(tagValue)) {
-          markComponentDetailDirty();
+        if (_componentEditor && _componentEditor.removeComponentDetailTag(tagValue)) {
+          _componentEditor.markComponentDetailDirty();
         }
       });
     }
@@ -266,10 +296,11 @@ function createBuilderModalController(config) {
     const recipeAddRowBtn = componentRoot.querySelector("#componentDetailRecipeAddRow");
     if (recipeAddRowBtn) {
       recipeAddRowBtn.addEventListener("click", () => {
-        const existingRows = readRecipeIngredientRowsFromForm();
-        existingRows.push(defaultRecipeIngredientRow());
-        renderRecipeIngredientRows(existingRows);
-        markComponentDetailDirty();
+        if (!_componentEditor) return;
+        const existingRows = _componentEditor.readRecipeIngredientRowsFromForm();
+        existingRows.push(_componentEditor.defaultRecipeIngredientRow());
+        _componentEditor.renderRecipeIngredientRows(existingRows);
+        _componentEditor.markComponentDetailDirty();
       });
     }
 
@@ -277,17 +308,17 @@ function createBuilderModalController(config) {
     const calcSyncRowsBtn = componentRoot.querySelector("#componentDetailCalcSyncRows");
     if (calcSyncRowsBtn) {
       calcSyncRowsBtn.addEventListener("click", () => {
-        syncCalculationRowsFromRecipeRows();
-        markComponentDetailDirty();
+        if (_componentEditor) _componentEditor.syncCalculationRowsFromRecipeRows();
+        if (_componentEditor) _componentEditor.markComponentDetailDirty();
       });
     }
 
     // ── Component detail: dirty tracking on any input/change ──────────
     componentRoot.addEventListener("input", () => {
-      markComponentDetailDirty();
+      if (_componentEditor) _componentEditor.markComponentDetailDirty();
     });
     componentRoot.addEventListener("change", () => {
-      markComponentDetailDirty();
+      if (_componentEditor) _componentEditor.markComponentDetailDirty();
     });
 
     // ── Component detail: backdrop click to close ─────────────────────
@@ -401,7 +432,12 @@ function createBuilderModalController(config) {
      * @param {string} [initialTab]
      */
     openComponentDetailEditor(componentId, initialTab) {
-      openComponentDetailEditor(componentId, initialTab);
+      if (_componentEditor) return _componentEditor.openComponentDetailEditor(componentId, initialTab);
+      return Promise.resolve();
+    },
+
+    getComponentEditor() {
+      return _componentEditor;
     },
 
     /**
