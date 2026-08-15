@@ -14,11 +14,13 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert "UI foundation v1 active" in html
     assert 'id="builderUiVersionMarker"' in html
     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
+    assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' in html
     ce_pos = html.find("builder_component_editor.js")
+    de_pos = html.find("builder_dish_editor.js")
     ctrl_pos = html.find("builder_modal_controller.js")
     builder_pos = html.find("builder.js?v=")
-    assert ce_pos < ctrl_pos < builder_pos
+    assert ce_pos < de_pos < ctrl_pos < builder_pos
 
     # Legacy modal identified in stuck screenshot should be present.
     assert 'id="addComponentModal"' in html
@@ -282,11 +284,19 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'component-data-icon' in builder_panel_js
     assert 'component-conflict-badge' not in builder_panel_js
     assert 'async function saveDishOverviewMetadata() {' in js
-    assert '"/api/builder/compositions/" +' in js
-    assert 'method: "PATCH"' in js
-    assert 'composition_name,' in js
-    assert 'library_group,' in js
-    assert 'setDishOverviewStatus("Ändringarna sparades.");' in js
+    assert 'const editor = _getBuilderDishEditor();' in js
+    assert 'return editor.saveDishOverviewMetadata();' in js
+
+    dish_editor_rv = client_admin.get("/static/js/builder_dish_editor.js")
+    assert dish_editor_rv.status_code == 200
+    dish_editor_js = dish_editor_rv.data.decode("utf-8")
+    assert 'function createBuilderDishEditor(' in dish_editor_js
+    assert 'async function saveDishOverviewMetadata() {' in dish_editor_js
+    assert '"/api/builder/compositions/" +' in dish_editor_js
+    assert 'method: "PATCH"' in dish_editor_js
+    assert 'composition_name,' in dish_editor_js
+    assert 'library_group,' in dish_editor_js
+    assert 'setDishOverviewStatus("Ändringarna sparades.");' in dish_editor_js
     css_rv = client_admin.get("/static/css/builder.css")
     assert css_rv.status_code == 200
     css = css_rv.data.decode("utf-8")

@@ -56,6 +56,12 @@ def _component_editor_js(client_admin) -> str:
     return rv.data.decode("utf-8")
 
 
+def _dish_editor_js(client_admin) -> str:
+    rv = client_admin.get("/static/js/builder_dish_editor.js")
+    assert rv.status_code == 200
+    return rv.data.decode("utf-8")
+
+
 def _composition_partial() -> str:
     path = os.path.join("templates", "builder", "_composition_modal.html")
     with open(path, encoding="utf-8") as f:
@@ -113,10 +119,16 @@ def test_component_detail_modal_rendered_exactly_once(client_admin) -> None:
 def test_shared_modal_controller_script_loaded(client_admin) -> None:
     """builder_modal_controller.js is served and included before builder.js."""
     html = _workspace_html(client_admin)
+    assert 'builder_dish_editor.js' in html, "dish editor script not in template"
     assert 'builder_modal_controller.js' in html, "controller script not in template"
+    dish_pos = html.find("builder_dish_editor.js")
     ctrl_pos = html.find("builder_modal_controller.js")
     builder_pos = html.find("builder.js")
-    assert ctrl_pos < builder_pos, "controller must be loaded before builder.js"
+    assert dish_pos < ctrl_pos < builder_pos, "dish editor must load before controller, which must load before builder.js"
+
+    rv = client_admin.get("/static/js/builder_dish_editor.js")
+    assert rv.status_code == 200
+    assert rv.content_type.startswith("application/javascript") or "javascript" in rv.content_type
 
     rv = client_admin.get("/static/js/builder_modal_controller.js")
     assert rv.status_code == 200
@@ -130,6 +142,7 @@ def test_builder_js_initializes_shared_controller(client_admin) -> None:
     """builder.js calls createBuilderModalController() to initialize the modal engine."""
     script = _builder_js(client_admin)
     assert "_builderModalController = createBuilderModalController({" in script
+    assert "dishEditorFactory: createBuilderDishEditor" in script
     assert "compositionRoot:" in script
     assert "componentRoot:" in script
     assert "initialState: _builderModalShadowState" in script
@@ -146,6 +159,8 @@ def test_modal_state_is_owned_by_controller(client_admin) -> None:
     assert "setState(key, value)" in controller
     assert "currentBuilderComposition: null" in controller
     assert "_componentDetailDirty: false" in controller
+    assert "getDishEditor()" in controller
+    assert "_dishEditor" in controller
 
     # builder.js no longer declares modal-local state as top-level let bindings.
     assert "let currentBuilderComposition = null;" not in script
@@ -198,6 +213,36 @@ def test_modal_controller_not_duplicated_in_builder_js(client_admin) -> None:
     assert (
         'dishTabButtons.forEach((button) => {' not in script
     ), "dishTabButtons forEach listener must be in controller, not builder.js"
+
+
+def test_dish_editor_owns_overview_persistence(client_admin) -> None:
+    """Dish overview persistence lives in builder_dish_editor.js, not builder.js."""
+    script = _builder_js(client_admin)
+    dish_editor = _dish_editor_js(client_admin)
+
+    assert "function createBuilderDishEditor(" in dish_editor
+    assert "async function saveDishOverviewMetadata()" in dish_editor
+    assert "function syncDishModalHeader(composition)" in dish_editor
+    assert "function syncDishOverviewInputs(composition)" in dish_editor
+    assert "function setDishOverviewStatus(message, isError = false)" in dish_editor
+    assert "function dishOverviewCategoryLabel(composition)" in dish_editor
+    assert '"/api/builder/compositions/" +' in dish_editor
+    assert 'setDishOverviewStatus("Ändringarna sparades.");' in dish_editor
+    assert 'showLoading("builderOut");' in dish_editor
+    assert 'loadCompositionTextPreviewForCurrentComposition(' in dish_editor
+
+    save_start = script.find("async function saveDishOverviewMetadata() {")
+    save_end = script.find("function openBuilderModalForComposition(")
+    assert save_start != -1 and save_end != -1 and save_start < save_end
+    save_body = script[save_start:save_end]
+    assert 'return editor.saveDishOverviewMetadata();' in save_body
+    assert '"/api/builder/compositions/" +' not in save_body
+    assert 'setDishOverviewStatus("Ändringarna sparades.");' not in save_body
+    assert 'showLoading("builderOut");' not in save_body
+    assert 'loadCompositionTextPreviewForCurrentComposition(' not in save_body
+    assert 'function syncDishModalHeader(composition) {' in script
+    assert 'function syncDishOverviewInputs(composition) {' in script
+    assert 'function saveDishOverviewMetadata() {' in script
 
 
 def test_dish_overflow_outside_click_handler_is_controller_owned(client_admin) -> None:
@@ -300,6 +345,9 @@ def test_workspace_callbacks_explicitly_separated(client_admin) -> None:
     assert "loadLibrary:" in controller or "config.loadLibrary" in controller
     # builder.js passes loadLibrary to the controller
     assert "loadLibrary: loadLibrary" in script
+
+    # builder.js passes the Dish editor factory to the controller
+    assert "dishEditorFactory: createBuilderDishEditor" in script
 
     # Controller receives updateComponentCategoryChipCounts as callback
     assert "updateComponentCategoryChipCounts" in controller

@@ -2117,6 +2117,13 @@ function _getBuilderComponentEditor() {
     : null;
 }
 
+function _getBuilderDishEditor() {
+  return _builderModalController &&
+    typeof _builderModalController.getDishEditor === "function"
+    ? _builderModalController.getDishEditor()
+    : null;
+}
+
 function defaultRecipeIngredientRow() {
   const editor = _getBuilderComponentEditor();
   return editor ? editor.defaultRecipeIngredientRow() : { ingredient_name: "", amount_value: "", amount_unit: "g" };
@@ -3008,32 +3015,23 @@ function normalizeDishLibraryGroupValue(value) {
 }
 
 function setDishOverviewStatus(message, isError = false) {
-  const statusLine = document.getElementById("resolveStatusLine");
-  if (!statusLine) {
-    return;
+  const editor = _getBuilderDishEditor();
+  if (editor) {
+    editor.setDishOverviewStatus(message, isError);
   }
-  const value = String(message || "").trim();
-  statusLine.textContent = value;
-  statusLine.classList.toggle("hidden", !value);
-  statusLine.dataset.state = value ? (isError ? "error" : "success") : "idle";
 }
 
 function syncDishModalHeader(composition) {
-  const modalTitle = document.getElementById("resolveModalTitle");
-  if (!modalTitle) {
-    return;
+  const editor = _getBuilderDishEditor();
+  if (editor) {
+    editor.syncDishModalHeader(composition);
   }
-  modalTitle.textContent = String((composition && composition.composition_name) || "").trim() || "Redigera rätt";
 }
 
 function syncDishOverviewInputs(composition) {
-  const nameInput = document.getElementById("dishOverviewName");
-  const categorySelect = document.getElementById("dishOverviewCategorySelect");
-  if (nameInput) {
-    nameInput.value = String((composition && composition.composition_name) || "");
-  }
-  if (categorySelect) {
-    categorySelect.value = normalizeDishLibraryGroupValue((composition && composition.library_group) || "ovrigt") || "ovrigt";
+  const editor = _getBuilderDishEditor();
+  if (editor) {
+    editor.syncDishOverviewInputs(composition);
   }
 }
 
@@ -4115,15 +4113,9 @@ function setCompositionTextPreview(previewId, message) {
 }
 
 function dishOverviewCategoryLabel(composition) {
-  const rawValue = String((composition && composition.library_group) || "").trim();
-  const key = normalizeDishCategoryKey(rawValue);
-  for (const entry of DISH_LIBRARY_GROUPS) {
-    if (entry.key === key && entry.key !== "all") {
-      return entry.label;
-    }
-  }
-  if (rawValue) {
-    return rawValue;
+  const editor = _getBuilderDishEditor();
+  if (editor) {
+    return editor.dishOverviewCategoryLabel(composition);
   }
   return "Ej kategoriserad";
 }
@@ -4966,63 +4958,11 @@ async function updateComponentRoleInCurrentComposition(componentId, roleValue) {
 }
 
 async function saveDishOverviewMetadata() {
-  if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
-    setDishOverviewStatus("Ingen rätt vald.", true);
-    return;
+  const editor = _getBuilderDishEditor();
+  if (editor) {
+    return editor.saveDishOverviewMetadata();
   }
-
-  const nameInput = document.getElementById("dishOverviewName");
-  const categorySelect = document.getElementById("dishOverviewCategorySelect");
-  const composition_name = String((nameInput && nameInput.value) || "").trim();
-  const library_group = normalizeDishLibraryGroupValue((categorySelect && categorySelect.value) || "");
-
-  if (!composition_name) {
-    setDishOverviewStatus("Rättnamn måste fyllas i.", true);
-    return;
-  }
-  if (!library_group) {
-    setDishOverviewStatus("Välj en giltig kategori.", true);
-    return;
-  }
-
-  showLoading("builderOut");
-  try {
-    const result = await callApi(
-      "/api/builder/compositions/" +
-        encodeURIComponent(String(currentBuilderComposition.composition_id || "")),
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: {
-          composition_name,
-          library_group,
-        },
-      },
-    );
-
-    showJson("builderOut", result);
-    if (!(result && result.status < 400 && result.data && result.data.ok && result.data.composition)) {
-      const message = String((result && result.data && (result.data.message || result.data.error)) || "Unable to save dish metadata");
-      setDishOverviewStatus(message, true);
-      return;
-    }
-
-    currentBuilderComposition = result.data.composition;
-    syncDishModalHeader(currentBuilderComposition);
-    syncDishOverviewInputs(currentBuilderComposition);
-    setDishOverviewStatus("Ändringarna sparades.");
-    loadCompositionTextPreviewForCurrentComposition(
-      "dishTextPreview",
-      "Ingen rätt vald",
-      "Läser textvy...",
-      "Textvy saknas.",
-    ).catch(() => {
-      setCompositionTextPreview("dishTextPreview", "Textvy saknas.");
-    });
-    await loadLibrary();
-  } catch (error) {
-    setDishOverviewStatus(String(error.message || error), true);
-  }
+  return Promise.resolve();
 }
 
 function openBuilderModalForComposition(composition, initialTab = "overview") {
@@ -5572,12 +5512,14 @@ function bindBuilderHandlers() {
   _builderModalController = createBuilderModalController({
     compositionRoot: document.getElementById("resolveModal"),
     componentRoot: document.getElementById("componentDetailEditorModal"),
+    dishEditorFactory: createBuilderDishEditor,
     loadLibrary: loadLibrary,
     updateComponentCategoryChipCounts: updateComponentCategoryChipCounts,
     filterLibraryComponents: filterLibraryComponents,
     currentComponentSearchQuery: currentComponentSearchQuery,
     initialState: _builderModalShadowState,
     callApi: callApi,
+    loadCompositionTextPreviewForCurrentComposition: loadCompositionTextPreviewForCurrentComposition,
     getCachedComponents: () => _cachedLibraryComponents,
     getCachedCompositions: () => _cachedLibraryCompositions,
     showLoading: showLoading,

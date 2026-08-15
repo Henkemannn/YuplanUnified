@@ -89,13 +89,31 @@ function createBuilderModalController(config) {
       ? config.componentEditorFactory
       : (typeof createBuilderComponentEditor === "function" ? createBuilderComponentEditor : null);
 
+  const _dishEditorFactory =
+    typeof config.dishEditorFactory === "function"
+      ? config.dishEditorFactory
+      : (typeof createBuilderDishEditor === "function" ? createBuilderDishEditor : null);
+
+  const _sharedStateAccessors = {
+    get: (key) => _state[key],
+    set: (key, value) => { _state[key] = value; return value; },
+  };
+
+  const _dishEditor = _dishEditorFactory
+    ? _dishEditorFactory({
+        callApi: config.callApi,
+        state: _sharedStateAccessors,
+        showLoading: config.showLoading,
+        showJson: config.showJson,
+        loadLibrary: _callbacks.loadLibrary,
+        loadCompositionTextPreviewForCurrentComposition: config.loadCompositionTextPreviewForCurrentComposition,
+      })
+    : null;
+
   const _componentEditor = _componentEditorFactory
     ? _componentEditorFactory({
         callApi: config.callApi,
-        state: {
-          get: (key) => _state[key],
-          set: (key, value) => { _state[key] = value; return value; },
-        },
+        state: _sharedStateAccessors,
         getCachedComponents: config.getCachedComponents,
         getCachedCompositions: config.getCachedCompositions,
         loadLibrary: _callbacks.loadLibrary,
@@ -349,7 +367,9 @@ function createBuilderModalController(config) {
     const dishOverviewSaveBtn = compositionRoot.querySelector("#btnDishOverviewSave");
     if (dishOverviewSaveBtn) {
       dishOverviewSaveBtn.addEventListener("click", async () => {
-        await saveDishOverviewMetadata();
+        if (_dishEditor) {
+          await _dishEditor.saveDishOverviewMetadata();
+        }
       });
     }
 
@@ -360,6 +380,9 @@ function createBuilderModalController(config) {
         if (typeof setDishOverviewStatus === "function") {
           setDishOverviewStatus("");
         }
+        if (_dishEditor) {
+          _dishEditor.setDishOverviewStatus("");
+        }
       });
     }
 
@@ -369,6 +392,9 @@ function createBuilderModalController(config) {
       dishOverviewCategorySelect.addEventListener("change", () => {
         if (typeof setDishOverviewStatus === "function") {
           setDishOverviewStatus("");
+        }
+        if (_dishEditor) {
+          _dishEditor.setDishOverviewStatus("");
         }
       });
     }
@@ -438,6 +464,10 @@ function createBuilderModalController(config) {
 
     getComponentEditor() {
       return _componentEditor;
+    },
+
+    getDishEditor() {
+      return _dishEditor;
     },
 
     /**
