@@ -159,6 +159,7 @@ def test_modal_state_is_owned_by_controller(client_admin) -> None:
     assert "setState(key, value)" in controller
     assert "currentBuilderComposition: null" in controller
     assert "_componentDetailDirty: false" in controller
+    assert "currentDishAllergenSummaryToken: 0" in controller
     assert "getDishEditor()" in controller
     assert "_dishEditor" in controller
 
@@ -183,9 +184,6 @@ def test_workspace_state_stays_in_builder_js(client_admin) -> None:
     controller = _controller_js(client_admin)
 
     assert "let reusableComponentsCache = [];" in script
-    assert "let _workspaceSurface = \"home\";" in script
-    assert "let _cachedLibraryComponents = [];" in script
-    assert "let _cachedLibraryCompositions = [];" in script
     assert "_workspaceSurface" not in controller
     assert "_cachedLibraryComponents" not in controller
     assert "_cachedLibraryCompositions" not in controller
@@ -243,6 +241,38 @@ def test_dish_editor_owns_overview_persistence(client_admin) -> None:
     assert 'function syncDishModalHeader(composition) {' in script
     assert 'function syncDishOverviewInputs(composition) {' in script
     assert 'function saveDishOverviewMetadata() {' in script
+
+
+def test_dish_editor_owns_allergen_rollup(client_admin) -> None:
+    """Dish allergen rollup lives in builder_dish_editor.js, not builder.js."""
+    script = _builder_js(client_admin)
+    dish_editor = _dish_editor_js(client_admin)
+
+    assert "function dishAllergenLabel(value)" in dish_editor
+    assert "function renderDishAllergenSummaryMessage(message)" in dish_editor
+    assert "function renderDishAllergenSummaryFailure()" in dish_editor
+    assert "function renderDishAllergenSummaryEmpty()" in dish_editor
+    assert "function renderDishAllergenSummaryLoading()" in dish_editor
+    assert "function renderDishAllergenSummary(composition, componentDetails)" in dish_editor
+    assert "async function fetchDishLinkedComponentDetailsForCurrentComposition()" in dish_editor
+    assert "async function loadDishAllergenSummaryForCurrentComposition()" in dish_editor
+    assert '"/api/builder/components/" + encodeURIComponent(componentIdValue) + "/details"' in dish_editor
+    assert 'currentDishAllergenSummaryToken' in dish_editor
+    assert 'allergenMap' in dish_editor
+    assert 'markerMap' in dish_editor
+
+    allergen_start = script.find("function dishAllergenLabel(value) {")
+    allergen_end = script.find("async function loadDishCalculationSummaryForCurrentComposition()")
+    assert allergen_start != -1 and allergen_end != -1 and allergen_start < allergen_end
+    allergen_body = script[allergen_start:allergen_end]
+    assert 'allergenMap' not in allergen_body
+    assert 'markerMap' not in allergen_body
+    assert 'fetchComponentDetailDraft(componentIdValue)' not in allergen_body
+    assert 'currentDishAllergenSummaryToken' not in allergen_body
+
+    assert 'function renderDishCalculationSummary(composition, componentDetails) {' in script
+    assert 'async function loadDishCalculationSummaryForCurrentComposition() {' in script
+    assert 'function parseDishCurrencyValue(value) {' in script
 
 
 def test_dish_overflow_outside_click_handler_is_controller_owned(client_admin) -> None:

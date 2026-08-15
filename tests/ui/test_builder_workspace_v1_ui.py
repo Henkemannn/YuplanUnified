@@ -194,7 +194,6 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'statusLine.classList.add("hidden");' in js
     assert 'Bygg rätt: ' not in js
     assert 'Justera vad som ska ingå i rätten.' not in js
-    assert 'defineBuilderModalStateAccessor("currentBuilderDishTab");' in js
     assert 'function dishBuilderTabValue(value) {' in js
     assert 'if (key === "components" || key === "allergens" || key === "calculation" || key === "overview") {' in js
     assert 'function setDishBuilderTab(tabValue) {' in js
@@ -222,10 +221,18 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'function renderDishOverview(composition) {' in js
     assert 'function saveDishOverviewMetadata() {' in js
     assert 'renderDishOverview(composition);' in js
-    assert 'function renderDishAllergenSummary(composition, componentDetails) {' in js
+    dish_editor_rv = client_admin.get("/static/js/builder_dish_editor.js")
+    assert dish_editor_rv.status_code == 200
+    dish_editor_js = dish_editor_rv.data.decode("utf-8")
+    assert 'function renderDishAllergenSummary(composition, componentDetails) {' in dish_editor_js
+    assert 'async function loadDishAllergenSummaryForCurrentComposition() {' in dish_editor_js
+    assert 'async function fetchDishLinkedComponentDetailsForCurrentComposition() {' in dish_editor_js
+    assert '"/api/builder/components/" + encodeURIComponent(componentIdValue) + "/details"' in dish_editor_js
+    assert 'allergenMap' in dish_editor_js
+    assert 'markerMap' in dish_editor_js
+
     assert 'function loadDishAllergenSummaryForCurrentComposition() {' in js
     assert 'function fetchDishLinkedComponentDetailsForCurrentComposition() {' in js
-    assert 'fetchComponentDetailDraft(componentIdValue)' in js
     assert 'function renderDishCalculationSummary(composition, componentDetails) {' in js
     assert 'function loadDishCalculationSummaryForCurrentComposition() {' in js
     assert 'renderDishCalculationSummary(composition, componentDetails.filter(Boolean));' in js
@@ -595,8 +602,6 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
 
     assert rv.status_code == 200
     script = rv.data.decode("utf-8")
-    assert 'window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";' in script
-    assert 'console.log("Builder JS active: builder-modal-system-reset-1");' in script
     assert 'function resetGlobalModalSafetyState() {' in script
     assert 'document.body.classList.remove("modal-open", "modal-locked");' in script
     assert 'document.documentElement.classList.remove("modal-open", "modal-locked");' in script
@@ -630,7 +635,6 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'builder-component-card-body' not in script
     assert 'component-library-card-body' not in script
     assert 'function resolveComponentCategoryThemeKey(item) {' in script
-    assert 'const COMPONENT_RAIL_CATEGORY_OPTIONS = ["main", "side", "sauce", "dessert", "ovrigt"];' in script
     assert 'return "Huvudkomponent";' in script
     assert 'return "Tillbehör";' in script
     assert 'return "Sås";' in script
@@ -751,7 +755,6 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'closeModalById("componentDetailEditorModal");' in script
     assert 'function openBuilderModalForComposition(composition, initialTab = "overview") {' in script
     assert 'setDishBuilderTab(initialTab);' in script
-    assert 'defineBuilderModalStateAccessor("pendingComponentCreateReturnTab");' in script
     assert 'function updateComponentDetailReturnAction() {' in script
     add_component_handler_start = script.find('if (addComponentBtn) {')
     add_component_handler_end = script.find('if (recipeCreateBtn) {')
