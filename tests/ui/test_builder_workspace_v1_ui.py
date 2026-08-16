@@ -231,6 +231,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'renderDishCalculationSummary(composition, componentDetails.filter(Boolean));' in js
     assert 'Sparad kostnad' not in js
     assert 'function parseDishCurrencyValue(value) {' in js
+    assert 'function formatDishCostValue(value) {' in js
+    assert 'return value.toFixed(2);' in js
+    assert 'formatCostValue(' not in js
     assert 'Saknar kalkyldata' in js
     assert 'Ingen kalkyl registrerad på komponenterna.' in js
     assert 'Komponentkostnad' in js

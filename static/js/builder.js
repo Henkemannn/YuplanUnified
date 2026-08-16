@@ -3312,6 +3312,13 @@ function parseDishCurrencyValue(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function formatDishCostValue(value) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  return value.toFixed(2);
+}
+
 function formatDishCalculationValue(value) {
   if (value == null) {
     return "–";
@@ -3321,7 +3328,7 @@ function formatDishCalculationValue(value) {
     const text = String(value || "").trim();
     return text ? text : "–";
   }
-  return formatCostValue(parsed) + " kr";
+  return formatDishCostValue(parsed) + " kr";
 }
 
 function formatDishCalculationCell(value, fallback = "–") {
@@ -3346,7 +3353,7 @@ function formatDishCalculationAmount(value, unit) {
 
 function formatDishCalculationRowCost(value) {
   const parsed = parseDishCurrencyValue(value);
-  return parsed == null ? "–" : formatCostValue(parsed) + " kr";
+  return parsed == null ? "–" : formatDishCostValue(parsed) + " kr";
 }
 
 function renderDishCalculationRow(row) {
@@ -3510,7 +3517,7 @@ function renderDishCalculationSummary(composition, componentDetails) {
 
     const value = document.createElement("div");
     value.className = "builder-dish-calculation-total-value";
-    value.textContent = formatCostValue(totalCost) + " kr";
+    value.textContent = formatDishCostValue(totalCost) + " kr";
     totalCard.appendChild(value);
 
     if (missingCalculationDataCount > 0) {
