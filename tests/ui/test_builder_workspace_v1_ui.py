@@ -256,6 +256,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'builder-component-card-surface' in builder_panel_js
     assert 'component-library-card-name' in builder_panel_js
     assert 'component-overflow' in builder_panel_js
+    assert 'card.addEventListener("click", async (event) => {' in builder_panel_js
+    assert 'target.closest(".component-row-right")' in builder_panel_js
+    assert 'await openComponentDetailEditor(componentIdValue);' in builder_panel_js
     assert 'Öppna komponent' in builder_panel_js
     assert 'Ta bort från rätt' in builder_panel_js
     assert 'function closeDishComponentOverflowMenus(exceptElement = null) {' in js

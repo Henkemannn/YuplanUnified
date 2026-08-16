@@ -4827,6 +4827,14 @@ function renderBuilderPanel(composition) {
       }
     });
 
+    card.addEventListener("click", async (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target && target.closest(".component-row-right")) {
+        return;
+      }
+      await openComponentDetailEditor(componentIdValue);
+    });
+
     const surface = document.createElement("button");
     surface.type = "button";
     surface.className = "builder-component-card-surface";
