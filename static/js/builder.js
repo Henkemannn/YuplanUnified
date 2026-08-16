@@ -23,43 +23,176 @@ function showLoading(targetId) {
 }
 
 function isBuilderWorkspaceV1() {
-  const editor = _getBuilderDishEditor();
-  return editor ? editor.dishAllergenLabel(value) : "";
+  const body = document.body;
+  return Boolean(body && body.classList.contains("builder-workspace-v1"));
+}
+
+function loadingMessageForTarget(targetId) {
+  const id = String(targetId || "");
+  if (id === "createDishOut" || id === "createComponentOut") {
+    return "Saving...";
+  }
   if (id === "builderOut" || id === "recipeOut") {
     return "Saving changes...";
   }
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummaryMessage(message);
+  return "Loading...";
+}
+
 function formatWorkspaceMessage(targetId, value) {
+  const id = String(targetId || "");
+  const payload = (value && value.data) || {};
+  const ok = Boolean(payload && payload.ok);
+
+  if (id === "createDishOut") {
     return ok ? "Dish created." : "Could not create dish.";
   }
   if (id === "createComponentOut") {
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummaryFailure();
-  }
+    if (payload && payload.message) {
       return String(payload.message);
     }
     return ok ? "Component created." : "Could not create component.";
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummaryEmpty();
   }
   if (id === "builderOut" || id === "recipeOut") {
     return ok ? "Saved." : "Could not save changes.";
   }
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummaryLoading();
-  }
+  if (id === "libraryOut") {
     return ok ? "Updated." : "Could not refresh library.";
   }
   return ok ? "Saved." : "Could not save changes.";
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummary(composition, componentDetails);
+}
+
+async function callApi(url, options) {
   const settings = options || {};
+  const method = String(settings.method || "GET").toUpperCase();
+  let requestUrl = String(url || "");
+
+  if (method === "GET") {
+    const cacheBust = "_ts=" + String(Date.now());
+    requestUrl += requestUrl.includes("?") ? "&" + cacheBust : "?" + cacheBust;
+  }
+
+  const headers = Object.assign({}, settings.headers || {});
+  let body;
+
+  if (settings.formData) {
+    body = settings.formData;
+    if (headers["Content-Type"]) {
+      delete headers["Content-Type"];
+    }
+  } else if (Object.prototype.hasOwnProperty.call(settings, "body")) {
+    body = JSON.stringify(settings.body);
+    if (!headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+  }
+
+  const response = await fetch(requestUrl, {
+    method,
+    headers,
+    body,
+    cache: method === "GET" ? "no-store" : "default",
+  });
+  const data = await response
+    .json()
+    .catch(() => ({ ok: false, error: "invalid_json_response", message: "Response was not valid JSON" }));
+  return { status: response.status, data };
+}
+
+function parseLibraryLines(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+const IMPORT_TYPE_MENU = "menu";
+const IMPORT_TYPE_DISH_LIST = "dish_list";
+const IMPORT_TYPE_COMPONENT_LIST = "component_list";
+const IMPORT_TYPE_RECIPE_TEXT = "recipe_text";
+const IMPORT_RESULT_ROW_LIMIT = 60;
+const COMPONENT_RENDER_LIMIT = 80;
+const COMPONENT_CATEGORY_OPTIONS = ["main", "side", "sauce", "dessert"];
+const COMPONENT_RAIL_CATEGORY_OPTIONS = ["main", "side", "sauce", "dessert", "ovrigt"];
+const COMPONENT_DEFAULT_LIBRARY_CATEGORIES = COMPONENT_RAIL_CATEGORY_OPTIONS;
+
+let _lastImportSession = null;
+let _cachedLibraryComponents = [];
+let _cachedLibraryCompositions = [];
+let _recentComponentIds = [];
+let _recentCompositionIds = [];
+let _workspaceSurface = "home";
+let _lastLibraryResult = null;
+let _componentCategoryFilter = "all";
+let _componentTagFilter = "all";
+let _componentInlineEditId = "";
+let _componentActionPopoverId = "";
+let _builderModalController = null;
+
+const _builderModalShadowState = {
+  currentBuilderComposition: null,
+  currentBuilderDishTab: "overview",
+  currentDishAllergenSummaryToken: 0,
+  currentDishCalculationSummaryToken: 0,
+  selectedComponentId: null,
+  pendingComponentCreateForCompositionId: null,
+  pendingComponentCreateForCompositionName: null,
+  pendingComponentCreateReturnTab: "components",
+  _activeComponentDetailId: "",
+  _activeComponentDetailTab: "overview",
+  _componentDetailDirty: false,
+  _componentDetailTagsDraft: [],
+};
+
+function getBuilderModalState(key) {
+  if (_builderModalController && typeof _builderModalController.getState === "function") {
+    return _builderModalController.getState(key);
+  }
+  return _builderModalShadowState[key];
+}
+
+function setBuilderModalState(key, value) {
+  _builderModalShadowState[key] = value;
+  if (_builderModalController && typeof _builderModalController.setState === "function") {
+    return _builderModalController.setState(key, value);
+  }
+  return value;
+}
+
+function defineBuilderModalStateAccessor(key) {
+  Object.defineProperty(globalThis, key, {
+    configurable: true,
+    enumerable: false,
+    get() {
+      return getBuilderModalState(key);
+    },
+    set(value) {
+      setBuilderModalState(key, value);
+    },
+  });
+}
+
+defineBuilderModalStateAccessor("currentBuilderComposition");
+defineBuilderModalStateAccessor("currentBuilderDishTab");
+defineBuilderModalStateAccessor("currentDishAllergenSummaryToken");
+defineBuilderModalStateAccessor("currentDishCalculationSummaryToken");
+defineBuilderModalStateAccessor("selectedComponentId");
+defineBuilderModalStateAccessor("pendingComponentCreateForCompositionId");
+defineBuilderModalStateAccessor("pendingComponentCreateForCompositionName");
+defineBuilderModalStateAccessor("pendingComponentCreateReturnTab");
+defineBuilderModalStateAccessor("_activeComponentDetailId");
+defineBuilderModalStateAccessor("_activeComponentDetailTab");
+defineBuilderModalStateAccessor("_componentDetailDirty");
+defineBuilderModalStateAccessor("_componentDetailTagsDraft");
+window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";
+console.log("Builder JS active: builder-modal-system-reset-1");
+
+/** @type {ReturnType<typeof createBuilderModalController>|null} */
+const IMPORT_LEADING_LABEL_RE = /^([A-Za-zÅÄÖåäö\s]+):\s*/;
+const IMPORT_LEADING_LABEL_TOKENS = new Set([
+  "dessert",
+  "kvall",
+  "lunch",
+  "middag",
   "frukost",
   "supper",
   "dinner",
@@ -2959,43 +3092,176 @@ function setDishBuilderTab(tabValue) {
 }
 
 function dishAllergenLabel(value) {
-  const editor = _getBuilderDishEditor();
-  return editor ? editor.dishAllergenLabel(value) : "";
+  const key = String(value || "").trim().toLowerCase();
+  const meta = SIGNAL_TOKEN_META[key];
+  if (meta && meta.label) {
+    return meta.label;
+  }
+  if (!key) {
+    return "";
+  }
+  return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 function renderDishAllergenSummaryMessage(message) {
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummaryMessage(message);
+  const host = document.getElementById("dishAllergensSummary");
+  if (!host) {
+    return;
   }
+  host.innerHTML = "";
+  const text = document.createElement("p");
+  text.className = "builder-dish-allergen-summary-empty";
+  text.textContent = String(message || "");
+  host.appendChild(text);
 }
 
 function renderDishAllergenSummaryFailure() {
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummaryFailure();
-  }
+  renderDishAllergenSummaryMessage("Kunde inte läsa komponenterna just nu.");
 }
 
 function renderDishAllergenSummaryEmpty() {
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummaryEmpty();
-  }
+  renderDishAllergenSummaryMessage("Inga allergener eller kostmarkörer registrerade på komponenterna.");
 }
 
 function renderDishAllergenSummaryLoading() {
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummaryLoading();
-  }
+  renderDishAllergenSummaryMessage("Samlar information från komponenterna...");
 }
 
 function renderDishAllergenSummary(composition, componentDetails) {
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    editor.renderDishAllergenSummary(composition, componentDetails);
+  const host = document.getElementById("dishAllergensSummary");
+  if (!host) {
+    return;
   }
+
+  host.innerHTML = "";
+  const detailsList = Array.isArray(componentDetails) ? componentDetails : [];
+  const allergenMap = new Map();
+  const markerMap = new Map();
+
+  for (const entry of detailsList) {
+    const component = entry && entry.component ? entry.component : null;
+    const details = entry && entry.details ? entry.details : null;
+    const componentName = String((component && component.component_name) || (component && component.component_id) || "").trim();
+    const allergenNotes = String((details && details.allergen_notes) || "").trim();
+    const allergens = Array.isArray(details && details.allergens) ? details.allergens : [];
+    const tags = Array.isArray(details && details.tags) ? details.tags : [];
+
+    for (const allergen of allergens) {
+      const allergenKey = String(allergen || "").trim().toLowerCase();
+      if (!allergenKey) {
+        continue;
+      }
+      if (!allergenMap.has(allergenKey)) {
+        allergenMap.set(allergenKey, { components: [], notes: [] });
+      }
+      const bucket = allergenMap.get(allergenKey);
+      if (componentName && !bucket.components.includes(componentName)) {
+        bucket.components.push(componentName);
+      }
+      if (allergenNotes && !bucket.notes.includes(allergenNotes)) {
+        bucket.notes.push(allergenNotes);
+      }
+    }
+
+    for (const tag of tags) {
+      const tagKey = String(tag || "").trim().toLowerCase();
+      if (!tagKey) {
+        continue;
+      }
+      if (!markerMap.has(tagKey)) {
+        markerMap.set(tagKey, []);
+      }
+      const list = markerMap.get(tagKey);
+      if (componentName && !list.includes(componentName)) {
+        list.push(componentName);
+      }
+    }
+  }
+
+  if (allergenMap.size === 0 && markerMap.size === 0) {
+    renderDishAllergenSummaryEmpty();
+    return;
+  }
+
+  const allergenSection = document.createElement("section");
+  allergenSection.className = "builder-dish-allergen-summary-section";
+
+  const allergenTitle = document.createElement("h4");
+  allergenTitle.textContent = "Allergener";
+  allergenSection.appendChild(allergenTitle);
+
+  if (allergenMap.size === 0) {
+    const empty = document.createElement("p");
+    empty.className = "builder-dish-allergen-summary-empty";
+    empty.textContent = "Inga allergener registrerade på komponenterna.";
+    allergenSection.appendChild(empty);
+  } else {
+    const list = document.createElement("div");
+    list.className = "builder-dish-allergen-grid";
+    for (const [allergenKey, value] of allergenMap.entries()) {
+      const card = document.createElement("article");
+      card.className = "builder-dish-allergen-card";
+
+      const chip = document.createElement("div");
+      chip.className = "builder-dish-allergen-chip";
+      chip.textContent = dishAllergenLabel(allergenKey);
+      card.appendChild(chip);
+
+      const source = document.createElement("p");
+      source.className = "builder-dish-allergen-source";
+      source.textContent = value.components.length > 0
+        ? "Från: " + value.components.join(", ")
+        : "Från komponenterna";
+      card.appendChild(source);
+
+      if (value.notes.length > 0) {
+        const note = document.createElement("p");
+        note.className = "builder-dish-allergen-note";
+        note.textContent = value.notes.join(" | ");
+        card.appendChild(note);
+      }
+
+      list.appendChild(card);
+    }
+    allergenSection.appendChild(list);
+  }
+
+  const markerSection = document.createElement("section");
+  markerSection.className = "builder-dish-allergen-summary-section";
+
+  const markerTitle = document.createElement("h4");
+  markerTitle.textContent = "Kostmarkörer";
+  markerSection.appendChild(markerTitle);
+
+  if (markerMap.size === 0) {
+    const empty = document.createElement("p");
+    empty.className = "builder-dish-allergen-summary-empty";
+    empty.textContent = "Inga kostmarkörer registrerade på komponenterna.";
+    markerSection.appendChild(empty);
+  } else {
+    const markerList = document.createElement("div");
+    markerList.className = "builder-dish-allergen-marker-grid";
+    for (const [tagKey, sources] of markerMap.entries()) {
+      const chip = document.createElement("article");
+      chip.className = "builder-dish-allergen-marker";
+
+      const label = document.createElement("div");
+      label.className = "builder-dish-allergen-marker-label";
+      label.textContent = dishAllergenLabel(tagKey);
+      chip.appendChild(label);
+
+      const source = document.createElement("p");
+      source.className = "builder-dish-allergen-marker-source";
+      source.textContent = sources.length > 0 ? "Från: " + sources.join(", ") : "Från komponenterna";
+      chip.appendChild(source);
+
+      markerList.appendChild(chip);
+    }
+    markerSection.appendChild(markerList);
+  }
+
+  host.appendChild(allergenSection);
+  host.appendChild(markerSection);
 }
 
 function renderDishCalculationSummaryMessage(message) {
@@ -3259,19 +3525,91 @@ function renderDishCalculationSummary(composition, componentDetails) {
 }
 
 async function fetchDishLinkedComponentDetailsForCurrentComposition() {
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    return editor.fetchDishLinkedComponentDetailsForCurrentComposition();
+  const composition = currentBuilderComposition;
+  if (!composition || !composition.composition_id) {
+    return {
+      composition: null,
+      compositionId: "",
+      linkedComponents: [],
+      componentDetails: [],
+    };
   }
-  return Promise.resolve({ composition: null, compositionId: "", linkedComponents: [], componentDetails: [] });
+
+  const compositionId = String(composition.composition_id || "").trim();
+  const linkedComponents = componentsInDisplayOrder(composition);
+  const linkedComponentIds = Array.from(new Set(
+    linkedComponents
+      .map((item) => String(item.component_id || "").trim())
+      .filter(Boolean),
+  ));
+
+  if (linkedComponentIds.length === 0) {
+    return {
+      composition,
+      compositionId,
+      linkedComponents,
+      componentDetails: [],
+    };
+  }
+
+  const componentDetails = await Promise.all(linkedComponents.map(async (linkedComponent) => {
+    const componentIdValue = String(linkedComponent.component_id || "").trim();
+    if (!componentIdValue) {
+      return null;
+    }
+    try {
+      const details = await fetchComponentDetailDraft(componentIdValue);
+      return {
+        component: linkedComponent,
+        details,
+      };
+    } catch (error) {
+      return {
+        component: linkedComponent,
+        details: { tags: [], long_description: "", recipe_ingredient_rows: [], recipe_ingredients_text: "", method_text: "", method_notes: "", calculation_yield: "", calculation_cost: "", calculation_notes: "", calculation_rows: [], allergens: [], allergen_notes: "" },
+        error: String(error && error.message ? error.message : error || ""),
+      };
+    }
+  }));
+
+  return {
+    composition,
+    compositionId,
+    linkedComponents,
+    componentDetails,
+  };
 }
 
 async function loadDishAllergenSummaryForCurrentComposition() {
-  const editor = _getBuilderDishEditor();
-  if (editor) {
-    return editor.loadDishAllergenSummaryForCurrentComposition();
+  const host = document.getElementById("dishAllergensSummary");
+  if (!host) {
+    return;
   }
-  return Promise.resolve();
+  const summaryToken = ++currentDishAllergenSummaryToken;
+  renderDishAllergenSummaryLoading();
+
+  const payload = await fetchDishLinkedComponentDetailsForCurrentComposition();
+  const composition = payload.composition;
+  const compositionId = String(payload.compositionId || "").trim();
+  const componentDetails = Array.isArray(payload.componentDetails) ? payload.componentDetails : [];
+
+  if (summaryToken !== currentDishAllergenSummaryToken) {
+    return;
+  }
+  if (!currentBuilderComposition || String(currentBuilderComposition.composition_id || "").trim() !== compositionId) {
+    return;
+  }
+  if (currentBuilderDishTab !== "allergens") {
+    return;
+  }
+
+  const anyFailure = componentDetails.some((item) => item && item.error);
+  if (anyFailure && componentDetails.every((item) => !item || !item.details)) {
+    renderDishAllergenSummaryFailure();
+    return;
+  }
+
+  renderDishAllergenSummary(composition, componentDetails.filter(Boolean));
 }
 
 async function loadDishCalculationSummaryForCurrentComposition() {
