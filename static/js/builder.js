@@ -6018,6 +6018,8 @@ function bindBuilderHandlers() {
           } else if (createdComponentId && result.data.duplicate) {
             setWorkspaceSurface("components");
             await openComponentDetailEditor(createdComponentId);
+          } else if (createdComponentId) {
+            await openComponentDetailEditor(createdComponentId);
           }
         }
       } catch (error) {

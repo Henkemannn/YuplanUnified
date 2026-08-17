@@ -779,6 +779,7 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'await attachComponentToPendingComposition(createdComponentId);' not in script
     assert 'if (createdComponentId && pendingComponentCreateForCompositionId)' in script
     assert 'else if (createdComponentId && result.data.duplicate)' in script
+    assert 'else if (createdComponentId) {' in script
     # Dish return orchestration stays in builder.js; Component editor receives it as a callback.
     assert 'async function reopenPendingCompositionForReturn() {' in script
     assert 'clearPendingComponentCreateForComposition();' in script
