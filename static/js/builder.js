@@ -3104,27 +3104,31 @@ function dishAllergenLabel(value) {
 }
 
 function renderDishAllergenSummaryMessage(message) {
-  const host = document.getElementById("dishAllergensSummary");
-  if (!host) {
-    return;
+  const editor = _getBuilderDishEditor();
+  if (editor) {
+    editor.renderDishAllergenSummaryMessage(message);
   }
-  host.innerHTML = "";
-  const text = document.createElement("p");
-  text.className = "builder-dish-allergen-summary-empty";
-  text.textContent = String(message || "");
-  host.appendChild(text);
 }
 
 function renderDishAllergenSummaryFailure() {
-  renderDishAllergenSummaryMessage("Kunde inte läsa komponenterna just nu.");
+  const editor = _getBuilderDishEditor();
+  if (editor) {
+    editor.renderDishAllergenSummaryFailure();
+  }
 }
 
 function renderDishAllergenSummaryEmpty() {
-  renderDishAllergenSummaryMessage("Inga allergener eller kostmarkörer registrerade på komponenterna.");
+  const editor = _getBuilderDishEditor();
+  if (editor) {
+    editor.renderDishAllergenSummaryEmpty();
+  }
 }
 
 function renderDishAllergenSummaryLoading() {
-  renderDishAllergenSummaryMessage("Samlar information från komponenterna...");
+  const editor = _getBuilderDishEditor();
+  if (editor) {
+    editor.renderDishAllergenSummaryLoading();
+  }
 }
 
 function renderDishAllergenSummary(composition, componentDetails) {

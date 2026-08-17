@@ -47,6 +47,30 @@ function createBuilderDishEditor(config) {
     preview.textContent = String(message || "");
   }
 
+  function renderDishAllergenSummaryMessage(message) {
+    const host = document.getElementById("dishAllergensSummary");
+    if (!host) {
+      return;
+    }
+    host.innerHTML = "";
+    const text = document.createElement("p");
+    text.className = "builder-dish-allergen-summary-empty";
+    text.textContent = String(message || "");
+    host.appendChild(text);
+  }
+
+  function renderDishAllergenSummaryFailure() {
+    renderDishAllergenSummaryMessage("Kunde inte läsa komponenterna just nu.");
+  }
+
+  function renderDishAllergenSummaryEmpty() {
+    renderDishAllergenSummaryMessage("Inga allergener eller kostmarkörer registrerade på komponenterna.");
+  }
+
+  function renderDishAllergenSummaryLoading() {
+    renderDishAllergenSummaryMessage("Samlar information från komponenterna...");
+  }
+
   function setDishOverviewStatus(message, isError = false) {
     const statusLine = document.getElementById("resolveStatusLine");
     if (!statusLine) {
@@ -165,5 +189,9 @@ function createBuilderDishEditor(config) {
     syncDishOverviewInputs,
     setDishOverviewStatus,
     dishOverviewCategoryLabel,
+    renderDishAllergenSummaryMessage,
+    renderDishAllergenSummaryFailure,
+    renderDishAllergenSummaryEmpty,
+    renderDishAllergenSummaryLoading,
   };
 }

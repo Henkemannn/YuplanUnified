@@ -458,6 +458,26 @@ def test_component_editor_owns_real_implementation(client_admin) -> None:
     assert "Recept" in editor or "recipe" in editor.lower()
 
 
+def test_dish_editor_owns_allergen_status_helpers(client_admin) -> None:
+    """The four Dish allergen status helpers live in builder_dish_editor.js."""
+    script = _builder_js(client_admin)
+    editor = _dish_editor_js(client_admin)
+
+    assert 'function renderDishAllergenSummaryMessage(message) {' in editor
+    assert 'function renderDishAllergenSummaryFailure() {' in editor
+    assert 'function renderDishAllergenSummaryEmpty() {' in editor
+    assert 'function renderDishAllergenSummaryLoading() {' in editor
+
+    assert 'editor.renderDishAllergenSummaryMessage(message)' in script
+    assert 'editor.renderDishAllergenSummaryFailure()' in script
+    assert 'editor.renderDishAllergenSummaryEmpty()' in script
+    assert 'editor.renderDishAllergenSummaryLoading()' in script
+    assert 'function dishAllergenLabel(value) {' in script
+    assert 'function renderDishAllergenSummary(composition, componentDetails) {' in script
+    assert 'function fetchDishLinkedComponentDetailsForCurrentComposition() {' in script
+    assert 'function loadDishAllergenSummaryForCurrentComposition() {' in script
+
+
 def test_component_editor_owns_recipe_method(client_admin) -> None:
     """Recept & metod implementation lives only in builder_component_editor.js."""
     editor = _component_editor_js(client_admin)

@@ -161,6 +161,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     js_rv = client_admin.get("/static/js/builder.js")
     assert js_rv.status_code == 200
     js = js_rv.data.decode("utf-8")
+    dish_editor_rv = client_admin.get("/static/js/builder_dish_editor.js")
+    assert dish_editor_rv.status_code == 200
+    dish_editor_js = dish_editor_rv.data.decode("utf-8")
     assert 'Fisk' in js
     assert 'Kött' in js
     assert 'Dessert' in js
@@ -246,6 +249,11 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="dishCalculationPanel"' in html
     assert 'builderCompositionTitle' not in js
     assert 'Rätt: ' not in js
+    assert 'function renderDishAllergenSummaryMessage(message) {' in dish_editor_js
+    assert 'function renderDishAllergenSummaryFailure() {' in dish_editor_js
+    assert 'function renderDishAllergenSummaryEmpty() {' in dish_editor_js
+    assert 'function renderDishAllergenSummaryLoading() {' in dish_editor_js
+    assert 'function dishAllergenLabel(value) {' in js
     assert 'function cleanDishTextPreview(text) {' in js
     assert r'replace(/\s*\(component\)/gi, "")' in js
     assert 'const colonIndex = cleaned.indexOf(":");' in js
