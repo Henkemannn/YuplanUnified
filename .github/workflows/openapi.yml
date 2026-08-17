@@ -27,6 +27,8 @@ jobs:
     permissions:
       contents: write   # needed for auto-commit of status badge
       pull-requests: write  # needed to comment & label PRs
+    env:
+      SECRET_KEY: ci-openapi-workflow-secret-key-0123456789abcdef0123456789abcdef
 
     steps:
       - uses: actions/checkout@v4
