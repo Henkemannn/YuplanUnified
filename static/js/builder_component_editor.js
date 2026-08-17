@@ -975,9 +975,6 @@ function createBuilderComponentEditor(config) {
       nameInput.value = String(component.component_name || component.component_id || "");
     }
     if (categoryInput) {
-      categoryInput.value = String(_normalizeCategoryKey(component.category) || "");
-    }
-    if (meta) {
       meta.textContent = "Komponent-ID: " + String(component.component_id || "");
     }
     _showLoading("componentDetailOut");
@@ -1018,6 +1015,9 @@ function createBuilderComponentEditor(config) {
       applyComponentDetailDraftToForm(saved);
       if (target) {
         target.tags = Array.isArray(saved.tags) ? saved.tags.slice() : [];
+      }
+      if (_loadLibrary) {
+        await _loadLibrary();
       }
       resetComponentDetailDirty();
       setComponentDetailFeedback({

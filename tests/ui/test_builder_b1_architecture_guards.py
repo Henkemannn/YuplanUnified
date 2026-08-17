@@ -453,6 +453,8 @@ def test_component_editor_owns_real_implementation(client_admin) -> None:
     assert "function addComponentDetailTagsFromInput(rawValue)" in editor
     assert "function deleteComponentFromLibrary(componentId, componentName)" in editor
     assert "function saveActiveComponentDetailDraft()" in editor
+    assert "await _loadLibrary();" in editor
+    assert "detail_summary" not in editor
     assert "Recept" in editor or "recipe" in editor.lower()
 
 
