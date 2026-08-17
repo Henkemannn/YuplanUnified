@@ -64,6 +64,7 @@ jobs:
         env:
           FLASK_ENV: production
           DATABASE_URL: sqlite:///ci_openapi_workflow.db
+          JWT_SECRET: ci-openapi-workflow-jwt-secret-0123456789abcdef0123456789abcdef
         run: |
           # Byt startkommando om ni använder något annat än run.py
           nohup python run.py >/tmp/app.log 2>&1 &
