@@ -8,7 +8,7 @@ on:
 
 jobs:
   backend:
-    name: backend (pytest: PG + SQLite)
+    name: "backend (pytest: PG + SQLite)"
     runs-on: ubuntu-latest
     services:
       postgres:
