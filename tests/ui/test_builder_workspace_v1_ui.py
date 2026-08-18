@@ -710,7 +710,6 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     # Home/Components are separate views, not one stacked mixed page.
     assert 'overview.classList.toggle("hidden", _workspaceSurface !== "home");' in script
     assert 'components.classList.toggle("hidden", _workspaceSurface !== "components");' in script
-    assert 'function openComponentDetailEditor(componentId, initialTab) {' in script
     assert 'openSimpleModal("componentDetailModal");' not in script
     assert 'const libraryComponentsGrid = document.getElementById("libraryComponentsGrid");' in script
     assert 'const importLinesEl = document.getElementById("importLibraryLines");' in script
@@ -811,6 +810,18 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'console.info("Builder UI version: foundation-v1");' in script
     assert 'setWorkspaceSurface("home");' in script
     assert 'function setWorkspaceSurface(surface)' in script
+
+
+def test_builder_component_editor_sets_category_on_every_open(client_admin) -> None:
+    rv = client_admin.get("/static/js/builder_component_editor.js")
+
+    assert rv.status_code == 200
+    script = rv.data.decode("utf-8")
+    assert 'function openComponentDetailEditor(componentId, initialTab) {' in script
+    assert 'const nextCategory = String(component.category || "").trim().toLowerCase();' in script
+    assert 'categoryInput.value = ["main", "side", "sauce", "dessert", "ovrigt"].includes(nextCategory)' in script
+    assert 'if (meta) {' in script
+    assert 'meta.textContent = "Komponent-ID: " + String(component.component_id || "");' in script
 
 
 def test_builder_component_calculation_examples_contract_values() -> None:

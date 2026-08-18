@@ -966,6 +966,7 @@ function createBuilderComponentEditor(config) {
     const nameInput = document.getElementById("componentDetailOverviewName");
     const categoryInput = document.getElementById("componentDetailOverviewCategory");
     const meta = document.getElementById("componentDetailOverviewMeta");
+    const nextCategory = String(component.category || "").trim().toLowerCase();
     if (title) {
       title.textContent =
         "Komponentredigerare: " +
@@ -975,6 +976,11 @@ function createBuilderComponentEditor(config) {
       nameInput.value = String(component.component_name || component.component_id || "");
     }
     if (categoryInput) {
+      categoryInput.value = ["main", "side", "sauce", "dessert", "ovrigt"].includes(nextCategory)
+        ? nextCategory
+        : "ovrigt";
+    }
+    if (meta) {
       meta.textContent = "Komponent-ID: " + String(component.component_id || "");
     }
     _showLoading("componentDetailOut");
