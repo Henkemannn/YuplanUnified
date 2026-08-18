@@ -60,8 +60,10 @@ jobs:
         run: |
           python - <<'PY'
           from core.app_factory import create_app
+          from core.db import create_all
           app = create_app({'TESTING': True})
           with app.app_context():
+              create_all()
               from flask.testing import FlaskClient
               client: FlaskClient = app.test_client()
               spec = client.get('/openapi.json', headers={'X-User-Role':'admin','X-Tenant-Id':'1'}).get_json()
