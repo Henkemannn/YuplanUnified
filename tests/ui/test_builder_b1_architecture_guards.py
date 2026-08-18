@@ -459,10 +459,12 @@ def test_component_editor_owns_real_implementation(client_admin) -> None:
 
 
 def test_dish_editor_owns_allergen_status_helpers(client_admin) -> None:
-    """The four Dish allergen status helpers live in builder_dish_editor.js."""
+    """The Dish allergen summary helpers live in builder_dish_editor.js."""
     script = _builder_js(client_admin)
     editor = _dish_editor_js(client_admin)
 
+    assert 'const _dishAllergenLabel = typeof config.dishAllergenLabel === "function"' in editor
+    assert 'function renderDishAllergenSummary(composition, componentDetails) {' in editor
     assert 'function renderDishAllergenSummaryMessage(message) {' in editor
     assert 'function renderDishAllergenSummaryFailure() {' in editor
     assert 'function renderDishAllergenSummaryEmpty() {' in editor
@@ -472,8 +474,8 @@ def test_dish_editor_owns_allergen_status_helpers(client_admin) -> None:
     assert 'editor.renderDishAllergenSummaryFailure()' in script
     assert 'editor.renderDishAllergenSummaryEmpty()' in script
     assert 'editor.renderDishAllergenSummaryLoading()' in script
-    assert 'function dishAllergenLabel(value) {' in script
     assert 'function renderDishAllergenSummary(composition, componentDetails) {' in script
+    assert 'editor.renderDishAllergenSummary(composition, componentDetails)' in script
     assert 'function fetchDishLinkedComponentDetailsForCurrentComposition() {' in script
     assert 'function loadDishAllergenSummaryForCurrentComposition() {' in script
 

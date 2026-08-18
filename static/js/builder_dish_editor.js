@@ -15,6 +15,9 @@ function createBuilderDishEditor(config) {
     typeof config.loadCompositionTextPreviewForCurrentComposition === "function"
       ? config.loadCompositionTextPreviewForCurrentComposition
       : null;
+  const _dishAllergenLabel = typeof config.dishAllergenLabel === "function"
+    ? config.dishAllergenLabel
+    : (value) => String(value || "");
 
   function _getState(key) {
     return _state.get(key);
@@ -69,6 +72,143 @@ function createBuilderDishEditor(config) {
 
   function renderDishAllergenSummaryLoading() {
     renderDishAllergenSummaryMessage("Samlar information från komponenterna...");
+  }
+
+  function renderDishAllergenSummary(composition, componentDetails) {
+    const host = document.getElementById("dishAllergensSummary");
+    if (!host) {
+      return;
+    }
+
+    host.innerHTML = "";
+    const detailsList = Array.isArray(componentDetails) ? componentDetails : [];
+    const allergenMap = new Map();
+    const markerMap = new Map();
+
+    for (const entry of detailsList) {
+      const component = entry && entry.component ? entry.component : null;
+      const details = entry && entry.details ? entry.details : null;
+      const componentName = String((component && component.component_name) || (component && component.component_id) || "").trim();
+      const allergenNotes = String((details && details.allergen_notes) || "").trim();
+      const allergens = Array.isArray(details && details.allergens) ? details.allergens : [];
+      const tags = Array.isArray(details && details.tags) ? details.tags : [];
+
+      for (const allergen of allergens) {
+        const allergenKey = String(allergen || "").trim().toLowerCase();
+        if (!allergenKey) {
+          continue;
+        }
+        if (!allergenMap.has(allergenKey)) {
+          allergenMap.set(allergenKey, { components: [], notes: [] });
+        }
+        const bucket = allergenMap.get(allergenKey);
+        if (componentName && !bucket.components.includes(componentName)) {
+          bucket.components.push(componentName);
+        }
+        if (allergenNotes && !bucket.notes.includes(allergenNotes)) {
+          bucket.notes.push(allergenNotes);
+        }
+      }
+
+      for (const tag of tags) {
+        const tagKey = String(tag || "").trim().toLowerCase();
+        if (!tagKey) {
+          continue;
+        }
+        if (!markerMap.has(tagKey)) {
+          markerMap.set(tagKey, []);
+        }
+        const list = markerMap.get(tagKey);
+        if (componentName && !list.includes(componentName)) {
+          list.push(componentName);
+        }
+      }
+    }
+
+    if (allergenMap.size === 0 && markerMap.size === 0) {
+      renderDishAllergenSummaryEmpty();
+      return;
+    }
+
+    const allergenSection = document.createElement("section");
+    allergenSection.className = "builder-dish-allergen-summary-section";
+
+    const allergenTitle = document.createElement("h4");
+    allergenTitle.textContent = "Allergener";
+    allergenSection.appendChild(allergenTitle);
+
+    if (allergenMap.size === 0) {
+      const empty = document.createElement("p");
+      empty.className = "builder-dish-allergen-summary-empty";
+      empty.textContent = "Inga allergener registrerade på komponenterna.";
+      allergenSection.appendChild(empty);
+    } else {
+      const list = document.createElement("div");
+      list.className = "builder-dish-allergen-grid";
+      for (const [allergenKey, value] of allergenMap.entries()) {
+        const card = document.createElement("article");
+        card.className = "builder-dish-allergen-card";
+
+        const chip = document.createElement("div");
+        chip.className = "builder-dish-allergen-chip";
+        chip.textContent = _dishAllergenLabel(allergenKey);
+        card.appendChild(chip);
+
+        const source = document.createElement("p");
+        source.className = "builder-dish-allergen-source";
+        source.textContent = value.components.length > 0
+          ? "Från: " + value.components.join(", ")
+          : "Från komponenterna";
+        card.appendChild(source);
+
+        if (value.notes.length > 0) {
+          const note = document.createElement("p");
+          note.className = "builder-dish-allergen-note";
+          note.textContent = value.notes.join(" | ");
+          card.appendChild(note);
+        }
+
+        list.appendChild(card);
+      }
+      allergenSection.appendChild(list);
+    }
+
+    const markerSection = document.createElement("section");
+    markerSection.className = "builder-dish-allergen-summary-section";
+
+    const markerTitle = document.createElement("h4");
+    markerTitle.textContent = "Kostmarkörer";
+    markerSection.appendChild(markerTitle);
+
+    if (markerMap.size === 0) {
+      const empty = document.createElement("p");
+      empty.className = "builder-dish-allergen-summary-empty";
+      empty.textContent = "Inga kostmarkörer registrerade på komponenterna.";
+      markerSection.appendChild(empty);
+    } else {
+      const markerList = document.createElement("div");
+      markerList.className = "builder-dish-allergen-marker-grid";
+      for (const [tagKey, sources] of markerMap.entries()) {
+        const chip = document.createElement("article");
+        chip.className = "builder-dish-allergen-marker";
+
+        const label = document.createElement("div");
+        label.className = "builder-dish-allergen-marker-label";
+        label.textContent = _dishAllergenLabel(tagKey);
+        chip.appendChild(label);
+
+        const source = document.createElement("p");
+        source.className = "builder-dish-allergen-marker-source";
+        source.textContent = sources.length > 0 ? "Från: " + sources.join(", ") : "Från komponenterna";
+        chip.appendChild(source);
+
+        markerList.appendChild(chip);
+      }
+      markerSection.appendChild(markerList);
+    }
+
+    host.appendChild(allergenSection);
+    host.appendChild(markerSection);
   }
 
   function setDishOverviewStatus(message, isError = false) {
@@ -189,6 +329,7 @@ function createBuilderDishEditor(config) {
     syncDishOverviewInputs,
     setDishOverviewStatus,
     dishOverviewCategoryLabel,
+    renderDishAllergenSummary,
     renderDishAllergenSummaryMessage,
     renderDishAllergenSummaryFailure,
     renderDishAllergenSummaryEmpty,

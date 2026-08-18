@@ -103,6 +103,7 @@ function createBuilderModalController(config) {
     ? _dishEditorFactory({
         callApi: config.callApi,
         state: _sharedStateAccessors,
+        dishAllergenLabel: config.dishAllergenLabel,
         showLoading: config.showLoading,
         showJson: config.showJson,
         loadLibrary: _callbacks.loadLibrary,

@@ -253,7 +253,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'function renderDishAllergenSummaryFailure() {' in dish_editor_js
     assert 'function renderDishAllergenSummaryEmpty() {' in dish_editor_js
     assert 'function renderDishAllergenSummaryLoading() {' in dish_editor_js
-    assert 'function dishAllergenLabel(value) {' in js
+    assert 'function renderDishAllergenSummary(composition, componentDetails) {' in dish_editor_js
+    assert 'const _dishAllergenLabel = typeof config.dishAllergenLabel === "function"' in dish_editor_js
+    assert 'dishAllergenLabel: dishAllergenLabel' in js
     assert 'function cleanDishTextPreview(text) {' in js
     assert r'replace(/\s*\(component\)/gi, "")' in js
     assert 'const colonIndex = cleaned.indexOf(":");' in js
