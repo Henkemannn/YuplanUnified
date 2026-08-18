@@ -99,18 +99,6 @@ function createBuilderModalController(config) {
     set: (key, value) => { _state[key] = value; return value; },
   };
 
-  const _dishEditor = _dishEditorFactory
-    ? _dishEditorFactory({
-        callApi: config.callApi,
-        state: _sharedStateAccessors,
-        dishAllergenLabel: config.dishAllergenLabel,
-        showLoading: config.showLoading,
-        showJson: config.showJson,
-        loadLibrary: _callbacks.loadLibrary,
-        loadCompositionTextPreviewForCurrentComposition: config.loadCompositionTextPreviewForCurrentComposition,
-      })
-    : null;
-
   const _componentEditor = _componentEditorFactory
     ? _componentEditorFactory({
         callApi: config.callApi,
@@ -128,6 +116,21 @@ function createBuilderModalController(config) {
         reopenPendingCompositionForReturn: config.reopenPendingCompositionForReturn,
         attachExistingComponentToCurrentComposition: config.attachExistingComponentToCurrentComposition,
         clearPendingComponentCreateForComposition: config.clearPendingComponentCreateForComposition,
+      })
+    : null;
+
+  const _dishEditor = _dishEditorFactory
+    ? _dishEditorFactory({
+        callApi: config.callApi,
+        state: _sharedStateAccessors,
+        fetchComponentDetailDraft: _componentEditor && typeof _componentEditor.fetchComponentDetailDraft === "function"
+          ? _componentEditor.fetchComponentDetailDraft
+          : config.fetchComponentDetailDraft,
+        dishAllergenLabel: config.dishAllergenLabel,
+        showLoading: config.showLoading,
+        showJson: config.showJson,
+        loadLibrary: _callbacks.loadLibrary,
+        loadCompositionTextPreviewForCurrentComposition: config.loadCompositionTextPreviewForCurrentComposition,
       })
     : null;
 

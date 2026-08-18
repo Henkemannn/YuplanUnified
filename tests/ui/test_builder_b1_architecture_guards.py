@@ -469,6 +469,15 @@ def test_dish_editor_owns_allergen_status_helpers(client_admin) -> None:
     assert 'function renderDishAllergenSummaryFailure() {' in editor
     assert 'function renderDishAllergenSummaryEmpty() {' in editor
     assert 'function renderDishAllergenSummaryLoading() {' in editor
+    assert 'function renderDishCalculationSummaryMessage(message) {' in editor
+    assert 'function renderDishCalculationSummaryFailure() {' in editor
+    assert 'function renderDishCalculationSummaryEmpty() {' in editor
+    assert 'function renderDishCalculationSummaryLoading() {' in editor
+    assert 'function renderDishCalculationRow(row) {' in editor
+    assert 'function renderDishCalculationSummary(composition, componentDetails) {' in editor
+    assert 'function fetchDishLinkedComponentDetailsForCurrentComposition() {' in editor
+    assert 'function loadDishAllergenSummaryForCurrentComposition() {' in editor
+    assert 'function loadDishCalculationSummaryForCurrentComposition() {' in editor
 
     assert 'editor.renderDishAllergenSummaryMessage(message)' in script
     assert 'editor.renderDishAllergenSummaryFailure()' in script
@@ -478,6 +487,7 @@ def test_dish_editor_owns_allergen_status_helpers(client_admin) -> None:
     assert 'editor.renderDishAllergenSummary(composition, componentDetails)' in script
     assert 'function fetchDishLinkedComponentDetailsForCurrentComposition() {' in script
     assert 'function loadDishAllergenSummaryForCurrentComposition() {' in script
+    assert 'function loadDishCalculationSummaryForCurrentComposition() {' in script
 
 
 def test_component_editor_owns_recipe_method(client_admin) -> None:

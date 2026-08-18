@@ -15,9 +15,16 @@ function createBuilderDishEditor(config) {
     typeof config.loadCompositionTextPreviewForCurrentComposition === "function"
       ? config.loadCompositionTextPreviewForCurrentComposition
       : null;
+  const _fetchComponentDetailDraft = typeof config.fetchComponentDetailDraft === "function"
+    ? config.fetchComponentDetailDraft
+    : null;
   const _dishAllergenLabel = typeof config.dishAllergenLabel === "function"
     ? config.dishAllergenLabel
     : (value) => String(value || "");
+
+  if (!_fetchComponentDetailDraft) {
+    throw new Error("createBuilderDishEditor: fetchComponentDetailDraft is required");
+  }
 
   function _getState(key) {
     return _state.get(key);
@@ -211,6 +218,417 @@ function createBuilderDishEditor(config) {
     host.appendChild(markerSection);
   }
 
+  function renderDishCalculationSummaryMessage(message) {
+    const host = document.getElementById("dishCalculationSummary");
+    if (!host) {
+      return;
+    }
+    host.innerHTML = "";
+    const text = document.createElement("p");
+    text.className = "builder-dish-calculation-summary-empty";
+    text.textContent = String(message || "");
+    host.appendChild(text);
+  }
+
+  function renderDishCalculationSummaryFailure() {
+    renderDishCalculationSummaryMessage("Kunde inte läsa komponenterna just nu.");
+  }
+
+  function renderDishCalculationSummaryEmpty() {
+    renderDishCalculationSummaryMessage("Ingen kalkyl registrerad på komponenterna.");
+  }
+
+  function renderDishCalculationSummaryLoading() {
+    renderDishCalculationSummaryMessage("Samlar kalkyldata från komponenterna...");
+  }
+
+  function parseDishStrictNumericValue(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return null;
+    }
+    if (!/^[-+]?(?:\d+|\d*[\.,]\d+)$/.test(text)) {
+      return null;
+    }
+    return Number(text.replace(",", "."));
+  }
+
+  function parseDishCurrencyValue(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return null;
+    }
+    const match = text.match(/[-+]?(?:\d+[\.,]?\d*|\d*[\.,]\d+)/);
+    if (!match) {
+      return null;
+    }
+    const parsed = Number(String(match[0]).replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function formatDishCostValue(value) {
+    if (!Number.isFinite(value)) {
+      return "";
+    }
+    return value.toFixed(2);
+  }
+
+  function formatDishCalculationValue(value) {
+    if (value == null) {
+      return "–";
+    }
+    const parsed = parseDishCurrencyValue(value);
+    if (parsed == null) {
+      const text = String(value || "").trim();
+      return text ? text : "–";
+    }
+    return formatDishCostValue(parsed) + " kr";
+  }
+
+  function formatDishCalculationCell(value, fallback = "–") {
+    const text = String(value || "").trim();
+    return text ? text : fallback;
+  }
+
+  function formatDishCalculationAmount(value, unit) {
+    const amountText = String(value || "").trim();
+    const unitText = String(unit || "").trim();
+    if (!amountText && !unitText) {
+      return "–";
+    }
+    if (!amountText) {
+      return "–" + (unitText ? " " + unitText : "");
+    }
+    if (!unitText) {
+      return amountText + " –";
+    }
+    return amountText + " " + unitText;
+  }
+
+  function formatDishCalculationRowCost(value) {
+    const parsed = parseDishCurrencyValue(value);
+    return parsed == null ? "–" : formatDishCostValue(parsed) + " kr";
+  }
+
+  function renderDishCalculationRow(row) {
+    const rowCard = document.createElement("article");
+    rowCard.className = "builder-dish-calculation-row";
+
+    const ingredient = document.createElement("div");
+    ingredient.className = "builder-dish-calculation-row-value";
+    ingredient.textContent = formatDishCalculationCell(row && row.ingredient_name);
+    rowCard.appendChild(ingredient);
+
+    const amount = document.createElement("div");
+    amount.className = "builder-dish-calculation-row-value";
+    amount.textContent = formatDishCalculationAmount(row && row.amount_value, row && row.amount_unit);
+    rowCard.appendChild(amount);
+
+    const price = document.createElement("div");
+    price.className = "builder-dish-calculation-row-value";
+    price.textContent = formatDishCalculationValue((row && row.price_value) || "");
+    rowCard.appendChild(price);
+
+    const cost = document.createElement("div");
+    cost.className = "builder-dish-calculation-row-value builder-dish-calculation-row-value-cost";
+    cost.textContent = formatDishCalculationRowCost((row && row.calculated_cost) || "");
+    rowCard.appendChild(cost);
+
+    return rowCard;
+  }
+
+  function componentsInDisplayOrder(composition) {
+    const components = Array.isArray(composition.components) ? composition.components : [];
+    return [...components].sort((left, right) => {
+      const leftOrder = Number(left.sort_order || 0);
+      const rightOrder = Number(right.sort_order || 0);
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      const leftName = String(left.component_name || left.component_id || "").toLowerCase();
+      const rightName = String(right.component_name || right.component_id || "").toLowerCase();
+      const nameCompare = leftName.localeCompare(rightName, undefined, { sensitivity: "base" });
+      if (nameCompare !== 0) {
+        return nameCompare;
+      }
+      return String(left.component_id || "").localeCompare(String(right.component_id || ""));
+    });
+  }
+
+  async function fetchDishLinkedComponentDetailsForCurrentComposition() {
+    const composition = _getState("currentBuilderComposition");
+    if (!composition || !composition.composition_id) {
+      return {
+        composition: null,
+        compositionId: "",
+        linkedComponents: [],
+        componentDetails: [],
+      };
+    }
+
+    const compositionId = String(composition.composition_id || "").trim();
+    const linkedComponents = componentsInDisplayOrder(composition);
+    const linkedComponentIds = Array.from(new Set(
+      linkedComponents
+        .map((item) => String(item.component_id || "").trim())
+        .filter(Boolean),
+    ));
+
+    if (linkedComponentIds.length === 0) {
+      return {
+        composition,
+        compositionId,
+        linkedComponents,
+        componentDetails: [],
+      };
+    }
+
+    const componentDetails = await Promise.all(linkedComponents.map(async (linkedComponent) => {
+      const componentIdValue = String(linkedComponent.component_id || "").trim();
+      if (!componentIdValue) {
+        return null;
+      }
+      try {
+        const details = await _fetchComponentDetailDraft(componentIdValue);
+        return {
+          component: linkedComponent,
+          details,
+        };
+      } catch (error) {
+        return {
+          component: linkedComponent,
+          details: { tags: [], long_description: "", recipe_ingredient_rows: [], recipe_ingredients_text: "", method_text: "", method_notes: "", calculation_yield: "", calculation_cost: "", calculation_notes: "", calculation_rows: [], allergens: [], allergen_notes: "" },
+          error: String(error && error.message ? error.message : error || ""),
+        };
+      }
+    }));
+
+    return {
+      composition,
+      compositionId,
+      linkedComponents,
+      componentDetails,
+    };
+  }
+
+  async function loadDishAllergenSummaryForCurrentComposition() {
+    const host = document.getElementById("dishAllergensSummary");
+    if (!host) {
+      return;
+    }
+    const summaryToken = _setState("currentDishAllergenSummaryToken", Number(_getState("currentDishAllergenSummaryToken") || 0) + 1);
+    renderDishAllergenSummaryLoading();
+
+    const payload = await fetchDishLinkedComponentDetailsForCurrentComposition();
+    const composition = payload.composition;
+    const compositionId = String(payload.compositionId || "").trim();
+    const componentDetails = Array.isArray(payload.componentDetails) ? payload.componentDetails : [];
+
+    if (summaryToken !== _getState("currentDishAllergenSummaryToken")) {
+      return;
+    }
+    if (!_getState("currentBuilderComposition") || String(_getState("currentBuilderComposition").composition_id || "").trim() !== compositionId) {
+      return;
+    }
+    if (_getState("currentBuilderDishTab") !== "allergens") {
+      return;
+    }
+
+    const anyFailure = componentDetails.some((item) => item && item.error);
+    if (anyFailure && componentDetails.every((item) => !item || !item.details)) {
+      renderDishAllergenSummaryFailure();
+      return;
+    }
+
+    renderDishAllergenSummary(composition, componentDetails.filter(Boolean));
+  }
+
+  async function loadDishCalculationSummaryForCurrentComposition() {
+    const host = document.getElementById("dishCalculationSummary");
+    if (!host) {
+      return;
+    }
+
+    const summaryToken = _setState("currentDishCalculationSummaryToken", Number(_getState("currentDishCalculationSummaryToken") || 0) + 1);
+    renderDishCalculationSummaryLoading();
+
+    const payload = await fetchDishLinkedComponentDetailsForCurrentComposition();
+    const composition = payload.composition;
+    const compositionId = String(payload.compositionId || "").trim();
+    const componentDetails = Array.isArray(payload.componentDetails) ? payload.componentDetails : [];
+
+    if (summaryToken !== _getState("currentDishCalculationSummaryToken")) {
+      return;
+    }
+    if (!_getState("currentBuilderComposition") || String(_getState("currentBuilderComposition").composition_id || "").trim() !== compositionId) {
+      return;
+    }
+    if (_getState("currentBuilderDishTab") !== "calculation") {
+      return;
+    }
+
+    if (!composition || !composition.composition_id) {
+      renderDishCalculationSummaryEmpty();
+      return;
+    }
+
+    const anyFailure = componentDetails.some((item) => item && item.error);
+    if (anyFailure && componentDetails.every((item) => !item || !item.details)) {
+      renderDishCalculationSummaryFailure();
+      return;
+    }
+
+    renderDishCalculationSummary(composition, componentDetails.filter(Boolean));
+  }
+
+  function renderDishCalculationSummary(composition, componentDetails) {
+    const host = document.getElementById("dishCalculationSummary");
+    if (!host) {
+      return;
+    }
+
+    host.innerHTML = "";
+    const detailsList = Array.isArray(componentDetails) ? componentDetails : [];
+    const orderedComponents = componentsInDisplayOrder(composition);
+    const detailsByComponentId = new Map();
+
+    detailsList.forEach((entry) => {
+      const componentId = String((entry && entry.component && entry.component.component_id) || "").trim();
+      if (componentId) {
+        detailsByComponentId.set(componentId, entry);
+      }
+    });
+
+    let totalCost = 0;
+    let knownCostCount = 0;
+    let anyCalculationData = false;
+    let missingCalculationDataCount = 0;
+
+    for (const component of orderedComponents) {
+      const componentId = String(component.component_id || "").trim();
+      const entry = componentId ? detailsByComponentId.get(componentId) : null;
+      const details = entry && entry.details ? entry.details : null;
+      const componentName = String(component.component_name || component.component_id || "").trim();
+      const calculationCostText = String((details && details.calculation_cost) || "").trim();
+      const calculationNotesText = String((details && details.calculation_notes) || "").trim();
+      const calculationRows = Array.isArray(details && details.calculation_rows) ? details.calculation_rows : [];
+      const hasCalculationData = Boolean(calculationCostText || calculationNotesText || calculationRows.length > 0);
+      const hasNumericCost = parseDishCurrencyValue(calculationCostText) != null;
+
+      if (hasCalculationData && !hasNumericCost) {
+        missingCalculationDataCount += 1;
+      }
+
+      const parsedCost = parseDishCurrencyValue(calculationCostText);
+      if (parsedCost != null) {
+        totalCost += parsedCost;
+        knownCostCount += 1;
+      }
+
+      const card = document.createElement("article");
+      card.className = "builder-dish-calculation-card";
+
+      const title = document.createElement("div");
+      title.className = "builder-dish-calculation-card-title";
+      title.textContent = componentName || "Komponent";
+      card.appendChild(title);
+
+      if (!hasCalculationData) {
+        const missing = document.createElement("p");
+        missing.className = "builder-dish-calculation-summary-empty builder-dish-calculation-summary-missing";
+        missing.textContent = "Saknar kalkyldata";
+        card.appendChild(missing);
+        host.appendChild(card);
+        continue;
+      }
+
+      anyCalculationData = true;
+
+      const metaGrid = document.createElement("div");
+      metaGrid.className = "builder-dish-calculation-meta";
+
+      const totalField = document.createElement("div");
+      totalField.className = "builder-dish-calculation-meta-item";
+      const totalLabel = document.createElement("span");
+      totalLabel.className = "builder-dish-calculation-meta-label";
+      totalLabel.textContent = "Komponentkostnad";
+      const totalValue = document.createElement("span");
+      totalValue.className = "builder-dish-calculation-meta-value";
+      totalValue.textContent = formatDishCalculationValue(calculationCostText);
+      totalField.appendChild(totalLabel);
+      totalField.appendChild(totalValue);
+      metaGrid.appendChild(totalField);
+
+      if (calculationNotesText) {
+        const notesField = document.createElement("div");
+        notesField.className = "builder-dish-calculation-meta-item";
+        const notesLabel = document.createElement("span");
+        notesLabel.className = "builder-dish-calculation-meta-label";
+        notesLabel.textContent = "Anteckning";
+        const notesValue = document.createElement("span");
+        notesValue.className = "builder-dish-calculation-meta-value";
+        notesValue.textContent = calculationNotesText;
+        notesField.appendChild(notesLabel);
+        notesField.appendChild(notesValue);
+        metaGrid.appendChild(notesField);
+      }
+
+      card.appendChild(metaGrid);
+
+      if (calculationRows.length > 0) {
+        const rowsWrap = document.createElement("div");
+        rowsWrap.className = "builder-dish-calculation-rows";
+
+        const header = document.createElement("div");
+        header.className = "builder-dish-calculation-row builder-dish-calculation-row-head";
+        ["Ingrediens", "Mängd", "Pris", "Kostnad"].forEach((labelText) => {
+          const label = document.createElement("div");
+          label.className = "builder-dish-calculation-row-value";
+          label.textContent = labelText;
+          header.appendChild(label);
+        });
+        rowsWrap.appendChild(header);
+
+        calculationRows.forEach((row) => {
+          rowsWrap.appendChild(renderDishCalculationRow(row));
+        });
+
+        card.appendChild(rowsWrap);
+      }
+
+      host.appendChild(card);
+    }
+
+    if (!anyCalculationData) {
+      renderDishCalculationSummaryEmpty();
+      return;
+    }
+
+    if (knownCostCount > 0) {
+      const totalCard = document.createElement("article");
+      totalCard.className = "builder-dish-calculation-total";
+
+      const label = document.createElement("div");
+      label.className = "builder-dish-calculation-total-label";
+      label.textContent = "Total kalkyl för rätt";
+      totalCard.appendChild(label);
+
+      const value = document.createElement("div");
+      value.className = "builder-dish-calculation-total-value";
+      value.textContent = formatDishCostValue(totalCost) + " kr";
+      totalCard.appendChild(value);
+
+      if (missingCalculationDataCount > 0) {
+        const warning = document.createElement("p");
+        warning.className = "builder-dish-calculation-summary-warning";
+        warning.textContent = "Vissa komponenter saknar kalkyldata.";
+        totalCard.appendChild(warning);
+      }
+
+      host.insertBefore(totalCard, host.firstChild);
+    }
+  }
+
   function setDishOverviewStatus(message, isError = false) {
     const statusLine = document.getElementById("resolveStatusLine");
     if (!statusLine) {
@@ -334,5 +752,15 @@ function createBuilderDishEditor(config) {
     renderDishAllergenSummaryFailure,
     renderDishAllergenSummaryEmpty,
     renderDishAllergenSummaryLoading,
+    renderDishCalculationSummaryMessage,
+    renderDishCalculationSummaryFailure,
+    renderDishCalculationSummaryEmpty,
+    renderDishCalculationSummaryLoading,
+    renderDishCalculationRow,
+    renderDishCalculationSummary,
+    fetchDishLinkedComponentDetailsForCurrentComposition,
+    loadDishAllergenSummaryForCurrentComposition,
+    loadDishCalculationSummaryForCurrentComposition,
+    componentsInDisplayOrder,
   };
 }

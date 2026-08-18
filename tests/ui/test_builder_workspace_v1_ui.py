@@ -228,23 +228,31 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'function renderDishAllergenSummary(composition, componentDetails) {' in js
     assert 'function loadDishAllergenSummaryForCurrentComposition() {' in js
     assert 'function fetchDishLinkedComponentDetailsForCurrentComposition() {' in js
-    assert 'fetchComponentDetailDraft(componentIdValue)' in js
+    assert 'function renderDishCalculationSummaryMessage(message) {' in js
+    assert 'function renderDishCalculationSummaryFailure() {' in js
+    assert 'function renderDishCalculationSummaryEmpty() {' in js
+    assert 'function renderDishCalculationSummaryLoading() {' in js
+    assert 'return editor.renderDishCalculationSummaryMessage(message);' in js or 'editor.renderDishCalculationSummaryMessage(message)' in js
+    assert 'return editor.renderDishCalculationSummaryFailure();' in js or 'editor.renderDishCalculationSummaryFailure()' in js
+    assert 'return editor.renderDishCalculationSummaryEmpty();' in js or 'editor.renderDishCalculationSummaryEmpty()' in js
+    assert 'return editor.renderDishCalculationSummaryLoading();' in js or 'editor.renderDishCalculationSummaryLoading()' in js
+    assert 'function renderDishCalculationRow(row) {' in js
     assert 'function renderDishCalculationSummary(composition, componentDetails) {' in js
     assert 'function loadDishCalculationSummaryForCurrentComposition() {' in js
-    assert 'renderDishCalculationSummary(composition, componentDetails.filter(Boolean));' in js
-    assert 'Sparad kostnad' not in js
-    assert 'function parseDishCurrencyValue(value) {' in js
-    assert 'function formatDishCostValue(value) {' in js
-    assert 'return value.toFixed(2);' in js
-    assert 'formatCostValue(' not in js
-    assert 'Saknar kalkyldata' in js
-    assert 'Ingen kalkyl registrerad på komponenterna.' in js
-    assert 'Komponentkostnad' in js
-    assert 'Total kalkyl för rätt' in js
-    assert 'Vissa komponenter saknar kalkyldata.' in js
-    assert 'formatDishCalculationAmount(' in js
-    assert 'formatDishCalculationRowCost(' in js
-    assert 'host.insertBefore(totalCard, host.firstChild);' in js
+    assert 'function parseDishCurrencyValue(value) {' in dish_editor_js
+    assert 'function formatDishCostValue(value) {' in dish_editor_js
+    assert 'return value.toFixed(2);' in dish_editor_js
+    assert 'formatCostValue(' not in dish_editor_js
+    assert 'Saknar kalkyldata' in dish_editor_js
+    assert 'Ingen kalkyl registrerad på komponenterna.' in dish_editor_js
+    assert 'Komponentkostnad' in dish_editor_js
+    assert 'Total kalkyl för rätt' in dish_editor_js
+    assert 'Vissa komponenter saknar kalkyldata.' in dish_editor_js
+    assert 'formatDishCalculationAmount(' in dish_editor_js
+    assert 'formatDishCalculationRowCost(' in dish_editor_js
+    assert 'host.insertBefore(totalCard, host.firstChild);' in dish_editor_js
+    assert 'const _fetchComponentDetailDraft = typeof config.fetchComponentDetailDraft === "function"' in dish_editor_js
+    assert 'await _fetchComponentDetailDraft(componentIdValue);' in dish_editor_js
     assert 'id="dishAllergensPanel"' in html
     assert 'id="dishCalculationPanel"' in html
     assert 'builderCompositionTitle' not in js
