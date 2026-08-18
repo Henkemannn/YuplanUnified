@@ -17,6 +17,12 @@ function createBuilderComponentEditor(config) {
   function _getCachedCompositions() {
     return typeof config.getCachedCompositions === "function" ? config.getCachedCompositions() : [];
   }
+  async function _resolveComponentById(componentId) {
+    if (typeof config.resolveComponentById === "function") {
+      return config.resolveComponentById(componentId);
+    }
+    return null;
+  }
   function _loadLibrary() {
     return typeof config.loadLibrary === "function" ? config.loadLibrary() : Promise.resolve();
   }
@@ -955,9 +961,15 @@ function createBuilderComponentEditor(config) {
       return;
     }
     const requestedTab = componentDetailTabValue(initialTab || "overview");
-    const component = _getCachedComponents().find(
+    let component = _getCachedComponents().find(
       (item) => String(item.component_id || "") === idValue,
     );
+    if (!component) {
+      const resolvedComponent = await _resolveComponentById(idValue);
+      if (resolvedComponent) {
+        component = resolvedComponent.component || resolvedComponent;
+      }
+    }
     if (!component) {
       return;
     }

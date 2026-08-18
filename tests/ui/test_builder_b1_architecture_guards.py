@@ -215,6 +215,24 @@ def test_modal_controller_not_duplicated_in_builder_js(client_admin) -> None:
     ), "dishTabButtons forEach listener must be in controller, not builder.js"
 
 
+def test_shared_controller_does_not_call_legacy_dish_globals(client_admin) -> None:
+    """The shared controller must not call old builder.js Dish lifecycle globals directly."""
+    controller = _controller_js(client_admin)
+    assert 'openBuilderModalForComposition(' not in controller
+    assert 'closeResolveModal(' not in controller
+
+
+def test_return_to_dish_attach_contract_uses_explicit_composition_id(client_admin) -> None:
+    """The real workspace return flow passes the originating composition id into the canonical attach path."""
+    script = _builder_js(client_admin)
+    controller = _controller_js(client_admin)
+
+    assert 'async function attachExistingComponentToCurrentComposition(componentId, compositionId = null)' in script
+    assert 'const explicitCompositionId = String(compositionId || "").trim();' in script
+    assert 'const resolvedCompositionId = explicitCompositionId || String(currentBuilderComposition' in script
+    assert '? await attachComponent(componentId, compositionId)' in controller
+
+
 def test_dish_editor_owns_overview_persistence(client_admin) -> None:
     """Dish overview persistence lives in builder_dish_editor.js, not builder.js."""
     script = _builder_js(client_admin)

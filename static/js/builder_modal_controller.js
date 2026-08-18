@@ -9,30 +9,17 @@
  *   - The workspace callback contract
  *   - The public API used by Builder Workspace and future consumers
  *
- * Implementation functions (renderBuilderPanel, openComponentDetailEditor, etc.)
- * remain in builder.js as globals and are called through here. This is an
- * EXTRACTION, not a rewrite — no logic is duplicated.
- *
- * Globals from builder.js (must be loaded on same page, called via delegation):
- *   openBuilderModalForComposition, closeResolveModal, openComponentDetailEditor
- *   renderBuilderPanel, setDishBuilderTab, closeDishComponentOverflowMenus
- *   setPendingComponentCreateForCurrentComposition, clearPendingComponentCreateForComposition
- *   attachExistingComponentToCurrentComposition, saveDishOverviewMetadata
- *   saveActiveComponentDetailDraft, closeModalById, openSimpleModal, closeSimpleModal
- *   setComponentDetailTab, markComponentDetailDirty, cleanComponentInlineName
- *   addComponentDetailTagsFromInput, removeComponentDetailTag
- *   readRecipeIngredientRowsFromForm, defaultRecipeIngredientRow
- *   renderRecipeIngredientRows, syncCalculationRowsFromRecipeRows
- *   reopenPendingCompositionForReturn, updateComponentDetailReturnAction
- *   deleteComponentFromLibrary, renderComponentPalette, loadReusableComponents
- *   currentBuilderComposition (mutable global), pendingComponentCreateForCompositionId
- *   _activeComponentDetailId (mutable global), _componentDetailDirty (mutable global)
- *
  * Workspace adapter callbacks (passed in config):
  *   config.loadLibrary: async () => void
  *   config.updateComponentCategoryChipCounts: () => void
  *   config.filterLibraryComponents: (query: string) => void
  *   config.currentComponentSearchQuery: () => string
+ *   config.resolveComponentById: (componentId: string) => object | null | Promise<object | null>
+ *   config.showLoading: (targetId: string) => void
+ *   config.showJson: (targetId: string, value: any) => void
+ *   config.openSimpleModal: (modalId: string) => void
+ *   config.closeModalById: (modalId: string) => void
+ *   config.renderComponentPalette: () => void
  *
  * @param {{
  *   compositionRoot: Element,
@@ -59,6 +46,13 @@ function createBuilderModalController(config) {
     updateComponentCategoryChipCounts: config.updateComponentCategoryChipCounts || null,
     filterLibraryComponents: config.filterLibraryComponents || null,
     currentComponentSearchQuery: config.currentComponentSearchQuery || null,
+    resolveComponentById: config.resolveComponentById || null,
+    attachExistingComponentToCurrentComposition: config.attachExistingComponentToCurrentComposition || null,
+    showLoading: config.showLoading || null,
+    showJson: config.showJson || null,
+    openSimpleModal: config.openSimpleModal || null,
+    closeModalById: config.closeModalById || null,
+    renderComponentPalette: config.renderComponentPalette || null,
   };
 
   const _state = {
@@ -99,6 +93,55 @@ function createBuilderModalController(config) {
     set: (key, value) => { _state[key] = value; return value; },
   };
 
+  function _openSimpleModal(modalId) {
+    if (typeof _callbacks.openSimpleModal === "function") {
+      _callbacks.openSimpleModal(modalId);
+      return;
+    }
+    const modal = document.getElementById(String(modalId || ""));
+    if (!modal) {
+      return;
+    }
+    modal.classList.remove("hidden");
+    modal.removeAttribute("hidden");
+    modal.style.display = "";
+    modal.removeAttribute("aria-hidden");
+    modal.inert = false;
+  }
+
+  function _closeModalById(modalId) {
+    if (typeof _callbacks.closeModalById === "function") {
+      _callbacks.closeModalById(modalId);
+      return;
+    }
+    const modal = document.getElementById(String(modalId || ""));
+    if (!modal) {
+      return;
+    }
+    modal.classList.add("hidden");
+    modal.removeAttribute("aria-hidden");
+    modal.inert = false;
+  }
+
+  function _showLoading(targetId) {
+    if (typeof _callbacks.showLoading === "function") {
+      _callbacks.showLoading(targetId);
+    }
+  }
+
+  function _showJson(targetId, value) {
+    if (typeof _callbacks.showJson === "function") {
+      _callbacks.showJson(targetId, value);
+    }
+  }
+
+  async function _resolveComponentById(componentId) {
+    if (typeof _callbacks.resolveComponentById === "function") {
+      return _callbacks.resolveComponentById(componentId);
+    }
+    return null;
+  }
+
   const _componentEditor = _componentEditorFactory
     ? _componentEditorFactory({
         callApi: config.callApi,
@@ -113,6 +156,7 @@ function createBuilderModalController(config) {
         showJson: config.showJson,
         closeModalById: config.closeModalById,
         openSimpleModal: config.openSimpleModal,
+        resolveComponentById: config.resolveComponentById,
         reopenPendingCompositionForReturn: config.reopenPendingCompositionForReturn,
         attachExistingComponentToCurrentComposition: config.attachExistingComponentToCurrentComposition,
         clearPendingComponentCreateForComposition: config.clearPendingComponentCreateForComposition,
@@ -140,7 +184,7 @@ function createBuilderModalController(config) {
 
   function _closeComponentDetailEditorSafe() {
     if (!_state._componentDetailDirty) {
-      closeModalById("componentDetailEditorModal");
+      _closeModalById("componentDetailEditorModal");
       _state._activeComponentDetailId = "";
       return Promise.resolve();
     }
@@ -150,7 +194,7 @@ function createBuilderModalController(config) {
         ? _componentEditor.saveActiveComponentDetailDraft()
         : Promise.resolve();
       return savePromise.then(() => {
-        closeModalById("componentDetailEditorModal");
+        _closeModalById("componentDetailEditorModal");
         _state._activeComponentDetailId = "";
         _state._componentDetailDirty = false;
       });
@@ -159,10 +203,301 @@ function createBuilderModalController(config) {
     if (!shouldDiscard) {
       return Promise.resolve();
     }
-    closeModalById("componentDetailEditorModal");
+    _closeModalById("componentDetailEditorModal");
     _state._activeComponentDetailId = "";
     _state._componentDetailDirty = false;
     return Promise.resolve();
+  }
+
+  function componentsInDisplayOrder(composition) {
+    const components = Array.isArray(composition && composition.components) ? composition.components : [];
+    return [...components].sort((left, right) => {
+      const leftOrder = Number(left.sort_order || 0);
+      const rightOrder = Number(right.sort_order || 0);
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      const leftName = String(left.component_name || left.component_id || "").toLowerCase();
+      const rightName = String(right.component_name || right.component_id || "").toLowerCase();
+      const nameCompare = leftName.localeCompare(rightName, undefined, { sensitivity: "base" });
+      if (nameCompare !== 0) {
+        return nameCompare;
+      }
+      return String(left.component_id || "").localeCompare(String(right.component_id || ""));
+    });
+  }
+
+  function renderDishOverviewKlossPreview(composition) {
+    const previewList = compositionRoot.querySelector("#dishOverviewKlossPreview");
+    if (!previewList) {
+      return;
+    }
+
+    previewList.innerHTML = "";
+    const components = componentsInDisplayOrder(composition);
+
+    if (components.length === 0) {
+      const li = document.createElement("li");
+      li.className = "component-build-surface-empty";
+      li.textContent = "Inga komponenter ännu.";
+      previewList.appendChild(li);
+      return;
+    }
+
+    for (const component of components) {
+      const componentIdValue = String(component.component_id || "");
+      const li = document.createElement("li");
+      li.className = "component-list-item";
+
+      const card = document.createElement("article");
+      card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
+
+      const surface = document.createElement("div");
+      surface.className = "builder-component-card-surface";
+
+      const name = document.createElement("div");
+      name.className = "component-library-card-name";
+      name.textContent = String(component.component_name || component.component_id || "");
+
+      surface.appendChild(name);
+      card.appendChild(surface);
+      card.addEventListener("click", async () => {
+        if (_componentEditor) {
+          await _componentEditor.openComponentDetailEditor(componentIdValue, "overview");
+        }
+      });
+      li.appendChild(card);
+      previewList.appendChild(li);
+    }
+  }
+
+  function renderDishComponentsPanel(composition) {
+    const list = compositionRoot.querySelector("#builderComponentsList");
+    if (!list) {
+      return;
+    }
+
+    list.innerHTML = "";
+    const components = componentsInDisplayOrder(composition);
+    if (components.length === 0) {
+      const li = document.createElement("li");
+      li.className = "component-build-surface-empty";
+      li.textContent = "Inga komponenter ännu. Använd Lägg till komponent för att börja bygga rätten.";
+      list.appendChild(li);
+      return;
+    }
+
+    for (const component of components) {
+      const componentIdValue = String(component.component_id || "");
+      const li = document.createElement("li");
+      li.className = "component-list-item";
+      if (!String(component.role || "").trim()) {
+        li.classList.add("component-list-item-missing-role");
+      }
+
+      const card = document.createElement("article");
+      card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
+      card.dataset.componentId = componentIdValue;
+
+      const surface = document.createElement("button");
+      surface.type = "button";
+      surface.className = "builder-component-card-surface";
+
+      const name = document.createElement("div");
+      name.className = "component-library-card-name";
+      name.textContent = String(component.component_name || component.component_id || "");
+
+      const right = document.createElement("div");
+      right.className = "component-row-right";
+
+      const overflow = document.createElement("details");
+      overflow.className = "component-overflow";
+      const overflowSummary = document.createElement("summary");
+      overflowSummary.textContent = "...";
+      overflowSummary.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+      const menu = document.createElement("div");
+      menu.className = "component-overflow-menu";
+      const openComponentBtn = document.createElement("button");
+      openComponentBtn.type = "button";
+      openComponentBtn.textContent = "Öppna komponent";
+      openComponentBtn.addEventListener("click", async () => {
+        overflow.removeAttribute("open");
+        if (_componentEditor) {
+          await _componentEditor.openComponentDetailEditor(componentIdValue, "overview");
+        }
+      });
+      menu.appendChild(openComponentBtn);
+      overflow.appendChild(overflowSummary);
+      overflow.appendChild(menu);
+      right.appendChild(overflow);
+
+      surface.appendChild(name);
+      surface.appendChild(right);
+      surface.addEventListener("click", async () => {
+        if (_componentEditor) {
+          await _componentEditor.openComponentDetailEditor(componentIdValue, "overview");
+        }
+      });
+
+      card.appendChild(surface);
+      li.appendChild(card);
+      list.appendChild(li);
+    }
+  }
+
+  function renderCurrentComposition(composition) {
+    if (!composition || !composition.composition_id) {
+      return;
+    }
+    _state.currentBuilderComposition = composition;
+    _state.currentBuilderDishTab = _state.currentBuilderDishTab || "overview";
+    if (_dishEditor) {
+      _dishEditor.syncDishModalHeader(composition);
+      _dishEditor.syncDishOverviewInputs(composition);
+    }
+    renderDishOverviewKlossPreview(composition);
+    renderDishComponentsPanel(composition);
+    if (_dishEditor) {
+      _dishEditor.setDishOverviewStatus("");
+    }
+    setDishBuilderTab(_state.currentBuilderDishTab);
+  }
+
+  function openCompositionModal() {
+    _openSimpleModal("resolveModal");
+    const modal = compositionRoot;
+    modal.classList.remove("hidden");
+    modal.removeAttribute("hidden");
+    modal.style.display = "";
+    modal.removeAttribute("aria-hidden");
+    modal.inert = false;
+  }
+
+  function closeCompositionModal() {
+    _state.currentDishAllergenSummaryToken += 1;
+    _state.currentDishCalculationSummaryToken += 1;
+    closeDishComponentOverflowMenus();
+    _closeModalById("componentDetailEditorModal");
+    _closeModalById("resolveModal");
+    _state.currentBuilderComposition = null;
+    _state.currentBuilderDishTab = "overview";
+  }
+
+  async function _returnComponentDetailToDish() {
+    const componentId = String(_state._activeComponentDetailId || "").trim();
+    const compositionId = String(_state.pendingComponentCreateForCompositionId || _state.currentBuilderComposition?.composition_id || "").trim();
+    if (!componentId || !compositionId) {
+      return;
+    }
+
+    if (_state._componentDetailDirty) {
+      if (_componentEditor) {
+        await _componentEditor.saveActiveComponentDetailDraft();
+      }
+    }
+    if (_state._componentDetailDirty) {
+      return;
+    }
+
+    const pendingReturnTab = String(_state.pendingComponentCreateReturnTab || "components").trim() || "components";
+    const attachComponent = typeof _callbacks.attachExistingComponentToCurrentComposition === "function"
+      ? _callbacks.attachExistingComponentToCurrentComposition
+      : null;
+    const attachResult = attachComponent
+      ? await attachComponent(componentId, compositionId)
+      : null;
+
+    if (!(attachResult && attachResult.data && attachResult.data.ok && attachResult.data.composition)) {
+      _showJson("componentDetailOut", attachResult || { status: 0, data: { ok: false, error: "attach_failed" } });
+      return;
+    }
+
+    const returnedComposition = attachResult.data.composition;
+    _state.currentBuilderComposition = returnedComposition;
+    _state.pendingComponentCreateForCompositionId = null;
+    _state.pendingComponentCreateForCompositionName = null;
+    _state.pendingComponentCreateReturnTab = "components";
+    _state._activeComponentDetailId = "";
+    _state._componentDetailDirty = false;
+    _closeModalById("componentDetailEditorModal");
+    openCompositionModal();
+    renderCurrentComposition(returnedComposition);
+    setDishBuilderTab(pendingReturnTab);
+  }
+
+  function closeDishComponentOverflowMenus(exceptElement = null) {
+    const panel = compositionRoot.querySelector("#dishComponentsPanel");
+    if (!panel) {
+      return false;
+    }
+
+    const keepOpen = exceptElement instanceof Element
+      ? exceptElement.closest(".component-overflow")
+      : null;
+
+    let didCloseAny = false;
+    const menus = panel.querySelectorAll(".component-overflow");
+    for (const menu of menus) {
+      if (!(menu instanceof HTMLElement)) {
+        continue;
+      }
+      if (keepOpen && menu === keepOpen) {
+        continue;
+      }
+      if (menu.hasAttribute("open")) {
+        menu.removeAttribute("open");
+        didCloseAny = true;
+      }
+    }
+
+    return didCloseAny;
+  }
+
+  function setDishBuilderTab(tabValue) {
+    const key = String(tabValue || "").trim().toLowerCase();
+    const nextTab = key === "components" || key === "allergens" || key === "calculation" || key === "overview"
+      ? key
+      : "overview";
+    _state.currentBuilderDishTab = nextTab;
+    if (nextTab !== "components") {
+      closeDishComponentOverflowMenus();
+    }
+
+    const tabButtons = Array.from(compositionRoot.querySelectorAll("[data-dish-tab]"));
+    const tabPanels = Array.from(compositionRoot.querySelectorAll("[data-dish-panel]"));
+    tabButtons.forEach((button) => {
+      const tab = String(button.getAttribute("data-dish-tab") || "").trim().toLowerCase();
+      const active = tab === nextTab;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+      button.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    tabPanels.forEach((panel) => {
+      const tab = String(panel.getAttribute("data-dish-panel") || "").trim().toLowerCase();
+      const active = tab === nextTab;
+      panel.hidden = !active;
+      panel.classList.toggle("hidden", !active);
+      panel.setAttribute("aria-hidden", active ? "false" : "true");
+      if (active) {
+        panel.removeAttribute("hidden");
+      } else {
+        panel.setAttribute("hidden", "hidden");
+      }
+    });
+
+    if (nextTab === "calculation" && _dishEditor) {
+      _dishEditor.loadDishCalculationSummaryForCurrentComposition().catch(() => {
+        _dishEditor.renderDishCalculationSummaryFailure();
+      });
+    }
+
+    if (nextTab === "allergens" && _dishEditor) {
+      _dishEditor.loadDishAllergenSummaryForCurrentComposition().catch(() => {
+        _dishEditor.renderDishAllergenSummaryFailure();
+      });
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -209,31 +544,7 @@ function createBuilderModalController(config) {
     const componentDetailReturnBtn = componentRoot.querySelector("#componentDetailReturnToDishBtn");
     if (componentDetailReturnBtn) {
       componentDetailReturnBtn.addEventListener("click", async () => {
-        const componentId = String(_state._activeComponentDetailId || "").trim();
-        if (!componentId || !_state.pendingComponentCreateForCompositionId) {
-          return;
-        }
-        if (_state._componentDetailDirty) {
-          if (_componentEditor) await _componentEditor.saveActiveComponentDetailDraft();
-        }
-        if (_state._componentDetailDirty) {
-          return;
-        }
-        const reopenedComposition = await reopenPendingCompositionForReturn();
-        if (!reopenedComposition) {
-          showJson("componentDetailOut", { status: 0, data: { ok: false, error: "pending composition not found" } });
-          return;
-        }
-        const attachResult = await attachExistingComponentToCurrentComposition(componentId);
-        if (attachResult && attachResult.data && attachResult.data.ok && attachResult.data.composition) {
-          if (_callbacks.loadLibrary) {
-            await _callbacks.loadLibrary();
-          }
-          clearPendingComponentCreateForComposition();
-          closeModalById("componentDetailEditorModal");
-          _state._activeComponentDetailId = "";
-          _state._componentDetailDirty = false;
-        }
+        await _returnComponentDetailToDish();
       });
     }
 
@@ -354,8 +665,7 @@ function createBuilderModalController(config) {
     const resolveCancelBtn = compositionRoot.querySelector("#resolveCancel");
     if (resolveCancelBtn) {
       resolveCancelBtn.addEventListener("click", () => {
-        closeModalById("resolveModal");
-        closeResolveModal();
+        closeCompositionModal();
       });
     }
 
@@ -406,8 +716,7 @@ function createBuilderModalController(config) {
     // ── Dish modal: backdrop click to close ───────────────────────────
     compositionRoot.addEventListener("click", (event) => {
       if (event.target === compositionRoot) {
-        closeModalById("resolveModal");
-        closeResolveModal();
+        closeCompositionModal();
       }
     });
 
@@ -446,14 +755,16 @@ function createBuilderModalController(config) {
      * @param {string} [initialTab]
      */
     openComposition(composition, initialTab) {
-      openBuilderModalForComposition(composition, initialTab || "overview");
+      renderCurrentComposition(composition);
+      setDishBuilderTab(initialTab || "overview");
+      openCompositionModal();
     },
 
     /**
      * Close the Dish (composition) modal.
      */
     closeComposition() {
-      closeResolveModal();
+      closeCompositionModal();
     },
 
     /**
@@ -479,7 +790,7 @@ function createBuilderModalController(config) {
      * @param {object} composition
      */
     renderBuilderPanel(composition) {
-      renderBuilderPanel(composition);
+      renderCurrentComposition(composition);
     },
 
     /**
@@ -495,14 +806,22 @@ function createBuilderModalController(config) {
      * from within a dish. Uses current composition if no args provided.
      */
     setPendingComponentCreate() {
-      setPendingComponentCreateForCurrentComposition();
+      _state.pendingComponentCreateForCompositionId = _state.currentBuilderComposition && _state.currentBuilderComposition.composition_id
+        ? String(_state.currentBuilderComposition.composition_id || "").trim() || null
+        : null;
+      _state.pendingComponentCreateForCompositionName = _state.currentBuilderComposition && _state.currentBuilderComposition.composition_name
+        ? String(_state.currentBuilderComposition.composition_name || "").trim() || null
+        : null;
+      _state.pendingComponentCreateReturnTab = "components";
     },
 
     /**
      * Clear pending composition create context.
      */
     clearPendingComponentCreate() {
-      clearPendingComponentCreateForComposition();
+      _state.pendingComponentCreateForCompositionId = null;
+      _state.pendingComponentCreateForCompositionName = null;
+      _state.pendingComponentCreateReturnTab = "components";
     },
 
     /**
@@ -510,14 +829,19 @@ function createBuilderModalController(config) {
      * @param {string} componentId
      */
     attachExistingComponentToCurrentComposition(componentId) {
-      return attachExistingComponentToCurrentComposition(componentId);
+      if (typeof _callbacks.attachExistingComponentToCurrentComposition === "function") {
+        return _callbacks.attachExistingComponentToCurrentComposition(componentId);
+      }
+      return Promise.resolve({ status: 0, data: { ok: false, error: "attach callback unavailable" } });
     },
 
     /**
      * Re-render the component palette (addComponentModal).
      */
     renderComponentPalette() {
-      renderComponentPalette();
+      if (typeof _callbacks.renderComponentPalette === "function") {
+        _callbacks.renderComponentPalette();
+      }
     },
 
     /**
@@ -561,9 +885,11 @@ function createBuilderModalController(config) {
      * Re-renders palette and composition list.
      */
     onReusableComponentsRefreshed() {
-      renderComponentPalette();
+      if (typeof _callbacks.renderComponentPalette === "function") {
+        _callbacks.renderComponentPalette();
+      }
       if (_state.currentBuilderComposition) {
-        renderBuilderPanel(_state.currentBuilderComposition);
+        renderCurrentComposition(_state.currentBuilderComposition);
       }
     },
 

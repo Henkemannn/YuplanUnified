@@ -4622,8 +4622,10 @@ async function removeComponentFromCurrentComposition(componentId) {
   }
 }
 
-async function attachExistingComponentToCurrentComposition(componentId) {
-  if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
+async function attachExistingComponentToCurrentComposition(componentId, compositionId = null) {
+  const explicitCompositionId = String(compositionId || "").trim();
+  const resolvedCompositionId = explicitCompositionId || String(currentBuilderComposition && currentBuilderComposition.composition_id || "").trim();
+  if (!resolvedCompositionId) {
     const failure = {
       status: 0,
       data: { ok: false, error: "no_composition_selected" },
@@ -4632,7 +4634,6 @@ async function attachExistingComponentToCurrentComposition(componentId) {
     return failure;
   }
 
-  const compositionId = String(currentBuilderComposition.composition_id);
   const roleInput = document.getElementById("newComponentRole");
   const role = roleInput ? String(roleInput.value || "").trim() : "";
 
@@ -4640,7 +4641,7 @@ async function attachExistingComponentToCurrentComposition(componentId) {
   try {
     const result = await callApi(
       "/api/builder/compositions/" +
-        encodeURIComponent(compositionId) +
+        encodeURIComponent(resolvedCompositionId) +
         "/components/attach",
       {
         method: "POST",
@@ -4712,7 +4713,7 @@ async function attachComponentToPendingComposition(componentId) {
     }
   }
 
-  const attachResult = await attachExistingComponentToCurrentComposition(componentId);
+  const attachResult = await attachExistingComponentToCurrentComposition(componentId, compositionId);
   if (attachResult && attachResult.data && attachResult.data.ok && attachResult.data.composition) {
     await loadLibrary();
     clearPendingComponentCreateForComposition();
@@ -5086,6 +5087,8 @@ function bindBuilderHandlers() {
     loadCompositionTextPreviewForCurrentComposition: loadCompositionTextPreviewForCurrentComposition,
     getCachedComponents: () => _cachedLibraryComponents,
     getCachedCompositions: () => _cachedLibraryCompositions,
+    resolveComponentById: (componentId) => findCachedComponentById(componentId),
+    renderComponentPalette: renderComponentPalette,
     showLoading: showLoading,
     showJson: showJson,
     closeModalById: closeModalById,
