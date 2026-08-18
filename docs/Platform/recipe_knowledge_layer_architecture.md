@@ -142,7 +142,7 @@ This ensures:
 
 All recipes must respect strict tenant boundaries.
 
-### Levels:
+### Levels
 
 * private → only creator
 * site → same kitchen/site

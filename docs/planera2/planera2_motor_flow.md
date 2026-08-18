@@ -272,7 +272,7 @@ Per combination:
 
 # 🧠 Designregler (måste följas)
 
-## Engine får inte:
+## Engine får inte
 
 ❌ göra DB-anrop
 ❌ importera Flask
@@ -281,7 +281,7 @@ Per combination:
 
 ---
 
-## Engine måste:
+## Engine måste
 
 ✔ vara ren funktion
 ✔ vara deterministisk

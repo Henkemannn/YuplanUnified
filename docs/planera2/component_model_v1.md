@@ -19,7 +19,7 @@ En komponent är:
 
 > En återanvändbar produktionsbyggsten som kan ingå i flera måltider och sammanhang.
 
-### Exempel:
+### Exempel
 - Köttbullar
 - Potatis
 - Tomatsås

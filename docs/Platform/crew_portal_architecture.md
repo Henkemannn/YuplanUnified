@@ -31,9 +31,12 @@ Yuplan byggs som en plattform med tydliga lager:
 [ Kitchen Portal ]   → operativ vy
 [ Admin Portal ]     → konfiguration
 
+```text
+
             ↓
 
 [ Planera 2.0 Engine ] → compute layer
+```
 ⚠️ Kritiska arkitekturregler
 1. Ingen logik i portalen
 
