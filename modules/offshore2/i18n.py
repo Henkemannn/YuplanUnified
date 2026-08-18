@@ -442,7 +442,6 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "offshore.work_menu.meal_slot.dinner": "Middag",
         "offshore.work_menu.track.primary": "Primär",
         "offshore.work_menu.track.secondary": "Sekundär",
-        "offshore.success.work_menu_saved": "Arbetsmeny sparad.",
         "offshore.success.work_menu_saved": "Arbeidsmeny lagret.",
         "offshore.settings.title": "Innstillinger",
         "offshore.settings.subtitle": "Konfigurasjon for Offshore-installasjonen.",

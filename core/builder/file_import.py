@@ -50,7 +50,6 @@ _LABEL_TOKENS = {
     "breakfast",
     "frukost",
     "kvallsmat",
-    "kvallsmat",
     "special",
     "specialkost",
 }
@@ -91,15 +90,11 @@ _REVIEW_IGNORE_TOKENS = {
     "januari",
     "februari",
     "mars",
-    "april",
     "maj",
     "juni",
     "juli",
     "augusti",
-    "september",
     "oktober",
-    "november",
-    "december",
 }
 _MEAL_LABEL_TOKENS = {
     "lunch",

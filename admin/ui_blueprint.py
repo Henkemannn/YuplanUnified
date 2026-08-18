@@ -1464,7 +1464,7 @@ def admin_menu_import_week_unpublish(year: int, week: int) -> str:  # type: igno
 
 __all__ = ["admin_ui_bp"]
 from core.app_authz import require_roles
-from flask import session, current_app
+from flask import session
 import os
 @admin_ui_bp.get("/ui/systemadmin/customers/new")
 @require_roles("superuser")
