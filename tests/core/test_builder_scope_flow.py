@@ -488,7 +488,7 @@ def test_scoped_composition_mutation_is_blocked_for_foreign_tenant() -> None:
             actor=foreign,
         )
 
-    with pytest.raises(ValueError, match="component not found"):
+    with pytest.raises(ValueError, match="composition not found"):
         flow.reorder_components_in_composition(
             composition_id=composition.composition_id,
             ordered_entries=[(component.components[0].component_id, 0)],

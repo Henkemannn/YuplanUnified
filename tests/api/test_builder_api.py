@@ -8,7 +8,34 @@ from docx import Document
 from openpyxl import Workbook
 from core.app_factory import create_app
 
-HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
+HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1", "X-User-Id": "11"}
+
+
+def _headers(*, role: str = "admin", tenant_id: int = 1, user_id: int = 11) -> dict[str, str]:
+    return {
+        "X-User-Role": role,
+        "X-Tenant-Id": str(tenant_id),
+        "X-User-Id": str(user_id),
+    }
+
+
+def _seed_session(client, *, role: str, tenant_id: int, user_id: int) -> None:
+    with client.session_transaction() as sess:
+        sess["role"] = role
+        sess["tenant_id"] = tenant_id
+        sess["user_id"] = user_id
+
+
+def _app_with_builder_db(db_path: str):
+    previous = os.environ.get("BUILDER_DB_PATH")
+    os.environ["BUILDER_DB_PATH"] = db_path
+    try:
+        return create_app({"TESTING": True})
+    finally:
+        if previous is None:
+            os.environ.pop("BUILDER_DB_PATH", None)
+        else:
+            os.environ["BUILDER_DB_PATH"] = previous
 
 
 def _client():
@@ -3359,3 +3386,194 @@ def test_component_declaration_readiness_endpoint_can_be_disabled_by_toggle() ->
     assert body.get("ok") is True
     assert body.get("declaration_enabled") is False
     assert body.get("readiness") is None
+
+
+def test_cook_can_read_org_recipe_and_edit_own_private_fork_via_api() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_cook_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    admin_client = app.test_client()
+    cook_client = app.test_client()
+    admin_headers = _headers(role="admin", tenant_id=1, user_id=11)
+    cook_headers = _headers(role="cook", tenant_id=1, user_id=42)
+    _seed_session(admin_client, role="admin", tenant_id=1, user_id=11)
+    _seed_session(cook_client, role="cook", tenant_id=1, user_id=42)
+
+    component_rv = admin_client.post(
+        "/api/builder/components",
+        json={"component_name": "Cook API Soup"},
+        headers=admin_headers,
+    )
+    component_id = ((component_rv.get_json() or {}).get("component") or {}).get("component_id")
+    recipe_rv = admin_client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Base", "yield_portions": 4, "visibility": "private"},
+        headers=admin_headers,
+    )
+    recipe_id = ((recipe_rv.get_json() or {}).get("recipe") or {}).get("recipe_id")
+    line_rv = admin_client.post(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/ingredients",
+        json={"ingredient_name": "Salt", "amount_value": 10, "amount_unit": "g"},
+        headers=admin_headers,
+    )
+    line_id = ((line_rv.get_json() or {}).get("ingredient_line") or {}).get("recipe_ingredient_line_id")
+
+    listed = cook_client.get(f"/api/builder/components/{component_id}/recipes", headers=cook_headers)
+    detail = cook_client.get(f"/api/builder/components/{component_id}/recipes/{recipe_id}", headers=cook_headers)
+    scaling = cook_client.get(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/scaling-preview?target_portions=8",
+        headers=cook_headers,
+    )
+    traits = cook_client.get(
+        f"/api/builder/components/{component_id}/recipes/{recipe_id}/trait-signals",
+        headers=cook_headers,
+    )
+
+    fork_component = cook_client.post(f"/api/builder/components/{component_id}/fork", headers=cook_headers)
+    fork_component_id = ((fork_component.get_json() or {}).get("component") or {}).get("component_id")
+    fork_recipe = cook_client.post(
+        f"/api/builder/components/{fork_component_id}/recipes",
+        json={"recipe_name": "Fork Base", "yield_portions": 6, "visibility": "private"},
+        headers=cook_headers,
+    )
+    fork_recipe_id = ((fork_recipe.get_json() or {}).get("recipe") or {}).get("recipe_id")
+    fork_line = cook_client.post(
+        f"/api/builder/components/{fork_component_id}/recipes/{fork_recipe_id}/ingredients",
+        json={"ingredient_name": "Pepper", "amount_value": 1, "amount_unit": "g"},
+        headers=cook_headers,
+    )
+    fork_line_id = ((fork_line.get_json() or {}).get("ingredient_line") or {}).get("recipe_ingredient_line_id")
+    update_recipe = cook_client.patch(
+        f"/api/builder/components/{fork_component_id}/recipes/{fork_recipe_id}",
+        json={"recipe_name": "Fork Updated", "yield_portions": 12, "visibility": "private"},
+        headers=cook_headers,
+    )
+    update_line = cook_client.patch(
+        f"/api/builder/components/{fork_component_id}/recipes/{fork_recipe_id}/ingredients/{fork_line_id}",
+        json={"ingredient_name": "Black pepper", "amount_value": 2, "amount_unit": "g"},
+        headers=cook_headers,
+    )
+    delete_line = cook_client.delete(
+        f"/api/builder/components/{fork_component_id}/recipes/{fork_recipe_id}/ingredients/{fork_line_id}",
+        headers=cook_headers,
+    )
+    delete_recipe = cook_client.delete(
+        f"/api/builder/components/{fork_component_id}/recipes/{fork_recipe_id}",
+        headers=cook_headers,
+    )
+
+    composition_rv = admin_client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "cook_api_plate", "composition_name": "Cook API Plate"},
+        headers=admin_headers,
+    )
+    composition_id = ((composition_rv.get_json() or {}).get("composition") or {}).get("composition_id")
+    composition_fork = cook_client.post(
+        f"/api/builder/compositions/{composition_id}/fork",
+        headers=cook_headers,
+    )
+    fork_composition_id = ((composition_fork.get_json() or {}).get("composition") or {}).get("composition_id")
+    add_component = cook_client.post(
+        f"/api/builder/compositions/{fork_composition_id}/components",
+        json={"component_name": "Side Dish", "role": "side"},
+        headers=cook_headers,
+    )
+
+    assert listed.status_code == 200
+    assert detail.status_code == 200
+    assert scaling.status_code == 200
+    assert traits.status_code == 200
+    assert (listed.get_json() or {}).get("count") == 1
+    assert ((detail.get_json() or {}).get("recipe") or {}).get("recipe_id") == recipe_id
+    assert fork_component.status_code == 201
+    assert fork_recipe.status_code == 201
+    assert fork_line.status_code == 201
+    assert update_recipe.status_code == 200
+    assert update_line.status_code == 200
+    assert delete_line.status_code == 200
+    assert delete_recipe.status_code == 200
+    assert composition_fork.status_code == 201
+    assert add_component.status_code == 200
+    assert len(((add_component.get_json() or {}).get("composition") or {}).get("components") or []) >= 1
+
+
+def test_cook_cannot_edit_org_original_or_other_cook_private_fork_via_api() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_cook_blocked_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    admin_client = app.test_client()
+    cook_a_client = app.test_client()
+    cook_b_client = app.test_client()
+    admin_headers = _headers(role="admin", tenant_id=1, user_id=11)
+    cook_a_headers = _headers(role="cook", tenant_id=1, user_id=42)
+    cook_b_headers = _headers(role="cook", tenant_id=1, user_id=43)
+    _seed_session(admin_client, role="admin", tenant_id=1, user_id=11)
+    _seed_session(cook_a_client, role="cook", tenant_id=1, user_id=42)
+    _seed_session(cook_b_client, role="cook", tenant_id=1, user_id=43)
+
+    component_rv = admin_client.post(
+        "/api/builder/components",
+        json={"component_name": "Blocked API Soup"},
+        headers=admin_headers,
+    )
+    component_id = ((component_rv.get_json() or {}).get("component") or {}).get("component_id")
+    recipe_rv = admin_client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Base", "yield_portions": 4, "visibility": "private"},
+        headers=admin_headers,
+    )
+    recipe_id = ((recipe_rv.get_json() or {}).get("recipe") or {}).get("recipe_id")
+
+    composition_rv = admin_client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "blocked_api_plate", "composition_name": "Blocked API Plate"},
+        headers=admin_headers,
+    )
+    composition_id = ((composition_rv.get_json() or {}).get("composition") or {}).get("composition_id")
+
+    fork_component = cook_a_client.post(f"/api/builder/components/{component_id}/fork", headers=cook_a_headers)
+    fork_component_id = ((fork_component.get_json() or {}).get("component") or {}).get("component_id")
+    fork_composition = cook_a_client.post(
+        f"/api/builder/compositions/{composition_id}/fork",
+        headers=cook_a_headers,
+    )
+    fork_composition_id = ((fork_composition.get_json() or {}).get("composition") or {}).get("composition_id")
+
+    org_recipe_attempt = cook_a_client.post(
+        f"/api/builder/components/{component_id}/recipes",
+        json={"recipe_name": "Cook Blocked", "yield_portions": 2, "visibility": "private"},
+        headers=cook_a_headers,
+    )
+    org_composition_attempt = cook_a_client.post(
+        f"/api/builder/compositions/{composition_id}/components",
+        json={"component_name": "Blocked Side"},
+        headers=cook_a_headers,
+    )
+    own_recipe_attempt = cook_a_client.post(
+        f"/api/builder/components/{fork_component_id}/recipes",
+        json={"recipe_name": "Cook Allowed", "yield_portions": 2, "visibility": "private"},
+        headers=cook_a_headers,
+    )
+    cross_recipe_attempt = cook_b_client.post(
+        f"/api/builder/components/{fork_component_id}/recipes",
+        json={"recipe_name": "Cook B Blocked", "yield_portions": 2, "visibility": "private"},
+        headers=cook_b_headers,
+    )
+    own_composition_attempt = cook_a_client.post(
+        f"/api/builder/compositions/{fork_composition_id}/components",
+        json={"component_name": "Allowed Side"},
+        headers=cook_a_headers,
+    )
+    cross_composition_attempt = cook_b_client.post(
+        f"/api/builder/compositions/{fork_composition_id}/components",
+        json={"component_name": "Blocked Side"},
+        headers=cook_b_headers,
+    )
+
+    assert org_recipe_attempt.status_code == 400
+    assert org_composition_attempt.status_code == 400
+    assert own_recipe_attempt.status_code == 201
+    assert cross_recipe_attempt.status_code == 400
+    assert own_composition_attempt.status_code == 200
+    assert cross_composition_attempt.status_code == 400
+    assert recipe_id is not None

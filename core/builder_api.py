@@ -1787,7 +1787,7 @@ def create_component():
 
 
 @bp.patch("/components/<component_id>")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def update_component(component_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -2139,7 +2139,7 @@ def list_component_aliases(component_id: str):
 
 
 @bp.post("/components/<component_id>/aliases")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def create_component_alias_endpoint(component_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -2703,7 +2703,7 @@ def fork_composition(composition_id: str):
 
 
 @bp.post("/compositions/<composition_id>/components")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def add_component_to_composition(composition_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -2725,7 +2725,7 @@ def add_component_to_composition(composition_id: str):
 
 
 @bp.post("/compositions/<composition_id>/components/attach")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def attach_existing_component_to_composition(composition_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -2747,7 +2747,7 @@ def attach_existing_component_to_composition(composition_id: str):
 
 
 @bp.patch("/compositions/<composition_id>/components/reorder")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def reorder_components_in_composition(composition_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -2797,7 +2797,7 @@ def render_composition_text(composition_id: str):
 
 
 @bp.delete("/compositions/<composition_id>/components/<component_id>")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def remove_component_from_composition(composition_id: str, component_id: str):
     try:
         flow = _get_builder_flow()
@@ -2814,7 +2814,7 @@ def remove_component_from_composition(composition_id: str, component_id: str):
 
 
 @bp.patch("/compositions/<composition_id>/components/<component_id>")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def rename_component_in_composition(composition_id: str, component_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -2853,7 +2853,7 @@ def rename_component_in_composition(composition_id: str, component_id: str):
 
 
 @bp.post("/components/<component_id>/recipes")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def create_component_recipe(component_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -2921,7 +2921,7 @@ def create_component_recipe(component_id: str):
 
 
 @bp.get("/components/<component_id>/recipes")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def list_component_recipes(component_id: str):
     try:
         flow = _get_builder_flow()
@@ -2947,7 +2947,7 @@ def list_component_recipes(component_id: str):
 
 
 @bp.patch("/components/<component_id>/recipes/primary")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def set_component_primary_recipe(component_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -2968,7 +2968,7 @@ def set_component_primary_recipe(component_id: str):
 
 
 @bp.post("/components/<component_id>/recipes/<recipe_id>/ingredients")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def add_component_recipe_ingredient(component_id: str, recipe_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -3008,7 +3008,7 @@ def add_component_recipe_ingredient(component_id: str, recipe_id: str):
 
 
 @bp.patch("/components/<component_id>/recipes/<recipe_id>")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def update_component_recipe(component_id: str, recipe_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -3033,7 +3033,7 @@ def update_component_recipe(component_id: str, recipe_id: str):
 
 
 @bp.delete("/components/<component_id>/recipes/<recipe_id>")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def delete_component_recipe(component_id: str, recipe_id: str):
     try:
         flow = _get_builder_flow()
@@ -3050,7 +3050,7 @@ def delete_component_recipe(component_id: str, recipe_id: str):
 
 
 @bp.patch("/components/<component_id>/recipes/<recipe_id>/ingredients/<ingredient_line_id>")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def update_component_recipe_ingredient(component_id: str, recipe_id: str, ingredient_line_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -3090,7 +3090,7 @@ def update_component_recipe_ingredient(component_id: str, recipe_id: str, ingred
 
 
 @bp.delete("/components/<component_id>/recipes/<recipe_id>/ingredients/<ingredient_line_id>")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def delete_component_recipe_ingredient(component_id: str, recipe_id: str, ingredient_line_id: str):
     try:
         flow = _get_builder_flow()
