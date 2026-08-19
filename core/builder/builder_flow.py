@@ -5,6 +5,7 @@ import logging
 import re
 import secrets
 from decimal import Decimal
+from typing import Protocol
 
 from ..components import (
     build_recipe_trait_signal_preview,
@@ -43,6 +44,9 @@ from .diet_conflict_preview import (
     build_diet_conflict_preview_from_traits,
     merge_diet_conflict_previews,
 )
+from .library_scope import ActorContext
+from .library_scope import ObjectScope
+from .library_scope import can_read_object
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +71,14 @@ class LibraryImportSummary:
     warnings: list[str] = field(default_factory=list)
 
 
+class ObjectScopeRepository(Protocol):
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None: ...
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None: ...
+
+    def delete_scope(self, object_type: str, object_id: str) -> None: ...
+
+
 class BuilderFlow:
     def __init__(
         self,
@@ -77,6 +89,7 @@ class BuilderFlow:
         alias_repository: InMemoryCompositionAliasRepository,
         component_alias_repository: InMemoryComponentAliasRepository | None = None,
         recipe_service: RecipeService | None = None,
+        object_scope_repository: ObjectScopeRepository | None = None,
     ) -> None:
         self._component_service = component_service
         self._composition_service = composition_service
@@ -84,6 +97,32 @@ class BuilderFlow:
         self._alias_repository = alias_repository
         self._component_alias_repository = component_alias_repository or InMemoryComponentAliasRepository()
         self._recipe_service = recipe_service or RecipeService()
+        self._object_scope_repository = object_scope_repository
+
+    def _can_read_library_object(
+        self,
+        object_type: str,
+        object_id: str,
+        *,
+        actor: ActorContext | None,
+    ) -> bool:
+        if actor is None or self._object_scope_repository is None:
+            return True
+
+        scope = self._object_scope_repository.get_scope(object_type, object_id)
+        if scope is None:
+            return True
+        return can_read_object(actor, scope)
+
+    def _set_object_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        if self._object_scope_repository is None:
+            return
+        self._object_scope_repository.set_scope(object_type, object_id, scope)
+
+    def _delete_object_scope(self, object_type: str, object_id: str) -> None:
+        if self._object_scope_repository is None:
+            return
+        self._object_scope_repository.delete_scope(object_type, object_id)
 
     def create_component_recipe(
         self,
@@ -95,11 +134,12 @@ class BuilderFlow:
         notes: str | None = None,
         recipe_id: str | None = None,
         is_primary: bool = False,
+        actor: ActorContext | None = None,
     ) -> Recipe:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
-        component = self._component_service.get_component(component_id_value)
+        component = self.get_library_component(component_id_value, actor=actor)
         if component is None:
             raise ValueError(f"component not found: {component_id_value}")
 
@@ -126,12 +166,13 @@ class BuilderFlow:
         *,
         component_id: str,
         recipe_id: str | None,
+        actor: ActorContext | None = None,
     ) -> Component:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
 
-        component = self._component_service.get_component(component_id_value)
+        component = self.get_library_component(component_id_value, actor=actor)
         if component is None:
             raise ValueError(f"component not found: {component_id_value}")
 
@@ -160,10 +201,14 @@ class BuilderFlow:
         sort_order: int = 0,
         trait_signals: list[str] | tuple[str, ...] | None = None,
         recipe_ingredient_line_id: str | None = None,
+        actor: ActorContext | None = None,
     ) -> RecipeIngredientLine:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
+        component = self.get_library_component(component_id_value, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip()
         if not recipe_id_value:
@@ -198,10 +243,15 @@ class BuilderFlow:
         *,
         component_id: str,
         recipe_id: str,
+        actor: ActorContext | None = None,
     ) -> tuple[Recipe, list[RecipeIngredientLine]]:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
+
+        component = self.get_library_component(component_id_value, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip()
         if not recipe_id_value:
@@ -224,10 +274,14 @@ class BuilderFlow:
         component_id: str,
         recipe_id: str,
         target_portions: int,
+        actor: ActorContext | None = None,
     ) -> RecipeScalingPreview:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
+        component = self.get_library_component(component_id_value, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip()
         if not recipe_id_value:
@@ -257,10 +311,14 @@ class BuilderFlow:
         *,
         component_id: str,
         recipe_id: str,
+        actor: ActorContext | None = None,
     ) -> RecipeTraitSignalPreview:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
+        component = self.get_library_component(component_id_value, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip()
         if not recipe_id_value:
@@ -281,12 +339,13 @@ class BuilderFlow:
         self,
         *,
         component_id: str,
+        actor: ActorContext | None = None,
     ) -> tuple[Component, list[Recipe]]:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
 
-        component = self._component_service.get_component(component_id_value)
+        component = self.get_library_component(component_id_value, actor=actor)
         if component is None:
             raise ValueError(f"component not found: {component_id_value}")
 
@@ -311,10 +370,14 @@ class BuilderFlow:
         yield_portions: int,
         visibility: str | None = None,
         notes: str | None = None,
+        actor: ActorContext | None = None,
     ) -> Recipe:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
+        component = self.get_library_component(component_id_value, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip()
         if not recipe_id_value:
@@ -348,10 +411,14 @@ class BuilderFlow:
         note: str | None = None,
         sort_order: int = 0,
         trait_signals: list[str] | tuple[str, ...] | None = None,
+        actor: ActorContext | None = None,
     ) -> RecipeIngredientLine:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
+        component = self.get_library_component(component_id_value, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip()
         if not recipe_id_value:
@@ -394,10 +461,14 @@ class BuilderFlow:
         component_id: str,
         recipe_id: str,
         recipe_ingredient_line_id: str,
+        actor: ActorContext | None = None,
     ) -> None:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
+        component = self.get_library_component(component_id_value, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip()
         if not recipe_id_value:
@@ -429,6 +500,7 @@ class BuilderFlow:
         *,
         component_id: str,
         recipe_id: str,
+        actor: ActorContext | None = None,
     ) -> None:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
@@ -438,7 +510,7 @@ class BuilderFlow:
         if not recipe_id_value:
             raise ValueError("recipe_id must be non-empty")
 
-        component = self._component_service.get_component(component_id_value)
+        component = self.get_library_component(component_id_value, actor=actor)
         if component is None:
             raise ValueError(f"component not found: {component_id_value}")
 
@@ -455,22 +527,28 @@ class BuilderFlow:
 
         self._recipe_service.delete_recipe(recipe_id_value)
 
-    def create_standalone_component(self, component_name: str, *, category: str | None = None) -> Component:
+    def create_standalone_component(
+        self,
+        component_name: str,
+        *,
+        category: str | None = None,
+        actor: ActorContext | None = None,
+    ) -> Component:
         category_value = str(category or "").strip().lower() or None
         name_value = self._normalize_component_name(component_name)
         if not name_value:
             raise ValueError("component_name must be non-empty")
 
-        match = self.match_component_name(name_value)
+        match = self.match_component_name(name_value, actor=actor)
         if match.status in {"exact_match", "alias_match"} and match.component_id:
             existing = self._component_service.get_component(match.component_id)
-            if existing is not None:
+            if existing is not None and self._can_read_library_object("component", existing.component_id, actor=actor):
                 if category_value and not list(existing.categories or []):
                     return self._component_service.set_component_category(existing.component_id, category_value)
                 return existing
 
         normalized_key = self._normalize_component_key(name_value)
-        for existing_item in self._component_service.list_components(active_only=False):
+        for existing_item in self.list_library_components(actor=actor):
             if self._normalize_component_key(existing_item.canonical_name) == normalized_key:
                 if category_value and not list(existing_item.categories or []):
                     return self._component_service.set_component_category(existing_item.component_id, category_value)
@@ -493,11 +571,32 @@ class BuilderFlow:
             component_id = f"{base}_{suffix}"
             suffix += 1
 
-        return self._component_service.create_component(
+        created = self._component_service.create_component(
             component_id=component_id,
             canonical_name=name_value,
             categories=[category_value] if category_value else [],
         )
+        if actor is not None and self._object_scope_repository is not None:
+            try:
+                self._set_object_scope(
+                    "component",
+                    created.component_id,
+                    ObjectScope(
+                        tenant_id=actor.tenant_id,
+                        owner_scope="organisation",
+                        owner_site_id=None,
+                        owner_user_id=None,
+                        visibility="organisation",
+                        source_object_id=None,
+                    ),
+                )
+            except Exception:
+                try:
+                    self._component_service.delete_component(created.component_id)
+                except Exception:
+                    pass
+                raise
+        return created
 
     def set_component_category(self, component_id: str, category: str | None) -> Component:
         return self._component_service.set_component_category(component_id, category)
@@ -559,10 +658,10 @@ class BuilderFlow:
             return self._component_alias_repository.list_all()
         return self._component_alias_repository.list_for_component(component_id)
 
-    def match_component_name(self, text: str) -> ComponentMatchResult:
+    def match_component_name(self, text: str, *, actor: ActorContext | None = None) -> ComponentMatchResult:
         return match_component_reference(
             import_text=text,
-            components=self._component_service.list_components(active_only=False),
+            components=self.list_library_components(actor=actor),
             alias_repository=self._component_alias_repository,
         )
 
@@ -572,12 +671,34 @@ class BuilderFlow:
         composition_name: str,
         *,
         library_group: str | None = None,
+        actor: ActorContext | None = None,
     ) -> Composition:
-        return self._composition_service.create_composition(
+        composition = self._composition_service.create_composition(
             composition_id=composition_id,
             composition_name=composition_name,
             library_group=library_group,
         )
+        if actor is not None and self._object_scope_repository is not None:
+            try:
+                self._set_object_scope(
+                    "composition",
+                    composition.composition_id,
+                    ObjectScope(
+                        tenant_id=actor.tenant_id,
+                        owner_scope="organisation",
+                        owner_site_id=None,
+                        owner_user_id=None,
+                        visibility="organisation",
+                        source_object_id=None,
+                    ),
+                )
+            except Exception:
+                try:
+                    self._composition_service.delete_composition(composition.composition_id)
+                except Exception:
+                    pass
+                raise
+        return composition
 
     def create_composition_with_generated_id(
         self,
@@ -585,12 +706,14 @@ class BuilderFlow:
         *,
         library_group: str | None = None,
         seed_components: bool = False,
+        actor: ActorContext | None = None,
     ) -> Composition:
         composition, _, _ = self.create_library_composition_from_text(
             raw_text=composition_name,
             library_group=library_group,
             seed_components=seed_components,
             learn_alias=False,
+            actor=actor,
         )
         return composition
 
@@ -600,8 +723,9 @@ class BuilderFlow:
         component_name: str,
         *,
         role: str | None = None,
+        actor: ActorContext | None = None,
     ) -> Composition:
-        composition = self._composition_service.get_composition(composition_id)
+        composition = self.get_library_composition(composition_id, actor=actor)
         if composition is None:
             raise ValueError(f"composition not found: {composition_id}")
 
@@ -609,7 +733,7 @@ class BuilderFlow:
         if not component_name_value:
             raise ValueError("component_name must be non-empty")
 
-        component = self.create_standalone_component(component_name_value)
+        component = self.create_standalone_component(component_name_value, actor=actor)
         return self._composition_service.add_component_to_composition(
             composition_id=composition_id,
             component_id=component.component_id,
@@ -621,7 +745,16 @@ class BuilderFlow:
         self,
         composition_id: str,
         component_id: str,
+        actor: ActorContext | None = None,
     ) -> Composition:
+        composition = self.get_library_composition(composition_id, actor=actor)
+        if composition is None:
+            raise ValueError(f"composition not found: {composition_id}")
+
+        component = self.get_library_component(component_id, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id}")
+
         return self._composition_service.remove_component_from_composition(
             composition_id=composition_id,
             component_id=component_id,
@@ -635,10 +768,15 @@ class BuilderFlow:
         *,
         role: str | None = None,
         role_provided: bool = False,
+        actor: ActorContext | None = None,
     ) -> Composition:
-        composition = self._composition_service.get_composition(composition_id)
+        composition = self.get_library_composition(composition_id, actor=actor)
         if composition is None:
             raise ValueError(f"composition not found: {composition_id}")
+
+        current_component = self.get_library_component(component_id, actor=actor)
+        if current_component is None:
+            raise ValueError(f"component not found: {component_id}")
 
         new_name_value = str(new_component_name or "").strip()
         if not new_name_value:
@@ -672,7 +810,7 @@ class BuilderFlow:
             except ValueError:
                 pass
 
-        resolved_component = self.create_standalone_component(new_name_value)
+        resolved_component = self.create_standalone_component(new_name_value, actor=actor)
         resolved_role = role if role_provided else existing.role
         return self._composition_service.add_component_to_composition(
             composition_id=composition_id,
@@ -688,10 +826,15 @@ class BuilderFlow:
         component_id: str,
         *,
         role: str | None,
+        actor: ActorContext | None = None,
     ) -> Composition:
-        composition = self._composition_service.get_composition(composition_id)
+        composition = self.get_library_composition(composition_id, actor=actor)
         if composition is None:
             raise ValueError(f"composition not found: {composition_id}")
+
+        component = self.get_library_component(component_id, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id}")
 
         return self._composition_service.update_component_role_in_composition(
             composition_id=composition_id,
@@ -699,19 +842,35 @@ class BuilderFlow:
             role=role,
         )
 
-    def list_compositions(self, *, group_name: str | None = None) -> list[Composition]:
-        return self._composition_service.list_compositions(group_name=group_name)
+    def list_compositions(
+        self,
+        *,
+        group_name: str | None = None,
+        actor: ActorContext | None = None,
+    ) -> list[Composition]:
+        if group_name is None and actor is not None:
+            return self.list_library_compositions(actor=actor)
+
+        items = self._composition_service.list_compositions(group_name=group_name)
+        if actor is not None and self._object_scope_repository is not None:
+            items = [
+                item
+                for item in items
+                if self._can_read_library_object("composition", item.composition_id, actor=actor)
+            ]
+        return items
 
     def preview_component_declaration_readiness(
         self,
         *,
         component_id: str,
+        actor: ActorContext | None = None,
     ) -> ComponentDeclarationReadiness:
         component_id_value = str(component_id or "").strip()
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
 
-        component = self._component_service.get_component(component_id_value)
+        component = self.get_library_component(component_id_value, actor=actor)
         if component is None:
             raise ValueError(f"component not found: {component_id_value}")
 
@@ -792,12 +951,13 @@ class BuilderFlow:
         self,
         *,
         composition_id: str,
+        actor: ActorContext | None = None,
     ) -> CompositionDeclarationReadiness:
         composition_id_value = str(composition_id or "").strip()
         if not composition_id_value:
             raise ValueError("composition_id must be non-empty")
 
-        composition = self._composition_service.get_composition(composition_id_value)
+        composition = self.get_library_composition(composition_id_value, actor=actor)
         if composition is None:
             raise ValueError(f"composition not found: {composition_id_value}")
 
@@ -815,6 +975,7 @@ class BuilderFlow:
         for linked in ordered_components:
             readiness = self.preview_component_declaration_readiness(
                 component_id=linked.component_id,
+                actor=actor,
             )
             component_readiness.append(readiness)
             warnings.extend([f"component {linked.component_id}: {message}" for message in readiness.warnings])
@@ -838,12 +999,17 @@ class BuilderFlow:
             warnings=warnings,
         )
 
-    def render_composition_text_model(self, *, composition_id: str) -> RenderedCompositionTextModel:
+    def render_composition_text_model(
+        self,
+        *,
+        composition_id: str,
+        actor: ActorContext | None = None,
+    ) -> RenderedCompositionTextModel:
         composition_id_value = str(composition_id or "").strip()
         if not composition_id_value:
             raise ValueError("composition_id must be non-empty")
 
-        composition = self._composition_service.get_composition(composition_id_value)
+        composition = self.get_library_composition(composition_id_value, actor=actor)
         if composition is None:
             raise ValueError(f"composition not found: {composition_id_value}")
 
@@ -854,6 +1020,7 @@ class BuilderFlow:
         *,
         composition_id: str,
         ordered_entries: list[tuple[str, int]],
+        actor: ActorContext | None = None,
     ) -> Composition:
         composition_id_value = str(composition_id or "").strip()
         if not composition_id_value:
@@ -869,19 +1036,35 @@ class BuilderFlow:
             component_id_text = str(component_id_value or "").strip()
             if not component_id_text:
                 raise ValueError("component_id must be non-empty")
+            if self.get_library_component(component_id_text, actor=actor) is None:
+                raise ValueError(f"component not found: {component_id_text}")
             normalized_entries.append((component_id_text, int(sort_order_value)))
+
+        if self.get_library_composition(composition_id_value, actor=actor) is None:
+            raise ValueError(f"composition not found: {composition_id_value}")
 
         return self._composition_service.reorder_components_in_composition(
             composition_id=composition_id_value,
             ordered_entries=normalized_entries,
         )
 
-    def list_library_components(self) -> list[Component]:
+    def list_library_components(self, *, actor: ActorContext | None = None) -> list[Component]:
         items = self._component_service.list_components(active_only=False)
+        if actor is not None and self._object_scope_repository is not None:
+            items = [
+                item
+                for item in items
+                if self._can_read_library_object("component", item.component_id, actor=actor)
+            ]
         return sorted(items, key=lambda item: (item.canonical_name.lower(), item.component_id))
 
-    def list_reusable_components_for_builder(self, *, query: str | None = None) -> list[Component]:
-        items = self.list_library_components()
+    def list_reusable_components_for_builder(
+        self,
+        *,
+        query: str | None = None,
+        actor: ActorContext | None = None,
+    ) -> list[Component]:
+        items = self.list_library_components(actor=actor)
         query_value = str(query or "").strip().lower()
         if not query_value:
             return items
@@ -898,6 +1081,7 @@ class BuilderFlow:
         composition_id: str,
         component_id: str,
         role: str | None = None,
+        actor: ActorContext | None = None,
     ) -> Composition:
         composition_id_value = str(composition_id or "").strip()
         if not composition_id_value:
@@ -907,11 +1091,11 @@ class BuilderFlow:
         if not component_id_value:
             raise ValueError("component_id must be non-empty")
 
-        composition = self._composition_service.get_composition(composition_id_value)
+        composition = self.get_library_composition(composition_id_value, actor=actor)
         if composition is None:
             raise ValueError(f"composition not found: {composition_id_value}")
 
-        component = self._component_service.get_component(component_id_value)
+        component = self.get_library_component(component_id_value, actor=actor)
         if component is None:
             raise ValueError(f"component not found: {component_id_value}")
 
@@ -925,11 +1109,41 @@ class BuilderFlow:
             role=role,
         )
 
-    def list_library_compositions(self) -> list[Composition]:
+    def get_library_component(self, component_id: str, *, actor: ActorContext | None = None) -> Component | None:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        component = self._component_service.get_component(component_id_value)
+        if component is None:
+            return None
+        if not self._can_read_library_object("component", component_id_value, actor=actor):
+            return None
+        return component
+
+    def get_library_composition(self, composition_id: str, *, actor: ActorContext | None = None) -> Composition | None:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
+
+        composition = self._composition_service.get_composition(composition_id_value)
+        if composition is None:
+            return None
+        if not self._can_read_library_object("composition", composition_id_value, actor=actor):
+            return None
+        return composition
+
+    def list_library_compositions(self, *, actor: ActorContext | None = None) -> list[Composition]:
         items = self._composition_service.list_compositions()
+        if actor is not None and self._object_scope_repository is not None:
+            items = [
+                item
+                for item in items
+                if self._can_read_library_object("composition", item.composition_id, actor=actor)
+            ]
         return sorted(items, key=lambda item: (item.composition_name.lower(), item.composition_id))
 
-    def import_library_text_lines(self, lines: list[str]) -> LibraryImportSummary:
+    def import_library_text_lines(self, lines: list[str], *, actor: ActorContext | None = None) -> LibraryImportSummary:
         normalized_lines = [str(line or "").strip() for line in lines]
         normalized_lines = [line for line in normalized_lines if line]
         if not normalized_lines:
@@ -953,7 +1167,7 @@ class BuilderFlow:
             composition = None
 
             if resolution.kind == "composition" and resolution.composition_id:
-                composition = self._composition_repository.get(resolution.composition_id)
+                composition = self.get_library_composition(resolution.composition_id, actor=actor)
                 if composition is not None:
                     reused_count += 1
                     matched_via = matched_via or "existing"
@@ -964,6 +1178,7 @@ class BuilderFlow:
                     library_group=None,
                     seed_components=True,
                     learn_alias=True,
+                    actor=actor,
                 )
                 created_count += 1
                 matched_via = "created"
@@ -1000,63 +1215,93 @@ class BuilderFlow:
         learn_alias: bool,
         alias_text: str | None = None,
         composition_name_override: str | None = None,
+        actor: ActorContext | None = None,
     ) -> tuple[Composition, list[str], list[dict[str, object]]]:
         chosen_name = composition_name_override if composition_name_override is not None else raw_text
         composition_name = self._normalize_component_name(chosen_name)
         if not composition_name:
             raise ValueError("composition_name must be non-empty")
 
+        visible_component_ids = {item.component_id for item in self.list_library_components(actor=actor)}
         composition = self.create_composition(
             composition_id=self._generate_composition_id(),
             composition_name=composition_name,
             library_group=library_group,
+            actor=actor,
         )
         warnings: list[str] = []
         review_items: list[dict[str, object]] = []
+        created_component_ids: list[str] = []
 
-        if seed_components:
-            for suggestion in self._suggest_components_from_unresolved_text(raw_text):
-                match = self.match_component_name(suggestion)
-                composition = self.add_component_to_composition(
-                    composition_id=composition.composition_id,
-                    component_name=suggestion,
-                    role="component",
-                )
-                if match.status == "possible_match":
-                    review_items.append(
-                        {
-                            "raw_text": raw_text,
-                            "suggested_component_name": suggestion,
-                            "status": "possible_match",
-                            "normalized_text": match.normalized_text,
-                            "possible_matches": [
-                                {
-                                    "component_id": candidate.component_id,
-                                    "component_name": candidate.component_name,
-                                    "matched_on": candidate.matched_on,
-                                    "score": candidate.score,
-                                }
-                                for candidate in match.possible_matches
-                            ],
-                        }
+        try:
+            if seed_components:
+                for suggestion in self._suggest_components_from_unresolved_text(raw_text):
+                    match = self.match_component_name(suggestion, actor=actor)
+                    component = self.create_standalone_component(suggestion, actor=actor)
+                    if component.component_id not in visible_component_ids:
+                        created_component_ids.append(component.component_id)
+                        visible_component_ids.add(component.component_id)
+
+                    composition = self._composition_service.add_component_to_composition(
+                        composition_id=composition.composition_id,
+                        component_id=component.component_id,
+                        component_name=component.canonical_name,
+                        role="component",
                     )
+                    if match.status == "possible_match":
+                        review_items.append(
+                            {
+                                "raw_text": raw_text,
+                                "suggested_component_name": suggestion,
+                                "status": "possible_match",
+                                "normalized_text": match.normalized_text,
+                                "possible_matches": [
+                                    {
+                                        "component_id": candidate.component_id,
+                                        "component_name": candidate.component_name,
+                                        "matched_on": candidate.matched_on,
+                                        "score": candidate.score,
+                                    }
+                                    for candidate in match.possible_matches
+                                ],
+                            }
+                        )
 
-        if learn_alias:
-            alias_warning = self._create_manual_alias_for_composition(
-                composition_id=composition.composition_id,
-                unresolved_text=raw_text,
-            )
-            if alias_warning:
-                warnings.append(alias_warning)
-                logger.warning(alias_warning)
-        elif alias_text:
-            alias_warning = self._create_manual_alias_for_composition(
-                composition_id=composition.composition_id,
-                unresolved_text=alias_text,
-            )
-            if alias_warning:
-                warnings.append(alias_warning)
-                logger.warning(alias_warning)
+            if learn_alias:
+                alias_warning = self._create_manual_alias_for_composition(
+                    composition_id=composition.composition_id,
+                    unresolved_text=raw_text,
+                )
+                if alias_warning:
+                    warnings.append(alias_warning)
+                    logger.warning(alias_warning)
+            elif alias_text:
+                alias_warning = self._create_manual_alias_for_composition(
+                    composition_id=composition.composition_id,
+                    unresolved_text=alias_text,
+                )
+                if alias_warning:
+                    warnings.append(alias_warning)
+                    logger.warning(alias_warning)
+        except Exception:
+            for component_id in reversed(created_component_ids):
+                try:
+                    self._delete_object_scope("component", component_id)
+                except Exception:
+                    pass
+                try:
+                    self._component_service.delete_component(component_id)
+                except Exception:
+                    pass
+            try:
+                self._delete_object_scope("composition", composition.composition_id)
+            except Exception:
+                pass
+            try:
+                self._composition_service.delete_composition(composition.composition_id)
+            except Exception:
+                pass
+            raise
 
         return composition, warnings, review_items
 

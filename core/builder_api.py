@@ -9,10 +9,12 @@ from decimal import Decimal
 from typing import Any
 import uuid
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request, session
 
 from .app_authz import require_roles
+from .app_sessions import get_session
 from .builder import BuilderFlow
+from .builder.library_scope import ActorContext
 from .builder_menu_context_flow import BuilderMenuContextFlow
 from .builder.file_import import (
     DEFAULT_COMPONENT_CATEGORIES,
@@ -30,6 +32,7 @@ from .builder_sqlite import (
     SQLiteComponentRepository,
     SQLiteCompositionAliasRepository,
     SQLiteCompositionRepository,
+    SQLiteBuilderObjectScopeRepository,
 )
 from .components import (
     CompositionService,
@@ -85,6 +88,26 @@ def _optional_str(payload: dict[str, Any], field: str) -> str | None:
         return None
     value = str(raw).strip()
     return value or None
+
+
+def _get_builder_actor() -> ActorContext | None:
+    session_data = get_session(session)
+    if session_data is None:
+        return None
+
+    site_id = getattr(g, "site_id", None)
+    if site_id is None:
+        site_id = session.get("site_id")
+    site_id_value = str(site_id).strip() if site_id is not None else None
+    if site_id_value == "":
+        site_id_value = None
+
+    return ActorContext(
+        tenant_id=int(session_data["tenant_id"]),
+        user_id=int(session_data["user_id"]),
+        site_id=site_id_value,
+        role=str(session_data["role"]),
+    )
 
 
 VALID_DISH_LIBRARY_GROUPS = {"fisk", "kott", "dessert", "ovrigt"}
@@ -466,13 +489,14 @@ def _run_library_import(
     ignored_noise_count: int = 0,
 ) -> tuple[Any, _LibraryImportMetrics]:
     flow = _get_builder_flow()
+    actor = _get_builder_actor()
     known_component_ids = {
         str(component.component_id)
-        for component in flow.list_library_components()
+        for component in flow.list_library_components(actor=actor)
         if str(component.component_id).strip()
     }
 
-    summary = flow.import_library_text_lines(lines)
+    summary = flow.import_library_text_lines(lines, actor=actor)
 
     created_component_ids: set[str] = set()
     reused_component_ids: set[str] = set()
@@ -503,6 +527,7 @@ def _run_library_import(
 
 def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
     flow = _get_builder_flow()
+    actor = _get_builder_actor()
     classified = classify_builder_import_lines(lines)
     drafts: list[dict[str, Any]] = []
     for index, item in enumerate(classified):
@@ -518,7 +543,7 @@ def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
             components = [{"name": name} for name in component_suggestions]
             suggested_tags = suggest_component_tags(normalized_name)
             for name in component_suggestions:
-                match = flow.match_component_name(name)
+                match = flow.match_component_name(name, actor=actor)
                 if str(match.status or "") in {"exact_match", "alias_match", "possible_match"}:
                     hints.append(
                         {
@@ -554,9 +579,10 @@ def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
 
 def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
     flow = _get_builder_flow()
+    actor = _get_builder_actor()
     known_component_ids = {
         str(component.component_id)
-        for component in flow.list_library_components()
+        for component in flow.list_library_components(actor=actor)
         if str(component.component_id).strip()
     }
 
@@ -595,6 +621,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
             component = flow.create_standalone_component(
                 name,
                 category=_normalize_component_category(suggest_component_category(name)),
+                actor=actor,
             )
             if item_tags:
                 details = _load_component_details(component.component_id)
@@ -643,6 +670,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
                 composition_name=name,
                 library_group=None,
                 seed_components=False,
+                actor=actor,
             )
             created_composition_count += 1
             if source_text and sanitize_builder_import_text(source_text) != name:
@@ -677,6 +705,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
                 component = flow.create_standalone_component(
                     component_name,
                     category=_normalize_component_category(suggest_component_category(component_name)),
+                    actor=actor,
                 )
                 component_tags = suggest_component_tags(component_name)
                 if component_tags:
@@ -699,6 +728,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
                     composition_id=composition.composition_id,
                     component_id=component.component_id,
                     role="component",
+                    actor=actor,
                 )
 
         row_results.append(
@@ -1570,6 +1600,7 @@ def _get_builder_flow() -> BuilderFlow:
         component_alias_repository = SQLiteComponentAliasRepository(db_path=db_path)
         composition_repository = SQLiteCompositionRepository(db_path=db_path)
         alias_repository = SQLiteCompositionAliasRepository(db_path=db_path)
+        object_scope_repository = SQLiteBuilderObjectScopeRepository(db_path=db_path)
 
         component_service = ComponentService(repository=component_repository)
         composition_service = CompositionService(repository=composition_repository)
@@ -1580,6 +1611,7 @@ def _get_builder_flow() -> BuilderFlow:
             composition_repository=composition_repository,
             alias_repository=alias_repository,
             component_alias_repository=component_alias_repository,
+            object_scope_repository=object_scope_repository,
         )
         current_app.extensions["builder_flow"] = flow
         return flow
@@ -1611,6 +1643,7 @@ def create_composition():
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         composition_name = _require_str(payload, "composition_name")
         composition_id = _optional_str(payload, "composition_id")
         library_group = _optional_str(payload, "library_group")
@@ -1621,6 +1654,7 @@ def create_composition():
                 composition_id=composition_id,
                 composition_name=composition_name,
                 library_group=library_group,
+                actor=actor,
             )
         else:
             should_seed_components = True if seed_components is None else bool(seed_components)
@@ -1628,6 +1662,7 @@ def create_composition():
                 composition_name=composition_name,
                 library_group=library_group,
                 seed_components=should_seed_components,
+                actor=actor,
             )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -1644,7 +1679,8 @@ def delete_composition(composition_id: str):
 
     try:
         flow = _get_builder_flow()
-        composition = flow._composition_service.get_composition(composition_id_value)
+        actor = _get_builder_actor()
+        composition = flow.get_library_composition(composition_id_value, actor=actor)
         if composition is None:
             return _bad_request(f"composition not found: {composition_id_value}")
 
@@ -1693,6 +1729,9 @@ def update_composition_metadata(composition_id: str):
             return _bad_request("At least one of composition_name or library_group is required")
 
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        if flow.get_library_composition(composition_id_value, actor=actor) is None:
+            return _not_found(f"composition not found: {composition_id_value}")
         composition = flow._composition_service.update_composition_metadata(
             composition_id_value,
             composition_name=composition_name,
@@ -1716,10 +1755,11 @@ def create_component():
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         component_name_value = _require_str(payload, "component_name")
         normalized_key = flow._normalize_component_key(component_name_value)
         existing_component = None
-        for item in flow.list_library_components():
+        for item in flow.list_library_components(actor=actor):
             if flow._normalize_component_key(str(item.canonical_name or "")) == normalized_key:
                 existing_component = item
                 break
@@ -1738,6 +1778,7 @@ def create_component():
         component = flow.create_standalone_component(
             component_name=component_name_value,
             category=category_value,
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -1754,6 +1795,7 @@ def update_component(component_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         component_id_value = str(component_id or "")
         component = None
 
@@ -1793,7 +1835,8 @@ def get_component_details(component_id: str):
         return _bad_request("component_id is required")
 
     flow = _get_builder_flow()
-    component = flow._component_service.get_component(component_id_value)
+    actor = _get_builder_actor()
+    component = flow.get_library_component(component_id_value, actor=actor)
     if component is None:
         return _bad_request(f"component not found: {component_id_value}")
 
@@ -1813,7 +1856,8 @@ def patch_component_details(component_id: str):
         return _bad_request("component_id is required")
 
     flow = _get_builder_flow()
-    component = flow._component_service.get_component(component_id_value)
+    actor = _get_builder_actor()
+    component = flow.get_library_component(component_id_value, actor=actor)
     if component is None:
         return _bad_request(f"component not found: {component_id_value}")
 
@@ -1863,7 +1907,8 @@ def patch_component_details(component_id: str):
 @require_roles("editor", "admin", "superuser")
 def list_component_method_summary_report():
     flow = _get_builder_flow()
-    components = flow.list_library_components()
+    actor = _get_builder_actor()
+    components = flow.list_library_components(actor=actor)
     details_map = {
         str(component.component_id): _load_component_details(str(component.component_id))
         for component in components
@@ -1908,12 +1953,13 @@ def delete_component(component_id: str):
 
     try:
         flow = _get_builder_flow()
-        component = flow._component_service.get_component(component_id_value)
+        actor = _get_builder_actor()
+        component = flow.get_library_component(component_id_value, actor=actor)
         if component is None:
             return _bad_request(f"component not found: {component_id_value}")
 
         referenced_pairs: dict[str, str] = {}
-        for composition in flow.list_library_compositions():
+        for composition in flow.list_library_compositions(actor=actor):
             if any(item.component_id == component_id_value for item in composition.components):
                 referenced_pairs[str(composition.composition_id)] = str(composition.composition_name)
 
@@ -1954,7 +2000,8 @@ def list_reusable_components():
     query = request.args.get("q")
     try:
         flow = _get_builder_flow()
-        components = flow.list_reusable_components_for_builder(query=query)
+        actor = _get_builder_actor()
+        components = flow.list_reusable_components_for_builder(query=query, actor=actor)
         summaries = _load_component_detail_summaries([
             str(component.component_id)
             for component in components
@@ -1981,7 +2028,8 @@ def list_reusable_components():
 @require_roles("editor", "admin", "superuser")
 def list_component_category_normalization_report():
     flow = _get_builder_flow()
-    components = flow.list_library_components()
+    actor = _get_builder_actor()
+    components = flow.list_library_components(actor=actor)
     entries: list[dict[str, Any]] = []
 
     for component in components:
@@ -2008,8 +2056,9 @@ def list_component_category_normalization_report():
 @require_roles("editor", "admin", "superuser")
 def list_phrase_fragment_component_report():
     flow = _get_builder_flow()
-    components = flow.list_library_components()
-    compositions = flow.list_library_compositions()
+    actor = _get_builder_actor()
+    components = flow.list_library_components(actor=actor)
+    compositions = flow.list_library_compositions(actor=actor)
 
     linked_by_component: dict[str, list[dict[str, str]]] = {}
     for composition in compositions:
@@ -2071,7 +2120,8 @@ def list_component_aliases(component_id: str):
 
     try:
         flow = _get_builder_flow()
-        component = flow._component_service.get_component(component_id_value)
+        actor = _get_builder_actor()
+        component = flow.get_library_component(component_id_value, actor=actor)
         if component is None:
             return _bad_request(f"component not found: {component_id_value}")
         aliases = flow.list_component_aliases(component_id=component_id_value)
@@ -2101,6 +2151,10 @@ def create_component_alias_endpoint(component_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        component = flow.get_library_component(component_id_value, actor=actor)
+        if component is None:
+            return _bad_request(f"component not found: {component_id_value}")
         alias = flow.add_component_alias(
             component_id=component_id_value,
             alias_text=_require_str(payload, "alias_text"),
@@ -2123,8 +2177,9 @@ def create_component_alias_endpoint(component_id: str):
 def list_library():
     try:
         flow = _get_builder_flow()
-        components = flow.list_library_components()
-        compositions = flow.list_library_compositions()
+        actor = _get_builder_actor()
+        components = flow.list_library_components(actor=actor)
+        compositions = flow.list_library_compositions(actor=actor)
         summaries = _load_component_detail_summaries([
             str(component.component_id)
             for component in components
@@ -2603,7 +2658,8 @@ def import_library_file_confirm():
 def list_compositions():
     try:
         flow = _get_builder_flow()
-        compositions = flow.list_compositions()
+        actor = _get_builder_actor()
+        compositions = flow.list_compositions(actor=actor)
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -2628,10 +2684,12 @@ def add_component_to_composition(composition_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         composition = flow.add_component_to_composition(
             composition_id=str(composition_id),
             component_name=_require_str(payload, "component_name"),
             role=_optional_str(payload, "role"),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2648,10 +2706,12 @@ def attach_existing_component_to_composition(composition_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         composition = flow.attach_existing_component_to_composition(
             composition_id=str(composition_id),
             component_id=_require_str(payload, "component_id"),
             role=_optional_str(payload, "role"),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2684,9 +2744,11 @@ def reorder_components_in_composition(composition_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         composition = flow.reorder_components_in_composition(
             composition_id=str(composition_id),
             ordered_entries=ordered_entries,
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2699,7 +2761,8 @@ def reorder_components_in_composition(composition_id: str):
 def render_composition_text(composition_id: str):
     try:
         flow = _get_builder_flow()
-        model = flow.render_composition_text_model(composition_id=str(composition_id))
+        actor = _get_builder_actor()
+        model = flow.render_composition_text_model(composition_id=str(composition_id), actor=actor)
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -2711,9 +2774,11 @@ def render_composition_text(composition_id: str):
 def remove_component_from_composition(composition_id: str, component_id: str):
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         composition = flow.remove_component_from_composition(
             composition_id=str(composition_id),
             component_id=str(component_id),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2735,6 +2800,7 @@ def rename_component_in_composition(composition_id: str, component_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         composition = None
 
         if has_name:
@@ -2744,12 +2810,14 @@ def rename_component_in_composition(composition_id: str, component_id: str):
                 new_component_name=_require_str(payload, "component_name"),
                 role=_optional_str(payload, "role"),
                 role_provided=has_role,
+                actor=actor,
             )
         elif has_role:
             composition = flow.update_component_role_in_composition(
                 composition_id=str(composition_id),
                 component_id=str(component_id),
                 role=_optional_str(payload, "role"),
+                actor=actor,
             )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2766,6 +2834,7 @@ def create_component_recipe(component_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         recipe = flow.create_component_recipe(
             component_id=str(component_id),
             recipe_name=_require_str(payload, "recipe_name"),
@@ -2774,6 +2843,7 @@ def create_component_recipe(component_id: str):
             notes=_optional_str(payload, "notes"),
             recipe_id=_optional_str(payload, "recipe_id"),
             is_primary=bool(payload.get("is_primary", False)),
+            actor=actor,
         )
 
         raw_lines = payload.get("ingredient_lines")
@@ -2800,11 +2870,13 @@ def create_component_recipe(component_id: str):
                     sort_order=_maybe_int(item.get("sort_order"), field="sort_order") or 0,
                     trait_signals=_optional_str_list(item, "trait_signals"),
                     recipe_ingredient_line_id=_optional_str(item, "recipe_ingredient_line_id"),
+                    actor=actor,
                 )
 
         recipe, lines = flow.get_component_recipe_detail(
             component_id=str(component_id),
             recipe_id=recipe.recipe_id,
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2826,7 +2898,8 @@ def create_component_recipe(component_id: str):
 def list_component_recipes(component_id: str):
     try:
         flow = _get_builder_flow()
-        component, recipes = flow.list_component_recipes(component_id=str(component_id))
+        actor = _get_builder_actor()
+        component, recipes = flow.list_component_recipes(component_id=str(component_id), actor=actor)
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -2855,9 +2928,11 @@ def set_component_primary_recipe(component_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         component = flow.set_component_primary_recipe(
             component_id=str(component_id),
             recipe_id=_optional_str(payload, "recipe_id"),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2874,6 +2949,7 @@ def add_component_recipe_ingredient(component_id: str, recipe_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         amount_value = payload.get("amount_value")
         if amount_value is None:
             amount_value = payload.get("quantity_value")
@@ -2896,6 +2972,7 @@ def add_component_recipe_ingredient(component_id: str, recipe_id: str):
             sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
             trait_signals=_optional_str_list(payload, "trait_signals"),
             recipe_ingredient_line_id=_optional_str(payload, "recipe_ingredient_line_id"),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2912,6 +2989,7 @@ def update_component_recipe(component_id: str, recipe_id: str):
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         recipe = flow.update_component_recipe_metadata(
             component_id=str(component_id),
             recipe_id=str(recipe_id),
@@ -2919,6 +2997,7 @@ def update_component_recipe(component_id: str, recipe_id: str):
             yield_portions=_require_int(payload, "yield_portions"),
             visibility=_optional_str(payload, "visibility"),
             notes=_optional_str(payload, "notes"),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2931,9 +3010,11 @@ def update_component_recipe(component_id: str, recipe_id: str):
 def delete_component_recipe(component_id: str, recipe_id: str):
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         flow.delete_component_recipe(
             component_id=str(component_id),
             recipe_id=str(recipe_id),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2950,6 +3031,7 @@ def update_component_recipe_ingredient(component_id: str, recipe_id: str, ingred
 
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         amount_value = payload.get("amount_value")
         if amount_value is None:
             amount_value = payload.get("quantity_value")
@@ -2972,6 +3054,7 @@ def update_component_recipe_ingredient(component_id: str, recipe_id: str, ingred
             note=_optional_str(payload, "note"),
             sort_order=_maybe_int(payload.get("sort_order"), field="sort_order") or 0,
             trait_signals=_optional_str_list(payload, "trait_signals"),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2984,10 +3067,12 @@ def update_component_recipe_ingredient(component_id: str, recipe_id: str, ingred
 def delete_component_recipe_ingredient(component_id: str, recipe_id: str, ingredient_line_id: str):
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         flow.delete_recipe_ingredient_line(
             component_id=str(component_id),
             recipe_id=str(recipe_id),
             recipe_ingredient_line_id=str(ingredient_line_id),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -3000,9 +3085,11 @@ def delete_component_recipe_ingredient(component_id: str, recipe_id: str, ingred
 def get_component_recipe(component_id: str, recipe_id: str):
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         recipe, lines = flow.get_component_recipe_detail(
             component_id=str(component_id),
             recipe_id=str(recipe_id),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -3065,8 +3152,10 @@ def get_component_declaration_readiness(component_id: str):
             return jsonify({"ok": True, "declaration_enabled": False, "readiness": None})
 
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         readiness = flow.preview_component_declaration_readiness(
             component_id=str(component_id),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -3092,8 +3181,10 @@ def get_composition_declaration_readiness(composition_id: str):
             return jsonify({"ok": True, "declaration_enabled": False, "readiness": None})
 
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         readiness = flow.preview_composition_declaration_readiness(
             composition_id=str(composition_id),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
