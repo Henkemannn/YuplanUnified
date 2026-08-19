@@ -3141,10 +3141,12 @@ def get_component_recipe_scaling_preview(component_id: str, recipe_id: str):
         if target_portions is None:
             raise ValueError("target_portions is required")
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         preview = flow.preview_component_recipe_scaling(
             component_id=str(component_id),
             recipe_id=str(recipe_id),
             target_portions=int(target_portions),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -3157,9 +3159,11 @@ def get_component_recipe_scaling_preview(component_id: str, recipe_id: str):
 def get_component_recipe_trait_signals(component_id: str, recipe_id: str):
     try:
         flow = _get_builder_flow()
+        actor = _get_builder_actor()
         preview = flow.preview_component_recipe_trait_signals(
             component_id=str(component_id),
             recipe_id=str(recipe_id),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))

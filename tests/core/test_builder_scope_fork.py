@@ -238,3 +238,116 @@ def test_component_details_persisted_on_fork_are_independent() -> None:
     forked = flow.fork_component(component.component_id, actor=cook)
     assert forked.component_id != component.component_id
     assert scope_repo.get_scope("component", forked.component_id).source_object_id == component.component_id
+
+
+def test_cook_can_read_private_fork_recipe_detail_scaling_and_traits() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = _actor(tenant_id=1, user_id=20, role="cook")
+
+    component = flow.create_standalone_component("Recipe read soup", actor=editor)
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        yield_portions=4,
+        actor=editor,
+    )
+    flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Salt",
+        amount_value=10,
+        amount_unit="g",
+        trait_signals=["lactose"],
+        actor=editor,
+    )
+
+    forked = flow.fork_component(component.component_id, actor=cook)
+    _, forked_recipes = flow.list_component_recipes(component_id=forked.component_id, actor=cook)
+    forked_recipe, forked_lines = flow.get_component_recipe_detail(
+        component_id=forked.component_id,
+        recipe_id=forked_recipes[0].recipe_id,
+        actor=cook,
+    )
+
+    assert forked_recipe.component_id == forked.component_id
+    assert forked_lines[0].ingredient_name == "Salt"
+
+    scaling = flow.preview_component_recipe_scaling(
+        component_id=forked.component_id,
+        recipe_id=forked_recipe.recipe_id,
+        target_portions=8,
+        actor=cook,
+    )
+    traits = flow.preview_component_recipe_trait_signals(
+        component_id=forked.component_id,
+        recipe_id=forked_recipe.recipe_id,
+        actor=cook,
+    )
+
+    assert scaling.component_id == forked.component_id
+    assert traits.component_id == forked.component_id
+
+
+def test_foreign_tenant_cannot_read_known_component_recipe_data() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    owner = _actor(tenant_id=1, user_id=10, role="editor")
+    foreign = _actor(tenant_id=2, user_id=20, role="cook")
+
+    component = flow.create_standalone_component("Foreign recipe soup", actor=owner)
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        yield_portions=4,
+        actor=owner,
+    )
+
+    with pytest.raises(ValueError, match="component not found"):
+        flow.get_component_recipe_detail(
+            component_id=component.component_id,
+            recipe_id=recipe.recipe_id,
+            actor=foreign,
+        )
+
+    with pytest.raises(ValueError, match="component not found"):
+        flow.preview_component_recipe_scaling(
+            component_id=component.component_id,
+            recipe_id=recipe.recipe_id,
+            target_portions=8,
+            actor=foreign,
+        )
+
+    with pytest.raises(ValueError, match="component not found"):
+        flow.preview_component_recipe_trait_signals(
+            component_id=component.component_id,
+            recipe_id=recipe.recipe_id,
+            actor=foreign,
+        )
+
+
+def test_private_fork_recipe_data_is_hidden_from_other_cook() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook_a = _actor(tenant_id=1, user_id=20, role="cook")
+    cook_b = _actor(tenant_id=1, user_id=30, role="cook")
+
+    component = flow.create_standalone_component("Private recipe soup", actor=editor)
+    flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        yield_portions=4,
+        actor=editor,
+    )
+
+    forked = flow.fork_component(component.component_id, actor=cook_a)
+
+    _, forked_recipes = flow.list_component_recipes(component_id=forked.component_id, actor=cook_a)
+    with pytest.raises(ValueError, match="component not found"):
+        flow.get_component_recipe_detail(
+            component_id=forked.component_id,
+            recipe_id=forked_recipes[0].recipe_id,
+            actor=cook_b,
+        )

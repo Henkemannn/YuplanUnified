@@ -196,8 +196,6 @@ class BuilderFlow:
         component = self.get_library_component(component_id_value, actor=actor)
         if component is None:
             raise ValueError(f"component not found: {component_id_value}")
-        if not self._can_write_library_object("component", component_id_value, actor=actor):
-            raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip() or None
         if recipe_id_value is not None:
@@ -231,8 +229,6 @@ class BuilderFlow:
             raise ValueError("component_id must be non-empty")
         component = self.get_library_component(component_id_value, actor=actor)
         if component is None:
-            raise ValueError(f"component not found: {component_id_value}")
-        if not self._can_write_library_object("component", component_id_value, actor=actor):
             raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip()
@@ -276,8 +272,6 @@ class BuilderFlow:
 
         component = self.get_library_component(component_id_value, actor=actor)
         if component is None:
-            raise ValueError(f"component not found: {component_id_value}")
-        if not self._can_write_library_object("component", component_id_value, actor=actor):
             raise ValueError(f"component not found: {component_id_value}")
 
         recipe_id_value = str(recipe_id or "").strip()
