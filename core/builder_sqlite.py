@@ -12,6 +12,7 @@ from .components import Component
 from .components import ComponentAlias
 from .components import Composition
 from .components import CompositionComponent
+from .builder.library_scope import ObjectScope
 from .menu import CompositionAlias
 from .menu import Menu
 from .menu import MenuDetail
@@ -95,6 +96,24 @@ def initialize_builder_sqlite(path: str) -> str:
                 library_group TEXT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS builder_object_scopes (
+                object_type TEXT NOT NULL,
+                object_id TEXT NOT NULL,
+                tenant_id INTEGER NOT NULL,
+                owner_scope TEXT NOT NULL,
+                owner_site_id TEXT NULL,
+                owner_user_id INTEGER NULL,
+                visibility TEXT NOT NULL,
+                source_object_id TEXT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (object_type, object_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_builder_object_scopes_tenant
+                ON builder_object_scopes(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_builder_object_scopes_tenant_type
+                ON builder_object_scopes(tenant_id, object_type);
 
             CREATE TABLE IF NOT EXISTS builder_composition_components (
                 composition_id TEXT NOT NULL,
@@ -217,6 +236,7 @@ def clear_builder_sqlite_data(path: str) -> dict[str, int]:
         "builder_import_sessions",
         "builder_menu_rows",
         "builder_menus",
+        "builder_object_scopes",
         "builder_composition_aliases",
         "builder_composition_components",
         "builder_compositions",
@@ -240,6 +260,154 @@ def clear_builder_sqlite_data(path: str) -> dict[str, int]:
             conn.execute(f"DELETE FROM {table_name}")
 
     return counts
+
+
+def _normalize_builder_object_type(object_type: str) -> str:
+    value = str(object_type or "").strip()
+    if value not in {"component", "composition"}:
+        raise ValueError("object_type must be component or composition")
+    return value
+
+
+def _normalize_builder_object_id(object_id: str) -> str:
+    value = str(object_id or "").strip()
+    if not value:
+        raise ValueError("object_id must be a non-empty string")
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class BuilderObjectScopeRecord:
+    object_type: str
+    object_id: str
+    scope: ObjectScope
+
+
+@dataclass
+class SQLiteBuilderObjectScopeRepository:
+    db_path: str
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        normalized_object_type = _normalize_builder_object_type(object_type)
+        normalized_object_id = _normalize_builder_object_id(object_id)
+        if normalized_object_type != object_type or normalized_object_id != object_id:
+            object_type = normalized_object_type
+            object_id = normalized_object_id
+
+        with _connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO builder_object_scopes (
+                    object_type,
+                    object_id,
+                    tenant_id,
+                    owner_scope,
+                    owner_site_id,
+                    owner_user_id,
+                    visibility,
+                    source_object_id,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT(object_type, object_id) DO UPDATE SET
+                    tenant_id = excluded.tenant_id,
+                    owner_scope = excluded.owner_scope,
+                    owner_site_id = excluded.owner_site_id,
+                    owner_user_id = excluded.owner_user_id,
+                    visibility = excluded.visibility,
+                    source_object_id = excluded.source_object_id,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    object_type,
+                    object_id,
+                    int(scope.tenant_id),
+                    scope.owner_scope,
+                    scope.owner_site_id,
+                    scope.owner_user_id,
+                    scope.visibility,
+                    scope.source_object_id,
+                ),
+            )
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        normalized_object_type = _normalize_builder_object_type(object_type)
+        normalized_object_id = _normalize_builder_object_id(object_id)
+        with _connect(self.db_path) as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM builder_object_scopes
+                WHERE object_type = ? AND object_id = ?
+                """,
+                (normalized_object_type, normalized_object_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return ObjectScope(
+            tenant_id=int(row["tenant_id"]),
+            owner_scope=str(row["owner_scope"]),
+            owner_site_id=row["owner_site_id"],
+            owner_user_id=int(row["owner_user_id"]) if row["owner_user_id"] is not None else None,
+            visibility=str(row["visibility"]),
+            source_object_id=row["source_object_id"],
+        )
+
+    def list_for_tenant(
+        self,
+        tenant_id: int,
+        object_type: str | None = None,
+    ) -> list[BuilderObjectScopeRecord]:
+        normalized_object_type = None
+        if object_type is not None:
+            normalized_object_type = _normalize_builder_object_type(object_type)
+
+        with _connect(self.db_path) as conn:
+            if normalized_object_type is None:
+                rows = conn.execute(
+                    """
+                    SELECT *
+                    FROM builder_object_scopes
+                    WHERE tenant_id = ?
+                    ORDER BY object_type, object_id
+                    """,
+                    (int(tenant_id),),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT *
+                    FROM builder_object_scopes
+                    WHERE tenant_id = ? AND object_type = ?
+                    ORDER BY object_id
+                    """,
+                    (int(tenant_id), normalized_object_type),
+                ).fetchall()
+
+        return [
+            BuilderObjectScopeRecord(
+                object_type=str(row["object_type"]),
+                object_id=str(row["object_id"]),
+                scope=ObjectScope(
+                    tenant_id=int(row["tenant_id"]),
+                    owner_scope=str(row["owner_scope"]),
+                    owner_site_id=row["owner_site_id"],
+                    owner_user_id=int(row["owner_user_id"]) if row["owner_user_id"] is not None else None,
+                    visibility=str(row["visibility"]),
+                    source_object_id=row["source_object_id"],
+                ),
+            )
+            for row in rows
+        ]
+
+    def delete_scope(self, object_type: str, object_id: str) -> None:
+        normalized_object_type = _normalize_builder_object_type(object_type)
+        normalized_object_id = _normalize_builder_object_id(object_id)
+        with _connect(self.db_path) as conn:
+            conn.execute(
+                "DELETE FROM builder_object_scopes WHERE object_type = ? AND object_id = ?",
+                (normalized_object_type, normalized_object_id),
+            )
 
 
 @dataclass
@@ -793,7 +961,9 @@ class SQLiteMenuDetailRepository:
 
 
 __all__ = [
+    "BuilderObjectScopeRecord",
     "initialize_builder_sqlite",
+    "SQLiteBuilderObjectScopeRepository",
     "SQLiteComponentRepository",
     "SQLiteComponentAliasRepository",
     "SQLiteCompositionRepository",
