@@ -125,11 +125,13 @@ def fork_object_scope(
     canonical_source_id = str(source_object_id).strip()
     if not canonical_source_id:
         raise ValueError("source_object_id must be a non-empty string")
+    if getattr(actor, "user_id", None) is None:
+        raise ValueError("actor.user_id is required for private fork creation")
 
     return ObjectScope(
         tenant_id=actor.tenant_id,
         owner_scope="user",
-        owner_site_id=actor.site_id,
+        owner_site_id=None,
         owner_user_id=actor.user_id,
         visibility="private",
         source_object_id=canonical_source_id,

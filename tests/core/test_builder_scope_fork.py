@@ -1,0 +1,240 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from core.app_factory import create_app
+from core.builder import BuilderFlow
+from core.builder.library_scope import ActorContext
+from core.builder.library_scope import ObjectScope
+from core.builder_sqlite import SQLiteBuilderObjectScopeRepository
+from core.builder_sqlite import initialize_builder_sqlite
+from core.components import ComponentService
+from core.components import CompositionService
+from core.components import InMemoryComponentAliasRepository
+from core.components import InMemoryComponentRepository
+from core.components import InMemoryCompositionRepository
+from core.menu import InMemoryCompositionAliasRepository
+
+
+class _MemoryScopeRepository:
+    def __init__(self, *, fail_on_set: bool = False) -> None:
+        self.fail_on_set = fail_on_set
+        self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        return self.scopes.get((object_type, object_id))
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        if self.fail_on_set:
+            raise RuntimeError("scope persistence failed")
+        self.scopes[(object_type, object_id)] = scope
+
+    def delete_scope(self, object_type: str, object_id: str) -> None:
+        self.scopes.pop((object_type, object_id), None)
+
+
+def _actor(*, tenant_id: int = 1, user_id: int | None = 11, role: str = "cook") -> ActorContext:
+    return ActorContext(tenant_id=tenant_id, user_id=user_id if user_id is not None else -1, site_id=None, role=role)
+
+
+def _build_flow(scope_repository: object | None = None) -> BuilderFlow:
+    component_repository = InMemoryComponentRepository()
+    composition_repository = InMemoryCompositionRepository()
+    alias_repository = InMemoryCompositionAliasRepository()
+    component_alias_repository = InMemoryComponentAliasRepository()
+
+    return BuilderFlow(
+        component_service=ComponentService(repository=component_repository),
+        composition_service=CompositionService(repository=composition_repository),
+        composition_repository=composition_repository,
+        alias_repository=alias_repository,
+        component_alias_repository=component_alias_repository,
+        object_scope_repository=scope_repository,  # type: ignore[arg-type]
+    )
+
+
+def _sqlite_client(tmp_path: Path):
+    db_path = tmp_path / "builder_scope_fork.db"
+    app = create_app({"TESTING": True, "BUILDER_DB_PATH": str(db_path)})
+    initialize_builder_sqlite(str(db_path))
+    return app.test_client(), str(db_path)
+
+
+def test_cook_can_read_and_fork_organisation_component() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = _actor(tenant_id=1, user_id=20, role="cook")
+
+    component = flow.create_standalone_component("Forkable soup", actor=editor)
+    recipe = flow.create_component_recipe(
+        component_id=component.component_id,
+        recipe_name="Base",
+        yield_portions=4,
+        actor=editor,
+    )
+    line = flow.add_recipe_ingredient_line(
+        component_id=component.component_id,
+        recipe_id=recipe.recipe_id,
+        ingredient_name="Salt",
+        amount_value=10,
+        amount_unit="g",
+        actor=editor,
+    )
+
+    readable = flow.get_library_component(component.component_id, actor=cook)
+    assert readable is not None
+
+    forked = flow.fork_component(component.component_id, actor=cook)
+    assert forked.component_id != component.component_id
+    assert forked.canonical_name == component.canonical_name
+    assert forked.categories == component.categories
+
+    scope = scope_repo.get_scope("component", forked.component_id)
+    assert scope == ObjectScope(
+        tenant_id=1,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=20,
+        visibility="private",
+        source_object_id=component.component_id,
+    )
+
+    forked_recipe = flow.get_component_recipe_detail(component_id=forked.component_id, recipe_id=flow.list_component_recipes(component_id=forked.component_id, actor=cook)[1][0].recipe_id, actor=cook)
+    assert forked_recipe[0].component_id == forked.component_id
+    assert forked_recipe[1][0].ingredient_name == "Salt"
+    assert forked_recipe[1][0].recipe_ingredient_line_id != line.recipe_ingredient_line_id
+
+    owner_view = flow.get_library_component(component.component_id, actor=editor)
+    assert owner_view is not None
+    assert owner_view.canonical_name == component.canonical_name
+
+
+def test_cook_cannot_directly_mutate_organisation_component() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = _actor(tenant_id=1, user_id=20, role="cook")
+
+    component = flow.create_standalone_component("Original soup", actor=editor)
+
+    with pytest.raises(ValueError, match="component not found"):
+        flow.rename_component(component.component_id, "Changed", actor=cook)
+
+    with pytest.raises(ValueError, match="component not found"):
+        flow.set_component_category(component.component_id, "side", actor=cook)
+
+    with pytest.raises(ValueError, match="component not found"):
+        flow.create_component_recipe(
+            component_id=component.component_id,
+            recipe_name="Blocked",
+            yield_portions=2,
+            actor=cook,
+        )
+
+
+def test_cook_private_fork_is_isolated_from_other_cook() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook_a = _actor(tenant_id=1, user_id=20, role="cook")
+    cook_b = _actor(tenant_id=1, user_id=30, role="cook")
+
+    component = flow.create_standalone_component("Isolation soup", actor=editor)
+    forked = flow.fork_component(component.component_id, actor=cook_a)
+
+    assert flow.get_library_component(forked.component_id, actor=cook_a) is not None
+    assert flow.get_library_component(forked.component_id, actor=cook_b) is None
+
+    with pytest.raises(ValueError, match="component not found"):
+        flow.rename_component(forked.component_id, "Other", actor=cook_b)
+
+
+def test_cook_missing_user_id_cannot_create_private_fork() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = ActorContext(tenant_id=1, user_id=None, site_id=None, role="cook")
+
+    component = flow.create_standalone_component("No user soup", actor=editor)
+
+    with pytest.raises(ValueError, match="actor.user_id is required"):
+        flow.fork_component(component.component_id, actor=cook)
+
+
+def test_cook_can_fork_and_edit_private_composition_shallowly() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = _actor(tenant_id=1, user_id=20, role="cook")
+
+    component = flow.create_standalone_component("Shared fish", actor=editor)
+    composition = flow.create_composition("plate-shared", "Shared plate", actor=editor)
+    flow.add_component_to_composition(
+        composition_id=composition.composition_id,
+        component_name=component.canonical_name,
+        actor=editor,
+    )
+
+    forked_composition = flow.fork_composition(composition.composition_id, actor=cook)
+    scope = scope_repo.get_scope("composition", forked_composition.composition_id)
+    assert scope == ObjectScope(
+        tenant_id=1,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=20,
+        visibility="private",
+        source_object_id=composition.composition_id,
+    )
+
+    assert len(forked_composition.components) == 1
+    assert forked_composition.components[0].component_id == component.component_id
+
+    forked_component = flow.fork_component(component.component_id, actor=cook)
+    updated = flow.rename_component_in_composition(
+        composition_id=forked_composition.composition_id,
+        component_id=component.component_id,
+        new_component_name="Forked fish",
+        actor=cook,
+    )
+    assert updated.components[0].component_id == "forked_fish"
+    assert flow.get_library_component(component.component_id, actor=editor) is not None
+
+
+def test_fork_scope_write_failure_rolls_back() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = _actor(tenant_id=1, user_id=20, role="cook")
+
+    component = flow.create_standalone_component("Rollback soup", actor=editor)
+
+    scope_repo.fail_on_set = True
+
+    with pytest.raises(RuntimeError, match="scope persistence failed"):
+        flow.fork_component(component.component_id, actor=cook)
+
+    assert flow.get_library_component("rollback_soup_2", actor=editor) is None
+    assert scope_repo.get_scope("component", component.component_id) == ObjectScope(
+        tenant_id=1,
+        owner_scope="organisation",
+        owner_site_id=None,
+        owner_user_id=None,
+        visibility="organisation",
+        source_object_id=None,
+    )
+    assert ("component", "rollback_soup_2") not in scope_repo.scopes
+
+
+def test_component_details_persisted_on_fork_are_independent() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = _actor(tenant_id=1, user_id=20, role="cook")
+
+    component = flow.create_standalone_component("Detail soup", actor=editor)
+    forked = flow.fork_component(component.component_id, actor=cook)
+    assert forked.component_id != component.component_id
+    assert scope_repo.get_scope("component", forked.component_id).source_object_id == component.component_id

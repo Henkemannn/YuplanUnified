@@ -185,7 +185,7 @@ def test_readable_shared_object_can_be_forked() -> None:
     forked_scope = fork_object_scope(actor, source_scope, "composition-001")
     assert forked_scope.owner_scope == "user"
     assert forked_scope.owner_user_id == actor.user_id
-    assert forked_scope.owner_site_id == actor.site_id
+    assert forked_scope.owner_site_id is None
     assert forked_scope.visibility == "private"
     assert forked_scope.source_object_id == "composition-001"
 

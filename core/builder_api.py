@@ -1828,7 +1828,7 @@ def update_component(component_id: str):
 
 
 @bp.get("/components/<component_id>/details")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def get_component_details(component_id: str):
     component_id_value = str(component_id or "").strip()
     if not component_id_value:
@@ -1904,7 +1904,7 @@ def patch_component_details(component_id: str):
 
 
 @bp.get("/components/method-summary-report")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def list_component_method_summary_report():
     flow = _get_builder_flow()
     actor = _get_builder_actor()
@@ -1995,7 +1995,7 @@ def delete_component(component_id: str):
 
 
 @bp.get("/components")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def list_reusable_components():
     query = request.args.get("q")
     try:
@@ -2025,7 +2025,7 @@ def list_reusable_components():
 
 
 @bp.get("/components/category-normalization-report")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def list_component_category_normalization_report():
     flow = _get_builder_flow()
     actor = _get_builder_actor()
@@ -2053,7 +2053,7 @@ def list_component_category_normalization_report():
 
 
 @bp.get("/components/phrase-fragment-report")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def list_phrase_fragment_component_report():
     flow = _get_builder_flow()
     actor = _get_builder_actor()
@@ -2112,7 +2112,7 @@ def list_phrase_fragment_component_report():
 
 
 @bp.get("/components/<component_id>/aliases")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def list_component_aliases(component_id: str):
     component_id_value = str(component_id or "").strip()
     if not component_id_value:
@@ -2160,6 +2160,7 @@ def create_component_alias_endpoint(component_id: str):
             alias_text=_require_str(payload, "alias_text"),
             source=_optional_str(payload, "source") or "manual",
             confidence=payload.get("confidence", 1.0),
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))
@@ -2173,7 +2174,7 @@ def create_component_alias_endpoint(component_id: str):
 
 
 @bp.get("/library")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def list_library():
     try:
         flow = _get_builder_flow()
@@ -2203,6 +2204,19 @@ def list_library():
             ],
         }
     )
+
+
+@bp.post("/components/<component_id>/fork")
+@require_roles("cook", "editor", "admin", "superuser")
+def fork_component(component_id: str):
+    try:
+        flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        component = flow.fork_component(component_id=str(component_id), actor=actor)
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "component": _serialize_component(component)}), 201
 
 
 @bp.post("/import")
@@ -2654,7 +2668,7 @@ def import_library_file_confirm():
 
 
 @bp.get("/compositions")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def list_compositions():
     try:
         flow = _get_builder_flow()
@@ -2673,6 +2687,19 @@ def list_compositions():
             ],
         }
     )
+
+
+@bp.post("/compositions/<composition_id>/fork")
+@require_roles("cook", "editor", "admin", "superuser")
+def fork_composition(composition_id: str):
+    try:
+        flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        composition = flow.fork_composition(composition_id=str(composition_id), actor=actor)
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
 
 
 @bp.post("/compositions/<composition_id>/components")
@@ -2757,7 +2784,7 @@ def reorder_components_in_composition(composition_id: str):
 
 
 @bp.get("/compositions/<composition_id>/render/text")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def render_composition_text(composition_id: str):
     try:
         flow = _get_builder_flow()
@@ -3081,7 +3108,7 @@ def delete_component_recipe_ingredient(component_id: str, recipe_id: str, ingred
 
 
 @bp.get("/components/<component_id>/recipes/<recipe_id>")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def get_component_recipe(component_id: str, recipe_id: str):
     try:
         flow = _get_builder_flow()
@@ -3104,7 +3131,7 @@ def get_component_recipe(component_id: str, recipe_id: str):
 
 
 @bp.get("/components/<component_id>/recipes/<recipe_id>/scaling-preview")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def get_component_recipe_scaling_preview(component_id: str, recipe_id: str):
     try:
         target_portions = _maybe_int(
@@ -3126,7 +3153,7 @@ def get_component_recipe_scaling_preview(component_id: str, recipe_id: str):
 
 
 @bp.get("/components/<component_id>/recipes/<recipe_id>/trait-signals")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def get_component_recipe_trait_signals(component_id: str, recipe_id: str):
     try:
         flow = _get_builder_flow()
@@ -3141,7 +3168,7 @@ def get_component_recipe_trait_signals(component_id: str, recipe_id: str):
 
 
 @bp.get("/components/<component_id>/declaration-readiness")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def get_component_declaration_readiness(component_id: str):
     try:
         include_declaration = _parse_bool_query_param(
@@ -3170,7 +3197,7 @@ def get_component_declaration_readiness(component_id: str):
 
 
 @bp.get("/compositions/<composition_id>/declaration-readiness")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def get_composition_declaration_readiness(composition_id: str):
     try:
         include_declaration = _parse_bool_query_param(
