@@ -193,14 +193,26 @@ def test_cook_can_fork_and_edit_private_composition_shallowly() -> None:
     assert forked_composition.components[0].component_id == component.component_id
 
     forked_component = flow.fork_component(component.component_id, actor=cook)
-    updated = flow.rename_component_in_composition(
+    flow.remove_component_from_composition(
         composition_id=forked_composition.composition_id,
         component_id=component.component_id,
+        actor=cook,
+    )
+    flow.attach_existing_component_to_composition(
+        composition_id=forked_composition.composition_id,
+        component_id=forked_component.component_id,
+        actor=cook,
+    )
+    updated = flow.rename_component_in_composition(
+        composition_id=forked_composition.composition_id,
+        component_id=forked_component.component_id,
         new_component_name="Forked fish",
         actor=cook,
     )
-    assert updated.components[0].component_id == "forked_fish"
+    assert updated.components[0].component_id == forked_component.component_id
+    assert updated.components[0].component_name == "Forked fish"
     assert flow.get_library_component(component.component_id, actor=editor) is not None
+    assert flow.get_library_component(forked_component.component_id, actor=cook) is not None
 
 
 def test_fork_scope_write_failure_rolls_back() -> None:
