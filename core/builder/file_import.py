@@ -150,8 +150,13 @@ _PREFIX_STRIP_RE = re.compile(
     r")\s*[:\-]\s*",
     flags=re.IGNORECASE,
 )
-_SERVING_CONNECTOR_RE = re.compile(r"\b(?:serveras\s+med|served\s+with|with)\b", flags=re.IGNORECASE)
-_SERVING_WORD_RE = re.compile(r"\bserveras\b", flags=re.IGNORECASE)
+_STANDALONE_SERVING_WORD_RE = re.compile(r"\b(?:serveras|serveres|servert)\b(?!\s+med\b)", flags=re.IGNORECASE)
+_STRONG_COMPONENT_CONNECTOR_RE = re.compile(
+    r"\b(?:serveras\s+med|serveres\s+med|servert\s+med|served\s+with|with|med)\b",
+    flags=re.IGNORECASE,
+)
+_TOP_LEVEL_COMPONENT_CONNECTOR_RE = re.compile(r"\s+(?:och|og|samt)\s+", flags=re.IGNORECASE)
+_TAIL_COMPONENT_CONNECTOR_RE = re.compile(r"\s+(?:och|og|samt|and)\s+", flags=re.IGNORECASE)
 _COMPONENT_NOISE_RE = re.compile(r"^(?:serveras(?:\s+med)?|served\s+with|with|med)$", flags=re.IGNORECASE)
 _LEADING_COMPONENT_FILLER_RE = re.compile(r"^(?:serveras(?:\s+med)?|served\s+with|with|med)\b\s*", flags=re.IGNORECASE)
 _TRAILING_COMPONENT_FILLER_RE = re.compile(r"\s*\b(?:serveras(?:\s+med)?|served\s+with|with|med)\b$", flags=re.IGNORECASE)
@@ -502,35 +507,63 @@ def _strip_leading_label_prefix(value: str) -> str:
     return text[matched.end() :].strip()
 
 
+def _normalize_import_component_candidate(candidate: str) -> str | None:
+    text = str(candidate or "").strip(" \t\r\n-|;:,.•")
+    while text:
+        updated = _LEADING_COMPONENT_FILLER_RE.sub("", text).strip(" \t\r\n-|;:,.•")
+        updated = _TRAILING_COMPONENT_FILLER_RE.sub("", updated).strip(" \t\r\n-|;:,.•")
+        if updated == text:
+            break
+        text = updated
+    if not text:
+        return None
+    if _COMPONENT_NOISE_RE.fullmatch(text):
+        return None
+    if _DESCRIPTIVE_COMPONENT_FRAGMENT_RE.match(text):
+        return None
+    return text[:1].upper() + text[1:]
+
+
+def _split_import_component_candidates(text: str, *, tail_mode: bool) -> list[str]:
+    source = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not source:
+        return []
+
+    source = _STANDALONE_SERVING_WORD_RE.sub(" ", source)
+    source = re.sub(r"\s+", " ", source).strip()
+
+    if not source:
+        return []
+
+    matches = list(_STRONG_COMPONENT_CONNECTOR_RE.finditer(source))
+    if matches:
+        suggestions: list[str] = []
+        start = 0
+        for match in matches:
+            prefix = source[start:match.start()].strip()
+            if prefix:
+                suggestions.extend(_split_import_component_candidates(prefix, tail_mode=False))
+            start = match.end()
+        tail = source[start:].strip()
+        if tail:
+            suggestions.extend(_split_import_component_candidates(tail, tail_mode=True))
+        return suggestions
+
+    parts = _TAIL_COMPONENT_CONNECTOR_RE.split(source) if tail_mode else _TOP_LEVEL_COMPONENT_CONNECTOR_RE.split(source)
+    suggestions: list[str] = []
+    for part in parts:
+        label = _normalize_import_component_candidate(part)
+        if label and label not in suggestions:
+            suggestions.append(label)
+    return suggestions
+
+
 def suggest_components_from_import_dish_name(name: str) -> list[str]:
     text = sanitize_builder_import_text(name)
     if not text:
         return []
 
-    split_source = _SERVING_CONNECTOR_RE.sub(" med ", text)
-    split_source = _SERVING_WORD_RE.sub(" ", split_source)
-    split_source = re.sub(r"\s+", " ", split_source).strip()
-
-    parts = re.split(r"\s+(?:med|och|m)\s+", split_source, flags=re.IGNORECASE)
-    suggestions: list[str] = []
-    for part in parts:
-        candidate = str(part or "").strip(" \t\r\n-|;:,.•")
-        while candidate:
-            updated = _LEADING_COMPONENT_FILLER_RE.sub("", candidate).strip(" \t\r\n-|;:,.•")
-            updated = _TRAILING_COMPONENT_FILLER_RE.sub("", updated).strip(" \t\r\n-|;:,.•")
-            if updated == candidate:
-                break
-            candidate = updated
-        if not candidate:
-            continue
-        if _COMPONENT_NOISE_RE.fullmatch(candidate):
-            continue
-        if _DESCRIPTIVE_COMPONENT_FRAGMENT_RE.match(candidate):
-            continue
-        label = candidate[:1].upper() + candidate[1:]
-        if label and label not in suggestions:
-            suggestions.append(label)
-    return suggestions
+    return _split_import_component_candidates(text, tail_mode=False)
 
 
 def suggest_component_category(name: str) -> str:

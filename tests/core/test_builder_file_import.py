@@ -291,6 +291,30 @@ def test_component_decomposition_handles_serveras_med_and_och() -> None:
     assert all(name.lower() != "serveras med" for name in components)
 
 
+@pytest.mark.parametrize(
+    ("dish_name", "expected"),
+    [
+        ("Asiatisk svineribbe med hoisinsås og ris", ["Asiatisk svineribbe", "Hoisinsås", "Ris"]),
+        ("Köttbullar med potatismos och gräddsås", ["Köttbullar", "Potatismos", "Gräddsås"]),
+        ("Laks med poteter og saus", ["Laks", "Poteter", "Saus"]),
+        ("Kylling serveres med ris og saus", ["Kylling", "Ris", "Saus"]),
+        ("Kylling servert med ris og saus", ["Kylling", "Ris", "Saus"]),
+        ("Köttbullar och potatismos", ["Köttbullar", "Potatismos"]),
+        ("Laks og poteter", ["Laks", "Poteter"]),
+        ("Köttbullar med potatismos samt en citrondoftande sås", ["Köttbullar", "Potatismos", "En citrondoftande sås"]),
+        ("Fisk samt kokt potatis", ["Fisk", "Kokt potatis"]),
+        ("Chicken with rice and sauce", ["Chicken", "Rice", "Sauce"]),
+        ("Fish and chips", ["Fish and chips"]),
+        ("Mac and cheese", ["Mac and cheese"]),
+    ],
+)
+def test_component_decomposition_supports_scandinavian_and_cautious_english_connectors(
+    dish_name: str,
+    expected: list[str],
+) -> None:
+    assert suggest_components_from_import_dish_name(dish_name) == expected
+
+
 def test_component_decomposition_ignores_descriptive_phrase_only_fragment() -> None:
     components = suggest_components_from_import_dish_name("Kycklinggryta med smak av dragon")
 
