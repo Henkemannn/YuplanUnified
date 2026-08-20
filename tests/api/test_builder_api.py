@@ -2567,9 +2567,18 @@ def test_rename_component_in_composition_endpoint() -> None:
     body = rv.get_json() or {}
     assert body.get("ok") is True
     components = body.get("composition", {}).get("components") or []
-    assert [item["component_id"] for item in components] == ["lax", "potatis"]
+    assert [item["component_id"] for item in components] == ["fisk", "potatis"]
     assert [item["component_name"] for item in components] == ["Lax", "Potatis"]
     assert components[0]["role"] == "connector"
+
+    composition_rv = client.get("/api/builder/compositions", headers=HEADERS)
+    assert composition_rv.status_code == 200
+    compositions = (composition_rv.get_json() or {}).get("compositions") or []
+    target = next((item for item in compositions if item.get("composition_id") == "plate_4"), None)
+    assert target is not None
+    composition_components = target.get("components") or []
+    assert [item["component_id"] for item in composition_components] == ["fisk", "potatis"]
+    assert [item["component_name"] for item in composition_components] == ["Lax", "Potatis"]
 
 
 def test_rename_component_in_composition_endpoint_preserves_swedish_component_name() -> None:
@@ -2596,7 +2605,7 @@ def test_rename_component_in_composition_endpoint_preserves_swedish_component_na
     components = body.get("composition", {}).get("components") or []
     assert len(components) == 1
     assert components[0]["component_name"] == "Köttbullar"
-    assert components[0]["component_id"] == "kottbullar"
+    assert components[0]["component_id"] == "fisk"
 
 
 def test_rename_then_add_component_persists_in_list_reload_for_coarse_component_flow() -> None:
@@ -2735,9 +2744,61 @@ def test_rename_component_in_composition_endpoint_can_update_name_and_role_toget
     assert rv.status_code == 200
     components = ((rv.get_json() or {}).get("composition") or {}).get("components") or []
     assert len(components) == 1
-    assert components[0].get("component_id") == "lax"
+    assert components[0].get("component_id") == "fisk"
     assert components[0].get("component_name") == "Lax"
     assert components[0].get("role") == "main"
+
+
+def test_component_rename_keeps_shared_dishes_on_same_component_id() -> None:
+    client = _client()
+    client.post(
+        "/api/builder/components",
+        json={"component_name": "Hoisinsås og ris"},
+        headers=HEADERS,
+    )
+
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_shared_1", "composition_name": "Dish 1"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_shared_2", "composition_name": "Dish 2"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_shared_1/components",
+        json={"component_name": "Hoisinsås og ris", "role": "component"},
+        headers=HEADERS,
+    )
+    client.post(
+        "/api/builder/compositions/plate_shared_2/components/attach",
+        json={"component_id": "hoisinsas_og_ris", "role": "component"},
+        headers=HEADERS,
+    )
+
+    renamed = client.patch(
+        "/api/builder/components/hoisinsas_og_ris",
+        json={"name": "Hoisinsås"},
+        headers=HEADERS,
+    )
+    assert renamed.status_code == 200
+
+    listed_compositions = client.get("/api/builder/compositions", headers=HEADERS)
+    assert listed_compositions.status_code == 200
+    compositions = (listed_compositions.get_json() or {}).get("compositions") or []
+    for composition_id in ("plate_shared_1", "plate_shared_2"):
+        target = next((item for item in compositions if item.get("composition_id") == composition_id), None)
+        assert target is not None
+        components = target.get("components") or []
+        assert [item.get("component_id") for item in components] == ["hoisinsas_og_ris"]
+        assert [item.get("component_name") for item in components] == ["Hoisinsås"]
+
+    listed = client.get("/api/builder/components", headers=HEADERS)
+    assert listed.status_code == 200
+    ids = [item.get("component_id") for item in ((listed.get_json() or {}).get("components") or [])]
+    assert ids.count("hoisinsas_og_ris") == 1
 
 
 def test_update_component_endpoint_requires_component_name_or_role() -> None:

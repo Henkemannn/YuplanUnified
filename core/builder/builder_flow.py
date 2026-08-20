@@ -1021,28 +1021,17 @@ class BuilderFlow:
             raise ValueError("component entry not found in composition")
 
         old_component_id = str(component_id)
+        resolved_component = self.rename_component(
+            component_id=old_component_id,
+            component_name=new_name_value,
+            actor=actor,
+        )
+        resolved_role = role if role_provided else existing.role
         self._composition_service.remove_component_from_composition(
             composition_id=composition_id,
             component_id=old_component_id,
             sort_order=existing.sort_order,
         )
-        updated_composition = self._composition_service.get_composition(composition_id)
-        if updated_composition is None:
-            raise ValueError(f"composition not found: {composition_id}")
-
-        all_compositions = self._composition_service.list_compositions()
-        old_still_referenced = any(
-            any(item.component_id == old_component_id for item in comp.components)
-            for comp in all_compositions
-        )
-        if not old_still_referenced:
-            try:
-                self._component_service.delete_component(old_component_id)
-            except ValueError:
-                pass
-
-        resolved_component = self.create_standalone_component(new_name_value, actor=actor)
-        resolved_role = role if role_provided else existing.role
         return self._composition_service.add_component_to_composition(
             composition_id=composition_id,
             component_id=resolved_component.component_id,
@@ -1369,7 +1358,7 @@ class BuilderFlow:
             return None
         if not self._can_read_library_object("composition", composition_id_value, actor=actor):
             return None
-        return composition
+        return self._refresh_composition_component_names(composition)
 
     def list_library_compositions(self, *, actor: ActorContext | None = None) -> list[Composition]:
         items = self._composition_service.list_compositions()
@@ -1379,7 +1368,33 @@ class BuilderFlow:
                 for item in items
                 if self._can_read_library_object("composition", item.composition_id, actor=actor)
             ]
-        return sorted(items, key=lambda item: (item.composition_name.lower(), item.composition_id))
+        refreshed_items = [self._refresh_composition_component_names(item) for item in items]
+        return sorted(refreshed_items, key=lambda item: (item.composition_name.lower(), item.composition_id))
+
+    def _refresh_composition_component_names(self, composition: Composition) -> Composition:
+        refreshed_components: list[CompositionComponent] = []
+        for item in list(composition.components or []):
+            component_id_value = str(item.component_id or "").strip()
+            canonical_name = str(item.component_name or item.component_id or "").strip()
+            if component_id_value:
+                component = self._component_service.get_component(component_id_value)
+                if component is not None:
+                    canonical_name = str(component.canonical_name or component_id_value).strip()
+            refreshed_components.append(
+                CompositionComponent(
+                    component_id=component_id_value,
+                    component_name=canonical_name,
+                    role=item.role,
+                    sort_order=item.sort_order,
+                )
+            )
+
+        return Composition(
+            composition_id=composition.composition_id,
+            composition_name=composition.composition_name,
+            library_group=composition.library_group,
+            components=refreshed_components,
+        )
 
     def import_library_text_lines(self, lines: list[str], *, actor: ActorContext | None = None) -> LibraryImportSummary:
         normalized_lines = [str(line or "").strip() for line in lines]

@@ -428,9 +428,13 @@ def test_rename_component_in_composition_through_builder_flow() -> None:
     )
 
     component_ids = [item.component_id for item in updated.components]
-    assert component_ids == ["salmon", "potatoes"]
+    assert component_ids == ["fish", "potatoes"]
+    assert [item.component_name for item in updated.components] == ["Salmon", "Potatoes"]
     assert updated.components[0].role == "connector"
     assert updated.components[0].sort_order == 10
+    assert flow.get_library_component("fish") is not None
+    assert flow.get_library_component("fish").canonical_name == "Salmon"
+    assert len([item for item in flow.list_library_components() if item.component_id == "fish"]) == 1
 
 
 def test_rename_component_in_composition_rejects_empty_name() -> None:
@@ -531,11 +535,14 @@ def test_rename_component_in_composition_updates_component_name() -> None:
 
     assert len(updated.components) == 1
     assert updated.components[0].component_name == "Köttbullar"
-    assert updated.components[0].component_id == "kottbullar"
+    assert updated.components[0].component_id == "fisk"
+    assert flow.get_library_component("fisk") is not None
+    assert flow.get_library_component("fisk").canonical_name == "Köttbullar"
+    assert flow.get_library_composition("plate") is not None
+    assert flow.get_library_composition("plate").components[0].component_name == "Köttbullar"
 
 
 def test_rename_component_in_composition_removes_old_coarse_component_from_library() -> None:
-    """After renaming a coarse component, the old entity must no longer appear in list_library_components."""
     flow = _build_flow()
     flow.create_composition(composition_id="dish1", composition_name="Pannbiff")
     flow.add_component_to_composition(
@@ -559,13 +566,17 @@ def test_rename_component_in_composition_removes_old_coarse_component_from_libra
     )
 
     library_ids = {item.component_id for item in flow.list_library_components()}
-    assert "stekt_lok_potatis" not in library_ids, "Old coarse component must be purged from library after rename"
-    assert "stekt_lok" in library_ids
+    assert "stekt_lok_potatis" in library_ids
+    assert "stekt_lok" not in library_ids
     assert "kokt_potatis" in library_ids
+
+    dish_view = flow.get_library_composition("dish1")
+    assert dish_view is not None
+    assert [item.component_id for item in dish_view.components] == ["stekt_lok_potatis", "kokt_potatis"]
+    assert [item.component_name for item in dish_view.components] == ["Stekt lök", "Kokt potatis"]
 
 
 def test_rename_component_in_composition_keeps_old_component_when_still_referenced_elsewhere() -> None:
-    """Old component entity must NOT be deleted if it is still linked to another composition."""
     flow = _build_flow()
     flow.create_composition(composition_id="dish1", composition_name="Dish 1")
     flow.create_composition(composition_id="dish2", composition_name="Dish 2")
@@ -589,9 +600,16 @@ def test_rename_component_in_composition_keeps_old_component_when_still_referenc
     )
 
     library_ids = {item.component_id for item in flow.list_library_components()}
-    # "fish" must still be in the library because dish2 still references it
     assert "fish" in library_ids
-    assert "salmon" in library_ids
+    assert "salmon" not in library_ids
+
+    dish1_view = flow.get_library_composition("dish1")
+    dish2_view = flow.get_library_composition("dish2")
+    assert dish1_view is not None and dish2_view is not None
+    assert [item.component_id for item in dish1_view.components] == ["fish"]
+    assert [item.component_name for item in dish1_view.components] == ["Salmon"]
+    assert [item.component_id for item in dish2_view.components] == ["fish"]
+    assert [item.component_name for item in dish2_view.components] == ["Salmon"]
 
 
 def test_builder_flow_component_recipe_structured_ingredient_storage() -> None:
