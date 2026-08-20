@@ -179,6 +179,8 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "data-work-menu-builder-host" in html
     assert "offshore-work-menu-builder-host__backdrop" in html
     assert "offshore-work-menu-builder-host__frame" in html
+    assert 'src="/builder-editor-host"' in html
+    assert 'src="about:blank"' not in html
     assert 'target="_blank"' not in html
     assert html.count('class="app-shell__card offshore-work-menu-controls"') == 1
     assert html.count('class="offshore-work-menu-controls__header"') == 1
@@ -216,6 +218,14 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "openBuilderHostFromTrack(trackButton)" in js_source
     assert "return openBuilderHost(bridge);" in js_source
     assert "return false;" in js_source
+    assert "builderHostFrame.src = bridge.builder_url;" not in js_source
+    assert "builderHostFrame.src = 'about:blank';" not in js_source
+    assert "builderHostRuntimeReady" in js_source
+    assert "pendingBuilderHostOpen" in js_source
+    assert "postBuilderHostPing()" in js_source
+    assert "postBuilderHostOpen(" in js_source
+    assert "builder-host-runtime-ready" in js_source
+    assert "builder-host-open" in js_source
     assert "window.addEventListener('message'" in js_source
     assert "lastBuilderHostKind" in js_source
     assert "String(detail.kind || '') !== lastBuilderHostKind" in js_source

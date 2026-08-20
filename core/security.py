@@ -103,11 +103,7 @@ def _origin_from_request() -> str | None:
 
 
 def _is_builder_editor_host_request() -> bool:
-    if request.path != "/builder-editor-host":
-        return False
-    composition_id = str(request.args.get("composition_id") or "").strip()
-    component_id = str(request.args.get("component_id") or "").strip()
-    return bool(composition_id or component_id)
+    return request.path == "/builder-editor-host"
 
 
 def _validate_cors(app: Flask, resp):  # pragma: no cover - exercised indirectly

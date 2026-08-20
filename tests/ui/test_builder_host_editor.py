@@ -91,3 +91,23 @@ def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
     assert "compositionLoadPromises.has(idValue)" in host_js
     assert "compositionLoadPromises.set(idValue, loadPromise);" in host_js
     assert "compositionLoadPromises.delete(idValue);" in host_js
+    assert "notifyHostRuntimeReady();" in host_js
+    assert "builder-host-ping" in host_js
+    assert "builder-host-open" in host_js
+    assert "builder-host-runtime-ready" in host_js
+    assert "window.addEventListener('message'" in host_js
+    assert "if (target.hostTargetId) {" in host_js
+    assert "await openRequestedTarget();" in host_js
+    assert "setHostStatus(false, 'Saknar composition_id or component_id.')" not in host_js
+
+
+def test_builder_editor_host_idle_startup_does_not_fail(client_admin) -> None:
+    rv = client_admin.get("/builder-editor-host", headers=_headers())
+
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+    assert 'src="/builder-editor-host"' not in html  # template contract is checked in offshore tests
+    host_js = Path("static/js/builder_editor_host.js").read_text(encoding="utf-8")
+    assert "if (target.hostTargetId) {" in host_js
+    assert "notifyHostRuntimeReady();" in host_js
+    assert "setHostStatus(false, 'Saknar composition_id or component_id.')" not in host_js

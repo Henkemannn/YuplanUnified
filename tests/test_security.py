@@ -61,6 +61,17 @@ def test_builder_editor_host_composition_allows_same_origin_framing(client):
     assert "frame-ancestors 'none'" not in csp
 
 
+def test_builder_editor_host_without_target_allows_same_origin_framing(client):
+    r = client.get(
+        "/builder-editor-host",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert r.headers.get("X-Frame-Options") == "SAMEORIGIN"
+    csp = r.headers.get("Content-Security-Policy", "")
+    assert "frame-ancestors 'self'" in csp
+    assert "frame-ancestors 'none'" not in csp
+
+
 def test_builder_editor_host_component_allows_same_origin_framing(client):
     r = client.get(
         "/builder-editor-host?component_id=fish",

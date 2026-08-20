@@ -115,6 +115,7 @@
   function getCachedCompositions() {
     return state.cachedCompositions;
   }
+
   function upsertCachedComponent(component) {
     const componentId = normalizeId(component && component.component_id);
     if (!componentId) {
@@ -391,6 +392,58 @@
     }
   }
 
+  function notifyHostRuntimeReady() {
+    const payload = {
+      type: 'builder-host-runtime-ready',
+      detail: {
+        source: 'builder-editor-host',
+      },
+    };
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage(payload, window.location.origin);
+    }
+  }
+
+  window.addEventListener('message', async (event) => {
+    if (event.origin !== window.location.origin) {
+      return;
+    }
+    if (!window.parent || event.source !== window.parent || window.parent === window) {
+      return;
+    }
+    const payload = event.data || {};
+    const detail = payload.detail || {};
+
+    if (payload.type === 'builder-host-ping') {
+      notifyHostRuntimeReady();
+      return;
+    }
+
+    if (payload.type !== 'builder-host-open') {
+      return;
+    }
+
+    const kind = String(detail.kind || '').trim();
+    const targetId = String(detail.host_target_id || '').trim();
+    if (!targetId || (kind !== 'composition' && kind !== 'component')) {
+      return;
+    }
+
+    if (kind === 'composition') {
+      state.compositionId = targetId;
+      state.componentId = '';
+      state.hostKind = 'composition';
+      state.hostTargetId = targetId;
+    } else {
+      state.componentId = targetId;
+      state.compositionId = '';
+      state.hostKind = 'component';
+      state.hostTargetId = targetId;
+    }
+
+    await openRequestedTarget();
+  });
+
   function setHostStatus(ready, errorText = '') {
     document.body.classList.toggle('builder-editor-host-ready', Boolean(ready));
     document.body.classList.toggle('builder-editor-host-failed', !ready);
@@ -404,7 +457,6 @@
 
   async function openRequestedTarget() {
     if (!state.hostTargetId) {
-      setHostStatus(false, 'Saknar composition_id eller component_id.');
       return;
     }
 
@@ -477,6 +529,10 @@
       },
     });
 
-    await openRequestedTarget();
+    notifyHostRuntimeReady();
+
+    if (target.hostTargetId) {
+      await openRequestedTarget();
+    }
   });
 })();
