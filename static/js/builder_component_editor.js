@@ -26,6 +26,12 @@ function createBuilderComponentEditor(config) {
   function _loadLibrary() {
     return typeof config.loadLibrary === "function" ? config.loadLibrary() : Promise.resolve();
   }
+  function _upsertCachedComponent(component) {
+    if (typeof config.upsertCachedComponent === "function") {
+      return config.upsertCachedComponent(component);
+    }
+    return null;
+  }
   function _filterLibraryComponents(q) {
     if (typeof config.filterLibraryComponents === "function") {
       config.filterLibraryComponents(q);
@@ -65,6 +71,11 @@ function createBuilderComponentEditor(config) {
     return typeof config.reopenPendingCompositionForReturn === "function"
       ? config.reopenPendingCompositionForReturn()
       : Promise.resolve(null);
+  }
+  function _refreshCurrentCompositionView() {
+    return typeof config.refreshCurrentCompositionView === "function"
+      ? config.refreshCurrentCompositionView()
+      : Promise.resolve();
   }
   function _attachExistingComponentToCurrentComposition(id) {
     return typeof config.attachExistingComponentToCurrentComposition === "function"
@@ -308,15 +319,14 @@ function createBuilderComponentEditor(config) {
   async function saveComponentOverviewFromDetail(componentId) {
     const idValue = String(componentId || "").trim();
     if (!idValue) {
-      return;
+      throw new Error("Component id is missing.");
     }
     const nameInput = document.getElementById("componentDetailOverviewName");
     const categoryInput = document.getElementById("componentDetailOverviewCategory");
     const nextName = cleanComponentInlineName(nameInput ? nameInput.value : "");
     const nextCategory = String((categoryInput && categoryInput.value) || "").trim().toLowerCase();
     if (!nextName) {
-      window.alert("Component name is required.");
-      return;
+      throw new Error("Component name is required.");
     }
     _showLoading("componentDetailOut");
     const result = await callApi(
@@ -329,7 +339,7 @@ function createBuilderComponentEditor(config) {
     );
     setComponentDetailFeedback(result);
     if (!(result && result.status < 400 && result.data && result.data.ok)) {
-      return;
+      throw new Error("Could not save component overview.");
     }
     const target = _getCachedComponents().find((entry) => String(entry.component_id || "") === idValue);
     if (target) {
@@ -339,8 +349,18 @@ function createBuilderComponentEditor(config) {
     if (nameInput) {
       nameInput.value = nextName;
     }
+    if (result && result.data && result.data.component) {
+      _upsertCachedComponent({
+        ...result.data.component,
+        component_id: idValue,
+        component_name: nextName,
+        category: nextCategory || "",
+      });
+    }
+    const cachedAfter = _getCachedComponents().find((entry) => String(entry.component_id || "") === idValue) || null;
     _updateComponentCategoryChipCounts();
     _filterLibraryComponents(_currentComponentSearchQuery());
+    return result;
   }
 
   // ─── C/K: Form feedback ──────────────────────────────────────────────────
@@ -356,8 +376,16 @@ function createBuilderComponentEditor(config) {
       el.textContent = String(data.message || "Saved.");
       return;
     }
-    el.textContent = String(data.message || data.error || "Could not save changes.");
+      el.textContent = String(data.message || data.error || "Could not save changes.");
   }
+
+    function clearComponentDetailFeedback() {
+      const el = document.getElementById("componentDetailOut");
+      if (!el) {
+        return;
+      }
+      el.textContent = "";
+    }
 
   // ─── H: Dirty/session tracking ───────────────────────────────────────────
 
@@ -896,8 +924,11 @@ function createBuilderComponentEditor(config) {
     if (!button) {
       return;
     }
+    const compositionId = String(_getState("pendingComponentCreateForCompositionId") || "").trim();
     const compositionName = String(_getState("pendingComponentCreateForCompositionName") || "").trim();
-    if (!compositionName) {
+    const pendingComponentId = String(_getState("pendingComponentCreateComponentId") || "").trim();
+    const activeComponentId = String(_getState("_activeComponentDetailId") || "").trim();
+    if (!compositionId || !compositionName || !pendingComponentId || !activeComponentId || activeComponentId !== pendingComponentId) {
       button.classList.add("hidden");
       button.setAttribute("hidden", "hidden");
       button.textContent = "";
@@ -960,6 +991,10 @@ function createBuilderComponentEditor(config) {
     if (!idValue) {
       return;
     }
+    const pendingComponentId = String(_getState("pendingComponentCreateComponentId") || "").trim();
+    if (pendingComponentId && pendingComponentId !== idValue) {
+      _clearPendingComponentCreateForComposition();
+    }
     const requestedTab = componentDetailTabValue(initialTab || "overview");
     let component = _getCachedComponents().find(
       (item) => String(item.component_id || "") === idValue,
@@ -996,6 +1031,7 @@ function createBuilderComponentEditor(config) {
       meta.textContent = "Komponent-ID: " + String(component.component_id || "");
     }
     _showLoading("componentDetailOut");
+      clearComponentDetailFeedback();
     applyComponentDetailDraftToForm(defaultComponentDetailDraft());
     try {
       const draft = await fetchComponentDetailDraft(idValue);
@@ -1028,20 +1064,33 @@ function createBuilderComponentEditor(config) {
       const target = _getCachedComponents().find(
         (entry) => String(entry.component_id || "") === idValue,
       );
-      await saveComponentOverviewFromDetail(idValue);
+      const overviewResult = await saveComponentOverviewFromDetail(idValue);
       const saved = await saveComponentDetailDraft(idValue, draft);
       applyComponentDetailDraftToForm(saved);
       if (target) {
         target.tags = Array.isArray(saved.tags) ? saved.tags.slice() : [];
       }
-      if (_loadLibrary) {
-        await _loadLibrary();
+      if (overviewResult && overviewResult.data && overviewResult.data.component) {
+        _upsertCachedComponent({
+          ...overviewResult.data.component,
+          component_id: idValue,
+          tags: Array.isArray(saved.tags) ? saved.tags.slice() : [],
+        });
       }
       resetComponentDetailDirty();
+      const canonicalAfter = _getCachedComponents().find((entry) => String(entry.component_id || "") === idValue) || null;
+      const compositionLink = _getCachedCompositions().find(
+        (composition) => Array.isArray(composition.components) && composition.components.some((item) => String(item.component_id || "") === idValue),
+      ) || null;
       setComponentDetailFeedback({
         status: 200,
         data: { ok: true, message: "Komponentdetaljer sparade." },
       });
+      try {
+        await _refreshCurrentCompositionView();
+      } catch (refreshError) {
+        console.warn("Component saved, but current composition refresh failed:", refreshError);
+      }
     } catch (_error) {
       setComponentDetailFeedback({
         status: 500,
@@ -1054,6 +1103,8 @@ function createBuilderComponentEditor(config) {
     _closeModalById("componentDetailEditorModal");
     _setState("_activeComponentDetailId", "");
     _setState("_componentDetailDirty", false);
+      clearComponentDetailFeedback();
+    _clearPendingComponentCreateForComposition();
   }
 
   // ─── J: Component delete ──────────────────────────────────────────────────

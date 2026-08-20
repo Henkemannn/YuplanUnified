@@ -157,6 +157,9 @@ describe('standalone canonical builder runtime', () => {
     };
     const apiCalls = [];
     const attachCalls = [];
+    let loadLibraryCalls = 0;
+    let refreshCurrentCompositionCalls = 0;
+    let forceComponentOverviewSaveFailure = false;
 
     let controller;
 
@@ -181,6 +184,9 @@ describe('standalone canonical builder runtime', () => {
 
       if (method === 'PATCH' && /\/components\/[^/]+$/.test(url)) {
         const componentId = decodeURIComponent(url.split('/components/')[1]);
+        if (forceComponentOverviewSaveFailure && componentId === 'linked_component') {
+          return { status: 500, data: { ok: false, error: 'forced overview failure' } };
+        }
         const existing = componentStore.get(componentId) || { component_id: componentId };
         const nextComponent = { ...existing, ...(options.body || {}) };
         componentStore.set(componentId, nextComponent);
@@ -263,7 +269,13 @@ describe('standalone canonical builder runtime', () => {
       dishAllergenLabel(value) {
         return String(value || '').toUpperCase();
       },
-      loadLibrary: async () => {},
+      loadLibrary: async () => {
+        loadLibraryCalls += 1;
+      },
+      refreshCurrentCompositionView: async () => {
+        refreshCurrentCompositionCalls += 1;
+        throw new Error('refresh failed');
+      },
       loadCompositionTextPreviewForCurrentComposition: async () => {},
     });
 
@@ -294,27 +306,76 @@ describe('standalone canonical builder runtime', () => {
     expect(typeof window.openBuilderModalForComposition).toBe('undefined');
 
     const nameInput = document.getElementById('componentDetailOverviewName');
+    const categoryInput = document.getElementById('componentDetailOverviewCategory');
     expect(nameInput).not.toBeNull();
+    expect(categoryInput).not.toBeNull();
     nameInput.value = 'Linked Component Edited';
+    categoryInput.value = 'sauce';
     document.getElementById('componentDetailSaveChanges')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await Promise.resolve();
     await Promise.resolve();
 
     expect(apiCalls.some((call) => call.method === 'PATCH' && /\/components\/linked_component$/.test(call.url))).toBe(true);
     expect(apiCalls.some((call) => call.method === 'PATCH' && /\/components\/linked_component\/details$/.test(call.url))).toBe(true);
+    expect(loadLibraryCalls).toBe(0);
+    expect(refreshCurrentCompositionCalls).toBe(1);
+    expect(controller.getState('_componentDetailDirty')).toBe(false);
     expect(controller.getCurrentComposition()?.composition_id).toBe('dish_1');
+    expect(controller.getCurrentComposition()?.components?.[0]?.component_id).toBe('linked_component');
+    expect(controller.getCurrentComposition()?.components?.[0]?.component_name).toBe('Linked Component Edited');
+    expect(controller.getCurrentComposition()?.components?.[0]?.category).toBe('sauce');
+    expect(document.querySelector('#builderComponentsList .dish-linked-component-card[data-component-id="linked_component"] .component-library-card-name')?.textContent).toBe('Linked Component Edited');
+    expect(document.querySelector('#builderComponentsList .dish-linked-component-card[data-component-id="linked_component"]')?.classList.contains('builder-component-card-theme-sauce')).toBe(true);
+    expect(compositionStore.dish_1.components?.[0]?.component_name).toBe('Linked Component');
+    expect(document.querySelector('#builderComponentsList .dish-linked-component-card .component-library-card-name')?.textContent).toBe('Linked Component Edited');
+    expect(document.querySelector('#builderComponentsList .dish-linked-component-card')?.classList.contains('builder-component-card-theme-sauce')).toBe(true);
+    expect(componentStore.size).toBe(2);
     expect(document.getElementById('resolveModal')?.classList.contains('hidden')).toBe(false);
 
     document.getElementById('componentDetailEditorClose')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await Promise.resolve();
     expect(document.getElementById('componentDetailEditorModal')?.classList.contains('hidden')).toBe(true);
+    expect(attachCalls).toHaveLength(0);
     expect(document.getElementById('resolveModal')?.classList.contains('hidden')).toBe(false);
+
+    forceComponentOverviewSaveFailure = true;
+    controller.openComponentDetailEditor('linked_component', 'overview');
+    await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    const failingNameInput = document.getElementById('componentDetailOverviewName');
+    expect(failingNameInput).not.toBeNull();
+    failingNameInput.value = 'Linked Component Broken Save';
+    document.getElementById('componentDetailSaveChanges')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await waitForTextContent(() => document.getElementById('componentDetailOut')?.textContent, 'Could not save changes.');
+    expect(document.getElementById('componentDetailOut')?.textContent).toContain('Could not save changes.');
+    forceComponentOverviewSaveFailure = false;
+
+    controller.openComponentDetailEditor('new_component', 'overview');
+    await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    expect(document.getElementById('componentDetailOut')?.textContent).not.toContain('Could not save changes.');
+    document.getElementById('componentDetailEditorClose')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await waitForCondition(() => document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    expect(document.getElementById('componentDetailOut')?.textContent || '').toBe('');
 
     controller.setPendingComponentCreate();
     expect(controller.getState('pendingComponentCreateForCompositionId')).toBe('dish_1');
     controller.openComponentDetailEditor('new_component', 'overview');
     await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    expect(document.getElementById('componentDetailReturnToDishBtn')?.classList.contains('hidden')).toBe(true);
+    controller.setState('pendingComponentCreateComponentId', 'new_component');
     expect(document.getElementById('componentDetailReturnToDishBtn')?.textContent).toContain('Standalone Dish');
+    expect(document.getElementById('componentDetailReturnToDishBtn')?.classList.contains('hidden')).toBe(false);
+
+    document.getElementById('componentDetailEditorClose')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await waitForCondition(() => document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    expect(controller.getState('pendingComponentCreateForCompositionId')).toBeNull();
+    expect(controller.getState('pendingComponentCreateComponentId')).toBeNull();
+    expect(attachCalls).toHaveLength(0);
+
+    controller.setPendingComponentCreate();
+    controller.openComponentDetailEditor('new_component', 'overview');
+    await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    controller.setState('pendingComponentCreateComponentId', 'new_component');
+    expect(document.getElementById('componentDetailReturnToDishBtn')?.classList.contains('hidden')).toBe(false);
 
     const newComponentName = document.getElementById('componentDetailOverviewName');
     expect(newComponentName).not.toBeNull();
@@ -327,11 +388,40 @@ describe('standalone canonical builder runtime', () => {
     await waitForCondition(() => document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
     await waitForCondition(() => document.getElementById('resolveModal')?.classList.contains('hidden') === false);
     expect(attachCalls).toContain('new_component');
+    expect(attachCalls).toHaveLength(1);
     expect(controller.getState('pendingComponentCreateForCompositionId')).toBeNull();
     expect(controller.getCurrentComposition()?.components?.some((item) => String(item.component_id || '') === 'new_component')).toBe(true);
     expect(controller.getCurrentComposition()?.composition_id).toBe('dish_1');
     expect(controller.getState('currentBuilderDishTab')).toBe('components');
     expect(compositionStore.dish_1.components.some((item) => String(item.component_id || '') === 'new_component')).toBe(true);
+    expect(document.querySelector('#builderComponentsList .dish-linked-component-card[data-component-id="new_component"]')).not.toBeNull();
+    expect(controller.getState('pendingComponentCreateForCompositionId')).toBeNull();
+    expect(controller.getState('pendingComponentCreateComponentId')).toBeNull();
+
+    const attachCountAfterFirstReturn = attachCalls.length;
+    expect(attachCountAfterFirstReturn).toBe(1);
+
+    controller.openComponentDetailEditor('linked_component', 'overview');
+    await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    expect(document.getElementById('componentDetailReturnToDishBtn')?.classList.contains('hidden')).toBe(true);
+    document.getElementById('componentDetailEditorClose')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await waitForCondition(() => document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    expect(attachCalls).toHaveLength(attachCountAfterFirstReturn);
+
+    controller.setPendingComponentCreate();
+    expect(controller.getState('pendingComponentCreateForCompositionId')).toBe('dish_1');
+    controller.openComponentDetailEditor('new_component', 'overview');
+    await waitForCondition(() => !document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    controller.setState('pendingComponentCreateComponentId', 'new_component');
+    expect(document.getElementById('componentDetailReturnToDishBtn')?.textContent).toContain('Standalone Dish');
+
+    document.getElementById('componentDetailReturnToDishBtn')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await waitForCondition(() => document.getElementById('componentDetailEditorModal')?.classList.contains('hidden'));
+    await waitForCondition(() => document.getElementById('resolveModal')?.classList.contains('hidden') === false);
+    expect(attachCalls).toHaveLength(attachCountAfterFirstReturn);
+    expect(controller.getState('pendingComponentCreateForCompositionId')).toBeNull();
+    expect(controller.getCurrentComposition()?.composition_id).toBe('dish_1');
+    expect(controller.getCurrentComposition()?.components?.filter((item) => String(item.component_id || '') === 'new_component')).toHaveLength(1);
     expect(document.querySelector('#builderComponentsList .dish-linked-component-card[data-component-id="new_component"]')).not.toBeNull();
 
     controller.closeComposition();

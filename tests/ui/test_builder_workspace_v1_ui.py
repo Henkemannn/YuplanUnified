@@ -224,7 +224,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'function syncDishOverviewInputs(composition) {' in js
     assert 'function renderDishOverview(composition) {' in js
     assert 'function saveDishOverviewMetadata() {' in js
-    assert 'renderDishOverview(composition);' in js
+    assert 'renderDishOverview(normalizedComposition);' in js
     assert 'function renderDishAllergenSummary(composition, componentDetails) {' in js
     assert 'function loadDishAllergenSummaryForCurrentComposition() {' in js
     assert 'function fetchDishLinkedComponentDetailsForCurrentComposition() {' in js
@@ -775,6 +775,7 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'function openBuilderModalForComposition(composition, initialTab = "overview") {' in script
     assert 'setDishBuilderTab(initialTab);' in script
     assert 'defineBuilderModalStateAccessor("pendingComponentCreateReturnTab");' in script
+    assert 'defineBuilderModalStateAccessor("pendingComponentCreateComponentId");' in script
     assert 'function updateComponentDetailReturnAction() {' in script
     add_component_handler_start = script.find('if (addComponentBtn) {')
     add_component_handler_end = script.find('if (recipeCreateBtn) {')
@@ -782,12 +783,14 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     add_component_handler_js = script[add_component_handler_start:add_component_handler_end]
     assert 'setPendingComponentCreateForCurrentComposition();' in add_component_handler_js
     assert 'closeModalById("addComponentModal");' in add_component_handler_js
-    assert 'closeResolveModal();' in add_component_handler_js
+    assert 'hideResolveModalForComponentCreation();' in add_component_handler_js
     assert 'openSimpleModal("componentCreateModal");' in add_component_handler_js
     assert 'await openComponentDetailEditor(createdComponentId);' in script
     assert 'await attachComponentToPendingComposition(createdComponentId);' not in script
-    assert 'if (createdComponentId && pendingComponentCreateForCompositionId)' in script
+    assert 'pendingComponentCreateComponentId = createdComponentId;' in script
+    assert 'if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate)' in script
     assert 'else if (createdComponentId && result.data.duplicate)' in script
+    assert 'clearPendingComponentCreateForComposition();' in add_component_handler_js or 'clearPendingComponentCreateForComposition();' in script
     assert 'else if (createdComponentId) {' in script
     # Dish return orchestration stays in builder.js; Component editor receives it as a callback.
     assert 'async function reopenPendingCompositionForReturn() {' in script
@@ -828,6 +831,9 @@ def test_builder_component_editor_sets_category_on_every_open(client_admin) -> N
     assert rv.status_code == 200
     script = rv.data.decode("utf-8")
     assert 'function openComponentDetailEditor(componentId, initialTab) {' in script
+    assert 'function clearComponentDetailFeedback() {' in script
+    assert 'clearComponentDetailFeedback();' in script
+    assert 'Could not save changes.' in script
     assert 'const nextCategory = String(component.category || "").trim().toLowerCase();' in script
     assert 'categoryInput.value = ["main", "side", "sauce", "dessert", "ovrigt"].includes(nextCategory)' in script
     assert 'if (meta) {' in script

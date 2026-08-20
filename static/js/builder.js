@@ -3,11 +3,13 @@ function showJson(targetId, value) {
   if (!el) {
     return;
   }
+  const payload = (value && value.data) || {};
+  const renderedMessage = isBuilderWorkspaceV1() ? formatWorkspaceMessage(targetId, value) : JSON.stringify(value, null, 2);
   if (isBuilderWorkspaceV1()) {
-    el.textContent = formatWorkspaceMessage(targetId, value);
+    el.textContent = renderedMessage;
     return;
   }
-  el.textContent = JSON.stringify(value, null, 2);
+  el.textContent = renderedMessage;
 }
 
 function showLoading(targetId) {
@@ -65,7 +67,6 @@ async function callApi(url, options) {
   const settings = options || {};
   const method = String(settings.method || "GET").toUpperCase();
   let requestUrl = String(url || "");
-
   if (method === "GET") {
     const cacheBust = "_ts=" + String(Date.now());
     requestUrl += requestUrl.includes("?") ? "&" + cacheBust : "?" + cacheBust;
@@ -137,6 +138,7 @@ const _builderModalShadowState = {
   pendingComponentCreateForCompositionId: null,
   pendingComponentCreateForCompositionName: null,
   pendingComponentCreateReturnTab: "components",
+  pendingComponentCreateComponentId: null,
   _activeComponentDetailId: "",
   _activeComponentDetailTab: "overview",
   _componentDetailDirty: false,
@@ -179,6 +181,7 @@ defineBuilderModalStateAccessor("selectedComponentId");
 defineBuilderModalStateAccessor("pendingComponentCreateForCompositionId");
 defineBuilderModalStateAccessor("pendingComponentCreateForCompositionName");
 defineBuilderModalStateAccessor("pendingComponentCreateReturnTab");
+defineBuilderModalStateAccessor("pendingComponentCreateComponentId");
 defineBuilderModalStateAccessor("_activeComponentDetailId");
 defineBuilderModalStateAccessor("_activeComponentDetailTab");
 defineBuilderModalStateAccessor("_componentDetailDirty");
@@ -3722,12 +3725,49 @@ function findCachedComponentById(componentId) {
   if (!idValue) {
     return null;
   }
-  for (const item of reusableComponentsCache) {
+  for (const item of _cachedLibraryComponents) {
     if (String(item.component_id || "") === idValue) {
       return item;
     }
   }
   return null;
+}
+
+function upsertCachedLibraryComponent(component) {
+  const incoming = component && typeof component === "object" ? component : null;
+  if (!incoming) {
+    return null;
+  }
+  const componentId = String(incoming.component_id || "").trim();
+  if (!componentId) {
+    return null;
+  }
+
+  let target = findCachedComponentById(componentId);
+  if (!target) {
+    target = { component_id: componentId };
+    _cachedLibraryComponents = _cachedLibraryComponents.concat([target]);
+    if (_lastLibraryResult && _lastLibraryResult.data && Array.isArray(_lastLibraryResult.data.components)) {
+      _lastLibraryResult.data.components = _lastLibraryResult.data.components.concat([target]);
+    }
+  }
+  Object.assign(target, incoming, { component_id: componentId });
+  return target;
+}
+
+function traceCompositionRenderContext(composition, sourceLabel) {
+  const compositionId = String((composition && composition.composition_id) || "").trim();
+  const components = Array.isArray(composition && composition.components) ? composition.components : [];
+}
+
+function refreshCurrentCompositionViewFromCanonicalCache() {
+  if (_builderModalController && typeof _builderModalController.refreshCurrentComposition === "function") {
+    _builderModalController.refreshCurrentComposition();
+    return;
+  }
+  if (currentBuilderComposition) {
+    renderBuilderPanel(currentBuilderComposition);
+  }
 }
 
 function selectComponentBlock(componentId) {
@@ -4204,9 +4244,6 @@ async function loadReusableComponents(query) {
     _builderModalController.onReusableComponentsRefreshed();
   } else {
     renderComponentPalette();
-    if (currentBuilderComposition) {
-      renderBuilderPanel(currentBuilderComposition);
-    }
   }
 }
 
@@ -4218,6 +4255,7 @@ function renderDishOverviewKlossPreview(composition) {
 
   previewList.innerHTML = "";
   const components = componentsInDisplayOrder(composition);
+  traceCompositionRenderContext(composition, "overview-preview");
 
   if (components.length === 0) {
     const li = document.createElement("li");
@@ -4260,14 +4298,16 @@ function renderBuilderPanel(composition) {
     return;
   }
 
-  currentBuilderComposition = composition;
+  const normalizedComposition = normalizeCompositionComponentNamesForDisplay(composition);
+  currentBuilderComposition = normalizedComposition;
+  traceCompositionRenderContext(normalizedComposition, "builder-panel");
   setDishBuilderTab(currentBuilderDishTab);
   resetRecipePanel("Komponent: inte vald");
-  renderDishOverview(composition);
-  renderDishOverviewKlossPreview(composition);
+  renderDishOverview(normalizedComposition);
+  renderDishOverviewKlossPreview(normalizedComposition);
   list.innerHTML = "";
 
-  loadCompositionDeclarationPreview(String(composition.composition_id || "")).catch(() => {
+  loadCompositionDeclarationPreview(String(normalizedComposition.composition_id || "")).catch(() => {
     renderCompositionDeclarationPreview({ declaration_enabled: false, readiness: null });
   });
   loadCompositionTextPreviewForCurrentComposition(
@@ -4279,7 +4319,7 @@ function renderBuilderPanel(composition) {
     setCompositionTextPreview("dishTextPreview", "Textvy saknas.");
   });
 
-  const components = Array.isArray(composition.components) ? composition.components : [];
+  const components = Array.isArray(normalizedComposition.components) ? normalizedComposition.components : [];
 
   if (components.length === 0) {
     selectedComponentId = null;
@@ -4543,9 +4583,13 @@ function openBuilderModalForComposition(composition, initialTab = "overview") {
     statusLine.classList.add("hidden");
   }
   setDishOverviewStatus("");
-  renderBuilderPanel(composition);
-  setDishBuilderTab(initialTab);
-  modal.classList.remove("hidden");
+  if (_builderModalController && typeof _builderModalController.openComposition === "function") {
+    _builderModalController.openComposition(composition, initialTab);
+  } else {
+    renderBuilderPanel(composition);
+    setDishBuilderTab(initialTab);
+    modal.classList.remove("hidden");
+  }
   loadReusableComponents("").catch((error) => {
     showJson("builderOut", {
       status: 0,
@@ -4561,6 +4605,13 @@ function closeResolveModal() {
   closeModalById("resolveModal");
   currentBuilderComposition = null;
   currentBuilderDishTab = "overview";
+}
+
+function hideResolveModalForComponentCreation() {
+  currentDishAllergenSummaryToken += 1;
+  currentDishCalculationSummaryToken += 1;
+  closeDishComponentOverflowMenus();
+  closeModalById("resolveModal");
 }
 
 function closeDishComponentOverflowMenus(exceptElement = null) {
@@ -4659,7 +4710,13 @@ async function attachExistingComponentToCurrentComposition(componentId, composit
       stageAddedComponentPulse(attachedId);
       stageSelectedComponentPulse(attachedId);
       closeSimpleModal("addComponentModal");
-      renderBuilderPanel(result.data.composition);
+      if (!explicitCompositionId && _builderModalController && typeof _builderModalController.renderBuilderPanel === "function") {
+        try {
+          _builderModalController.renderBuilderPanel(result.data.composition);
+        } catch (renderError) {
+          console.warn("Component attach succeeded, but controller render failed:", renderError);
+        }
+      }
     }
     return result;
   } catch (error) {
@@ -4677,6 +4734,7 @@ function setPendingComponentCreateForCurrentComposition() {
     pendingComponentCreateForCompositionId = null;
     pendingComponentCreateForCompositionName = null;
     pendingComponentCreateReturnTab = "components";
+    pendingComponentCreateComponentId = null;
     updateComponentDetailReturnAction();
     return;
   }
@@ -4684,6 +4742,7 @@ function setPendingComponentCreateForCurrentComposition() {
   pendingComponentCreateForCompositionId = String(currentBuilderComposition.composition_id || "").trim() || null;
   pendingComponentCreateForCompositionName = String(currentBuilderComposition.composition_name || "").trim() || null;
   pendingComponentCreateReturnTab = "components";
+  pendingComponentCreateComponentId = null;
   updateComponentDetailReturnAction();
 }
 
@@ -4691,6 +4750,7 @@ function clearPendingComponentCreateForComposition() {
   pendingComponentCreateForCompositionId = null;
   pendingComponentCreateForCompositionName = null;
   pendingComponentCreateReturnTab = "components";
+  pendingComponentCreateComponentId = null;
   updateComponentDetailReturnAction();
 }
 
@@ -5079,6 +5139,11 @@ function bindBuilderHandlers() {
     dishEditorFactory: createBuilderDishEditor,
     dishAllergenLabel: dishAllergenLabel,
     loadLibrary: loadLibrary,
+    refreshCurrentCompositionView: () => {
+      refreshCurrentCompositionViewFromCanonicalCache();
+      return Promise.resolve();
+    },
+    resolveComponentCategoryThemeKey: resolveComponentCategoryThemeKey,
     updateComponentCategoryChipCounts: updateComponentCategoryChipCounts,
     filterLibraryComponents: filterLibraryComponents,
     currentComponentSearchQuery: currentComponentSearchQuery,
@@ -5088,6 +5153,7 @@ function bindBuilderHandlers() {
     getCachedComponents: () => _cachedLibraryComponents,
     getCachedCompositions: () => _cachedLibraryCompositions,
     resolveComponentById: (componentId) => findCachedComponentById(componentId),
+    upsertCachedComponent: upsertCachedLibraryComponent,
     renderComponentPalette: renderComponentPalette,
     showLoading: showLoading,
     showJson: showJson,
@@ -5555,15 +5621,23 @@ function bindBuilderHandlers() {
         });
         showJson("createComponentOut", result);
         if (result && result.data && result.data.ok) {
-          const createdComponentId = String((((result || {}).data || {}).component || {}).component_id || "").trim();
+          const createdComponent = ((result || {}).data || {}).component || null;
+          const createdComponentId = String((createdComponent && createdComponent.component_id) || "").trim();
+          const isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);
           closeSimpleModal("componentCreateModal");
           if (freeComponentNameEl) {
             freeComponentNameEl.value = "";
           }
-          await loadLibrary();
-          if (createdComponentId && pendingComponentCreateForCompositionId) {
+          if (createdComponent) {
+            upsertCachedLibraryComponent(createdComponent);
+          }
+          updateComponentCategoryChipCounts();
+          filterLibraryComponents(currentComponentSearchQuery());
+          if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate) {
+            pendingComponentCreateComponentId = createdComponentId;
             await openComponentDetailEditor(createdComponentId);
           } else if (createdComponentId && result.data.duplicate) {
+            clearPendingComponentCreateForComposition();
             setWorkspaceSurface("components");
             await openComponentDetailEditor(createdComponentId);
           } else if (createdComponentId) {
@@ -5571,6 +5645,7 @@ function bindBuilderHandlers() {
           }
         }
       } catch (error) {
+        clearPendingComponentCreateForComposition();
         showJson("createComponentOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
       }
     });
@@ -5932,7 +6007,7 @@ function bindBuilderHandlers() {
       }
       setPendingComponentCreateForCurrentComposition();
       closeModalById("addComponentModal");
-      closeResolveModal();
+      hideResolveModalForComponentCreation();
       openSimpleModal("componentCreateModal");
       const freeComponentNameEl = document.getElementById("freeComponentName");
       if (freeComponentNameEl) {

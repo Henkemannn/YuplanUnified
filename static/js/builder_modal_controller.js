@@ -15,6 +15,7 @@
  *   config.filterLibraryComponents: (query: string) => void
  *   config.currentComponentSearchQuery: () => string
  *   config.resolveComponentById: (componentId: string) => object | null | Promise<object | null>
+ *   config.resolveComponentCategoryThemeKey: (component: object) => string
  *   config.showLoading: (targetId: string) => void
  *   config.showJson: (targetId: string, value: any) => void
  *   config.openSimpleModal: (modalId: string) => void
@@ -47,6 +48,7 @@ function createBuilderModalController(config) {
     filterLibraryComponents: config.filterLibraryComponents || null,
     currentComponentSearchQuery: config.currentComponentSearchQuery || null,
     resolveComponentById: config.resolveComponentById || null,
+    resolveComponentCategoryThemeKey: config.resolveComponentCategoryThemeKey || null,
     attachExistingComponentToCurrentComposition: config.attachExistingComponentToCurrentComposition || null,
     showLoading: config.showLoading || null,
     showJson: config.showJson || null,
@@ -135,11 +137,74 @@ function createBuilderModalController(config) {
     }
   }
 
+  function _clearPendingComponentCreateForComposition() {
+    if (typeof config.clearPendingComponentCreateForComposition === "function") {
+      config.clearPendingComponentCreateForComposition();
+    }
+  }
+
+  function _resolveComponentTheme(component) {
+    if (typeof _callbacks.resolveComponentCategoryThemeKey === "function") {
+      return String(_callbacks.resolveComponentCategoryThemeKey(component) || "neutral");
+    }
+    return "neutral";
+  }
+
   async function _resolveComponentById(componentId) {
     if (typeof _callbacks.resolveComponentById === "function") {
       return _callbacks.resolveComponentById(componentId);
     }
     return null;
+  }
+
+  function _resolveCanonicalComponent(component) {
+    const componentId = String(component && component.component_id || "").trim();
+    if (!componentId) {
+      return component;
+    }
+
+    const resolved = typeof _callbacks.resolveComponentById === "function"
+      ? _callbacks.resolveComponentById(componentId)
+      : null;
+    if (!resolved || typeof resolved.then === "function") {
+      return component;
+    }
+
+    const canonical = resolved.component || resolved;
+    const componentName = String(canonical.component_name || component.component_name || component.component_id || "").trim();
+    return {
+      ...component,
+      ...canonical,
+      component_id: componentId,
+      component_name: componentName,
+    };
+  }
+
+  function _compositionHasLinkedComponent(composition, componentId) {
+    const compositionId = String(composition && composition.composition_id || "").trim();
+    const linkedComponentId = String(componentId || "").trim();
+    if (!compositionId || !linkedComponentId) {
+      return false;
+    }
+    if (String((composition && composition.composition_id) || "").trim() !== compositionId) {
+      return false;
+    }
+    return Array.isArray(composition && composition.components)
+      ? composition.components.some((item) => String(item && item.component_id || "").trim() === linkedComponentId)
+      : false;
+  }
+
+  function _normalizeCompositionForRender(composition) {
+    if (!composition || !composition.composition_id) {
+      return composition;
+    }
+
+    return {
+      ...composition,
+      components: Array.isArray(composition.components)
+        ? composition.components.map((component) => _resolveCanonicalComponent(component))
+        : [],
+    };
   }
 
   const _componentEditor = _componentEditorFactory
@@ -149,6 +214,7 @@ function createBuilderModalController(config) {
         getCachedComponents: config.getCachedComponents,
         getCachedCompositions: config.getCachedCompositions,
         loadLibrary: _callbacks.loadLibrary,
+        upsertCachedComponent: config.upsertCachedComponent,
         filterLibraryComponents: _callbacks.filterLibraryComponents,
         updateComponentCategoryChipCounts: _callbacks.updateComponentCategoryChipCounts,
         currentComponentSearchQuery: _callbacks.currentComponentSearchQuery,
@@ -160,6 +226,7 @@ function createBuilderModalController(config) {
         reopenPendingCompositionForReturn: config.reopenPendingCompositionForReturn,
         attachExistingComponentToCurrentComposition: config.attachExistingComponentToCurrentComposition,
         clearPendingComponentCreateForComposition: config.clearPendingComponentCreateForComposition,
+        refreshCurrentCompositionView: config.refreshCurrentCompositionView,
       })
     : null;
 
@@ -234,7 +301,7 @@ function createBuilderModalController(config) {
     }
 
     previewList.innerHTML = "";
-    const components = componentsInDisplayOrder(composition);
+    const components = componentsInDisplayOrder(_normalizeCompositionForRender(composition));
 
     if (components.length === 0) {
       const li = document.createElement("li");
@@ -246,18 +313,22 @@ function createBuilderModalController(config) {
 
     for (const component of components) {
       const componentIdValue = String(component.component_id || "");
+      const canonicalComponent = _resolveCanonicalComponent(component);
+      const displayedName = String((canonicalComponent && canonicalComponent.component_name) || component.component_name || component.component_id || "");
+      const themeKey = _resolveComponentTheme(canonicalComponent || component);
       const li = document.createElement("li");
       li.className = "component-list-item";
 
       const card = document.createElement("article");
       card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
+      card.classList.add("builder-component-card-theme-" + themeKey);
 
       const surface = document.createElement("div");
       surface.className = "builder-component-card-surface";
 
       const name = document.createElement("div");
       name.className = "component-library-card-name";
-      name.textContent = String(component.component_name || component.component_id || "");
+      name.textContent = displayedName;
 
       surface.appendChild(name);
       card.appendChild(surface);
@@ -278,7 +349,7 @@ function createBuilderModalController(config) {
     }
 
     list.innerHTML = "";
-    const components = componentsInDisplayOrder(composition);
+    const components = componentsInDisplayOrder(_normalizeCompositionForRender(composition));
     if (components.length === 0) {
       const li = document.createElement("li");
       li.className = "component-build-surface-empty";
@@ -289,6 +360,15 @@ function createBuilderModalController(config) {
 
     for (const component of components) {
       const componentIdValue = String(component.component_id || "");
+      const canonicalComponent = typeof _callbacks.resolveComponentById === "function"
+        ? _callbacks.resolveComponentById(componentIdValue)
+        : null;
+      const canonicalResolved = canonicalComponent && typeof canonicalComponent.then !== "function"
+        ? (canonicalComponent.component || canonicalComponent)
+        : null;
+      const displayedName = String((canonicalResolved && canonicalResolved.component_name) || component.component_name || component.component_id || "");
+      const displayedCategory = String((canonicalResolved && canonicalResolved.category) || component.category || "");
+      const themeKey = _resolveComponentTheme(canonicalResolved || component);
       const li = document.createElement("li");
       li.className = "component-list-item";
       if (!String(component.role || "").trim()) {
@@ -298,6 +378,7 @@ function createBuilderModalController(config) {
       const card = document.createElement("article");
       card.className = "builder-component-card builder-component-card-compact dish-linked-component-card";
       card.dataset.componentId = componentIdValue;
+      card.classList.add("builder-component-card-theme-" + themeKey);
 
       const surface = document.createElement("button");
       surface.type = "button";
@@ -305,7 +386,7 @@ function createBuilderModalController(config) {
 
       const name = document.createElement("div");
       name.className = "component-library-card-name";
-      name.textContent = String(component.component_name || component.component_id || "");
+      name.textContent = displayedName;
 
       const right = document.createElement("div");
       right.className = "component-row-right";
@@ -351,14 +432,15 @@ function createBuilderModalController(config) {
     if (!composition || !composition.composition_id) {
       return;
     }
-    _state.currentBuilderComposition = composition;
+    const normalizedComposition = _normalizeCompositionForRender(composition);
+    _state.currentBuilderComposition = normalizedComposition;
     _state.currentBuilderDishTab = _state.currentBuilderDishTab || "overview";
     if (_dishEditor) {
-      _dishEditor.syncDishModalHeader(composition);
-      _dishEditor.syncDishOverviewInputs(composition);
+      _dishEditor.syncDishModalHeader(normalizedComposition);
+      _dishEditor.syncDishOverviewInputs(normalizedComposition);
     }
-    renderDishOverviewKlossPreview(composition);
-    renderDishComponentsPanel(composition);
+    renderDishOverviewKlossPreview(normalizedComposition);
+    renderDishComponentsPanel(normalizedComposition);
     if (_dishEditor) {
       _dishEditor.setDishOverviewStatus("");
     }
@@ -366,6 +448,10 @@ function createBuilderModalController(config) {
   }
 
   function openCompositionModal() {
+    const builderOut = compositionRoot.querySelector("#builderOut");
+    if (builderOut) {
+      builderOut.textContent = "";
+    }
     _openSimpleModal("resolveModal");
     const modal = compositionRoot;
     modal.classList.remove("hidden");
@@ -387,8 +473,11 @@ function createBuilderModalController(config) {
 
   async function _returnComponentDetailToDish() {
     const componentId = String(_state._activeComponentDetailId || "").trim();
-    const compositionId = String(_state.pendingComponentCreateForCompositionId || _state.currentBuilderComposition?.composition_id || "").trim();
-    if (!componentId || !compositionId) {
+    const compositionId = String(_state.pendingComponentCreateForCompositionId || "").trim();
+    const pendingComponentId = String(_state.pendingComponentCreateComponentId || "").trim();
+    const currentCompositionId = String(_state.currentBuilderComposition?.composition_id || "").trim();
+    const isNewFromDish = Boolean(compositionId && pendingComponentId && componentId && componentId === pendingComponentId);
+    if (!componentId || (!compositionId && !currentCompositionId)) {
       return;
     }
 
@@ -401,7 +490,33 @@ function createBuilderModalController(config) {
       return;
     }
 
+    const shouldAttachToDish = Boolean(isNewFromDish);
+    if (!shouldAttachToDish) {
+      _state._activeComponentDetailId = "";
+      _closeModalById("componentDetailEditorModal");
+      if (_state.currentBuilderComposition) {
+        renderCurrentComposition(_state.currentBuilderComposition);
+      }
+      return;
+    }
+
     const pendingReturnTab = String(_state.pendingComponentCreateReturnTab || "components").trim() || "components";
+
+    const currentComposition = _state.currentBuilderComposition;
+    const alreadyLinked = _compositionHasLinkedComponent(currentComposition, componentId) && String((currentComposition && currentComposition.composition_id) || "").trim() === compositionId;
+    if (alreadyLinked) {
+      const returnedComposition = currentComposition;
+      _state.currentBuilderComposition = returnedComposition;
+      _state._activeComponentDetailId = "";
+      _state._componentDetailDirty = false;
+      _closeModalById("componentDetailEditorModal");
+      openCompositionModal();
+      renderCurrentComposition(returnedComposition);
+      setDishBuilderTab(pendingReturnTab);
+      _clearPendingComponentCreateForComposition();
+      return;
+    }
+
     const attachComponent = typeof _callbacks.attachExistingComponentToCurrentComposition === "function"
       ? _callbacks.attachExistingComponentToCurrentComposition
       : null;
@@ -416,15 +531,13 @@ function createBuilderModalController(config) {
 
     const returnedComposition = attachResult.data.composition;
     _state.currentBuilderComposition = returnedComposition;
-    _state.pendingComponentCreateForCompositionId = null;
-    _state.pendingComponentCreateForCompositionName = null;
-    _state.pendingComponentCreateReturnTab = "components";
     _state._activeComponentDetailId = "";
     _state._componentDetailDirty = false;
     _closeModalById("componentDetailEditorModal");
     openCompositionModal();
     renderCurrentComposition(returnedComposition);
     setDishBuilderTab(pendingReturnTab);
+    _clearPendingComponentCreateForComposition();
   }
 
   function closeDishComponentOverflowMenus(exceptElement = null) {
@@ -888,6 +1001,13 @@ function createBuilderModalController(config) {
       if (typeof _callbacks.renderComponentPalette === "function") {
         _callbacks.renderComponentPalette();
       }
+    },
+
+    /**
+     * Re-render the current composition from the canonical cache.
+     * This is only used after an explicit component save or attach action.
+     */
+    refreshCurrentComposition() {
       if (_state.currentBuilderComposition) {
         renderCurrentComposition(_state.currentBuilderComposition);
       }

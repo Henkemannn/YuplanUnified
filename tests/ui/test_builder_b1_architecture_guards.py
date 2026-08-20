@@ -171,10 +171,12 @@ def test_modal_state_is_owned_by_controller(client_admin) -> None:
     assert "let pendingComponentCreateForCompositionId = null;" not in script
     assert "let pendingComponentCreateForCompositionName = null;" not in script
     assert "let pendingComponentCreateReturnTab = \"components\";" not in script
+    assert 'defineBuilderModalStateAccessor("pendingComponentCreateComponentId");' in script
     assert "let _activeComponentDetailId = \"\";" not in script
     assert "let _activeComponentDetailTab = \"overview\";" not in script
     assert "let _componentDetailDirty = false;" not in script
     assert "let _componentDetailTagsDraft = [];" not in script
+    assert "pendingComponentCreateComponentId: null" in script
 
 
 def test_workspace_state_stays_in_builder_js(client_admin) -> None:
@@ -189,6 +191,38 @@ def test_workspace_state_stays_in_builder_js(client_admin) -> None:
     assert "_workspaceSurface" not in controller
     assert "_cachedLibraryComponents" not in controller
     assert "_cachedLibraryCompositions" not in controller
+
+
+def test_reusable_component_refresh_is_palette_only(client_admin) -> None:
+    """Reusable-component cache refresh must not rerender the current dish."""
+    controller = _controller_js(client_admin)
+    start = controller.find("onReusableComponentsRefreshed()")
+    end = controller.find("refreshCurrentComposition()")
+    assert start != -1 and end != -1 and start < end
+    block = controller[start:end]
+    assert 'renderComponentPalette()' in block
+    assert 'renderCurrentComposition(_state.currentBuilderComposition);' not in block
+
+
+def test_component_create_flow_avoids_full_library_wait(client_admin) -> None:
+    """Creating a component from the builder should upsert cache and open the editor without awaiting loadLibrary()."""
+    script = _builder_js(client_admin)
+    start = script.find('if (createComponentBtn) {')
+    end = script.find('if (importLibraryBtn) {')
+    assert start != -1 and end != -1 and start < end
+    block = script[start:end]
+    assert 'upsertCachedLibraryComponent(createdComponent);' in block
+    assert 'await loadLibrary();' not in block
+    assert 'await openComponentDetailEditor(createdComponentId);' in block
+
+
+def test_component_editor_callbacks_are_forwarded_and_dish_name_is_canonical(client_admin) -> None:
+    """The controller forwards the cache-refresh callbacks and the dish renderer uses canonical display names."""
+    controller = _controller_js(client_admin)
+    assert 'upsertCachedComponent: config.upsertCachedComponent,' in controller
+    assert 'refreshCurrentCompositionView: config.refreshCurrentCompositionView,' in controller
+    assert 'name.textContent = displayedName;' in controller
+    assert 'name.textContent = String(component.component_name || component.component_id || "");' not in controller
 
 
 # ── Guard 7: No duplicate modal implementation in builder.js ─────────────────
@@ -232,6 +266,14 @@ def test_return_to_dish_attach_contract_uses_explicit_composition_id(client_admi
     assert 'const resolvedCompositionId = explicitCompositionId || String(currentBuilderComposition' in script
     assert '? await attachComponent(componentId, compositionId)' in controller
 
+    start = script.find('async function attachExistingComponentToCurrentComposition(componentId, compositionId = null) {')
+    end = script.find('function setPendingComponentCreateForCurrentComposition() {')
+    assert start != -1 and end != -1 and start < end
+    body = script[start:end]
+    render_lines = [line.strip() for line in body.splitlines() if 'renderBuilderPanel(result.data.composition);' in line]
+    assert render_lines == ['_builderModalController.renderBuilderPanel(result.data.composition);']
+    assert 'normalizeCompositionComponentNamesForDisplay' not in body
+
 
 def test_dish_editor_owns_overview_persistence(client_admin) -> None:
     """Dish overview persistence lives in builder_dish_editor.js, not builder.js."""
@@ -261,6 +303,15 @@ def test_dish_editor_owns_overview_persistence(client_admin) -> None:
     assert 'function syncDishModalHeader(composition) {' in script
     assert 'function syncDishOverviewInputs(composition) {' in script
     assert 'function saveDishOverviewMetadata() {' in script
+
+
+def test_open_composition_modal_clears_builder_out(client_admin) -> None:
+    """Opening the Dish modal must clear stale builderOut feedback."""
+    controller = _controller_js(client_admin)
+
+    assert 'const builderOut = compositionRoot.querySelector("#builderOut");' in controller
+    assert 'builderOut.textContent = "";' in controller
+    assert '_openSimpleModal("resolveModal");' in controller
 
 
 def test_dish_overflow_outside_click_handler_is_controller_owned(client_admin) -> None:
