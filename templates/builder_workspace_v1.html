@@ -6,18 +6,8 @@
   <title>Builder Workspace v1</title>
   <link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">
   <link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">
-  {% set builder_host_entry = request.args.get('composition_id') or request.args.get('component_id') %}
-  {% if builder_host_entry %}
-  <style>
-    body.builder-host-entry .builder-platform-header,
-    body.builder-host-entry .builder-platform-layout,
-    body.builder-host-entry #libraryOut {
-      display: none !important;
-    }
-  </style>
-  {% endif %}
 </head>
-<body class="builder-workspace-v1{% if builder_host_entry %} builder-host-entry{% endif %}">
+<body class="builder-workspace-v1">
   <header class="builder-platform-header">
     <p class="builder-workspace-eyebrow">Builder Workspace v1</p>
     <h1>Yuplan Builder</h1>

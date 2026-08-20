@@ -171,9 +171,19 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "data-work-menu-expand-toggle" in html
     assert "offshoreWorkMenuModal" in html
     assert "data-work-menu-builder-bridge" in html
-    assert "/builder-workspace-v1?composition_id=demo_offshore_kott" in html
+    assert "/builder-editor-host?composition_id=demo_offshore_kott" in html
     assert "offshore-work-menu-meal__status" not in html
     assert "offshore-work-menu-meal__meta" not in html
+
+    assert "data-work-menu-builder-open" in html
+    assert "data-work-menu-builder-host" in html
+    assert "offshore-work-menu-builder-host__backdrop" in html
+    assert "offshore-work-menu-builder-host__frame" in html
+    assert 'target="_blank"' not in html
+    assert html.count('class="app-shell__card offshore-work-menu-controls"') == 1
+    assert html.count('class="offshore-work-menu-controls__header"') == 1
+    assert html.count('class="offshore-work-menu-track-filter" data-work-menu-track-filter') == 1
+    assert html.count('class="offshore-work-menu-builder-host__panel"') == 1
 
     with app.test_request_context("/offshore/work-menu", headers=_headers("cook")):
         vm = offshore_work_menu_service.build_view_model(
@@ -193,6 +203,26 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert first_track.builder_bridge["composition_name"] == "Demo Offshore Kött"
     assert first_track.builder_bridge["component_count"] == 1
     assert [item["component_name"] for item in first_track.builder_bridge["components"]] == ["Demo Offshore Kött"]
+    assert first_track.builder_bridge["builder_url"].startswith("/builder-editor-host?composition_id=")
+
+    js_path = "static/offshore2/work_menu.js"
+    with open(js_path, encoding="utf-8") as f:
+        js_source = f.read()
+    assert "if (openBuilderHostFromTrack(row)) {" in js_source
+    assert "event.preventDefault();" in js_source
+    assert "event.stopPropagation();" in js_source
+    assert js_source.index("openBuilderHostFromTrack(row)") < js_source.index("openModalFromTrack(row)")
+    assert "event.target.closest('[data-work-menu-builder-open]')" not in js_source
+    assert "openBuilderHostFromTrack(trackButton)" in js_source
+    assert "return openBuilderHost(bridge);" in js_source
+    assert "return false;" in js_source
+    assert "window.addEventListener('message'" in js_source
+    assert "lastBuilderHostKind" in js_source
+    assert "String(detail.kind || '') !== lastBuilderHostKind" in js_source
+    assert "builder-host-ready" in js_source
+    assert "offshore-work-menu-builder-host--ready" in js_source
+    assert "offshore-work-menu-builder-host--open" in js_source
+    assert "window.scrollTo(lastBuilderHostScrollX, lastBuilderHostScrollY);" in js_source
 
     with app.app_context():
         db = get_session()
@@ -278,6 +308,8 @@ def test_offshore_work_menu_reset_deletes_decision():
     assert after == before - 1
 
 
+
+
 def test_offshore_work_menu_preserves_unknown_track_groups():
     app = _mk_app()
     site_id = _seed_site(app, tenant_id=1, name="Rig A")
@@ -315,6 +347,27 @@ def test_offshore_work_menu_hides_editor_controls_for_read_only_role():
     assert response.status_code == 200
     assert "data-work-menu-save-form" not in html
     assert "data-work-menu-decision-type" not in html
+
+
+def test_offshore_work_menu_builder_host_markup_is_chrome_free():
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    _seed_builder_menu(app)
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
+    _seed_period(app, tenant_id=1, site_id=site_id)
+
+    client = app.test_client()
+    _login(client, tenant_id=1, site_id=site_id, role="cook")
+    response = client.get("/offshore/work-menu", headers=_headers("cook"))
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'class="offshore-work-menu-builder-host"' in html
+    assert 'offshore-work-menu-builder-host__panel' in html
+    assert 'offshore-work-menu-builder-host__backdrop' in html
+    assert 'offshore-work-menu-builder-host__frame' in html
+    assert html.count('class="offshore-work-menu-builder-host"') == 1
 
 
 def test_offshore_work_menu_rejects_ambiguous_builder_decision():

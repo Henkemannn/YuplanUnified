@@ -63,6 +63,9 @@
     const modalBridgeSummary = root.querySelector('[data-work-menu-builder-bridge-summary]');
     const modalBridgeComponents = root.querySelector('[data-work-menu-builder-bridge-components]');
     const modalBridgeLink = root.querySelector('[data-work-menu-builder-bridge-link]');
+    const builderHost = root.querySelector('[data-work-menu-builder-host]');
+    const builderHostFrame = root.querySelector('[data-work-menu-builder-host-frame]');
+    const builderHostTitle = root.querySelector('[data-work-menu-builder-host-title]');
     const saveForm = root.querySelector('[data-work-menu-save-form]');
     const resetForm = root.querySelector('[data-work-menu-reset-form]');
     const decisionTypeField = root.querySelector('[data-work-menu-decision-type]');
@@ -79,6 +82,11 @@
     const availableKeys = normalizeTrackList(trackToggles.map((checkbox) => checkbox.dataset.trackKey));
     let visibleKeys = normalizeTrackList(readStoredKeys(storageKey) || defaultVisibleKeys);
     let lastActiveElement = null;
+    let lastBuilderBridge = null;
+    let lastBuilderHostKind = '';
+    let lastBuilderHostActiveElement = null;
+    let lastBuilderHostScrollX = window.scrollX || 0;
+    let lastBuilderHostScrollY = window.scrollY || 0;
 
     function validVisibleKeys(values) {
       const filtered = normalizeTrackList(values).filter((key) => availableKeys.includes(key));
@@ -146,6 +154,65 @@
       }
     }
 
+    function closeBuilderHost() {
+      if (!builderHost) {
+        return;
+      }
+      builderHost.hidden = true;
+      builderHost.setAttribute('aria-hidden', 'true');
+      builderHost.classList.remove('offshore-work-menu-builder-host--open');
+      builderHost.classList.remove('offshore-work-menu-builder-host--ready');
+      document.body.classList.remove('offshore-work-menu-builder-host-open');
+      if (builderHostFrame) {
+        builderHostFrame.src = 'about:blank';
+      }
+      window.scrollTo(lastBuilderHostScrollX, lastBuilderHostScrollY);
+      if (lastBuilderHostActiveElement && typeof lastBuilderHostActiveElement.focus === 'function') {
+        lastBuilderHostActiveElement.focus();
+      }
+    }
+
+    function openBuilderHost(bridge, hostKind = 'composition') {
+      if (!builderHost || !builderHostFrame || !bridge || !bridge.composition_id || !bridge.builder_url) {
+        return false;
+      }
+      lastBuilderHostActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      lastBuilderBridge = bridge;
+      lastBuilderHostKind = String(hostKind || 'composition');
+      if (builderHostTitle) {
+        builderHostTitle.textContent = bridge.composition_name || bridge.composition_id;
+      }
+      lastBuilderHostScrollX = window.scrollX || 0;
+      lastBuilderHostScrollY = window.scrollY || 0;
+      builderHostFrame.src = bridge.builder_url;
+      builderHost.hidden = false;
+      builderHost.setAttribute('aria-hidden', 'false');
+      builderHost.classList.add('offshore-work-menu-builder-host--open');
+      builderHost.classList.remove('offshore-work-menu-builder-host--ready');
+      document.body.classList.add('offshore-work-menu-builder-host-open');
+      return true;
+    }
+
+    function openBuilderHostFromTrack(trackButton) {
+      if (!trackButton) {
+        return false;
+      }
+      const rawBridge = trackButton.dataset.builderBridge || '';
+      if (!rawBridge) {
+        return false;
+      }
+      let bridge = null;
+      try {
+        bridge = JSON.parse(rawBridge);
+      } catch (error) {
+        return false;
+      }
+      if (!bridge || !bridge.composition_id || !bridge.builder_url) {
+        return false;
+      }
+      return openBuilderHost(bridge);
+    }
+
     function syncModalFields(trackButton) {
       const serviceEventId = trackButton.dataset.serviceEventId || '';
       const trackKey = trackButton.dataset.trackKey || '';
@@ -207,9 +274,9 @@
       modalBridgeTitle.textContent = '';
       modalBridgeSummary.textContent = '';
       modalBridgeComponents.innerHTML = '';
-      modalBridgeLink.href = '#';
       modalBridgeLink.textContent = 'Öppna i Menu Builder';
       modalBridgeLink.removeAttribute('aria-disabled');
+      modalBridgeLink.removeAttribute('href');
 
       const rawBridge = trackButton.dataset.builderBridge || '';
       if (!rawBridge) {
@@ -225,6 +292,8 @@
       if (!bridge || !bridge.composition_id) {
         return;
       }
+
+      lastBuilderBridge = bridge;
 
       modalBridgeTitle.textContent = bridge.composition_name || bridge.composition_id;
       const componentCount = Number.isFinite(Number(bridge.component_count)) ? Number(bridge.component_count) : 0;
@@ -258,9 +327,9 @@
       }
 
       if (bridge.builder_url) {
-        modalBridgeLink.href = bridge.builder_url;
+        modalBridgeLink.setAttribute('data-builder-url', bridge.builder_url);
       } else if (bridge.render_url) {
-        modalBridgeLink.href = bridge.render_url;
+        modalBridgeLink.setAttribute('data-builder-url', bridge.render_url);
       }
       if (bridge.readiness_url) {
         modalBridgeLink.setAttribute('data-readiness-url', bridge.readiness_url);
@@ -368,8 +437,66 @@
         if (event.target instanceof HTMLElement && event.target.closest('[data-work-menu-expand-toggle]')) {
           return;
         }
+        if (openBuilderHostFromTrack(row)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         openModalFromTrack(row);
       });
+    });
+
+    if (modalBridgeLink) {
+      modalBridgeLink.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (lastBuilderBridge) {
+          openBuilderHost(lastBuilderBridge);
+        }
+      });
+    }
+
+    window.addEventListener('message', (event) => {
+      if (!builderHost || builderHost.hidden) {
+        return;
+      }
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+      if (!builderHostFrame || event.source !== builderHostFrame.contentWindow) {
+        return;
+      }
+      const payload = event.data || {};
+      const detail = payload.detail || {};
+      if (!lastBuilderBridge) {
+        return;
+      }
+      if (payload.type === 'builder-host-ready') {
+        if (String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
+          return;
+        }
+        if (String(detail.kind || '') !== lastBuilderHostKind) {
+          return;
+        }
+        builderHost.classList.add('offshore-work-menu-builder-host--ready');
+        if (builderHostFrame) {
+          try {
+            builderHostFrame.focus();
+          } catch (error) {
+            // Ignore focus failures in restricted environments.
+          }
+        }
+        return;
+      }
+      if (payload.type !== 'builder-host-close') {
+        return;
+      }
+      if (String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
+        return;
+      }
+      if (String(detail.kind || '') !== lastBuilderHostKind) {
+        return;
+      }
+      closeBuilderHost();
     });
 
     if (modal) {

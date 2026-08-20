@@ -16,20 +16,20 @@ def _safe_builder_url(endpoint: str, **values: object) -> str:
 
     composition_id = str(values.get("composition_id") or "").strip()
     component_id = str(values.get("component_id") or "").strip()
-    if endpoint == "ui.builder_workspace_v1_ui":
+    if endpoint == "ui.builder_editor_host_ui":
         if composition_id:
-            return f"/builder-workspace-v1?composition_id={composition_id}"
+            return f"/builder-editor-host?composition_id={composition_id}"
         if component_id:
-            return f"/builder-workspace-v1?component_id={component_id}"
-        return "/builder-workspace-v1"
+            return f"/builder-editor-host?component_id={component_id}"
+        return "/builder-editor-host"
     if endpoint == "builder_api.render_composition_text" and composition_id:
-        return f"/builder-workspace-v1?composition_id={composition_id}"
+        return f"/builder-editor-host?composition_id={composition_id}"
     if endpoint == "builder_api.get_composition_declaration_readiness" and composition_id:
-        return f"/builder-workspace-v1?composition_id={composition_id}"
+        return f"/builder-editor-host?composition_id={composition_id}"
     if endpoint == "builder_api.get_component_details" and component_id:
-        return f"/builder-workspace-v1?component_id={component_id}"
+        return f"/builder-editor-host?component_id={component_id}"
     if endpoint == "builder_api.list_component_recipes" and component_id:
-        return f"/builder-workspace-v1?component_id={component_id}"
+        return f"/builder-editor-host?component_id={component_id}"
     return ""
 
 
@@ -55,8 +55,8 @@ class OffshoreBuilderBridgeService:
                 "component_name": reference.component_name,
                 "role": reference.role,
                 "sort_order": reference.sort_order,
-                "details_url": _safe_builder_url("ui.builder_workspace_v1_ui", component_id=reference.component_id),
-                "recipes_url": _safe_builder_url("ui.builder_workspace_v1_ui", component_id=reference.component_id),
+                "details_url": _safe_builder_url("ui.builder_editor_host_ui", component_id=reference.component_id),
+                "recipes_url": _safe_builder_url("ui.builder_editor_host_ui", component_id=reference.component_id),
             }
             for reference in component_references
             if str(reference.component_id or "").strip()
@@ -67,9 +67,9 @@ class OffshoreBuilderBridgeService:
             "composition_id": composition_id,
             "composition_name": str(composition_reference.composition_name or composition_id).strip(),
             "component_count": len(components),
-            "builder_url": _safe_builder_url("ui.builder_workspace_v1_ui", composition_id=composition_id),
-            "render_url": _safe_builder_url("builder_api.render_composition_text", composition_id=composition_id),
-            "readiness_url": _safe_builder_url("builder_api.get_composition_declaration_readiness", composition_id=composition_id),
+            "builder_url": _safe_builder_url("ui.builder_editor_host_ui", composition_id=composition_id),
+            "render_url": _safe_builder_url("ui.builder_editor_host_ui", composition_id=composition_id),
+            "readiness_url": _safe_builder_url("ui.builder_editor_host_ui", composition_id=composition_id),
             "components": components,
         }
 

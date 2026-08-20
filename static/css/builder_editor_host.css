@@ -1,0 +1,32 @@
+html {
+  background: transparent;
+}
+
+body.builder-workspace-v1.builder-editor-host {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: transparent;
+  visibility: hidden;
+}
+
+body.builder-workspace-v1.builder-editor-host.builder-editor-host-ready,
+body.builder-workspace-v1.builder-editor-host.builder-editor-host-failed {
+  visibility: visible;
+}
+
+body.builder-workspace-v1.builder-editor-host #builderEditorHostStatus {
+  position: fixed;
+  inset: 16px;
+  z-index: 4100;
+  display: none;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(8, 12, 20, 0.92);
+  color: #fff;
+  white-space: pre-wrap;
+}
+
+body.builder-workspace-v1.builder-editor-host.builder-editor-host-failed #builderEditorHostStatus {
+  display: block;
+}

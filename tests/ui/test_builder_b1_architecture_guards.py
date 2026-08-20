@@ -193,6 +193,17 @@ def test_workspace_state_stays_in_builder_js(client_admin) -> None:
     assert "_cachedLibraryCompositions" not in controller
 
 
+def test_workspace_js_has_no_host_entry_logic(client_admin) -> None:
+    """The ordinary workspace script must not keep iframe host-entry behavior."""
+    script = _builder_js(client_admin)
+
+    assert "_builderHostLocation" not in script
+    assert "notifyBuilderHostClose" not in script
+    assert "revealBuilderHostEntry" not in script
+    assert "builder-host-entry" not in script
+    assert "builder-host-close" not in script
+
+
 def test_reusable_component_refresh_is_palette_only(client_admin) -> None:
     """Reusable-component cache refresh must not rerender the current dish."""
     controller = _controller_js(client_admin)
@@ -434,6 +445,7 @@ def test_builder_modal_css_loaded(client_admin) -> None:
     """builder_modal.css is included in the Builder Workspace template."""
     html = _workspace_html(client_admin)
     assert "builder_modal.css" in html
+    assert "builder_editor.css" not in html
 
     rv = client_admin.get("/static/css/builder_modal.css")
     assert rv.status_code == 200
@@ -453,6 +465,12 @@ def test_builder_modal_css_scoped_to_modal_ids() -> None:
     assert "#dishAllergensPanel" in content or "#dishCalculationPanel" in content
 
 
+def test_builder_editor_css_removed() -> None:
+    """The temporary builder_editor.css file must not remain in the workspace."""
+    path = os.path.join("static", "css", "builder_editor.css")
+    assert not os.path.exists(path), "builder_editor.css should have been deleted"
+
+
 # ── Guard: Modal roots have data-builder-modal-root attribute ─────────────────
 
 
@@ -466,26 +484,25 @@ def test_modal_roots_have_builder_modal_root_attribute(client_admin) -> None:
 # ── Guard: Offshore files untouched ──────────────────────────────────────────
 
 
-def test_offshore_files_not_modified() -> None:
-    """No Offshore-owned files were modified by this ticket."""
-    import subprocess
-    result = subprocess.run(
-        ["git", "diff", "--name-only", "HEAD"],
-        capture_output=True,
-        text=True,
-    )
-    changed = set(result.stdout.strip().split("\n")) if result.stdout.strip() else set()
-    offshore_files = [
-        "templates/offshore2/",
-        "static/offshore2/",
-        "modules/offshore2/",
-        "core/offshore_builder_bridge.py",
-    ]
-    for offshore_path in offshore_files:
-        for changed_file in changed:
-            assert not changed_file.startswith(offshore_path), (
-                f"Offshore file modified: {changed_file}"
-            )
+def test_offshore_files_not_modified(client_admin) -> None:
+    """Offshore may host Builder, but must not duplicate Builder editors or persistence."""
+    template_path = os.path.join("templates", "offshore2", "work_menu.html")
+    with open(template_path, encoding="utf-8") as f:
+        html = f.read()
+    controller = _controller_js(client_admin)
+    work_menu_path = os.path.join("static", "offshore2", "work_menu.js")
+    with open(work_menu_path, encoding="utf-8") as f:
+        work_menu_js = f.read()
+
+    assert 'data-work-menu-builder-host' in html
+    assert 'builder_light' not in html
+    assert 'id="resolveModal"' not in html
+    assert 'id="componentDetailEditorModal"' not in html
+    assert 'createBuilderDishEditor' not in work_menu_js
+    assert 'createBuilderComponentEditor' not in work_menu_js
+    assert '/api/builder/' not in work_menu_js
+    assert 'builder_light' not in work_menu_js
+    assert 'builder_light' not in controller
 
 
 # ── Guard C1-1: Component editor file exists and is served ───────────────────

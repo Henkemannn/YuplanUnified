@@ -9,6 +9,8 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
     assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
+    assert 'builder_editor.css' not in html
     assert "Builder Workspace v1" in html
     assert "Yuplan Builder" in html
     assert "UI foundation v1 active" in html

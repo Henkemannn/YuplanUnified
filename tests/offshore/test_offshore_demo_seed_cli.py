@@ -210,7 +210,7 @@ def test_offshore_demo_seed_reaches_work_menu_titles(tmp_path: Path) -> None:
     assert any(title == "Plukkfisk med purre og bacon" for title in lunch_titles)
     assert lunch_bridges["koett"]["composition_id"] != "demo_offshore_fisk"
     assert int(lunch_bridges["koett"]["component_count"]) >= 1
-    assert str(lunch_bridges["koett"]["builder_url"]).startswith("/builder-workspace-v1?composition_id=")
+    assert str(lunch_bridges["koett"]["builder_url"]).startswith("/builder-editor-host?composition_id=")
     assert lunch_bridges["fisk"]["composition_id"] != "demo_offshore_fisk"
     assert int(lunch_bridges["fisk"]["component_count"]) >= 1
-    assert str(lunch_bridges["fisk"]["builder_url"]).startswith("/builder-workspace-v1?composition_id=")
+    assert str(lunch_bridges["fisk"]["builder_url"]).startswith("/builder-editor-host?composition_id=")

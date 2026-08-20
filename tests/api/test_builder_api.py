@@ -274,6 +274,96 @@ def test_patch_composition_metadata_endpoint_returns_not_found_for_unknown_compo
     assert body.get("error") == "not_found"
 
 
+def test_single_component_read_endpoint_returns_requested_component() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_single_component_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    admin_client = app.test_client()
+    cook_client = app.test_client()
+    admin_headers = _headers(role="admin", tenant_id=1, user_id=11)
+    cook_headers = _headers(role="cook", tenant_id=1, user_id=42)
+    _seed_session(admin_client, role="admin", tenant_id=1, user_id=11)
+    _seed_session(cook_client, role="cook", tenant_id=1, user_id=42)
+
+    created = admin_client.post(
+        "/api/builder/components",
+        json={"component_name": "Scoped soup"},
+        headers=admin_headers,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    readable = cook_client.get(f"/api/builder/components/{component_id}", headers=cook_headers)
+    assert readable.status_code == 200
+    body = readable.get_json() or {}
+    assert body.get("ok") is True
+    component = body.get("component") or {}
+    assert component.get("component_id") == component_id
+    assert component.get("component_name") == "Scoped soup"
+
+
+def test_single_composition_read_endpoint_returns_requested_composition() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_single_composition_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    admin_client = app.test_client()
+    cook_client = app.test_client()
+    admin_headers = _headers(role="admin", tenant_id=1, user_id=11)
+    cook_headers = _headers(role="cook", tenant_id=1, user_id=42)
+    _seed_session(admin_client, role="admin", tenant_id=1, user_id=11)
+    _seed_session(cook_client, role="cook", tenant_id=1, user_id=42)
+
+    created = admin_client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "scoped_plate", "composition_name": "Scoped plate"},
+        headers=admin_headers,
+    )
+    composition_id = str(((created.get_json() or {}).get("composition") or {}).get("composition_id") or "")
+    assert composition_id == "scoped_plate"
+
+    readable = cook_client.get(f"/api/builder/compositions/{composition_id}", headers=cook_headers)
+    assert readable.status_code == 200
+    body = readable.get_json() or {}
+    assert body.get("ok") is True
+    composition = body.get("composition") or {}
+    assert composition.get("composition_id") == composition_id
+    assert composition.get("composition_name") == "Scoped plate"
+
+
+def test_single_component_read_endpoint_respects_private_scope_boundary() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_single_component_scope_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    admin_client = app.test_client()
+    cook_a_client = app.test_client()
+    cook_b_client = app.test_client()
+    admin_headers = _headers(role="admin", tenant_id=1, user_id=11)
+    cook_a_headers = _headers(role="cook", tenant_id=1, user_id=42)
+    cook_b_headers = _headers(role="cook", tenant_id=1, user_id=43)
+    _seed_session(admin_client, role="admin", tenant_id=1, user_id=11)
+    _seed_session(cook_a_client, role="cook", tenant_id=1, user_id=42)
+    _seed_session(cook_b_client, role="cook", tenant_id=1, user_id=43)
+
+    created = admin_client.post(
+        "/api/builder/components",
+        json={"component_name": "Boundary soup"},
+        headers=admin_headers,
+    )
+    component_id = str(((created.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert component_id
+
+    forked = cook_a_client.post(f"/api/builder/components/{component_id}/fork", headers=cook_a_headers)
+    forked_component_id = str(((forked.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert forked_component_id
+
+    owner_read = cook_a_client.get(f"/api/builder/components/{forked_component_id}", headers=cook_a_headers)
+    other_read = cook_b_client.get(f"/api/builder/components/{forked_component_id}", headers=cook_b_headers)
+
+    assert owner_read.status_code == 200
+    assert other_read.status_code == 400
+    assert (other_read.get_json() or {}).get("error") == "bad_request"
+
+
 def test_free_create_composition_seeds_persisted_component_links_and_reuses_existing() -> None:
     client = _client()
     existing = client.post(

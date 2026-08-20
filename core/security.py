@@ -102,6 +102,14 @@ def _origin_from_request() -> str | None:
     return request.headers.get("Origin")
 
 
+def _is_builder_editor_host_request() -> bool:
+    if request.path != "/builder-editor-host":
+        return False
+    composition_id = str(request.args.get("composition_id") or "").strip()
+    component_id = str(request.args.get("component_id") or "").strip()
+    return bool(composition_id or component_id)
+
+
 def _validate_cors(app: Flask, resp):  # pragma: no cover - exercised indirectly
     allowed: list[str] = app.config.get("CORS_ALLOWED_ORIGINS", []) or []
     if not allowed:
@@ -231,7 +239,10 @@ def init_security(app: Flask):
     def _security_after_request(resp):  # pragma: no cover - coverage via tests
         # Security Headers (some already added in existing app after_request; we ensure presence only)
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-        resp.headers.setdefault("X-Frame-Options", "DENY")
+        if _is_builder_editor_host_request():
+            resp.headers["X-Frame-Options"] = "SAMEORIGIN"
+        else:
+            resp.headers.setdefault("X-Frame-Options", "DENY")
         resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         resp.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
         if not app.config.get("TESTING") and not app.config.get("DEBUG"):
@@ -240,7 +251,11 @@ def init_security(app: Flask):
             )
         # Basic CSP if absent. Landing page uses inline CSS/JS and Google Fonts,
         # so allow that only for the public root HTML route.
-        if request.path == "/" and (resp.mimetype or "").startswith("text/html"):
+        if _is_builder_editor_host_request():
+            resp.headers["Content-Security-Policy"] = (
+                "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+            )
+        elif request.path == "/" and (resp.mimetype or "").startswith("text/html"):
             resp.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "

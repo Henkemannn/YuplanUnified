@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 
 def _headers(*, role: str = "admin", tenant_id: int = 1, user_id: int = 11) -> dict[str, str]:
     return {
@@ -9,66 +11,83 @@ def _headers(*, role: str = "admin", tenant_id: int = 1, user_id: int = 11) -> d
     }
 
 
-def test_builder_host_entry_reuses_canonical_dish_editor(client_admin) -> None:
-    rv = client_admin.get("/builder-workspace-v1?composition_id=plate_1", headers=_headers())
+def test_builder_editor_host_renders_shared_editor_shell(client_admin) -> None:
+    rv = client_admin.get("/builder-editor-host?composition_id=plate_1", headers=_headers())
 
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    assert 'class="builder-workspace-v1 builder-host-entry"' in html
-    assert 'body.builder-host-entry .builder-platform-layout' in html
+    assert '<style>' not in html
+    assert 'class="builder-workspace-v1 builder-editor-host"' in html
+    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
     assert '<script src="/static/js/builder_modal_controller.js?v=builder-b1-modal-controller-v1"></script>' in html
-    assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' in html
-    assert html.count('builder_component_editor.js') == 1
-    assert html.count('builder_dish_editor.js') == 1
-    assert 'builder_light' not in html
-
-    js = client_admin.get("/static/js/builder.js").data.decode("utf-8")
-    assert 'openCompositionFromLibrary(_builderHostLocation.compositionId);' in js
-    assert 'builder-host-close' in js
+    assert '<script src="/static/js/builder_editor_host.js?v=builder-editor-host-v1"></script>' in html
+    assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' not in html
+    assert 'builder-platform-header' not in html
+    assert 'builder-shell' not in html
+    assert 'builder-sidebar' not in html
 
 
-def test_builder_host_entry_reuses_canonical_component_editor(client_admin) -> None:
-    rv = client_admin.get("/builder-workspace-v1?component_id=fish", headers=_headers())
+def test_builder_editor_host_uses_same_assets_for_component_route(client_admin) -> None:
+    rv = client_admin.get("/builder-editor-host?component_id=fish", headers=_headers())
 
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
-    assert 'class="builder-workspace-v1 builder-host-entry"' in html
+    assert 'class="builder-workspace-v1 builder-editor-host"' in html
+    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
-    assert 'builder_light' not in html
-
-    js = client_admin.get("/static/js/builder.js").data.decode("utf-8")
-    assert 'openComponentDetailEditor(_builderHostLocation.componentId);' in js
-    assert 'String(detail.kind || "") !== _builderHostLocation.hostKind' in js
-    assert 'builder-host-close' in js
+    assert '<script src="/static/js/builder_editor_host.js?v=builder-editor-host-v1"></script>' in html
+    assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' not in html
 
 
-def test_builder_host_close_semantics_are_root_only(client_admin) -> None:
-    js = client_admin.get("/static/js/builder_modal_controller.js").data.decode("utf-8")
+def test_builder_editor_host_without_target_still_loads_shell(client_admin) -> None:
+    rv = client_admin.get("/builder-editor-host", headers=_headers())
 
-    assert '_builderHostLocation' not in js
-    assert '_notifyHostClose({ kind: "component", component_id: activeComponentId });' in js
-    assert '_notifyHostClose({ kind: "composition", composition_id: activeCompositionId });' in js
+    assert rv.status_code == 200
+    html = rv.data.decode("utf-8")
+    assert '<style>' not in html
+    assert 'class="builder-workspace-v1 builder-editor-host"' in html
+    assert '<link rel="stylesheet" href="/static/css/builder.css?v=builder-modal-system-reset-1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
+    assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
+    assert '<script src="/static/js/builder_editor_host.js?v=builder-editor-host-v1"></script>' in html
+    assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' not in html
 
 
-def test_builder_host_entry_respects_existing_access_boundary(client_admin) -> None:
+def test_builder_editor_host_respects_access_boundary(client_admin) -> None:
     rv = client_admin.get(
-        "/builder-workspace-v1?composition_id=plate_1",
+        "/builder-editor-host?composition_id=plate_1",
         headers=_headers(role="viewer"),
     )
 
     assert rv.status_code == 403
 
 
-def test_builder_workspace_normal_route_still_renders_workspace_shell(client_admin) -> None:
-    rv = client_admin.get("/builder-workspace-v1", headers=_headers())
+def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
+    host_js = Path("static/js/builder_editor_host.js").read_text(encoding="utf-8")
 
-    assert rv.status_code == 200
-    html = rv.data.decode("utf-8")
-    assert 'class="builder-workspace-v1 builder-host-entry"' not in html
-    assert 'Builder Workspace v1' in html
-    assert 'builder-platform-header' in html
-    assert 'builder-shell' in html
-    assert 'builder_light' not in html
+    open_requested_start = host_js.find("async function openRequestedTarget()")
+    assert open_requested_start != -1
+    open_requested_end = host_js.find("document.addEventListener('DOMContentLoaded'", open_requested_start)
+    assert open_requested_end != -1
+    open_requested_block = host_js[open_requested_start:open_requested_end]
+
+    assert "await loadLibrary();" not in open_requested_block
+    assert "resolveCompositionById(state.compositionId)" in open_requested_block
+    assert "resolveComponentById(state.componentId)" in open_requested_block
+    assert "loadComponentById(" in host_js
+    assert "loadCompositionById(" in host_js
+    assert "const componentLoadPromises = new Map();" in host_js
+    assert "const compositionLoadPromises = new Map();" in host_js
+    assert "componentLoadPromises.has(idValue)" in host_js
+    assert "componentLoadPromises.set(idValue, loadPromise);" in host_js
+    assert "componentLoadPromises.delete(idValue);" in host_js
+    assert "compositionLoadPromises.has(idValue)" in host_js
+    assert "compositionLoadPromises.set(idValue, loadPromise);" in host_js
+    assert "compositionLoadPromises.delete(idValue);" in host_js

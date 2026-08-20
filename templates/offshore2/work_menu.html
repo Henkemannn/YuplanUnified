@@ -122,7 +122,7 @@
                         data-badge-label="{{ badge or '' }}"
                       >
                         <span class="offshore-work-menu-track-row__track">{{ track.track_label or vm.labels.get('offshore.work_menu.track.unknown', track.track_key) }}</span>
-                        <span class="offshore-work-menu-track-row__title">{{ track.effective_title or track.published_title or vm.labels['offshore.work_menu.no_dish'] }}</span>
+                        <span class="offshore-work-menu-track-row__title"{% if track.builder_bridge %} data-work-menu-builder-open{% endif %}>{{ track.effective_title or track.published_title or vm.labels['offshore.work_menu.no_dish'] }}</span>
                         {% if badge %}
                           <span class="offshore-work-menu-track-row__badge">{{ badge }}</span>
                         {% endif %}
@@ -186,7 +186,7 @@
                 <p class="offshore-work-menu-modal__fact-label">Builder-komposition</p>
                 <strong data-work-menu-builder-bridge-title></strong>
               </div>
-              <a class="yp-button yp-button-secondary" href="#" target="_blank" rel="noreferrer noopener" data-work-menu-builder-bridge-link>Öppna i Menu Builder</a>
+              <button class="yp-button yp-button-secondary" type="button" data-work-menu-builder-bridge-link>Öppna i Menu Builder</button>
             </div>
             <p class="offshore-work-menu-modal__builder-bridge-summary" data-work-menu-builder-bridge-summary></p>
             <ul class="offshore-work-menu-modal__builder-bridge-components" data-work-menu-builder-bridge-components></ul>
@@ -246,6 +246,12 @@
           {% endif %}
         </div>
       </div>
+      <section class="offshore-work-menu-builder-host" hidden aria-hidden="true" data-work-menu-builder-host>
+        <div class="offshore-work-menu-builder-host__backdrop" aria-hidden="true"></div>
+        <div class="offshore-work-menu-builder-host__panel" role="dialog" aria-modal="true" aria-label="Builder host">
+          <iframe class="offshore-work-menu-builder-host__frame" title="Builder host" data-work-menu-builder-host-frame></iframe>
+        </div>
+      </section>
     {% endif %}
   </div>
 {% endblock %}

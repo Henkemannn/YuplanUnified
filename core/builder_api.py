@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 import uuid
 
-from flask import Blueprint, current_app, g, jsonify, request, session
+from flask import Blueprint, current_app, g, has_request_context, jsonify, request, session
 
 from .app_authz import require_roles
 from .app_sessions import get_session
@@ -91,6 +91,8 @@ def _optional_str(payload: dict[str, Any], field: str) -> str | None:
 
 
 def _get_builder_actor() -> ActorContext | None:
+    if not has_request_context():
+        return None
     session_data = get_session(session)
     if session_data is None:
         return None
@@ -2206,6 +2208,22 @@ def list_library():
     )
 
 
+@bp.get("/components/<component_id>")
+@require_roles("cook", "editor", "admin", "superuser")
+def get_component(component_id: str):
+    component_id_value = str(component_id or "").strip()
+    if not component_id_value:
+        return _bad_request("component_id is required")
+
+    flow = _get_builder_flow()
+    actor = _get_builder_actor()
+    component = flow.get_library_component(component_id_value, actor=actor)
+    if component is None:
+        return _bad_request(f"component not found: {component_id_value}")
+
+    return jsonify({"ok": True, "component": _serialize_component(component)})
+
+
 @bp.post("/components/<component_id>/fork")
 @require_roles("cook", "editor", "admin", "superuser")
 def fork_component(component_id: str):
@@ -2687,6 +2705,22 @@ def list_compositions():
             ],
         }
     )
+
+
+@bp.get("/compositions/<composition_id>")
+@require_roles("cook", "editor", "admin", "superuser")
+def get_composition(composition_id: str):
+    composition_id_value = str(composition_id or "").strip()
+    if not composition_id_value:
+        return _bad_request("composition_id is required")
+
+    flow = _get_builder_flow()
+    actor = _get_builder_actor()
+    composition = flow.get_library_composition(composition_id_value, actor=actor)
+    if composition is None:
+        return _bad_request(f"composition not found: {composition_id_value}")
+
+    return jsonify({"ok": True, "composition": _serialize_composition(composition)})
 
 
 @bp.post("/compositions/<composition_id>/fork")

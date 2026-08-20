@@ -187,47 +187,6 @@ defineBuilderModalStateAccessor("_activeComponentDetailTab");
 defineBuilderModalStateAccessor("_componentDetailDirty");
 defineBuilderModalStateAccessor("_componentDetailTagsDraft");
 
-const _builderHostLocation = (() => {
-  try {
-    const url = new URL(window.location.href);
-    const compositionId = String(url.searchParams.get("composition_id") || "").trim();
-    const componentId = String(url.searchParams.get("component_id") || "").trim();
-    const hostKind = compositionId ? "composition" : (componentId ? "component" : "");
-    const hostTargetId = compositionId || componentId;
-    return {
-      compositionId,
-      componentId,
-      hostKind,
-      hostTargetId,
-      isHostEntry: Boolean(hostTargetId),
-    };
-  } catch (error) {
-    return {
-      compositionId: "",
-      componentId: "",
-      hostKind: "",
-      hostTargetId: "",
-      isHostEntry: false,
-    };
-  }
-})();
-
-function notifyBuilderHostClose(detail) {
-  if (!_builderHostLocation.isHostEntry) {
-    return;
-  }
-  if (!detail || String(detail.kind || "") !== _builderHostLocation.hostKind) {
-    return;
-  }
-  window.dispatchEvent(new CustomEvent("builder-host-close", {
-    detail: {
-      source: "builder-workspace-v1",
-      host_target_id: _builderHostLocation.hostTargetId,
-      ...detail,
-    },
-  }));
-}
-
 window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";
 console.log("Builder JS active: builder-modal-system-reset-1");
 
@@ -5204,7 +5163,6 @@ function bindBuilderHandlers() {
     reopenPendingCompositionForReturn: reopenPendingCompositionForReturn,
     attachExistingComponentToCurrentComposition: attachExistingComponentToCurrentComposition,
     clearPendingComponentCreateForComposition: clearPendingComponentCreateForComposition,
-    notifyHostClose: notifyBuilderHostClose,
     componentEditorFactory: createBuilderComponentEditor,
   });
   // ─────────────────────────────────────────────────────────────────────────
@@ -6326,13 +6284,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await loadLibrary();
     await loadImportsInboxSessions("");
-    if (_builderHostLocation.compositionId) {
-      await openCompositionFromLibrary(_builderHostLocation.compositionId);
-      setWorkspaceSurface("dishes");
-    } else if (_builderHostLocation.componentId) {
-      setWorkspaceSurface("components");
-      await openComponentDetailEditor(_builderHostLocation.componentId);
-    }
   } catch (error) {
     showJson("libraryOut", {
       status: 0,
