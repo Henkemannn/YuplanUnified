@@ -55,6 +55,7 @@ function createBuilderModalController(config) {
     openSimpleModal: config.openSimpleModal || null,
     closeModalById: config.closeModalById || null,
     renderComponentPalette: config.renderComponentPalette || null,
+    notifyHostClose: config.notifyHostClose || null,
   };
 
   const _state = {
@@ -134,6 +135,12 @@ function createBuilderModalController(config) {
   function _showJson(targetId, value) {
     if (typeof _callbacks.showJson === "function") {
       _callbacks.showJson(targetId, value);
+    }
+  }
+
+  function _notifyHostClose(detail) {
+    if (typeof _callbacks.notifyHostClose === "function") {
+      _callbacks.notifyHostClose(detail);
     }
   }
 
@@ -250,9 +257,11 @@ function createBuilderModalController(config) {
   // ════════════════════════════════════════════════════════════════════════
 
   function _closeComponentDetailEditorSafe() {
+    const activeComponentId = String(_state._activeComponentDetailId || "").trim();
     if (!_state._componentDetailDirty) {
       _closeModalById("componentDetailEditorModal");
       _state._activeComponentDetailId = "";
+      _notifyHostClose({ kind: "component", component_id: activeComponentId });
       return Promise.resolve();
     }
     const shouldSave = window.confirm("Save changes before leaving?");
@@ -264,6 +273,7 @@ function createBuilderModalController(config) {
         _closeModalById("componentDetailEditorModal");
         _state._activeComponentDetailId = "";
         _state._componentDetailDirty = false;
+        _notifyHostClose({ kind: "component", component_id: activeComponentId });
       });
     }
     const shouldDiscard = window.confirm("Discard changes and close?");
@@ -273,6 +283,7 @@ function createBuilderModalController(config) {
     _closeModalById("componentDetailEditorModal");
     _state._activeComponentDetailId = "";
     _state._componentDetailDirty = false;
+    _notifyHostClose({ kind: "component", component_id: activeComponentId });
     return Promise.resolve();
   }
 
@@ -465,10 +476,12 @@ function createBuilderModalController(config) {
     _state.currentDishAllergenSummaryToken += 1;
     _state.currentDishCalculationSummaryToken += 1;
     closeDishComponentOverflowMenus();
+    const activeCompositionId = String(_state.currentBuilderComposition?.composition_id || "").trim();
     _closeModalById("componentDetailEditorModal");
     _closeModalById("resolveModal");
     _state.currentBuilderComposition = null;
     _state.currentBuilderDishTab = "overview";
+    _notifyHostClose({ kind: "composition", composition_id: activeCompositionId });
   }
 
   async function _returnComponentDetailToDish() {
