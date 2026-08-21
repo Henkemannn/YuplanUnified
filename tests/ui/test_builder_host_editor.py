@@ -71,6 +71,7 @@ def test_builder_editor_host_respects_access_boundary(client_admin) -> None:
 
 def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
     host_js = Path("static/js/builder_editor_host.js").read_text(encoding="utf-8")
+    controller_js = Path("static/js/builder_modal_controller.js").read_text(encoding="utf-8")
 
     open_requested_start = host_js.find("async function openRequestedTarget()")
     assert open_requested_start != -1
@@ -102,6 +103,15 @@ def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
     assert "builder-host-ping" in host_js
     assert "builder-host-open" in host_js
     assert "builder-host-runtime-ready" in host_js
+    assert "prepareLinkedComponentForEdit" in host_js
+    assert "'/api/builder/compositions/' + encodeURIComponent(compositionId) + '/components/' + encodeURIComponent(sourceComponentId) + '/edit-target'" in host_js
+    assert "upsertCachedComponent(result.data.component);" in host_js
+    assert "upsertCachedComposition(result.data.composition);" in host_js
+    assert "prepareLinkedComponentForEdit" in controller_js
+    assert "_openLinkedComponentEditor" in controller_js
+    assert "await _openLinkedComponentEditor(componentIdValue);" in controller_js
+    assert "openComponentDetailEditor(componentId, initialTab)" in controller_js
+    assert "if (_componentEditor) return _componentEditor.openComponentDetailEditor(componentId, initialTab);" in controller_js
     assert "window.addEventListener('message'" in host_js
     assert "if (target.hostTargetId) {" in host_js
     assert "await openRequestedTarget();" in host_js

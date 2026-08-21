@@ -1875,7 +1875,7 @@ def get_component_details(component_id: str):
 
 
 @bp.patch("/components/<component_id>/details")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def patch_component_details(component_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -1887,9 +1887,10 @@ def patch_component_details(component_id: str):
 
     flow = _get_builder_flow()
     actor = _get_builder_actor()
-    component = flow.get_library_component(component_id_value, actor=actor)
-    if component is None:
-        return _bad_request(f"component not found: {component_id_value}")
+    try:
+        flow.get_library_component_for_write(component_id_value, actor=actor)
+    except ValueError as exc:
+        return _bad_request(str(exc))
 
     allowed_fields = {
         "tags",
@@ -1931,6 +1932,51 @@ def patch_component_details(component_id: str):
         return _bad_request(str(exc))
 
     return jsonify({"ok": True, "component_id": component_id_value, "details": details})
+
+
+@bp.post("/compositions/<composition_id>/components/<component_id>/edit-target")
+@require_roles("cook", "editor", "admin", "superuser")
+def resolve_linked_component_edit_target(composition_id: str, component_id: str):
+    composition_id_value = str(composition_id or "").strip()
+    component_id_value = str(component_id or "").strip()
+    if not composition_id_value:
+        return _bad_request("composition_id is required")
+    if not component_id_value:
+        return _bad_request("component_id is required")
+
+    try:
+        flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        composition, target_component = flow.resolve_linked_component_edit_target(
+            composition_id_value,
+            component_id_value,
+            actor=actor,
+        )
+        if target_component.component_id != component_id_value:
+            target_details = _load_component_details(target_component.component_id)
+            if target_details.get("updated_at") is None:
+                source_details = _load_component_details(component_id_value)
+                _save_component_details(target_component.component_id, source_details)
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    refreshed_component = flow.get_library_component(target_component.component_id, actor=actor)
+    if refreshed_component is None:
+        return _bad_request(f"component not found: {target_component.component_id}")
+
+    refreshed_composition = flow.get_library_composition(composition.composition_id, actor=actor)
+    if refreshed_composition is None:
+        return _bad_request(f"composition not found: {composition.composition_id}")
+
+    return jsonify(
+        {
+            "ok": True,
+            "source_component_id": component_id_value,
+            "forked": refreshed_component.component_id != component_id_value,
+            "component": _serialize_component(refreshed_component),
+            "composition": _serialize_composition(refreshed_composition),
+        }
+    )
 
 
 @bp.get("/components/method-summary-report")

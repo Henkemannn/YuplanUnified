@@ -26,6 +26,26 @@ class _MemoryScopeRepository:
     def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
         return self.scopes.get((object_type, object_id))
 
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None:
+        for (stored_object_type, object_id), scope in reversed(list(self.scopes.items())):
+            if (
+                stored_object_type == object_type
+                and scope.tenant_id == tenant_id
+                and scope.owner_scope == "user"
+                and scope.owner_user_id == owner_user_id
+                and scope.visibility == "private"
+                and scope.source_object_id == source_object_id
+            ):
+                return object_id
+        return None
+
     def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
         if self.fail_on_set:
             raise RuntimeError("scope persistence failed")
@@ -215,6 +235,92 @@ def test_cook_can_fork_and_edit_private_composition_shallowly() -> None:
     assert flow.get_library_component(forked_component.component_id, actor=cook) is not None
 
 
+def test_cook_can_resolve_linked_component_edit_target_and_reuse_private_fork() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook_a = _actor(tenant_id=1, user_id=20, role="cook")
+    cook_b = _actor(tenant_id=1, user_id=30, role="cook")
+
+    shared_component = flow.create_standalone_component("Linked fork fish", actor=editor)
+    shared_dish = flow.create_composition("dish-shared-fork", "Shared dish", actor=editor)
+    flow._composition_service.add_component_to_composition(
+        composition_id=shared_dish.composition_id,
+        component_id=shared_component.component_id,
+        component_name=shared_component.canonical_name,
+        role="main",
+        sort_order=7,
+    )
+
+    cook_a_source = flow.resolve_composition_edit_target(shared_dish.composition_id, actor=cook_a)
+    updated_a, forked_a = flow.resolve_linked_component_edit_target(
+        cook_a_source.composition_id,
+        shared_component.component_id,
+        actor=cook_a,
+    )
+    repeated_a, repeated_component_a = flow.resolve_linked_component_edit_target(
+        cook_a_source.composition_id,
+        shared_component.component_id,
+        actor=cook_a,
+    )
+
+    assert forked_a.component_id != shared_component.component_id
+    assert repeated_component_a.component_id == forked_a.component_id
+    assert repeated_a.composition_id == updated_a.composition_id
+    assert repeated_a.components[0].component_id == forked_a.component_id
+    assert repeated_a.components[0].role == "main"
+    assert repeated_a.components[0].sort_order == 7
+    assert flow.get_library_composition(shared_dish.composition_id, actor=editor).components[0].component_id == shared_component.component_id
+
+    fork_scope = scope_repo.get_scope("component", forked_a.component_id)
+    assert fork_scope == ObjectScope(
+        tenant_id=1,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=20,
+        visibility="private",
+        source_object_id=shared_component.component_id,
+    )
+
+    cook_b_dish = flow.resolve_composition_edit_target(shared_dish.composition_id, actor=cook_b)
+    updated_b, forked_b = flow.resolve_linked_component_edit_target(
+        cook_b_dish.composition_id,
+        shared_component.component_id,
+        actor=cook_b,
+    )
+
+    assert forked_b.component_id != forked_a.component_id
+    assert updated_b.components[0].component_id == forked_b.component_id
+    assert flow.get_library_component(forked_a.component_id, actor=cook_b) is None
+
+
+def test_cook_can_update_metadata_on_private_composition_but_not_shared_source() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = _actor(tenant_id=1, user_id=20, role="cook")
+
+    shared = flow.create_composition("dish-metadata-fork", "Shared plate", actor=editor)
+    private_target = flow.resolve_composition_edit_target(shared.composition_id, actor=cook)
+
+    updated = flow.update_composition_metadata(
+        private_target.composition_id,
+        composition_name="Cook plate",
+        library_group="fisk",
+        actor=cook,
+    )
+    assert updated.composition_name == "Cook plate"
+    assert updated.library_group == "fisk"
+    assert flow.get_library_composition(shared.composition_id, actor=editor).composition_name == "Shared plate"
+
+    with pytest.raises(ValueError, match="composition not found"):
+        flow.update_composition_metadata(
+            shared.composition_id,
+            composition_name="Blocked",
+            actor=cook,
+        )
+
+
 def test_cook_resolve_composition_edit_target_reuses_private_fork() -> None:
     scope_repo = _MemoryScopeRepository()
     flow = _build_flow(scope_repo)
@@ -303,6 +409,93 @@ def test_cook_b_cannot_read_or_reuse_cook_a_private_composition_fork() -> None:
     assert cook_a_target.composition_id != cook_b_target.composition_id
     assert flow.get_library_composition(cook_a_target.composition_id, actor=cook_b) is None
     assert flow.get_library_composition(cook_b_target.composition_id, actor=cook_a) is None
+
+
+def test_edit_target_reuses_private_fork_without_scanning_visible_lists() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = _actor(tenant_id=1, user_id=20, role="cook")
+
+    source_component = flow.create_standalone_component("Fast lookup fish", actor=editor)
+    source_composition = flow.create_composition("fast-lookup-plate", "Fast lookup plate", actor=editor)
+    flow.add_component_to_composition(
+        composition_id=source_composition.composition_id,
+        component_name=source_component.canonical_name,
+        actor=editor,
+    )
+
+    first_composition = flow.resolve_composition_edit_target(source_composition.composition_id, actor=cook)
+    first_composition, first_private_component = flow.resolve_linked_component_edit_target(
+        first_composition.composition_id,
+        source_component.component_id,
+        actor=cook,
+    )
+    first_component_id = first_private_component.component_id
+
+    composition_list_calls = 0
+    component_list_calls = 0
+
+    def _fail_composition_list(*, actor: ActorContext | None = None):
+        nonlocal composition_list_calls
+        composition_list_calls += 1
+        raise AssertionError("list_library_compositions should not be used to rediscover private forks")
+
+    def _fail_component_list(*, actor: ActorContext | None = None):
+        nonlocal component_list_calls
+        component_list_calls += 1
+        raise AssertionError("list_library_components should not be used to rediscover private forks")
+
+    flow.list_library_compositions = _fail_composition_list  # type: ignore[method-assign]
+    flow.list_library_components = _fail_component_list  # type: ignore[method-assign]
+
+    second_composition = flow.resolve_composition_edit_target(source_composition.composition_id, actor=cook)
+    second_composition, second_component = flow.resolve_linked_component_edit_target(
+        second_composition.composition_id,
+        source_component.component_id,
+        actor=cook,
+    )
+
+    assert second_composition.composition_id == first_composition.composition_id
+    assert second_component.component_id == first_component_id
+    assert composition_list_calls == 0
+    assert component_list_calls == 0
+
+
+def test_edit_target_reuses_private_fork_by_type_and_tenant_isolation() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook_a = _actor(tenant_id=1, user_id=20, role="cook")
+    cook_b = _actor(tenant_id=2, user_id=30, role="cook")
+
+    shared_component = flow.create_standalone_component("Cross match soup")
+    shared_composition = flow.create_composition(shared_component.component_id, "Cross match plate")
+    flow.add_component_to_composition(
+        composition_id=shared_composition.composition_id,
+        component_name=shared_component.canonical_name,
+    )
+
+    cook_a_composition = flow.resolve_composition_edit_target(shared_composition.composition_id, actor=cook_a)
+    cook_a_component_composition, cook_a_component = flow.resolve_linked_component_edit_target(
+        cook_a_composition.composition_id,
+        shared_component.component_id,
+        actor=cook_a,
+    )
+
+    cook_b_composition = flow.resolve_composition_edit_target(shared_composition.composition_id, actor=cook_b)
+    cook_b_component_composition, cook_b_component = flow.resolve_linked_component_edit_target(
+        cook_b_composition.composition_id,
+        shared_component.component_id,
+        actor=cook_b,
+    )
+
+    assert cook_a_composition.composition_id != cook_b_composition.composition_id
+    assert cook_a_component.component_id != cook_b_component.component_id
+    assert cook_a_component_composition.components[0].component_id == cook_a_component.component_id
+    assert cook_b_component_composition.components[0].component_id == cook_b_component.component_id
+    assert flow.get_library_composition(cook_a_composition.composition_id, actor=cook_b) is None
+    assert flow.get_library_component(cook_a_component.component_id, actor=cook_b) is None
 
 
 def test_cook_cannot_update_shared_composition_metadata_directly() -> None:

@@ -274,6 +274,137 @@ def test_patch_composition_metadata_endpoint_returns_not_found_for_unknown_compo
     assert body.get("error") == "not_found"
 
 
+def test_linked_component_edit_target_rewires_private_dish_and_copies_details_once() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_linked_edit_target_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    admin_client = app.test_client()
+    cook_a_client = app.test_client()
+    cook_b_client = app.test_client()
+    admin_headers = _headers(role="admin", tenant_id=9001, user_id=3)
+    cook_a_headers = _headers(role="cook", tenant_id=9001, user_id=4)
+    cook_b_headers = _headers(role="cook", tenant_id=9001, user_id=5)
+    _seed_session(admin_client, role="admin", tenant_id=9001, user_id=3)
+    _seed_session(cook_a_client, role="cook", tenant_id=9001, user_id=4)
+    _seed_session(cook_b_client, role="cook", tenant_id=9001, user_id=5)
+
+    shared_component_rv = admin_client.post(
+        "/api/builder/components",
+        json={"component_name": "Linked dish fish"},
+        headers=admin_headers,
+    )
+    assert shared_component_rv.status_code == 201
+    shared_component_id = str(((shared_component_rv.get_json() or {}).get("component") or {}).get("component_id") or "")
+    assert shared_component_id
+
+    admin_client.patch(
+        f"/api/builder/components/{shared_component_id}/details",
+        json={
+            "recipe_ingredient_rows": [{"ingredient_name": "Fish", "amount_value": "1", "amount_unit": "kg"}],
+            "method_text": "Steam the fish",
+            "calculation_cost": "123.45",
+            "calculation_rows": [{"ingredient_name": "Fish", "amount_value": "1", "amount_unit": "kg"}],
+            "allergens": ["fish"],
+            "tags": ["seafood"],
+        },
+        headers=admin_headers,
+    )
+
+    shared_dish_rv = admin_client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "cmp_5mr4rq", "composition_name": "Shared dish"},
+        headers=admin_headers,
+    )
+    assert shared_dish_rv.status_code == 201
+    admin_client.post(
+        "/api/builder/compositions/cmp_5mr4rq/components",
+        json={"component_name": "Linked dish fish", "role": "main"},
+        headers=admin_headers,
+    )
+
+    cook_a_private_dish = cook_a_client.post(
+        "/api/builder/compositions/cmp_5mr4rq/edit-target",
+        headers=cook_a_headers,
+    )
+    assert cook_a_private_dish.status_code == 200
+    cook_a_private_dish_id = ((cook_a_private_dish.get_json() or {}).get("composition") or {}).get("composition_id")
+    assert cook_a_private_dish_id and cook_a_private_dish_id != "cmp_5mr4rq"
+
+    linked_target = cook_a_client.post(
+        f"/api/builder/compositions/{cook_a_private_dish_id}/components/{shared_component_id}/edit-target",
+        headers=cook_a_headers,
+    )
+    assert linked_target.status_code == 200
+    linked_body = linked_target.get_json() or {}
+    assert linked_body.get("ok") is True
+    assert linked_body.get("forked") is True
+    private_component_id = ((linked_body.get("component") or {}).get("component_id") or "")
+    assert private_component_id and private_component_id != shared_component_id
+    linked_component_entry = ((linked_body.get("composition") or {}).get("components") or [])[0]
+    assert ((linked_body.get("composition") or {}).get("components") or [])[0].get("component_id") == private_component_id
+    assert linked_component_entry.get("role") == "main"
+    source_component_entry = (admin_client.get("/api/builder/compositions/cmp_5mr4rq", headers=admin_headers).get_json() or {}).get("composition") or {}
+    source_link_entry = (source_component_entry.get("components") or [])[0]
+    assert linked_component_entry.get("sort_order") == source_link_entry.get("sort_order")
+
+    repeated_target = cook_a_client.post(
+        f"/api/builder/compositions/{cook_a_private_dish_id}/components/{shared_component_id}/edit-target",
+        headers=cook_a_headers,
+    )
+    assert repeated_target.status_code == 200
+    assert (((repeated_target.get_json() or {}).get("component") or {}).get("component_id")) == private_component_id
+
+    copied_details = cook_a_client.get(f"/api/builder/components/{private_component_id}/details", headers=cook_a_headers)
+    assert copied_details.status_code == 200
+    copied_body = copied_details.get_json() or {}
+    copied_details_payload = copied_body.get("details") or {}
+    assert copied_details_payload.get("method_text") == "Steam the fish"
+    assert copied_details_payload.get("recipe_ingredient_rows") == [{"ingredient_name": "Fish", "amount_value": "1", "amount_unit": "kg"}]
+    assert copied_details_payload.get("calculation_cost") == "123.45"
+    assert copied_details_payload.get("allergens") == ["fish"]
+
+    cook_a_private_patch = cook_a_client.patch(
+        f"/api/builder/components/{private_component_id}/details",
+        json={"method_text": "Cook A method"},
+        headers=cook_a_headers,
+    )
+    assert cook_a_private_patch.status_code == 200
+
+    shared_after = admin_client.get(f"/api/builder/components/{shared_component_id}/details", headers=admin_headers)
+    assert shared_after.status_code == 200
+    assert ((shared_after.get_json() or {}).get("details") or {}).get("method_text") == "Steam the fish"
+
+    cook_a_shared_patch = cook_a_client.patch(
+        f"/api/builder/components/{shared_component_id}/details",
+        json={"method_text": "Blocked"},
+        headers=cook_a_headers,
+    )
+    assert cook_a_shared_patch.status_code == 400
+
+    cook_b_private_dish = cook_b_client.post(
+        "/api/builder/compositions/cmp_5mr4rq/edit-target",
+        headers=cook_b_headers,
+    )
+    assert cook_b_private_dish.status_code == 200
+    cook_b_private_dish_id = ((cook_b_private_dish.get_json() or {}).get("composition") or {}).get("composition_id")
+    assert cook_b_private_dish_id and cook_b_private_dish_id != cook_a_private_dish_id
+
+    cook_b_target = cook_b_client.post(
+        f"/api/builder/compositions/{cook_b_private_dish_id}/components/{shared_component_id}/edit-target",
+        headers=cook_b_headers,
+    )
+    assert cook_b_target.status_code == 200
+    cook_b_private_component_id = ((cook_b_target.get_json() or {}).get("component") or {}).get("component_id")
+    assert cook_b_private_component_id and cook_b_private_component_id != private_component_id
+
+    cook_b_private_details = cook_b_client.get(f"/api/builder/components/{private_component_id}/details", headers=cook_b_headers)
+    assert cook_b_private_details.status_code == 400
+
+    cook_b_initial_details = cook_b_client.get(f"/api/builder/components/{cook_b_private_component_id}/details", headers=cook_b_headers)
+    assert cook_b_initial_details.status_code == 200
+    assert ((cook_b_initial_details.get_json() or {}).get("details") or {}).get("method_text") == "Steam the fish"
+
+
 def test_composition_edit_target_endpoint_reuses_private_fork_and_preserves_source() -> None:
     fd, db_path = tempfile.mkstemp(prefix="builder_api_edit_target_", suffix=".db")
     os.close(fd)

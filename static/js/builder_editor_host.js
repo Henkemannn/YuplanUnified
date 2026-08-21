@@ -242,6 +242,28 @@
     }
   }
 
+  async function prepareLinkedComponentForEdit(componentId) {
+    const currentComposition = getCurrentComposition();
+    const compositionId = normalizeId(currentComposition && currentComposition.composition_id);
+    const sourceComponentId = normalizeId(componentId);
+    if (!compositionId || !sourceComponentId) {
+      return null;
+    }
+    const result = await callApi(
+      '/api/builder/compositions/' + encodeURIComponent(compositionId) + '/components/' + encodeURIComponent(sourceComponentId) + '/edit-target',
+      { method: 'POST' }
+    );
+    if (!(result && result.status < 400 && result.data && result.data.ok && result.data.component && result.data.composition)) {
+      throw new Error('Could not prepare linked component for edit.');
+    }
+    const component = upsertCachedComponent(result.data.component);
+    const composition = upsertCachedComposition(result.data.composition);
+    if (composition) {
+      state.controller && typeof state.controller.renderBuilderPanel === 'function' && state.controller.renderBuilderPanel(composition);
+    }
+    return { component: component || result.data.component, composition: composition || result.data.composition };
+  }
+
   async function resolveCompositionEditTarget(compositionId) {
     const idValue = normalizeId(compositionId);
     if (!idValue) {
@@ -522,6 +544,7 @@
       getCachedComponents,
       getCachedCompositions,
       resolveComponentById,
+      prepareLinkedComponentForEdit,
       resolveComponentCategoryThemeKey,
       filterLibraryComponents,
       currentComponentSearchQuery,

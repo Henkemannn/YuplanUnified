@@ -15,6 +15,7 @@
  *   config.filterLibraryComponents: (query: string) => void
  *   config.currentComponentSearchQuery: () => string
  *   config.resolveComponentById: (componentId: string) => object | null | Promise<object | null>
+ *   config.prepareLinkedComponentForEdit: (componentId: string) => object | null | Promise<object | null>
  *   config.resolveComponentCategoryThemeKey: (component: object) => string
  *   config.showLoading: (targetId: string) => void
  *   config.showJson: (targetId: string, value: any) => void
@@ -48,6 +49,7 @@ function createBuilderModalController(config) {
     filterLibraryComponents: config.filterLibraryComponents || null,
     currentComponentSearchQuery: config.currentComponentSearchQuery || null,
     resolveComponentById: config.resolveComponentById || null,
+    prepareLinkedComponentForEdit: config.prepareLinkedComponentForEdit || null,
     resolveComponentCategoryThemeKey: config.resolveComponentCategoryThemeKey || null,
     attachExistingComponentToCurrentComposition: config.attachExistingComponentToCurrentComposition || null,
     showLoading: config.showLoading || null,
@@ -162,6 +164,26 @@ function createBuilderModalController(config) {
       return _callbacks.resolveComponentById(componentId);
     }
     return null;
+  }
+
+  async function _openLinkedComponentEditor(componentId) {
+    const componentIdValue = String(componentId || "").trim();
+    if (!componentIdValue || !_componentEditor) {
+      return Promise.resolve();
+    }
+
+    let targetComponentId = componentIdValue;
+    if (typeof _callbacks.prepareLinkedComponentForEdit === "function") {
+      const prepared = await _callbacks.prepareLinkedComponentForEdit(componentIdValue);
+      if (prepared && prepared.composition) {
+        renderCurrentComposition(prepared.composition);
+      }
+      if (prepared && prepared.component && String(prepared.component.component_id || "").trim()) {
+        targetComponentId = String(prepared.component.component_id || "").trim();
+      }
+    }
+
+    return _componentEditor.openComponentDetailEditor(targetComponentId, "overview");
   }
 
   function _resolveCanonicalComponent(component) {
@@ -344,9 +366,7 @@ function createBuilderModalController(config) {
       surface.appendChild(name);
       card.appendChild(surface);
       card.addEventListener("click", async () => {
-        if (_componentEditor) {
-          await _componentEditor.openComponentDetailEditor(componentIdValue, "overview");
-        }
+        await _openLinkedComponentEditor(componentIdValue);
       });
       li.appendChild(card);
       previewList.appendChild(li);
@@ -416,9 +436,7 @@ function createBuilderModalController(config) {
       openComponentBtn.textContent = "Öppna komponent";
       openComponentBtn.addEventListener("click", async () => {
         overflow.removeAttribute("open");
-        if (_componentEditor) {
-          await _componentEditor.openComponentDetailEditor(componentIdValue, "overview");
-        }
+        await _openLinkedComponentEditor(componentIdValue);
       });
       menu.appendChild(openComponentBtn);
       overflow.appendChild(overflowSummary);
@@ -428,9 +446,7 @@ function createBuilderModalController(config) {
       surface.appendChild(name);
       surface.appendChild(right);
       surface.addEventListener("click", async () => {
-        if (_componentEditor) {
-          await _componentEditor.openComponentDetailEditor(componentIdValue, "overview");
-        }
+        await _openLinkedComponentEditor(componentIdValue);
       });
 
       card.appendChild(surface);

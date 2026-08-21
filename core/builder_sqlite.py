@@ -114,6 +114,18 @@ def initialize_builder_sqlite(path: str) -> str:
                 ON builder_object_scopes(tenant_id);
             CREATE INDEX IF NOT EXISTS idx_builder_object_scopes_tenant_type
                 ON builder_object_scopes(tenant_id, object_type);
+            CREATE INDEX IF NOT EXISTS idx_builder_object_scopes_private_fork_lookup
+                ON builder_object_scopes(
+                    object_type,
+                    tenant_id,
+                    owner_user_id,
+                    source_object_id,
+                    visibility,
+                    owner_scope,
+                    updated_at DESC,
+                    created_at DESC,
+                    object_id
+                );
 
             CREATE TABLE IF NOT EXISTS builder_composition_components (
                 composition_id TEXT NOT NULL,
@@ -286,6 +298,41 @@ class BuilderObjectScopeRecord:
 @dataclass
 class SQLiteBuilderObjectScopeRepository:
     db_path: str
+
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None:
+        normalized_object_type = _normalize_builder_object_type(object_type)
+        normalized_source_object_id = _normalize_builder_object_id(source_object_id)
+        with _connect(self.db_path) as conn:
+            row = conn.execute(
+                """
+                SELECT object_id
+                FROM builder_object_scopes
+                WHERE object_type = ?
+                  AND tenant_id = ?
+                  AND owner_scope = 'user'
+                  AND owner_user_id = ?
+                  AND visibility = 'private'
+                  AND source_object_id = ?
+                ORDER BY updated_at DESC, created_at DESC, object_id DESC
+                LIMIT 1
+                """,
+                (
+                    normalized_object_type,
+                    int(tenant_id),
+                    int(owner_user_id),
+                    normalized_source_object_id,
+                ),
+            ).fetchone()
+        if row is None:
+            return None
+        return str(row["object_id"])
 
     def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
         normalized_object_type = _normalize_builder_object_type(object_type)

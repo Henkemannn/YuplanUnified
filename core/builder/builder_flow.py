@@ -78,6 +78,15 @@ class LibraryImportSummary:
 class ObjectScopeRepository(Protocol):
     def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None: ...
 
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None: ...
+
     def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None: ...
 
     def delete_scope(self, object_type: str, object_id: str) -> None: ...
@@ -925,6 +934,111 @@ class BuilderFlow:
                     pass
             raise
 
+    def get_library_component_for_write(self, component_id: str, *, actor: ActorContext | None = None) -> Component:
+        component_id_value = str(component_id or "").strip()
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        component = self.get_library_component(component_id_value, actor=actor)
+        if component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+        if not self._can_write_library_object("component", component_id_value, actor=actor):
+            raise ValueError(f"component not found: {component_id_value}")
+        return component
+
+    def resolve_linked_component_edit_target(
+        self,
+        composition_id: str,
+        component_id: str,
+        *,
+        actor: ActorContext | None = None,
+    ) -> tuple[Composition, Component]:
+        composition_id_value = str(composition_id or "").strip()
+        component_id_value = str(component_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
+        if not component_id_value:
+            raise ValueError("component_id must be non-empty")
+
+        composition = self.get_library_composition(composition_id_value, actor=actor)
+        if composition is None or not self._can_write_library_object("composition", composition_id_value, actor=actor):
+            raise ValueError(f"composition not found: {composition_id_value}")
+
+        linked_component = next(
+            (item for item in composition.components if str(item.component_id or "").strip() == component_id_value),
+            None,
+        )
+
+        if linked_component is None:
+            for candidate in composition.components:
+                candidate_scope = None
+                if self._object_scope_repository is not None:
+                    candidate_scope = self._object_scope_repository.get_scope("component", str(candidate.component_id or "").strip())
+                if candidate_scope is None:
+                    continue
+                if (
+                    actor is not None
+                    and candidate_scope.tenant_id == actor.tenant_id
+                    and candidate_scope.owner_scope == "user"
+                    and candidate_scope.owner_user_id == actor.user_id
+                    and candidate_scope.visibility == "private"
+                    and candidate_scope.source_object_id == component_id_value
+                ):
+                    return self.get_library_composition(composition_id_value, actor=actor) or composition, self.get_library_component_for_write(candidate.component_id, actor=actor)
+            raise ValueError(f"component not found: {component_id_value}")
+
+        source_component = self.get_library_component(component_id_value, actor=actor)
+        if source_component is None:
+            raise ValueError(f"component not found: {component_id_value}")
+
+        if self._can_write_library_object("component", component_id_value, actor=actor):
+            return composition, source_component
+
+        if actor is None:
+            raise ValueError("actor is required for private fork creation")
+
+        private_component: Component | None = None
+        private_component_id = None
+        if self._object_scope_repository is not None:
+            private_component_id = self._object_scope_repository.find_private_fork_id(
+                "component",
+                component_id_value,
+                tenant_id=actor.tenant_id,
+                owner_user_id=actor.user_id,
+            )
+
+        if private_component_id is not None:
+            private_component = self.get_library_component(private_component_id, actor=actor)
+            if private_component is not None and linked_component is None:
+                return self.get_library_composition(composition_id_value, actor=actor) or composition, private_component
+
+        if private_component is None:
+            private_component = self.fork_component(component_id_value, actor=actor)
+
+        source_link = next(
+            (item for item in composition.components if str(item.component_id or "").strip() == component_id_value),
+            None,
+        )
+        if source_link is None:
+            raise ValueError(f"component not found in composition: {component_id_value}")
+
+        self._composition_service.remove_component_from_composition(
+            composition_id=composition_id_value,
+            component_id=component_id_value,
+            sort_order=source_link.sort_order,
+        )
+        self._composition_service.add_component_to_composition(
+            composition_id=composition_id_value,
+            component_id=private_component.component_id,
+            component_name=private_component.canonical_name,
+            role=source_link.role,
+            sort_order=source_link.sort_order,
+        )
+        refreshed_composition = self.get_library_composition(composition_id_value, actor=actor)
+        if refreshed_composition is None:
+            raise ValueError(f"composition not found: {composition_id_value}")
+        return refreshed_composition, private_component
+
     def resolve_composition_edit_target(
         self,
         composition_id: str,
@@ -945,22 +1059,17 @@ class BuilderFlow:
         if actor is None:
             raise ValueError("actor is required for private fork creation")
 
-        for candidate in self.list_library_compositions(actor=actor):
-            if candidate.composition_id == source_composition.composition_id:
-                continue
-            scope = None
-            if self._object_scope_repository is not None:
-                scope = self._object_scope_repository.get_scope("composition", candidate.composition_id)
-            if scope is None:
-                continue
-            if (
-                scope.tenant_id == actor.tenant_id
-                and scope.owner_scope == "user"
-                and scope.owner_user_id == actor.user_id
-                and scope.visibility == "private"
-                and scope.source_object_id == source_composition.composition_id
-            ):
-                return candidate
+        if self._object_scope_repository is not None:
+            private_composition_id = self._object_scope_repository.find_private_fork_id(
+                "composition",
+                source_composition.composition_id,
+                tenant_id=actor.tenant_id,
+                owner_user_id=actor.user_id,
+            )
+            if private_composition_id is not None:
+                private_composition = self.get_library_composition(private_composition_id, actor=actor)
+                if private_composition is not None:
+                    return private_composition
 
         return self.fork_composition(composition_id_value, actor=actor)
 

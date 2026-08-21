@@ -28,6 +28,26 @@ class _MemoryScopeRepository:
     def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
         return self.scopes.get((object_type, object_id))
 
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None:
+        for (stored_object_type, object_id), scope in reversed(list(self.scopes.items())):
+            if (
+                stored_object_type == object_type
+                and scope.tenant_id == tenant_id
+                and scope.owner_scope == "user"
+                and scope.owner_user_id == owner_user_id
+                and scope.visibility == "private"
+                and scope.source_object_id == source_object_id
+            ):
+                return object_id
+        return None
+
     def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
         self.set_calls += 1
         if self.fail_on_set:

@@ -168,6 +168,67 @@ def test_source_object_id_lineage_round_trips(tmp_path: Path) -> None:
     assert stored.source_object_id == "composition-001"
 
 
+def test_find_private_fork_id_prefers_most_recent_matching_row_and_filters_scope(tmp_path: Path) -> None:
+    db_path = tmp_path / "builder.sqlite3"
+    repo = _repository(db_path)
+
+    older_component_scope = ObjectScope(
+        tenant_id=7,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=101,
+        visibility="private",
+        source_object_id="source-1",
+    )
+    newer_component_scope = ObjectScope(
+        tenant_id=7,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=101,
+        visibility="private",
+        source_object_id="source-1",
+    )
+    matching_composition_scope = ObjectScope(
+        tenant_id=7,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=101,
+        visibility="private",
+        source_object_id="source-1",
+    )
+    other_tenant_scope = ObjectScope(
+        tenant_id=8,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=101,
+        visibility="private",
+        source_object_id="source-1",
+    )
+
+    repo.set_scope("component", "component-old", older_component_scope)
+    repo.set_scope("component", "component-new", newer_component_scope)
+    repo.set_scope("composition", "composition-fork", matching_composition_scope)
+    repo.set_scope("component", "component-tenant-two", other_tenant_scope)
+
+    with _connect(db_path) as conn:
+        conn.execute(
+            "UPDATE builder_object_scopes SET updated_at = '2026-01-01 00:00:00' WHERE object_id = 'component-old'"
+        )
+        conn.execute(
+            "UPDATE builder_object_scopes SET updated_at = '2026-01-02 00:00:00' WHERE object_id = 'component-new'"
+        )
+        conn.execute(
+            "UPDATE builder_object_scopes SET updated_at = '2026-01-03 00:00:00' WHERE object_id = 'composition-fork'"
+        )
+
+    assert repo.find_private_fork_id("component", "source-1", tenant_id=7, owner_user_id=101) == "component-new"
+    assert repo.find_private_fork_id("composition", "source-1", tenant_id=7, owner_user_id=101) == "composition-fork"
+    assert repo.find_private_fork_id("component", "source-1", tenant_id=8, owner_user_id=101) == "component-tenant-two"
+    assert repo.find_private_fork_id("component", "source-1", tenant_id=7, owner_user_id=202) is None
+    assert repo.find_private_fork_id("composition", "source-1", tenant_id=7, owner_user_id=202) is None
+    assert repo.find_private_fork_id("component", "other-source", tenant_id=7, owner_user_id=101) is None
+
+
 def test_set_scope_upserts_existing_scope(tmp_path: Path) -> None:
     repo = _repository(tmp_path / "builder.sqlite3")
     initial_scope = ObjectScope(
