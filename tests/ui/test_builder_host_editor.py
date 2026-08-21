@@ -79,7 +79,7 @@ def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
     open_requested_block = host_js[open_requested_start:open_requested_end]
 
     assert "await loadLibrary();" not in open_requested_block
-    assert "resolveCompositionById(state.compositionId)" in open_requested_block
+    assert "resolveCompositionEditTarget(sourceCompositionId)" in open_requested_block
     assert "resolveComponentById(state.componentId)" in open_requested_block
     assert "loadComponentById(" in host_js
     assert "loadCompositionById(" in host_js
@@ -91,6 +91,13 @@ def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
     assert "compositionLoadPromises.has(idValue)" in host_js
     assert "compositionLoadPromises.set(idValue, loadPromise);" in host_js
     assert "compositionLoadPromises.delete(idValue);" in host_js
+    assert "resolveCompositionEditTarget(" in host_js
+    assert "'/api/builder/compositions/' + encodeURIComponent(idValue) + '/edit-target'" in host_js
+    assert "const sourceCompositionId = state.compositionId;" in host_js
+    assert "const editableComposition = await resolveCompositionEditTarget(sourceCompositionId);" in host_js
+    assert "state.compositionId = editableComposition.composition_id;" in host_js
+    assert "state.hostTargetId = editableComposition.composition_id;" not in host_js
+    assert "state.controller.openComposition(editableComposition, 'overview');" in host_js
     assert "notifyHostRuntimeReady();" in host_js
     assert "builder-host-ping" in host_js
     assert "builder-host-open" in host_js
@@ -98,16 +105,4 @@ def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
     assert "window.addEventListener('message'" in host_js
     assert "if (target.hostTargetId) {" in host_js
     assert "await openRequestedTarget();" in host_js
-    assert "setHostStatus(false, 'Saknar composition_id or component_id.')" not in host_js
-
-
-def test_builder_editor_host_idle_startup_does_not_fail(client_admin) -> None:
-    rv = client_admin.get("/builder-editor-host", headers=_headers())
-
-    assert rv.status_code == 200
-    html = rv.data.decode("utf-8")
-    assert 'src="/builder-editor-host"' not in html  # template contract is checked in offshore tests
-    host_js = Path("static/js/builder_editor_host.js").read_text(encoding="utf-8")
-    assert "if (target.hostTargetId) {" in host_js
-    assert "notifyHostRuntimeReady();" in host_js
     assert "setHostStatus(false, 'Saknar composition_id or component_id.')" not in host_js

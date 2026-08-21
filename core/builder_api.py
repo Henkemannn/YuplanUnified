@@ -1710,7 +1710,7 @@ def delete_composition(composition_id: str):
 
 
 @bp.patch("/compositions/<composition_id>")
-@require_roles("editor", "admin", "superuser")
+@require_roles("cook", "editor", "admin", "superuser")
 def update_composition_metadata(composition_id: str):
     payload = _require_json_object()
     if isinstance(payload, tuple):
@@ -1732,12 +1732,11 @@ def update_composition_metadata(composition_id: str):
 
         flow = _get_builder_flow()
         actor = _get_builder_actor()
-        if flow.get_library_composition(composition_id_value, actor=actor) is None:
-            return _not_found(f"composition not found: {composition_id_value}")
-        composition = flow._composition_service.update_composition_metadata(
+        composition = flow.update_composition_metadata(
             composition_id_value,
             composition_name=composition_name,
             library_group=library_group,
+            actor=actor,
         )
     except ValueError as exc:
         message = str(exc)
@@ -1746,6 +1745,33 @@ def update_composition_metadata(composition_id: str):
         return _bad_request(message)
 
     return jsonify({"ok": True, "composition": _serialize_composition(composition)})
+
+
+@bp.post("/compositions/<composition_id>/edit-target")
+@require_roles("cook", "editor", "admin", "superuser")
+def resolve_composition_edit_target(composition_id: str):
+    composition_id_value = str(composition_id or "").strip()
+    if not composition_id_value:
+        return _bad_request("composition_id is required")
+
+    try:
+        flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        target = flow.resolve_composition_edit_target(
+            composition_id=composition_id_value,
+            actor=actor,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify(
+        {
+            "ok": True,
+            "source_composition_id": composition_id_value,
+            "forked": target.composition_id != composition_id_value,
+            "composition": _serialize_composition(target),
+        }
+    )
 
 
 @bp.post("/components")
@@ -1813,12 +1839,14 @@ def update_component(component_id: str):
             component = flow.rename_component(
                 component_id=component_id_value,
                 component_name=str(rename_value or ""),
+                actor=actor,
             )
 
         if has_category:
             component = flow.set_component_category(
                 component_id=component_id_value,
                 category=_normalize_component_category(_optional_str(payload, "category")),
+                actor=actor,
             )
 
         if component is None:

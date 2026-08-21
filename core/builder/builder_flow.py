@@ -925,6 +925,69 @@ class BuilderFlow:
                     pass
             raise
 
+    def resolve_composition_edit_target(
+        self,
+        composition_id: str,
+        *,
+        actor: ActorContext | None = None,
+    ) -> Composition:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
+
+        source_composition = self.get_library_composition(composition_id_value, actor=actor)
+        if source_composition is None:
+            raise ValueError(f"composition not found: {composition_id_value}")
+
+        if self._can_write_library_object("composition", composition_id_value, actor=actor):
+            return source_composition
+
+        if actor is None:
+            raise ValueError("actor is required for private fork creation")
+
+        for candidate in self.list_library_compositions(actor=actor):
+            if candidate.composition_id == source_composition.composition_id:
+                continue
+            scope = None
+            if self._object_scope_repository is not None:
+                scope = self._object_scope_repository.get_scope("composition", candidate.composition_id)
+            if scope is None:
+                continue
+            if (
+                scope.tenant_id == actor.tenant_id
+                and scope.owner_scope == "user"
+                and scope.owner_user_id == actor.user_id
+                and scope.visibility == "private"
+                and scope.source_object_id == source_composition.composition_id
+            ):
+                return candidate
+
+        return self.fork_composition(composition_id_value, actor=actor)
+
+    def update_composition_metadata(
+        self,
+        composition_id: str,
+        *,
+        composition_name: str | None = None,
+        library_group: str | None = None,
+        actor: ActorContext | None = None,
+    ) -> Composition:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
+
+        composition = self.get_library_composition(composition_id_value, actor=actor)
+        if composition is None:
+            raise ValueError(f"composition not found: {composition_id_value}")
+        if not self._can_write_library_object("composition", composition_id_value, actor=actor):
+            raise ValueError(f"composition not found: {composition_id_value}")
+
+        return self._composition_service.update_composition_metadata(
+            composition_id_value,
+            composition_name=composition_name,
+            library_group=library_group,
+        )
+
     def create_composition_with_generated_id(
         self,
         composition_name: str,

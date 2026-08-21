@@ -242,6 +242,19 @@
     }
   }
 
+  async function resolveCompositionEditTarget(compositionId) {
+    const idValue = normalizeId(compositionId);
+    if (!idValue) {
+      return null;
+    }
+    const result = await callApi('/api/builder/compositions/' + encodeURIComponent(idValue) + '/edit-target', { method: 'POST' });
+    if (!(result && result.status < 400 && result.data && result.data.ok && result.data.composition)) {
+      throw new Error('Could not resolve composition edit target.');
+    }
+    const composition = upsertCachedComposition(result.data.composition);
+    return composition || null;
+  }
+
   async function loadLibrary() {
     await Promise.all([loadAllCompositions(), loadAllComponents()]);
   }
@@ -462,11 +475,13 @@
 
     try {
       if (state.hostKind === 'composition') {
-        const composition = await resolveCompositionById(state.compositionId);
-        if (!composition) {
+        const sourceCompositionId = state.compositionId;
+        const editableComposition = await resolveCompositionEditTarget(sourceCompositionId);
+        if (!editableComposition) {
           throw new Error('Kompositionen kunde inte hittas.');
         }
-        state.controller.openComposition(composition, 'overview');
+        state.compositionId = editableComposition.composition_id;
+        state.controller.openComposition(editableComposition, 'overview');
       } else {
         const component = await resolveComponentById(state.componentId);
         if (!component) {

@@ -274,6 +274,158 @@ def test_patch_composition_metadata_endpoint_returns_not_found_for_unknown_compo
     assert body.get("error") == "not_found"
 
 
+def test_composition_edit_target_endpoint_reuses_private_fork_and_preserves_source() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_edit_target_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    admin_client = app.test_client()
+    cook_a_client = app.test_client()
+    cook_b_client = app.test_client()
+    admin_headers = _headers(role="admin", tenant_id=1, user_id=3)
+    cook_a_headers = _headers(role="cook", tenant_id=1, user_id=4)
+    cook_b_headers = _headers(role="cook", tenant_id=1, user_id=5)
+    _seed_session(admin_client, role="admin", tenant_id=1, user_id=3)
+    _seed_session(cook_a_client, role="cook", tenant_id=1, user_id=4)
+    _seed_session(cook_b_client, role="cook", tenant_id=1, user_id=5)
+
+    created = admin_client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "cmp_5mr4rq", "composition_name": "Shared dish"},
+        headers=admin_headers,
+    )
+    assert created.status_code == 201
+
+    first = cook_a_client.post(
+        "/api/builder/compositions/cmp_5mr4rq/edit-target",
+        headers=cook_a_headers,
+    )
+    second = cook_a_client.post(
+        "/api/builder/compositions/cmp_5mr4rq/edit-target",
+        headers=cook_a_headers,
+    )
+    other = cook_b_client.post(
+        "/api/builder/compositions/cmp_5mr4rq/edit-target",
+        headers=cook_b_headers,
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert other.status_code == 200
+
+    first_body = first.get_json() or {}
+    second_body = second.get_json() or {}
+    other_body = other.get_json() or {}
+    assert first_body.get("ok") is True
+    assert first_body.get("forked") is True
+    assert first_body.get("source_composition_id") == "cmp_5mr4rq"
+    assert (first_body.get("composition") or {}).get("composition_id") != "cmp_5mr4rq"
+    assert (second_body.get("composition") or {}).get("composition_id") == (first_body.get("composition") or {}).get("composition_id")
+    assert (other_body.get("composition") or {}).get("composition_id") != (first_body.get("composition") or {}).get("composition_id")
+
+    source = admin_client.get("/api/builder/compositions/cmp_5mr4rq", headers=admin_headers)
+    assert source.status_code == 200
+    assert ((source.get_json() or {}).get("composition") or {}).get("composition_name") == "Shared dish"
+
+    fork_read = cook_b_client.get(
+        f"/api/builder/compositions/{(first_body.get('composition') or {}).get('composition_id')}",
+        headers=cook_b_headers,
+    )
+    assert fork_read.status_code == 400
+    assert (fork_read.get_json() or {}).get("error") == "bad_request"
+
+
+def test_cook_can_patch_private_composition_but_not_shared_source() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_private_patch_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    admin_client = app.test_client()
+    cook_client = app.test_client()
+    admin_headers = _headers(role="admin", tenant_id=1, user_id=3)
+    cook_headers = _headers(role="cook", tenant_id=1, user_id=4)
+    _seed_session(admin_client, role="admin", tenant_id=1, user_id=3)
+    _seed_session(cook_client, role="cook", tenant_id=1, user_id=4)
+
+    created = admin_client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "cmp_5mr4rq", "composition_name": "Shared dish"},
+        headers=admin_headers,
+    )
+    assert created.status_code == 201
+
+    shared_attempt = cook_client.patch(
+        "/api/builder/compositions/cmp_5mr4rq",
+        json={"composition_name": "Cook blocked"},
+        headers=cook_headers,
+    )
+    assert shared_attempt.status_code == 404
+
+    edit_target = cook_client.post(
+        "/api/builder/compositions/cmp_5mr4rq/edit-target",
+        headers=cook_headers,
+    )
+    private_id = ((edit_target.get_json() or {}).get("composition") or {}).get("composition_id")
+    assert private_id and private_id != "cmp_5mr4rq"
+
+    private_patch = cook_client.patch(
+        f"/api/builder/compositions/{private_id}",
+        json={"composition_name": "Cook editable dish", "library_group": "fisk"},
+        headers=cook_headers,
+    )
+    assert private_patch.status_code == 200
+    private_body = private_patch.get_json() or {}
+    assert (private_body.get("composition") or {}).get("composition_name") == "Cook editable dish"
+    assert (private_body.get("composition") or {}).get("library_group") == "fisk"
+
+    source = admin_client.get("/api/builder/compositions/cmp_5mr4rq", headers=admin_headers)
+    assert source.status_code == 200
+    assert ((source.get_json() or {}).get("composition") or {}).get("composition_name") == "Shared dish"
+
+
+def test_component_patch_passes_actor_for_scope_enforcement() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_component_scope_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    admin_client = app.test_client()
+    cook_client = app.test_client()
+    admin_headers = _headers(role="admin", tenant_id=1, user_id=3)
+    cook_headers = _headers(role="cook", tenant_id=1, user_id=4)
+    _seed_session(admin_client, role="admin", tenant_id=1, user_id=3)
+    _seed_session(cook_client, role="cook", tenant_id=1, user_id=4)
+
+    created = admin_client.post(
+        "/api/builder/components",
+        json={"component_name": "Shared component soup"},
+        headers=admin_headers,
+    )
+    assert created.status_code == 201
+    component_id = ((created.get_json() or {}).get("component") or {}).get("component_id")
+
+    shared_patch = cook_client.patch(
+        f"/api/builder/components/{component_id}",
+        json={"component_name": "Cook blocked"},
+        headers=cook_headers,
+    )
+    assert shared_patch.status_code == 400
+
+    forked = cook_client.post(f"/api/builder/components/{component_id}/fork", headers=cook_headers)
+    forked_id = ((forked.get_json() or {}).get("component") or {}).get("component_id")
+    assert forked_id and forked_id != component_id
+
+    private_patch = cook_client.patch(
+        f"/api/builder/components/{forked_id}",
+        json={"component_name": "Cook allowed", "category": "side"},
+        headers=cook_headers,
+    )
+    assert private_patch.status_code == 200
+    private_body = private_patch.get_json() or {}
+    assert (private_body.get("component") or {}).get("component_name") == "Cook allowed"
+    assert (private_body.get("component") or {}).get("category") == "side"
+
+    source = admin_client.get(f"/api/builder/components/{component_id}", headers=admin_headers)
+    assert source.status_code == 200
+    assert ((source.get_json() or {}).get("component") or {}).get("component_name") == "Shared component soup"
+
+
 def test_single_component_read_endpoint_returns_requested_component() -> None:
     fd, db_path = tempfile.mkstemp(prefix="builder_api_single_component_", suffix=".db")
     os.close(fd)
