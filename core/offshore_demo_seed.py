@@ -599,9 +599,9 @@ def _ensure_work_menu_decisions(work_period_id: int) -> int:
             service_slot = "lunch" if str(event.service_code).lower() == "lunch" or "lunch" in str(event.display_name).lower() else "dinner"
             decision_matrix = [
                 ("koett", "use_published", None, None),
-                ("fisk", "use_builder_composition", "demo_offshore_fisk", None),
+                ("fisk", "use_published", None, None),
                 ("soppa", "use_free_text", None, f"Demo {service_slot} soppa dag {local_index + 1}"),
-                ("vegetariskt", "use_published" if local_index % 2 == 0 else "use_builder_composition", "demo_offshore_vegetariskt" if local_index % 2 == 1 else None, None),
+                ("vegetariskt", "use_published", None, None),
             ]
             for track_key, decision_type, selected_builder_composition_id, free_text in decision_matrix:
                 if (int(event.id), track_key) in existing:

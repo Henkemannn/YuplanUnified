@@ -465,10 +465,6 @@
         if (event.target instanceof HTMLElement && event.target.closest('button, a, input, select, textarea, label, [data-work-menu-track-open], [data-work-menu-expand-toggle]')) {
           return;
         }
-        const firstVisibleTrack = card.querySelector('[data-work-menu-track-open]:not([hidden])');
-        if (firstVisibleTrack instanceof HTMLElement) {
-          openModalFromTrack(firstVisibleTrack);
-        }
       });
     });
 
@@ -482,7 +478,6 @@
           event.stopPropagation();
           return;
         }
-        openModalFromTrack(row);
       });
     });
 

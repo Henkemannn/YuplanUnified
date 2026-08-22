@@ -8,7 +8,9 @@ from sqlalchemy import text
 from sqlalchemy import create_engine
 
 from core.app_factory import create_app
+from core.db import get_session
 from modules.offshore2.work_menu import _service as work_menu_service
+from modules.offshore2.models import OffshoreWorkMenuDecision
 
 
 def _build_app(tmp_path: Path, *, env: str = "testing"):
@@ -214,3 +216,27 @@ def test_offshore_demo_seed_reaches_work_menu_titles(tmp_path: Path) -> None:
     assert lunch_bridges["fisk"]["composition_id"] != "demo_offshore_fisk"
     assert int(lunch_bridges["fisk"]["component_count"]) >= 1
     assert str(lunch_bridges["fisk"]["builder_url"]).startswith("/builder-editor-host?composition_id=")
+
+
+def test_offshore_demo_seed_does_not_invent_fake_builder_ids(tmp_path: Path) -> None:
+    app = _build_app(tmp_path)
+    runner = app.test_cli_runner()
+
+    result = runner.invoke(args=["offshore-demo-seed"])
+    assert result.exit_code == 0, result.output
+
+    with app.app_context():
+        db = get_session()
+        try:
+            rows = (
+                db.query(OffshoreWorkMenuDecision.selected_builder_composition_id)
+                .filter(OffshoreWorkMenuDecision.tenant_id == 9001)
+                .filter(OffshoreWorkMenuDecision.site_id == "demo-offshore")
+                .all()
+            )
+        finally:
+            db.close()
+
+    selected_ids = {str(row[0] or "") for row in rows}
+    assert "demo_offshore_fisk" not in selected_ids
+    assert "demo_offshore_vegetariskt" not in selected_ids

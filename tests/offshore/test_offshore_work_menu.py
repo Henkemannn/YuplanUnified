@@ -248,7 +248,9 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "if (openBuilderHostFromTrack(row)) {" in js_source
     assert "event.preventDefault();" in js_source
     assert "event.stopPropagation();" in js_source
-    assert js_source.index("openBuilderHostFromTrack(row)") < js_source.index("openModalFromTrack(row)")
+    assert "openModalFromTrack(row)" not in js_source
+    assert "openModalFromTrack(firstVisibleTrack)" not in js_source
+    assert "function openModalFromTrack(trackButton)" in js_source
     assert "event.target.closest('[data-work-menu-builder-open]')" not in js_source
     assert "openBuilderHostFromTrack(trackButton)" in js_source
     assert "return openBuilderHost(bridge);" in js_source
