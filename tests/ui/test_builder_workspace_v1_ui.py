@@ -101,6 +101,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'builder-dish-view-card-overview hidden' not in resolve_modal_html
     assert 'id="dishOverviewName"' in resolve_modal_html
     assert 'id="dishOverviewCategorySelect"' in resolve_modal_html
+    assert 'id="dishOverviewUseCustomMenuName"' in resolve_modal_html
+    assert 'id="dishOverviewMenuNameField"' in resolve_modal_html
+    assert 'id="dishOverviewMenuName"' in resolve_modal_html
     assert 'id="btnDishOverviewSave"' in resolve_modal_html
     assert 'Rättnamn' in resolve_modal_html
     assert 'Kategori' in resolve_modal_html
@@ -108,10 +111,10 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '<option value="fisk">Fisk</option>' in resolve_modal_html
     assert '<option value="kott">Kött</option>' in resolve_modal_html
     assert '<option value="dessert">Dessert</option>' in resolve_modal_html
-    assert 'Menytext' in resolve_modal_html
-    assert 'Menytext / Textvy' not in resolve_modal_html
-    assert 'Så visas rätten i menyer och utskrifter.' in resolve_modal_html
-    assert 'Menytexten kan redigeras senare.' not in resolve_modal_html
+    assert 'Använd annat namn i menyer' in resolve_modal_html
+    assert 'När detta är av används rättnamnet i menyer och utskrifter.' in resolve_modal_html
+    assert 'Menynamn' in resolve_modal_html
+    assert 'dishTextPreview' not in resolve_modal_html
     overview_section_start = resolve_modal_html.find('id="dishOverviewPanel"')
     assert overview_section_start != -1
     overview_section_end = resolve_modal_html.find('id="dishComponentsPanel"')
@@ -322,7 +325,9 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'method: "PATCH"' in dish_editor_js
     assert 'composition_name,' in dish_editor_js
     assert 'library_group,' in dish_editor_js
-    assert 'setDishOverviewStatus("Ändringarna sparades.");' in dish_editor_js
+    assert 'setDishOverviewStatus("");' in dish_editor_js
+    assert 'flashDishOverviewSaveButtonSuccess();' in dish_editor_js
+    assert 'showJson("builderOut", result);' not in dish_editor_js
     css_rv = client_admin.get("/static/css/builder.css")
     assert css_rv.status_code == 200
     css = css_rv.data.decode("utf-8")

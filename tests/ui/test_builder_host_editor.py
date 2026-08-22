@@ -108,10 +108,14 @@ def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
     assert "upsertCachedComponent(result.data.component);" in host_js
     assert "upsertCachedComposition(result.data.composition);" in host_js
     assert "prepareLinkedComponentForEdit" in controller_js
+    assert "syncDishMenuNameVisibility" in controller_js
+    assert "dishOverviewUseCustomMenuName" in controller_js
+    assert "dishOverviewMenuName" in controller_js
     assert "_openLinkedComponentEditor" in controller_js
     assert "await _openLinkedComponentEditor(componentIdValue);" in controller_js
     assert "openComponentDetailEditor(componentId, initialTab)" in controller_js
     assert "if (_componentEditor) return _componentEditor.openComponentDetailEditor(componentId, initialTab);" in controller_js
+    assert "loadCompositionTextPreviewForCurrentComposition" not in controller_js
     assert "window.addEventListener('message'" in host_js
     assert "if (target.hostTargetId) {" in host_js
     assert "await openRequestedTarget();" in host_js

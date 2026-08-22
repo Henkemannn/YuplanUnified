@@ -270,7 +270,6 @@ function createBuilderModalController(config) {
         showLoading: config.showLoading,
         showJson: config.showJson,
         loadLibrary: _callbacks.loadLibrary,
-        loadCompositionTextPreviewForCurrentComposition: config.loadCompositionTextPreviewForCurrentComposition,
       })
     : null;
 
@@ -465,6 +464,7 @@ function createBuilderModalController(config) {
     if (_dishEditor) {
       _dishEditor.syncDishModalHeader(normalizedComposition);
       _dishEditor.syncDishOverviewInputs(normalizedComposition);
+      _dishEditor.syncDishMenuNameVisibility();
     }
     renderDishOverviewKlossPreview(normalizedComposition);
     renderDishComponentsPanel(normalizedComposition);
@@ -849,6 +849,27 @@ function createBuilderModalController(config) {
         if (typeof setDishOverviewStatus === "function") {
           setDishOverviewStatus("");
         }
+        if (_dishEditor) {
+          _dishEditor.setDishOverviewStatus("");
+        }
+      });
+    }
+
+    const dishOverviewUseCustomMenuNameInput = compositionRoot.querySelector("#dishOverviewUseCustomMenuName");
+    if (dishOverviewUseCustomMenuNameInput) {
+      dishOverviewUseCustomMenuNameInput.addEventListener("change", () => {
+        if (_dishEditor && typeof _dishEditor.syncDishMenuNameVisibility === "function") {
+          _dishEditor.syncDishMenuNameVisibility();
+        }
+        if (_dishEditor) {
+          _dishEditor.setDishOverviewStatus("");
+        }
+      });
+    }
+
+    const dishOverviewMenuNameInput = compositionRoot.querySelector("#dishOverviewMenuName");
+    if (dishOverviewMenuNameInput) {
+      dishOverviewMenuNameInput.addEventListener("input", () => {
         if (_dishEditor) {
           _dishEditor.setDishOverviewStatus("");
         }

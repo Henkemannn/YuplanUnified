@@ -38,6 +38,16 @@ function createOpenCloseHelpers() {
   };
 }
 
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 async function waitForTextContent(getValue, expectedText, timeoutMs = 1000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -67,6 +77,172 @@ describe('standalone canonical builder runtime', () => {
     delete window.openBuilderModalForComposition;
     delete window.closeResolveModal;
     delete window.renderBuilderPanel;
+  });
+
+  it('syncs custom dish menu-name controls and saves the expected payloads without builder.js', async () => {
+    const compositionHtml = loadTemplate('../../templates/builder/_composition_modal.html');
+    const componentHtml = loadTemplate('../../templates/builder/_component_detail_modal.html');
+
+    document.body.innerHTML = [
+      '<div id="builderOut"></div>',
+      '<div id="componentDetailOut"></div>',
+      compositionHtml,
+      componentHtml,
+    ].join('\n');
+
+    expect(document.getElementById('dishOverviewUseCustomMenuName')).not.toBeNull();
+    expect(document.getElementById('dishOverviewMenuName')).not.toBeNull();
+    expect(document.getElementById('dishTextPreview')).toBeNull();
+
+    loadScript('../../static/js/builder_dish_editor.js');
+    loadScript('../../static/js/builder_modal_controller.js');
+
+    const patchBodies = [];
+    const showJsonCalls = [];
+    const showLoadingCalls = [];
+    const firstDishSave = createDeferred();
+    let activeComposition = {
+      composition_id: 'dish_1',
+      composition_name: 'Lasagne',
+      library_group: 'kott',
+      use_custom_menu_name: false,
+      menu_name: 'Stored custom name',
+      components: [],
+    };
+    let forceDishSaveFailure = false;
+
+    const controller = window.createBuilderModalController({
+      compositionRoot: document.getElementById('resolveModal'),
+      componentRoot: document.getElementById('componentDetailEditorModal'),
+      callApi: async (url, options = {}) => {
+        if (String(options.method || 'GET').toUpperCase() === 'PATCH' && /\/compositions\/[^/]+$/.test(url)) {
+          const body = options.body || {};
+          patchBodies.push(body);
+          if (patchBodies.length === 1) {
+            await firstDishSave.promise;
+          }
+          if (forceDishSaveFailure) {
+            return { status: 500, data: { ok: false, error: 'forced dish save failure' } };
+          }
+          activeComposition = {
+            ...activeComposition,
+            composition_name: body.composition_name ?? activeComposition.composition_name,
+            library_group: body.library_group ?? activeComposition.library_group,
+            use_custom_menu_name: body.use_custom_menu_name ?? activeComposition.use_custom_menu_name,
+            ...(Object.prototype.hasOwnProperty.call(body, 'menu_name') ? { menu_name: body.menu_name } : {}),
+          };
+          return { status: 200, data: { ok: true, composition: activeComposition } };
+        }
+        return { status: 200, data: { ok: true } };
+      },
+      state: {
+        get(key) {
+          return this[key];
+        },
+        set(key, value) {
+          this[key] = value;
+          return value;
+        },
+      },
+      showLoading(targetId) {
+        showLoadingCalls.push(targetId);
+      },
+      showJson(targetId, value) {
+        showJsonCalls.push({ targetId, value });
+      },
+      openSimpleModal: createOpenCloseHelpers().openSimpleModal,
+      closeModalById: createOpenCloseHelpers().closeModalById,
+      renderComponentPalette() {},
+      dishAllergenLabel(value) {
+        return String(value || '').toUpperCase();
+      },
+      loadLibrary: async () => {},
+      fetchComponentDetailDraft: async () => null,
+    });
+
+    controller.openComposition(activeComposition, 'overview');
+
+    const useCustomMenuNameCheckbox = document.getElementById('dishOverviewUseCustomMenuName');
+    const menuNameField = document.getElementById('dishOverviewMenuNameField');
+    const menuNameInput = document.getElementById('dishOverviewMenuName');
+
+    expect(useCustomMenuNameCheckbox?.checked).toBe(false);
+    expect(menuNameField?.hidden).toBe(true);
+    expect(menuNameInput?.value).toBe('Stored custom name');
+
+    controller.renderBuilderPanel({
+      ...activeComposition,
+      use_custom_menu_name: true,
+      menu_name: 'Guest-facing name',
+    });
+
+    expect(useCustomMenuNameCheckbox?.checked).toBe(true);
+    expect(menuNameField?.hidden).toBe(false);
+    expect(menuNameInput?.value).toBe('Guest-facing name');
+
+    useCustomMenuNameCheckbox.checked = false;
+    useCustomMenuNameCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(menuNameField?.hidden).toBe(true);
+    expect(menuNameInput?.value).toBe('Guest-facing name');
+
+    useCustomMenuNameCheckbox.checked = true;
+    useCustomMenuNameCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(menuNameField?.hidden).toBe(false);
+    expect(menuNameInput?.value).toBe('Guest-facing name');
+
+    menuNameInput.value = 'Hemlagad lasagne med tomat, béchamel och parmesan';
+    const firstSavePromise = controller.getDishEditor().saveDishOverviewMetadata();
+    expect(showLoadingCalls).toHaveLength(0);
+    expect(document.getElementById('btnDishOverviewSave')?.textContent).toBe('Sparar...');
+    expect(document.getElementById('btnDishOverviewSave')?.disabled).toBe(true);
+    firstDishSave.resolve();
+    await firstSavePromise;
+    expect(showJsonCalls).toHaveLength(0);
+    expect(showLoadingCalls).toHaveLength(0);
+    expect(document.getElementById('builderOut')?.textContent || '').toBe('');
+    expect(patchBodies.at(-1)).toMatchObject({
+      composition_name: 'Lasagne',
+      library_group: 'kott',
+      use_custom_menu_name: true,
+      menu_name: 'Hemlagad lasagne med tomat, béchamel och parmesan',
+    });
+    expect(menuNameField?.hidden).toBe(false);
+    expect(document.getElementById('resolveStatusLine')?.textContent).toBe('');
+    expect(document.getElementById('btnDishOverviewSave')?.textContent).toBe('✓ Sparat');
+    expect(document.getElementById('btnDishOverviewSave')?.disabled).toBe(false);
+    await waitForCondition(() => document.getElementById('btnDishOverviewSave')?.textContent === 'Spara ändringar', 2000);
+    expect(document.getElementById('btnDishOverviewSave')?.textContent).toBe('Spara ändringar');
+
+    useCustomMenuNameCheckbox.checked = false;
+    useCustomMenuNameCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+    await controller.getDishEditor().saveDishOverviewMetadata();
+    expect(showJsonCalls).toHaveLength(0);
+    expect(showLoadingCalls).toHaveLength(0);
+    expect(patchBodies.at(-1)).toMatchObject({
+      composition_name: 'Lasagne',
+      library_group: 'kott',
+      use_custom_menu_name: false,
+    });
+    expect(Object.prototype.hasOwnProperty.call(patchBodies.at(-1), 'menu_name')).toBe(false);
+    expect(menuNameInput?.value).toBe('Hemlagad lasagne med tomat, béchamel och parmesan');
+
+    useCustomMenuNameCheckbox.checked = true;
+    useCustomMenuNameCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+    menuNameInput.value = '   ';
+    const beforeFailureCalls = patchBodies.length;
+    await controller.getDishEditor().saveDishOverviewMetadata();
+    expect(patchBodies.length).toBe(beforeFailureCalls);
+    expect(document.getElementById('resolveStatusLine')?.textContent).toBe('Menynamn måste fyllas i när annat namn i menyer används.');
+
+    forceDishSaveFailure = true;
+    menuNameInput.value = 'Gästnamn';
+    await controller.getDishEditor().saveDishOverviewMetadata();
+    expect(showJsonCalls).toHaveLength(0);
+    expect(showLoadingCalls).toHaveLength(0);
+    expect(document.getElementById('resolveStatusLine')?.textContent).toBe('forced dish save failure');
+    expect(document.getElementById('builderOut')?.textContent || '').toBe('');
+    expect(document.getElementById('btnDishOverviewSave')?.textContent).toBe('Spara ändringar');
+    expect(document.getElementById('btnDishOverviewSave')?.disabled).toBe(false);
   });
 
   it('boots and runs the canonical Dish + Component flow without builder.js', async () => {
@@ -160,7 +336,7 @@ describe('standalone canonical builder runtime', () => {
     let loadLibraryCalls = 0;
     let refreshCurrentCompositionCalls = 0;
     let forceComponentOverviewSaveFailure = false;
-
+        expect(document.getElementById('btnDishOverviewSave')?.textContent).toBe('✓ Sparat');
     let controller;
 
     const callApi = async (url, options = {}) => {

@@ -11,10 +11,6 @@ function createBuilderDishEditor(config) {
   const _showLoading = typeof config.showLoading === "function" ? config.showLoading : null;
   const _showJson = typeof config.showJson === "function" ? config.showJson : null;
   const _loadLibrary = typeof config.loadLibrary === "function" ? config.loadLibrary : null;
-  const _loadCompositionTextPreviewForCurrentComposition =
-    typeof config.loadCompositionTextPreviewForCurrentComposition === "function"
-      ? config.loadCompositionTextPreviewForCurrentComposition
-      : null;
   const _fetchComponentDetailDraft = typeof config.fetchComponentDetailDraft === "function"
     ? config.fetchComponentDetailDraft
     : null;
@@ -49,12 +45,43 @@ function createBuilderDishEditor(config) {
     return "";
   }
 
-  function setCompositionTextPreview(previewId, message) {
-    const preview = document.getElementById(String(previewId || ""));
-    if (!preview) {
-      return;
+  function syncDishMenuNameVisibility() {
+    const useCustomMenuNameCheckbox = document.getElementById("dishOverviewUseCustomMenuName");
+    const menuNameField = document.getElementById("dishOverviewMenuNameField");
+    const isVisible = Boolean(useCustomMenuNameCheckbox && useCustomMenuNameCheckbox.checked);
+    if (menuNameField) {
+      menuNameField.hidden = !isVisible;
     }
-    preview.textContent = String(message || "");
+    return isVisible;
+  }
+
+  let _dishOverviewSaveButtonResetTimer = null;
+
+  function setDishOverviewSaveButtonText(text) {
+    const saveButton = document.getElementById("btnDishOverviewSave");
+    if (saveButton) {
+      saveButton.textContent = String(text || "Spara ändringar");
+    }
+  }
+
+  function flashDishOverviewSaveButtonSuccess() {
+    if (_dishOverviewSaveButtonResetTimer !== null) {
+      window.clearTimeout(_dishOverviewSaveButtonResetTimer);
+      _dishOverviewSaveButtonResetTimer = null;
+    }
+    setDishOverviewSaveButtonText("✓ Sparat");
+    _dishOverviewSaveButtonResetTimer = window.setTimeout(() => {
+      _dishOverviewSaveButtonResetTimer = null;
+      setDishOverviewSaveButtonText("Spara ändringar");
+    }, 1500);
+  }
+
+  function resetDishOverviewSaveButton() {
+    if (_dishOverviewSaveButtonResetTimer !== null) {
+      window.clearTimeout(_dishOverviewSaveButtonResetTimer);
+      _dishOverviewSaveButtonResetTimer = null;
+    }
+    setDishOverviewSaveButtonText("Spara ändringar");
   }
 
   function renderDishAllergenSummaryMessage(message) {
@@ -651,12 +678,21 @@ function createBuilderDishEditor(config) {
   function syncDishOverviewInputs(composition) {
     const nameInput = document.getElementById("dishOverviewName");
     const categorySelect = document.getElementById("dishOverviewCategorySelect");
+    const useCustomMenuNameCheckbox = document.getElementById("dishOverviewUseCustomMenuName");
+    const menuNameInput = document.getElementById("dishOverviewMenuName");
     if (nameInput) {
       nameInput.value = String((composition && composition.composition_name) || "");
     }
     if (categorySelect) {
       categorySelect.value = normalizeDishLibraryGroupValue((composition && composition.library_group) || "ovrigt") || "ovrigt";
     }
+    if (useCustomMenuNameCheckbox) {
+      useCustomMenuNameCheckbox.checked = Boolean(composition && composition.use_custom_menu_name);
+    }
+    if (menuNameInput) {
+      menuNameInput.value = String((composition && composition.menu_name) || "");
+    }
+    syncDishMenuNameVisibility();
   }
 
   function dishOverviewCategoryLabel(composition) {
@@ -678,8 +714,12 @@ function createBuilderDishEditor(config) {
 
     const nameInput = document.getElementById("dishOverviewName");
     const categorySelect = document.getElementById("dishOverviewCategorySelect");
+    const useCustomMenuNameCheckbox = document.getElementById("dishOverviewUseCustomMenuName");
+    const menuNameInput = document.getElementById("dishOverviewMenuName");
     const composition_name = String((nameInput && nameInput.value) || "").trim();
     const library_group = normalizeDishLibraryGroupValue((categorySelect && categorySelect.value) || "");
+    const use_custom_menu_name = Boolean(useCustomMenuNameCheckbox && useCustomMenuNameCheckbox.checked);
+    const menu_name = String((menuNameInput && menuNameInput.value) || "").trim();
 
     if (!composition_name) {
       setDishOverviewStatus("Rättnamn måste fyllas i.", true);
@@ -689,10 +729,18 @@ function createBuilderDishEditor(config) {
       setDishOverviewStatus("Välj en giltig kategori.", true);
       return;
     }
-
-    if (_showLoading) {
-      _showLoading("builderOut");
+    if (use_custom_menu_name && !menu_name) {
+      setDishOverviewStatus("Menynamn måste fyllas i när annat namn i menyer används.", true);
+      return;
     }
+
+    const saveButton = document.getElementById("btnDishOverviewSave");
+    if (saveButton) {
+      saveButton.disabled = true;
+      saveButton.textContent = "Sparar...";
+    }
+
+    let saveSucceeded = false;
     try {
       const result = await _callApi(
         "/api/builder/compositions/" +
@@ -703,16 +751,16 @@ function createBuilderDishEditor(config) {
           body: {
             composition_name,
             library_group,
+            use_custom_menu_name,
+            ...(use_custom_menu_name ? { menu_name } : {}),
           },
         },
       );
 
-      if (_showJson) {
-        _showJson("builderOut", result);
-      }
       if (!(result && result.status < 400 && result.data && result.data.ok && result.data.composition)) {
         const message = String((result && result.data && (result.data.message || result.data.error)) || "Unable to save dish metadata");
         setDishOverviewStatus(message, true);
+        resetDishOverviewSaveButton();
         return;
       }
 
@@ -720,24 +768,25 @@ function createBuilderDishEditor(config) {
       _setState("currentBuilderComposition", savedComposition);
       syncDishModalHeader(savedComposition);
       syncDishOverviewInputs(savedComposition);
-      setDishOverviewStatus("Ändringarna sparades.");
-
-      if (_loadCompositionTextPreviewForCurrentComposition) {
-        await _loadCompositionTextPreviewForCurrentComposition(
-          "dishTextPreview",
-          "Ingen rätt vald",
-          "Läser textvy...",
-          "Textvy saknas.",
-        ).catch(() => {
-          setCompositionTextPreview("dishTextPreview", "Textvy saknas.");
-        });
+      setDishOverviewStatus("");
+      if (saveButton) {
+        saveButton.disabled = false;
       }
+      flashDishOverviewSaveButtonSuccess();
+      saveSucceeded = true;
 
       if (_loadLibrary) {
         await _loadLibrary();
       }
     } catch (error) {
       setDishOverviewStatus(String(error.message || error), true);
+      resetDishOverviewSaveButton();
+    } finally {
+      if (!saveSucceeded) {
+        if (saveButton) {
+          saveButton.disabled = false;
+        }
+      }
     }
   }
 
@@ -745,6 +794,7 @@ function createBuilderDishEditor(config) {
     saveDishOverviewMetadata,
     syncDishModalHeader,
     syncDishOverviewInputs,
+    syncDishMenuNameVisibility,
     setDishOverviewStatus,
     dishOverviewCategoryLabel,
     renderDishAllergenSummary,

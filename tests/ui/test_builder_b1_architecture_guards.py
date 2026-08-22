@@ -295,12 +295,14 @@ def test_dish_editor_owns_overview_persistence(client_admin) -> None:
     assert "async function saveDishOverviewMetadata()" in dish_editor
     assert "function syncDishModalHeader(composition)" in dish_editor
     assert "function syncDishOverviewInputs(composition)" in dish_editor
+    assert "function syncDishMenuNameVisibility()" in dish_editor
     assert "function setDishOverviewStatus(message, isError = false)" in dish_editor
     assert "function dishOverviewCategoryLabel(composition)" in dish_editor
     assert '"/api/builder/compositions/" +' in dish_editor
-    assert 'setDishOverviewStatus("Ändringarna sparades.");' in dish_editor
-    assert 'showLoading("builderOut");' in dish_editor
-    assert 'loadCompositionTextPreviewForCurrentComposition(' in dish_editor
+    assert 'setDishOverviewStatus("");' in dish_editor
+    assert 'flashDishOverviewSaveButtonSuccess();' in dish_editor
+    assert 'showLoading("builderOut");' not in dish_editor
+    assert 'loadCompositionTextPreviewForCurrentComposition(' not in dish_editor
 
     save_start = script.find("async function saveDishOverviewMetadata() {")
     save_end = script.find("function openBuilderModalForComposition(")
@@ -308,11 +310,12 @@ def test_dish_editor_owns_overview_persistence(client_admin) -> None:
     save_body = script[save_start:save_end]
     assert 'return editor.saveDishOverviewMetadata();' in save_body
     assert '"/api/builder/compositions/" +' not in save_body
-    assert 'setDishOverviewStatus("Ändringarna sparades.");' not in save_body
+    assert 'flashDishOverviewSaveButtonSuccess();' not in save_body
     assert 'showLoading("builderOut");' not in save_body
     assert 'loadCompositionTextPreviewForCurrentComposition(' not in save_body
     assert 'function syncDishModalHeader(composition) {' in script
     assert 'function syncDishOverviewInputs(composition) {' in script
+    assert 'function syncDishMenuNameVisibility() {' in dish_editor
     assert 'function saveDishOverviewMetadata() {' in script
 
 

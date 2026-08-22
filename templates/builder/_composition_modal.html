@@ -40,16 +40,25 @@
                 </select>
               </label>
 
+              <div class="builder-dish-overview-field builder-dish-overview-field-wide">
+                <label for="dishOverviewUseCustomMenuName">
+                  <input id="dishOverviewUseCustomMenuName" type="checkbox">
+                  <span>Använd annat namn i menyer</span>
+                </label>
+                <p class="builder-dish-view-note">När detta är av används rättnamnet i menyer och utskrifter.</p>
+              </div>
+
+              <div id="dishOverviewMenuNameField" class="builder-dish-overview-field builder-dish-overview-field-wide" hidden>
+                <label class="builder-dish-overview-field" for="dishOverviewMenuName">
+                  <span>Menynamn</span>
+                  <input id="dishOverviewMenuName" type="text" autocomplete="off" spellcheck="false">
+                </label>
+              </div>
+
               <div class="workspace-inline-actions">
                 <button id="btnDishOverviewSave" type="button">Spara ändringar</button>
               </div>
             </div>
-
-            <div class="builder-dish-overview-text-block">
-              <p class="modal-section-title">Menytext</p>
-              <p class="builder-dish-view-note">Så visas rätten i menyer och utskrifter.</p>
-            </div>
-            <pre id="dishTextPreview" class="builder-dish-text-preview">Ingen rätt vald</pre>
 
             <div class="builder-dish-overview-preview-block">
               <p class="modal-section-title">Komponentklossar</p>
