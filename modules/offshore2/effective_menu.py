@@ -28,6 +28,7 @@ from .i18n import copy_for, normalize_locale, t
 from .menu_context import _service as _menu_context_service, _validate_scope
 from .models import OffshoreInstallationSettings, OffshoreServiceEvent, OffshoreWorkMenuDecision, OffshoreWorkPeriod
 from .periods import _local_zone, site_timezone_name
+from core.builder.library_scope import ActorContext
 
 
 ADAPTER_VERSION = "offshore-effective-menu/v1"
@@ -95,17 +96,23 @@ def _publication_title(row: dict[str, object] | None) -> str | None:
     return _safe_title(row.get("composition_name") or row.get("unresolved_text"))
 
 
-def _resolve_builder_composition_title(builder_flow, composition_id: str | None) -> tuple[str | None, tuple[PlanningComponentReference, ...]]:
+def _resolve_builder_composition_title(
+    builder_flow,
+    composition_id: str | None,
+    *,
+    actor: ActorContext | None = None,
+) -> tuple[str | None, tuple[PlanningComponentReference, ...]]:
     composition_id = _clean(composition_id)
     if not composition_id or builder_flow is None:
         return None, ()
-    repository = getattr(builder_flow, "_composition_repository", None)
-    if repository is None:
-        library_flow = getattr(builder_flow, "_library_flow", None)
-        repository = getattr(library_flow, "_composition_repository", None)
-    if repository is None:
-        return None, ()
-    composition = repository.get(composition_id)
+    resolver = getattr(builder_flow, "resolve_composition_read_target", None)
+    if callable(resolver):
+        try:
+            composition = resolver(composition_id, actor=actor)
+        except Exception:
+            composition = None
+    else:
+        composition = None
     if composition is None:
         return None, ()
     components = tuple(
@@ -126,6 +133,7 @@ def _resolve_builder_composition_details(
     *,
     composition_id: str | None,
     composition_title: str | None = None,
+    actor: ActorContext | None = None,
 ) -> tuple[PlanningCompositionReference | None, tuple[PlanningComponentReference, ...]]:
     if builder_flow is None:
         return None, ()
@@ -152,7 +160,34 @@ def _resolve_builder_composition_details(
     if not resolved_id:
         return None, ()
 
-    effective_title, component_refs = _resolve_builder_composition_title(builder_flow, resolved_id)
+    resolved_composition = None
+    resolver = getattr(builder_flow, "resolve_composition_read_target", None)
+    if callable(resolver):
+        try:
+            resolved_composition = resolver(resolved_id, actor=actor)
+        except Exception:
+            resolved_composition = None
+
+    if resolved_composition is not None:
+        effective_composition_id = _clean(getattr(resolved_composition, "composition_id", None)) or resolved_id
+        effective_title = _safe_title(getattr(resolved_composition, "composition_name", None))
+        component_refs = tuple(
+            PlanningComponentReference(
+                component_id=_clean(getattr(item, "component_id", None)),
+                component_name=_safe_title(getattr(item, "component_name", None)) or _clean(getattr(item, "component_id", None)),
+                role=_safe_title(getattr(item, "role", None)),
+                sort_order=int(getattr(item, "sort_order", 0) or 0),
+            )
+            for item in getattr(resolved_composition, "components", ())
+            if _clean(getattr(item, "component_id", None))
+        )
+        if not effective_title:
+            effective_title = _safe_title(composition_title)
+        if not effective_title:
+            return None, ()
+        return PlanningCompositionReference(composition_id=effective_composition_id, composition_name=effective_title), component_refs
+
+    effective_title, component_refs = _resolve_builder_composition_title(builder_flow, resolved_id, actor=actor)
     if not effective_title and _clean(composition_title):
         effective_title = _safe_title(composition_title)
     if not effective_title:
@@ -206,12 +241,12 @@ def _load_period(db, tenant_id: int, site_id: str) -> OffshoreWorkPeriod | None:
     return None
 
 
-def _build_composition_options(builder_flow) -> tuple[PlanningCompositionOption, ...]:
+def _build_composition_options(builder_flow, *, actor: ActorContext | None = None) -> tuple[PlanningCompositionOption, ...]:
     options: list[PlanningCompositionOption] = []
     if builder_flow is None:
         return ()
     try:
-        for composition in builder_flow.list_compositions():
+        for composition in builder_flow.list_compositions(actor=actor):
             composition_id = _clean(getattr(composition, "composition_id", None))
             if not composition_id:
                 continue
@@ -235,6 +270,7 @@ class OffshoreEffectiveMenuService:
         locale: str,
         work_period_id: int | None = None,
         service_event_ids: tuple[int, ...] | None = None,
+        actor: ActorContext | None = None,
     ) -> PlanningMenuContext:
         locale_value = normalize_locale(locale or "sv")
         now = datetime.now(UTC)
@@ -310,14 +346,25 @@ class OffshoreEffectiveMenuService:
             zone = _local_zone(site_timezone_name(int(tenant_id), str(site_id)))
             track_groups = _parse_visibility_json(getattr(settings, "menu_track_visibility_json", None) if settings is not None else None, locale_value)
             builder_flow = None
+            menu_flow = None
             if has_app_context():
-                from core.builder_menu_context_api import _get_menu_context_flow
+                builder_flow = current_app.extensions.get("builder_flow")
+                if builder_flow is None:
+                    from core.builder_api import _get_builder_flow
 
-                try:
-                    builder_flow = _get_menu_context_flow()
-                except Exception:
-                    builder_flow = current_app.extensions.get("builder_menu_context_flow")
-            composition_options = _build_composition_options(builder_flow)
+                    try:
+                        builder_flow = _get_builder_flow()
+                    except Exception:
+                        builder_flow = None
+                menu_flow = current_app.extensions.get("builder_menu_context_flow")
+                if menu_flow is None:
+                    from core.builder_menu_context_api import _get_menu_context_flow
+
+                    try:
+                        menu_flow = _get_menu_context_flow()
+                    except Exception:
+                        menu_flow = None
+            composition_options = _build_composition_options(builder_flow, actor=actor)
 
             contexts = _menu_context_service.list_contexts_for_period(tenant_id=tenant_id, site_id=site_id, work_period_id=int(period.id))
             context_by_event_id = {int(row.service_event_id): row for row in contexts}
@@ -348,9 +395,9 @@ class OffshoreEffectiveMenuService:
 
             menus_by_id: dict[str, str] = {}
             rows_by_menu_id: dict[str, list[dict[str, object]]] = {}
-            if builder_flow is not None:
+            if menu_flow is not None:
                 try:
-                    for menu in builder_flow.list_menus():
+                    for menu in menu_flow.list_menus():
                         menu_id = _clean(getattr(menu, "menu_id", None))
                         if menu_id:
                             menus_by_id[menu_id] = _safe_title(getattr(menu, "title", None)) or menu_id
@@ -364,9 +411,9 @@ class OffshoreEffectiveMenuService:
                 meal_slot = _resolve_service_slot(event)
                 menu_context = context_by_event_id.get(int(event.id))
                 builder_menu_id = _clean(getattr(menu_context, "builder_menu_id", None)) if menu_context is not None else ""
-                if builder_menu_id and builder_menu_id not in rows_by_menu_id and builder_flow is not None:
+                if builder_menu_id and builder_menu_id not in rows_by_menu_id and menu_flow is not None:
                     try:
-                        rows_by_menu_id[builder_menu_id] = list(builder_flow.list_menu_rows(builder_menu_id))
+                        rows_by_menu_id[builder_menu_id] = list(menu_flow.list_menu_rows(builder_menu_id))
                     except Exception:
                         rows_by_menu_id[builder_menu_id] = []
                 menu_rows = rows_by_menu_id.get(builder_menu_id, [])
@@ -390,6 +437,7 @@ class OffshoreEffectiveMenuService:
                             builder_flow,
                             composition_id=published_row.get("composition_id"),
                             composition_title=published_title,
+                            actor=actor,
                         )
                     decision = decisions_by_event_and_track.get((int(event.id), track.track_key))
                     decision_type = _clean(getattr(decision, "decision_type", None)) or None
@@ -425,20 +473,20 @@ class OffshoreEffectiveMenuService:
                         if decision_type == "use_builder_composition":
                             source_type = EffectiveMenuSourceType.OPERATIONAL_BUILDER_OVERRIDE
                             selected_builder_composition_id = _clean(getattr(decision, "selected_builder_composition_id", None))
-                            selected_title, selected_component_refs = _resolve_builder_composition_title(builder_flow, selected_builder_composition_id)
-                            effective_title = selected_title or published_title
-                            display_name = effective_title or published_title
-                            if published_builder_reference is not None:
-                                builder_reference = published_builder_reference
-                                component_refs = published_component_refs
-                            elif selected_builder_composition_id:
-                                builder_reference = PlanningCompositionReference(
-                                    composition_id=selected_builder_composition_id,
-                                    composition_name=selected_title or selected_builder_composition_id,
-                                )
-                                component_refs = selected_component_refs
+                            selected_reference, selected_component_refs = _resolve_builder_composition_details(
+                                builder_flow,
+                                composition_id=selected_builder_composition_id,
+                                actor=actor,
+                                composition_title=selected_builder_composition_id,
+                            )
+                            builder_reference = selected_reference
+                            if builder_reference is not None:
+                                selected_title = builder_reference.composition_name
                             else:
-                                builder_reference = None
+                                selected_title = _safe_title(selected_builder_composition_id)
+                            effective_title = selected_title
+                            display_name = effective_title or published_title
+                            component_refs = selected_component_refs
                             if builder_reference is None:
                                 warnings.append("missing_builder_composition")
                             if not component_refs:

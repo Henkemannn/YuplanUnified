@@ -271,6 +271,43 @@ def test_cook_private_composition_fork_copies_custom_menu_name_state() -> None:
     assert shared.effective_menu_name == "Hemlagad lasagne med tomat, béchamel och parmesan"
 
 
+def test_cook_read_resolution_reuses_existing_private_composition_fork_without_creating_new_one() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook_a = _actor(tenant_id=1, user_id=20, role="cook")
+    cook_b = _actor(tenant_id=1, user_id=30, role="cook")
+
+    shared = flow.create_composition("plate-shared-read", "Shared plate", actor=editor)
+    private_target = flow.resolve_composition_edit_target(shared.composition_id, actor=cook_a)
+    renamed_private = flow.update_composition_metadata(
+        private_target.composition_id,
+        composition_name="Shared plate Cook A",
+        actor=cook_a,
+    )
+
+    scope_count_before = len(scope_repo.scopes)
+    composition_count_before = len(flow._composition_service.list_compositions())
+
+    resolved_private = flow.resolve_composition_read_target(shared.composition_id, actor=cook_a)
+    resolved_same_private = flow.resolve_composition_read_target(renamed_private.composition_id, actor=cook_a)
+    resolved_shared = flow.resolve_composition_read_target(shared.composition_id, actor=cook_b)
+    resolved_anonymous = flow.resolve_composition_read_target(shared.composition_id, actor=None)
+
+    assert resolved_private is not None
+    assert resolved_private.composition_id == renamed_private.composition_id
+    assert resolved_private.composition_name == "Shared plate Cook A"
+    assert resolved_same_private is not None
+    assert resolved_same_private.composition_id == renamed_private.composition_id
+    assert resolved_shared is not None
+    assert resolved_shared.composition_id == shared.composition_id
+    assert resolved_shared.composition_name == "Shared plate"
+    assert resolved_anonymous is not None
+    assert resolved_anonymous.composition_id == shared.composition_id
+    assert len(scope_repo.scopes) == scope_count_before
+    assert len(flow._composition_service.list_compositions()) == composition_count_before
+
+
 def test_cook_can_resolve_linked_component_edit_target_and_reuse_private_fork() -> None:
     scope_repo = _MemoryScopeRepository()
     flow = _build_flow(scope_repo)

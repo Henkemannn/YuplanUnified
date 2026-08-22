@@ -1079,6 +1079,40 @@ class BuilderFlow:
 
         return self.fork_composition(composition_id_value, actor=actor)
 
+    def resolve_composition_read_target(
+        self,
+        composition_id: str,
+        *,
+        actor: ActorContext | None = None,
+    ) -> Composition | None:
+        composition_id_value = str(composition_id or "").strip()
+        if not composition_id_value:
+            raise ValueError("composition_id must be non-empty")
+
+        composition = self.get_library_composition(composition_id_value, actor=actor)
+        if composition is None:
+            return None
+
+        if actor is None or self._object_scope_repository is None:
+            return composition
+
+        scope = self._object_scope_repository.get_scope("composition", composition_id_value)
+        if scope is not None and scope.visibility == "private":
+            return composition
+
+        private_composition_id = self._object_scope_repository.find_private_fork_id(
+            "composition",
+            composition_id_value,
+            tenant_id=actor.tenant_id,
+            owner_user_id=actor.user_id,
+        )
+        if private_composition_id is not None:
+            private_composition = self.get_library_composition(private_composition_id, actor=actor)
+            if private_composition is not None:
+                return private_composition
+
+        return composition
+
     def update_composition_metadata(
         self,
         composition_id: str,

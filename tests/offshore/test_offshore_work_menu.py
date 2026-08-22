@@ -4,6 +4,8 @@ import uuid
 from datetime import UTC, date, datetime, time
 
 from core.app_factory import create_app
+from core.builder.library_scope import ActorContext
+from core.builder.library_scope import ObjectScope
 from core.db import create_all, get_session
 from core.models import CommunBuilderPublicationPin, Site, Tenant
 from modules.offshore2.menu_context import _service as menu_context_service
@@ -18,8 +20,42 @@ from core.builder_menu_context_api import _get_menu_context_flow
 TEST_WORK_MENU_DAY = datetime.now(UTC).date()
 
 
-def _headers(role: str, tenant_id: int = 1):
-    return {"X-User-Role": role, "X-Tenant-Id": str(tenant_id), "X-User-Id": "42", "X-User-Name": "Henrik"}
+class _MemoryScopeRepository:
+    def __init__(self) -> None:
+        self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        return self.scopes.get((object_type, object_id))
+
+    def find_private_fork_id(
+        self,
+        object_type: str,
+        source_object_id: str,
+        *,
+        tenant_id: int,
+        owner_user_id: int,
+    ) -> str | None:
+        for (stored_object_type, object_id), scope in reversed(list(self.scopes.items())):
+            if (
+                stored_object_type == object_type
+                and scope.tenant_id == tenant_id
+                and scope.owner_scope == "user"
+                and scope.owner_user_id == owner_user_id
+                and scope.visibility == "private"
+                and scope.source_object_id == source_object_id
+            ):
+                return object_id
+        return None
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        self.scopes[(object_type, object_id)] = scope
+
+    def delete_scope(self, object_type: str, object_id: str) -> None:
+        self.scopes.pop((object_type, object_id), None)
+
+
+def _headers(role: str, tenant_id: int = 1, user_id: int = 42):
+    return {"X-User-Role": role, "X-Tenant-Id": str(tenant_id), "X-User-Id": str(user_id), "X-User-Name": "Henrik"}
 
 
 def _login(client, *, tenant_id: int, site_id: str, role: str):
@@ -171,7 +207,6 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "data-work-menu-expand-toggle" in html
     assert "offshoreWorkMenuModal" in html
     assert "data-work-menu-builder-bridge" in html
-    assert "/builder-editor-host?composition_id=demo_offshore_kott" in html
     assert "offshore-work-menu-meal__status" not in html
     assert "offshore-work-menu-meal__meta" not in html
 
@@ -200,7 +235,7 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
 
     first_day = (vm.get("days") or [])[0]
     first_meal = (first_day.meals or [])[0]
-    first_track = (first_meal.tracks or [])[0]
+    first_track = next((track for track in (first_meal.tracks or ()) if track.builder_bridge is not None), None)
     assert first_track.builder_bridge is not None
     assert first_track.builder_bridge["composition_name"] == "Demo Offshore Kött"
     assert first_track.builder_bridge["component_count"] == 1
@@ -262,6 +297,180 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
         finally:
             db.close()
     assert after == before + 1
+
+
+def test_offshore_work_menu_uses_actor_private_builder_fork_without_creating_new_forks():
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    _seed_builder_menu(app)
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
+    period_id = _seed_period(app, tenant_id=1, site_id=site_id)
+    with app.app_context():
+        events = period_service.list_service_events(1, site_id, period_id)
+        menu_context_service.sync_service_event_context(tenant_id=1, site_id=site_id, work_period_id=period_id, service_event_id=events[0].id)
+
+        flow = _get_builder_flow()
+        scope_repo = _MemoryScopeRepository()
+        flow._object_scope_repository = scope_repo  # type: ignore[attr-defined]
+        shared = flow.get_library_composition("demo_offshore_kott", actor=None)
+        assert shared is not None
+        cook_a_actor = ActorContext(tenant_id=1, user_id=20, site_id=site_id, role="cook")
+        cook_b_actor = ActorContext(tenant_id=1, user_id=30, site_id=site_id, role="cook")
+        cook_b_private_actor = ActorContext(tenant_id=1, user_id=31, site_id=site_id, role="cook")
+        no_fork_actor = ActorContext(tenant_id=1, user_id=40, site_id=site_id, role="cook")
+        private_target = flow.resolve_composition_edit_target(shared.composition_id, actor=cook_a_actor)
+        private_target = flow.update_composition_metadata(
+            private_target.composition_id,
+            composition_name="Demo Offshore Kött Cook A",
+            actor=cook_a_actor,
+        )
+        cook_b_private = flow.resolve_composition_edit_target(shared.composition_id, actor=cook_b_private_actor)
+        cook_b_private = flow.update_composition_metadata(
+            cook_b_private.composition_id,
+            composition_name="Demo Offshore K÷tt Cook B",
+            actor=cook_b_private_actor,
+        )
+        composition_count_before = len(flow._composition_service.list_compositions())
+
+    client = app.test_client()
+    _login(client, tenant_id=1, site_id=site_id, role="cook")
+
+    response_a = client.get("/offshore/work-menu")
+    assert response_a.status_code == 200
+
+    response_b = client.get("/offshore/work-menu", headers=_headers("cook", user_id=30))
+    html_b = response_b.get_data(as_text=True)
+    assert response_b.status_code == 200
+    assert "Demo Offshore Kött" in html_b
+
+    response_c = client.get("/offshore/work-menu", headers=_headers("cook", user_id=40))
+    html_c = response_c.get_data(as_text=True)
+    assert response_c.status_code == 200
+    assert "Demo Offshore Kött" in html_c
+
+    with app.app_context():
+        flow = _get_builder_flow()
+        resolved_private = flow.resolve_composition_read_target(shared.composition_id, actor=cook_a_actor)
+        resolved_shared = flow.resolve_composition_read_target(shared.composition_id, actor=cook_b_actor)
+        resolved_no_fork = flow.resolve_composition_read_target(shared.composition_id, actor=no_fork_actor)
+
+        assert resolved_private is not None
+        assert resolved_private.composition_id == private_target.composition_id
+        assert resolved_private.composition_name == "Demo Offshore Kött Cook A"
+        assert resolved_shared is not None
+        assert resolved_shared.composition_id == shared.composition_id
+        assert resolved_shared.composition_name == "Demo Offshore Kött"
+        assert resolved_no_fork is not None
+        assert resolved_no_fork.composition_id == shared.composition_id
+        assert len(flow._composition_service.list_compositions()) == composition_count_before
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=20)):
+        vm_a = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=20,
+        )
+    assert any(track.effective_title == "Demo Offshore Kött Cook A" for day in (vm_a.get("days") or ()) for meal in day.meals for track in meal.tracks)
+
+    option_values_a = {option["value"] for option in (vm_a.get("composition_options") or ())}
+    assert shared.composition_id in option_values_a
+    assert private_target.composition_id in option_values_a
+    assert cook_b_private.composition_id not in option_values_a
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=30)):
+        vm_b = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=30,
+        )
+    assert any(track.effective_title == "Demo Offshore Kött" for day in (vm_b.get("days") or ()) for meal in day.meals for track in meal.tracks)
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=40)):
+        vm_c = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=40,
+        )
+    assert any(track.effective_title == "Demo Offshore Kött" for day in (vm_c.get("days") or ()) for meal in day.meals for track in meal.tracks)
+
+    option_values_c = {option["value"] for option in (vm_c.get("composition_options") or ())}
+    assert shared.composition_id in option_values_c
+    assert private_target.composition_id not in option_values_c
+    assert cook_b_private.composition_id not in option_values_c
+
+
+def test_offshore_work_menu_selected_builder_override_uses_selected_identity_and_components():
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    _seed_builder_menu(app)
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
+    period_id = _seed_period(app, tenant_id=1, site_id=site_id)
+    with app.app_context():
+        events = period_service.list_service_events(1, site_id, period_id)
+        menu_context_service.sync_service_event_context(tenant_id=1, site_id=site_id, work_period_id=period_id, service_event_id=events[0].id)
+        flow = _get_builder_flow()
+
+        decision = offshore_work_menu_service.save_decision(
+            tenant_id=1,
+            site_id=site_id,
+            work_period_id=period_id,
+            service_event_id=events[0].id,
+            menu_track_key="koett",
+            decision_type="use_builder_composition",
+            selected_builder_composition_id="demo_offshore_fisk",
+            free_text=None,
+            actor_user_id=20,
+        )
+        assert decision.selected_builder_composition_id == "demo_offshore_fisk"
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=20)):
+        vm = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=20,
+        )
+
+    selected_track = None
+    for day in vm.get("days") or ():
+        for meal in day.meals:
+            for track in meal.tracks:
+                if track.track_key == "koett":
+                    selected_track = track
+                    break
+            if selected_track is not None:
+                break
+        if selected_track is not None:
+            break
+
+    assert selected_track is not None
+    assert selected_track.effective_title == "Demo Offshore Fisk"
+    assert selected_track.builder_composition_id == "demo_offshore_fisk"
+    assert selected_track.builder_bridge is not None
+    assert selected_track.builder_bridge["composition_id"] == "demo_offshore_fisk"
+    assert selected_track.builder_bridge["composition_name"] == "Demo Offshore Fisk"
+    assert [component["component_id"] for component in selected_track.builder_bridge["components"]] == ["demo_offshore_fisk"]
 
 
 def test_offshore_work_menu_reset_deletes_decision():

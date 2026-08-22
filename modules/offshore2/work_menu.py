@@ -9,6 +9,7 @@ from flask import current_app, has_app_context, request, url_for
 
 from core.db import get_session
 from core.offshore_builder_bridge import _service as _builder_bridge_service
+from core.builder.library_scope import ActorContext
 
 from .effective_menu import _service as _effective_menu_service
 from .i18n import copy_for, t
@@ -324,12 +325,32 @@ class OffshoreWorkMenuService:
         except Exception:
             return []
 
-    def build_view_model(self, *, tenant_id: int | None, site_id: str | None, locale: str, theme: str, role: str | None, tenant_name: str | None, site_name: str | None) -> dict[str, object]:
+    def build_view_model(
+        self,
+        *,
+        tenant_id: int | None,
+        site_id: str | None,
+        locale: str,
+        theme: str,
+        role: str | None,
+        tenant_name: str | None,
+        site_name: str | None,
+        actor_user_id: int | None = None,
+    ) -> dict[str, object]:
         labels = copy_for(locale)
+        actor = None
+        if tenant_id is not None and site_id and actor_user_id is not None and (role or "").strip():
+            actor = ActorContext(
+                tenant_id=int(tenant_id),
+                user_id=int(actor_user_id),
+                site_id=str(site_id),
+                role=str(role),
+            )
         context = _effective_menu_service.build_context(
             tenant_id=tenant_id,
             site_id=site_id,
             locale=locale,
+            actor=actor,
         )
         return _build_work_menu_view_model_from_context(
             context=context,

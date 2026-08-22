@@ -66,6 +66,11 @@ def _get_actor_user_id() -> int | None:
     user_id = request.headers.get("X-User-Id")
     if isinstance(user_id, str) and user_id.isdigit():
         return int(user_id)
+    session_user_id = session.get("user_id")
+    if isinstance(session_user_id, int):
+        return session_user_id
+    if isinstance(session_user_id, str) and session_user_id.isdigit():
+        return int(session_user_id)
     return None
 
 
@@ -129,9 +134,10 @@ def work_menu():
         site_id=result.get("site_id"),
         locale=resolve_locale(),
         theme=resolve_theme(),
-        role=current_app.config.get("_offshore_role") or request.headers.get("X-User-Role") or None,
+        role=current_app.config.get("_offshore_role") or request.headers.get("X-User-Role") or session.get("role") or None,
         tenant_name=result.get("tenant_name"),
         site_name=result.get("site_name"),
+        actor_user_id=_get_actor_user_id(),
     )
     return render_template("offshore2/work_menu.html", vm=vm)
 
