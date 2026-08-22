@@ -235,6 +235,42 @@ def test_cook_can_fork_and_edit_private_composition_shallowly() -> None:
     assert flow.get_library_component(forked_component.component_id, actor=cook) is not None
 
 
+def test_cook_private_composition_fork_copies_custom_menu_name_state() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    editor = _actor(tenant_id=1, user_id=10, role="editor")
+    cook = _actor(tenant_id=1, user_id=20, role="cook")
+
+    source = flow.create_composition(
+        "plate-custom-menu",
+        "Lasagne",
+        actor=editor,
+        use_custom_menu_name=True,
+        menu_name="Hemlagad lasagne med tomat, béchamel och parmesan",
+    )
+
+    private_target = flow.resolve_composition_edit_target(source.composition_id, actor=cook)
+    assert private_target.use_custom_menu_name is True
+    assert private_target.menu_name == "Hemlagad lasagne med tomat, béchamel och parmesan"
+    assert private_target.effective_menu_name == "Hemlagad lasagne med tomat, béchamel och parmesan"
+
+    updated_private = flow.update_composition_metadata(
+        private_target.composition_id,
+        use_custom_menu_name=False,
+        actor=cook,
+    )
+
+    assert updated_private.use_custom_menu_name is False
+    assert updated_private.menu_name == "Hemlagad lasagne med tomat, béchamel och parmesan"
+    assert updated_private.effective_menu_name == "Lasagne"
+
+    shared = flow.get_library_composition(source.composition_id, actor=editor)
+    assert shared is not None
+    assert shared.use_custom_menu_name is True
+    assert shared.menu_name == "Hemlagad lasagne med tomat, béchamel och parmesan"
+    assert shared.effective_menu_name == "Hemlagad lasagne med tomat, béchamel och parmesan"
+
+
 def test_cook_can_resolve_linked_component_edit_target_and_reuse_private_fork() -> None:
     scope_repo = _MemoryScopeRepository()
     flow = _build_flow(scope_repo)

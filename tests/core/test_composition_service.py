@@ -18,6 +18,48 @@ def test_create_composition() -> None:
     assert composition.composition_name == "Meatballs Plate"
     assert composition.library_group == "lunch"
     assert composition.components == []
+    assert composition.use_custom_menu_name is False
+    assert composition.menu_name is None
+    assert composition.effective_menu_name == "Meatballs Plate"
+
+
+def test_custom_menu_name_toggles_without_losing_stored_value() -> None:
+    service = CompositionService()
+    service.create_composition(
+        composition_id="plate",
+        composition_name="Lasagne",
+    )
+
+    updated = service.update_composition_metadata(
+        composition_id="plate",
+        use_custom_menu_name=True,
+        menu_name="  Hemlagad lasagne med tomat, béchamel och parmesan  ",
+    )
+
+    assert updated.use_custom_menu_name is True
+    assert updated.menu_name == "Hemlagad lasagne med tomat, béchamel och parmesan"
+    assert updated.effective_menu_name == "Hemlagad lasagne med tomat, béchamel och parmesan"
+
+    disabled = service.update_composition_metadata(
+        composition_id="plate",
+        use_custom_menu_name=False,
+    )
+
+    assert disabled.use_custom_menu_name is False
+    assert disabled.menu_name == "Hemlagad lasagne med tomat, béchamel och parmesan"
+    assert disabled.effective_menu_name == "Lasagne"
+
+
+def test_custom_menu_name_requires_effective_value_when_enabled() -> None:
+    service = CompositionService()
+    service.create_composition(composition_id="plate", composition_name="Lasagne")
+
+    with pytest.raises(ValueError, match="menu_name must be non-empty when use_custom_menu_name is true"):
+        service.update_composition_metadata(
+            composition_id="plate",
+            use_custom_menu_name=True,
+            menu_name="   ",
+        )
 
 
 def test_add_components_to_composition_and_preserve_order() -> None:
@@ -88,6 +130,42 @@ def test_update_composition_metadata_updates_name_and_group_without_touching_com
     assert updated.composition_name == "Updated Plate"
     assert updated.library_group == "fisk"
     assert [item.component_id for item in updated.components] == ["fish"]
+
+
+def test_component_mutations_preserve_custom_menu_name_fields() -> None:
+    service = CompositionService()
+    service.create_composition(
+        composition_id="plate",
+        composition_name="Plate",
+        use_custom_menu_name=True,
+        menu_name="Custom plate",
+    )
+
+    added = service.add_component_to_composition(
+        composition_id="plate",
+        component_id="fish",
+        role="main",
+        sort_order=10,
+    )
+    rerolled = service.update_component_role_in_composition(
+        composition_id="plate",
+        component_id="fish",
+        role="side",
+    )
+    reordered = service.reorder_components_in_composition(
+        composition_id="plate",
+        ordered_entries=[("fish", 10)],
+    )
+    removed = service.remove_component_from_composition(
+        composition_id="plate",
+        component_id="fish",
+        sort_order=10,
+    )
+
+    for item in (added, rerolled, reordered, removed):
+        assert item.use_custom_menu_name is True
+        assert item.menu_name == "Custom plate"
+        assert item.effective_menu_name == "Custom plate"
 
 
 def test_duplicate_component_allowed_when_sort_order_differs() -> None:

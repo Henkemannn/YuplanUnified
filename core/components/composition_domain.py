@@ -17,3 +17,12 @@ class Composition:
     composition_name: str
     library_group: str | None = None
     components: list[CompositionComponent] = field(default_factory=list)
+    use_custom_menu_name: bool = False
+    menu_name: str | None = None
+
+    @property
+    def effective_menu_name(self) -> str:
+        custom_name = str(self.menu_name or "").strip()
+        if self.use_custom_menu_name and custom_name:
+            return custom_name
+        return self.composition_name

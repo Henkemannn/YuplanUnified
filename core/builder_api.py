@@ -398,6 +398,9 @@ def _serialize_composition(composition) -> dict[str, Any]:
         "composition_id": composition.composition_id,
         "composition_name": composition.composition_name,
         "library_group": composition.library_group,
+        "use_custom_menu_name": bool(getattr(composition, "use_custom_menu_name", False)),
+        "menu_name": getattr(composition, "menu_name", None),
+        "effective_menu_name": getattr(composition, "effective_menu_name", composition.composition_name),
         "components": [
             _serialize_composition_component(component) for component in composition.components
         ],
@@ -1726,9 +1729,11 @@ def update_composition_metadata(composition_id: str):
             composition_name = _require_str(payload, "composition_name")
 
         library_group = _require_dish_library_group(payload)
+        use_custom_menu_name = _optional_bool(payload, "use_custom_menu_name") if "use_custom_menu_name" in payload else None
+        menu_name = _optional_str(payload, "menu_name") if "menu_name" in payload else None
 
-        if composition_name is None and library_group is None:
-            return _bad_request("At least one of composition_name or library_group is required")
+        if composition_name is None and library_group is None and use_custom_menu_name is None and menu_name is None:
+            return _bad_request("At least one of composition_name, library_group, use_custom_menu_name or menu_name is required")
 
         flow = _get_builder_flow()
         actor = _get_builder_actor()
@@ -1736,6 +1741,8 @@ def update_composition_metadata(composition_id: str):
             composition_id_value,
             composition_name=composition_name,
             library_group=library_group,
+            use_custom_menu_name=use_custom_menu_name,
+            menu_name=menu_name,
             actor=actor,
         )
     except ValueError as exc:

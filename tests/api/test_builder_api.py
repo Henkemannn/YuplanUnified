@@ -260,6 +260,45 @@ def test_patch_composition_metadata_endpoint_rejects_invalid_library_group() -> 
     assert body.get("error") == "bad_request"
 
 
+def test_patch_composition_metadata_endpoint_supports_custom_menu_name_toggle() -> None:
+    client = _client()
+    created = client.post(
+        "/api/builder/compositions",
+        json={"composition_id": "plate_custom", "composition_name": "Lasagne"},
+        headers=HEADERS,
+    )
+    assert created.status_code == 201
+
+    enabled = client.patch(
+        "/api/builder/compositions/plate_custom",
+        json={
+            "use_custom_menu_name": True,
+            "menu_name": "  Hemlagad lasagne med tomat  ",
+        },
+        headers=HEADERS,
+    )
+
+    assert enabled.status_code == 200
+    enabled_body = enabled.get_json() or {}
+    enabled_composition = enabled_body.get("composition") or {}
+    assert enabled_composition.get("use_custom_menu_name") is True
+    assert enabled_composition.get("menu_name") == "Hemlagad lasagne med tomat"
+    assert enabled_composition.get("effective_menu_name") == "Hemlagad lasagne med tomat"
+
+    disabled = client.patch(
+        "/api/builder/compositions/plate_custom",
+        json={"use_custom_menu_name": False},
+        headers=HEADERS,
+    )
+
+    assert disabled.status_code == 200
+    disabled_body = disabled.get_json() or {}
+    disabled_composition = disabled_body.get("composition") or {}
+    assert disabled_composition.get("use_custom_menu_name") is False
+    assert disabled_composition.get("menu_name") == "Hemlagad lasagne med tomat"
+    assert disabled_composition.get("effective_menu_name") == "Lasagne"
+
+
 def test_patch_composition_metadata_endpoint_returns_not_found_for_unknown_composition() -> None:
     client = _client()
 
@@ -611,6 +650,9 @@ def test_single_composition_read_endpoint_returns_requested_composition() -> Non
     composition = body.get("composition") or {}
     assert composition.get("composition_id") == composition_id
     assert composition.get("composition_name") == "Scoped plate"
+    assert composition.get("use_custom_menu_name") is False
+    assert composition.get("menu_name") is None
+    assert composition.get("effective_menu_name") == "Scoped plate"
 
 
 def test_single_component_read_endpoint_respects_private_scope_boundary() -> None:
@@ -2563,6 +2605,9 @@ def test_list_compositions_endpoint() -> None:
     assert body.get("count") == 1
     compositions = body.get("compositions") or []
     assert compositions[0]["composition_id"] == "plate_1"
+    assert compositions[0]["use_custom_menu_name"] is False
+    assert compositions[0]["menu_name"] is None
+    assert compositions[0]["effective_menu_name"] == "Fish Plate"
 
 
 def test_add_component_to_composition_endpoint() -> None:

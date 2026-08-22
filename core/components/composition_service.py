@@ -8,6 +8,36 @@ class CompositionService:
     def __init__(self, repository: InMemoryCompositionRepository | None = None) -> None:
         self._repository = repository or InMemoryCompositionRepository()
 
+    @staticmethod
+    def _normalize_menu_name(menu_name: str | None) -> str | None:
+        value = str(menu_name or "").strip()
+        return value or None
+
+    def _build_composition(
+        self,
+        composition: Composition,
+        *,
+        composition_name: str | None = None,
+        library_group: str | None = None,
+        components: list[CompositionComponent] | None = None,
+        use_custom_menu_name: bool | None = None,
+        menu_name: str | None = None,
+    ) -> Composition:
+        next_components = list(composition.components) if components is None else sorted(list(components), key=lambda item: item.sort_order)
+        next_use_custom_menu_name = composition.use_custom_menu_name if use_custom_menu_name is None else bool(use_custom_menu_name)
+        next_menu_name = composition.menu_name if menu_name is None else self._normalize_menu_name(menu_name)
+        if next_use_custom_menu_name and not str(next_menu_name or "").strip():
+            raise ValueError("menu_name must be non-empty when use_custom_menu_name is true")
+
+        return Composition(
+            composition_id=composition.composition_id,
+            composition_name=composition_name if composition_name is not None else composition.composition_name,
+            library_group=library_group if library_group is not None else composition.library_group,
+            components=next_components,
+            use_custom_menu_name=next_use_custom_menu_name,
+            menu_name=next_menu_name,
+        )
+
     def create_composition(
         self,
         composition_id: str,
@@ -15,6 +45,8 @@ class CompositionService:
         *,
         library_group: str | None = None,
         components: list[CompositionComponent] | None = None,
+        use_custom_menu_name: bool = False,
+        menu_name: str | None = None,
     ) -> Composition:
         composition_id_value = str(composition_id or "").strip()
         if not composition_id_value:
@@ -24,11 +56,17 @@ class CompositionService:
         if not composition_name_value:
             raise ValueError("composition_name must be non-empty")
 
+        normalized_menu_name = self._normalize_menu_name(menu_name)
+        if use_custom_menu_name and not normalized_menu_name:
+            raise ValueError("menu_name must be non-empty when use_custom_menu_name is true")
+
         composition = Composition(
             composition_id=composition_id_value,
             composition_name=composition_name_value,
             library_group=str(library_group).strip() if library_group is not None else None,
             components=sorted(list(components or []), key=lambda item: item.sort_order),
+            use_custom_menu_name=bool(use_custom_menu_name),
+            menu_name=normalized_menu_name,
         )
         self._repository.add(composition)
         return composition
@@ -47,16 +85,19 @@ class CompositionService:
         *,
         composition_name: str | None = None,
         library_group: str | None = None,
+        use_custom_menu_name: bool | None = None,
+        menu_name: str | None = None,
     ) -> Composition:
         composition = self._require_composition(composition_id)
-        if composition_name is None and library_group is None:
+        if composition_name is None and library_group is None and use_custom_menu_name is None and menu_name is None:
             raise ValueError("at least one composition field must be provided")
 
-        updated = Composition(
-            composition_id=composition.composition_id,
-            composition_name=composition_name if composition_name is not None else composition.composition_name,
-            library_group=library_group if library_group is not None else composition.library_group,
-            components=list(composition.components),
+        updated = self._build_composition(
+            composition,
+            composition_name=composition_name,
+            library_group=library_group,
+            use_custom_menu_name=use_custom_menu_name,
+            menu_name=menu_name,
         )
         self._repository.update(updated)
         return updated
@@ -106,12 +147,7 @@ class CompositionService:
         )
         updated_components.sort(key=lambda item: item.sort_order)
 
-        updated = Composition(
-            composition_id=composition.composition_id,
-            composition_name=composition.composition_name,
-            library_group=composition.library_group,
-            components=updated_components,
-        )
+        updated = self._build_composition(composition, components=updated_components)
         self._repository.update(updated)
         return updated
 
@@ -154,12 +190,7 @@ class CompositionService:
         if not updated:
             raise ValueError("component entry not found in composition")
 
-        refreshed = Composition(
-            composition_id=composition.composition_id,
-            composition_name=composition.composition_name,
-            library_group=composition.library_group,
-            components=updated_components,
-        )
+        refreshed = self._build_composition(composition, components=updated_components)
         self._repository.update(refreshed)
         return refreshed
 
@@ -194,12 +225,7 @@ class CompositionService:
         if not removed:
             raise ValueError("component entry not found in composition")
 
-        updated = Composition(
-            composition_id=composition.composition_id,
-            composition_name=composition.composition_name,
-            library_group=composition.library_group,
-            components=updated_components,
-        )
+        updated = self._build_composition(composition, components=updated_components)
         self._repository.update(updated)
         return updated
 
@@ -238,12 +264,7 @@ class CompositionService:
                 )
             )
 
-        updated = Composition(
-            composition_id=composition.composition_id,
-            composition_name=composition.composition_name,
-            library_group=composition.library_group,
-            components=updated_components,
-        )
+        updated = self._build_composition(composition, components=updated_components)
         self._repository.update(updated)
         return updated
 

@@ -737,12 +737,16 @@ class BuilderFlow:
         composition_name: str,
         *,
         library_group: str | None = None,
+        use_custom_menu_name: bool = False,
+        menu_name: str | None = None,
         actor: ActorContext | None = None,
     ) -> Composition:
         composition = self._composition_service.create_composition(
             composition_id=composition_id,
             composition_name=composition_name,
             library_group=library_group,
+            use_custom_menu_name=use_custom_menu_name,
+            menu_name=menu_name,
         )
         if actor is not None and self._object_scope_repository is not None:
             try:
@@ -910,6 +914,8 @@ class BuilderFlow:
                 composition_name=source_composition.composition_name,
                 library_group=source_composition.library_group,
                 components=copied_components,
+                use_custom_menu_name=source_composition.use_custom_menu_name,
+                menu_name=source_composition.menu_name,
             )
             source_scope = self._object_scope_repository.get_scope("composition", composition_id_value) or ObjectScope(
                 tenant_id=actor.tenant_id,
@@ -1079,6 +1085,8 @@ class BuilderFlow:
         *,
         composition_name: str | None = None,
         library_group: str | None = None,
+        use_custom_menu_name: bool | None = None,
+        menu_name: str | None = None,
         actor: ActorContext | None = None,
     ) -> Composition:
         composition_id_value = str(composition_id or "").strip()
@@ -1095,6 +1103,8 @@ class BuilderFlow:
             composition_id_value,
             composition_name=composition_name,
             library_group=library_group,
+            use_custom_menu_name=use_custom_menu_name,
+            menu_name=menu_name,
         )
 
     def create_composition_with_generated_id(
@@ -1566,6 +1576,8 @@ class BuilderFlow:
             composition_name=composition.composition_name,
             library_group=composition.library_group,
             components=refreshed_components,
+            use_custom_menu_name=composition.use_custom_menu_name,
+            menu_name=composition.menu_name,
         )
 
     def import_library_text_lines(self, lines: list[str], *, actor: ActorContext | None = None) -> LibraryImportSummary:

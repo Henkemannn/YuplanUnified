@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from core.builder import BuilderFlow
@@ -13,7 +14,7 @@ from core.builder_sqlite import (
     SQLiteMenuDetailRepository,
     SQLiteMenuRepository,
 )
-from core.components import ComponentService, CompositionService
+from core.components import ComponentService, Composition, CompositionComponent, CompositionService
 from core.components import InMemoryRecipeIngredientLineRepository, InMemoryRecipeRepository
 from core.menu import MenuService
 
@@ -22,6 +23,35 @@ def _db_path(tmp_path: Path) -> str:
     db_path = tmp_path / "builder_persistence_test.db"
     initialize_builder_sqlite(str(db_path))
     return str(db_path)
+
+
+def _connect(path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _create_legacy_composition_db(path: Path) -> None:
+    with _connect(path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE builder_compositions (
+                composition_id TEXT PRIMARY KEY,
+                composition_name TEXT NOT NULL,
+                library_group TEXT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE builder_composition_components (
+                composition_id TEXT NOT NULL,
+                component_id TEXT NOT NULL,
+                component_name TEXT NULL,
+                role TEXT NULL,
+                sort_order INTEGER NOT NULL,
+                PRIMARY KEY (composition_id, component_id, sort_order)
+            );
+            """
+        )
 
 
 def _build_builder_flow(db_path: str) -> BuilderFlow:
@@ -91,7 +121,12 @@ def test_alias_persists_after_reload(tmp_path: Path) -> None:
 def test_composition_with_component_links_persists(tmp_path: Path) -> None:
     db_path = _db_path(tmp_path)
     flow_one = _build_builder_flow(db_path)
-    comp = flow_one.create_composition(composition_id="plate_1", composition_name="Fish plate")
+    comp = flow_one.create_composition(
+        composition_id="plate_1",
+        composition_name="Fish plate",
+        use_custom_menu_name=True,
+        menu_name="Custom fish plate",
+    )
     updated = flow_one.add_component_to_composition(
         composition_id=comp.composition_id,
         component_name="Fish",
@@ -105,6 +140,60 @@ def test_composition_with_component_links_persists(tmp_path: Path) -> None:
     assert loaded.composition_name == "Fish plate"
     assert len(loaded.components) == 1
     assert loaded.components[0].component_name == "Fish"
+    assert loaded.use_custom_menu_name is True
+    assert loaded.menu_name == "Custom fish plate"
+
+
+def test_legacy_composition_schema_upgrade_adds_custom_menu_columns(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy_builder_persistence_test.db"
+    _create_legacy_composition_db(db_path)
+
+    initialize_builder_sqlite(str(db_path))
+
+    with _connect(db_path) as conn:
+        columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info('builder_compositions')").fetchall()}
+
+    assert "use_custom_menu_name" in columns
+    assert "menu_name" in columns
+    assert "menu_nameTEXT" not in columns
+
+    repo = SQLiteCompositionRepository(db_path=str(db_path))
+    created = Composition(
+        composition_id="plate_upgrade",
+        composition_name="Lasagne",
+        library_group="ovrigt",
+        components=[],
+        use_custom_menu_name=True,
+        menu_name="Test menu name",
+    )
+    repo.add(created)
+
+    loaded = repo.get("plate_upgrade")
+    assert loaded is not None
+    assert loaded.use_custom_menu_name is True
+    assert loaded.menu_name == "Test menu name"
+    assert loaded.effective_menu_name == "Test menu name"
+
+
+def test_composition_menu_name_round_trips(tmp_path: Path) -> None:
+    db_path = _db_path(tmp_path)
+    repo = SQLiteCompositionRepository(db_path=db_path)
+    composition = Composition(
+        composition_id="plate_custom",
+        composition_name="Lasagne",
+        library_group="ovrigt",
+        components=[],
+        use_custom_menu_name=True,
+        menu_name="Hemlagad lasagne",
+    )
+
+    repo.add(composition)
+    loaded = repo.get("plate_custom")
+
+    assert loaded is not None
+    assert loaded.use_custom_menu_name is True
+    assert loaded.menu_name == "Hemlagad lasagne"
+    assert loaded.effective_menu_name == "Hemlagad lasagne"
 
 
 def test_menu_with_rows_persists(tmp_path: Path) -> None:

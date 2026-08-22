@@ -94,6 +94,8 @@ def initialize_builder_sqlite(path: str) -> str:
                 composition_id TEXT PRIMARY KEY,
                 composition_name TEXT NOT NULL,
                 library_group TEXT NULL,
+                use_custom_menu_name INTEGER NOT NULL DEFAULT 0,
+                menu_name TEXT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -235,6 +237,17 @@ def initialize_builder_sqlite(path: str) -> str:
             conn.execute("ALTER TABLE component_details ADD COLUMN long_description_text TEXT NOT NULL DEFAULT ''")
         if "calculation_rows_json" not in details_columns:
             conn.execute("ALTER TABLE component_details ADD COLUMN calculation_rows_json TEXT NOT NULL DEFAULT '[]'")
+
+        composition_columns = {
+            str(row["name"])
+            for row in conn.execute("PRAGMA table_info('builder_compositions')").fetchall()
+        }
+        if "use_custom_menu_name" not in composition_columns:
+            conn.execute(
+                "ALTER TABLE builder_compositions ADD COLUMN use_custom_menu_name INTEGER NOT NULL DEFAULT 0"
+            )
+        if "menu_name" not in composition_columns:
+            conn.execute("ALTER TABLE builder_compositions ADD COLUMN menu_name TEXT NULL")
     return db_path
 
 
@@ -637,8 +650,14 @@ class SQLiteCompositionRepository:
                 raise ValueError(f"composition already exists: {composition.composition_id}")
 
             conn.execute(
-                "INSERT INTO builder_compositions (composition_id, composition_name, library_group) VALUES (?, ?, ?)",
-                (composition.composition_id, composition.composition_name, composition.library_group),
+                "INSERT INTO builder_compositions (composition_id, composition_name, library_group, use_custom_menu_name, menu_name) VALUES (?, ?, ?, ?, ?)",
+                (
+                    composition.composition_id,
+                    composition.composition_name,
+                    composition.library_group,
+                    1 if composition.use_custom_menu_name else 0,
+                    composition.menu_name,
+                ),
             )
             for component in list(composition.components or []):
                 conn.execute(
@@ -686,6 +705,8 @@ class SQLiteCompositionRepository:
                 )
                 for item in components
             ],
+            use_custom_menu_name=_to_bool(row["use_custom_menu_name"]),
+            menu_name=row["menu_name"],
         )
 
     def list_all(self) -> list[Composition]:
@@ -707,8 +728,14 @@ class SQLiteCompositionRepository:
     def update(self, composition: Composition) -> None:
         with _connect(self.db_path) as conn:
             result = conn.execute(
-                "UPDATE builder_compositions SET composition_name = ?, library_group = ? WHERE composition_id = ?",
-                (composition.composition_name, composition.library_group, composition.composition_id),
+                "UPDATE builder_compositions SET composition_name = ?, library_group = ?, use_custom_menu_name = ?, menu_name = ? WHERE composition_id = ?",
+                (
+                    composition.composition_name,
+                    composition.library_group,
+                    1 if composition.use_custom_menu_name else 0,
+                    composition.menu_name,
+                    composition.composition_id,
+                ),
             )
             if result.rowcount == 0:
                 raise ValueError(f"composition not found: {composition.composition_id}")
