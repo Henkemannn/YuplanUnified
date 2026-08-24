@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-24
 
 # Planera 2.0 Architecture Lock
 
@@ -43,14 +43,21 @@ Do not hardcode gluten, lactose, timbal, department, Alt1, Alt2, crew, shift, VI
 Those are adapter and application concepts.
 
 ## Planning Slice
-A thin orchestration concept representing one actual service or Dish context plus demand and destinations that must be supplied.
-Do not turn Planning Slice into a large duplicate domain model.
+A thin orchestration and input concept representing one actual service or Dish context plus demand and destinations that must be supplied.
+It is not a new canonical persistence model or source of truth.
+Do not create a parallel persistent Planning Slice database or domain unless a future locked decision explicitly requires it.
 
 Planera Core input should remain generic around:
 - baseline and demand
 - units and destinations
 - deviations, requirements, and variants
 - context and references
+
+## Production Requirement Traceability
+Production Requirement must retain stable references or identity back to the context that produced it where available.
+Examples of references may include service or event, menu or publication, Dish or composition_id, destination or unit, and business context identifiers.
+These references exist for traceability and downstream consumers such as recipe scaling, prep, freezer, history, and analytics.
+Planera does not take ownership of the referenced Builder or business objects.
 
 Planera Core output must be capable of expressing:
 - what production requirement the result belongs to
@@ -67,7 +74,7 @@ Planera Core output must be capable of expressing:
 - Planera calculates normal quantity plus adapted production quantity and destination breakdown.
 
 Example user-facing result:
-Kottbullar:
+Köttbullar:
 87 standard portions.
 2 gluten adaptations -> Department A.
 3 lactose adaptations -> Departments B and C.

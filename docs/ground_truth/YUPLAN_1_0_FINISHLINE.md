@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-24
 
 # Yuplan 1.0 Finishline
 
@@ -17,7 +17,7 @@ Close the shared Builder/Menu/Offshore seam.
 
 ## Immediate Remaining Menu/Offshore Seam
 - user-scope OffshoreWorkMenuDecision.
-- Work Menu > "Aendra raett".
+- Work Menu > "Ändra rätt".
 - choose a real scoped canonical Builder Dish by composition_id.
 - create a new canonical Dish through the canonical Builder flow.
 - no duplicate Offshore Dish library or editor.
@@ -27,15 +27,17 @@ Close the shared Builder/Menu/Offshore seam.
 Yuplan Kommun 1.0 - Ready for Pilot.
 
 Order:
-1. Planera 2.0 Architecture Lock.
-2. Portal Foundation / Avdelningsportal consolidation.
-3. Kommun -> Planera 2.0 shadow/parity integration.
-4. Planera 2.0 becomes Kommun production calculation after parity passes.
-5. Finish Avdelningsportal.
-6. iPad / auth / print / operational polish.
-7. full Kommun end-to-end acceptance: Builder -> Published Menu -> Department Portal/menu choice -> demand -> Planera 2.0 -> kitchen/production/packing output.
-8. Kommun 1.0 Ready for Pilot.
-9. Return main development focus to Offshore 1.0.
+1. Close remaining Menu/Offshore seam.
+2. Ground Truth / Planera 2.0 Architecture Lock - COMPLETE.
+3. Portal Foundation / Avdelningsportal canonical-path consolidation.
+4. Define and verify Planera 2.0 production contracts needed for Kommun integration.
+5. Kommun -> Planera 2.0 shadow/parity integration.
+6. Planera 2.0 becomes Kommun production calculation after parity acceptance.
+7. Finish Avdelningsportal.
+8. iPad/auth/print/operational polish.
+9. Full Kommun end-to-end acceptance: Builder -> Published Menu -> Department Portal/menu choice -> effective demand/requirements -> Planera 2.0 -> production/packing output.
+10. Kommun 1.0 Ready for Pilot.
+11. Return main development focus to Offshore 1.0.
 
 Do not list H3 Offshore Bibliotek as a blocker for Kommun launch.
 

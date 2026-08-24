@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-24
 
 # Portals Architecture Lock
 
@@ -14,6 +14,7 @@ Create or reuse a common Portal Foundation where practical:
 - week and day navigation
 - information and messages
 - canonical menu identity and data consumption
+- portals consume the published or external menu truth.
 
 ## Avdelningsportal
 - scoped to a department.
@@ -26,8 +27,11 @@ Create or reuse a common Portal Foundation where practical:
 - menu choice is a legitimate portal-owned user action.
 - preserve separation between explicit department menu choice and kitchen operational Alt2 or drift state.
 - reuse useful existing portal service, API, and UI work rather than restart.
+- menu-facing Dish names use effective_menu_name.
+- portals must not read a cook's private Work Menu or COW Dish as external menu truth.
+- operational or private Work Menu changes only become external portal truth if they are deliberately promoted or published through the proper publication flow.
 
-## Messportal
+## Mässportal
 - same general Portal Foundation where useful.
 - published menu.
 - allergens and food information.
