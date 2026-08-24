@@ -389,6 +389,12 @@ class OffshoreEffectiveMenuService:
                     OffshoreWorkMenuDecision.site_id == str(site_id),
                     OffshoreWorkMenuDecision.service_event_id.in_([int(event.id) for event in events]),
                 )
+                .filter(
+                    OffshoreWorkMenuDecision.owner_user_id.is_(None)
+                    if actor is None
+                    else OffshoreWorkMenuDecision.owner_user_id == int(actor.user_id)
+                )
+                .order_by(OffshoreWorkMenuDecision.updated_at.asc(), OffshoreWorkMenuDecision.id.asc())
                 .all()
             )
             decisions_by_event_and_track = {(int(row.service_event_id), str(row.menu_track_key)): row for row in decision_rows}

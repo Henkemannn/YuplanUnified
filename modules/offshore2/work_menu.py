@@ -367,6 +367,8 @@ class OffshoreWorkMenuService:
         try:
             if tenant_id is None or not site_id:
                 raise ValueError("offshore.validation.missing_context")
+            if actor_user_id is None:
+                raise ValueError("offshore.validation.missing_actor")
             event = (
                 db.query(OffshoreServiceEvent)
                 .filter(
@@ -427,6 +429,7 @@ class OffshoreWorkMenuService:
                     OffshoreWorkMenuDecision.site_id == str(site_id),
                     OffshoreWorkMenuDecision.service_event_id == int(service_event_id),
                     OffshoreWorkMenuDecision.menu_track_key == track_key,
+                    OffshoreWorkMenuDecision.owner_user_id == int(actor_user_id),
                 )
                 .first()
             )
@@ -436,6 +439,7 @@ class OffshoreWorkMenuService:
                     site_id=str(site_id),
                     service_event_id=int(service_event_id),
                     menu_track_key=track_key,
+                    owner_user_id=int(actor_user_id),
                     decision_type=decision_key,
                     selected_builder_composition_id=composition_id or None,
                     free_text=text_value or None,
@@ -471,6 +475,8 @@ class OffshoreWorkMenuService:
         try:
             if tenant_id is None or not site_id:
                 raise ValueError("offshore.validation.missing_context")
+            if actor_user_id is None:
+                raise ValueError("offshore.validation.missing_actor")
             event = (
                 db.query(OffshoreServiceEvent)
                 .filter(
@@ -491,6 +497,7 @@ class OffshoreWorkMenuService:
                     OffshoreWorkMenuDecision.site_id == str(site_id),
                     OffshoreWorkMenuDecision.service_event_id == int(service_event_id),
                     OffshoreWorkMenuDecision.menu_track_key == track_key,
+                    OffshoreWorkMenuDecision.owner_user_id == int(actor_user_id),
                 )
                 .first()
             )

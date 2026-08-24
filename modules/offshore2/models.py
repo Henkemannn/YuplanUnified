@@ -286,6 +286,7 @@ class OffshoreWorkMenuDecision(Base):
     decision_type: Mapped[str] = mapped_column(String(32), nullable=False)
     selected_builder_composition_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     free_text: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     source_publication_pin_id: Mapped[str | None] = mapped_column(
         ForeignKey("commun_builder_publication_pins.id", ondelete="SET NULL"), nullable=True
     )
@@ -297,8 +298,22 @@ class OffshoreWorkMenuDecision(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow, server_default="CURRENT_TIMESTAMP")
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "site_id", "service_event_id", "menu_track_key", name="uq_offshore_work_menu_decisions_event_track"),
+        UniqueConstraint(
+            "tenant_id",
+            "site_id",
+            "service_event_id",
+            "menu_track_key",
+            "owner_user_id",
+            name="uq_offshore_work_menu_decisions_event_track_owner",
+        ),
         Index("ix_offshore_work_menu_decisions_tenant_site_event", "tenant_id", "site_id", "service_event_id"),
+        Index(
+            "ix_offshore_work_menu_decisions_tenant_site_event_owner",
+            "tenant_id",
+            "site_id",
+            "service_event_id",
+            "owner_user_id",
+        ),
         Index("ix_offshore_work_menu_decisions_tenant_site_track", "tenant_id", "site_id", "menu_track_key"),
         CheckConstraint("length(trim(menu_track_key)) > 0", name="ck_offshore_work_menu_decisions_menu_track_key_not_empty"),
         CheckConstraint(

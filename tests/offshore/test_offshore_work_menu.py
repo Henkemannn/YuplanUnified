@@ -3,6 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime, time
 
+import pytest
+
 from core.app_factory import create_app
 from core.builder.library_scope import ActorContext
 from core.builder.library_scope import ObjectScope
@@ -175,6 +177,15 @@ def _seed_period(app, *, tenant_id: int, site_id: str):
         generation = period_service.create_work_period_from_template(tenant_id=tenant_id, site_id=site_id, period_template_id=template.id, starts_at=datetime.combine(TEST_WORK_MENU_DAY, time(8, 0), tzinfo=UTC), menu_cycle_id=cycle.id, name="Week")
         period_service.update_work_period(tenant_id=tenant_id, site_id=site_id, period_id=generation.work_period.id, payload={"status": "active"})
         return generation.work_period.id
+
+
+def _find_track(vm, track_key: str):
+    for day in vm.get("days") or ():
+        for meal in day.meals:
+            for track in meal.tracks:
+                if track.track_key == track_key:
+                    return track
+    return None
 
 
 def test_offshore_work_menu_renders_tracks_and_saves_decision():
@@ -473,6 +484,249 @@ def test_offshore_work_menu_selected_builder_override_uses_selected_identity_and
     assert selected_track.builder_bridge["composition_id"] == "demo_offshore_fisk"
     assert selected_track.builder_bridge["composition_name"] == "Demo Offshore Fisk"
     assert [component["component_id"] for component in selected_track.builder_bridge["components"]] == ["demo_offshore_fisk"]
+
+
+def test_offshore_work_menu_decisions_are_owner_scoped_and_reset_is_personal():
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    _seed_builder_menu(app)
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
+    period_id = _seed_period(app, tenant_id=1, site_id=site_id)
+    with app.app_context():
+        events = period_service.list_service_events(1, site_id, period_id)
+        menu_context_service.sync_service_event_context(tenant_id=1, site_id=site_id, work_period_id=period_id, service_event_id=events[0].id)
+
+        with pytest.raises(ValueError):
+            offshore_work_menu_service.save_decision(
+                tenant_id=1,
+                site_id=site_id,
+                work_period_id=period_id,
+                service_event_id=events[0].id,
+                menu_track_key="fisk",
+                decision_type="use_free_text",
+                selected_builder_composition_id=None,
+                free_text="missing actor",
+                actor_user_id=None,
+            )
+        with pytest.raises(ValueError):
+            offshore_work_menu_service.reset_decision(
+                tenant_id=1,
+                site_id=site_id,
+                work_period_id=period_id,
+                service_event_id=events[0].id,
+                menu_track_key="fisk",
+                actor_user_id=None,
+            )
+
+        decision_a = offshore_work_menu_service.save_decision(
+            tenant_id=1,
+            site_id=site_id,
+            work_period_id=period_id,
+            service_event_id=events[0].id,
+            menu_track_key="fisk",
+            decision_type="use_free_text",
+            selected_builder_composition_id=None,
+            free_text="Cook A",
+            actor_user_id=20,
+        )
+        decision_b = offshore_work_menu_service.save_decision(
+            tenant_id=1,
+            site_id=site_id,
+            work_period_id=period_id,
+            service_event_id=events[0].id,
+            menu_track_key="fisk",
+            decision_type="use_free_text",
+            selected_builder_composition_id=None,
+            free_text="Cook B",
+            actor_user_id=30,
+        )
+        decision_a_updated = offshore_work_menu_service.save_decision(
+            tenant_id=1,
+            site_id=site_id,
+            work_period_id=period_id,
+            service_event_id=events[0].id,
+            menu_track_key="fisk",
+            decision_type="use_free_text",
+            selected_builder_composition_id=None,
+            free_text="Cook A updated",
+            actor_user_id=20,
+        )
+        legacy_null_owner = OffshoreWorkMenuDecision(
+            tenant_id=1,
+            site_id=site_id,
+            service_event_id=events[0].id,
+            menu_track_key="soppa",
+            decision_type="use_free_text",
+            free_text="Legacy null owner",
+            owner_user_id=None,
+            source_publication_pin_id=decision_a.source_publication_pin_id,
+            source_publication_year=decision_a.source_publication_year,
+            source_publication_week=decision_a.source_publication_week,
+            created_by_user_id=None,
+            updated_by_user_id=None,
+        )
+        db = get_session()
+        try:
+            db.add(legacy_null_owner)
+            db.commit()
+        finally:
+            db.close()
+
+    assert decision_a.owner_user_id == 20
+    assert decision_a.created_by_user_id == 20
+    assert decision_a.updated_by_user_id == 20
+    assert decision_b.owner_user_id == 30
+    assert decision_b.created_by_user_id == 30
+    assert decision_b.updated_by_user_id == 30
+    assert decision_a_updated.owner_user_id == 20
+    assert decision_a_updated.created_by_user_id == 20
+    assert decision_a_updated.updated_by_user_id == 20
+    assert decision_a_updated.free_text == "Cook A updated"
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=20)):
+        vm_a = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=20,
+        )
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=30)):
+        vm_b = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=30,
+        )
+
+    track_a = _find_track(vm_a, "fisk")
+    track_b = _find_track(vm_b, "fisk")
+    assert track_a is not None
+    assert track_b is not None
+    assert track_a.effective_title == "Cook A updated"
+    assert track_b.effective_title == "Cook B"
+
+    reset_result = offshore_work_menu_service.reset_decision(
+        tenant_id=1,
+        site_id=site_id,
+        work_period_id=period_id,
+        service_event_id=events[0].id,
+        menu_track_key="fisk",
+        actor_user_id=20,
+    )
+    assert reset_result is True
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=20)):
+        vm_a_after_reset = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=20,
+        )
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=30)):
+        vm_b_after_reset = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=30,
+        )
+
+    track_a_after_reset = _find_track(vm_a_after_reset, "fisk")
+    track_b_after_reset = _find_track(vm_b_after_reset, "fisk")
+    assert track_a_after_reset is not None
+    assert track_b_after_reset is not None
+    assert track_a_after_reset.effective_title == track_a_after_reset.published_title
+    assert track_b_after_reset.effective_title == "Cook B"
+
+    with app.app_context():
+        db = get_session()
+        try:
+            rows = db.query(OffshoreWorkMenuDecision).filter_by(tenant_id=1, site_id=site_id, service_event_id=events[0].id, menu_track_key="fisk").all()
+            owners = {(row.owner_user_id, row.free_text) for row in rows}
+        finally:
+            db.close()
+
+    assert (30, "Cook B") in owners
+    assert all(owner_user_id != 20 for owner_user_id, _ in owners)
+
+
+def test_offshore_work_menu_legacy_null_owner_decision_is_anonymous_to_authenticated_cooks():
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    _seed_builder_menu(app)
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
+    period_id = _seed_period(app, tenant_id=1, site_id=site_id)
+    with app.app_context():
+        events = period_service.list_service_events(1, site_id, period_id)
+        menu_context_service.sync_service_event_context(tenant_id=1, site_id=site_id, work_period_id=period_id, service_event_id=events[0].id)
+        db = get_session()
+        try:
+            db.add(
+                OffshoreWorkMenuDecision(
+                    tenant_id=1,
+                    site_id=site_id,
+                    service_event_id=events[0].id,
+                    menu_track_key="soppa",
+                    decision_type="use_free_text",
+                    free_text="Legacy null owner",
+                    owner_user_id=None,
+                    source_publication_pin_id=None,
+                    source_publication_year=2026,
+                    source_publication_week=34,
+                    created_by_user_id=None,
+                    updated_by_user_id=None,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=20)):
+        vm_actor = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=20,
+        )
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook")):
+        vm_anonymous = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=None,
+        )
+
+    actor_track = _find_track(vm_actor, "soppa")
+    anonymous_track = _find_track(vm_anonymous, "soppa")
+    assert actor_track is not None
+    assert anonymous_track is not None
+    assert actor_track.effective_title == actor_track.published_title
+    assert anonymous_track.effective_title == "Legacy null owner"
 
 
 def test_offshore_work_menu_reset_deletes_decision():
