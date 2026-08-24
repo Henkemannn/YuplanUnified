@@ -134,6 +134,27 @@ def _resolve_builder_composition_title(builder_flow, composition_id: str | None)
     return _safe_title(getattr(composition, "composition_name", None))
 
 
+def _build_builder_composition_options(builder_flow, *, actor: ActorContext | None = None) -> tuple[dict[str, object], ...]:
+    if builder_flow is None:
+        return ()
+    try:
+        options: list[dict[str, object]] = []
+        for composition in builder_flow.list_compositions(actor=actor):
+            composition_id = _clean(getattr(composition, "composition_id", None))
+            if not composition_id:
+                continue
+            options.append(
+                {
+                    "value": composition_id,
+                    "label": _safe_title(getattr(composition, "composition_name", None)) or composition_id,
+                    "library_group": getattr(composition, "library_group", None),
+                }
+            )
+        return tuple(sorted(options, key=lambda item: (str(item["label"]).lower(), str(item["value"]))))
+    except Exception:
+        return ()
+
+
 @dataclass(frozen=True, slots=True)
 class OffshoreWorkMenuTrackView:
     track_key: str
@@ -352,7 +373,7 @@ class OffshoreWorkMenuService:
             locale=locale,
             actor=actor,
         )
-        return _build_work_menu_view_model_from_context(
+        vm = _build_work_menu_view_model_from_context(
             context=context,
             labels=labels,
             locale=locale,
@@ -361,6 +382,20 @@ class OffshoreWorkMenuService:
             tenant_name=tenant_name,
             site_name=site_name,
         )
+        builder_flow = None
+        if has_app_context():
+            builder_flow = current_app.extensions.get("builder_flow")
+            if builder_flow is None:
+                try:
+                    from core.builder_api import _get_builder_flow
+
+                    builder_flow = _get_builder_flow()
+                except Exception:
+                    builder_flow = None
+        composition_options = _build_builder_composition_options(builder_flow, actor=actor)
+        if composition_options:
+            vm["composition_options"] = composition_options
+        return vm
 
     def save_decision(self, *, tenant_id: int | None, site_id: str | None, work_period_id: int, service_event_id: int, menu_track_key: str, decision_type: str, selected_builder_composition_id: str | None, free_text: str | None, actor_user_id: int | None = None) -> OffshoreWorkMenuDecision:
         db = get_session()

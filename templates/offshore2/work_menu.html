@@ -100,6 +100,7 @@
                       <div
                         class="offshore-work-menu-track-row"
                         data-work-menu-track-row
+                        data-day-label="{{ day.label }}"
                         data-service-event-id="{{ meal.service_event_id }}"
                         data-service-date="{{ day.local_date }}"
                         data-meal-slot="{{ meal.meal_slot }}"
@@ -119,7 +120,6 @@
                         data-free-text="{{ track.free_text or '' }}"
                         data-row-state="{{ track.row_state }}"
                         data-badge-label="{{ badge or '' }}"
-                        style="grid-template-columns: minmax(44px, 64px) minmax(0, 1fr) auto auto;"
                       >
                         <span class="offshore-work-menu-track-row__track">{{ track.track_label or vm.labels.get('offshore.work_menu.track.unknown', track.track_key) }}</span>
                         <button
@@ -127,12 +127,11 @@
                           class="offshore-work-menu-track-row__title"
                           data-work-menu-track-open
                           {% if track.builder_bridge %}data-work-menu-builder-open{% endif %}
-                          style="background: transparent; border: 0; padding: 0; text-align: left; cursor: pointer;"
                         >{{ track.effective_title or track.published_title or vm.labels['offshore.work_menu.no_dish'] }}</button>
                         {% if vm.is_managed_role and track.builder_bridge %}
                           <button
                             type="button"
-                            class="yp-button yp-button-secondary offshore-work-menu-track-row__edit"
+                            class="offshore-work-menu-track-row__edit"
                             data-work-menu-track-edit
                             aria-label="Ändra rätt"
                             title="Ändra rätt"
@@ -176,7 +175,7 @@
             <button type="button" class="offshore-work-menu-modal__close" aria-label="{{ vm.labels['offshore.work_menu.close'] }}" data-work-menu-modal-close>×</button>
           </div>
 
-          <div class="offshore-work-menu-modal__summary">
+          <div class="offshore-work-menu-modal__summary" data-work-menu-legacy-summary>
             <div class="offshore-work-menu-modal__summary-line" data-work-menu-modal-summary></div>
             <div class="offshore-work-menu-modal__facts">
               <div>
@@ -195,72 +194,109 @@
             <div class="offshore-work-menu-modal__badges" data-work-menu-modal-badges></div>
           </div>
 
-          <section class="offshore-work-menu-modal__builder-bridge" data-work-menu-builder-bridge hidden>
-            <div class="offshore-work-menu-modal__builder-bridge-header">
-              <div>
-                <p class="offshore-work-menu-modal__fact-label">Builder-komposition</p>
-                <strong data-work-menu-builder-bridge-title></strong>
+          <section class="offshore-work-menu-picker" data-work-menu-dish-picker hidden>
+            <div class="offshore-work-menu-picker__context" data-work-menu-picker-context></div>
+            <div class="offshore-work-menu-picker__current" data-work-menu-picker-current></div>
+            <div class="offshore-work-menu-picker__confirm" data-work-menu-picker-confirm hidden>
+              <p class="offshore-work-menu-picker__confirm-text" data-work-menu-picker-confirm-text>Byt rätt?</p>
+              <p class="offshore-work-menu-picker__confirm-current" data-work-menu-picker-confirm-current></p>
+              <p class="offshore-work-menu-picker__confirm-selected" data-work-menu-picker-confirm-selected></p>
+              <div class="offshore-work-menu-picker__confirm-meta" data-work-menu-picker-confirm-meta></div>
+              <div class="offshore-work-menu-picker__actions">
+                <button class="yp-button yp-button-primary" type="button" data-work-menu-picker-submit>Byt rätt</button>
+                <button class="yp-button yp-button-secondary" type="button" data-work-menu-picker-back>Tillbaka</button>
               </div>
-              <button class="yp-button yp-button-secondary" type="button" data-work-menu-builder-bridge-link>Öppna i Menu Builder</button>
             </div>
-            <p class="offshore-work-menu-modal__builder-bridge-summary" data-work-menu-builder-bridge-summary></p>
-            <ul class="offshore-work-menu-modal__builder-bridge-components" data-work-menu-builder-bridge-components></ul>
+            <div class="offshore-work-menu-picker__browse" data-work-menu-picker-browse>
+              <label class="offshore-field offshore-work-menu-picker__search">
+                <span class="offshore-field__label">Sök rätt...</span>
+                <input class="offshore-input" type="search" placeholder="Sök rätt..." data-work-menu-picker-search />
+              </label>
+              <div class="offshore-work-menu-picker__categories" data-work-menu-picker-categories></div>
+              <section class="offshore-work-menu-picker__section" data-work-menu-picker-relevant-section>
+                <h3 class="offshore-work-menu-picker__section-title">Relevanta rätter</h3>
+                <div class="offshore-work-menu-picker__results" data-work-menu-picker-relevant></div>
+              </section>
+              <section class="offshore-work-menu-picker__section" data-work-menu-picker-results-section>
+                <h3 class="offshore-work-menu-picker__section-title" data-work-menu-picker-results-title>Resultat</h3>
+                <div class="offshore-work-menu-picker__results" data-work-menu-picker-results></div>
+              </section>
+              <div class="offshore-work-menu-picker__footer">
+                <button class="yp-button yp-button-ghost" type="button" data-work-menu-picker-reset>Återställ till <span data-work-menu-picker-reset-title></span></button>
+                <button class="yp-button yp-button-secondary" type="button" data-dish-picker-create-new>+ Skapa ny rätt</button>
+              </div>
+            </div>
           </section>
 
-          {% if vm.is_managed_role %}
-            <form class="offshore-work-menu-modal__form" method="post" action="{{ url_for('offshore2.save_work_menu_decision') }}" data-work-menu-save-form>
-              {{ csrf_token_input()|safe }}
-              <input type="hidden" name="work_period_id" value="{{ vm.work_period.id }}" />
-              <input type="hidden" name="service_event_id" value="" data-work-menu-field="service_event_id" />
-              <input type="hidden" name="menu_track_key" value="" data-work-menu-field="menu_track_key" />
-              <input type="hidden" name="service_date" value="" data-work-menu-field="service_date" />
-
-              <div class="offshore-form__grid offshore-form__grid--two offshore-work-menu-modal__decision-grid">
-                <label class="offshore-field" data-work-menu-field-wrapper="decision-type">
-                  <span class="offshore-field__label">{{ vm.labels['offshore.work_menu.action.use_published'] }}</span>
-                  <select class="offshore-input" name="decision_type" data-work-menu-decision-type>
-                    <option value="use_published">{{ vm.labels['offshore.work_menu.action.use_published'] }}</option>
-                    <option value="use_builder_composition">{{ vm.labels['offshore.work_menu.action.choose_builder'] }}</option>
-                    <option value="use_free_text">{{ vm.labels['offshore.work_menu.action.write_free_text'] }}</option>
-                  </select>
-                </label>
-                <label class="offshore-field" data-work-menu-field-wrapper="builder">
-                  <span class="offshore-field__label">Builder-komposition</span>
-                  <select class="offshore-input" name="selected_builder_composition_id" data-work-menu-builder-select>
-                    <option value="">Välj komposition</option>
-                    {% for option in vm.composition_options %}
-                      <option value="{{ option.value }}">{{ option.label }}</option>
-                    {% endfor %}
-                  </select>
-                </label>
+          <section class="offshore-work-menu-modal__legacy" data-work-menu-legacy-panel hidden>
+            <section class="offshore-work-menu-modal__builder-bridge" data-work-menu-builder-bridge hidden>
+              <div class="offshore-work-menu-modal__builder-bridge-header">
+                <div>
+                  <p class="offshore-work-menu-modal__fact-label">Builder-komposition</p>
+                  <strong data-work-menu-builder-bridge-title></strong>
+                </div>
+                <button class="yp-button yp-button-secondary" type="button" data-work-menu-builder-bridge-link>Öppna i Menu Builder</button>
               </div>
+              <p class="offshore-work-menu-modal__builder-bridge-summary" data-work-menu-builder-bridge-summary></p>
+              <ul class="offshore-work-menu-modal__builder-bridge-components" data-work-menu-builder-bridge-components></ul>
+            </section>
 
-              <label class="offshore-field" data-work-menu-field-wrapper="free-text">
-                <span class="offshore-field__label">{{ vm.labels['offshore.work_menu.action.write_free_text'] }}</span>
-                <input class="offshore-input" type="text" name="free_text" value="" placeholder="{{ vm.labels['offshore.work_menu.no_dish'] }}" data-work-menu-free-text />
-              </label>
+            {% if vm.is_managed_role %}
+              <form class="offshore-work-menu-modal__form" method="post" action="{{ url_for('offshore2.save_work_menu_decision') }}" data-work-menu-save-form>
+                {{ csrf_token_input()|safe }}
+                <input type="hidden" name="work_period_id" value="{{ vm.work_period.id }}" />
+                <input type="hidden" name="service_event_id" value="" data-work-menu-field="service_event_id" />
+                <input type="hidden" name="menu_track_key" value="" data-work-menu-field="menu_track_key" />
+                <input type="hidden" name="service_date" value="" data-work-menu-field="service_date" />
 
-              <div class="offshore-work-menu-modal__actions">
-                <button class="yp-button yp-button-primary" type="submit">{{ vm.labels['offshore.work_menu.save'] }}</button>
-                <button class="yp-button yp-button-secondary" type="button" data-work-menu-modal-close>{{ vm.labels['offshore.work_menu.cancel'] }}</button>
+                <div class="offshore-form__grid offshore-form__grid--two offshore-work-menu-modal__decision-grid">
+                  <label class="offshore-field" data-work-menu-field-wrapper="decision-type">
+                    <span class="offshore-field__label">{{ vm.labels['offshore.work_menu.action.use_published'] }}</span>
+                    <select class="offshore-input" name="decision_type" data-work-menu-decision-type>
+                      <option value="use_published">{{ vm.labels['offshore.work_menu.action.use_published'] }}</option>
+                      <option value="use_builder_composition">{{ vm.labels['offshore.work_menu.action.choose_builder'] }}</option>
+                      <option value="use_free_text">{{ vm.labels['offshore.work_menu.action.write_free_text'] }}</option>
+                    </select>
+                  </label>
+                  <label class="offshore-field" data-work-menu-field-wrapper="builder">
+                    <span class="offshore-field__label">Builder-komposition</span>
+                    <select class="offshore-input" name="selected_builder_composition_id" data-work-menu-builder-select>
+                      <option value="">Välj komposition</option>
+                      {% for option in vm.composition_options %}
+                        <option value="{{ option.value }}">{{ option.label }}</option>
+                      {% endfor %}
+                    </select>
+                  </label>
+                </div>
+
+                <label class="offshore-field" data-work-menu-field-wrapper="free-text">
+                  <span class="offshore-field__label">{{ vm.labels['offshore.work_menu.action.write_free_text'] }}</span>
+                  <input class="offshore-input" type="text" name="free_text" value="" placeholder="{{ vm.labels['offshore.work_menu.no_dish'] }}" data-work-menu-free-text />
+                </label>
+
+                <div class="offshore-work-menu-modal__actions">
+                  <button class="yp-button yp-button-primary" type="submit">{{ vm.labels['offshore.work_menu.save'] }}</button>
+                  <button class="yp-button yp-button-secondary" type="button" data-work-menu-modal-close>{{ vm.labels['offshore.work_menu.cancel'] }}</button>
+                </div>
+              </form>
+
+              <form class="offshore-work-menu-modal__reset-form" method="post" action="{{ url_for('offshore2.reset_work_menu_decision') }}" data-work-menu-reset-form>
+                {{ csrf_token_input()|safe }}
+                <input type="hidden" name="work_period_id" value="{{ vm.work_period.id }}" data-work-menu-field="work_period_id" />
+                <input type="hidden" name="service_event_id" value="" data-work-menu-field="service_event_id" />
+                <input type="hidden" name="menu_track_key" value="" data-work-menu-field="menu_track_key" />
+                <input type="hidden" name="service_date" value="" data-work-menu-field="service_date" />
+                <button class="yp-button yp-button-ghost" type="submit">Återställ publicerad rätt</button>
+              </form>
+            {% else %}
+              <div class="offshore-work-menu-modal__readonly">
+                <span class="yp-pill">Read only</span>
               </div>
-            </form>
-
-            <form class="offshore-work-menu-modal__reset-form" method="post" action="{{ url_for('offshore2.reset_work_menu_decision') }}" data-work-menu-reset-form>
-              {{ csrf_token_input()|safe }}
-              <input type="hidden" name="work_period_id" value="{{ vm.work_period.id }}" data-work-menu-field="work_period_id" />
-              <input type="hidden" name="service_event_id" value="" data-work-menu-field="service_event_id" />
-              <input type="hidden" name="menu_track_key" value="" data-work-menu-field="menu_track_key" />
-              <input type="hidden" name="service_date" value="" data-work-menu-field="service_date" />
-              <button class="yp-button yp-button-ghost" type="submit">Återställ publicerad rätt</button>
-            </form>
-          {% else %}
-            <div class="offshore-work-menu-modal__readonly">
-              <span class="yp-pill">Read only</span>
-            </div>
-          {% endif %}
+            {% endif %}
+          </section>
         </div>
       </div>
+      <script type="application/json" data-work-menu-composition-options>{{ vm.composition_options | tojson }}</script>
       <section class="offshore-work-menu-builder-host" hidden aria-hidden="true" data-work-menu-builder-host>
         <div class="offshore-work-menu-builder-host__backdrop" aria-hidden="true"></div>
         <div class="offshore-work-menu-builder-host__panel" role="dialog" aria-modal="true" aria-label="Builder host">

@@ -9,6 +9,36 @@
     return Array.from(new Set((values || []).map(normalizeKey).filter(Boolean)));
   }
 
+  function formatGroupLabel(value) {
+    const raw = String(value || '').trim();
+    if (!raw) {
+      return '';
+    }
+    return raw
+      .replace(/[_-]+/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  function normalizePickerGroup(value) {
+    const key = normalizeKey(value);
+    if (key === 'kott' || key === 'fisk' || key === 'dessert' || key === 'ovrigt') {
+      return key;
+    }
+    return 'ovrigt';
+  }
+
+  function formatPickerGroupLabel(value) {
+    return {
+      kott: 'Kött',
+      fisk: 'Fisk',
+      dessert: 'Dessert',
+      ovrigt: 'Övrigt',
+    }[normalizePickerGroup(value)] || 'Övrigt';
+  }
+
   function readStoredKeys(storageKey) {
     if (!storageKey || !window.localStorage) {
       return null;
@@ -63,6 +93,41 @@
     const modalBridgeSummary = root.querySelector('[data-work-menu-builder-bridge-summary]');
     const modalBridgeComponents = root.querySelector('[data-work-menu-builder-bridge-components]');
     const modalBridgeLink = root.querySelector('[data-work-menu-builder-bridge-link]');
+    const picker = root.querySelector('[data-work-menu-dish-picker]');
+    const pickerContext = root.querySelector('[data-work-menu-picker-context]');
+    const pickerCurrent = root.querySelector('[data-work-menu-picker-current]');
+    const pickerSearch = root.querySelector('[data-work-menu-picker-search]');
+    const pickerCategories = root.querySelector('[data-work-menu-picker-categories]');
+    const pickerRelevantSection = root.querySelector('[data-work-menu-picker-relevant-section]');
+    const pickerRelevant = root.querySelector('[data-work-menu-picker-relevant]');
+    const pickerBrowse = root.querySelector('[data-work-menu-picker-browse]');
+    const pickerResultsSection = root.querySelector('[data-work-menu-picker-results-section]');
+    const pickerResultsTitle = root.querySelector('[data-work-menu-picker-results-title]');
+    const pickerResults = root.querySelector('[data-work-menu-picker-results]');
+    const pickerConfirm = root.querySelector('[data-work-menu-picker-confirm]');
+    const pickerConfirmText = root.querySelector('[data-work-menu-picker-confirm-text]');
+    const pickerConfirmCurrent = root.querySelector('[data-work-menu-picker-confirm-current]');
+    const pickerConfirmSelected = root.querySelector('[data-work-menu-picker-confirm-selected]');
+    const pickerConfirmMeta = root.querySelector('[data-work-menu-picker-confirm-meta]');
+    const pickerSubmit = root.querySelector('[data-work-menu-picker-submit]');
+    const pickerBack = root.querySelector('[data-work-menu-picker-back]');
+    const pickerReset = root.querySelector('[data-work-menu-picker-reset]');
+    const pickerResetTitle = root.querySelector('[data-work-menu-picker-reset-title]');
+    const pickerCreateNew = root.querySelector('[data-dish-picker-create-new]');
+    const legacySummary = root.querySelector('[data-work-menu-legacy-summary]');
+    const pickerSubmitDefaultLabel = pickerSubmit ? (pickerSubmit.textContent || 'Byt rätt') : 'Byt rätt';
+    const compositionOptions = (() => {
+      const script = root.querySelector('[data-work-menu-composition-options]');
+      if (!script) {
+        return [];
+      }
+      try {
+        const parsed = JSON.parse(script.textContent || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (error) {
+        return [];
+      }
+    })();
     const builderHost = root.querySelector('[data-work-menu-builder-host]');
     const builderHostFrame = root.querySelector('[data-work-menu-builder-host-frame]');
     const builderHostTitle = root.querySelector('[data-work-menu-builder-host-title]');
@@ -91,6 +156,271 @@
     let lastBuilderHostScrollY = window.scrollY || 0;
     let builderHostRuntimeReady = false;
     let pendingBuilderHostOpen = null;
+    let pickerActiveTrack = null;
+    let pickerSelectedOption = '';
+    let pickerActiveCategory = 'all';
+    let pickerSearchValue = '';
+    let pickerViewMode = 'browse';
+    let pickerSubmitting = false;
+
+    function hidePicker() {
+      if (picker) {
+        picker.hidden = true;
+      }
+      if (pickerConfirm) {
+        pickerConfirm.hidden = true;
+      }
+      pickerViewMode = 'browse';
+      if (legacySummary) {
+        legacySummary.hidden = false;
+      }
+      if (modalSummary) {
+        modalSummary.hidden = false;
+      }
+      if (modalPublished) {
+        modalPublished.hidden = false;
+      }
+      if (modalEffective) {
+        modalEffective.hidden = false;
+      }
+      if (modalSource) {
+        modalSource.hidden = false;
+      }
+      if (modalBadges) {
+        modalBadges.hidden = false;
+      }
+      pickerSubmitting = false;
+      if (pickerSubmit) {
+        pickerSubmit.disabled = false;
+        pickerSubmit.textContent = pickerSubmitDefaultLabel;
+      }
+    }
+
+    function setPickerViewMode(mode) {
+      pickerViewMode = mode === 'confirm' ? 'confirm' : 'browse';
+      const browsing = pickerViewMode === 'browse';
+      if (pickerBrowse) {
+        pickerBrowse.hidden = !browsing;
+      }
+      if (pickerSearch) {
+        pickerSearch.hidden = !browsing;
+      }
+      if (pickerCategories) {
+        pickerCategories.hidden = !browsing;
+      }
+      if (pickerRelevantSection) {
+        pickerRelevantSection.hidden = !browsing || pickerRelevantSection.hidden;
+      }
+      if (pickerResultsTitle) {
+        pickerResultsTitle.hidden = !browsing;
+      }
+      if (pickerResults) {
+        pickerResults.hidden = !browsing;
+      }
+      if (pickerReset) {
+        pickerReset.hidden = !browsing;
+      }
+      if (pickerCreateNew) {
+        pickerCreateNew.hidden = !browsing;
+      }
+      if (pickerConfirm) {
+        pickerConfirm.hidden = browsing;
+      }
+    }
+
+    function setPickerResults(items, container, emptyLabel) {
+      if (!container) {
+        return;
+      }
+      container.innerHTML = '';
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'offshore-work-menu-picker__context-line';
+        empty.textContent = emptyLabel;
+        container.appendChild(empty);
+        return;
+      }
+      items.forEach((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'offshore-work-menu-picker__result';
+        if (String(item.value) === String(pickerSelectedOption)) {
+          button.classList.add('offshore-work-menu-picker__result--selected');
+        }
+        button.dataset.dishPickerValue = String(item.value || '');
+        const title = document.createElement('div');
+        title.className = 'offshore-work-menu-picker__result-title';
+        title.textContent = item.label || item.value || 'Okänd rätt';
+        const meta = document.createElement('div');
+        meta.className = 'offshore-work-menu-picker__result-meta';
+        meta.textContent = formatPickerGroupLabel(item.library_group);
+        button.appendChild(title);
+        button.appendChild(meta);
+        container.appendChild(button);
+      });
+    }
+
+    function renderPickerCategories() {
+      if (!pickerCategories) {
+        return;
+      }
+      const groups = Array.from(new Set(compositionOptions.map((option) => normalizePickerGroup(option.library_group))));
+      const chips = [{ key: 'all', label: 'Alla' }].concat(
+        groups.map((group) => ({ key: group, label: formatPickerGroupLabel(group) })),
+      );
+      pickerCategories.innerHTML = '';
+      chips.forEach((chip) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'offshore-work-menu-picker__chip';
+        button.textContent = chip.label;
+        button.dataset.dishPickerCategory = chip.key;
+        if (chip.key === pickerActiveCategory) {
+          button.classList.add('offshore-work-menu-picker__chip--active');
+        }
+        pickerCategories.appendChild(button);
+      });
+    }
+
+    function filterCompositionOptions() {
+      const search = normalizeKey(pickerSearchValue);
+      return compositionOptions.filter((option) => {
+        const optionGroup = normalizePickerGroup(option.library_group);
+        const matchesCategory = pickerActiveCategory === 'all' || optionGroup === pickerActiveCategory;
+        if (!matchesCategory) {
+          return false;
+        }
+        if (!search) {
+          return true;
+        }
+        const haystack = [option.label, option.value, option.library_group].map(normalizeKey).join(' ');
+        return haystack.includes(search);
+      });
+    }
+
+    function renderPickerResults() {
+      if (!picker || !pickerRelevant || !pickerResults) {
+        return;
+      }
+      const filteredItems = filterCompositionOptions();
+      const searchActive = Boolean(pickerSearchValue.trim());
+      const categoryActive = pickerActiveCategory !== 'all';
+      const defaultBrowse = !searchActive && !categoryActive;
+      const relevantItems = defaultBrowse ? compositionOptions.slice(0, 4) : [];
+      setPickerResults(relevantItems, pickerRelevant, 'Inga relevanta rätter hittades.');
+      setPickerResults(defaultBrowse ? [] : filteredItems, pickerResults, 'Inga rätter matchar sökningen.');
+      if (pickerResultsTitle) {
+        pickerResultsTitle.textContent = searchActive || categoryActive ? 'Resultat' : 'Resultat';
+      }
+      if (pickerRelevantSection) {
+        pickerRelevantSection.hidden = pickerViewMode === 'confirm' || !defaultBrowse || relevantItems.length === 0;
+      }
+      if (pickerResultsSection) {
+        pickerResultsSection.hidden = pickerViewMode === 'confirm' || defaultBrowse;
+      }
+    }
+
+    function updatePickerConfirm() {
+      if (!pickerConfirm || !pickerConfirmText || !pickerConfirmMeta) {
+        return;
+      }
+      const selected = compositionOptions.find((option) => String(option.value) === String(pickerSelectedOption));
+      if (!selected) {
+        pickerConfirm.hidden = true;
+        return;
+      }
+      pickerConfirm.hidden = false;
+      pickerConfirmText.textContent = 'Byt rätt?';
+      if (pickerConfirmCurrent) {
+        pickerConfirmCurrent.textContent = `Nuvarande rätt: ${pickerActiveTrack ? (pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || '—') : '—'}`;
+      }
+      if (pickerConfirmSelected) {
+        pickerConfirmSelected.textContent = `→ ${selected.label || 'Vald rätt'}`;
+      }
+      pickerConfirmMeta.textContent = [pickerActiveTrack ? pickerActiveTrack.dataset.dayLabel : '', pickerActiveTrack ? pickerActiveTrack.dataset.mealLabel : '', formatPickerGroupLabel(selected.library_group)].filter(Boolean).join(' · ');
+      if (pickerSubmit) {
+        pickerSubmit.disabled = false;
+      }
+      if (builderField) {
+        builderField.value = String(selected.value || '');
+      }
+      setPickerViewMode('confirm');
+    }
+
+    function selectPickerOption(value) {
+      pickerSelectedOption = String(value || '');
+      renderPickerResults();
+      updatePickerConfirm();
+    }
+
+    function returnToPickerBrowse() {
+      setPickerViewMode('browse');
+      if (pickerConfirm) {
+        pickerConfirm.hidden = true;
+      }
+      renderPickerResults();
+      if (pickerSearch) {
+        pickerSearch.focus();
+      }
+    }
+
+    function openDishPicker(trackButton) {
+      if (!picker || !modal || !managedRole) {
+        return;
+      }
+      pickerActiveTrack = getTrackCard(trackButton);
+      if (!pickerActiveTrack) {
+        return;
+      }
+        const currentComposition = compositionOptions.find((option) => String(option.value) === String(pickerActiveTrack.dataset.builderCompositionId || '')) || null;
+      modal.dataset.workMenuMode = 'chooser';
+      modalTitle.textContent = 'Byt rätt';
+      modalSummary.hidden = true;
+      modalPublished.hidden = true;
+      modalEffective.hidden = true;
+      modalSource.hidden = true;
+      modalBadges.hidden = true;
+      if (modalBridge) {
+        modalBridge.hidden = true;
+      }
+      if (legacySummary) {
+        legacySummary.hidden = true;
+      }
+      if (pickerContext) {
+        pickerContext.textContent = [pickerActiveTrack.dataset.dayLabel || '', pickerActiveTrack.dataset.mealLabel || '', formatPickerGroupLabel(currentComposition ? currentComposition.library_group : pickerActiveTrack.dataset.trackGroup || '')].filter(Boolean).join(' · ');
+      }
+      if (pickerCurrent) {
+        pickerCurrent.textContent = `Nuvarande rätt: ${currentComposition ? currentComposition.label : (pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || '—')}`;
+      }
+      pickerActiveCategory = 'all';
+      pickerSelectedOption = '';
+      if (pickerSearch) {
+        pickerSearch.value = '';
+      }
+      if (pickerResetTitle) {
+        pickerResetTitle.textContent = pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || '';
+      }
+      if (picker) {
+        picker.hidden = false;
+      }
+      setPickerViewMode('browse');
+      if (saveForm && resetForm) {
+        syncModalFields(pickerActiveTrack);
+        if (decisionTypeField) {
+          decisionTypeField.value = 'use_builder_composition';
+        }
+        syncModalSections('chooser');
+      }
+      renderPickerCategories();
+      renderPickerResults();
+      updatePickerConfirm();
+      modal.hidden = false;
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('offshore-work-menu-modal-open');
+      if (pickerSearch) {
+        pickerSearch.focus();
+      }
+    }
 
     function validVisibleKeys(values) {
       const filtered = normalizeTrackList(values).filter((key) => availableKeys.includes(key));
@@ -154,8 +484,10 @@
       if (!modal) {
         return;
       }
+      hidePicker();
       modal.hidden = true;
       modal.setAttribute('aria-hidden', 'true');
+      modal.dataset.workMenuMode = 'default';
       document.body.classList.remove('offshore-work-menu-modal-open');
       if (lastActiveElement && typeof lastActiveElement.focus === 'function') {
         lastActiveElement.focus();
@@ -410,13 +742,19 @@
       const mealTitle = trackCard.dataset.mealTitle || '';
       const mealTime = trackCard.dataset.mealTime || '';
       const serviceDate = trackCard.dataset.serviceDate || '';
-      const title = mode === 'chooser' ? 'Ändra rätt' : (trackCard.dataset.trackLabel || trackCard.dataset.trackKey || '');
       const publishedTitle = trackCard.dataset.publicTitle || '';
       const effectiveTitle = trackCard.dataset.effectiveTitle || '';
       const sourceLabel = trackCard.dataset.sourceLabel || '';
       const badgeLabel = trackCard.dataset.badgeLabel || '';
       const decisionLabel = trackCard.dataset.decisionLabel || '';
       const rowState = trackCard.dataset.rowState || 'published';
+
+      if (mode === 'chooser') {
+        openDishPicker(trackCard);
+        return;
+      }
+
+      const title = trackCard.dataset.trackLabel || trackCard.dataset.trackKey || '';
 
       modalTitle.textContent = title;
       modalSummary.textContent = [serviceDate, mealLabel, mealTitle, mealTime].filter(Boolean).join(' · ');
@@ -448,15 +786,6 @@
 
       if (managedRole && saveForm && resetForm) {
         syncModalFields(trackCard);
-        if (decisionTypeField && mode === 'chooser') {
-          decisionTypeField.value = 'use_builder_composition';
-        }
-        if (builderField && mode === 'chooser') {
-          builderField.value = trackCard.dataset.builderCompositionId || '';
-        }
-        if (freeTextField && mode === 'chooser') {
-          freeTextField.value = '';
-        }
         syncModalSections(mode);
       }
 
@@ -516,6 +845,115 @@
         openModalFromTrack(button, 'chooser');
       });
     });
+
+    if (trackRows.length) {
+      trackRows.forEach((row) => {
+        const titleButton = row.querySelector('[data-work-menu-track-open]');
+        if (titleButton) {
+          titleButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openBuilderHostFromTrack(row);
+          });
+        }
+      });
+    }
+
+    if (pickerSearch) {
+      pickerSearch.addEventListener('input', () => {
+        pickerSearchValue = pickerSearch.value || '';
+        setPickerViewMode('browse');
+        renderPickerResults();
+      });
+    }
+
+    if (pickerCategories) {
+      pickerCategories.addEventListener('click', (event) => {
+        const button = event.target instanceof HTMLElement ? event.target.closest('[data-dish-picker-category]') : null;
+        if (!button) {
+          return;
+        }
+        pickerActiveCategory = String(button.dataset.dishPickerCategory || 'all');
+        setPickerViewMode('browse');
+        if (pickerResultsSection) {
+          pickerResultsSection.hidden = false;
+        }
+        renderPickerCategories();
+        renderPickerResults();
+      });
+    }
+
+    if (pickerResults) {
+      pickerResults.addEventListener('click', (event) => {
+        const button = event.target instanceof HTMLElement ? event.target.closest('[data-dish-picker-value]') : null;
+        if (!button) {
+          return;
+        }
+        selectPickerOption(button.dataset.dishPickerValue || '');
+      });
+    }
+
+    if (pickerRelevant) {
+      pickerRelevant.addEventListener('click', (event) => {
+        const button = event.target instanceof HTMLElement ? event.target.closest('[data-dish-picker-value]') : null;
+        if (!button) {
+          return;
+        }
+        selectPickerOption(button.dataset.dishPickerValue || '');
+      });
+    }
+
+    if (pickerSubmit) {
+      pickerSubmit.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (pickerSubmitting || !saveForm || !pickerSelectedOption) {
+          return;
+        }
+        pickerSubmitting = true;
+        pickerSubmit.disabled = true;
+        pickerSubmit.textContent = 'Byter…';
+        if (pickerConfirm) {
+          pickerConfirm.hidden = true;
+        }
+        if (picker) {
+          picker.hidden = true;
+        }
+        if (decisionTypeField) {
+          decisionTypeField.value = 'use_builder_composition';
+        }
+        if (builderField) {
+          builderField.value = pickerSelectedOption;
+        }
+        if (freeTextField) {
+          freeTextField.value = '';
+        }
+        window.requestAnimationFrame(() => {
+          saveForm.requestSubmit ? saveForm.requestSubmit() : saveForm.submit();
+        });
+      });
+    }
+
+    if (pickerBack) {
+      pickerBack.addEventListener('click', (event) => {
+        event.preventDefault();
+        returnToPickerBrowse();
+      });
+    }
+
+    if (pickerReset) {
+      pickerReset.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (resetForm) {
+          resetForm.requestSubmit ? resetForm.requestSubmit() : resetForm.submit();
+        }
+      });
+    }
+
+    if (pickerCreateNew) {
+      pickerCreateNew.addEventListener('click', (event) => {
+        event.preventDefault();
+      });
+    }
 
     if (modalBridgeLink) {
       modalBridgeLink.addEventListener('click', (event) => {

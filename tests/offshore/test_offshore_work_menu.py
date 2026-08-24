@@ -142,18 +142,20 @@ def _seed_builder_menu(app, *, menu_id: str = "builder-menu-1") -> None:
     with app.app_context():
         flow = _get_builder_flow()
         menu_flow = _get_menu_context_flow()
-        flow.create_standalone_component("Demo Offshore Kött")
-        flow.create_standalone_component("Demo Offshore Fisk")
-        flow.create_standalone_component("Demo Offshore Soppa")
-        flow.create_standalone_component("Demo Offshore Vegetariskt")
-        for composition_id, composition_name in [
-            ("demo_offshore_kott", "Demo Offshore Kött"),
-            ("demo_offshore_fisk", "Demo Offshore Fisk"),
-            ("demo_offshore_soppa", "Demo Offshore Soppa"),
-            ("demo_offshore_vegetariskt", "Demo Offshore Vegetariskt"),
-        ]:
+        seeded_compositions = [
+            ("demo_offshore_kott", "Demo Offshore Kött", "demo-offshore"),
+            ("demo_offshore_fisk", "Demo Offshore Fisk", "demo-offshore"),
+            ("demo_offshore_soppa", "Demo Offshore Soppa", "demo-offshore"),
+            ("demo_offshore_vegetariskt", "Demo Offshore Vegetariskt", "demo-offshore"),
+            ("real_kott_dish", "Köttbullar med potatis och gräddsås", "kott"),
+            ("real_fisk_dish", "Cajuan Kyckling med potet og kålsalat", "fisk"),
+            ("real_dessert_dish", "Äppelpaj med vaniljsås", "dessert"),
+            ("real_ovrigt_dish", "Grönsakssoppa med bröd", "ovrigt"),
+        ]
+        for composition_id, composition_name, library_group in seeded_compositions:
+            flow.create_standalone_component(composition_name)
             if flow._composition_repository.get(composition_id) is None:
-                flow.create_composition(composition_id, composition_name, library_group="demo-offshore")
+                flow.create_composition(composition_id, composition_name, library_group=library_group)
             flow.add_component_to_composition(
                 composition_id=composition_id,
                 component_name=composition_name,
@@ -162,7 +164,7 @@ def _seed_builder_menu(app, *, menu_id: str = "builder-menu-1") -> None:
         menu_flow.create_menu(menu_id=menu_id, site_id="demo-site", week_key="demo-week", title="Demo Offshore Builder Menu", version=1, status="draft")
         for day in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"):
             for meal_slot in ("lunch", "dinner"):
-                for sort_order, composition_id in enumerate(("demo_offshore_kott", "demo_offshore_fisk", "demo_offshore_soppa", "demo_offshore_vegetariskt"), start=1):
+                for sort_order, composition_id in enumerate(("demo_offshore_kott", "demo_offshore_fisk", "demo_offshore_soppa", "demo_offshore_vegetariskt", "real_kott_dish", "real_fisk_dish", "real_dessert_dish", "real_ovrigt_dish"), start=1):
                     menu_flow.add_composition_menu_row(menu_id=menu_id, day=day, meal_slot=meal_slot, composition_id=composition_id, sort_order=sort_order)
 
 
@@ -224,6 +226,17 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "offshore-work-menu-meal__meta" not in html
 
     assert "data-work-menu-builder-open" in html
+    assert "data-work-menu-dish-picker" in html
+    assert "data-work-menu-picker-browse" in html
+    assert "data-work-menu-picker-title" not in html
+    assert html.count('offshore-work-menu-modal__title') == 1
+    assert "data-work-menu-picker-search" in html
+    assert "data-work-menu-picker-categories" in html
+    assert "data-work-menu-picker-relevant" in html
+    assert "data-work-menu-picker-results-section" in html
+    assert "data-dish-picker-create-new" in html
+    assert "Återställ till" in html
+    assert "data-work-menu-composition-options" in html
     assert "data-work-menu-builder-host" in html
     assert "offshore-work-menu-builder-host__backdrop" in html
     assert "offshore-work-menu-builder-host__frame" in html
@@ -244,7 +257,38 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
             role="cook",
             tenant_name="Tenant One",
             site_name="Rig A",
+            actor_user_id=20,
         )
+
+    options_by_value = {option["value"]: option for option in (vm.get("composition_options") or ())}
+    assert options_by_value["real_kott_dish"]["library_group"] == "kott"
+    assert options_by_value["real_fisk_dish"]["library_group"] == "fisk"
+    assert options_by_value["real_dessert_dish"]["library_group"] == "dessert"
+    assert options_by_value["real_ovrigt_dish"]["library_group"] == "ovrigt"
+    assert options_by_value["demo_offshore_kott"]["library_group"] == "demo-offshore"
+    assert options_by_value["demo_offshore_fisk"]["library_group"] == "demo-offshore"
+    assert {option["library_group"] for option in options_by_value.values()} >= {"kott", "fisk", "dessert", "ovrigt", "demo-offshore"}
+
+    with app.app_context():
+        flow = _get_builder_flow()
+        builder_actor = ActorContext(tenant_id=1, user_id=20, site_id=site_id, role="cook")
+        before_count = len(flow.list_library_compositions(actor=builder_actor))
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook")):
+        _ = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=20,
+        )
+    with app.app_context():
+        flow = _get_builder_flow()
+        builder_actor = ActorContext(tenant_id=1, user_id=20, site_id=site_id, role="cook")
+        after_count = len(flow.list_library_compositions(actor=builder_actor))
+    assert after_count == before_count
 
     first_day = (vm.get("days") or [])[0]
     first_meal = (first_day.meals or [])[0]
@@ -260,6 +304,28 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
         js_source = f.read()
     assert "const trackCards = Array.from(root.querySelectorAll('[data-work-menu-track-row]'));" in js_source
     assert "const editButtons = Array.from(root.querySelectorAll('[data-work-menu-track-edit]'));" in js_source
+    assert "const picker = root.querySelector('[data-work-menu-dish-picker]');" in js_source
+    assert "function openDishPicker(trackButton)" in js_source
+    assert "function renderPickerCategories()" in js_source
+    assert "function renderPickerResults()" in js_source
+    assert "function formatPickerGroupLabel(value)" in js_source
+    assert "meta.textContent = formatPickerGroupLabel(item.library_group);" in js_source
+    assert "meta.textContent = [groupLabel, item.value]" not in js_source
+    assert "setPickerViewMode('confirm');" in js_source
+    assert "pickerConfirmSelected.textContent = `→ ${selected.label || 'Vald rätt'}`;" in js_source
+    assert "pickerConfirmMeta.textContent = [pickerActiveTrack ? pickerActiveTrack.dataset.dayLabel" in js_source
+    assert "pickerResetTitle.textContent = pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || '';" in js_source
+    assert "pickerBrowse.hidden = !browsing;" in js_source
+    assert "pickerResultsSection.hidden = pickerViewMode === 'confirm' || defaultBrowse;" in js_source
+    assert "const defaultBrowse = !searchActive && !categoryActive;" in js_source
+    assert "setPickerResults(defaultBrowse ? [] : filteredItems, pickerResults, 'Inga rätter matchar sökningen.');" in js_source
+    assert "pickerCategories.addEventListener('click'" in js_source
+    assert "pickerResults.addEventListener('click'" in js_source
+    assert "pickerSubmit.addEventListener('click'" in js_source
+    assert "pickerBack.addEventListener('click'" in js_source
+    assert "pickerSubmit.textContent = 'Byter…';" in js_source
+    assert "pickerSubmit.disabled = true;" in js_source
+    assert "window.requestAnimationFrame(() => {" in js_source
     assert "function openModalFromTrack(trackButton, mode = 'default')" in js_source
     assert "modal.dataset.workMenuMode = mode;" in js_source
     assert "openModalFromTrack(button, 'chooser');" in js_source
@@ -286,6 +352,13 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "offshore-work-menu-builder-host--ready" in js_source
     assert "offshore-work-menu-builder-host--open" in js_source
     assert "window.scrollTo(lastBuilderHostScrollX, lastBuilderHostScrollY);" in js_source
+
+    css_path = "static/offshore2/offshore.css"
+    with open(css_path, encoding="utf-8") as f:
+        css_source = f.read()
+    assert "background: transparent;" in css_source
+    assert "appearance: none;" in css_source
+    assert "cursor: pointer;" in css_source
 
     with app.app_context():
         db = get_session()
