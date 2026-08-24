@@ -73,6 +73,8 @@
     const freeTextField = root.querySelector('[data-work-menu-free-text]');
     const trackToggles = Array.from(root.querySelectorAll('[data-work-menu-track-toggle]'));
     const trackRows = Array.from(root.querySelectorAll('[data-work-menu-track-open]'));
+    const trackCards = Array.from(root.querySelectorAll('[data-work-menu-track-row]'));
+    const editButtons = Array.from(root.querySelectorAll('[data-work-menu-track-edit]'));
     const mealCards = Array.from(root.querySelectorAll('[data-work-menu-meal]'));
     const mealOpenCards = Array.from(root.querySelectorAll('[data-work-menu-meal-open]'));
     const expandButtons = Array.from(root.querySelectorAll('[data-work-menu-expand-toggle]'));
@@ -105,10 +107,7 @@
       mealCards.forEach((mealCard) => {
         const mealId = mealCard.dataset.mealId || '';
         const expanded = mealCard.dataset.mealExpanded === 'true';
-        const rows = trackRows.filter((row) => {
-          const rowMeal = row.closest('[data-work-menu-meal]');
-          return Boolean(rowMeal && rowMeal.dataset.mealId === mealId);
-        });
+        const rows = trackCards.filter((row) => row.dataset.mealId === mealId);
         const hiddenCount = rows.reduce((count, row) => {
           const trackKey = normalizeKey(row.dataset.trackKey);
           const show = expanded || visibleKeys.includes(trackKey);
@@ -142,6 +141,13 @@
     function setMealExpanded(mealCard, expanded) {
       mealCard.dataset.mealExpanded = expanded ? 'true' : 'false';
       updateTrackVisibility();
+    }
+
+    function getTrackCard(trackButton) {
+      if (!(trackButton instanceof HTMLElement)) {
+        return null;
+      }
+      return trackButton.closest('[data-work-menu-track-row]') || trackButton;
     }
 
     function closeModal() {
@@ -234,10 +240,11 @@
     }
 
     function openBuilderHostFromTrack(trackButton) {
-      if (!trackButton) {
+      const trackCard = getTrackCard(trackButton);
+      if (!trackCard) {
         return false;
       }
-      const rawBridge = trackButton.dataset.builderBridge || '';
+      const rawBridge = trackCard.dataset.builderBridge || '';
       if (!rawBridge) {
         return false;
       }
@@ -254,12 +261,16 @@
     }
 
     function syncModalFields(trackButton) {
-      const serviceEventId = trackButton.dataset.serviceEventId || '';
-      const trackKey = trackButton.dataset.trackKey || '';
-      const serviceDate = trackButton.dataset.serviceDate || '';
-      const decisionType = trackButton.dataset.decisionType || 'use_published';
-      const builderCompositionId = trackButton.dataset.builderCompositionId || '';
-      const freeText = trackButton.dataset.freeText || '';
+      const trackCard = getTrackCard(trackButton);
+      if (!trackCard) {
+        return;
+      }
+      const serviceEventId = trackCard.dataset.serviceEventId || '';
+      const trackKey = trackCard.dataset.trackKey || '';
+      const serviceDate = trackCard.dataset.serviceDate || '';
+      const decisionType = trackCard.dataset.decisionType || 'use_published';
+      const builderCompositionId = trackCard.dataset.builderCompositionId || '';
+      const freeText = trackCard.dataset.freeText || '';
 
       root.querySelectorAll('[data-work-menu-field="service_event_id"]').forEach((field) => {
         field.value = serviceEventId;
@@ -282,20 +293,25 @@
       }
     }
 
-    function syncModalSections() {
+    function syncModalSections(mode) {
       if (!decisionTypeField) {
         return;
       }
       const value = decisionTypeField.value;
+      const chooserMode = mode === 'chooser';
+      const decisionTypeWrapper = root.querySelector('[data-work-menu-field-wrapper="decision-type"]');
       const builderWrapper = root.querySelector('[data-work-menu-field-wrapper="builder"]');
       const freeTextWrapper = root.querySelector('[data-work-menu-field-wrapper="free-text"]');
       const showBuilder = value === 'use_builder_composition';
       const showFreeText = value === 'use_free_text';
+      if (decisionTypeWrapper) {
+        decisionTypeWrapper.hidden = chooserMode;
+      }
       if (builderWrapper) {
-        builderWrapper.hidden = !showBuilder;
+        builderWrapper.hidden = chooserMode ? false : !showBuilder;
       }
       if (freeTextWrapper) {
-        freeTextWrapper.hidden = !showFreeText;
+        freeTextWrapper.hidden = chooserMode ? true : !showFreeText;
       }
       if (builderField) {
         builderField.required = showBuilder;
@@ -377,24 +393,30 @@
       modalBridge.hidden = false;
     }
 
-    function openModalFromTrack(trackButton) {
+    function openModalFromTrack(trackButton, mode = 'default') {
       if (!modal || !modalPanel || !modalTitle || !modalSummary || !modalPublished || !modalEffective || !modalSource || !modalBadges) {
         return;
       }
 
-      lastActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const trackCard = getTrackCard(trackButton);
+      if (!trackCard) {
+        return;
+      }
 
-      const mealLabel = trackButton.dataset.mealLabel || '';
-      const mealTitle = trackButton.dataset.mealTitle || '';
-      const mealTime = trackButton.dataset.mealTime || '';
-      const serviceDate = trackButton.dataset.serviceDate || '';
-      const title = trackButton.dataset.trackLabel || trackButton.dataset.trackKey || '';
-      const publishedTitle = trackButton.dataset.publicTitle || '';
-      const effectiveTitle = trackButton.dataset.effectiveTitle || '';
-      const sourceLabel = trackButton.dataset.sourceLabel || '';
-      const badgeLabel = trackButton.dataset.badgeLabel || '';
-      const decisionLabel = trackButton.dataset.decisionLabel || '';
-      const rowState = trackButton.dataset.rowState || 'published';
+      lastActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      modal.dataset.workMenuMode = mode;
+
+      const mealLabel = trackCard.dataset.mealLabel || '';
+      const mealTitle = trackCard.dataset.mealTitle || '';
+      const mealTime = trackCard.dataset.mealTime || '';
+      const serviceDate = trackCard.dataset.serviceDate || '';
+      const title = mode === 'chooser' ? 'Ändra rätt' : (trackCard.dataset.trackLabel || trackCard.dataset.trackKey || '');
+      const publishedTitle = trackCard.dataset.publicTitle || '';
+      const effectiveTitle = trackCard.dataset.effectiveTitle || '';
+      const sourceLabel = trackCard.dataset.sourceLabel || '';
+      const badgeLabel = trackCard.dataset.badgeLabel || '';
+      const decisionLabel = trackCard.dataset.decisionLabel || '';
+      const rowState = trackCard.dataset.rowState || 'published';
 
       modalTitle.textContent = title;
       modalSummary.textContent = [serviceDate, mealLabel, mealTitle, mealTime].filter(Boolean).join(' · ');
@@ -422,11 +444,20 @@
         modalBadges.appendChild(badge);
       }
 
-      syncBuilderBridge(trackButton);
+      syncBuilderBridge(trackCard);
 
       if (managedRole && saveForm && resetForm) {
-        syncModalFields(trackButton);
-        syncModalSections();
+        syncModalFields(trackCard);
+        if (decisionTypeField && mode === 'chooser') {
+          decisionTypeField.value = 'use_builder_composition';
+        }
+        if (builderField && mode === 'chooser') {
+          builderField.value = trackCard.dataset.builderCompositionId || '';
+        }
+        if (freeTextField && mode === 'chooser') {
+          freeTextField.value = '';
+        }
+        syncModalSections(mode);
       }
 
       modal.hidden = false;
@@ -470,14 +501,19 @@
 
     trackRows.forEach((row) => {
       row.addEventListener('click', (event) => {
-        if (event.target instanceof HTMLElement && event.target.closest('[data-work-menu-expand-toggle]')) {
-          return;
-        }
         if (openBuilderHostFromTrack(row)) {
           event.preventDefault();
           event.stopPropagation();
           return;
         }
+      });
+    });
+
+    editButtons.forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openModalFromTrack(button, 'chooser');
       });
     });
 
@@ -580,7 +616,18 @@
     }
 
     if (decisionTypeField) {
-      decisionTypeField.addEventListener('change', syncModalSections);
+      decisionTypeField.addEventListener('change', () => {
+        const mode = modal ? modal.dataset.workMenuMode || 'default' : 'default';
+        syncModalSections(mode);
+      });
+    }
+
+    if (saveForm) {
+      saveForm.addEventListener('submit', () => {
+        if (modal && modal.dataset.workMenuMode === 'chooser' && decisionTypeField) {
+          decisionTypeField.value = 'use_builder_composition';
+        }
+      });
     }
 
     applyPreferences();

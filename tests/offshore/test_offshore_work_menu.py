@@ -218,6 +218,8 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "data-work-menu-expand-toggle" in html
     assert "offshoreWorkMenuModal" in html
     assert "data-work-menu-builder-bridge" in html
+    assert "data-work-menu-track-edit" in html
+    assert "Ändra rätt" in html
     assert "offshore-work-menu-meal__status" not in html
     assert "offshore-work-menu-meal__meta" not in html
 
@@ -256,13 +258,16 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     js_path = "static/offshore2/work_menu.js"
     with open(js_path, encoding="utf-8") as f:
         js_source = f.read()
+    assert "const trackCards = Array.from(root.querySelectorAll('[data-work-menu-track-row]'));" in js_source
+    assert "const editButtons = Array.from(root.querySelectorAll('[data-work-menu-track-edit]'));" in js_source
+    assert "function openModalFromTrack(trackButton, mode = 'default')" in js_source
+    assert "modal.dataset.workMenuMode = mode;" in js_source
+    assert "openModalFromTrack(button, 'chooser');" in js_source
+    assert "decisionTypeField.value = 'use_builder_composition';" in js_source
+    assert "syncModalSections(mode);" in js_source
     assert "if (openBuilderHostFromTrack(row)) {" in js_source
     assert "event.preventDefault();" in js_source
     assert "event.stopPropagation();" in js_source
-    assert "openModalFromTrack(row)" not in js_source
-    assert "openModalFromTrack(firstVisibleTrack)" not in js_source
-    assert "function openModalFromTrack(trackButton)" in js_source
-    assert "event.target.closest('[data-work-menu-builder-open]')" not in js_source
     assert "openBuilderHostFromTrack(trackButton)" in js_source
     assert "return openBuilderHost(bridge);" in js_source
     assert "return false;" in js_source
@@ -484,6 +489,134 @@ def test_offshore_work_menu_selected_builder_override_uses_selected_identity_and
     assert selected_track.builder_bridge["composition_id"] == "demo_offshore_fisk"
     assert selected_track.builder_bridge["composition_name"] == "Demo Offshore Fisk"
     assert [component["component_id"] for component in selected_track.builder_bridge["components"]] == ["demo_offshore_fisk"]
+
+
+def test_offshore_work_menu_chooser_submits_real_builder_composition_and_is_personal():
+    app = _mk_app()
+    site_id = _seed_site(app, tenant_id=1, name="Rig A")
+    _seed_installation(app, tenant_id=1, site_id=site_id)
+    _seed_builder_menu(app)
+    _seed_publication(app, tenant_id=1, site_id=site_id, day=TEST_WORK_MENU_DAY, builder_menu_id="builder-menu-1")
+    period_id = _seed_period(app, tenant_id=1, site_id=site_id)
+    with app.app_context():
+        events = period_service.list_service_events(1, site_id, period_id)
+        menu_context_service.sync_service_event_context(tenant_id=1, site_id=site_id, work_period_id=period_id, service_event_id=events[0].id)
+
+        flow = _get_builder_flow()
+        scope_repo = _MemoryScopeRepository()
+        flow._object_scope_repository = scope_repo  # type: ignore[attr-defined]
+        shared = flow.get_library_composition("demo_offshore_kott", actor=None)
+        assert shared is not None
+        cook_a_actor = ActorContext(tenant_id=1, user_id=20, site_id=site_id, role="cook")
+        cook_b_actor = ActorContext(tenant_id=1, user_id=30, site_id=site_id, role="cook")
+        cook_a_private = flow.resolve_composition_edit_target(shared.composition_id, actor=cook_a_actor)
+        cook_a_private = flow.update_composition_metadata(
+            cook_a_private.composition_id,
+            composition_name="Demo Offshore Kött Cook A",
+            actor=cook_a_actor,
+        )
+
+    client = app.test_client()
+    _login(client, tenant_id=1, site_id=site_id, role="cook")
+
+    response = client.post(
+        "/offshore/work-menu/decisions",
+        data={
+            "work_period_id": str(period_id),
+            "service_event_id": str(events[0].id),
+            "menu_track_key": "fisk",
+            "decision_type": "use_builder_composition",
+            "selected_builder_composition_id": cook_a_private.composition_id,
+        },
+        headers=_headers("cook", user_id=20),
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=20)):
+        vm_a = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=20,
+        )
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=30)):
+        vm_b = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=30,
+        )
+
+    track_a = _find_track(vm_a, "fisk")
+    track_b = _find_track(vm_b, "fisk")
+    assert track_a is not None
+    assert track_b is not None
+    assert track_a.effective_title == "Demo Offshore Kött Cook A"
+    assert track_a.builder_composition_id == cook_a_private.composition_id
+    assert track_a.builder_bridge is not None
+    assert track_a.builder_bridge["composition_id"] == cook_a_private.composition_id
+    assert track_a.builder_bridge["composition_name"] == "Demo Offshore Kött Cook A"
+    assert track_b.effective_title == "Demo Offshore Fisk"
+
+    with app.app_context():
+        db = get_session()
+        try:
+            rows = db.query(OffshoreWorkMenuDecision).filter_by(tenant_id=1, site_id=site_id, service_event_id=events[0].id, menu_track_key="fisk").all()
+        finally:
+            db.close()
+
+    assert {(row.owner_user_id, row.selected_builder_composition_id) for row in rows} == {(20, cook_a_private.composition_id)}
+
+    reset_response = client.post(
+        "/offshore/work-menu/decisions/reset",
+        data={
+            "work_period_id": str(period_id),
+            "service_event_id": str(events[0].id),
+            "menu_track_key": "fisk",
+        },
+        headers=_headers("cook", user_id=20),
+        follow_redirects=True,
+    )
+    assert reset_response.status_code == 200
+
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=20)):
+        vm_a_reset = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=20,
+        )
+    with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=30)):
+        vm_b_reset = offshore_work_menu_service.build_view_model(
+            tenant_id=1,
+            site_id=site_id,
+            locale="sv",
+            theme="system",
+            role="cook",
+            tenant_name="Tenant One",
+            site_name="Rig A",
+            actor_user_id=30,
+        )
+
+    track_a_reset = _find_track(vm_a_reset, "fisk")
+    track_b_reset = _find_track(vm_b_reset, "fisk")
+    assert track_a_reset is not None
+    assert track_b_reset is not None
+    assert track_a_reset.effective_title == track_a_reset.published_title
+    assert track_b_reset.effective_title == "Demo Offshore Fisk"
 
 
 def test_offshore_work_menu_decisions_are_owner_scoped_and_reset_is_personal():
@@ -822,6 +955,8 @@ def test_offshore_work_menu_hides_editor_controls_for_read_only_role():
     assert response.status_code == 200
     assert "data-work-menu-save-form" not in html
     assert "data-work-menu-decision-type" not in html
+    assert "data-work-menu-track-edit" not in html
+    assert "Ändra rätt" not in html
 
 
 def test_offshore_work_menu_builder_host_markup_is_chrome_free():
