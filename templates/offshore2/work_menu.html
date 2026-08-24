@@ -127,7 +127,12 @@
                           class="offshore-work-menu-track-row__title"
                           data-work-menu-track-open
                           {% if track.builder_bridge %}data-work-menu-builder-open{% endif %}
-                        >{{ track.effective_title or track.published_title or vm.labels['offshore.work_menu.no_dish'] }}</button>
+                        >
+                          <span class="offshore-work-menu-track-row__title-text">{{ track.effective_title or track.published_title or vm.labels['offshore.work_menu.no_dish'] }}</span>
+                          {% if badge and track.decision_type != 'use_published' and track.row_state != 'empty' %}
+                            <span class="offshore-work-menu-track-row__indicator" title="Personligt val" aria-label="Personligt val"></span>
+                          {% endif %}
+                        </button>
                         {% if vm.is_managed_role and track.builder_bridge %}
                           <button
                             type="button"
@@ -136,9 +141,6 @@
                             aria-label="Ändra rätt"
                             title="Ändra rätt"
                           >&gt;</button>
-                        {% endif %}
-                        {% if badge %}
-                          <span class="offshore-work-menu-track-row__badge">{{ badge }}</span>
                         {% endif %}
                       </div>
                     {% endfor %}
@@ -175,7 +177,7 @@
             <button type="button" class="offshore-work-menu-modal__close" aria-label="{{ vm.labels['offshore.work_menu.close'] }}" data-work-menu-modal-close>×</button>
           </div>
 
-          <div class="offshore-work-menu-modal__summary" data-work-menu-legacy-summary>
+          <div class="offshore-work-menu-modal__summary" data-work-menu-legacy-summary hidden>
             <div class="offshore-work-menu-modal__summary-line" data-work-menu-modal-summary></div>
             <div class="offshore-work-menu-modal__facts">
               <div>
@@ -197,6 +199,7 @@
           <section class="offshore-work-menu-picker" data-work-menu-dish-picker hidden>
             <div class="offshore-work-menu-picker__context" data-work-menu-picker-context></div>
             <div class="offshore-work-menu-picker__current" data-work-menu-picker-current></div>
+            <p class="offshore-work-menu-picker__instruction" data-work-menu-picker-instruction>Välj en befintlig rätt eller skapa en ny.</p>
             <div class="offshore-work-menu-picker__confirm" data-work-menu-picker-confirm hidden>
               <p class="offshore-work-menu-picker__confirm-text" data-work-menu-picker-confirm-text>Byt rätt?</p>
               <p class="offshore-work-menu-picker__confirm-current" data-work-menu-picker-confirm-current></p>
@@ -217,7 +220,7 @@
                 <h3 class="offshore-work-menu-picker__section-title">Relevanta rätter</h3>
                 <div class="offshore-work-menu-picker__results" data-work-menu-picker-relevant></div>
               </section>
-              <section class="offshore-work-menu-picker__section" data-work-menu-picker-results-section>
+              <section class="offshore-work-menu-picker__section" data-work-menu-picker-results-section hidden>
                 <h3 class="offshore-work-menu-picker__section-title" data-work-menu-picker-results-title>Resultat</h3>
                 <div class="offshore-work-menu-picker__results" data-work-menu-picker-results></div>
               </section>

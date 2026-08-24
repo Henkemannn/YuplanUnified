@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import re
 from datetime import UTC, date, datetime, time
 
 import pytest
@@ -220,6 +221,8 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "data-work-menu-expand-toggle" in html
     assert "offshoreWorkMenuModal" in html
     assert "data-work-menu-builder-bridge" in html
+    assert "data-work-menu-legacy-summary" in html
+    assert re.search(r"data-work-menu-legacy-summary[^>]*hidden", html)
     assert "data-work-menu-track-edit" in html
     assert "Ändra rätt" in html
     assert "offshore-work-menu-meal__status" not in html
@@ -228,12 +231,14 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "data-work-menu-builder-open" in html
     assert "data-work-menu-dish-picker" in html
     assert "data-work-menu-picker-browse" in html
-    assert "data-work-menu-picker-title" not in html
+    assert "data-work-menu-picker-instruction" in html
+    assert "Välj en befintlig rätt eller skapa en ny." in html
     assert html.count('offshore-work-menu-modal__title') == 1
     assert "data-work-menu-picker-search" in html
     assert "data-work-menu-picker-categories" in html
     assert "data-work-menu-picker-relevant" in html
     assert "data-work-menu-picker-results-section" in html
+    assert re.search(r"data-work-menu-picker-results-section[^>]*hidden", html)
     assert "data-dish-picker-create-new" in html
     assert "Återställ till" in html
     assert "data-work-menu-composition-options" in html
@@ -316,9 +321,12 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "pickerConfirmMeta.textContent = [pickerActiveTrack ? pickerActiveTrack.dataset.dayLabel" in js_source
     assert "pickerResetTitle.textContent = pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || '';" in js_source
     assert "pickerBrowse.hidden = !browsing;" in js_source
+    assert "pickerInstruction.hidden = !browsing;" in js_source
     assert "pickerResultsSection.hidden = pickerViewMode === 'confirm' || defaultBrowse;" in js_source
+    assert "pickerConfirm.hidden = browsing;" in js_source
     assert "const defaultBrowse = !searchActive && !categoryActive;" in js_source
     assert "setPickerResults(defaultBrowse ? [] : filteredItems, pickerResults, 'Inga rätter matchar sökningen.');" in js_source
+    assert "pickerResultsSection.hidden = pickerViewMode === 'confirm' || defaultBrowse;" in js_source
     assert "pickerCategories.addEventListener('click'" in js_source
     assert "pickerResults.addEventListener('click'" in js_source
     assert "pickerSubmit.addEventListener('click'" in js_source
@@ -359,6 +367,10 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "background: transparent;" in css_source
     assert "appearance: none;" in css_source
     assert "cursor: pointer;" in css_source
+    assert "[data-work-menu-picker-confirm][hidden]" in css_source
+    assert "[data-work-menu-picker-browse][hidden]" in css_source
+    assert "[data-work-menu-picker-results-section][hidden]" in css_source
+    assert "[data-work-menu-legacy-summary][hidden]" in css_source
 
     with app.app_context():
         db = get_session()
@@ -377,9 +389,12 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
             "free_text": "Today\'s fish",
         },
         headers=_headers("cook"),
-        follow_redirects=True,
+        follow_redirects=False,
     )
-    assert post.status_code == 200
+    assert post.status_code == 302
+    assert post.headers["Location"].endswith("/offshore/work-menu")
+    with client.session_transaction() as session:
+        assert not session.get("_flashes")
 
     with app.app_context():
         db = get_session()
@@ -388,6 +403,12 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
         finally:
             db.close()
     assert after == before + 1
+
+    page_after_save = client.get("/offshore/work-menu", headers=_headers("cook"))
+    html_after_save = page_after_save.get_data(as_text=True)
+    assert "offshore-work-menu-track-row__indicator" in html_after_save
+    assert "Personligt val" in html_after_save
+    assert "offshore-work-menu-track-row__badge" not in html_after_save
 
 
 def test_offshore_work_menu_uses_actor_private_builder_fork_without_creating_new_forks():
@@ -657,9 +678,12 @@ def test_offshore_work_menu_chooser_submits_real_builder_composition_and_is_pers
             "menu_track_key": "fisk",
         },
         headers=_headers("cook", user_id=20),
-        follow_redirects=True,
+        follow_redirects=False,
     )
-    assert reset_response.status_code == 200
+    assert reset_response.status_code == 302
+    assert reset_response.headers["Location"].endswith("/offshore/work-menu")
+    with client.session_transaction() as session:
+        assert not session.get("_flashes")
 
     with app.test_request_context("/offshore/work-menu", headers=_headers("cook", user_id=20)):
         vm_a_reset = offshore_work_menu_service.build_view_model(

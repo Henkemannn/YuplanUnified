@@ -160,7 +160,6 @@ def save_work_menu_decision():
             free_text=request.form.get("free_text") or None,
             actor_user_id=_get_actor_user_id(),
         )
-        _flash_success("offshore.success.work_menu_saved")
     except LookupError:
         return not_found("offshore.validation.cross_site")
     except PermissionError:
@@ -185,7 +184,6 @@ def reset_work_menu_decision():
             menu_track_key=str(request.form.get("menu_track_key") or ""),
             actor_user_id=_get_actor_user_id(),
         )
-        _flash_success("offshore.success.work_menu_saved")
     except LookupError:
         return not_found("offshore.validation.cross_site")
     except PermissionError:

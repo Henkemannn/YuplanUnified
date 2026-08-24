@@ -96,6 +96,7 @@
     const picker = root.querySelector('[data-work-menu-dish-picker]');
     const pickerContext = root.querySelector('[data-work-menu-picker-context]');
     const pickerCurrent = root.querySelector('[data-work-menu-picker-current]');
+    const pickerInstruction = root.querySelector('[data-work-menu-picker-instruction]');
     const pickerSearch = root.querySelector('[data-work-menu-picker-search]');
     const pickerCategories = root.querySelector('[data-work-menu-picker-categories]');
     const pickerRelevantSection = root.querySelector('[data-work-menu-picker-relevant-section]');
@@ -170,7 +171,14 @@
       if (pickerConfirm) {
         pickerConfirm.hidden = true;
       }
+      if (pickerBrowse) {
+        pickerBrowse.hidden = false;
+      }
       pickerViewMode = 'browse';
+      pickerActiveTrack = null;
+      pickerSelectedOption = '';
+      pickerActiveCategory = 'all';
+      pickerSearchValue = '';
       if (legacySummary) {
         legacySummary.hidden = false;
       }
@@ -225,6 +233,9 @@
       }
       if (pickerConfirm) {
         pickerConfirm.hidden = browsing;
+      }
+      if (pickerInstruction) {
+        pickerInstruction.hidden = !browsing;
       }
     }
 
@@ -358,6 +369,11 @@
       if (pickerConfirm) {
         pickerConfirm.hidden = true;
       }
+      if (pickerSubmit) {
+        pickerSubmit.disabled = false;
+        pickerSubmit.textContent = pickerSubmitDefaultLabel;
+      }
+      pickerSubmitting = false;
       renderPickerResults();
       if (pickerSearch) {
         pickerSearch.focus();
@@ -403,6 +419,14 @@
       if (picker) {
         picker.hidden = false;
       }
+      if (pickerConfirm) {
+        pickerConfirm.hidden = true;
+      }
+      if (pickerSubmit) {
+        pickerSubmit.disabled = false;
+        pickerSubmit.textContent = pickerSubmitDefaultLabel;
+      }
+      pickerSubmitting = false;
       setPickerViewMode('browse');
       if (saveForm && resetForm) {
         syncModalFields(pickerActiveTrack);
