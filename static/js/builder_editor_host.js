@@ -154,9 +154,7 @@
   function filterLibraryComponents() {}
   function updateComponentCategoryChipCounts() {}
   function currentComponentSearchQuery() { return ''; }
-  function resolveComponentCategoryThemeKey(component) {
-    return normalizeId(component && component.category) || 'neutral';
-  }
+  const resolveComponentCategoryThemeKey = BuilderComponentTheme.resolveComponentCategoryThemeKey;
 
   async function loadAllCompositions() {
     const result = await callApi('/api/builder/compositions', { method: 'GET' });
@@ -207,6 +205,26 @@
     } finally {
       componentLoadPromises.delete(idValue);
     }
+  }
+
+  async function preloadLinkedComponents(composition) {
+    const linkedComponents = Array.isArray(composition && composition.components)
+      ? composition.components
+      : [];
+    const linkedIds = [];
+    const seen = new Set();
+    for (const component of linkedComponents) {
+      const componentId = normalizeId(component && component.component_id);
+      if (!componentId || seen.has(componentId)) {
+        continue;
+      }
+      seen.add(componentId);
+      linkedIds.push(componentId);
+    }
+    if (linkedIds.length === 0) {
+      return [];
+    }
+    return Promise.all(linkedIds.map((componentId) => loadComponentById(componentId)));
   }
 
   async function loadCompositionById(compositionId) {
@@ -281,7 +299,7 @@
     await Promise.all([loadAllCompositions(), loadAllComponents()]);
   }
 
-  async function resolveComponentById(componentId) {
+  function resolveComponentById(componentId) {
     const idValue = normalizeId(componentId);
     if (!idValue) {
       return null;
@@ -292,7 +310,7 @@
     if (cached) {
       return cached;
     }
-    return loadComponentById(idValue);
+    return null;
   }
 
   async function resolveCompositionById(compositionId) {
@@ -503,13 +521,14 @@
           throw new Error('Kompositionen kunde inte hittas.');
         }
         state.compositionId = editableComposition.composition_id;
+        await preloadLinkedComponents(editableComposition);
         state.controller.openComposition(editableComposition, 'overview');
       } else {
-        const component = await resolveComponentById(state.componentId);
+        const component = await loadComponentById(state.componentId);
         if (!component) {
           throw new Error('Komponenten kunde inte hittas.');
         }
-        await state.controller.openComponentDetailEditor(state.componentId, 'overview');
+        await state.controller.openComponentDetailEditor(component.component_id, 'overview');
       }
       setHostStatus(true);
       notifyHostReady({ kind: state.hostKind });

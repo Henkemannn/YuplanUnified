@@ -17,12 +17,15 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'id="builderUiVersionMarker"' in html
     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
+    assert '<script src="/static/js/builder_component_theme.js"></script>' in html
     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' in html
     ce_pos = html.find("builder_component_editor.js")
     de_pos = html.find("builder_dish_editor.js")
+    theme_pos = html.find("builder_component_theme.js")
     ctrl_pos = html.find("builder_modal_controller.js")
     builder_pos = html.find("builder.js?v=")
     assert ce_pos < de_pos < ctrl_pos < builder_pos
+    assert theme_pos < ce_pos < builder_pos
 
     # Legacy modal identified in stuck screenshot should be present.
     assert 'id="addComponentModal"' in html
@@ -660,7 +663,8 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'removeBtn.setAttribute("aria-label", "Remove component");' not in script
     assert 'builder-component-card-body' not in script
     assert 'component-library-card-body' not in script
-    assert 'function resolveComponentCategoryThemeKey(item) {' in script
+    assert 'BuilderComponentTheme.resolveComponentCategoryThemeKey' in script
+    assert 'function resolveComponentCategoryThemeKey(item) {' not in script
     assert 'const COMPONENT_RAIL_CATEGORY_OPTIONS = ["main", "side", "sauce", "dessert", "ovrigt"];' in script
     assert 'return "Huvudkomponent";' in script
     assert 'return "Tillbehör";' in script
@@ -688,6 +692,12 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'calculationIcon.dataset.componentTabTarget = "calculation";' in script
     assert 'calculationIcon.setAttribute("role", "button");' in script
     assert 'calculationIcon.setAttribute("tabindex", "0");' in script
+
+    helper_rv = client_admin.get('/static/js/builder_component_theme.js')
+    assert helper_rv.status_code == 200
+    helper_script = helper_rv.data.decode('utf-8')
+    assert 'function resolveComponentCategoryThemeKey(component) {' in helper_script
+    assert 'globalThis.BuilderComponentTheme = Object.freeze({' in helper_script
     assert 'allergenIcon.textContent = "🌾";' in script
     assert 'allergenIcon.title = "Allergen/kostinfo finns";' in script
     assert 'allergenIcon.dataset.componentTabTarget = "allergens";' in script

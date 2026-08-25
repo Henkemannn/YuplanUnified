@@ -942,6 +942,11 @@
         if (picker) {
           picker.hidden = true;
         }
+        if (modal) {
+          modal.hidden = true;
+          modal.setAttribute('aria-hidden', 'true');
+        }
+        document.body.classList.remove('offshore-work-menu-modal-open');
         if (decisionTypeField) {
           decisionTypeField.value = 'use_builder_composition';
         }

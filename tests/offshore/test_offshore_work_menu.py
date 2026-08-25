@@ -333,6 +333,8 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "pickerBack.addEventListener('click'" in js_source
     assert "pickerSubmit.textContent = 'Byter…';" in js_source
     assert "pickerSubmit.disabled = true;" in js_source
+    assert "modal.hidden = true;" in js_source
+    assert "document.body.classList.remove('offshore-work-menu-modal-open');" in js_source
     assert "window.requestAnimationFrame(() => {" in js_source
     assert "function openModalFromTrack(trackButton, mode = 'default')" in js_source
     assert "modal.dataset.workMenuMode = mode;" in js_source
