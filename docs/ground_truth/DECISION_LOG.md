@@ -38,3 +38,7 @@ Last reviewed: 2026-08-27
 - Main Offshore development resumes after Kommun pilot-ready.
 - Offshore 1.0 MVP is locked around Provisioning, Cook Operations and Crew Experience.
 - External-service policy locked: integrate first; build own where Yuplan creates unique value.
+- Live Builder/Host/Offshore Work Menu acceptance completed: existing canonical Dish selection, reload persistence, create Dish -> Component -> Work Menu, canonical edit refresh, and reset to published baseline all passed manual E2E verification.
+- The shared Builder/Menu/Offshore seam is accepted and broad Builder/Menu MVP work is frozen. Only a concrete pilot-blocking regression or deliberate Ground Truth change may reopen it before Kommun 1.0 Ready for Pilot.
+- Legacy unscoped read compatibility remains technical debt and does not define fresh-tenant architecture or justify reopening broad Builder product scope.
+- Active launch work moves to Portal Foundation / Avdelningsportal canonical-path consolidation for Kommun 1.0.
