@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-27
 
 # Decision Log
 
@@ -20,3 +20,21 @@ Last reviewed: 2026-08-24
 - External menu-facing surfaces use effective_menu_name.
 - Private Cook Work Menu or COW state is not portal or publication truth unless deliberately promoted or published.
 - Planera 2.0 Architecture Lock marked complete; next launch path remains close Menu/Offshore seam -> Portal/Kommun integration -> Kommun Ready for Pilot.
+
+## 2026-08-26
+- Shared Builder runtime is the canonical direction; embedded Hosts remain thin.
+- Legacy Builder scope inconsistency identified: old unscoped objects may be globally readable while newer objects are tenant scoped.
+- This legacy condition must not drive cross-tenant visibility workarounds.
+- Scope-aware canonical writes must not silently create unscoped Components/Compositions.
+- organisation scope is tenant-local.
+- private Cook/COW state is user isolated.
+- legacy backfill must be provenance driven; no tenant guessing.
+- missing-scope read compatibility is temporary.
+
+## 2026-08-27
+- Builder finishline narrowed to prevention -> legacy containment/repair -> deny-by-default/parity -> freeze.
+- Offshore demo/provisioning actor context must come from a real principal in the same tenant; fabricated or cross-tenant principals are forbidden.
+- Main launch path after Builder freeze remains Kommun 1.0 Ready for Pilot.
+- Main Offshore development resumes after Kommun pilot-ready.
+- Offshore 1.0 MVP is locked around Provisioning, Cook Operations and Crew Experience.
+- External-service policy locked: integrate first; build own where Yuplan creates unique value.

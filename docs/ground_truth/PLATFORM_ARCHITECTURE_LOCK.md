@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-27
 
 # Platform Architecture Lock
 
@@ -20,6 +20,14 @@ Last reviewed: 2026-08-22
 - The actually applicable Dish or menu identity for the current actor or business situation.
 - Published menu stays baseline.
 - Operational or private choices do not mutate publication.
+
+## Tenant and Ownership Boundary
+- Tenant isolation is a platform invariant, not a UI concern.
+- organisation-scoped canonical data may be shared inside one tenant only.
+- user/private data is isolated to the owning actor according to the scope rules.
+- Business modules must pass real actor/tenant context into scope-aware canonical writes.
+- No production path may fabricate a principal or borrow a user from another tenant merely to satisfy scope.
+- Legacy objects without scope are compatibility debt and must not define the architecture for new tenants.
 
 ## Production Layer
 - Planera 2.0.

@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-27
 
 # Builder Menu Lock
 
@@ -19,7 +19,18 @@ Last reviewed: 2026-08-24
 - Published menus, portals, print/menu presentation, and other external menu-facing surfaces SHALL use effective_menu_name.
 - A cook's private Work Menu or COW identity must never leak into published or external menu presentation unless that operational choice is explicitly promoted or published through the proper publication flow.
 - published menu remains the immutable baseline.
-- Cook private COW must never alter Land, Admin, shared source, or another Cook.
+- Cook private COW must never alter Land, Admin, shared source, another Cook, or another tenant.
 - Offshore does not create duplicate Dish or Component libraries or editors.
-- canonical standalone Builder editors are reused by business modules.
+- Canonical standalone Builder editors and the shared Builder Component Library runtime are reused by business modules.
+- Embedded hosts may isolate shell/CSS/return behavior, but must remain thin and must not become shadow Builder runtimes.
 - Builder is not a production engine.
+
+## Scope Integrity
+- Canonical Builder objects are tenant/user scoped platform data.
+- organisation scope may be shared only inside the same tenant.
+- user/private scope follows the owning actor and is the basis for private Cook COW.
+- A scope-aware canonical create must never silently create an unscoped Component or Composition.
+- Missing-scope legacy objects are compatibility debt, not a valid canonical product scope.
+- Legacy scope repair must not guess tenant ownership. Provenance is required before backfill.
+- Missing-scope read compatibility may remain temporarily while legacy data is migrated.
+- Target state after migration/parity is missing-scope deny-by-default.

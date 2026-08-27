@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-27
 
 # Portals Architecture Lock
 
@@ -39,5 +39,13 @@ Create or reuse a common Portal Foundation where practical:
 - practical and crew information.
 - later reporting and communication functions.
 - does not own menu or production truth.
+
+## External Services
+- Integrate strong existing external services first when Yuplan does not create unique value by rebuilding them.
+- Normalize external data through Yuplan adapters before presentation.
+- Offshore weather/marine information may be added from installation coordinates where useful.
+- Weather/marine presentation should expose source and last update time.
+- Yuplan must not present external weather/marine data as certified navigation or safety status unless the source/product explicitly supports that claim.
+- External-service integrations must not become new menu or production sources of truth.
 
 Existing legacy or current portal variants are reference material, not automatically canonical implementations.
