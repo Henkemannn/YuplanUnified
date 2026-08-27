@@ -1,0 +1,175 @@
+﻿=== WORKSPACE FAILURES ===
+F.....F..                                                                [100%]
+================================== FAILURES ===================================
+___________ test_builder_workspace_v1_route_renders_product_surface ___________
+tests\ui\test_builder_workspace_v1_ui.py:311: in test_builder_workspace_v1_route_renders_product_surface
+    assert 'const didCloseDishOverflow = closeDishComponentOverflowMenus();' in js
+E   AssertionError: assert 'const didCloseDishOverflow = closeDishComponentOverflowMenus();' in 'function showJson(targetId, value) {\r\n  const el = document.getElementById(targetId);\r\n  if (!el) {\r\n    return...\r\n      status: 0,\r\n      data: { ok: false, error: String(error.message || error) },\r\n    });\r\n  }\r\n});\r\n'
+---------------------------- Captured stdout setup ----------------------------
+RUNTIME: sqlite_file=C:\Users\Henrik Jonsson\AppData\Local\Temp\pytest-of-Henrik Jonsson\pytest-318\db0\test_app.db testing=True branch=feat/planera-app-shell-2026-03-03 commit=374102a tenants=? sites=? users=? secret_key_len=54 secret_key_sha256=646cf5a2cefdfbd28da0caabb3b2f896a792d15703b2d043a6d93ff6a2279034
+---------------------------- Captured stderr setup ----------------------------
+create_all: start
+create_all: TESTING -> drop_all enabled
+----------------------------- Captured log setup ------------------------------
+WARNING  core.app_factory:app_factory.py:176 WARN: SECRET_KEY missing/short, using dev fallback
+INFO     unified.db:db.py:167 create_all: start
+WARNING  unified.db:db.py:172 create_all: TESTING -> drop_all enabled
+---------------------------- Captured stderr call -----------------------------
+{'request_id': '08eab81c-4c46-4471-9b60-1766661aca52', 'tenant_id': 1, 'tenant_id_g': 1, 'tenant_id_session': 1, 'site_id_g': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'site_id_session': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'user_id': 1, 'user_id_g': None, 'method': 'GET', 'path': '/builder-workspace-v1', 'status': 200, 'duration_ms': 9}
+{'request_id': '768acf2c-e356-43e3-ba5a-47556bad88ad', 'tenant_id': 1, 'tenant_id_g': 1, 'tenant_id_session': 1, 'site_id_g': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'site_id_session': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'user_id': 1, 'user_id_g': 1, 'method': 'GET', 'path': '/static/js/builder.js', 'status': 200, 'duration_ms': 1}
+{'request_id': '22373f02-16b5-444e-8a93-0fca5a0a55d5', 'tenant_id': 1, 'tenant_id_g': 1, 'tenant_id_session': 1, 'site_id_g': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'site_id_session': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'user_id': 1, 'user_id_g': 1, 'method': 'GET', 'path': '/static/js/builder_dish_editor.js', 'status': 200, 'duration_ms': 0}
+------------------------------ Captured log call ------------------------------
+INFO     unified:app_factory.py:1130 {'request_id': '08eab81c-4c46-4471-9b60-1766661aca52', 'tenant_id': 1, 'tenant_id_g': 1, 'tenant_id_session': 1, 'site_id_g': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'site_id_session': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'user_id': 1, 'user_id_g': None, 'method': 'GET', 'path': '/builder-workspace-v1', 'status': 200, 'duration_ms': 9}
+INFO     unified:app_factory.py:1130 {'request_id': '768acf2c-e356-43e3-ba5a-47556bad88ad', 'tenant_id': 1, 'tenant_id_g': 1, 'tenant_id_session': 1, 'site_id_g': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'site_id_session': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'user_id': 1, 'user_id_g': 1, 'method': 'GET', 'path': '/static/js/builder.js', 'status': 200, 'duration_ms': 1}
+INFO     unified:app_factory.py:1130 {'request_id': '22373f02-16b5-444e-8a93-0fca5a0a55d5', 'tenant_id': 1, 'tenant_id_g': 1, 'tenant_id_session': 1, 'site_id_g': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'site_id_session': '0d677bc6-e2e2-404c-ab91-7ac60d6bd302', 'user_id': 1, 'user_id_g': 1, 'method': 'GET', 'path': '/static/js/builder_dish_editor.js', 'status': 200, 'duration_ms': 0}
+_______________ test_builder_legacy_modal_close_system_contract _______________
+tests\ui\test_builder_workspace_v1_ui.py:939: in test_builder_legacy_modal_close_system_contract
+    assert 'closeModalById("dishesLibraryModal");' in script
+E   assert 'closeModalById("dishesLibraryModal");' in 'function showJson(targetId, value) {\r\n  const el = document.getElementById(targetId);\r\n  if (!el) {\r\n    return...\r\n      status: 0,\r\n      data: { ok: false, error: String(error.message || error) },\r\n    });\r\n  }\r\n});\r\n'
+---------------------------- Captured stderr call -----------------------------
+{'request_id': '7aa29483-7c2c-4b49-903c-200952fe6f6b', 'tenant_id': None, 'tenant_id_g': None, 'tenant_id_session': None, 'site_id_g': 'b5455f99-dd7b-45f2-b923-0d0535513c0e', 'site_id_session': 'b5455f99-dd7b-45f2-b923-0d0535513c0e', 'user_id': None, 'user_id_g': None, 'method': 'GET', 'path': '/static/js/builder.js', 'status': 200, 'duration_ms': 0}
+------------------------------ Captured log call ------------------------------
+INFO     unified:app_factory.py:1130 {'request_id': '7aa29483-7c2c-4b49-903c-200952fe6f6b', 'tenant_id': None, 'tenant_id_g': None, 'tenant_id_session': None, 'site_id_g': 'b5455f99-dd7b-45f2-b923-0d0535513c0e', 'site_id_session': 'b5455f99-dd7b-45f2-b923-0d0535513c0e', 'user_id': None, 'user_id_g': None, 'method': 'GET', 'path': '/static/js/builder.js', 'status': 200, 'duration_ms': 0}
+=========================== short test summary info ===========================
+FAILED tests/ui/test_builder_workspace_v1_ui.py::test_builder_workspace_v1_route_renders_product_surface
+FAILED tests/ui/test_builder_workspace_v1_ui.py::test_builder_legacy_modal_close_system_contract
+2 failed, 7 passed in 1.30s
+
+=== TEST FILE DIFF ===
+diff --git a/tests/ui/test_builder_workspace_v1_ui.py b/tests/ui/test_builder_workspace_v1_ui.py
+index 31654db..96db599 100644
+--- a/tests/ui/test_builder_workspace_v1_ui.py
++++ b/tests/ui/test_builder_workspace_v1_ui.py
+@@ -18,14 +18,17 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
+     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
+     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
+     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
++    assert '<script src="/static/js/builder_component_library_runtime.js"></script>' in html
++    assert html.count('<script src="/static/js/builder_component_theme.js"></script>') == 1
+     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' in html
+     ce_pos = html.find("builder_component_editor.js")
+     de_pos = html.find("builder_dish_editor.js")
+     theme_pos = html.find("builder_component_theme.js")
++    runtime_pos = html.find("builder_component_library_runtime.js")
+     ctrl_pos = html.find("builder_modal_controller.js")
+     builder_pos = html.find("builder.js?v=")
+     assert ce_pos < de_pos < ctrl_pos < builder_pos
+-    assert theme_pos < ce_pos < builder_pos
++    assert theme_pos < runtime_pos < ce_pos < builder_pos
+ 
+     # Legacy modal identified in stuck screenshot should be present.
+     assert 'id="addComponentModal"' in html
+@@ -632,6 +635,15 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
+     assert 'window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";' in script
+     assert 'console.log("Builder JS active: builder-modal-system-reset-1");' in script
+     assert 'function resetGlobalModalSafetyState() {' in script
++    assert 'function getComponentLibraryRuntime() {' in script
++    assert 'BuilderComponentLibraryRuntime.create({' in script
++    assert 'getComponentLibraryRuntime().renderPalette();' in script
++    assert 'const runtime = BuilderComponentLibraryRuntime.create({' in script
++    assert 'const palette = document.getElementById("builderComponentPalette");' not in script
++    assert 'pill.addEventListener("click", async () => {' not in script
++    assert 'openAddComponentModalBtn.addEventListener("click"' not in script
++    assert 'addComponentBtn.addEventListener("click"' not in script
++    assert 'componentCreateModalCloseBtn.addEventListener("click"' not in script
+     assert 'document.body.classList.remove("modal-open", "modal-locked");' in script
+     assert 'document.documentElement.classList.remove("modal-open", "modal-locked");' in script
+     assert 'document.body.style.pointerEvents = "";' in script
+@@ -725,8 +737,8 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
+     assert 'componentDetailSaveChangesBtn' in script
+     assert 'window.confirm("Save changes before leaving?")' in script
+     assert 'window.confirm("Discard changes and close?")' in script
+-    assert 'if (modal.id === "componentDetailEditorModal") {' in script
+-    assert 'await closeComponentDetailEditor();' in script
++    assert 'if (modal.id === "componentDetailEditorModal") {' not in script
++    assert 'await closeComponentDetailEditor();' not in script
+     assert 'function renderRecipeIngredientRows(rows) {' in script
+     assert 'function syncCalculationRowsFromRecipeRows() {' in script
+     assert 'deleteComponentFromLibrary' in script
+@@ -794,30 +806,24 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
+     assert 'defineBuilderModalStateAccessor("pendingComponentCreateReturnTab");' in script
+     assert 'defineBuilderModalStateAccessor("pendingComponentCreateComponentId");' in script
+     assert 'function updateComponentDetailReturnAction() {' in script
+-    add_component_handler_start = script.find('if (addComponentBtn) {')
+-    add_component_handler_end = script.find('if (recipeCreateBtn) {')
+-    assert add_component_handler_start != -1 and add_component_handler_end != -1 and add_component_handler_start < add_component_handler_end
+-    add_component_handler_js = script[add_component_handler_start:add_component_handler_end]
+-    assert 'setPendingComponentCreateForCurrentComposition();' in add_component_handler_js
+-    assert 'closeModalById("addComponentModal");' in add_component_handler_js
+-    assert 'hideResolveModalForComponentCreation();' in add_component_handler_js
+-    assert 'openSimpleModal("componentCreateModal");' in add_component_handler_js
+-    assert 'await openComponentDetailEditor(createdComponentId);' in script
++    assert 'await openComponentDetailEditor(createdComponentId);' not in script
+     assert 'await attachComponentToPendingComposition(createdComponentId);' not in script
+-    assert 'pendingComponentCreateComponentId = createdComponentId;' in script
+-    assert 'if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate)' in script
+-    assert 'else if (createdComponentId && result.data.duplicate)' in script
+-    assert 'clearPendingComponentCreateForComposition();' in add_component_handler_js or 'clearPendingComponentCreateForComposition();' in script
+-    assert 'else if (createdComponentId) {' in script
++    assert 'pendingComponentCreateComponentId = createdComponentId;' not in script
++    assert 'if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate)' not in script
++    assert 'isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);' in script
++    assert 'openComponentCreateModal: openBuilderComponentCreateModal,' in script
++    assert 'clearPendingComponentCreateForComposition();' in script
+     # Dish return orchestration stays in builder.js; Component editor receives it as a callback.
+     assert 'async function reopenPendingCompositionForReturn() {' in script
+     assert 'clearPendingComponentCreateForComposition();' in script
+     assert 'await loadLibrary();' in script
+-    assert 'const freeDishCategoryEl = document.getElementById("freeDishCategory");' in script
+-    assert 'const library_group = freeDishCategoryEl ? String(freeDishCategoryEl.value || "").trim() : "ovrigt";' in script
+-    assert 'seed_components: false,' in script
+-    assert 'openBuilderModalForComposition(result.data.composition, "components");' in script
+-    assert 'freeDishCategoryEl.value = "ovrigt";' in script
++    assert 'function openBuilderDishCreateModal() {' in script
++    assert 'BuilderDishCreateModal.bind({});' in script
++    assert 'includeSeedComponents: true' in script
++    assert 'createEndpoint: "/api/builder/compositions"' in script or 'createEndpoint: "/api/builder/compositions",' in script
++    assert 'openBuilderModalForComposition(composition, "components");' in script
++    assert 'freeDishCategoryEl' not in script
++    assert 'seed_components: false,' not in script
+     assert 'body: { composition_name },' not in script
+     assert 'Create dish' not in script
+     assert 'Dish creation' not in script
+@@ -842,6 +848,26 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
+     assert 'function setWorkspaceSurface(surface)' in script
+ 
+ 
++def test_builder_component_library_runtime_contract(client_admin) -> None:
++    rv = client_admin.get("/static/js/builder_component_library_runtime.js")
++
++    assert rv.status_code == 200
++    script = rv.data.decode("utf-8")
++    assert 'globalThis.BuilderComponentLibraryRuntime = Object.freeze({' in script
++    assert 'function create(options) {' in script
++    assert "'/api/builder/components'" in script
++    assert 'const searchValue = getSearchValue().toLowerCase();' in script
++    assert "searchInputElement.addEventListener('input'" in script
++    assert "button.addEventListener('click', async () => {" in script
++    assert 'button.disabled = true;' in script
++    assert 'attachedIds.has(componentId)' in script
++    assert 'const attachResult = await handleAttach(componentId);' in script
++    assert 'async function handleAttach(componentId) {' in script
++    assert 'component-palette-pill-included' in script
++    assert 'No components match search' in script
++    assert 'No reusable components yet' in script
++
++
+ def test_builder_component_editor_sets_category_on_every_open(client_admin) -> None:
+     rv = client_admin.get("/static/js/builder_component_editor.js")
+ 
+@@ -905,10 +931,11 @@ def test_builder_legacy_modal_close_system_contract(client_admin) -> None:
+     assert 'document.documentElement.classList.remove("modal-open", "modal-locked");' in script
+ 
+     # Explicit close mappings for all legacy Done/Cancel controls.
+-    assert 'closeModalById("addComponentModal");' in script
+-    assert 'closeModalById("importLibraryModal");' in script
+-    assert 'closeModalById("componentCreateModal");' in script
+-    assert 'closeModalById("quickCreateModal");' in script
++    assert 'closeModalById("addComponentModal");' not in script
++    assert 'closeModalById("importLibraryModal");' not in script
++    assert 'closeModalById("componentCreateModal");' not in script
++    assert 'function openBuilderDishCreateModal() {' in script
++    assert 'includeSeedComponents: true' in script
+     assert 'closeModalById("dishesLibraryModal");' in script
+     assert 'closeModalById("importEditModal");' in script
+     assert 'closeModalById("importInboxModal");' in script

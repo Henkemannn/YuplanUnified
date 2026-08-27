@@ -1,0 +1,1036 @@
+﻿=== STATUS ===
+ M core/builder/builder_flow.py
+ M core/builder/library_scope.py
+ M core/builder_api.py
+ M core/builder_menu_context_api.py
+ M core/builder_menu_context_flow.py
+ M core/offshore_demo_seed.py
+ M static/js/builder.js
+ M static/js/builder_editor_host.js
+ M static/js/builder_modal_controller.js
+ M static/offshore2/work_menu.js
+ M templates/builder_editor_host.html
+ M templates/builder_workspace_v1.html
+ M tests/api/test_builder_api.py
+ M tests/core/test_builder_menu_context_flow.py
+ M tests/core/test_builder_scope_flow.py
+ M tests/offshore/test_offshore_demo_seed_cli.py
+ M tests/offshore/test_offshore_work_menu.py
+ M tests/ui/test_builder_host_editor.py
+ M tests/ui/test_builder_workspace_v1_ui.py
+?? brt2-review.txt
+?? brt2-workspace-failures.txt
+?? bst1-review.txt
+?? builder-decoupling-diff.txt
+?? builder-runtime-review.txt
+?? static/js/builder_component_create.js
+?? static/js/builder_component_library_runtime.js
+?? static/js/builder_dish_create.js
+?? templates/builder/_add_component_modal.html
+?? templates/builder/_component_create_modal.html
+?? templates/builder/_dish_create_modal.html
+
+=== DIFF STAT ===
+ core/builder/builder_flow.py                  | 117 +++++++
+ core/builder/library_scope.py                 |  11 +-
+ core/builder_api.py                           |  78 ++++-
+ core/builder_menu_context_api.py              |   9 +
+ core/builder_menu_context_flow.py             |   6 +-
+ core/offshore_demo_seed.py                    |  57 +++-
+ static/js/builder.js                          | 458 ++++++++------------------
+ static/js/builder_editor_host.js              | 238 +++++++++----
+ static/js/builder_modal_controller.js         |  70 +++-
+ static/offshore2/work_menu.js                 | 123 ++++++-
+ templates/builder_editor_host.html            |   7 +
+ templates/builder_workspace_v1.html           |  75 +----
+ tests/api/test_builder_api.py                 |  76 ++++-
+ tests/core/test_builder_menu_context_flow.py  |  74 ++++-
+ tests/core/test_builder_scope_flow.py         | 140 +++++++-
+ tests/offshore/test_offshore_demo_seed_cli.py |  73 +++-
+ tests/offshore/test_offshore_work_menu.py     |  16 +-
+ tests/ui/test_builder_host_editor.py          |  55 +++-
+ tests/ui/test_builder_workspace_v1_ui.py      |  85 +++--
+ 19 files changed, 1238 insertions(+), 530 deletions(-)
+
+=== BUILDER FLOW ===
+diff --git a/core/builder/builder_flow.py b/core/builder/builder_flow.py
+index 7f78b9b..3e3912e 100644
+--- a/core/builder/builder_flow.py
++++ b/core/builder/builder_flow.py
+@@ -47,6 +47,7 @@ from .diet_conflict_preview import (
+ )
+ from .library_scope import ActorContext
+ from .library_scope import ObjectScope
++from .library_scope import private_object_scope
+ from .library_scope import can_read_object
+ from .library_scope import can_write_object
+ from .library_scope import fork_object_scope
+@@ -75,6 +76,12 @@ class LibraryImportSummary:
+     warnings: list[str] = field(default_factory=list)
+ 
+ 
++@dataclass(frozen=True)
++class PrivateComponentCreateResult:
++    component: Component
++    reused: bool
++
++
+ class ObjectScopeRepository(Protocol):
+     def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None: ...
+ 
+@@ -596,6 +603,9 @@ class BuilderFlow:
+                     return self._component_service.set_component_category(existing_item.component_id, category_value)
+                 return existing_item
+ 
++        if self._object_scope_repository is not None and actor is None:
++            raise ValueError("actor is required for scoped component creation")
++
+         base = self._slugify_component_name(name_value)
+         if not base:
+             base = self._generate_component_seed()
+@@ -640,6 +650,70 @@ class BuilderFlow:
+                 raise
+         return created
+ 
++    def create_private_standalone_component(
++        self,
++        component_name: str,
++        *,
++        category: str | None = None,
++        actor: ActorContext | None = None,
++    ) -> Component:
++        return self.create_private_component(component_name, category=category, actor=actor).component
++
++    def create_private_component(
++        self,
++        component_name: str,
++        *,
++        category: str | None = None,
++        actor: ActorContext | None = None,
++    ) -> PrivateComponentCreateResult:
++        category_value = str(category or "").strip().lower() or None
++        name_value = self._normalize_component_name(component_name)
++        if not name_value:
++            raise ValueError("component_name must be non-empty")
++        if actor is None:
++            raise ValueError("actor is required for private component creation")
++
++        match = self.match_component_name(name_value, actor=actor)
++        if match.status in {"exact_match", "alias_match"} and match.component_id:
++            existing = self._component_service.get_component(match.component_id)
++            if existing is not None and self._can_read_library_object("component", existing.component_id, actor=actor):
++                return PrivateComponentCreateResult(component=existing, reused=True)
++
++        normalized_key = self._normalize_component_key(name_value)
++        for existing_item in self.list_library_components(actor=actor):
++            if self._normalize_component_key(existing_item.canonical_name) == normalized_key:
++                return PrivateComponentCreateResult(component=existing_item, reused=True)
++
++        base = self._slugify_component_name(name_value)
++        if not base:
++            base = self._generate_component_seed()
++
++        component_id = base
++        suffix = 2
++        while True:
++            existing = self._component_service.get_component(component_id)
++            if existing is None:
++                break
++            if existing.canonical_name == name_value and self._can_read_library_object("component", existing.component_id, actor=actor):
++                return PrivateComponentCreateResult(component=existing, reused=True)
++            component_id = f"{base}_{suffix}"
++            suffix += 1
++
++        created = self._component_service.create_component(
++            component_id=component_id,
++            canonical_name=name_value,
++            categories=[category_value] if category_value else [],
++        )
++        try:
++            self._set_object_scope("component", created.component_id, private_object_scope(actor))
++        except Exception:
++            try:
++                self._component_service.delete_component(created.component_id)
++            except Exception:
++                pass
++            raise
++        return PrivateComponentCreateResult(component=created, reused=False)
++
+     def set_component_category(
+         self,
+         component_id: str,
+@@ -741,6 +815,9 @@ class BuilderFlow:
+         menu_name: str | None = None,
+         actor: ActorContext | None = None,
+     ) -> Composition:
++        if self._object_scope_repository is not None and actor is None:
++            raise ValueError("actor is required for scoped composition creation")
++
+         composition = self._composition_service.create_composition(
+             composition_id=composition_id,
+             composition_name=composition_name,
+@@ -1158,6 +1235,46 @@ class BuilderFlow:
+         )
+         return composition
+ 
++    def create_private_composition_with_generated_id(
++        self,
++        composition_name: str,
++        *,
++        library_group: str | None = None,
++        actor: ActorContext | None = None,
++    ) -> Composition:
++        composition_name_value = str(composition_name or '').strip()
++        if not composition_name_value:
++            raise ValueError('composition_name must be non-empty')
++        if actor is None:
++            raise ValueError('actor is required for private composition creation')
++        if self._object_scope_repository is None:
++            raise ValueError('object scope repository is required for private creation')
++
++        created_composition: Composition | None = None
++        try:
++            created_composition = self._composition_service.create_composition(
++                composition_id=self._generate_composition_id(),
++                composition_name=composition_name_value,
++                library_group=library_group,
++            )
++            self._set_object_scope(
++                'composition',
++                created_composition.composition_id,
++                private_object_scope(actor, source_object_id=None),
++            )
++            return self._composition_service.get_composition(created_composition.composition_id) or created_composition
++        except Exception:
++            if created_composition is not None:
++                try:
++                    self._delete_object_scope('composition', created_composition.composition_id)
++                except Exception:
++                    pass
++                try:
++                    self._composition_service.delete_composition(created_composition.composition_id)
++                except Exception:
++                    pass
++            raise
++
+     def add_component_to_composition(
+         self,
+         composition_id: str,
+
+=== BUILDER API ===
+diff --git a/core/builder_api.py b/core/builder_api.py
+index 22792cb..edd3e4e 100644
+--- a/core/builder_api.py
++++ b/core/builder_api.py
+@@ -530,9 +530,9 @@ def _run_library_import(
+     return summary, metrics
+ 
+ 
+-def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
++def _build_import_review_drafts(lines: list[str], *, actor: ActorContext | None = None) -> list[dict[str, Any]]:
+     flow = _get_builder_flow()
+-    actor = _get_builder_actor()
++    effective_actor = actor if actor is not None else _get_builder_actor()
+     classified = classify_builder_import_lines(lines)
+     drafts: list[dict[str, Any]] = []
+     for index, item in enumerate(classified):
+@@ -548,7 +548,7 @@ def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
+             components = [{"name": name} for name in component_suggestions]
+             suggested_tags = suggest_component_tags(normalized_name)
+             for name in component_suggestions:
+-                match = flow.match_component_name(name, actor=actor)
++                match = flow.match_component_name(name, actor=effective_actor)
+                 if str(match.status or "") in {"exact_match", "alias_match", "possible_match"}:
+                     hints.append(
+                         {
+@@ -582,12 +582,12 @@ def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
+     return drafts
+ 
+ 
+-def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
++def _publish_review_drafts(items: list[dict[str, Any]], *, actor: ActorContext | None = None) -> dict[str, Any]:
+     flow = _get_builder_flow()
+-    actor = _get_builder_actor()
++    effective_actor = actor if actor is not None else _get_builder_actor()
+     known_component_ids = {
+         str(component.component_id)
+-        for component in flow.list_library_components(actor=actor)
++        for component in flow.list_library_components(actor=effective_actor)
+         if str(component.component_id).strip()
+     }
+ 
+@@ -626,7 +626,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
+             component = flow.create_standalone_component(
+                 name,
+                 category=_normalize_component_category(suggest_component_category(name)),
+-                actor=actor,
++                actor=effective_actor,
+             )
+             if item_tags:
+                 details = _load_component_details(component.component_id)
+@@ -675,7 +675,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
+                 composition_name=name,
+                 library_group=None,
+                 seed_components=False,
+-                actor=actor,
++                actor=effective_actor,
+             )
+             created_composition_count += 1
+             if source_text and sanitize_builder_import_text(source_text) != name:
+@@ -710,7 +710,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
+                 component = flow.create_standalone_component(
+                     component_name,
+                     category=_normalize_component_category(suggest_component_category(component_name)),
+-                    actor=actor,
++                    actor=effective_actor,
+                 )
+                 component_tags = suggest_component_tags(component_name)
+                 if component_tags:
+@@ -733,7 +733,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
+                     composition_id=composition.composition_id,
+                     component_id=component.component_id,
+                     role="component",
+-                    actor=actor,
++                    actor=effective_actor,
+                 )
+ 
+         row_results.append(
+@@ -1675,6 +1675,35 @@ def create_composition():
+     return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
+ 
+ 
++@bp.post("/compositions/private")
++@require_roles("viewer", "editor", "admin", "superuser")
++def create_private_composition():
++    payload = _require_json_object()
++    if isinstance(payload, tuple):
++        return payload
++
++    try:
++        flow = _get_builder_flow()
++        actor = _get_builder_actor()
++        if actor is None:
++            return _unauthorized()
++        if "composition_id" in payload:
++            return _bad_request("composition_id is not allowed")
++        if "seed_components" in payload:
++            return _bad_request("seed_components is not allowed")
++        composition_name = _require_str(payload, "composition_name")
++        library_group = _require_dish_library_group(payload)
++        composition = flow.create_private_composition_with_generated_id(
++            composition_name=composition_name,
++            library_group=library_group,
++            actor=actor,
++        )
++    except ValueError as exc:
++        return _bad_request(str(exc))
++
++    return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
++
++
+ @bp.delete("/compositions/<composition_id>")
+ @require_roles("editor", "admin", "superuser")
+ def delete_composition(composition_id: str):
+@@ -1821,6 +1850,35 @@ def create_component():
+     return jsonify({"ok": True, "component": _serialize_component(component)}), 201
+ 
+ 
++@bp.post("/components/private")
++@require_roles("viewer", "editor", "admin", "superuser")
++def create_private_component():
++    payload = _require_json_object()
++    if isinstance(payload, tuple):
++        return payload
++
++    try:
++        flow = _get_builder_flow()
++        actor = _get_builder_actor()
++        if actor is None:
++            return _unauthorized()
++        component_name_value = _require_str(payload, "component_name")
++        result = flow.create_private_component(
++            component_name=component_name_value,
++            category=_optional_str(payload, "category"),
++            actor=actor,
++        )
++    except ValueError as exc:
++        return _bad_request(str(exc))
++
++    status_code = 200 if result.reused else 201
++    response_body = {"ok": True, "component": _serialize_component(result.component)}
++    if result.reused:
++        response_body["duplicate"] = True
++        response_body["message"] = f"Komponenten finns redan: {result.component.canonical_name}"
++    return jsonify(response_body), status_code
++
++
+ @bp.patch("/components/<component_id>")
+ @require_roles("cook", "editor", "admin", "superuser")
+ def update_component(component_id: str):
+
+=== OFFSHORE DEMO SEED ===
+diff --git a/core/offshore_demo_seed.py b/core/offshore_demo_seed.py
+index 29cdfd2..18f5d5b 100644
+--- a/core/offshore_demo_seed.py
++++ b/core/offshore_demo_seed.py
+@@ -10,6 +10,7 @@ import click
+ from flask import Flask, current_app
+ from sqlalchemy import text
+ 
++from core.builder.library_scope import ActorContext
+ from core.commun_builder_linkage import CommunBuilderMenuLinkService
+ from core.commun_builder_import import import_menu_result_to_builder_canonical
+ from core.commun_builder_publication import CommunBuilderPublicationRepository
+@@ -390,9 +391,46 @@ def _builder_flow():
+     return _get_builder_flow()
+ 
+ 
+-def _ensure_builder_content(*, anchor_day: date):
++def _demo_builder_actor() -> ActorContext:
++    db = get_session()
++    try:
++        row = db.execute(
++            text(
++                """
++                SELECT id, role
++                FROM users
++                WHERE role IN ('admin', 'superuser')
++                ORDER BY
++                    CASE WHEN tenant_id = :tenant_id THEN 0 ELSE 1 END,
++                    CASE role WHEN 'superuser' THEN 0 ELSE 1 END,
++                    id ASC
++                LIMIT 1
++                """
++            ),
++            {"tenant_id": DEMO_TENANT_ID},
++        ).fetchone()
++    finally:
++        db.close()
++
++    if row is None:
++        return ActorContext(
++            tenant_id=DEMO_TENANT_ID,
++            user_id=1,
++            site_id=DEMO_SITE_ID,
++            role="admin",
++        )
++
++    return ActorContext(
++        tenant_id=DEMO_TENANT_ID,
++        user_id=int(row.id),
++        site_id=DEMO_SITE_ID,
++        role=str(row.role or "admin"),
++    )
++
++
++def _ensure_builder_content(*, anchor_day: date, actor: ActorContext):
+     import_result = build_demo_menu_import_result(csv_path=demo_menu_csv_path(), anchor_day=anchor_day)
+-    _materialize_demo_builder_library(import_result)
++    _materialize_demo_builder_library(import_result, actor=actor)
+     return import_menu_result_to_builder_canonical(
+         import_result,
+         tenant_id=DEMO_TENANT_ID,
+@@ -401,9 +439,9 @@ def _ensure_builder_content(*, anchor_day: date):
+     )
+ 
+ 
+-def _materialize_demo_builder_library(import_result):
++def _materialize_demo_builder_library(import_result, *, actor: ActorContext) -> None:
+     lines = [str(item.dish_name or "").strip() for week in import_result.weeks for item in week.items if str(item.dish_name or "").strip()]
+-    drafts = _build_import_review_drafts(lines)
++    drafts = _build_import_review_drafts(lines, actor=actor)
+     selected_items = [
+         {
+             **draft,
+@@ -414,7 +452,7 @@ def _materialize_demo_builder_library(import_result):
+         if draft.get("classification") == "importable_dish"
+     ]
+     if selected_items:
+-        _publish_review_drafts(selected_items)
++        _publish_review_drafts(selected_items, actor=actor)
+ 
+ 
+ def _ensure_legacy_menu_and_publication(builder_menu_id: str, *, year: int, week: int) -> int:
+@@ -628,7 +666,7 @@ def _ensure_work_menu_decisions(work_period_id: int) -> int:
+         db.close()
+ 
+ 
+-def _ensure_prep_tasks() -> int:
++def _ensure_prep_tasks(*, actor: ActorContext) -> int:
+     db = get_session()
+     try:
+         service_events = (
+@@ -647,7 +685,7 @@ def _ensure_prep_tasks() -> int:
+         "Demo Offshore Soppa",
+         "Demo Offshore Vegetariskt",
+     ]
+-    component_ids = [builder_flow.create_standalone_component(name).component_id for name in component_names]
++    component_ids = [builder_flow.create_standalone_component(name, actor=actor).component_id for name in component_names]
+ 
+     created_count = 0
+     for index, event in enumerate(service_events):
+@@ -719,7 +757,8 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
+             prep_task_count=0,
+         )
+ 
+-    outcomes = _ensure_builder_content(anchor_day=anchor_day)
++    demo_actor = _demo_builder_actor()
++    outcomes = _ensure_builder_content(anchor_day=anchor_day, actor=demo_actor)
+     publication_service = CommunBuilderPublicationService()
+     for outcome in outcomes:
+         publication_service.publish_week(
+@@ -732,7 +771,7 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
+ 
+     _, _, work_period_id = _ensure_offshore_domain(anchor_day=anchor_day)
+     _ensure_work_menu_decisions(work_period_id)
+-    prep_task_count = _ensure_prep_tasks()
++    prep_task_count = _ensure_prep_tasks(actor=demo_actor)
+     service_event_count = len(period_service.list_service_events(DEMO_TENANT_ID, DEMO_SITE_ID, work_period_id))
+ 
+     first_outcome = outcomes[0] if outcomes else None
+
+=== BUILDER MENU CONTEXT FLOW ===
+diff --git a/core/builder_menu_context_flow.py b/core/builder_menu_context_flow.py
+index f458aa4..2b0140c 100644
+--- a/core/builder_menu_context_flow.py
++++ b/core/builder_menu_context_flow.py
+@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
+ import logging
+ 
+ from .builder import BuilderFlow
++from .builder.library_scope import ActorContext
+ from .builder.declaration_readiness import (
+     ComponentDeclarationReadiness,
+     MenuDeclarationReadiness,
+@@ -402,6 +403,8 @@ class BuilderMenuContextFlow:
+         menu_id: str,
+         menu_detail_id: str,
+         composition_name: str,
++        *,
++        actor: ActorContext | None = None,
+     ) -> tuple[Composition, MenuDetail, list[str]]:
+         details = self._menu_service.list_menu_details(menu_id)
+         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
+@@ -413,13 +416,14 @@ class BuilderMenuContextFlow:
+         if not unresolved_text:
+             raise ValueError("unresolved row required")
+ 
+-        composition = self._library_flow.create_composition_with_generated_id(composition_name=composition_name)
++        composition = self._library_flow.create_composition_with_generated_id(composition_name=composition_name, actor=actor)
+ 
+         for suggestion in self._library_flow.suggest_components_from_text(unresolved_text):
+             composition = self._library_flow.add_component_to_composition(
+                 composition_id=composition.composition_id,
+                 component_name=suggestion,
+                 role="component",
++                actor=actor,
+             )
+ 
+         warnings: list[str] = []
+
+=== SCOPE TESTS ===
+diff --git a/tests/core/test_builder_scope_flow.py b/tests/core/test_builder_scope_flow.py
+index 5425f8a..caa6e23 100644
+--- a/tests/core/test_builder_scope_flow.py
++++ b/tests/core/test_builder_scope_flow.py
+@@ -121,6 +121,139 @@ def test_create_scoped_composition_persists_organisation_scope() -> None:
+     )
+ 
+ 
++def test_scoped_component_create_requires_actor() -> None:
++    scope_repo = _MemoryScopeRepository()
++    flow = _build_flow(scope_repo)
++
++    with pytest.raises(ValueError, match="actor is required for scoped component creation"):
++        flow.create_standalone_component("Actorless component")
++
++
++def test_scoped_composition_create_requires_actor() -> None:
++    scope_repo = _MemoryScopeRepository()
++    flow = _build_flow(scope_repo)
++
++    with pytest.raises(ValueError, match="actor is required for scoped composition creation"):
++        flow.create_composition_with_generated_id("Actorless dish")
++
++
++def test_create_private_scoped_composition_persists_private_user_scope() -> None:
++    scope_repo = _MemoryScopeRepository()
++    flow = _build_flow(scope_repo)
++    actor = _actor(tenant_id=7, user_id=101)
++
++    composition = flow.create_private_composition_with_generated_id("Free dish", actor=actor)
++
++    assert composition.composition_name == "Free dish"
++    assert scope_repo.get_scope("composition", composition.composition_id) == ObjectScope(
++        tenant_id=7,
++        owner_scope="user",
++        owner_site_id=None,
++        owner_user_id=101,
++        visibility="private",
++        source_object_id=None,
++    )
++
++
++def test_create_private_scoped_component_persists_private_user_scope() -> None:
++    scope_repo = _MemoryScopeRepository()
++    flow = _build_flow(scope_repo)
++    owner = _actor(tenant_id=7, user_id=101)
++    other_user = _actor(tenant_id=7, user_id=102)
++
++    component = flow.create_private_standalone_component("Privat komponent", actor=owner)
++
++    assert component.canonical_name == "Privat komponent"
++    assert scope_repo.get_scope("component", component.component_id) == ObjectScope(
++        tenant_id=7,
++        owner_scope="user",
++        owner_site_id=None,
++        owner_user_id=101,
++        visibility="private",
++        source_object_id=None,
++    )
++    assert component.component_id in {item.component_id for item in flow.list_library_components(actor=owner)}
++    assert component.component_id not in {item.component_id for item in flow.list_library_components(actor=other_user)}
++
++
++def test_private_component_collision_never_reuses_unreadable_private_component() -> None:
++    scope_repo = _MemoryScopeRepository()
++    flow = _build_flow(scope_repo)
++    cook_b = _actor(tenant_id=7, user_id=202)
++    cook_a = _actor(tenant_id=7, user_id=101)
++
++    cook_b_result = flow.create_private_component("Tomats├Ñs", actor=cook_b)
++    cook_b_component = cook_b_result.component
++    assert cook_b_result.reused is False
++
++    cook_b_scope = scope_repo.get_scope("component", cook_b_component.component_id)
++    assert cook_b_scope is not None
++    assert can_read_object(cook_a, cook_b_scope) is False
++
++    cook_a_result = flow.create_private_component("Tomats├Ñs", actor=cook_a)
++    cook_a_component = cook_a_result.component
++    cook_a_scope = scope_repo.get_scope("component", cook_a_component.component_id)
++
++    assert cook_a_result.reused is False
++    assert cook_a_component.component_id != cook_b_component.component_id
++    assert cook_a_component.canonical_name == "Tomats├Ñs"
++    assert cook_a_scope == ObjectScope(
++        tenant_id=7,
++        owner_scope="user",
++        owner_site_id=None,
++        owner_user_id=101,
++        visibility="private",
++        source_object_id=None,
++    )
++    assert scope_repo.get_scope("component", cook_b_component.component_id) == cook_b_scope
++    assert cook_b_component.component_id in {item.component_id for item in flow.list_library_components(actor=cook_b)}
++    assert cook_b_component.component_id not in {item.component_id for item in flow.list_library_components(actor=cook_a)}
++
++
++def test_private_component_reuses_readable_organisation_component_and_own_private_component() -> None:
++    scope_repo = _MemoryScopeRepository()
++    flow = _build_flow(scope_repo)
++    org_actor = _actor(tenant_id=8, user_id=303)
++    cook_a = _actor(tenant_id=8, user_id=101)
++
++    organisation_component = flow.create_standalone_component("Tomats├Ñs", actor=org_actor)
++    org_result = flow.create_private_component("Tomats├Ñs", actor=cook_a)
++
++    assert org_result.reused is True
++    assert org_result.component.component_id == organisation_component.component_id
++
++    own_created = flow.create_private_component("R├Âdbetss├Ñs", actor=cook_a)
++    own_reused = flow.create_private_component("R├Âdbetss├Ñs", actor=cook_a)
++
++    assert own_created.reused is False
++    assert own_reused.reused is True
++    assert own_reused.component.component_id == own_created.component.component_id
++
++
++def test_private_component_reuse_does_not_mutate_existing_categories() -> None:
++    scope_repo = _MemoryScopeRepository()
++    flow = _build_flow(scope_repo)
++    org_actor = _actor(tenant_id=9, user_id=401)
++    cook = _actor(tenant_id=9, user_id=402)
++
++    organisation_component = flow.create_standalone_component("Tomats├Ñs", actor=org_actor)
++    original_org_categories = list(organisation_component.categories or [])
++
++    org_result = flow.create_private_component("Tomats├Ñs", category="sauce", actor=cook)
++    assert org_result.reused is True
++    assert org_result.component.component_id == organisation_component.component_id
++    assert list(org_result.component.categories or []) == original_org_categories
++    assert list(flow.get_library_component(organisation_component.component_id, actor=org_actor).categories or []) == original_org_categories
++
++    own_created = flow.create_private_component("Egen s├Ñs", category="sauce", actor=cook)
++    original_own_categories = list(own_created.component.categories or [])
++    own_reused = flow.create_private_component("Egen s├Ñs", category="dessert", actor=cook)
++
++    assert own_reused.reused is True
++    assert own_reused.component.component_id == own_created.component.component_id
++    assert list(own_reused.component.categories or []) == original_own_categories
++
++
+ def test_seeded_components_receive_scope() -> None:
+     scope_repo = _MemoryScopeRepository()
+     flow = _build_flow(scope_repo)
+@@ -146,7 +279,7 @@ def test_reused_object_keeps_existing_scope() -> None:
+     flow = _build_flow(scope_repo)
+     actor = _actor(tenant_id=4, user_id=404)
+ 
+-    component = flow.create_standalone_component("Kokt potatis")
++    component = flow.create_standalone_component("Kokt potatis", actor=actor)
+     existing_scope = ObjectScope(
+         tenant_id=4,
+         owner_scope="private",
+@@ -161,7 +294,7 @@ def test_reused_object_keeps_existing_scope() -> None:
+ 
+     assert reused.component_id == component.component_id
+     assert scope_repo.get_scope("component", component.component_id) == existing_scope
+-    assert scope_repo.set_calls == 1
++    assert scope_repo.set_calls == 2
+ 
+ 
+ @pytest.mark.parametrize("object_type", ["component", "composition"])
+@@ -225,8 +358,7 @@ def test_private_object_is_only_visible_to_owner(object_type: str) -> None:
+ 
+ @pytest.mark.parametrize("object_type", ["component", "composition"])
+ def test_legacy_unscoped_objects_remain_visible(object_type: str) -> None:
+-    scope_repo = _MemoryScopeRepository()
+-    flow = _build_flow(scope_repo)
++    flow = _build_flow()
+     actor = _actor(tenant_id=31, user_id=1)
+     other_actor = _actor(tenant_id=32, user_id=2)
+ 
+
+=== MENU CONTEXT TESTS ===
+diff --git a/tests/core/test_builder_menu_context_flow.py b/tests/core/test_builder_menu_context_flow.py
+index f5e91c1..8210102 100644
+--- a/tests/core/test_builder_menu_context_flow.py
++++ b/tests/core/test_builder_menu_context_flow.py
+@@ -3,6 +3,8 @@ from __future__ import annotations
+ from decimal import Decimal
+ 
+ from core.builder import BuilderFlow
++from core.builder.library_scope import ActorContext
++from core.builder.library_scope import ObjectScope
+ from core.builder_menu_context_flow import BuilderMenuContextFlow
+ from core.components import (
+     ComponentService,
+@@ -17,6 +19,23 @@ from core.components import (
+ from core.menu import ImportedMenuRow, InMemoryCompositionAliasRepository, MenuService, create_composition_alias
+ 
+ 
++class _MemoryScopeRepository:
++    def __init__(self) -> None:
++        self.scopes: dict[tuple[str, str], ObjectScope] = {}
++
++    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
++        return self.scopes.get((object_type, object_id))
++
++    def find_private_fork_id(self, object_type: str, source_object_id: str, *, tenant_id: int, owner_user_id: int) -> str | None:
++        return None
++
++    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
++        self.scopes[(object_type, object_id)] = scope
++
++    def delete_scope(self, object_type: str, object_id: str) -> None:
++        self.scopes.pop((object_type, object_id), None)
++
++
+ def _build_flows() -> tuple[BuilderFlow, BuilderMenuContextFlow]:
+     component_repository = InMemoryComponentRepository()
+     composition_repository = InMemoryCompositionRepository()
+@@ -45,6 +64,36 @@ def _build_flows() -> tuple[BuilderFlow, BuilderMenuContextFlow]:
+     return builder_flow, menu_context_flow
+ 
+ 
++def _build_scoped_flows() -> tuple[BuilderFlow, BuilderMenuContextFlow, _MemoryScopeRepository]:
++    component_repository = InMemoryComponentRepository()
++    composition_repository = InMemoryCompositionRepository()
++    alias_repository = InMemoryCompositionAliasRepository()
++    recipe_repository = InMemoryRecipeRepository()
++    ingredient_repository = InMemoryRecipeIngredientLineRepository()
++    scope_repository = _MemoryScopeRepository()
++
++    component_service = ComponentService(repository=component_repository)
++    composition_service = CompositionService(repository=composition_repository)
++    menu_service = MenuService(composition_repository=composition_repository)
++
++    builder_flow = BuilderFlow(
++        component_service=component_service,
++        composition_service=composition_service,
++        composition_repository=composition_repository,
++        alias_repository=alias_repository,
++        object_scope_repository=scope_repository,  # type: ignore[arg-type]
++    )
++    menu_context_flow = BuilderMenuContextFlow(
++        menu_service=menu_service,
++        composition_repository=composition_repository,
++        alias_repository=alias_repository,
++        recipe_repository=recipe_repository,
++        ingredient_repository=ingredient_repository,
++        library_flow=builder_flow,
++    )
++    return builder_flow, menu_context_flow, scope_repository
++
++
+ def test_create_menu_and_import_rows_through_menu_context_flow() -> None:
+     builder_flow, flow = _build_flows()
+     builder_flow.create_composition(composition_id="plate", composition_name="Kottbullar med mos")
+@@ -331,7 +380,8 @@ def test_menu_context_flow_is_orchestration_not_logic_duplication() -> None:
+ 
+ 
+ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
+-    _, flow = _build_flows()
++    _, flow, scope_repo = _build_scoped_flows()
++    actor = ActorContext(tenant_id=7, user_id=101, site_id=None, role="admin")
+     flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+     summary = flow.import_menu_rows(
+         menu_id="menu_1",
+@@ -343,6 +393,7 @@ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
+         menu_id="menu_1",
+         menu_detail_id=detail_id,
+         composition_name="New Plate",
++        actor=actor,
+     )
+ 
+     assert created.composition_id.startswith("cmp_")
+@@ -352,10 +403,19 @@ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
+     assert updated.composition_id == created.composition_id
+     assert updated.unresolved_text is None
+     assert warnings == []
++    assert scope_repo.get_scope("composition", created.composition_id) == ObjectScope(
++        tenant_id=7,
++        owner_scope="organisation",
++        owner_site_id=None,
++        owner_user_id=None,
++        visibility="organisation",
++        source_object_id=None,
++    )
+ 
+ 
+ def test_create_composition_from_unresolved_row_adds_suggested_components() -> None:
+-    _, flow = _build_flows()
++    _, flow, scope_repo = _build_scoped_flows()
++    actor = ActorContext(tenant_id=7, user_id=101, site_id=None, role="admin")
+     flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
+     summary = flow.import_menu_rows(
+         menu_id="menu_1",
+@@ -373,12 +433,22 @@ def test_create_composition_from_unresolved_row_adds_suggested_components() -> N
+         menu_id="menu_1",
+         menu_detail_id=detail_id,
+         composition_name="Fiskratt",
++        actor=actor,
+     )
+ 
+     component_ids = [item.component_id for item in created.components]
+     assert component_ids == ["kokt_torsk", "aggsas", "pressad_potatis"]
+     component_names = [item.component_name for item in created.components]
+     assert component_names == ["Kokt torsk", "├äggs├Ñs", "Pressad potatis"]
++    for component_id in component_ids:
++        assert scope_repo.get_scope("component", component_id) == ObjectScope(
++            tenant_id=7,
++            owner_scope="organisation",
++            owner_site_id=None,
++            owner_user_id=None,
++            visibility="organisation",
++            source_object_id=None,
++        )
+ 
+ 
+ def test_reimport_same_text_resolves_via_auto_created_alias() -> None:
+
+=== OFFSHORE SEED TESTS ===
+diff --git a/tests/offshore/test_offshore_demo_seed_cli.py b/tests/offshore/test_offshore_demo_seed_cli.py
+index 82b552b..fc5bfe5 100644
+--- a/tests/offshore/test_offshore_demo_seed_cli.py
++++ b/tests/offshore/test_offshore_demo_seed_cli.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from pathlib import Path
++import sqlite3
+ 
+ from alembic import command
+ from alembic.config import Config
+@@ -71,19 +72,65 @@ def test_offshore_demo_seed_cli_creates_idempotent_demo_rows(tmp_path: Path) ->
+     assert second.exit_code == 0, second.output
+ 
+     with app.app_context():
+-        assert _count_rows("tenants", "id = :id", {"id": 9001}) == 1
+-        assert _count_rows("sites", "id = :id AND tenant_id = :tenant_id", {"id": "demo-offshore", "tenant_id": 9001}) == 1
+-        assert _count_rows("offshore_installation_settings", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
+-        assert _count_rows("offshore_work_positions", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 3
+-        assert _count_rows("offshore_menu_cycles", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
+-        assert _count_rows("offshore_period_templates", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
+-        assert _count_rows("offshore_work_periods", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
+-        assert _count_rows("offshore_service_events", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
+-        assert _count_rows("offshore_service_event_menu_contexts", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
+-        assert _count_rows("offshore_work_menu_decisions", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 56
+-        assert _count_rows("offshore_prep_tasks", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
+-        assert _count_rows("commun_builder_menu_links", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
+-        assert _count_rows("commun_builder_publication_pins", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
++        from core.db import get_session
++
++        db = get_session()
++        try:
++            assert _count_rows("tenants", "id = :id", {"id": 9001}) == 1
++            assert _count_rows("sites", "id = :id AND tenant_id = :tenant_id", {"id": "demo-offshore", "tenant_id": 9001}) == 1
++            assert _count_rows("offshore_installation_settings", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
++            assert _count_rows("offshore_work_positions", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 3
++            assert _count_rows("offshore_menu_cycles", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
++            assert _count_rows("offshore_period_templates", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
++            assert _count_rows("offshore_work_periods", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
++            assert _count_rows("offshore_service_events", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
++            assert _count_rows("offshore_service_event_menu_contexts", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
++            assert _count_rows("offshore_work_menu_decisions", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 56
++            assert _count_rows("offshore_prep_tasks", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
++            assert _count_rows("commun_builder_menu_links", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
++            assert _count_rows("commun_builder_publication_pins", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
++
++            builder_db_path = Path(app.config["BUILDER_DB_PATH"])
++            with sqlite3.connect(builder_db_path) as builder_db:
++                builder_db.row_factory = sqlite3.Row
++                component_scope_count = builder_db.execute(
++                    "SELECT COUNT(*) AS count FROM builder_object_scopes WHERE tenant_id = ? AND object_type = 'component'",
++                    (9001,),
++                ).fetchone()["count"]
++                composition_scope_count = builder_db.execute(
++                    "SELECT COUNT(*) AS count FROM builder_object_scopes WHERE tenant_id = ? AND object_type = 'composition'",
++                    (9001,),
++                ).fetchone()["count"]
++                assert int(component_scope_count or 0) > 0
++                assert int(composition_scope_count or 0) > 0
++
++                demo_component_row = builder_db.execute(
++                    "SELECT component_id FROM builder_components WHERE canonical_name = ? LIMIT 1",
++                    ("Demo Offshore K├Âtt",),
++                ).fetchone()
++                assert demo_component_row is not None
++                assert (
++                    builder_db.execute(
++                        "SELECT COUNT(*) AS count FROM builder_object_scopes WHERE object_type = 'component' AND object_id = ? AND tenant_id = ? AND owner_scope = 'organisation' AND visibility = 'organisation'",
++                        (str(demo_component_row[0]), 9001),
++                    ).fetchone()["count"]
++                    == 1
++                )
++
++                demo_composition_row = builder_db.execute(
++                    "SELECT object_id FROM builder_object_scopes WHERE object_type = 'composition' AND tenant_id = ? ORDER BY object_id LIMIT 1",
++                    (9001,),
++                ).fetchone()
++                assert demo_composition_row is not None
++                assert (
++                    builder_db.execute(
++                        "SELECT COUNT(*) AS count FROM builder_object_scopes WHERE object_type = 'composition' AND object_id = ? AND tenant_id = ? AND owner_scope = 'organisation' AND visibility = 'organisation'",
++                        (str(demo_composition_row[0]), 9001),
++                    ).fetchone()["count"]
++                    == 1
++                )
++        finally:
++            db.close()
+ 
+ 
+ def test_offshore_demo_seed_cli_refuses_in_production(tmp_path: Path) -> None:
+
+=== BUILDER API TESTS ===
+diff --git a/tests/api/test_builder_api.py b/tests/api/test_builder_api.py
+index 3752517..74ac5d5 100644
+--- a/tests/api/test_builder_api.py
++++ b/tests/api/test_builder_api.py
+@@ -3,6 +3,7 @@ from __future__ import annotations
+ import io
+ import tempfile
+ import os
++from pathlib import Path
+ 
+ from docx import Document
+ from openpyxl import Workbook
+@@ -114,14 +115,81 @@ def test_create_composition_endpoint_supports_generated_id_without_menu_context(
+     body = rv.get_json() or {}
+     assert body.get("ok") is True
+     composition = body.get("composition") or {}
++    assert composition.get("composition_name") == "Free Dish"
+     generated_id = composition.get("composition_id")
+     assert isinstance(generated_id, str)
+     assert generated_id.startswith("cmp_")
+     assert len(generated_id) == 10
+-    assert composition.get("composition_name") == "Free Dish"
+-    components = composition.get("components") or []
+-    assert len(components) == 1
+-    assert components[0].get("component_name") == "Free Dish"
++    assert len(composition.get("components") or []) == 1
++    assert (composition.get("components") or [])[0].get("component_name") == "Free Dish"
++
++
++def test_create_private_composition_endpoint_generates_private_composition() -> None:
++    client = _sqlite_client()
++
++    rv = client.post(
++        "/api/builder/compositions/private",
++        json={
++            "composition_name": "Private Dish",
++            "library_group": "ovrigt",
++        },
++        headers=_headers(role="viewer"),
++    )
++
++    assert rv.status_code == 201
++    body = rv.get_json() or {}
++    assert body.get("ok") is True
++    composition = body.get("composition") or {}
++    generated_id = composition.get("composition_id")
++    assert isinstance(generated_id, str)
++    assert generated_id.startswith("cmp_")
++    assert len(generated_id) == 10
++    assert composition.get("composition_name") == "Private Dish"
++
++
++def test_create_private_component_endpoint_limits_visibility_to_owner() -> None:
++    fd, db_path = tempfile.mkstemp(prefix="builder_api_private_component_", suffix=".db")
++    os.close(fd)
++    app = _app_with_builder_db(db_path)
++    owner_client = app.test_client()
++    other_client = app.test_client()
++    owner_headers = _headers(role="cook", tenant_id=1, user_id=4)
++    other_headers = _headers(role="cook", tenant_id=1, user_id=5)
++    _seed_session(owner_client, role="cook", tenant_id=1, user_id=4)
++    _seed_session(other_client, role="cook", tenant_id=1, user_id=5)
++
++    created = owner_client.post(
++        "/api/builder/components/private",
++        json={"component_name": "Private palette component"},
++        headers=owner_headers,
++    )
++
++    assert created.status_code == 201
++    body = created.get_json() or {}
++    component = body.get("component") or {}
++    component_id = str(component.get("component_id") or "")
++    assert component.get("component_name") == "Private palette component"
++    assert component_id
++
++    owner_list = owner_client.get("/api/builder/components", headers=owner_headers)
++    other_list = other_client.get("/api/builder/components", headers=other_headers)
++    assert owner_list.status_code == 200
++    assert other_list.status_code == 200
++    owner_ids = {str(item.get("component_id") or "") for item in (owner_list.get_json() or {}).get("components", [])}
++    other_ids = {str(item.get("component_id") or "") for item in (other_list.get_json() or {}).get("components", [])}
++    assert component_id in owner_ids
++    assert component_id not in other_ids
++
++
++def test_private_component_endpoint_delegates_matching_to_builder_flow() -> None:
++    api_source = Path("core/builder_api.py").read_text(encoding="utf-8")
++    private_route_start = api_source.index('@bp.post("/components/private")')
++    private_route_end = api_source.index('@bp.patch("/components/<component_id>")', private_route_start)
++    private_route_block = api_source[private_route_start:private_route_end]
++
++    assert "create_private_component(" in private_route_block
++    assert "_normalize_component_key" not in private_route_block
++    assert "list_library_components(actor=actor)" not in private_route_block
+ 
+ 
+ def test_create_composition_endpoint_supports_empty_shell_when_seed_components_false() -> None:
+
+=== DIFF CHECK ===

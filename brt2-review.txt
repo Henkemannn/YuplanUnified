@@ -1,0 +1,1417 @@
+﻿=== BRT-2 STATUS ===
+ M core/builder/builder_flow.py
+ M core/builder/library_scope.py
+ M core/builder_api.py
+ M static/js/builder.js
+ M static/js/builder_editor_host.js
+ M static/js/builder_modal_controller.js
+ M static/offshore2/work_menu.js
+ M templates/builder_editor_host.html
+ M templates/builder_workspace_v1.html
+ M tests/api/test_builder_api.py
+ M tests/core/test_builder_scope_flow.py
+ M tests/offshore/test_offshore_work_menu.py
+ M tests/ui/test_builder_host_editor.py
+ M tests/ui/test_builder_workspace_v1_ui.py
+?? brt2-review.txt
+?? builder-decoupling-diff.txt
+?? builder-runtime-review.txt
+?? static/js/builder_component_create.js
+?? static/js/builder_component_library_runtime.js
+?? static/js/builder_dish_create.js
+?? templates/builder/_add_component_modal.html
+?? templates/builder/_component_create_modal.html
+?? templates/builder/_dish_create_modal.html
+
+=== BRT-2 TRACKED DIFF ===
+diff --git a/static/js/builder.js b/static/js/builder.js
+index b12889c..4b7b567 100644
+--- a/static/js/builder.js
++++ b/static/js/builder.js
+@@ -2956,7 +2956,7 @@ async function loadLibrary() {
+   await refreshWorkspaceOverviewCounts(result);
+ }
+ 
+-let reusableComponentsCache = [];
++let componentLibraryRuntime = null;
+ let draggedComponentEntryKey = null;
+ let pendingAddedPulseComponentId = null;
+ let pendingSelectedPulseComponentId = null;
+@@ -4127,90 +4127,44 @@ function renderExistingComponentSuggestions(components) {
+ }
+ 
+ function renderComponentPalette() {
+-  const palette = document.getElementById("builderComponentPalette");
+-  const searchInput = document.getElementById("builderPaletteSearch");
+-  if (!palette) {
+-    return;
+-  }
+-
+-  palette.innerHTML = "";
+-  const composition = currentBuilderComposition;
+-  const components = Array.isArray(reusableComponentsCache) ? reusableComponentsCache : [];
+-
+-  if (!composition || components.length === 0) {
+-    const empty = document.createElement("div");
+-    empty.className = "component-palette-empty";
+-    empty.textContent = "No reusable components yet";
+-    palette.appendChild(empty);
+-    return;
+-  }
+-
+-  const searchValue = searchInput ? String(searchInput.value || "").trim().toLowerCase() : "";
+-  const existingIds = new Set(
+-    (Array.isArray(composition.components) ? composition.components : []).map((item) =>
+-      String(item.component_id || ""),
+-    ),
+-  );
+-
+-  let renderedCount = 0;
+-
+-  for (const component of components) {
+-    const componentId = String(component.component_id || "");
+-    const componentName = String(component.component_name || componentId || "");
+-    if (searchValue && !componentName.toLowerCase().includes(searchValue)) {
+-      continue;
+-    }
+-    const isAlreadyIncluded = existingIds.has(componentId);
+-    const hasPrimaryRecipe = Boolean(String(component.primary_recipe_id || "").trim());
+-
+-    const pill = document.createElement("button");
+-    pill.type = "button";
+-    pill.className = "component-palette-pill";
+-    pill.textContent = componentName;
+-    pill.title = isAlreadyIncluded ? "Already included in this dish" : "Add component to dish";
+-    if (hasPrimaryRecipe) {
+-      pill.classList.add("component-palette-pill-has-data");
+-    }
+-    if (isAlreadyIncluded) {
+-      pill.classList.add("component-palette-pill-included");
+-      pill.disabled = true;
+-    } else {
+-      pill.addEventListener("click", async () => {
+-        pill.classList.add("component-palette-pill-pick");
+-        setTimeout(() => {
+-          pill.classList.remove("component-palette-pill-pick");
+-        }, 260);
+-        await attachExistingComponentToCurrentComposition(componentId);
+-      });
+-    }
++  getComponentLibraryRuntime().renderPalette();
++}
+ 
+-    palette.appendChild(pill);
+-    renderedCount += 1;
++function getComponentLibraryRuntime() {
++  if (componentLibraryRuntime) {
++    return componentLibraryRuntime;
+   }
+ 
+-  if (renderedCount === 0) {
+-    const empty = document.createElement("div");
+-    empty.className = "component-palette-empty";
+-    empty.textContent = searchValue ? "No components match search" : "No reusable components yet";
+-    palette.appendChild(empty);
+-  }
++  const runtime = BuilderComponentLibraryRuntime.create({
++    callApi,
++    getCurrentComposition: () => currentBuilderComposition,
++    attachComponent: (componentId) => attachExistingComponentToCurrentComposition(componentId),
++  });
++  runtime.bindPalette({
++    paletteElement: document.getElementById("builderComponentPalette"),
++    searchInputElement: document.getElementById("builderPaletteSearch"),
++  });
++  componentLibraryRuntime = runtime;
++  return componentLibraryRuntime;
+ }
+ 
+ async function loadReusableComponents(query) {
+-  const queryValue = String(query || "").trim();
+-  let url = "/api/builder/components";
+-  if (queryValue) {
+-    url += "?q=" + encodeURIComponent(queryValue);
+-  }
+-
+-  const result = await callApi(url, { method: "GET" });
+-  const items = (result && result.data && result.data.components) || [];
+-  reusableComponentsCache = Array.isArray(items) ? items : [];
+-  renderExistingComponentSuggestions(reusableComponentsCache);
++  const runtime = getComponentLibraryRuntime();
++  await runtime.loadAllComponents();
++  const queryValue = String(query || "").trim().toLowerCase();
++  const items = runtime.getCachedComponents();
++  const filteredItems = queryValue
++    ? items.filter((item) => {
++        const componentName = String(item.component_name || item.canonical_name || item.component_id || "").toLowerCase();
++        const componentId = String(item.component_id || "").toLowerCase();
++        return componentName.includes(queryValue) || componentId.includes(queryValue);
++      })
++    : items;
++  renderExistingComponentSuggestions(filteredItems);
+   if (_builderModalController) {
+     _builderModalController.onReusableComponentsRefreshed();
+   } else {
+-    renderComponentPalette();
++    runtime.renderPalette();
+   }
+ }
+ 
+@@ -4565,6 +4519,63 @@ function openBuilderModalForComposition(composition, initialTab = "overview") {
+   });
+ }
+ 
++function openBuilderDishCreateModal() {
++  const createController = globalThis.BuilderDishCreateModal;
++  if (createController && typeof createController.open === "function") {
++    createController.open({
++      title: "Skapa r├ñtt",
++      createEndpoint: "/api/builder/compositions",
++      includeSeedComponents: true,
++      onSuccess: async (composition) => {
++        closeSimpleModal("dishesLibraryModal");
++        openBuilderModalForComposition(composition, "components");
++        await loadLibrary();
++      },
++    });
++    return;
++  }
++  openSimpleModal("quickCreateModal");
++  const input = document.getElementById("freeDishName");
++  if (input) {
++    input.focus();
++  }
++}
++
++function openBuilderComponentCreateModal() {
++  const createController = globalThis.BuilderComponentCreateModal;
++  if (createController && typeof createController.open === "function") {
++    createController.open({
++      title: "Create component",
++      createEndpoint: "/api/builder/components",
++      onSuccess: async (createdComponent, result) => {
++        const createdComponentId = String((createdComponent && createdComponent.component_id) || "").trim();
++        const isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);
++        if (createdComponent) {
++          upsertCachedLibraryComponent(createdComponent);
++        }
++        updateComponentCategoryChipCounts();
++        filterLibraryComponents(currentComponentSearchQuery());
++        if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate) {
++          pendingComponentCreateComponentId = createdComponentId;
++          await openComponentDetailEditor(createdComponentId);
++        } else if (createdComponentId && isDuplicateCreate) {
++          clearPendingComponentCreateForComposition();
++          setWorkspaceSurface("components");
++          await openComponentDetailEditor(createdComponentId);
++        } else if (createdComponentId) {
++          await openComponentDetailEditor(createdComponentId);
++        }
++      },
++    });
++    return;
++  }
++  openSimpleModal("componentCreateModal");
++  const input = document.getElementById("freeComponentName");
++  if (input) {
++    input.focus();
++  }
++}
++
+ function closeResolveModal() {
+   currentDishAllergenSummaryToken += 1;
+   currentDishCalculationSummaryToken += 1;
+@@ -5020,7 +5031,6 @@ function bindBuilderHandlers() {
+   const componentCreateModalCloseBtn = document.getElementById("componentCreateModalClose");
+   const openNewDishModalBtn = document.getElementById("openNewDishModalBtn");
+   const dishesLibraryModalCloseBtn = document.getElementById("dishesLibraryModalClose");
+-  const quickCreateModalCloseBtn = document.getElementById("quickCreateModalClose");
+   const importLibraryModalCloseBtn = document.getElementById("importLibraryModalClose");
+   const openAddComponentModalBtn = document.getElementById("openAddComponentModalBtn");
+   const addComponentModalCloseBtn = document.getElementById("addComponentModalClose");
+@@ -5129,6 +5139,7 @@ function bindBuilderHandlers() {
+     reopenPendingCompositionForReturn: reopenPendingCompositionForReturn,
+     attachExistingComponentToCurrentComposition: attachExistingComponentToCurrentComposition,
+     clearPendingComponentCreateForComposition: clearPendingComponentCreateForComposition,
++    openComponentCreateModal: openBuilderComponentCreateModal,
+     componentEditorFactory: createBuilderComponentEditor,
+   });
+   // ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+@@ -5310,21 +5321,17 @@ function bindBuilderHandlers() {
+   if (openComponentCreateModalBtn) {
+     openComponentCreateModalBtn.addEventListener("click", () => {
+       clearPendingComponentCreateForComposition();
+-      openSimpleModal("componentCreateModal");
+-      const freeComponentNameEl = document.getElementById("freeComponentName");
+-      if (freeComponentNameEl) {
+-        freeComponentNameEl.focus();
+-      }
++      openBuilderComponentCreateModal();
+     });
+   }
+ 
++  if (globalThis.BuilderDishCreateModal && typeof globalThis.BuilderDishCreateModal.bind === "function") {
++    globalThis.BuilderDishCreateModal.bind({});
++  }
++
+   if (primaryCreateDishBtn) {
+     primaryCreateDishBtn.addEventListener("click", () => {
+-      openSimpleModal("quickCreateModal");
+-      const freeDishNameEl = document.getElementById("freeDishName");
+-      if (freeDishNameEl) {
+-        freeDishNameEl.focus();
+-      }
++      openBuilderDishCreateModal();
+     });
+   }
+ 
+@@ -5338,11 +5345,7 @@ function bindBuilderHandlers() {
+   if (homeActionCreateComponentBtn) {
+     homeActionCreateComponentBtn.addEventListener("click", () => {
+       clearPendingComponentCreateForComposition();
+-      openSimpleModal("componentCreateModal");
+-      const freeComponentNameEl = document.getElementById("freeComponentName");
+-      if (freeComponentNameEl) {
+-        freeComponentNameEl.focus();
+-      }
++      openBuilderComponentCreateModal();
+     });
+   }
+ 
+@@ -5366,6 +5369,10 @@ function bindBuilderHandlers() {
+   if (componentCreateModalCloseBtn) {
+     componentCreateModalCloseBtn.addEventListener("click", () => {
+       clearPendingComponentCreateForComposition();
++      if (globalThis.BuilderComponentCreateModal && typeof globalThis.BuilderComponentCreateModal.close === "function") {
++        globalThis.BuilderComponentCreateModal.close("cancel");
++        return;
++      }
+       closeModalById("componentCreateModal");
+     });
+   }
+@@ -5379,11 +5386,7 @@ function bindBuilderHandlers() {
+ 
+   if (openNewDishFromDishesViewBtn) {
+     openNewDishFromDishesViewBtn.addEventListener("click", () => {
+-      openSimpleModal("quickCreateModal");
+-      const freeDishNameEl = document.getElementById("freeDishName");
+-      if (freeDishNameEl) {
+-        freeDishNameEl.focus();
+-      }
++      openBuilderDishCreateModal();
+     });
+   }
+ 
+@@ -5426,11 +5429,7 @@ function bindBuilderHandlers() {
+ 
+   if (openNewDishModalBtn) {
+     openNewDishModalBtn.addEventListener("click", () => {
+-      openSimpleModal("quickCreateModal");
+-      const freeDishNameEl = document.getElementById("freeDishName");
+-      if (freeDishNameEl) {
+-        freeDishNameEl.focus();
+-      }
++      openBuilderDishCreateModal();
+     });
+   }
+ 
+@@ -5458,12 +5457,6 @@ function bindBuilderHandlers() {
+     });
+   }
+ 
+-  if (quickCreateModalCloseBtn) {
+-    quickCreateModalCloseBtn.addEventListener("click", () => {
+-      closeModalById("quickCreateModal");
+-    });
+-  }
+-
+   if (importLibraryModalCloseBtn) {
+     importLibraryModalCloseBtn.addEventListener("click", () => {
+       closeModalById("importLibraryModal");
+@@ -5472,6 +5465,10 @@ function bindBuilderHandlers() {
+ 
+   if (openAddComponentModalBtn) {
+     openAddComponentModalBtn.addEventListener("click", () => {
++      if (_builderModalController && typeof _builderModalController.openAddComponentModal === "function") {
++        _builderModalController.openAddComponentModal();
++        return;
++      }
+       openSimpleModal("addComponentModal");
+       const paletteSearch = document.getElementById("builderPaletteSearch");
+       if (paletteSearch) {
+@@ -5490,6 +5487,10 @@ function bindBuilderHandlers() {
+ 
+   if (addComponentModalCloseBtn) {
+     addComponentModalCloseBtn.addEventListener("click", () => {
++      if (_builderModalController && typeof _builderModalController.closeAddComponentModal === "function") {
++        _builderModalController.closeAddComponentModal();
++        return;
++      }
+       clearPendingComponentCreateForComposition();
+       closeModalById("addComponentModal");
+     });
+@@ -5529,95 +5530,6 @@ function bindBuilderHandlers() {
+     }
+   });
+ 
+-  if (createDishBtn) {
+-    createDishBtn.addEventListener("click", async () => {
+-      const freeDishNameEl = document.getElementById("freeDishName");
+-      const freeDishCategoryEl = document.getElementById("freeDishCategory");
+-      const composition_name = freeDishNameEl ? String(freeDishNameEl.value || "").trim() : "";
+-      const library_group = freeDishCategoryEl ? String(freeDishCategoryEl.value || "").trim() : "ovrigt";
+-      if (!composition_name) {
+-        showJson("createDishOut", { status: 0, data: { ok: false, error: "dish name is required" } });
+-        return;
+-      }
+-
+-      showLoading("createDishOut");
+-      try {
+-        const result = await callApi("/api/builder/compositions", {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: {
+-            composition_name,
+-            library_group,
+-            seed_components: false,
+-          },
+-        });
+-        showJson("createDishOut", result);
+-        if (result && result.data && result.data.ok && result.data.composition) {
+-          closeSimpleModal("dishesLibraryModal");
+-          closeSimpleModal("quickCreateModal");
+-          openBuilderModalForComposition(result.data.composition, "components");
+-          if (freeDishNameEl) {
+-            freeDishNameEl.value = "";
+-          }
+-          if (freeDishCategoryEl) {
+-            freeDishCategoryEl.value = "ovrigt";
+-          }
+-          await loadLibrary();
+-        }
+-      } catch (error) {
+-        showJson("createDishOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
+-      }
+-    });
+-  }
+-
+-  if (createComponentBtn) {
+-    createComponentBtn.addEventListener("click", async () => {
+-      const freeComponentNameEl = document.getElementById("freeComponentName");
+-      const component_name = freeComponentNameEl ? String(freeComponentNameEl.value || "").trim() : "";
+-      if (!component_name) {
+-        showJson("createComponentOut", { status: 0, data: { ok: false, error: "component name is required" } });
+-        return;
+-      }
+-
+-      showLoading("createComponentOut");
+-      try {
+-        const result = await callApi("/api/builder/components", {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: { component_name },
+-        });
+-        showJson("createComponentOut", result);
+-        if (result && result.data && result.data.ok) {
+-          const createdComponent = ((result || {}).data || {}).component || null;
+-          const createdComponentId = String((createdComponent && createdComponent.component_id) || "").trim();
+-          const isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);
+-          closeSimpleModal("componentCreateModal");
+-          if (freeComponentNameEl) {
+-            freeComponentNameEl.value = "";
+-          }
+-          if (createdComponent) {
+-            upsertCachedLibraryComponent(createdComponent);
+-          }
+-          updateComponentCategoryChipCounts();
+-          filterLibraryComponents(currentComponentSearchQuery());
+-          if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate) {
+-            pendingComponentCreateComponentId = createdComponentId;
+-            await openComponentDetailEditor(createdComponentId);
+-          } else if (createdComponentId && result.data.duplicate) {
+-            clearPendingComponentCreateForComposition();
+-            setWorkspaceSurface("components");
+-            await openComponentDetailEditor(createdComponentId);
+-          } else if (createdComponentId) {
+-            await openComponentDetailEditor(createdComponentId);
+-          }
+-        }
+-      } catch (error) {
+-        clearPendingComponentCreateForComposition();
+-        showJson("createComponentOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
+-      }
+-    });
+-  }
+-
+   if (importLibraryBtn) {
+     importLibraryBtn.addEventListener("click", async () => {
+       const importSummaryView = document.getElementById("importSummaryView");
+@@ -5960,12 +5872,6 @@ function bindBuilderHandlers() {
+     });
+   }
+ 
+-  if (paletteSearchInput) {
+-    paletteSearchInput.addEventListener("input", () => {
+-      renderComponentPalette();
+-    });
+-  }
+-
+   if (addComponentBtn) {
+     addComponentBtn.addEventListener("click", async () => {
+       if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
+diff --git a/static/js/builder_editor_host.js b/static/js/builder_editor_host.js
+index 9e0f7dc..b66704b 100644
+--- a/static/js/builder_editor_host.js
++++ b/static/js/builder_editor_host.js
+@@ -25,8 +25,13 @@
+     componentId: '',
+     hostKind: '',
+     hostTargetId: '',
++    hostMode: 'idle',
++    createdCompositionId: '',
++    createdCompositionReadySent: false,
+   };
+ 
++  let componentLibraryRuntime = null;
++
+   const componentLoadPromises = new Map();
+   const compositionLoadPromises = new Map();
+ 
+@@ -109,7 +114,7 @@
+   }
+ 
+   function getCachedComponents() {
+-    return state.cachedComponents;
++    return getComponentLibraryRuntime().getCachedComponents();
+   }
+ 
+   function getCachedCompositions() {
+@@ -117,20 +122,7 @@
+   }
+ 
+   function upsertCachedComponent(component) {
+-    const componentId = normalizeId(component && component.component_id);
+-    if (!componentId) {
+-      return null;
+-    }
+-    const next = { ...(component || {}), component_id: componentId };
+-    const index = state.cachedComponents.findIndex(
+-      (item) => normalizeId(item && item.component_id) === componentId
+-    );
+-    if (index >= 0) {
+-      state.cachedComponents[index] = next;
+-    } else {
+-      state.cachedComponents.push(next);
+-    }
+-    return next;
++    return getComponentLibraryRuntime().upsertCachedComponent(component);
+   }
+ 
+   function upsertCachedComposition(composition) {
+@@ -150,12 +142,68 @@
+     return next;
+   }
+ 
+-  function renderComponentPalette() {}
+-  function filterLibraryComponents() {}
+-  function updateComponentCategoryChipCounts() {}
+-  function currentComponentSearchQuery() { return ''; }
++  function renderComponentPalette() {
++    getComponentLibraryRuntime().renderPalette();
++  }
++
++  function getComponentLibraryRuntime() {
++    if (componentLibraryRuntime) {
++      return componentLibraryRuntime;
++    }
++
++    const runtime = BuilderComponentLibraryRuntime.create({
++      callApi,
++      getCurrentComposition,
++      attachComponent: (componentId) => attachExistingComponentToCurrentComposition(componentId),
++      onAttachSuccess: async (composition) => {
++        if (state.controller && typeof state.controller.closeAddComponentModal === 'function') {
++          state.controller.closeAddComponentModal();
++        }
++        if (state.controller && typeof state.controller.setDishBuilderTab === 'function') {
++          state.controller.setDishBuilderTab('components');
++        }
++        if (state.controller && typeof state.controller.renderBuilderPanel === 'function') {
++          state.controller.renderBuilderPanel(composition);
++        }
++        getComponentLibraryRuntime().renderPalette();
++      },
++    });
++    runtime.bindPalette({
++      paletteElement: document.getElementById('builderComponentPalette'),
++      searchInputElement: document.getElementById('builderPaletteSearch'),
++    });
++    componentLibraryRuntime = runtime;
++    return componentLibraryRuntime;
++  }
++
+   const resolveComponentCategoryThemeKey = BuilderComponentTheme.resolveComponentCategoryThemeKey;
+ 
++  function openBuilderComponentCreateModal() {
++    const createController = globalThis.BuilderComponentCreateModal;
++    if (createController && typeof createController.open === 'function') {
++      createController.open({
++        title: 'Skapa komponent',
++        createEndpoint: '/api/builder/components/private',
++        onSuccess: async (createdComponent) => {
++          const createdComponentId = normalizeId(createdComponent && createdComponent.component_id);
++          if (createdComponent) {
++            upsertCachedComponent(createdComponent);
++          }
++          if (createdComponentId) {
++            state.controller.setState('pendingComponentCreateComponentId', createdComponentId);
++            await state.controller.openComponentDetailEditor(createdComponentId, 'overview');
++          }
++        },
++      });
++      return;
++    }
++    openSimpleModal('componentCreateModal');
++    const input = document.getElementById('freeComponentName');
++    if (input) {
++      input.focus();
++    }
++  }
++
+   async function loadAllCompositions() {
+     const result = await callApi('/api/builder/compositions', { method: 'GET' });
+     if (!(result && result.status < 400 && result.data && result.data.ok && Array.isArray(result.data.compositions))) {
+@@ -166,12 +214,7 @@
+   }
+ 
+   async function loadAllComponents() {
+-    const result = await callApi('/api/builder/components', { method: 'GET' });
+-    if (!(result && result.status < 400 && result.data && result.data.ok && Array.isArray(result.data.components))) {
+-      throw new Error('Could not load components.');
+-    }
+-    state.cachedComponents = result.data.components.slice();
+-    return state.cachedComponents;
++    return getComponentLibraryRuntime().loadAllComponents();
+   }
+ 
+   async function loadComponentById(componentId) {
+@@ -179,9 +222,7 @@
+     if (!idValue) {
+       return null;
+     }
+-    const cached = state.cachedComponents.find(
+-      (item) => normalizeId(item && item.component_id) === idValue
+-    );
++    const cached = getComponentLibraryRuntime().resolveComponentById(idValue);
+     if (cached) {
+       return cached;
+     }
+@@ -195,7 +236,7 @@
+       if (!(result && result.status < 400 && result.data && result.data.ok && result.data.component)) {
+         throw new Error('Could not load component.');
+       }
+-      return upsertCachedComponent(result.data.component);
++      return getComponentLibraryRuntime().upsertCachedComponent(result.data.component);
+     })();
+ 
+     componentLoadPromises.set(idValue, loadPromise);
+@@ -299,18 +340,35 @@
+     await Promise.all([loadAllCompositions(), loadAllComponents()]);
+   }
+ 
++  function openCreateCompositionModal() {
++    if (!globalThis.BuilderDishCreateModal || typeof globalThis.BuilderDishCreateModal.open !== 'function') {
++      throw new Error('Create Dish UI is not available.');
++    }
++    globalThis.BuilderDishCreateModal.open({
++      title: 'Skapa r├ñtt',
++      createEndpoint: '/api/builder/compositions/private',
++      includeSeedComponents: false,
++      onSuccess: async (composition) => {
++        state.hostMode = 'create-composition-open';
++        state.createdCompositionId = String(composition && composition.composition_id || '').trim();
++        state.createdCompositionReadySent = false;
++        state.compositionId = state.createdCompositionId;
++        state.componentId = '';
++        state.hostKind = 'composition';
++        state.hostTargetId = state.compositionId;
++        state.controller.openComposition(composition, 'components');
++        setHostStatus(true);
++      },
++      onCancel: () => {
++        state.createdCompositionId = '';
++        state.createdCompositionReadySent = false;
++        notifyHostClose({ kind: 'create-composition', cancelled: true });
++      },
++    });
++  }
++
+   function resolveComponentById(componentId) {
+-    const idValue = normalizeId(componentId);
+-    if (!idValue) {
+-      return null;
+-    }
+-    const cached = state.cachedComponents.find(
+-      (item) => normalizeId(item && item.component_id) === idValue
+-    );
+-    if (cached) {
+-      return cached;
+-    }
+-    return null;
++    return getComponentLibraryRuntime().resolveComponentById(componentId);
+   }
+ 
+   async function resolveCompositionById(compositionId) {
+@@ -415,13 +473,56 @@
+     if (!state.hostTargetId) {
+       return;
+     }
++    const currentComposition = getCurrentComposition();
++    const detailComposition = detail && detail.composition ? detail.composition : null;
++    const finalComposition = detailComposition || (!(detail && detail.cancelled) ? currentComposition || null : null);
++    const finalCompositionId = normalizeId(finalComposition && finalComposition.composition_id);
++    const normalizedDetail = {
++      source: 'builder-editor-host',
++      host_target_id: state.hostTargetId,
++      ...(state.hostMode === 'create-composition-open'
++        ? {
++            composition: finalComposition || undefined,
++          }
++        : {
++            composition: detailComposition || currentComposition || undefined,
++          }),
++      ...detail,
++    };
++    if (
++      state.hostMode === 'create-composition-open'
++      && !state.createdCompositionReadySent
++      && state.createdCompositionId
++      && finalCompositionId
++      && finalCompositionId === state.createdCompositionId
++      && !normalizedDetail.cancelled
++    ) {
++      if (window.parent && window.parent !== window) {
++        window.parent.postMessage(
++          {
++            type: 'builder-host-created-composition-ready',
++            detail: {
++              source: 'builder-editor-host',
++              host_target_id: state.hostTargetId,
++              kind: 'composition',
++              composition: finalComposition || undefined,
++            },
++          },
++          window.location.origin,
++        );
++      }
++      state.createdCompositionReadySent = true;
++      state.createdCompositionId = '';
++      state.hostMode = 'idle';
++    }
++    if (normalizedDetail.cancelled) {
++      state.createdCompositionId = '';
++      state.createdCompositionReadySent = false;
++      state.hostMode = 'idle';
++    }
+     const payload = {
+       type: 'builder-host-close',
+-      detail: {
+-        source: 'builder-editor-host',
+-        host_target_id: state.hostTargetId,
+-        ...detail,
+-      },
++      detail: normalizedDetail,
+     };
+     if (window.parent && window.parent !== window) {
+       window.parent.postMessage(payload, window.location.origin);
+@@ -472,6 +573,26 @@
+       return;
+     }
+ 
++    if (payload.type === 'builder-host-create-composition') {
++      state.hostMode = 'create-composition';
++      state.hostKind = 'create-composition';
++      state.hostTargetId = 'create-composition';
++      state.compositionId = '';
++      state.componentId = '';
++      state.createdCompositionId = '';
++      state.createdCompositionReadySent = false;
++      try {
++        openCreateCompositionModal();
++        setHostStatus(true);
++        notifyHostReady({ kind: 'create-composition' });
++      } catch (error) {
++        showJson('builderOut', { status: 0, data: { ok: false, error: String(error && error.message || error) } });
++        notifyHostClose({ kind: 'create-composition', error: String(error && error.message || error) });
++        setHostStatus(false, String(error && error.message || error));
++      }
++      return;
++    }
++
+     if (payload.type !== 'builder-host-open') {
+       return;
+     }
+@@ -487,11 +608,13 @@
+       state.componentId = '';
+       state.hostKind = 'composition';
+       state.hostTargetId = targetId;
++      state.hostMode = 'composition';
+     } else {
+       state.componentId = targetId;
+       state.compositionId = '';
+       state.hostKind = 'component';
+       state.hostTargetId = targetId;
++      state.hostMode = 'component';
+     }
+ 
+     await openRequestedTarget();
+@@ -523,6 +646,8 @@
+         state.compositionId = editableComposition.composition_id;
+         await preloadLinkedComponents(editableComposition);
+         state.controller.openComposition(editableComposition, 'overview');
++      } else if (state.hostKind === 'create-composition') {
++        openCreateCompositionModal();
+       } else {
+         const component = await loadComponentById(state.componentId);
+         if (!component) {
+@@ -565,10 +690,8 @@
+       resolveComponentById,
+       prepareLinkedComponentForEdit,
+       resolveComponentCategoryThemeKey,
+-      filterLibraryComponents,
+-      currentComponentSearchQuery,
+-      updateComponentCategoryChipCounts,
+       upsertCachedComponent,
++      openComponentCreateModal: openBuilderComponentCreateModal,
+       showLoading,
+       showJson,
+       openSimpleModal,
+@@ -586,6 +709,12 @@
+       },
+     });
+ 
++    if (globalThis.BuilderDishCreateModal && typeof globalThis.BuilderDishCreateModal.bind === 'function') {
++      globalThis.BuilderDishCreateModal.bind({
++        includeSeedComponents: false,
++      });
++    }
++
+     notifyHostRuntimeReady();
+ 
+     if (target.hostTargetId) {
+diff --git a/static/js/builder_modal_controller.js b/static/js/builder_modal_controller.js
+index a923521..f98bef1 100644
+--- a/static/js/builder_modal_controller.js
++++ b/static/js/builder_modal_controller.js
+@@ -22,6 +22,7 @@
+  *   config.openSimpleModal: (modalId: string) => void
+  *   config.closeModalById: (modalId: string) => void
+  *   config.renderComponentPalette: () => void
++ *   config.openComponentCreateModal: () => void
+  *
+  * @param {{
+  *   compositionRoot: Element,
+@@ -57,6 +58,7 @@ function createBuilderModalController(config) {
+     openSimpleModal: config.openSimpleModal || null,
+     closeModalById: config.closeModalById || null,
+     renderComponentPalette: config.renderComponentPalette || null,
++    openComponentCreateModal: config.openComponentCreateModal || null,
+     notifyHostClose: config.notifyHostClose || null,
+   };
+ 
+@@ -128,6 +130,30 @@ function createBuilderModalController(config) {
+     modal.inert = false;
+   }
+ 
++  function _openAddComponentModal() {
++    if (_state.currentBuilderComposition && _state.currentBuilderComposition.composition_id) {
++      _state.pendingComponentCreateForCompositionId = String(_state.currentBuilderComposition.composition_id || "").trim() || null;
++      _state.pendingComponentCreateForCompositionName = String(_state.currentBuilderComposition.composition_name || "").trim() || null;
++      _state.pendingComponentCreateReturnTab = "components";
++    }
++    _openSimpleModal("addComponentModal");
++    if (typeof _callbacks.renderComponentPalette === "function") {
++      _callbacks.renderComponentPalette();
++    }
++    const searchInput = document.getElementById("builderPaletteSearch");
++    if (searchInput) {
++      try {
++        searchInput.focus();
++      } catch (error) {
++        // Ignore focus failures in restricted environments.
++      }
++    }
++  }
++
++  function _closeAddComponentModal() {
++    _closeModalById("addComponentModal");
++  }
++
+   function _showLoading(targetId) {
+     if (typeof _callbacks.showLoading === "function") {
+       _callbacks.showLoading(targetId);
+@@ -492,12 +518,20 @@ function createBuilderModalController(config) {
+     _state.currentDishAllergenSummaryToken += 1;
+     _state.currentDishCalculationSummaryToken += 1;
+     closeDishComponentOverflowMenus();
+-    const activeCompositionId = String(_state.currentBuilderComposition?.composition_id || "").trim();
++    const finalComposition = _state.currentBuilderComposition
++      ? {
++          ..._state.currentBuilderComposition,
++          components: Array.isArray(_state.currentBuilderComposition.components)
++            ? _state.currentBuilderComposition.components.map((component) => ({ ...component }))
++            : [],
++        }
++      : null;
++    const activeCompositionId = String(finalComposition?.composition_id || "").trim();
+     _closeModalById("componentDetailEditorModal");
+     _closeModalById("resolveModal");
+     _state.currentBuilderComposition = null;
+     _state.currentBuilderDishTab = "overview";
+-    _notifyHostClose({ kind: "composition", composition_id: activeCompositionId });
++    _notifyHostClose({ kind: "composition", composition_id: activeCompositionId, composition: finalComposition });
+   }
+ 
+   async function _returnComponentDetailToDish() {
+@@ -876,6 +910,30 @@ function createBuilderModalController(config) {
+       });
+     }
+ 
++    const openAddComponentModalBtn = compositionRoot.querySelector("#openAddComponentModalBtn");
++    if (openAddComponentModalBtn) {
++      openAddComponentModalBtn.addEventListener("click", () => {
++        _openAddComponentModal();
++      });
++    }
++
++    const addComponentModalCloseBtn = document.getElementById("addComponentModalClose");
++    if (addComponentModalCloseBtn) {
++      addComponentModalCloseBtn.addEventListener("click", () => {
++        _closeAddComponentModal();
++      });
++    }
++
++    const addComponentBtn = document.getElementById("btnAddComponent");
++    if (addComponentBtn) {
++      addComponentBtn.addEventListener("click", () => {
++        _closeAddComponentModal();
++        if (typeof _callbacks.openComponentCreateModal === "function") {
++          _callbacks.openComponentCreateModal();
++        }
++      });
++    }
++
+     // ÔöÇÔöÇ Dish modal: backdrop click to close ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+     compositionRoot.addEventListener("click", (event) => {
+       if (event.target === compositionRoot) {
+@@ -1007,6 +1065,14 @@ function createBuilderModalController(config) {
+       }
+     },
+ 
++    openAddComponentModal() {
++      _openAddComponentModal();
++    },
++
++    closeAddComponentModal() {
++      _closeAddComponentModal();
++    },
++
+     /**
+      * Close dish component overflow menus.
+      * @param {Element} [exceptElement]
+diff --git a/templates/builder_editor_host.html b/templates/builder_editor_host.html
+index 6ee4627..83b3504 100644
+--- a/templates/builder_editor_host.html
++++ b/templates/builder_editor_host.html
+@@ -12,8 +12,15 @@
+   <div id="builderEditorHostStatus" class="builder-editor-host-status" aria-live="polite"></div>
+   {% include "builder/_composition_modal.html" %}
+   {% include "builder/_component_detail_modal.html" %}
++  {% include "builder/_component_create_modal.html" %}
++  {% include "builder/_add_component_modal.html" %}
++
++  {% include "builder/_dish_create_modal.html" %}
+ 
+   <script src="/static/js/builder_component_theme.js"></script>
++  <script src="/static/js/builder_component_library_runtime.js"></script>
++  <script src="/static/js/builder_component_create.js"></script>
++  <script src="/static/js/builder_dish_create.js"></script>
+   <script src="/static/js/builder_component_editor.js"></script>
+   <script src="/static/js/builder_dish_editor.js"></script>
+   <script src="/static/js/builder_modal_controller.js?v=builder-b1-modal-controller-v1"></script>
+diff --git a/templates/builder_workspace_v1.html b/templates/builder_workspace_v1.html
+index 713e5d1..c76bd35 100644
+--- a/templates/builder_workspace_v1.html
++++ b/templates/builder_workspace_v1.html
+@@ -165,53 +165,9 @@
+ 
+   <div id="libraryOut" class="workspace-feedback workspace-feedback-page" aria-live="polite"></div>
+ 
+-  <div id="componentCreateModal" class="modal hidden">
+-    <div class="modal-content modal-content-compact">
+-      <div class="workspace-modal-header">
+-        <div>
+-          <p class="workspace-modal-kicker">Component creation</p>
+-          <h3>Create component</h3>
+-        </div>
+-        <button id="componentCreateModalClose" type="button">Done</button>
+-      </div>
+-
+-      <section class="workspace-quick-card">
+-        <label>Component name
+-          <input id="freeComponentName" type="text" placeholder="Mashed Potatoes">
+-        </label>
+-        <button id="btnCreateComponent" type="button">Create component</button>
+-        <div id="createComponentOut" class="workspace-feedback" aria-live="polite"></div>
+-      </section>
+-    </div>
+-  </div>
++  {% include "builder/_component_create_modal.html" %}
+ 
+-  <div id="quickCreateModal" class="modal hidden">
+-    <div class="modal-content modal-content-compact">
+-      <div class="workspace-modal-header">
+-        <div>
+-          <p class="workspace-modal-kicker">Skapa r├ñtt</p>
+-          <h3>Skapa r├ñtt</h3>
+-        </div>
+-        <button id="quickCreateModalClose" type="button">Avbryt</button>
+-      </div>
+-
+-      <section class="workspace-quick-card">
+-        <label>R├ñttnamn
+-          <input id="freeDishName" type="text" placeholder="Kottbullar med potatis">
+-        </label>
+-        <label>Kategori
+-          <select id="freeDishCategory">
+-            <option value="ovrigt" selected>├ûvrigt</option>
+-            <option value="fisk">Fisk</option>
+-            <option value="kott">K├Âtt</option>
+-            <option value="dessert">Dessert</option>
+-          </select>
+-        </label>
+-        <button id="btnCreateDish" type="button">Skapa r├ñtt</button>
+-        <div id="createDishOut" class="workspace-feedback" aria-live="polite"></div>
+-      </section>
+-    </div>
+-  </div>
++  {% include "builder/_dish_create_modal.html" %}
+ 
+   <div id="dishesLibraryModal" class="modal hidden">
+     <div class="modal-content modal-content-components">
+@@ -356,31 +312,12 @@
+ 
+   {% include "builder/_component_detail_modal.html" %}
+   {% include "builder/_composition_modal.html" %}
+-  <div id="addComponentModal" class="modal hidden">
+-    <div class="modal-content modal-content-components">
+-      <div class="workspace-modal-header">
+-        <div>
+-          <p class="workspace-modal-kicker">Dish building</p>
+-          <h3>L├ñgg till komponent</h3>
+-        </div>
+-        <button id="addComponentModalClose" type="button">Klar</button>
+-      </div>
+-
+-      <div class="workspace-modal-section-card">
+-        <p class="modal-section-title">V├ñlj komponenter fr├Ñn biblioteket</p>
+-        <label>S├Âk komponenter
+-          <input id="builderPaletteSearch" type="text" placeholder="S├Âk ├Ñteranv├ñndbara komponenter">
+-        </label>
+-        <div id="builderComponentPalette" class="component-palette"></div>
+-      </div>
+-      <div class="workspace-inline-actions workspace-builder-primary-actions">
+-        <button id="btnAddComponent" type="button">Skapa ny komponent</button>
+-      </div>
+-
+-    </div>
+-  </div>
++  {% include "builder/_add_component_modal.html" %}
+ 
+   <script src="/static/js/builder_component_theme.js"></script>
++  <script src="/static/js/builder_component_library_runtime.js"></script>
++  <script src="/static/js/builder_component_create.js"></script>
++  <script src="/static/js/builder_dish_create.js"></script>
+   <script src="/static/js/builder_component_editor.js"></script>
+   <script src="/static/js/builder_dish_editor.js"></script>
+   <script src="/static/js/builder_modal_controller.js?v=builder-b1-modal-controller-v1"></script>
+diff --git a/tests/ui/test_builder_host_editor.py b/tests/ui/test_builder_host_editor.py
+index d9f3e5b..11ddc35 100644
+--- a/tests/ui/test_builder_host_editor.py
++++ b/tests/ui/test_builder_host_editor.py
+@@ -22,11 +22,12 @@ def test_builder_editor_host_renders_shared_editor_shell(client_admin) -> None:
+     assert '<link rel="stylesheet" href="/static/css/builder_modal.css?v=builder-b1-modal-css-v1">' in html
+     assert '<link rel="stylesheet" href="/static/css/builder_editor_host.css?v=builder-editor-host-v1">' in html
+     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
++    assert '<script src="/static/js/builder_component_library_runtime.js"></script>' in html
+     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
+     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
+     assert '<script src="/static/js/builder_modal_controller.js?v=builder-b1-modal-controller-v1"></script>' in html
+     assert '<script src="/static/js/builder_editor_host.js?v=builder-editor-host-v1"></script>' in html
+-    assert html.find("builder_component_theme.js") < html.find("builder_editor_host.js?v=builder-editor-host-v1")
++    assert html.find("builder_component_theme.js") < html.find("builder_component_library_runtime.js") < html.find("builder_editor_host.js?v=builder-editor-host-v1")
+     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' not in html
+     assert 'builder-platform-header' not in html
+     assert 'builder-shell' not in html
+@@ -136,3 +137,48 @@ def test_builder_editor_host_uses_targeted_scoped_reads() -> None:
+     assert "if (target.hostTargetId) {" in host_js
+     assert "await openRequestedTarget();" in host_js
+     assert "setHostStatus(false, 'Saknar composition_id or component_id.')" not in host_js
++    assert 'function renderComponentPalette() {' in host_js
++    assert 'BuilderComponentLibraryRuntime.create({' in host_js
++    assert "const palette = document.getElementById('builderComponentPalette');" not in host_js
++    assert "const builderPaletteSearch = document.getElementById(\"builderPaletteSearch\");" not in controller_js
++
++
++def test_builder_editor_host_component_palette_and_create_ready_contract() -> None:
++    host_js = Path("static/js/builder_editor_host.js").read_text(encoding="utf-8")
++
++    assert "function renderComponentPalette() {" in host_js
++    assert "BuilderComponentLibraryRuntime.create({" in host_js
++    assert "getComponentLibraryRuntime().renderPalette();" in host_js
++    assert "const palette = document.getElementById('builderComponentPalette');" not in host_js
++    assert "const searchInput = document.getElementById('builderPaletteSearch');" not in host_js
++    assert "pill.addEventListener('click', async () => {" not in host_js
++    assert "builder-host-created-composition-ready" in host_js
++    assert "const detailComposition = detail && detail.composition ? detail.composition : null;" in host_js
++    assert "const finalComposition = detailComposition || (!(detail && detail.cancelled) ? currentComposition || null : null);" in host_js
++    assert "const finalCompositionId = normalizeId(finalComposition && finalComposition.composition_id);" in host_js
++    assert "composition: finalComposition || undefined" in host_js
++    assert "!normalizedDetail.cancelled" in host_js
++    assert "type: 'builder-host-close'" in host_js
++    assert not list(Path("static/offshore2").glob("*component*.js"))
++    runtime_js = Path("static/js/builder_component_library_runtime.js").read_text(encoding="utf-8")
++    assert "'/api/builder/components'" in runtime_js
++    assert "searchInputElement.addEventListener('input'" in runtime_js
++    assert "button.addEventListener('click', async () => {" in runtime_js
++    assert "No components match search" in runtime_js
++    assert "No reusable components yet" in runtime_js
++
++
++    def test_builder_editor_host_create_flow_uses_private_endpoint_and_explicit_success_signal() -> None:
++        host_js = Path("static/js/builder_editor_host.js").read_text(encoding="utf-8")
++        create_js = Path("static/js/builder_dish_create.js").read_text(encoding="utf-8")
++
++        assert "createdCompositionId" in host_js
++        assert "createdCompositionReadySent" in host_js
++        assert "builder-host-created-composition-ready" in host_js
++        assert "includeSeedComponents: false" in host_js
++        assert "createEndpoint: '/api/builder/compositions/private'" in host_js or 'createEndpoint: "/api/builder/compositions/private"' in host_js
++        assert "notifyHostClose({ kind: 'create-composition', cancelled: true });" in host_js
++        assert "state.hostMode = 'idle';" in host_js
++        assert "seed_components: false" in create_js
++        assert "includeSeedComponents" in create_js
++        assert "offshore" not in create_js.lower()
+diff --git a/tests/ui/test_builder_workspace_v1_ui.py b/tests/ui/test_builder_workspace_v1_ui.py
+index 31654db..f76e14e 100644
+--- a/tests/ui/test_builder_workspace_v1_ui.py
++++ b/tests/ui/test_builder_workspace_v1_ui.py
+@@ -18,14 +18,17 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
+     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
+     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
+     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
++    assert '<script src="/static/js/builder_component_library_runtime.js"></script>' in html
++    assert html.count('<script src="/static/js/builder_component_theme.js"></script>') == 1
+     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' in html
+     ce_pos = html.find("builder_component_editor.js")
+     de_pos = html.find("builder_dish_editor.js")
+     theme_pos = html.find("builder_component_theme.js")
++    runtime_pos = html.find("builder_component_library_runtime.js")
+     ctrl_pos = html.find("builder_modal_controller.js")
+     builder_pos = html.find("builder.js?v=")
+     assert ce_pos < de_pos < ctrl_pos < builder_pos
+-    assert theme_pos < ce_pos < builder_pos
++    assert theme_pos < runtime_pos < ce_pos < builder_pos
+ 
+     # Legacy modal identified in stuck screenshot should be present.
+     assert 'id="addComponentModal"' in html
+@@ -632,6 +635,12 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
+     assert 'window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";' in script
+     assert 'console.log("Builder JS active: builder-modal-system-reset-1");' in script
+     assert 'function resetGlobalModalSafetyState() {' in script
++    assert 'function getComponentLibraryRuntime() {' in script
++    assert 'BuilderComponentLibraryRuntime.create({' in script
++    assert 'getComponentLibraryRuntime().renderPalette();' in script
++    assert 'const runtime = BuilderComponentLibraryRuntime.create({' in script
++    assert 'const palette = document.getElementById("builderComponentPalette");' not in script
++    assert 'pill.addEventListener("click", async () => {' not in script
+     assert 'document.body.classList.remove("modal-open", "modal-locked");' in script
+     assert 'document.documentElement.classList.remove("modal-open", "modal-locked");' in script
+     assert 'document.body.style.pointerEvents = "";' in script
+@@ -806,18 +815,21 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
+     assert 'await attachComponentToPendingComposition(createdComponentId);' not in script
+     assert 'pendingComponentCreateComponentId = createdComponentId;' in script
+     assert 'if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate)' in script
+-    assert 'else if (createdComponentId && result.data.duplicate)' in script
++    assert 'isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);' in script
++    assert 'openComponentCreateModal: openBuilderComponentCreateModal,' in script
+     assert 'clearPendingComponentCreateForComposition();' in add_component_handler_js or 'clearPendingComponentCreateForComposition();' in script
+     assert 'else if (createdComponentId) {' in script
+     # Dish return orchestration stays in builder.js; Component editor receives it as a callback.
+     assert 'async function reopenPendingCompositionForReturn() {' in script
+     assert 'clearPendingComponentCreateForComposition();' in script
+     assert 'await loadLibrary();' in script
+-    assert 'const freeDishCategoryEl = document.getElementById("freeDishCategory");' in script
+-    assert 'const library_group = freeDishCategoryEl ? String(freeDishCategoryEl.value || "").trim() : "ovrigt";' in script
+-    assert 'seed_components: false,' in script
+-    assert 'openBuilderModalForComposition(result.data.composition, "components");' in script
+-    assert 'freeDishCategoryEl.value = "ovrigt";' in script
++    assert 'function openBuilderDishCreateModal() {' in script
++    assert 'BuilderDishCreateModal.bind({});' in script
++    assert 'includeSeedComponents: true' in script
++    assert 'createEndpoint: "/api/builder/compositions"' in script or 'createEndpoint: "/api/builder/compositions",' in script
++    assert 'openBuilderModalForComposition(composition, "components");' in script
++    assert 'freeDishCategoryEl' not in script
++    assert 'seed_components: false,' not in script
+     assert 'body: { composition_name },' not in script
+     assert 'Create dish' not in script
+     assert 'Dish creation' not in script
+@@ -842,6 +854,25 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
+     assert 'function setWorkspaceSurface(surface)' in script
+ 
+ 
++def test_builder_component_library_runtime_contract(client_admin) -> None:
++    rv = client_admin.get("/static/js/builder_component_library_runtime.js")
++
++    assert rv.status_code == 200
++    script = rv.data.decode("utf-8")
++    assert 'globalThis.BuilderComponentLibraryRuntime = Object.freeze({' in script
++    assert 'function create(options) {' in script
++    assert "'/api/builder/components'" in script
++    assert 'const searchValue = getSearchValue().toLowerCase();' in script
++    assert "searchInputElement.addEventListener('input'" in script
++    assert "button.addEventListener('click', async () => {" in script
++    assert 'button.disabled = true;' in script
++    assert 'attachedIds.has(componentId)' in script
++    assert 'const attachResult = await state.attachComponent(componentId);' in script
++    assert 'component-palette-pill-included' in script
++    assert 'No components match search' in script
++    assert 'No reusable components yet' in script
++
++
+ def test_builder_component_editor_sets_category_on_every_open(client_admin) -> None:
+     rv = client_admin.get("/static/js/builder_component_editor.js")
+ 
+@@ -908,7 +939,8 @@ def test_builder_legacy_modal_close_system_contract(client_admin) -> None:
+     assert 'closeModalById("addComponentModal");' in script
+     assert 'closeModalById("importLibraryModal");' in script
+     assert 'closeModalById("componentCreateModal");' in script
+-    assert 'closeModalById("quickCreateModal");' in script
++    assert 'function openBuilderDishCreateModal() {' in script
++    assert 'includeSeedComponents: true' in script
+     assert 'closeModalById("dishesLibraryModal");' in script
+     assert 'closeModalById("importEditModal");' in script
+     assert 'closeModalById("importInboxModal");' in script
+
+=== SHARED COMPONENT LIBRARY RUNTIME ===
+(function () {
+  'use strict';
+
+  function normalizeId(value) {
+    return String(value || '').trim();
+  }
+
+  function create(options) {
+    const state = {
+      cachedComponents: [],
+      loadPromise: null,
+      paletteElement: null,
+      searchInputElement: null,
+      bound: false,
+      currentCompositionGetter: typeof options.getCurrentComposition === 'function' ? options.getCurrentComposition : null,
+      attachComponent: typeof options.attachComponent === 'function' ? options.attachComponent : null,
+      onAttachSuccess: typeof options.onAttachSuccess === 'function' ? options.onAttachSuccess : null,
+      callApi: typeof options.callApi === 'function' ? options.callApi : null,
+    };
+
+    function getCurrentComposition() {
+      return state.currentCompositionGetter ? state.currentCompositionGetter() : null;
+    }
+
+    function getCachedComponents() {
+      return state.cachedComponents;
+    }
+
+    function upsertCachedComponent(component) {
+      const componentId = normalizeId(component && component.component_id);
+      if (!componentId) {
+        return null;
+      }
+      const next = { ...(component || {}), component_id: componentId };
+      const index = state.cachedComponents.findIndex((item) => normalizeId(item && item.component_id) === componentId);
+      if (index >= 0) {
+        state.cachedComponents[index] = next;
+      } else {
+        state.cachedComponents.push(next);
+      }
+      return next;
+    }
+
+    function resolveComponentById(componentId) {
+      const idValue = normalizeId(componentId);
+      if (!idValue) {
+        return null;
+      }
+      return state.cachedComponents.find((item) => normalizeId(item && item.component_id) === idValue) || null;
+    }
+
+    function getSearchValue() {
+      return state.searchInputElement ? String(state.searchInputElement.value || '').trim() : '';
+    }
+
+    function isAttachedToCurrentComposition(componentId) {
+      const currentComposition = getCurrentComposition();
+      const linked = Array.isArray(currentComposition && currentComposition.components)
+        ? currentComposition.components
+        : [];
+      const targetId = normalizeId(componentId);
+      return linked.some((item) => normalizeId(item && item.component_id) === targetId);
+    }
+
+    function renderPalette() {
+      const palette = state.paletteElement || document.getElementById('builderComponentPalette');
+      if (!palette) {
+        return;
+      }
+
+      const searchValue = getSearchValue().toLowerCase();
+      const components = Array.isArray(state.cachedComponents) ? state.cachedComponents : [];
+      const composition = getCurrentComposition();
+      const attachedIds = new Set(
+        Array.isArray(composition && composition.components)
+          ? composition.components.map((item) => normalizeId(item && item.component_id))
+          : [],
+      );
+
+      palette.innerHTML = '';
+
+      if (!components.length) {
+        const empty = document.createElement('div');
+        empty.className = 'component-palette-empty';
+        empty.textContent = 'No reusable components yet';
+        palette.appendChild(empty);
+        return;
+      }
+
+      let renderedCount = 0;
+
+      for (const component of components) {
+        const componentId = normalizeId(component && component.component_id);
+        if (!componentId) {
+          continue;
+        }
+        const componentName = String((component && (component.component_name || component.canonical_name)) || componentId).trim() || componentId;
+        if (searchValue && !componentName.toLowerCase().includes(searchValue) && !componentId.toLowerCase().includes(searchValue)) {
+          continue;
+        }
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'component-palette-pill';
+        button.dataset.componentId = componentId;
+        button.textContent = componentName;
+        button.title = attachedIds.has(componentId) ? 'Already included in this dish' : 'Add component to dish';
+        if (component && component.primary_recipe_id) {
+          button.classList.add('component-palette-pill-has-data');
+        }
+        if (attachedIds.has(componentId)) {
+          button.classList.add('component-palette-pill-included');
+          button.disabled = true;
+        } else {
+          button.addEventListener('click', async () => {
+            button.classList.add('component-palette-pill-pick');
+            setTimeout(() => button.classList.remove('component-palette-pill-pick'), 260);
+            const attachResult = await state.attachComponent(componentId);
+            if (attachResult && attachResult.data && attachResult.data.ok && attachResult.data.composition && state.onAttachSuccess) {
+              await state.onAttachSuccess(attachResult.data.composition, componentId, attachResult);
+            }
+          });
+        }
+
+        palette.appendChild(button);
+        renderedCount += 1;
+      }
+
+      if (!renderedCount) {
+        const empty = document.createElement('div');
+        empty.className = 'component-palette-empty';
+        empty.textContent = searchValue ? 'No components match search' : 'No reusable components yet';
+        palette.appendChild(empty);
+      }
+    }
+
+    async function loadAllComponents() {
+      if (state.loadPromise) {
+        return state.loadPromise;
+      }
+      if (!state.callApi) {
+        throw new Error('callApi is required');
+      }
+
+      state.loadPromise = (async () => {
+        const result = await state.callApi('/api/builder/components', { method: 'GET' });
+        if (!(result && result.status < 400 && result.data && result.data.ok && Array.isArray(result.data.components))) {
+          throw new Error('Could not load components.');
+        }
+        state.cachedComponents = result.data.components.slice();
+        return state.cachedComponents;
+      })();
+
+      try {
+        return await state.loadPromise;
+      } finally {
+        state.loadPromise = null;
+      }
+    }
+
+    function bindPalette(options) {
+      state.paletteElement = options && options.paletteElement ? options.paletteElement : state.paletteElement;
+      state.searchInputElement = options && options.searchInputElement ? options.searchInputElement : state.searchInputElement;
+      state.currentCompositionGetter = options && typeof options.getCurrentComposition === 'function'
+        ? options.getCurrentComposition
+        : state.currentCompositionGetter;
+      state.attachComponent = options && typeof options.attachComponent === 'function'
+        ? options.attachComponent
+        : state.attachComponent;
+      state.onAttachSuccess = options && typeof options.onAttachSuccess === 'function'
+        ? options.onAttachSuccess
+        : state.onAttachSuccess;
+
+      if (!state.bound) {
+        if (state.searchInputElement) {
+          state.searchInputElement.addEventListener('input', () => {
+            renderPalette();
+          });
+        }
+        state.bound = true;
+      }
+
+      return api;
+    }
+
+    async function handleAttach(componentId) {
+      if (!state.attachComponent) {
+        return { status: 0, data: { ok: false, error: 'attach callback unavailable' } };
+      }
+      return state.attachComponent(componentId);
+    }
+
+    const api = {
+      bindPalette,
+      loadAllComponents,
+      renderPalette,
+      getCachedComponents,
+      resolveComponentById,
+      upsertCachedComponent,
+      getSearchValue,
+      isAttachedToCurrentComposition,
+      handleAttach,
+    };
+
+    return api;
+  }
+
+  globalThis.BuilderComponentLibraryRuntime = Object.freeze({
+    create,
+  });
+})();

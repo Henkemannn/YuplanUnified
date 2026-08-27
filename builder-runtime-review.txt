@@ -1,0 +1,1796 @@
+﻿=== GIT STATUS ===
+ M core/builder/builder_flow.py
+ M core/builder/library_scope.py
+ M core/builder_api.py
+ M static/js/builder.js
+ M static/js/builder_editor_host.js
+ M static/js/builder_modal_controller.js
+ M static/offshore2/work_menu.js
+ M templates/builder_editor_host.html
+ M templates/builder_workspace_v1.html
+ M tests/api/test_builder_api.py
+ M tests/core/test_builder_scope_flow.py
+ M tests/offshore/test_offshore_work_menu.py
+ M tests/ui/test_builder_host_editor.py
+ M tests/ui/test_builder_workspace_v1_ui.py
+?? builder-decoupling-diff.txt
+?? builder-runtime-review.txt
+?? static/js/builder_component_create.js
+?? static/js/builder_dish_create.js
+?? templates/builder/_add_component_modal.html
+?? templates/builder/_component_create_modal.html
+?? templates/builder/_dish_create_modal.html
+
+=== TRACKED DIFF ===
+diff --git a/core/builder/builder_flow.py b/core/builder/builder_flow.py
+index 7f78b9b..5991d0f 100644
+--- a/core/builder/builder_flow.py
++++ b/core/builder/builder_flow.py
+@@ -47,6 +47,7 @@ from .diet_conflict_preview import (
+ )
+ from .library_scope import ActorContext
+ from .library_scope import ObjectScope
++from .library_scope import private_object_scope
+ from .library_scope import can_read_object
+ from .library_scope import can_write_object
+ from .library_scope import fork_object_scope
+@@ -640,6 +641,61 @@ class BuilderFlow:
+                 raise
+         return created
+ 
++    def create_private_standalone_component(
++        self,
++        component_name: str,
++        *,
++        category: str | None = None,
++        actor: ActorContext | None = None,
++    ) -> Component:
++        category_value = str(category or "").strip().lower() or None
++        name_value = self._normalize_component_name(component_name)
++        if not name_value:
++            raise ValueError("component_name must be non-empty")
++        if actor is None:
++            raise ValueError("actor is required for private component creation")
++
++        match = self.match_component_name(name_value, actor=actor)
++        if match.status in {"exact_match", "alias_match"} and match.component_id:
++            existing = self._component_service.get_component(match.component_id)
++            if existing is not None and self._can_read_library_object("component", existing.component_id, actor=actor):
++                return existing
++
++        normalized_key = self._normalize_component_key(name_value)
++        for existing_item in self.list_library_components(actor=actor):
++            if self._normalize_component_key(existing_item.canonical_name) == normalized_key:
++                return existing_item
++
++        base = self._slugify_component_name(name_value)
++        if not base:
++            base = self._generate_component_seed()
++
++        component_id = base
++        suffix = 2
++        while True:
++            existing = self._component_service.get_component(component_id)
++            if existing is None:
++                break
++            if existing.canonical_name == name_value:
++                return existing
++            component_id = f"{base}_{suffix}"
++            suffix += 1
++
++        created = self._component_service.create_component(
++            component_id=component_id,
++            canonical_name=name_value,
++            categories=[category_value] if category_value else [],
++        )
++        try:
++            self._set_object_scope("component", created.component_id, private_object_scope(actor))
++        except Exception:
++            try:
++                self._component_service.delete_component(created.component_id)
++            except Exception:
++                pass
++            raise
++        return created
++
+     def set_component_category(
+         self,
+         component_id: str,
+@@ -1158,6 +1214,46 @@ class BuilderFlow:
+         )
+         return composition
+ 
++    def create_private_composition_with_generated_id(
++        self,
++        composition_name: str,
++        *,
++        library_group: str | None = None,
++        actor: ActorContext | None = None,
++    ) -> Composition:
++        composition_name_value = str(composition_name or '').strip()
++        if not composition_name_value:
++            raise ValueError('composition_name must be non-empty')
++        if actor is None:
++            raise ValueError('actor is required for private composition creation')
++        if self._object_scope_repository is None:
++            raise ValueError('object scope repository is required for private creation')
++
++        created_composition: Composition | None = None
++        try:
++            created_composition = self._composition_service.create_composition(
++                composition_id=self._generate_composition_id(),
++                composition_name=composition_name_value,
++                library_group=library_group,
++            )
++            self._set_object_scope(
++                'composition',
++                created_composition.composition_id,
++                private_object_scope(actor, source_object_id=None),
++            )
++            return self._composition_service.get_composition(created_composition.composition_id) or created_composition
++        except Exception:
++            if created_composition is not None:
++                try:
++                    self._delete_object_scope('composition', created_composition.composition_id)
++                except Exception:
++                    pass
++                try:
++                    self._composition_service.delete_composition(created_composition.composition_id)
++                except Exception:
++                    pass
++            raise
++
+     def add_component_to_composition(
+         self,
+         composition_id: str,
+diff --git a/core/builder/library_scope.py b/core/builder/library_scope.py
+index b934f48..bff4690 100644
+--- a/core/builder/library_scope.py
++++ b/core/builder/library_scope.py
+@@ -128,13 +128,22 @@ def fork_object_scope(
+     if getattr(actor, "user_id", None) is None:
+         raise ValueError("actor.user_id is required for private fork creation")
+ 
++    return private_object_scope(actor, source_object_id=canonical_source_id)
++
++
++def private_object_scope(actor: ActorContext, *, source_object_id: str | None = None) -> ObjectScope:
++    """Build the scope for a newly created private user-owned object."""
++
++    if getattr(actor, "user_id", None) is None:
++        raise ValueError("actor.user_id is required for private object creation")
++
+     return ObjectScope(
+         tenant_id=actor.tenant_id,
+         owner_scope="user",
+         owner_site_id=None,
+         owner_user_id=actor.user_id,
+         visibility="private",
+-        source_object_id=canonical_source_id,
++        source_object_id=None if source_object_id is None else (str(source_object_id).strip() or None),
+     )
+ 
+ 
+diff --git a/core/builder_api.py b/core/builder_api.py
+index 22792cb..c64b140 100644
+--- a/core/builder_api.py
++++ b/core/builder_api.py
+@@ -1675,6 +1675,35 @@ def create_composition():
+     return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
+ 
+ 
++@bp.post("/compositions/private")
++@require_roles("viewer", "editor", "admin", "superuser")
++def create_private_composition():
++    payload = _require_json_object()
++    if isinstance(payload, tuple):
++        return payload
++
++    try:
++        flow = _get_builder_flow()
++        actor = _get_builder_actor()
++        if actor is None:
++            return _unauthorized()
++        if "composition_id" in payload:
++            return _bad_request("composition_id is not allowed")
++        if "seed_components" in payload:
++            return _bad_request("seed_components is not allowed")
++        composition_name = _require_str(payload, "composition_name")
++        library_group = _require_dish_library_group(payload)
++        composition = flow.create_private_composition_with_generated_id(
++            composition_name=composition_name,
++            library_group=library_group,
++            actor=actor,
++        )
++    except ValueError as exc:
++        return _bad_request(str(exc))
++
++    return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
++
++
+ @bp.delete("/compositions/<composition_id>")
+ @require_roles("editor", "admin", "superuser")
+ def delete_composition(composition_id: str):
+@@ -1821,6 +1850,48 @@ def create_component():
+     return jsonify({"ok": True, "component": _serialize_component(component)}), 201
+ 
+ 
++@bp.post("/components/private")
++@require_roles("viewer", "editor", "admin", "superuser")
++def create_private_component():
++    payload = _require_json_object()
++    if isinstance(payload, tuple):
++        return payload
++
++    try:
++        flow = _get_builder_flow()
++        actor = _get_builder_actor()
++        if actor is None:
++            return _unauthorized()
++        component_name_value = _require_str(payload, "component_name")
++        category_value = _normalize_component_category(_optional_str(payload, "category"))
++        normalized_key = flow._normalize_component_key(component_name_value)
++        existing_component = None
++        for item in flow.list_library_components(actor=actor):
++            if flow._normalize_component_key(str(item.canonical_name or "")) == normalized_key:
++                existing_component = item
++                break
++
++        if existing_component is not None:
++            return jsonify(
++                {
++                    "ok": True,
++                    "duplicate": True,
++                    "message": f"Komponenten finns redan: {existing_component.canonical_name}",
++                    "component": _serialize_component(existing_component),
++                }
++            ), 200
++
++        component = flow.create_private_standalone_component(
++            component_name=component_name_value,
++            category=category_value,
++            actor=actor,
++        )
++    except ValueError as exc:
++        return _bad_request(str(exc))
++
++    return jsonify({"ok": True, "component": _serialize_component(component)}), 201
++
++
+ @bp.patch("/components/<component_id>")
+ @require_roles("cook", "editor", "admin", "superuser")
+ def update_component(component_id: str):
+diff --git a/static/js/builder.js b/static/js/builder.js
+index b12889c..09644c7 100644
+--- a/static/js/builder.js
++++ b/static/js/builder.js
+@@ -4565,6 +4565,63 @@ function openBuilderModalForComposition(composition, initialTab = "overview") {
+   });
+ }
+ 
++function openBuilderDishCreateModal() {
++  const createController = globalThis.BuilderDishCreateModal;
++  if (createController && typeof createController.open === "function") {
++    createController.open({
++      title: "Skapa r├ñtt",
++      createEndpoint: "/api/builder/compositions",
++      includeSeedComponents: true,
++      onSuccess: async (composition) => {
++        closeSimpleModal("dishesLibraryModal");
++        openBuilderModalForComposition(composition, "components");
++        await loadLibrary();
++      },
++    });
++    return;
++  }
++  openSimpleModal("quickCreateModal");
++  const input = document.getElementById("freeDishName");
++  if (input) {
++    input.focus();
++  }
++}
++
++function openBuilderComponentCreateModal() {
++  const createController = globalThis.BuilderComponentCreateModal;
++  if (createController && typeof createController.open === "function") {
++    createController.open({
++      title: "Create component",
++      createEndpoint: "/api/builder/components",
++      onSuccess: async (createdComponent, result) => {
++        const createdComponentId = String((createdComponent && createdComponent.component_id) || "").trim();
++        const isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);
++        if (createdComponent) {
++          upsertCachedLibraryComponent(createdComponent);
++        }
++        updateComponentCategoryChipCounts();
++        filterLibraryComponents(currentComponentSearchQuery());
++        if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate) {
++          pendingComponentCreateComponentId = createdComponentId;
++          await openComponentDetailEditor(createdComponentId);
++        } else if (createdComponentId && isDuplicateCreate) {
++          clearPendingComponentCreateForComposition();
++          setWorkspaceSurface("components");
++          await openComponentDetailEditor(createdComponentId);
++        } else if (createdComponentId) {
++          await openComponentDetailEditor(createdComponentId);
++        }
++      },
++    });
++    return;
++  }
++  openSimpleModal("componentCreateModal");
++  const input = document.getElementById("freeComponentName");
++  if (input) {
++    input.focus();
++  }
++}
++
+ function closeResolveModal() {
+   currentDishAllergenSummaryToken += 1;
+   currentDishCalculationSummaryToken += 1;
+@@ -5020,7 +5077,6 @@ function bindBuilderHandlers() {
+   const componentCreateModalCloseBtn = document.getElementById("componentCreateModalClose");
+   const openNewDishModalBtn = document.getElementById("openNewDishModalBtn");
+   const dishesLibraryModalCloseBtn = document.getElementById("dishesLibraryModalClose");
+-  const quickCreateModalCloseBtn = document.getElementById("quickCreateModalClose");
+   const importLibraryModalCloseBtn = document.getElementById("importLibraryModalClose");
+   const openAddComponentModalBtn = document.getElementById("openAddComponentModalBtn");
+   const addComponentModalCloseBtn = document.getElementById("addComponentModalClose");
+@@ -5129,6 +5185,7 @@ function bindBuilderHandlers() {
+     reopenPendingCompositionForReturn: reopenPendingCompositionForReturn,
+     attachExistingComponentToCurrentComposition: attachExistingComponentToCurrentComposition,
+     clearPendingComponentCreateForComposition: clearPendingComponentCreateForComposition,
++    openComponentCreateModal: openBuilderComponentCreateModal,
+     componentEditorFactory: createBuilderComponentEditor,
+   });
+   // ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+@@ -5310,21 +5367,17 @@ function bindBuilderHandlers() {
+   if (openComponentCreateModalBtn) {
+     openComponentCreateModalBtn.addEventListener("click", () => {
+       clearPendingComponentCreateForComposition();
+-      openSimpleModal("componentCreateModal");
+-      const freeComponentNameEl = document.getElementById("freeComponentName");
+-      if (freeComponentNameEl) {
+-        freeComponentNameEl.focus();
+-      }
++      openBuilderComponentCreateModal();
+     });
+   }
+ 
++  if (globalThis.BuilderDishCreateModal && typeof globalThis.BuilderDishCreateModal.bind === "function") {
++    globalThis.BuilderDishCreateModal.bind({});
++  }
++
+   if (primaryCreateDishBtn) {
+     primaryCreateDishBtn.addEventListener("click", () => {
+-      openSimpleModal("quickCreateModal");
+-      const freeDishNameEl = document.getElementById("freeDishName");
+-      if (freeDishNameEl) {
+-        freeDishNameEl.focus();
+-      }
++      openBuilderDishCreateModal();
+     });
+   }
+ 
+@@ -5338,11 +5391,7 @@ function bindBuilderHandlers() {
+   if (homeActionCreateComponentBtn) {
+     homeActionCreateComponentBtn.addEventListener("click", () => {
+       clearPendingComponentCreateForComposition();
+-      openSimpleModal("componentCreateModal");
+-      const freeComponentNameEl = document.getElementById("freeComponentName");
+-      if (freeComponentNameEl) {
+-        freeComponentNameEl.focus();
+-      }
++      openBuilderComponentCreateModal();
+     });
+   }
+ 
+@@ -5366,6 +5415,10 @@ function bindBuilderHandlers() {
+   if (componentCreateModalCloseBtn) {
+     componentCreateModalCloseBtn.addEventListener("click", () => {
+       clearPendingComponentCreateForComposition();
++      if (globalThis.BuilderComponentCreateModal && typeof globalThis.BuilderComponentCreateModal.close === "function") {
++        globalThis.BuilderComponentCreateModal.close("cancel");
++        return;
++      }
+       closeModalById("componentCreateModal");
+     });
+   }
+@@ -5379,11 +5432,7 @@ function bindBuilderHandlers() {
+ 
+   if (openNewDishFromDishesViewBtn) {
+     openNewDishFromDishesViewBtn.addEventListener("click", () => {
+-      openSimpleModal("quickCreateModal");
+-      const freeDishNameEl = document.getElementById("freeDishName");
+-      if (freeDishNameEl) {
+-        freeDishNameEl.focus();
+-      }
++      openBuilderDishCreateModal();
+     });
+   }
+ 
+@@ -5426,11 +5475,7 @@ function bindBuilderHandlers() {
+ 
+   if (openNewDishModalBtn) {
+     openNewDishModalBtn.addEventListener("click", () => {
+-      openSimpleModal("quickCreateModal");
+-      const freeDishNameEl = document.getElementById("freeDishName");
+-      if (freeDishNameEl) {
+-        freeDishNameEl.focus();
+-      }
++      openBuilderDishCreateModal();
+     });
+   }
+ 
+@@ -5458,12 +5503,6 @@ function bindBuilderHandlers() {
+     });
+   }
+ 
+-  if (quickCreateModalCloseBtn) {
+-    quickCreateModalCloseBtn.addEventListener("click", () => {
+-      closeModalById("quickCreateModal");
+-    });
+-  }
+-
+   if (importLibraryModalCloseBtn) {
+     importLibraryModalCloseBtn.addEventListener("click", () => {
+       closeModalById("importLibraryModal");
+@@ -5472,6 +5511,10 @@ function bindBuilderHandlers() {
+ 
+   if (openAddComponentModalBtn) {
+     openAddComponentModalBtn.addEventListener("click", () => {
++      if (_builderModalController && typeof _builderModalController.openAddComponentModal === "function") {
++        _builderModalController.openAddComponentModal();
++        return;
++      }
+       openSimpleModal("addComponentModal");
+       const paletteSearch = document.getElementById("builderPaletteSearch");
+       if (paletteSearch) {
+@@ -5490,6 +5533,10 @@ function bindBuilderHandlers() {
+ 
+   if (addComponentModalCloseBtn) {
+     addComponentModalCloseBtn.addEventListener("click", () => {
++      if (_builderModalController && typeof _builderModalController.closeAddComponentModal === "function") {
++        _builderModalController.closeAddComponentModal();
++        return;
++      }
+       clearPendingComponentCreateForComposition();
+       closeModalById("addComponentModal");
+     });
+@@ -5529,95 +5576,6 @@ function bindBuilderHandlers() {
+     }
+   });
+ 
+-  if (createDishBtn) {
+-    createDishBtn.addEventListener("click", async () => {
+-      const freeDishNameEl = document.getElementById("freeDishName");
+-      const freeDishCategoryEl = document.getElementById("freeDishCategory");
+-      const composition_name = freeDishNameEl ? String(freeDishNameEl.value || "").trim() : "";
+-      const library_group = freeDishCategoryEl ? String(freeDishCategoryEl.value || "").trim() : "ovrigt";
+-      if (!composition_name) {
+-        showJson("createDishOut", { status: 0, data: { ok: false, error: "dish name is required" } });
+-        return;
+-      }
+-
+-      showLoading("createDishOut");
+-      try {
+-        const result = await callApi("/api/builder/compositions", {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: {
+-            composition_name,
+-            library_group,
+-            seed_components: false,
+-          },
+-        });
+-        showJson("createDishOut", result);
+-        if (result && result.data && result.data.ok && result.data.composition) {
+-          closeSimpleModal("dishesLibraryModal");
+-          closeSimpleModal("quickCreateModal");
+-          openBuilderModalForComposition(result.data.composition, "components");
+-          if (freeDishNameEl) {
+-            freeDishNameEl.value = "";
+-          }
+-          if (freeDishCategoryEl) {
+-            freeDishCategoryEl.value = "ovrigt";
+-          }
+-          await loadLibrary();
+-        }
+-      } catch (error) {
+-        showJson("createDishOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
+-      }
+-    });
+-  }
+-
+-  if (createComponentBtn) {
+-    createComponentBtn.addEventListener("click", async () => {
+-      const freeComponentNameEl = document.getElementById("freeComponentName");
+-      const component_name = freeComponentNameEl ? String(freeComponentNameEl.value || "").trim() : "";
+-      if (!component_name) {
+-        showJson("createComponentOut", { status: 0, data: { ok: false, error: "component name is required" } });
+-        return;
+-      }
+-
+-      showLoading("createComponentOut");
+-      try {
+-        const result = await callApi("/api/builder/components", {
+-          method: "POST",
+-          headers: { "Content-Type": "application/json" },
+-          body: { component_name },
+-        });
+-        showJson("createComponentOut", result);
+-        if (result && result.data && result.data.ok) {
+-          const createdComponent = ((result || {}).data || {}).component || null;
+-          const createdComponentId = String((createdComponent && createdComponent.component_id) || "").trim();
+-          const isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);
+-          closeSimpleModal("componentCreateModal");
+-          if (freeComponentNameEl) {
+-            freeComponentNameEl.value = "";
+-          }
+-          if (createdComponent) {
+-            upsertCachedLibraryComponent(createdComponent);
+-          }
+-          updateComponentCategoryChipCounts();
+-          filterLibraryComponents(currentComponentSearchQuery());
+-          if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate) {
+-            pendingComponentCreateComponentId = createdComponentId;
+-            await openComponentDetailEditor(createdComponentId);
+-          } else if (createdComponentId && result.data.duplicate) {
+-            clearPendingComponentCreateForComposition();
+-            setWorkspaceSurface("components");
+-            await openComponentDetailEditor(createdComponentId);
+-          } else if (createdComponentId) {
+-            await openComponentDetailEditor(createdComponentId);
+-          }
+-        }
+-      } catch (error) {
+-        clearPendingComponentCreateForComposition();
+-        showJson("createComponentOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
+-      }
+-    });
+-  }
+-
+   if (importLibraryBtn) {
+     importLibraryBtn.addEventListener("click", async () => {
+       const importSummaryView = document.getElementById("importSummaryView");
+diff --git a/static/js/builder_editor_host.js b/static/js/builder_editor_host.js
+index 9e0f7dc..a234cd7 100644
+--- a/static/js/builder_editor_host.js
++++ b/static/js/builder_editor_host.js
+@@ -25,6 +25,9 @@
+     componentId: '',
+     hostKind: '',
+     hostTargetId: '',
++    hostMode: 'idle',
++    createdCompositionId: '',
++    createdCompositionReadySent: false,
+   };
+ 
+   const componentLoadPromises = new Map();
+@@ -150,12 +153,127 @@
+     return next;
+   }
+ 
+-  function renderComponentPalette() {}
++  function renderComponentPalette() {
++    const palette = document.getElementById('builderComponentPalette');
++    if (!palette) {
++      return;
++    }
++
++    const composition = getCurrentComposition();
++    const searchValue = String(currentComponentSearchQuery() || '').trim().toLowerCase();
++    const existingIds = new Set(
++      Array.isArray(composition && composition.components)
++        ? composition.components.map((item) => normalizeId(item && item.component_id))
++        : [],
++    );
++    const components = Array.isArray(state.cachedComponents) ? state.cachedComponents : [];
++
++    palette.innerHTML = '';
++
++    if (!components.length) {
++      const empty = document.createElement('div');
++      empty.className = 'component-palette-empty';
++      empty.textContent = 'No reusable components yet';
++      palette.appendChild(empty);
++      return;
++    }
++
++    let renderedCount = 0;
++
++    for (const component of components) {
++      const componentId = normalizeId(component && component.component_id);
++      if (!componentId) {
++        continue;
++      }
++      const componentName = String((component && (component.component_name || component.canonical_name)) || componentId).trim() || componentId;
++      if (searchValue && !componentName.toLowerCase().includes(searchValue) && !componentId.toLowerCase().includes(searchValue)) {
++        continue;
++      }
++
++      const pill = document.createElement('button');
++      pill.type = 'button';
++      pill.className = 'component-palette-pill';
++      pill.textContent = componentName;
++      pill.title = existingIds.has(componentId) ? 'Already included in this dish' : 'Add component to dish';
++
++      if (component && component.primary_recipe_id) {
++        pill.classList.add('component-palette-pill-has-data');
++      }
++
++      if (existingIds.has(componentId)) {
++        pill.classList.add('component-palette-pill-included');
++        pill.disabled = true;
++      } else {
++        pill.addEventListener('click', async () => {
++          pill.classList.add('component-palette-pill-pick');
++          setTimeout(() => {
++            pill.classList.remove('component-palette-pill-pick');
++          }, 260);
++          const attachResult = await attachExistingComponentToCurrentComposition(componentId);
++          if (attachResult && attachResult.data && attachResult.data.ok && attachResult.data.composition) {
++            if (state.controller && typeof state.controller.closeAddComponentModal === 'function') {
++              state.controller.closeAddComponentModal();
++            }
++            if (state.controller && typeof state.controller.setDishBuilderTab === 'function') {
++              state.controller.setDishBuilderTab('components');
++            }
++            if (state.controller && typeof state.controller.renderBuilderPanel === 'function') {
++              state.controller.renderBuilderPanel(attachResult.data.composition);
++            }
++            return;
++          }
++          if (typeof showJson === 'function') {
++            showJson('builderOut', attachResult || { status: 0, data: { ok: false, error: 'attach_failed' } });
++          }
++        });
++      }
++
++      palette.appendChild(pill);
++      renderedCount += 1;
++    }
++
++    if (!renderedCount) {
++      const empty = document.createElement('div');
++      empty.className = 'component-palette-empty';
++      empty.textContent = searchValue ? 'No components match search' : 'No reusable components yet';
++      palette.appendChild(empty);
++    }
++  }
++
+   function filterLibraryComponents() {}
+   function updateComponentCategoryChipCounts() {}
+-  function currentComponentSearchQuery() { return ''; }
++  function currentComponentSearchQuery() {
++    const searchInput = document.getElementById('builderPaletteSearch');
++    return searchInput ? String(searchInput.value || '') : '';
++  }
+   const resolveComponentCategoryThemeKey = BuilderComponentTheme.resolveComponentCategoryThemeKey;
+ 
++  function openBuilderComponentCreateModal() {
++    const createController = globalThis.BuilderComponentCreateModal;
++    if (createController && typeof createController.open === 'function') {
++      createController.open({
++        title: 'Skapa komponent',
++        createEndpoint: '/api/builder/components/private',
++        onSuccess: async (createdComponent) => {
++          const createdComponentId = normalizeId(createdComponent && createdComponent.component_id);
++          if (createdComponent) {
++            upsertCachedComponent(createdComponent);
++          }
++          if (createdComponentId) {
++            state.controller.setState('pendingComponentCreateComponentId', createdComponentId);
++            await state.controller.openComponentDetailEditor(createdComponentId, 'overview');
++          }
++        },
++      });
++      return;
++    }
++    openSimpleModal('componentCreateModal');
++    const input = document.getElementById('freeComponentName');
++    if (input) {
++      input.focus();
++    }
++  }
++
+   async function loadAllCompositions() {
+     const result = await callApi('/api/builder/compositions', { method: 'GET' });
+     if (!(result && result.status < 400 && result.data && result.data.ok && Array.isArray(result.data.compositions))) {
+@@ -299,6 +417,33 @@
+     await Promise.all([loadAllCompositions(), loadAllComponents()]);
+   }
+ 
++  function openCreateCompositionModal() {
++    if (!globalThis.BuilderDishCreateModal || typeof globalThis.BuilderDishCreateModal.open !== 'function') {
++      throw new Error('Create Dish UI is not available.');
++    }
++    globalThis.BuilderDishCreateModal.open({
++      title: 'Skapa r├ñtt',
++      createEndpoint: '/api/builder/compositions/private',
++      includeSeedComponents: false,
++      onSuccess: async (composition) => {
++        state.hostMode = 'create-composition-open';
++        state.createdCompositionId = String(composition && composition.composition_id || '').trim();
++        state.createdCompositionReadySent = false;
++        state.compositionId = state.createdCompositionId;
++        state.componentId = '';
++        state.hostKind = 'composition';
++        state.hostTargetId = state.compositionId;
++        state.controller.openComposition(composition, 'components');
++        setHostStatus(true);
++      },
++      onCancel: () => {
++        state.createdCompositionId = '';
++        state.createdCompositionReadySent = false;
++        notifyHostClose({ kind: 'create-composition', cancelled: true });
++      },
++    });
++  }
++
+   function resolveComponentById(componentId) {
+     const idValue = normalizeId(componentId);
+     if (!idValue) {
+@@ -415,13 +560,56 @@
+     if (!state.hostTargetId) {
+       return;
+     }
++    const currentComposition = getCurrentComposition();
++    const detailComposition = detail && detail.composition ? detail.composition : null;
++    const finalComposition = detailComposition || (!(detail && detail.cancelled) ? currentComposition || null : null);
++    const finalCompositionId = normalizeId(finalComposition && finalComposition.composition_id);
++    const normalizedDetail = {
++      source: 'builder-editor-host',
++      host_target_id: state.hostTargetId,
++      ...(state.hostMode === 'create-composition-open'
++        ? {
++            composition: finalComposition || undefined,
++          }
++        : {
++            composition: detailComposition || currentComposition || undefined,
++          }),
++      ...detail,
++    };
++    if (
++      state.hostMode === 'create-composition-open'
++      && !state.createdCompositionReadySent
++      && state.createdCompositionId
++      && finalCompositionId
++      && finalCompositionId === state.createdCompositionId
++      && !normalizedDetail.cancelled
++    ) {
++      if (window.parent && window.parent !== window) {
++        window.parent.postMessage(
++          {
++            type: 'builder-host-created-composition-ready',
++            detail: {
++              source: 'builder-editor-host',
++              host_target_id: state.hostTargetId,
++              kind: 'composition',
++              composition: finalComposition || undefined,
++            },
++          },
++          window.location.origin,
++        );
++      }
++      state.createdCompositionReadySent = true;
++      state.createdCompositionId = '';
++      state.hostMode = 'idle';
++    }
++    if (normalizedDetail.cancelled) {
++      state.createdCompositionId = '';
++      state.createdCompositionReadySent = false;
++      state.hostMode = 'idle';
++    }
+     const payload = {
+       type: 'builder-host-close',
+-      detail: {
+-        source: 'builder-editor-host',
+-        host_target_id: state.hostTargetId,
+-        ...detail,
+-      },
++      detail: normalizedDetail,
+     };
+     if (window.parent && window.parent !== window) {
+       window.parent.postMessage(payload, window.location.origin);
+@@ -472,6 +660,26 @@
+       return;
+     }
+ 
++    if (payload.type === 'builder-host-create-composition') {
++      state.hostMode = 'create-composition';
++      state.hostKind = 'create-composition';
++      state.hostTargetId = 'create-composition';
++      state.compositionId = '';
++      state.componentId = '';
++      state.createdCompositionId = '';
++      state.createdCompositionReadySent = false;
++      try {
++        openCreateCompositionModal();
++        setHostStatus(true);
++        notifyHostReady({ kind: 'create-composition' });
++      } catch (error) {
++        showJson('builderOut', { status: 0, data: { ok: false, error: String(error && error.message || error) } });
++        notifyHostClose({ kind: 'create-composition', error: String(error && error.message || error) });
++        setHostStatus(false, String(error && error.message || error));
++      }
++      return;
++    }
++
+     if (payload.type !== 'builder-host-open') {
+       return;
+     }
+@@ -487,11 +695,13 @@
+       state.componentId = '';
+       state.hostKind = 'composition';
+       state.hostTargetId = targetId;
++      state.hostMode = 'composition';
+     } else {
+       state.componentId = targetId;
+       state.compositionId = '';
+       state.hostKind = 'component';
+       state.hostTargetId = targetId;
++      state.hostMode = 'component';
+     }
+ 
+     await openRequestedTarget();
+@@ -523,6 +733,8 @@
+         state.compositionId = editableComposition.composition_id;
+         await preloadLinkedComponents(editableComposition);
+         state.controller.openComposition(editableComposition, 'overview');
++      } else if (state.hostKind === 'create-composition') {
++        openCreateCompositionModal();
+       } else {
+         const component = await loadComponentById(state.componentId);
+         if (!component) {
+@@ -569,6 +781,7 @@
+       currentComponentSearchQuery,
+       updateComponentCategoryChipCounts,
+       upsertCachedComponent,
++      openComponentCreateModal: openBuilderComponentCreateModal,
+       showLoading,
+       showJson,
+       openSimpleModal,
+@@ -586,6 +799,12 @@
+       },
+     });
+ 
++    if (globalThis.BuilderDishCreateModal && typeof globalThis.BuilderDishCreateModal.bind === 'function') {
++      globalThis.BuilderDishCreateModal.bind({
++        includeSeedComponents: false,
++      });
++    }
++
+     notifyHostRuntimeReady();
+ 
+     if (target.hostTargetId) {
+diff --git a/static/js/builder_modal_controller.js b/static/js/builder_modal_controller.js
+index a923521..700562c 100644
+--- a/static/js/builder_modal_controller.js
++++ b/static/js/builder_modal_controller.js
+@@ -22,6 +22,7 @@
+  *   config.openSimpleModal: (modalId: string) => void
+  *   config.closeModalById: (modalId: string) => void
+  *   config.renderComponentPalette: () => void
++ *   config.openComponentCreateModal: () => void
+  *
+  * @param {{
+  *   compositionRoot: Element,
+@@ -57,6 +58,7 @@ function createBuilderModalController(config) {
+     openSimpleModal: config.openSimpleModal || null,
+     closeModalById: config.closeModalById || null,
+     renderComponentPalette: config.renderComponentPalette || null,
++    openComponentCreateModal: config.openComponentCreateModal || null,
+     notifyHostClose: config.notifyHostClose || null,
+   };
+ 
+@@ -128,6 +130,30 @@ function createBuilderModalController(config) {
+     modal.inert = false;
+   }
+ 
++  function _openAddComponentModal() {
++    if (_state.currentBuilderComposition && _state.currentBuilderComposition.composition_id) {
++      _state.pendingComponentCreateForCompositionId = String(_state.currentBuilderComposition.composition_id || "").trim() || null;
++      _state.pendingComponentCreateForCompositionName = String(_state.currentBuilderComposition.composition_name || "").trim() || null;
++      _state.pendingComponentCreateReturnTab = "components";
++    }
++    _openSimpleModal("addComponentModal");
++    if (typeof _callbacks.renderComponentPalette === "function") {
++      _callbacks.renderComponentPalette();
++    }
++    const searchInput = document.getElementById("builderPaletteSearch");
++    if (searchInput) {
++      try {
++        searchInput.focus();
++      } catch (error) {
++        // Ignore focus failures in restricted environments.
++      }
++    }
++  }
++
++  function _closeAddComponentModal() {
++    _closeModalById("addComponentModal");
++  }
++
+   function _showLoading(targetId) {
+     if (typeof _callbacks.showLoading === "function") {
+       _callbacks.showLoading(targetId);
+@@ -492,12 +518,20 @@ function createBuilderModalController(config) {
+     _state.currentDishAllergenSummaryToken += 1;
+     _state.currentDishCalculationSummaryToken += 1;
+     closeDishComponentOverflowMenus();
+-    const activeCompositionId = String(_state.currentBuilderComposition?.composition_id || "").trim();
++    const finalComposition = _state.currentBuilderComposition
++      ? {
++          ..._state.currentBuilderComposition,
++          components: Array.isArray(_state.currentBuilderComposition.components)
++            ? _state.currentBuilderComposition.components.map((component) => ({ ...component }))
++            : [],
++        }
++      : null;
++    const activeCompositionId = String(finalComposition?.composition_id || "").trim();
+     _closeModalById("componentDetailEditorModal");
+     _closeModalById("resolveModal");
+     _state.currentBuilderComposition = null;
+     _state.currentBuilderDishTab = "overview";
+-    _notifyHostClose({ kind: "composition", composition_id: activeCompositionId });
++    _notifyHostClose({ kind: "composition", composition_id: activeCompositionId, composition: finalComposition });
+   }
+ 
+   async function _returnComponentDetailToDish() {
+@@ -876,6 +910,39 @@ function createBuilderModalController(config) {
+       });
+     }
+ 
++    const openAddComponentModalBtn = compositionRoot.querySelector("#openAddComponentModalBtn");
++    if (openAddComponentModalBtn) {
++      openAddComponentModalBtn.addEventListener("click", () => {
++        _openAddComponentModal();
++      });
++    }
++
++    const addComponentModalCloseBtn = document.getElementById("addComponentModalClose");
++    if (addComponentModalCloseBtn) {
++      addComponentModalCloseBtn.addEventListener("click", () => {
++        _closeAddComponentModal();
++      });
++    }
++
++    const builderPaletteSearch = document.getElementById("builderPaletteSearch");
++    if (builderPaletteSearch) {
++      builderPaletteSearch.addEventListener("input", () => {
++        if (typeof _callbacks.renderComponentPalette === "function") {
++          _callbacks.renderComponentPalette();
++        }
++      });
++    }
++
++    const addComponentBtn = document.getElementById("btnAddComponent");
++    if (addComponentBtn) {
++      addComponentBtn.addEventListener("click", () => {
++        _closeAddComponentModal();
++        if (typeof _callbacks.openComponentCreateModal === "function") {
++          _callbacks.openComponentCreateModal();
++        }
++      });
++    }
++
+     // ÔöÇÔöÇ Dish modal: backdrop click to close ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+     compositionRoot.addEventListener("click", (event) => {
+       if (event.target === compositionRoot) {
+@@ -1007,6 +1074,14 @@ function createBuilderModalController(config) {
+       }
+     },
+ 
++    openAddComponentModal() {
++      _openAddComponentModal();
++    },
++
++    closeAddComponentModal() {
++      _closeAddComponentModal();
++    },
++
+     /**
+      * Close dish component overflow menus.
+      * @param {Element} [exceptElement]
+diff --git a/static/offshore2/work_menu.js b/static/offshore2/work_menu.js
+index e2bae52..cde435d 100644
+--- a/static/offshore2/work_menu.js
++++ b/static/offshore2/work_menu.js
+@@ -157,6 +157,7 @@
+     let lastBuilderHostScrollY = window.scrollY || 0;
+     let builderHostRuntimeReady = false;
+     let pendingBuilderHostOpen = null;
++    let pendingBuilderHostCreate = null;
+     let pickerActiveTrack = null;
+     let pickerSelectedOption = '';
+     let pickerActiveCategory = 'all';
+@@ -343,7 +344,7 @@
+       pickerConfirm.hidden = false;
+       pickerConfirmText.textContent = 'Byt r├ñtt?';
+       if (pickerConfirmCurrent) {
+-        pickerConfirmCurrent.textContent = `Nuvarande r├ñtt: ${pickerActiveTrack ? (pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || 'ÔÇö') : 'ÔÇö'}`;
++        pickerConfirmCurrent.textContent = `Nuvarande r├ñtt: ${pickerActiveTrack ? (pickerActiveTrack.dataset.effectiveTitle || pickerActiveTrack.dataset.publicTitle || 'ÔÇö') : 'ÔÇö'}`;
+       }
+       if (pickerConfirmSelected) {
+         pickerConfirmSelected.textContent = `ÔåÆ ${selected.label || 'Vald r├ñtt'}`;
+@@ -414,7 +415,7 @@
+         pickerSearch.value = '';
+       }
+       if (pickerResetTitle) {
+-        pickerResetTitle.textContent = pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || '';
++        pickerResetTitle.textContent = pickerActiveTrack.dataset.publicTitle || pickerActiveTrack.dataset.effectiveTitle || '';
+       }
+       if (picker) {
+         picker.hidden = false;
+@@ -528,6 +529,7 @@
+       builderHost.classList.remove('offshore-work-menu-builder-host--ready');
+       document.body.classList.remove('offshore-work-menu-builder-host-open');
+       pendingBuilderHostOpen = null;
++      pendingBuilderHostCreate = null;
+       window.scrollTo(lastBuilderHostScrollX, lastBuilderHostScrollY);
+       if (lastBuilderHostActiveElement && typeof lastBuilderHostActiveElement.focus === 'function') {
+         lastBuilderHostActiveElement.focus();
+@@ -566,6 +568,21 @@
+       );
+     }
+ 
++    function postBuilderHostCreateComposition() {
++      if (!builderHostFrame || !builderHostFrame.contentWindow || !lastBuilderBridge) {
++        return;
++      }
++      builderHostFrame.contentWindow.postMessage(
++        {
++          type: 'builder-host-create-composition',
++          detail: {
++            source: 'offshore-work-menu',
++          },
++        },
++        window.location.origin,
++      );
++    }
++
+     function openBuilderHost(bridge, hostKind = 'composition') {
+       if (!builderHost || !builderHostFrame || !bridge || !bridge.composition_id || !bridge.builder_url) {
+         return false;
+@@ -616,6 +633,46 @@
+       return openBuilderHost(bridge);
+     }
+ 
++    function openBuilderHostForCreate(trackButton) {
++      const trackCard = getTrackCard(trackButton);
++      if (!trackCard) {
++        return false;
++      }
++      const rawBridge = trackCard.dataset.builderBridge || '';
++      if (!rawBridge) {
++        return false;
++      }
++      let bridge = null;
++      try {
++        bridge = JSON.parse(rawBridge);
++      } catch (error) {
++        return false;
++      }
++      if (!bridge || !bridge.builder_url) {
++        return false;
++      }
++      lastBuilderHostActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
++      lastBuilderBridge = bridge;
++      lastBuilderHostKind = 'create-composition';
++      lastBuilderHostScrollX = window.scrollX || 0;
++      lastBuilderHostScrollY = window.scrollY || 0;
++      if (builderHostTitle) {
++        builderHostTitle.textContent = 'Skapa r├ñtt';
++      }
++      builderHost.hidden = false;
++      builderHost.setAttribute('aria-hidden', 'false');
++      builderHost.classList.add('offshore-work-menu-builder-host--open');
++      builderHost.classList.remove('offshore-work-menu-builder-host--ready');
++      document.body.classList.add('offshore-work-menu-builder-host-open');
++      pendingBuilderHostCreate = { bridge };
++      if (builderHostRuntimeReady) {
++        postBuilderHostCreateComposition();
++      } else {
++        postBuilderHostPing();
++      }
++      return true;
++    }
++
+     function syncModalFields(trackButton) {
+       const trackCard = getTrackCard(trackButton);
+       if (!trackCard) {
+@@ -981,6 +1038,10 @@
+     if (pickerCreateNew) {
+       pickerCreateNew.addEventListener('click', (event) => {
+         event.preventDefault();
++        if (!pickerActiveTrack) {
++          return;
++        }
++        openBuilderHostForCreate(pickerActiveTrack);
+       });
+     }
+ 
+@@ -1012,9 +1073,41 @@
+         builderHostRuntimeReady = true;
+         if (pendingBuilderHostOpen) {
+           postBuilderHostOpen(pendingBuilderHostOpen.bridge, pendingBuilderHostOpen.hostKind);
++        } else if (pendingBuilderHostCreate) {
++          postBuilderHostCreateComposition();
+         }
+         return;
+       }
++      if (payload.type === 'builder-host-created-composition-ready') {
++        if (lastBuilderHostKind !== 'create-composition') {
++          return;
++        }
++        const created = detail && detail.composition;
++        if (!created || !created.composition_id) {
++          return;
++        }
++        const option = {
++          value: created.composition_id,
++          label: created.composition_name || created.composition_id,
++          library_group: created.library_group || 'ovrigt',
++        };
++        const existingIndex = compositionOptions.findIndex((entry) => String(entry.value) === String(option.value));
++        if (existingIndex >= 0) {
++          compositionOptions[existingIndex] = option;
++        } else {
++          compositionOptions.unshift(option);
++        }
++        pickerSelectedOption = String(option.value);
++        if (builderField) {
++          builderField.value = String(option.value);
++        }
++        renderPickerCategories();
++        renderPickerResults();
++        updatePickerConfirm();
++        setPickerViewMode('confirm');
++        pendingBuilderHostCreate = null;
++        return;
++      }
+       if (!builderHost || builderHost.hidden) {
+         return;
+       }
+@@ -1022,11 +1115,20 @@
+         return;
+       }
+       if (payload.type === 'builder-host-ready') {
+-        if (String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
+-          return;
+-        }
+-        if (String(detail.kind || '') !== lastBuilderHostKind) {
+-          return;
++        if (lastBuilderHostKind === 'create-composition') {
++          if (String(detail.host_target_id || '') !== 'create-composition') {
++            return;
++          }
++          if (String(detail.kind || '') !== 'create-composition') {
++            return;
++          }
++        } else {
++          if (String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
++            return;
++          }
++          if (String(detail.kind || '') !== lastBuilderHostKind) {
++            return;
++          }
+         }
+         builderHost.classList.add('offshore-work-menu-builder-host--ready');
+         if (builderHostFrame) {
+@@ -1041,12 +1143,15 @@
+       if (payload.type !== 'builder-host-close') {
+         return;
+       }
+-      if (String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
++      if (lastBuilderHostKind !== 'create-composition' && String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
+         return;
+       }
+-      if (String(detail.kind || '') !== lastBuilderHostKind) {
++      if (lastBuilderHostKind !== 'create-composition' && String(detail.kind || '') !== lastBuilderHostKind) {
+         return;
+       }
++      if (lastBuilderHostKind === 'create-composition') {
++        pendingBuilderHostCreate = null;
++      }
+       closeBuilderHost();
+     });
+ 
+diff --git a/templates/builder_editor_host.html b/templates/builder_editor_host.html
+index 6ee4627..7991ef6 100644
+--- a/templates/builder_editor_host.html
++++ b/templates/builder_editor_host.html
+@@ -12,8 +12,14 @@
+   <div id="builderEditorHostStatus" class="builder-editor-host-status" aria-live="polite"></div>
+   {% include "builder/_composition_modal.html" %}
+   {% include "builder/_component_detail_modal.html" %}
++  {% include "builder/_component_create_modal.html" %}
++  {% include "builder/_add_component_modal.html" %}
++
++  {% include "builder/_dish_create_modal.html" %}
+ 
+   <script src="/static/js/builder_component_theme.js"></script>
++  <script src="/static/js/builder_component_create.js"></script>
++  <script src="/static/js/builder_dish_create.js"></script>
+   <script src="/static/js/builder_component_editor.js"></script>
+   <script src="/static/js/builder_dish_editor.js"></script>
+   <script src="/static/js/builder_modal_controller.js?v=builder-b1-modal-controller-v1"></script>
+diff --git a/templates/builder_workspace_v1.html b/templates/builder_workspace_v1.html
+index 713e5d1..7fa50ff 100644
+--- a/templates/builder_workspace_v1.html
++++ b/templates/builder_workspace_v1.html
+@@ -165,53 +165,9 @@
+ 
+   <div id="libraryOut" class="workspace-feedback workspace-feedback-page" aria-live="polite"></div>
+ 
+-  <div id="componentCreateModal" class="modal hidden">
+-    <div class="modal-content modal-content-compact">
+-      <div class="workspace-modal-header">
+-        <div>
+-          <p class="workspace-modal-kicker">Component creation</p>
+-          <h3>Create component</h3>
+-        </div>
+-        <button id="componentCreateModalClose" type="button">Done</button>
+-      </div>
+-
+-      <section class="workspace-quick-card">
+-        <label>Component name
+-          <input id="freeComponentName" type="text" placeholder="Mashed Potatoes">
+-        </label>
+-        <button id="btnCreateComponent" type="button">Create component</button>
+-        <div id="createComponentOut" class="workspace-feedback" aria-live="polite"></div>
+-      </section>
+-    </div>
+-  </div>
++  {% include "builder/_component_create_modal.html" %}
+ 
+-  <div id="quickCreateModal" class="modal hidden">
+-    <div class="modal-content modal-content-compact">
+-      <div class="workspace-modal-header">
+-        <div>
+-          <p class="workspace-modal-kicker">Skapa r├ñtt</p>
+-          <h3>Skapa r├ñtt</h3>
+-        </div>
+-        <button id="quickCreateModalClose" type="button">Avbryt</button>
+-      </div>
+-
+-      <section class="workspace-quick-card">
+-        <label>R├ñttnamn
+-          <input id="freeDishName" type="text" placeholder="Kottbullar med potatis">
+-        </label>
+-        <label>Kategori
+-          <select id="freeDishCategory">
+-            <option value="ovrigt" selected>├ûvrigt</option>
+-            <option value="fisk">Fisk</option>
+-            <option value="kott">K├Âtt</option>
+-            <option value="dessert">Dessert</option>
+-          </select>
+-        </label>
+-        <button id="btnCreateDish" type="button">Skapa r├ñtt</button>
+-        <div id="createDishOut" class="workspace-feedback" aria-live="polite"></div>
+-      </section>
+-    </div>
+-  </div>
++  {% include "builder/_dish_create_modal.html" %}
+ 
+   <div id="dishesLibraryModal" class="modal hidden">
+     <div class="modal-content modal-content-components">
+@@ -356,31 +312,11 @@
+ 
+   {% include "builder/_component_detail_modal.html" %}
+   {% include "builder/_composition_modal.html" %}
+-  <div id="addComponentModal" class="modal hidden">
+-    <div class="modal-content modal-content-components">
+-      <div class="workspace-modal-header">
+-        <div>
+-          <p class="workspace-modal-kicker">Dish building</p>
+-          <h3>L├ñgg till komponent</h3>
+-        </div>
+-        <button id="addComponentModalClose" type="button">Klar</button>
+-      </div>
+-
+-      <div class="workspace-modal-section-card">
+-        <p class="modal-section-title">V├ñlj komponenter fr├Ñn biblioteket</p>
+-        <label>S├Âk komponenter
+-          <input id="builderPaletteSearch" type="text" placeholder="S├Âk ├Ñteranv├ñndbara komponenter">
+-        </label>
+-        <div id="builderComponentPalette" class="component-palette"></div>
+-      </div>
+-      <div class="workspace-inline-actions workspace-builder-primary-actions">
+-        <button id="btnAddComponent" type="button">Skapa ny komponent</button>
+-      </div>
+-
+-    </div>
+-  </div>
++  {% include "builder/_add_component_modal.html" %}
+ 
+   <script src="/static/js/builder_component_theme.js"></script>
++  <script src="/static/js/builder_component_create.js"></script>
++  <script src="/static/js/builder_dish_create.js"></script>
+   <script src="/static/js/builder_component_editor.js"></script>
+   <script src="/static/js/builder_dish_editor.js"></script>
+   <script src="/static/js/builder_modal_controller.js?v=builder-b1-modal-controller-v1"></script>
+
+==================================================
+=== FILE: static\js\builder_component_create.js ===
+==================================================
+(function () {
+  'use strict';
+
+  const state = {
+    bound: false,
+    modal: null,
+    title: null,
+    nameInput: null,
+    submitButton: null,
+    closeButton: null,
+    output: null,
+    config: null,
+    submitting: false,
+  };
+
+  function getElement(id) {
+    return document.getElementById(String(id || ''));
+  }
+
+  function setOutput(message, isError = false) {
+    if (!state.output) {
+      return;
+    }
+    state.output.textContent = String(message || '');
+    state.output.dataset.state = isError ? 'error' : 'idle';
+  }
+
+  function setSubmitting(isSubmitting) {
+    state.submitting = Boolean(isSubmitting);
+    if (state.submitButton) {
+      state.submitButton.disabled = Boolean(isSubmitting);
+      state.submitButton.textContent = isSubmitting ? 'Skaparâ€¦' : 'Skapa komponent';
+    }
+  }
+
+  function hideModal() {
+    if (!state.modal) {
+      return;
+    }
+    state.modal.classList.add('hidden');
+    state.modal.hidden = true;
+    state.modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+  }
+
+  function showModal() {
+    if (!state.modal) {
+      return;
+    }
+    state.modal.classList.remove('hidden');
+    state.modal.hidden = false;
+    state.modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    if (state.nameInput) {
+      state.nameInput.focus();
+    }
+  }
+
+  async function submit() {
+    if (state.submitting || !state.config) {
+      return;
+    }
+
+    const componentName = String(state.nameInput ? state.nameInput.value : '').trim();
+    if (!componentName) {
+      setOutput('Komponentnamn mÃ¥ste anges.', true);
+      if (state.nameInput) {
+        state.nameInput.focus();
+      }
+      return;
+    }
+
+    const endpoint = String(state.config.createEndpoint || state.config.endpoint || '').trim();
+    if (!endpoint) {
+      setOutput('Create endpoint saknas.', true);
+      return;
+    }
+
+    const payload = { component_name: componentName };
+    if (state.config.category !== undefined && state.config.category !== null && String(state.config.category).trim()) {
+      payload.category = String(state.config.category).trim();
+    }
+
+    setSubmitting(true);
+    setOutput('Skapar...');
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+      });
+      const data = await response
+        .json()
+        .catch(() => ({ ok: false, error: 'invalid_json_response', message: 'Response was not valid JSON' }));
+      const result = { status: response.status, data };
+      if (!(response.status < 400 && data && data.ok && data.component)) {
+        setOutput(String(data && data.message || data && data.error || 'Kunde inte skapa komponent.'), true);
+        return;
+      }
+
+      hideModal();
+      setOutput('', false);
+      if (typeof state.config.onSuccess === 'function') {
+        await state.config.onSuccess(data.component, result);
+      }
+    } catch (error) {
+      setOutput(String(error && error.message || error), true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function close(reason = 'cancel') {
+    hideModal();
+    if (reason === 'cancel' && state.config && typeof state.config.onCancel === 'function') {
+      state.config.onCancel();
+    }
+  }
+
+  function bind(config) {
+    state.config = { ...(config || {}) };
+    state.modal = getElement(state.config.modalId || 'componentCreateModal');
+    state.title = getElement(state.config.titleId || 'componentCreateModalTitle');
+    state.nameInput = getElement(state.config.nameInputId || 'freeComponentName');
+    state.submitButton = getElement(state.config.submitButtonId || 'btnCreateComponent');
+    state.closeButton = getElement(state.config.closeButtonId || 'componentCreateModalClose');
+    state.output = getElement(state.config.outputId || 'createComponentOut');
+
+    if (!state.bound) {
+      if (state.submitButton) {
+        state.submitButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          submit();
+        });
+      }
+      if (state.closeButton) {
+        state.closeButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          close('cancel');
+        });
+      }
+      if (state.modal) {
+        state.modal.addEventListener('click', (event) => {
+          if (event.target === state.modal) {
+            close('cancel');
+          }
+        });
+      }
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && state.modal && !state.modal.hidden) {
+          close('cancel');
+        }
+      });
+      state.bound = true;
+    }
+
+    return api;
+  }
+
+  function open(config) {
+    state.config = { ...(state.config || {}), ...(config || {}) };
+    if (!state.modal) {
+      bind(state.config);
+    }
+    if (state.title && state.config.title) {
+      state.title.textContent = String(state.config.title);
+    }
+    if (state.nameInput) {
+      state.nameInput.value = '';
+    }
+    setOutput('', false);
+    setSubmitting(false);
+    showModal();
+    return api;
+  }
+
+  const api = {
+    bind,
+    open,
+    close,
+    setOutput,
+    isOpen() {
+      return Boolean(state.modal && !state.modal.hidden);
+    },
+  };
+
+  globalThis.BuilderComponentCreateModal = api;
+})();
+
+==================================================
+=== FILE: static\js\builder_dish_create.js ===
+==================================================
+(function () {
+  'use strict';
+
+  const state = {
+    bound: false,
+    modal: null,
+    title: null,
+    nameInput: null,
+    categoryInput: null,
+    submitButton: null,
+    closeButton: null,
+    output: null,
+    config: null,
+    submitting: false,
+  };
+
+  function getElement(id) {
+    return document.getElementById(String(id || ''));
+  }
+
+  function setOutput(message, isError = false) {
+    if (!state.output) {
+      return;
+    }
+    state.output.textContent = String(message || '');
+    state.output.dataset.state = isError ? 'error' : 'idle';
+  }
+
+  function setSubmitting(isSubmitting) {
+    state.submitting = Boolean(isSubmitting);
+    if (state.submitButton) {
+      state.submitButton.disabled = Boolean(isSubmitting);
+      state.submitButton.textContent = isSubmitting ? 'Skaparâ€¦' : 'Skapa rÃ¤tt';
+    }
+  }
+
+  function resetFields() {
+    if (state.nameInput) {
+      state.nameInput.value = '';
+    }
+    if (state.categoryInput) {
+      state.categoryInput.value = 'ovrigt';
+    }
+  }
+
+  function hideModal() {
+    if (!state.modal) {
+      return;
+    }
+    state.modal.classList.add('hidden');
+    state.modal.hidden = true;
+    state.modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+  }
+
+  function showModal() {
+    if (!state.modal) {
+      return;
+    }
+    state.modal.classList.remove('hidden');
+    state.modal.hidden = false;
+    state.modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    if (state.nameInput) {
+      state.nameInput.focus();
+    }
+  }
+
+  async function submit() {
+    if (state.submitting || !state.config) {
+      return;
+    }
+
+    const name = String(state.nameInput ? state.nameInput.value : '').trim();
+    const libraryGroup = String(state.categoryInput ? state.categoryInput.value : 'ovrigt').trim() || 'ovrigt';
+    if (!name) {
+      setOutput('RÃ¤ttnamn mÃ¥ste anges.', true);
+      if (state.nameInput) {
+        state.nameInput.focus();
+      }
+      return;
+    }
+
+    const endpoint = String(state.config.createEndpoint || state.config.endpoint || '').trim();
+    if (!endpoint) {
+      setOutput('Create endpoint saknas.', true);
+      return;
+    }
+
+    setSubmitting(true);
+    setOutput('Skapar...');
+
+    try {
+      const requestBody = {
+        composition_name: name,
+        library_group: libraryGroup,
+      };
+      if (state.config.includeSeedComponents !== false) {
+        requestBody.seed_components = false;
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(requestBody),
+      });
+      const data = await response
+        .json()
+        .catch(() => ({ ok: false, error: 'invalid_json_response', message: 'Response was not valid JSON' }));
+      const result = { status: response.status, data };
+      if (!(response.status < 400 && data && data.ok && data.composition)) {
+        setOutput(String(data && data.message || data && data.error || 'Kunde inte skapa rÃ¤tt.'), true);
+        return;
+      }
+
+      hideModal();
+      resetFields();
+      setOutput('', false);
+      if (typeof state.config.onSuccess === 'function') {
+        await state.config.onSuccess(data.composition, result);
+      }
+    } catch (error) {
+      setOutput(String(error && error.message || error), true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function close(reason = 'cancel') {
+    hideModal();
+    if (reason === 'cancel' && state.config && typeof state.config.onCancel === 'function') {
+      state.config.onCancel();
+    }
+  }
+
+  function bind(config) {
+    state.config = { ...(config || {}) };
+    state.modal = getElement(state.config.modalId || 'quickCreateModal');
+    state.title = getElement(state.config.titleId || 'quickCreateModalTitle');
+    state.nameInput = getElement(state.config.nameInputId || 'freeDishName');
+    state.categoryInput = getElement(state.config.categoryInputId || 'freeDishCategory');
+    state.submitButton = getElement(state.config.submitButtonId || 'btnCreateDish');
+    state.closeButton = getElement(state.config.closeButtonId || 'quickCreateModalClose');
+    state.output = getElement(state.config.outputId || 'createDishOut');
+
+    if (!state.bound) {
+      if (state.submitButton) {
+        state.submitButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          submit();
+        });
+      }
+      if (state.closeButton) {
+        state.closeButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          close('cancel');
+        });
+      }
+      if (state.modal) {
+        state.modal.addEventListener('click', (event) => {
+          if (event.target === state.modal) {
+            close('cancel');
+          }
+        });
+      }
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && state.modal && !state.modal.hidden) {
+          close('cancel');
+        }
+      });
+      state.bound = true;
+    }
+
+    return api;
+  }
+
+  function open(config) {
+    state.config = { ...(state.config || {}), ...(config || {}) };
+    if (!state.modal) {
+      bind(state.config);
+    }
+    resetFields();
+    if (state.title && state.config.title) {
+      state.title.textContent = String(state.config.title);
+    }
+    setOutput('', false);
+    setSubmitting(false);
+    showModal();
+    return api;
+  }
+
+  const api = {
+    bind,
+    open,
+    close,
+    setOutput,
+    isOpen() {
+      return Boolean(state.modal && !state.modal.hidden);
+    },
+  };
+
+  globalThis.BuilderDishCreateModal = api;
+})();
+
+==================================================
+=== FILE: templates\builder\_component_create_modal.html ===
+==================================================
+<div id="componentCreateModal" class="modal hidden">
+  <div class="modal-content modal-content-compact">
+    <div class="workspace-modal-header">
+      <div>
+        <p class="workspace-modal-kicker">Component creation</p>
+        <h3>Create component</h3>
+      </div>
+      <button id="componentCreateModalClose" type="button">Done</button>
+    </div>
+
+    <section class="workspace-quick-card">
+      <label>Component name
+        <input id="freeComponentName" type="text" placeholder="Mashed Potatoes">
+      </label>
+      <button id="btnCreateComponent" type="button">Create component</button>
+      <div id="createComponentOut" class="workspace-feedback" aria-live="polite"></div>
+    </section>
+  </div>
+</div>
+
+==================================================
+=== FILE: templates\builder\_dish_create_modal.html ===
+==================================================
+<div id="quickCreateModal" class="modal hidden">
+  <div class="modal-content modal-content-compact">
+    <div class="workspace-modal-header">
+      <div>
+        <p class="workspace-modal-kicker">Skapa rÃ¤tt</p>
+        <h3>Skapa rÃ¤tt</h3>
+      </div>
+      <button id="quickCreateModalClose" type="button">Avbryt</button>
+    </div>
+
+    <section class="workspace-quick-card">
+      <label>RÃ¤ttnamn
+        <input id="freeDishName" type="text" placeholder="Kottbullar med potatis">
+      </label>
+      <label>Kategori
+        <select id="freeDishCategory">
+          <option value="ovrigt" selected>Ã–vrigt</option>
+          <option value="fisk">Fisk</option>
+          <option value="kott">KÃ¶tt</option>
+          <option value="dessert">Dessert</option>
+        </select>
+      </label>
+      <button id="btnCreateDish" type="button">Skapa rÃ¤tt</button>
+      <div id="createDishOut" class="workspace-feedback" aria-live="polite"></div>
+    </section>
+  </div>
+</div>
+
+==================================================
+=== FILE: templates\builder\_add_component_modal.html ===
+==================================================
+<div id="addComponentModal" class="modal hidden">
+  <div class="modal-content modal-content-components">
+    <div class="workspace-modal-header">
+      <div>
+        <p class="workspace-modal-kicker">Dish building</p>
+        <h3>LÃ¤gg till komponent</h3>
+      </div>
+      <button id="addComponentModalClose" type="button">Klar</button>
+    </div>
+
+    <div class="workspace-modal-section-card">
+      <p class="modal-section-title">VÃ¤lj komponenter frÃ¥n biblioteket</p>
+      <label>SÃ¶k komponenter
+        <input id="builderPaletteSearch" type="text" placeholder="SÃ¶k Ã¥teranvÃ¤ndbara komponenter">
+      </label>
+      <div id="builderComponentPalette" class="component-palette"></div>
+    </div>
+    <div class="workspace-inline-actions workspace-builder-primary-actions">
+      <button id="btnAddComponent" type="button">Skapa ny komponent</button>
+    </div>
+
+  </div>
+</div>
