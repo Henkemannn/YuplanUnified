@@ -4,7 +4,11 @@ Last reviewed: 2026-08-27
 # Yuplan 1.0 Finishline
 
 ## Current Phase
-Close and freeze the shared Builder/Menu/Offshore seam. Current hardening focus is Builder runtime parity and tenant/scope integrity, not new Builder feature work.
+The shared Builder/Menu/Offshore seam was accepted and frozen on 2026-08-27 after live Workspace/Host/Work Menu parity verification.
+
+Active phase: Portal Foundation / Avdelningsportal canonical-path consolidation for Yuplan Kommun 1.0.
+
+Broad Builder/Menu MVP work is closed. Only pilot-blocking regressions may reopen the seam before Kommun 1.0 Ready for Pilot.
 
 ## Already Established
 - Builder is the canonical knowledge source.
@@ -16,28 +20,26 @@ Close and freeze the shared Builder/Menu/Offshore seam. Current hardening focus 
 - Work Menu resolves a cook's effective scoped Dish.
 - Work Menu can choose or create a real canonical Builder Dish and store canonical composition identity.
 - Ghost demo Builder IDs and old-modal fallback cleanup are complete.
+- Scope-aware Builder writes require real ActorContext and explicit canonical scope.
+- Offshore demo/provisioning Builder bootstrap uses a real principal in the target tenant; fabricated or borrowed cross-tenant principals are forbidden.
+- Live Offshore Work Menu parity is accepted: existing canonical Dish selection, reload persistence, create Dish -> Component -> Work Menu, canonical edit refresh, and reset to published baseline all passed manual E2E verification on 2026-08-27.
 - Legacy unscoped Builder data is historical/dev compatibility data, not the intended fresh-tenant model.
 
-## Immediate Remaining Builder/Menu Seam
-1. Prevent current scope-aware write paths from creating new unscoped canonical Components/Compositions.
-2. Verify real tenant/user ActorContext propagation through Builder, menu-context and Offshore paths.
-3. Resolve Offshore demo/provisioning actor bootstrap without fabricating a principal or borrowing one from another tenant.
-4. Repair or quarantine legacy scope data only where provenance is safe.
-5. Move missing-scope reads to deny-by-default only after migration/parity.
-6. Run live Workspace/Host/Work Menu parity gate.
-7. Fix only pilot-blocking Builder regressions.
-8. Freeze broad Builder/Menu MVP work.
-
-A fresh tenant must start with explicit scope from its first canonical write.
-Legacy dev-data cleanup is not a reason to redesign Builder for new tenants.
+## Builder/Menu/Offshore Freeze
+- A fresh tenant must start with explicit scope from its first canonical write.
+- Legacy scope repair must remain provenance driven; do not guess tenant ownership.
+- Temporary missing-scope read compatibility may remain while legacy data is contained or migrated.
+- Legacy dev-data cleanup is not a reason to redesign Builder for new tenants.
+- Do not add broad Builder/Menu MVP features before Kommun 1.0 Ready for Pilot.
+- Reopen this seam only for a concrete pilot-blocking regression or a deliberate Ground Truth decision change.
 
 ## Next Major Milestone
 Yuplan Kommun 1.0 - Ready for Pilot.
 
 Order:
-1. Close and freeze the remaining Builder/Menu/Offshore seam.
+1. Builder/Menu/Offshore seam freeze - COMPLETE (2026-08-27).
 2. Ground Truth / Planera 2.0 Architecture Lock - COMPLETE.
-3. Portal Foundation / Avdelningsportal canonical-path consolidation.
+3. Portal Foundation / Avdelningsportal canonical-path consolidation - ACTIVE.
 4. Define and verify Planera 2.0 production contracts needed for Kommun integration.
 5. Kommun -> Planera 2.0 shadow/parity integration.
 6. Planera 2.0 becomes Kommun production calculation after parity acceptance.
@@ -50,4 +52,4 @@ Order:
 Do not list H3 Offshore Bibliotek as a blocker for Kommun launch.
 
 ## Freeze Point
-After scope prevention, legacy-scope containment, and live parity are accepted, freeze broad Builder/Menu MVP work. Only pilot-blocking defects may reopen the seam before Kommun 1.0 Ready for Pilot.
+Builder/Menu/Offshore broad MVP work is frozen as of 2026-08-27. Scope integrity remains a platform invariant, and legacy-scope debt may be contained or repaired without reopening Builder product scope. Only pilot-blocking defects may reopen the seam before Kommun 1.0 Ready for Pilot.
