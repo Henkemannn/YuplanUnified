@@ -3,6 +3,7 @@ from core.app_factory import create_app
 from core.db import get_session, create_all
 from core.models import User, Tenant
 from werkzeug.security import generate_password_hash
+from sqlalchemy import text
 
 
 def _seed_tenant_and_user(db, role: str = "admin"):
@@ -19,13 +20,23 @@ def _seed_tenant_and_user(db, role: str = "admin"):
 
 
 def _seed_sites(db, count: int = 2):
-    from sqlalchemy import text
     # Minimal sites table for tests
-    db.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL)"))
+    db.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL, tenant_id INTEGER, version INTEGER)"))
     for i in range(count):
         sid = f"site-{i+1}-{uuid.uuid4()}"
-        db.execute(text("INSERT OR IGNORE INTO sites(id,name) VALUES(:i,:n)"), {"i": sid, "n": f"Site {i+1}"})
+        db.execute(text("INSERT OR IGNORE INTO sites(id,name,tenant_id,version) VALUES(:i,:n,1,0)"), {"i": sid, "n": f"Site {i+1}"})
     db.commit()
+
+
+def _seed_single_site(db, tenant_id: int) -> str:
+    site_id = f"site-{uuid.uuid4()}"
+    db.execute(text("CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL, tenant_id INTEGER, version INTEGER)"))
+    db.execute(
+        text("INSERT OR REPLACE INTO sites(id,name,tenant_id,version) VALUES(:id,:name,:tid,0)"),
+        {"id": site_id, "name": "Primary Site", "tid": tenant_id},
+    )
+    db.commit()
+    return site_id
 
 
 def _make_isolated_app():
@@ -134,3 +145,76 @@ def test_login_admin_ignores_stale_session_site_from_previous_user(monkeypatch):
         assert j.get("message") == "site_binding_required"
         with c.session_transaction() as sess:
             assert not (sess.get("site_id") or "").strip()
+
+
+def test_login_replaces_display_identity_in_same_session(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        cook_email = "cook.a@yuplan.local"
+        superuser_email = "henrik.jonsson@yuplan.se"
+        t = db.query(Tenant).first()
+        if not t:
+            t = Tenant(name="Primary")
+            db.add(t)
+            db.flush()
+        tenant_id = t.id
+        cook_user = User(
+            tenant_id=tenant_id,
+            email=cook_email,
+            username=cook_email,
+            password_hash=generate_password_hash("CookPassw0rd!"),
+            role="cook",
+            full_name="Yuplan Cook A",
+        )
+        superuser_user = User(
+            tenant_id=t.id,
+            email=superuser_email,
+            username=superuser_email,
+            password_hash=generate_password_hash("HenrikPassw0rd!"),
+            role="superuser",
+            full_name=None,
+        )
+        db.add(cook_user)
+        db.add(superuser_user)
+        db.flush()
+        cook_user_id = cook_user.id
+        superuser_user_id = superuser_user.id
+        db.commit()
+
+        site_id = _seed_single_site(db, tenant_id=tenant_id)
+        c = app.test_client()
+        with c.session_transaction() as sess:
+            sess["site_id"] = site_id
+
+        first = c.post(
+            "/auth/login",
+            json={"email": cook_email, "password": "CookPassw0rd!"},
+            headers={"Accept": "application/json"},
+        )
+        assert first.status_code == 200
+        with c.session_transaction() as sess:
+            assert sess.get("user_id") == cook_user_id
+            assert sess.get("role") == "cook"
+            assert sess.get("full_name") == "Yuplan Cook A"
+            assert sess.get("user_email") == cook_email
+            assert sess.get("username") == cook_email
+
+        second = c.post(
+            "/auth/login",
+            json={"email": superuser_email, "password": "HenrikPassw0rd!"},
+            headers={"Accept": "application/json"},
+        )
+        assert second.status_code == 200
+        with c.session_transaction() as sess:
+            assert sess.get("user_id") == superuser_user_id
+            assert sess.get("role") == "superuser"
+            assert sess.get("user_email") == superuser_email
+            assert sess.get("username") == superuser_email
+            assert sess.get("full_name") is None
+
+        page = c.get("/ui/admin/dashboard")
+        assert page.status_code == 200
+        html = page.get_data(as_text=True)
+        assert "Yuplan Cook A (superuser)" not in html

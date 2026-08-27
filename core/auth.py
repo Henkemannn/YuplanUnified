@@ -287,6 +287,8 @@ def login():
             pass
         # Keep display identity in session for app-shell badges/greetings.
         try:
+            for key in ("full_name", "user_email", "username"):
+                session.pop(key, None)
             if getattr(user, "email", None):
                 session["user_email"] = str(user.email)
             if getattr(user, "username", None):
