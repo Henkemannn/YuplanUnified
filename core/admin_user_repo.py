@@ -25,10 +25,12 @@ class AdminUserRepo:
             # Query aligned columns from unified schema
             rows = db.execute(
                 text(
-                    "SELECT id, username, email, full_name, role, is_active "
-                    "FROM users "
-                    "WHERE tenant_id = :tid "
-                    "ORDER BY username, email"
+                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.department_id, d.name, s.name "
+                    "FROM users u "
+                    "LEFT JOIN departments d ON d.id = u.department_id "
+                    "LEFT JOIN sites s ON s.id = d.site_id "
+                    "WHERE u.tenant_id = :tid "
+                    "ORDER BY u.username, u.email"
                 ),
                 {"tid": tenant_id}
             ).fetchall()
@@ -42,6 +44,9 @@ class AdminUserRepo:
                     "full_name": row[3],
                     "role": row[4],
                     "is_active": bool(row[5]) if row[5] is not None else True,
+                    "department_id": row[6],
+                    "department_name": row[7],
+                    "site_name": row[8],
                 })
             return users
         finally:
@@ -53,9 +58,11 @@ class AdminUserRepo:
         try:
             row = db.execute(
                 text(
-                    "SELECT id, username, email, full_name, role, is_active, tenant_id "
-                    "FROM users "
-                    "WHERE id = :uid"
+                    "SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.tenant_id, u.department_id, d.name, s.name "
+                    "FROM users u "
+                    "LEFT JOIN departments d ON d.id = u.department_id "
+                    "LEFT JOIN sites s ON s.id = d.site_id "
+                    "WHERE u.id = :uid"
                 ),
                 {"uid": user_id}
             ).fetchone()
@@ -72,6 +79,9 @@ class AdminUserRepo:
                 "role": row[4],
                 "is_active": bool(row[5]),
                 "tenant_id": row[6],
+                "department_id": row[7],
+                "department_name": row[8],
+                "site_name": row[9],
             }
         finally:
             db.close()
@@ -84,7 +94,8 @@ class AdminUserRepo:
         password: str,
         full_name: Optional[str] = None,
         role: str = "staff",
-        is_active: bool = True
+        is_active: bool = True,
+        department_id: Optional[str] = None,
     ) -> int:
         """
         Create a new user.
@@ -102,7 +113,8 @@ class AdminUserRepo:
                 password_hash=password_hash,
                 full_name=full_name,
                 role=role,
-                is_active=is_active
+                is_active=is_active,
+                department_id=department_id,
             )
             db.add(user)
             db.commit()
@@ -117,6 +129,8 @@ class AdminUserRepo:
         email: Optional[str] = None,
         full_name: Optional[str] = None,
         role: Optional[str] = None
+        ,
+        department_id: Optional[str] = None
     ) -> bool:
         """
         Update user fields.
@@ -139,6 +153,10 @@ class AdminUserRepo:
             if role is not None:
                 updates.append("role = :role")
                 params["role"] = role
+
+            if department_id is not None:
+                updates.append("department_id = :department_id")
+                params["department_id"] = department_id
             
             if not updates:
                 return True  # Nothing to update

@@ -23,6 +23,24 @@ def _h(role):
     return {"X-User-Role": role, "X-Tenant-Id": "1", "X-User-Id": "1"}
 
 
+def _seed_unit_portal_department(app, *, tenant_id: int, site_id: str, department_id: str, site_name: str = "Site") -> None:
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(text("INSERT OR IGNORE INTO tenants(id, name, active) VALUES(:tid, :name, 1)"), {"tid": tenant_id, "name": f"Tenant {tenant_id}"})
+            db.execute(
+                text("INSERT OR REPLACE INTO sites(id, name, tenant_id, version) VALUES(:sid, :name, :tid, 0)"),
+                {"sid": site_id, "name": site_name, "tid": tenant_id},
+            )
+            db.execute(
+                text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:did, :sid, :name, 'manual')"),
+                {"did": department_id, "sid": site_id, "name": f"Dept {department_id[:8]}"},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+
 # ============================================================================
 # PERMISSIONS TESTS
 # ============================================================================
@@ -287,6 +305,67 @@ def test_users_create_prevents_duplicate_email(client_admin):
     assert "används redan" in html.lower() or "finns redan" in html.lower()
 
 
+def test_users_create_unit_portal_requires_tenant_department(client_admin):
+    """Test unit_portal users must be bound to a department in the current tenant."""
+    app = client_admin.application
+    dept_id = str(uuid.uuid4())
+    site_id = str(uuid.uuid4())
+    _seed_unit_portal_department(app, tenant_id=1, site_id=site_id, department_id=dept_id)
+
+    resp = client_admin.post(
+        "/ui/admin/users/new",
+        data={
+            "username": "portal_user_ok",
+            "email": "portal_user_ok@test.com",
+            "full_name": "Portal User OK",
+            "password": "password123",
+            "role": "unit_portal",
+            "department_id": dept_id,
+        },
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+
+    assert resp.status_code == 200
+    with app.app_context():
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT role, department_id FROM users WHERE username = 'portal_user_ok'"),
+            ).fetchone()
+            assert row is not None
+            assert row[0] == "unit_portal"
+            assert row[1] == dept_id
+        finally:
+            db.close()
+
+
+def test_users_create_unit_portal_rejects_cross_tenant_department(client_admin):
+    """Test unit_portal create rejects departments from another tenant."""
+    app = client_admin.application
+    dept_id = str(uuid.uuid4())
+    site_id = str(uuid.uuid4())
+    _seed_unit_portal_department(app, tenant_id=2, site_id=site_id, department_id=dept_id, site_name="Other Site")
+
+    resp = client_admin.post(
+        "/ui/admin/users/new",
+        data={
+            "username": "portal_user_bad",
+            "email": "portal_user_bad@test.com",
+            "full_name": "Portal User Bad",
+            "password": "password123",
+            "role": "unit_portal",
+            "department_id": dept_id,
+        },
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    assert "tillhör inte din tenant" in html.lower()
+
+
 # ============================================================================
 # EDIT USER TESTS
 # ============================================================================
@@ -347,6 +426,51 @@ def test_users_update_success(client_admin):
             ).fetchone()[0]
         finally:
             db.close()
+
+
+def test_users_update_unit_portal_rejects_cross_tenant_department(client_admin):
+    """Test editing a unit_portal user cannot move them to another tenant's department."""
+    app = client_admin.application
+    dept_a = str(uuid.uuid4())
+    site_a = str(uuid.uuid4())
+    dept_b = str(uuid.uuid4())
+    site_b = str(uuid.uuid4())
+    _seed_unit_portal_department(app, tenant_id=1, site_id=site_a, department_id=dept_a, site_name="Tenant One Site")
+    _seed_unit_portal_department(app, tenant_id=2, site_id=site_b, department_id=dept_b, site_name="Tenant Two Site")
+
+    with app.app_context():
+        db = get_session()
+        try:
+            from werkzeug.security import generate_password_hash
+
+            pw_hash = generate_password_hash("pass123")
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active, department_id) "
+                    "VALUES (1, 'portal_edit@test.com', :ph, 'unit_portal', 'portal_edit_user', 'Portal Edit User', 1, :dept)"
+                ),
+                {"ph": pw_hash, "dept": dept_a},
+            )
+            db.commit()
+            user_id = db.execute(text("SELECT id FROM users WHERE username = 'portal_edit_user' LIMIT 1")).fetchone()[0]
+        finally:
+            db.close()
+
+    resp = client_admin.post(
+        f"/ui/admin/users/{user_id}/edit",
+        data={
+            "email": "portal_edit_updated@test.com",
+            "full_name": "Portal Edit Updated",
+            "role": "unit_portal",
+            "department_id": dept_b,
+        },
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    assert "tillhör inte din tenant" in html.lower()
     
     resp = client_admin.post(f"/ui/admin/users/{user_id}/edit", data={
         "email": "updated@test.com",

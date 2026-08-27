@@ -93,7 +93,7 @@
                 </label>
                 <select id="role" name="role" class="yp-input" required aria-label="Roll">
                     {% for r in vm.available_roles %}
-                    <option value="{{ r }}" {% if vm.user and vm.user.role == r %}selected{% endif %}>
+                    <option value="{{ r }}" {% if (vm.user and vm.user.role == r) or (not vm.user and vm.selected_role == r) %}selected{% endif %}>
                         {% if r == 'admin' %}
                             👤 Admin
                         {% elif r == 'superuser' %}
@@ -116,6 +116,24 @@
                     <strong>Kock:</strong> Åtkomst till matlagningsvyer.<br>
                     <strong>Enhetsportal:</strong> Åtkomst till enhetsspecifika funktioner.
                 </small>
+            </div>
+
+            <!-- Department binding for unit_portal -->
+            <div class="yp-form-field" id="department-field" {% if (vm.user and vm.user.role != 'unit_portal') and vm.selected_role != 'unit_portal' %}style="display:none"{% endif %}>
+                <label for="department_id" class="yp-label">
+                    🏠 Avdelning <span class="required">*</span>
+                </label>
+                <select id="department_id"
+                        name="department_id"
+                        class="yp-input"
+                        aria-label="Avdelning"
+                        {% if (vm.user and vm.user.role == 'unit_portal') or vm.selected_role == 'unit_portal' %}required{% endif %}>
+                    <option value="">Välj avdelning</option>
+                    {% for dept in vm.department_choices or [] %}
+                    <option value="{{ dept.id }}" {% if vm.user and vm.user.department_id == dept.id %}selected{% endif %}>{{ dept.site_name }} - {{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="yp-form-help">Endast avdelningar i din tenant visas här.</small>
             </div>
 
             <!-- Password (only for new users) -->
@@ -161,6 +179,27 @@
         </form>
     </div>
 </div>
+
+<script>
+(function() {
+    const roleSelect = document.getElementById('role');
+    const deptField = document.getElementById('department-field');
+    const deptSelect = document.getElementById('department_id');
+    if (!roleSelect || !deptField || !deptSelect) {
+        return;
+    }
+    function syncDepartmentField() {
+        const needsDepartment = roleSelect.value === 'unit_portal';
+        deptField.style.display = needsDepartment ? '' : 'none';
+        deptSelect.required = needsDepartment;
+        if (!needsDepartment) {
+            deptSelect.value = '';
+        }
+    }
+    roleSelect.addEventListener('change', syncDepartmentField);
+    syncDepartmentField();
+})();
+</script>
 
 <style>
 .admin-users-form {

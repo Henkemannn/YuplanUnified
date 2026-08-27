@@ -42,7 +42,7 @@ def _seed_minimal(db, site_id: str, dept_id: str):
             UNIQUE(tenant_id, site_id, department_id, year, week, weekday, meal)
         );
     """))
-    db.execute(text("INSERT OR IGNORE INTO sites(id,name,tenant_id,version) VALUES(:i,'TestSite',1,0)"), {"i": site_id})
+    db.execute(text("INSERT OR REPLACE INTO sites(id,name,tenant_id,version) VALUES(:i,'TestSite',1,0)"), {"i": site_id})
     db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:d, :s, 'Dept A', 'manual')"), {"d": dept_id, "s": site_id})
     db.commit()
 

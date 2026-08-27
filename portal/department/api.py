@@ -20,7 +20,7 @@ from sqlalchemy import text
 
 from portal.department.models import DepartmentPortalWeekPayload
 from portal.department.service import build_department_week_payload
-from portal.department.auth import get_department_id_from_claims
+from portal.department.auth import DepartmentPortalScope, resolve_department_portal_scope
 from portal.department.menu_choice_repo import MenuChoiceRepo
 from core.http_errors import forbidden
 from core.errors import bad_request
@@ -50,11 +50,10 @@ def _iso_week_start(year: int, week: int) -> datetime:
 def get_department_week():  # type: ignore[override]
     year_raw = request.args.get("year")
     week_raw = request.args.get("week")
-    # Department scoping from JWT/claims (helper aborts 403 if missing)
     try:
-        dept_id = get_department_id_from_claims()
+        scope = resolve_department_portal_scope()
     except Exception:
-        return forbidden(detail="department_claim_missing")
+        return forbidden(detail="department_scope_missing")
     try:
         year = int(year_raw or "")
         week = int(week_raw or "")
@@ -67,10 +66,10 @@ def get_department_week():  # type: ignore[override]
     except ValueError:
         return bad_request("invalid_week_reference")
 
-    payload: DepartmentPortalWeekPayload = build_department_week_payload(dept_id, year, week)
+    payload: DepartmentPortalWeekPayload = build_department_week_payload(scope, year, week)
     # Aggregate portal-level ETag from component map
     etag_sig = sha1(json.dumps(payload["etag_map"], sort_keys=True).encode()).hexdigest()[:12]
-    portal_etag = f'W/"portal-dept-week:{dept_id}:{year}-{week}:{etag_sig}"'
+    portal_etag = f'W/"portal-dept-week:{scope.department_id}:{year}-{week}:{etag_sig}"'
     inm = request.headers.get("If-None-Match")
     if inm and portal_etag in [p.strip() for p in inm.split(",") if p.strip()]:
         resp = Response(status=304)
@@ -92,7 +91,7 @@ def change_menu_choice():  # type: ignore[override]
     Weekday accepted forms: Mon,Tue,Wed,Thu,Fri,Sat,Sun (case-insensitive).
     Returns: {new_etag, selected_alt} with 200 or appropriate error.
     """
-    dept_id = get_department_id_from_claims()
+    scope = resolve_department_portal_scope()
     data = request.get_json(silent=True) or {}
     year = data.get("year")
     week = data.get("week")
@@ -118,34 +117,33 @@ def change_menu_choice():  # type: ignore[override]
     if selected_alt not in {"Alt1","Alt2"}:
         return bad_request("invalid_selected_alt")
     weekday_num = _WK_MAP[weekday_norm]
-    db = get_session()
-    try:
-        scope_row = db.execute(
-            text("SELECT d.site_id, COALESCE(s.tenant_id, 1) FROM departments d LEFT JOIN sites s ON s.id = d.site_id WHERE d.id=:id"),
-            {"id": dept_id},
-        ).fetchone()
-    finally:
-        db.close()
-    if not scope_row:
-        return bad_request("department_not_found")
-    site_id = str(scope_row[0])
-    tenant_id = int(scope_row[1] or 1)
-
     repo = MenuChoiceRepo()
-    current_sig = repo.get_signature(tenant_id=tenant_id, site_id=site_id, department_id=dept_id, year=year, week=week)
+    current_sig = repo.get_signature(
+        tenant_id=scope.tenant_id,
+        site_id=scope.site_id,
+        department_id=scope.department_id,
+        year=year,
+        week=week,
+    )
     if if_match != current_sig:
         # Concurrency failure – current signature differs from provided If-Match
         from core.http_errors import problem as _problem
         return _problem(412, "etag_mismatch", "Precondition Failed", "etag_mismatch")
     # Persist choice
     repo.set_choice(
-        tenant_id=tenant_id,
-        site_id=site_id,
-        department_id=dept_id,
+        tenant_id=scope.tenant_id,
+        site_id=scope.site_id,
+        department_id=scope.department_id,
         year=year,
         week=week,
         weekday=weekday_num,
         selected_alt=selected_alt,
     )
-    new_sig = repo.get_signature(tenant_id=tenant_id, site_id=site_id, department_id=dept_id, year=year, week=week)
+    new_sig = repo.get_signature(
+        tenant_id=scope.tenant_id,
+        site_id=scope.site_id,
+        department_id=scope.department_id,
+        year=year,
+        week=week,
+    )
     return jsonify({"new_etag": new_sig, "selected_alt": selected_alt})

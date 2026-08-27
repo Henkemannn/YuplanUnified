@@ -9,6 +9,8 @@ DEPT_ID = "77777777-1111-2222-3333-999999999999"
 def _seed_basic(db):
     db.execute(text("CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT, name TEXT, resident_count_mode TEXT NOT NULL DEFAULT 'manual')"))
     db.execute(text("CREATE TABLE IF NOT EXISTS department_notes(department_id TEXT PRIMARY KEY, notes TEXT)"))
+    db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, tenant_id INTEGER, version INTEGER)"))
+    db.execute(text("INSERT OR REPLACE INTO sites(id, name, tenant_id, version) VALUES('site', 'Site', 1, 0)"))
     db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:i,'site', 'Dept','manual')"), {"i": DEPT_ID})
     db.execute(text("INSERT OR REPLACE INTO department_notes(department_id, notes) VALUES(:i,'Note')"), {"i": DEPT_ID})
     # Alt2 flags storage

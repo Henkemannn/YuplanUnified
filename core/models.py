@@ -44,6 +44,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50))  # admin, unit_portal, cook, superuser
     full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    department_id: Mapped[str | None] = mapped_column(ForeignKey("departments.id"), nullable=True)
     unit_id: Mapped[int | None] = mapped_column(ForeignKey("units.id"), nullable=True)
     refresh_token_jti: Mapped[str | None] = mapped_column(String(64), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)

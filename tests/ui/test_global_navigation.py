@@ -1,8 +1,14 @@
 from sqlalchemy import text
 
 
+def _h(role: str = "admin", tenant_id: int = 1, user_id: int = 1) -> dict[str, str]:
+    return {"X-User-Role": role, "X-Tenant-Id": str(tenant_id), "X-User-Id": str(user_id)}
+
+
 def _seed_portal_week(db, dept_id: str, site_id: str, year: int, week: int):
     # Minimal seed copied from phase1 to allow portal UI render
+    db.execute(text("CREATE TABLE IF NOT EXISTS tenants(id INTEGER PRIMARY KEY, name TEXT, active INTEGER)"))
+    db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, tenant_id INTEGER, version INTEGER)"))
     db.execute(text("""
         CREATE TABLE IF NOT EXISTS departments(
             id TEXT PRIMARY KEY,
@@ -12,6 +18,8 @@ def _seed_portal_week(db, dept_id: str, site_id: str, year: int, week: int):
         )
     """))
     db.execute(text("CREATE TABLE IF NOT EXISTS department_notes(department_id TEXT PRIMARY KEY, notes TEXT)"))
+    db.execute(text("INSERT OR REPLACE INTO tenants(id,name,active) VALUES(1,'Demo',1)"))
+    db.execute(text("INSERT OR REPLACE INTO sites(id,name,tenant_id,version) VALUES(:s,'Site',1,0)"), {"s": site_id})
     db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:i,:s,:n,'manual')"), {"i": dept_id, "s": site_id, "n": "Avd 1"})
     db.execute(text("INSERT OR REPLACE INTO department_notes(department_id, notes) VALUES(:i,:n)"), {"i": dept_id, "n": "Inga risrätter"})
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_registrations(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, meal TEXT, diet_type TEXT, marked INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week,meal,diet_type))"))
@@ -56,8 +64,8 @@ def test_global_navigation_present(client_admin):
     finally:
         db.close()
     resp = client_admin.get(
-        f"/ui/portal/department/week?year={year}&week={week}",
-        environ_overrides={"test_claims": {"department_id": dept_id}},
+        f"/ui/portal/department/week?year={year}&week={week}&department_id={dept_id}",
+        headers=_h(),
     )
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)

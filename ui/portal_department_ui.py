@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import date as _date
-from flask import Blueprint, request, render_template, current_app, g
+from flask import Blueprint, request, render_template, current_app
 
-from portal.department.auth import get_department_id_from_claims
+from portal.department.auth import DepartmentPortalScope, resolve_department_portal_scope
 from portal.department.service import build_department_week_payload
 
 portal_dept_ui_bp = Blueprint("portal_dept_ui", __name__)
@@ -55,7 +55,9 @@ def portal_department_week_ui():  # type: ignore[override]
 
         db = get_session()
         try:
-            row = db.execute(text("SELECT id FROM departments ORDER BY id LIMIT 1")).fetchone()
+            row = db.execute(
+                text("SELECT d.id, d.site_id, s.tenant_id FROM departments d LEFT JOIN sites s ON s.id = d.site_id ORDER BY d.id LIMIT 1")
+            ).fetchone()
         finally:
             db.close()
         if not row:
@@ -68,16 +70,19 @@ def portal_department_week_ui():  # type: ignore[override]
                 "Run scripts/seed_demo.py to create demo data.",
             )
         demo_department_id = str(row[0])
-        g.jwt_claims = {
-            "department_id": demo_department_id,
-            "tenant_id": 1,
-            "user_id": "demo_user",
-        }
+        demo_site_id = str(row[1])
+        demo_tenant_id = int(row[2] or 1)
         current_app.logger.info("DEMO MODE ACTIVE (department=%s)", demo_department_id)
-        department_id = demo_department_id
+        scope = DepartmentPortalScope(
+            user_id=0,
+            role="demo",
+            tenant_id=demo_tenant_id,
+            department_id=demo_department_id,
+            site_id=demo_site_id,
+        )
     else:
-        department_id = get_department_id_from_claims()
-    payload = build_department_week_payload(department_id, year, week)
+        scope = resolve_department_portal_scope()
+    payload = build_department_week_payload(scope, year, week)
     vm = {
         "department_name": payload["department_name"],
         "site_name": payload["site_name"],

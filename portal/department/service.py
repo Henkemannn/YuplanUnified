@@ -19,6 +19,7 @@ from sqlalchemy import text
 from core.commun_builder_publication import CommunBuilderPublicationService
 from core.commun_builder_projection import get_shadow_projection_reader
 from core.db import get_session
+from portal.department.auth import DepartmentPortalScope
 from portal.department.menu_choice_repo import MenuChoiceRepo
 from portal.department.models import (
     DepartmentPortalWeekPayload,
@@ -56,12 +57,12 @@ def _iso_week_start(year: int, week: int) -> datetime:
     return datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
 
 
-def _fetch_department_meta(department_id: str) -> tuple[str, str, str, str | None]:
-    """Return (department_id, department_name, site_id, note)."""
+def _fetch_department_meta(department_id: str) -> tuple[str, str, str | None]:
+    """Return (department_id, department_name, note)."""
     db = get_session()
     try:
         row = db.execute(
-            text("SELECT id, name, site_id FROM departments WHERE id=:id"), {"id": department_id}
+            text("SELECT id, name FROM departments WHERE id=:id"), {"id": department_id}
         ).fetchone()
         if not row:
             raise ValueError("department_not_found")
@@ -75,7 +76,7 @@ def _fetch_department_meta(department_id: str) -> tuple[str, str, str, str | Non
         note_val = None
         if note_row and note_row[0]:
             note_val = str(note_row[0])
-        return str(row[0]), str(row[1]) if row[1] else "", str(row[2]), note_val
+        return str(row[0]), str(row[1]) if row[1] else "", note_val
     finally:
         db.close()
 
@@ -202,13 +203,15 @@ def _build_days(
 
 
 def build_department_week_payload(
-    department_id: str,
+    scope: DepartmentPortalScope,
     year: int,
     week: int,
-    tenant_id: int | str = 1,
 ) -> DepartmentPortalWeekPayload:
+    department_id = scope.department_id
+    tenant_id = scope.tenant_id
+    site_id = scope.site_id
     # Fetch meta
-    dep_id, dep_name, site_id, note_val = _fetch_department_meta(department_id)
+    dep_id, dep_name, note_val = _fetch_department_meta(department_id)
     # Resolve site name for header display (best-effort)
     site_name_val = ""
     try:

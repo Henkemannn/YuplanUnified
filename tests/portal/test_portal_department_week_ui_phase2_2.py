@@ -2,6 +2,7 @@ from sqlalchemy import text
 
 
 def _seed(db, dept_id: str, site_id: str, year: int, week: int):
+    db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, tenant_id INTEGER, version INTEGER)"))
     db.execute(text("""
         CREATE TABLE IF NOT EXISTS departments(
             id TEXT PRIMARY KEY,
@@ -10,6 +11,7 @@ def _seed(db, dept_id: str, site_id: str, year: int, week: int):
             resident_count_mode TEXT NOT NULL DEFAULT 'manual'
         )
     """))
+    db.execute(text("INSERT OR REPLACE INTO sites(id, name, tenant_id, version) VALUES(:s, 'Site', 1, 0)"), {"s": site_id})
     db.execute(text("CREATE TABLE IF NOT EXISTS department_notes(department_id TEXT PRIMARY KEY, notes TEXT)"))
     db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:i,:s,:n,'manual')"), {"i": dept_id, "s": site_id, "n": "Avd 1"})
     db.execute(text("INSERT OR REPLACE INTO department_notes(department_id, notes) VALUES(:i,:n)"), {"i": dept_id, "n": "Inga risrätter"})

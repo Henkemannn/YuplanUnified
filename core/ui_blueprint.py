@@ -7092,6 +7092,29 @@ def admin_users_list():
     return render_template("ui/unified_admin_users_list.html", vm=vm)
 
 
+def _admin_user_department_choices(tenant_id: int | str | None) -> list[dict]:
+    if tenant_id is None:
+        return []
+    db = get_session()
+    try:
+        rows = db.execute(
+            text(
+                "SELECT d.id, d.name, s.name "
+                "FROM departments d "
+                "JOIN sites s ON s.id = d.site_id "
+                "WHERE s.tenant_id = :tid "
+                "ORDER BY s.name, d.name"
+            ),
+            {"tid": int(tenant_id)},
+        ).fetchall()
+        return [
+            {"id": str(row[0]), "name": str(row[1] or ""), "site_name": str(row[2] or "")}
+            for row in rows
+        ]
+    finally:
+        db.close()
+
+
 @ui_bp.get("/ui/admin/users/new")
 @require_roles(*ADMIN_ROLES)
 def admin_users_new_form():
@@ -7099,6 +7122,7 @@ def admin_users_new_form():
     Show form for creating a new user.
     """
     role = session.get("role")
+    tid = session.get("tenant_id")
     
     # Get current week for header
     today = _date.today()
@@ -7117,6 +7141,8 @@ def admin_users_new_form():
         "mode": "new",
         "user": None,
         "available_roles": available_roles,
+        "selected_role": "staff",
+        "department_choices": _admin_user_department_choices(tid),
     }
     
     return render_template("ui/unified_admin_users_form.html", vm=vm)
@@ -7139,6 +7165,7 @@ def admin_users_create():
     full_name = request.form.get("full_name", "").strip()
     password = request.form.get("password", "").strip()
     role = request.form.get("role", "staff").strip()
+    department_id = (request.form.get("department_id") or "").strip() or None
     active_site = (session.get("site_id") or "").strip()
     
     # Validate
@@ -7174,6 +7201,17 @@ def admin_users_create():
         flash("Ogiltig roll.", "error")
         return redirect(url_for("ui.admin_users_new_form"))
 
+    department_choices = _admin_user_department_choices(tid)
+    if role == "unit_portal":
+        if not department_id:
+            flash("Enhetsportal-konton måste vara bundna till en avdelning.", "error")
+            return redirect(url_for("ui.admin_users_new_form"))
+        if not any(str(choice["id"]) == str(department_id) for choice in department_choices):
+            flash("Vald avdelning tillhör inte din tenant.", "error")
+            return redirect(url_for("ui.admin_users_new_form"))
+    else:
+        department_id = None
+
     # Enforce site binding for customer admins: require active site context
     if role == "admin" and not active_site:
         flash("Admin-konton måste vara bundna till en site.", "error")
@@ -7189,6 +7227,7 @@ def admin_users_create():
             full_name=full_name or None,
             role=role,
             is_active=True,
+            department_id=department_id,
         )
         flash(f"Användare '{username}' skapad.", "success")
     except Exception as e:
@@ -7240,6 +7279,8 @@ def admin_users_edit_form(user_id: int):
         "mode": "edit",
         "user": user,
         "available_roles": available_roles,
+        "selected_role": user["role"],
+        "department_choices": _admin_user_department_choices(tid),
     }
     
     return render_template("ui/unified_admin_users_form.html", vm=vm)
@@ -7256,6 +7297,15 @@ def admin_users_update(user_id: int):
     
     tid = session.get("tenant_id")
     current_role = session.get("role")
+    current_user_id = session.get("user_id")
+    if current_user_id is None:
+        header_uid = request.headers.get("X-User-Id")
+        if header_uid:
+            try:
+                current_user_id = int(header_uid)
+                session["user_id"] = current_user_id
+            except ValueError:
+                current_user_id = None
     
     repo = AdminUserRepo()
     user = repo.get_user(user_id)
@@ -7272,6 +7322,7 @@ def admin_users_update(user_id: int):
     email = request.form.get("email", "").strip()
     full_name = request.form.get("full_name", "").strip()
     role = request.form.get("role", "").strip()
+    department_id = (request.form.get("department_id") or "").strip() or None
     
     # Validate
     if not email:
@@ -7290,6 +7341,17 @@ def admin_users_update(user_id: int):
     if role not in valid_roles:
         flash("Ogiltig roll.", "error")
         return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
+
+    department_choices = _admin_user_department_choices(tid)
+    if role == "unit_portal":
+        if not department_id:
+            flash("Enhetsportal-konton måste vara bundna till en avdelning.", "error")
+            return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
+        if not any(str(choice["id"]) == str(department_id) for choice in department_choices):
+            flash("Vald avdelning tillhör inte din tenant.", "error")
+            return redirect(url_for("ui.admin_users_edit_form", user_id=user_id))
+    else:
+        department_id = None
     
     # Update user
     try:
@@ -7297,7 +7359,8 @@ def admin_users_update(user_id: int):
             user_id=user_id,
             email=email,
             full_name=full_name or None,
-            role=role
+            role=role,
+            department_id=department_id,
         )
         # If role transitioned to admin, ensure site binding is set
         if role == "admin":

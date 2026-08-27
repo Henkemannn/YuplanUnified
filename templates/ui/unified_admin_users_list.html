@@ -24,6 +24,7 @@
                     <th>NAMN</th>
                     <th>E-POST</th>
                     <th>ROLL</th>
+                    <th>AVDELNING</th>
                     <th>STATUS</th>
                     <th>ÅTGÄRDER</th>
                 </tr>
@@ -56,6 +57,13 @@
                                 {{ user.role }}
                             {% endif %}
                         </span>
+                    </td>
+                    <td>
+                        {% if user.department_name %}
+                            {{ user.site_name or '-' }} / {{ user.department_name }}
+                        {% else %}
+                            -
+                        {% endif %}
                     </td>
                     <td>
                         {% if user.is_active %}
