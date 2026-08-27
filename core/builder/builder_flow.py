@@ -47,6 +47,7 @@ from .diet_conflict_preview import (
 )
 from .library_scope import ActorContext
 from .library_scope import ObjectScope
+from .library_scope import private_object_scope
 from .library_scope import can_read_object
 from .library_scope import can_write_object
 from .library_scope import fork_object_scope
@@ -73,6 +74,12 @@ class LibraryImportSummary:
     row_results: list[LibraryImportRowResult] = field(default_factory=list)
     component_review_items: list[dict[str, object]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PrivateComponentCreateResult:
+    component: Component
+    reused: bool
 
 
 class ObjectScopeRepository(Protocol):
@@ -596,6 +603,9 @@ class BuilderFlow:
                     return self._component_service.set_component_category(existing_item.component_id, category_value)
                 return existing_item
 
+        if self._object_scope_repository is not None and actor is None:
+            raise ValueError("actor is required for scoped component creation")
+
         base = self._slugify_component_name(name_value)
         if not base:
             base = self._generate_component_seed()
@@ -639,6 +649,70 @@ class BuilderFlow:
                     pass
                 raise
         return created
+
+    def create_private_standalone_component(
+        self,
+        component_name: str,
+        *,
+        category: str | None = None,
+        actor: ActorContext | None = None,
+    ) -> Component:
+        return self.create_private_component(component_name, category=category, actor=actor).component
+
+    def create_private_component(
+        self,
+        component_name: str,
+        *,
+        category: str | None = None,
+        actor: ActorContext | None = None,
+    ) -> PrivateComponentCreateResult:
+        category_value = str(category or "").strip().lower() or None
+        name_value = self._normalize_component_name(component_name)
+        if not name_value:
+            raise ValueError("component_name must be non-empty")
+        if actor is None:
+            raise ValueError("actor is required for private component creation")
+
+        match = self.match_component_name(name_value, actor=actor)
+        if match.status in {"exact_match", "alias_match"} and match.component_id:
+            existing = self._component_service.get_component(match.component_id)
+            if existing is not None and self._can_read_library_object("component", existing.component_id, actor=actor):
+                return PrivateComponentCreateResult(component=existing, reused=True)
+
+        normalized_key = self._normalize_component_key(name_value)
+        for existing_item in self.list_library_components(actor=actor):
+            if self._normalize_component_key(existing_item.canonical_name) == normalized_key:
+                return PrivateComponentCreateResult(component=existing_item, reused=True)
+
+        base = self._slugify_component_name(name_value)
+        if not base:
+            base = self._generate_component_seed()
+
+        component_id = base
+        suffix = 2
+        while True:
+            existing = self._component_service.get_component(component_id)
+            if existing is None:
+                break
+            if existing.canonical_name == name_value and self._can_read_library_object("component", existing.component_id, actor=actor):
+                return PrivateComponentCreateResult(component=existing, reused=True)
+            component_id = f"{base}_{suffix}"
+            suffix += 1
+
+        created = self._component_service.create_component(
+            component_id=component_id,
+            canonical_name=name_value,
+            categories=[category_value] if category_value else [],
+        )
+        try:
+            self._set_object_scope("component", created.component_id, private_object_scope(actor))
+        except Exception:
+            try:
+                self._component_service.delete_component(created.component_id)
+            except Exception:
+                pass
+            raise
+        return PrivateComponentCreateResult(component=created, reused=False)
 
     def set_component_category(
         self,
@@ -741,6 +815,9 @@ class BuilderFlow:
         menu_name: str | None = None,
         actor: ActorContext | None = None,
     ) -> Composition:
+        if self._object_scope_repository is not None and actor is None:
+            raise ValueError("actor is required for scoped composition creation")
+
         composition = self._composition_service.create_composition(
             composition_id=composition_id,
             composition_name=composition_name,
@@ -1157,6 +1234,46 @@ class BuilderFlow:
             actor=actor,
         )
         return composition
+
+    def create_private_composition_with_generated_id(
+        self,
+        composition_name: str,
+        *,
+        library_group: str | None = None,
+        actor: ActorContext | None = None,
+    ) -> Composition:
+        composition_name_value = str(composition_name or '').strip()
+        if not composition_name_value:
+            raise ValueError('composition_name must be non-empty')
+        if actor is None:
+            raise ValueError('actor is required for private composition creation')
+        if self._object_scope_repository is None:
+            raise ValueError('object scope repository is required for private creation')
+
+        created_composition: Composition | None = None
+        try:
+            created_composition = self._composition_service.create_composition(
+                composition_id=self._generate_composition_id(),
+                composition_name=composition_name_value,
+                library_group=library_group,
+            )
+            self._set_object_scope(
+                'composition',
+                created_composition.composition_id,
+                private_object_scope(actor, source_object_id=None),
+            )
+            return self._composition_service.get_composition(created_composition.composition_id) or created_composition
+        except Exception:
+            if created_composition is not None:
+                try:
+                    self._delete_object_scope('composition', created_composition.composition_id)
+                except Exception:
+                    pass
+                try:
+                    self._composition_service.delete_composition(created_composition.composition_id)
+                except Exception:
+                    pass
+            raise
 
     def add_component_to_composition(
         self,

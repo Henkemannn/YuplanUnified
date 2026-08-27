@@ -10,6 +10,8 @@ import click
 from flask import Flask, current_app
 from sqlalchemy import text
 
+from core.admin_user_repo import AdminUserRepo
+from core.builder.library_scope import ActorContext
 from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.commun_builder_import import import_menu_result_to_builder_canonical
 from core.commun_builder_publication import CommunBuilderPublicationRepository
@@ -43,6 +45,10 @@ DEMO_MENU_ID = "demo_offshore_week_menu"
 DEMO_MENU_TITLE = "Demo Offshore Smoke Menu"
 DEMO_BUILDER_MENU_ID = "demo_offshore_builder_week_menu"
 DEMO_BUILDER_MENU_TITLE = "Demo Offshore Builder Menu"
+DEMO_BUILDER_ADMIN_EMAIL = "demo.offshore.admin@example.local"
+DEMO_BUILDER_ADMIN_USERNAME = DEMO_BUILDER_ADMIN_EMAIL
+DEMO_BUILDER_ADMIN_FULL_NAME = "Demo Offshore Admin"
+DEMO_BUILDER_ADMIN_PASSWORD = "demo-offshore-admin-password"
 DEMO_WEEK_KEY = "demo-offshore-week"
 DEMO_MENU_TRACK_VISIBILITY_JSON = json.dumps(
     {
@@ -246,6 +252,44 @@ def _ensure_feature_flags() -> None:
         db.close()
 
 
+def _ensure_demo_builder_principal() -> int:
+    db = get_session()
+    try:
+        row = db.execute(
+            text(
+                """
+                SELECT id, tenant_id, role, email
+                FROM users
+                WHERE tenant_id = :tenant_id
+                  AND role IN ('admin', 'superuser')
+                  AND lower(email) = :email
+                LIMIT 1
+                """
+            ),
+            {"tenant_id": DEMO_TENANT_ID, "email": DEMO_BUILDER_ADMIN_EMAIL.lower()},
+        ).fetchone()
+        if row is not None:
+            if int(row.tenant_id) != DEMO_TENANT_ID:
+                raise ValueError("demo builder principal belongs to the wrong tenant")
+            if str(row.role or "").strip() != "admin":
+                raise ValueError("demo builder principal must be an admin")
+            return int(row.id)
+
+        repo = AdminUserRepo()
+        user_id = repo.create_user(
+            tenant_id=DEMO_TENANT_ID,
+            username=DEMO_BUILDER_ADMIN_USERNAME,
+            email=DEMO_BUILDER_ADMIN_EMAIL,
+            password=DEMO_BUILDER_ADMIN_PASSWORD,
+            full_name=DEMO_BUILDER_ADMIN_FULL_NAME,
+            role="admin",
+            is_active=True,
+        )
+        return int(user_id)
+    finally:
+        db.close()
+
+
 def _clear_scoped_offshore_rows() -> None:
     db = get_session()
     try:
@@ -390,9 +434,39 @@ def _builder_flow():
     return _get_builder_flow()
 
 
-def _ensure_builder_content(*, anchor_day: date):
+def _demo_builder_actor() -> ActorContext:
+    db = get_session()
+    try:
+        row = db.execute(
+            text(
+                """
+                SELECT id, tenant_id, role
+                FROM users
+                WHERE tenant_id = :tenant_id
+                  AND role IN ('admin', 'superuser')
+                  AND lower(email) = :email
+                LIMIT 1
+                """
+            ),
+            {"tenant_id": DEMO_TENANT_ID, "email": DEMO_BUILDER_ADMIN_EMAIL.lower()},
+        ).fetchone()
+    finally:
+        db.close()
+
+    if row is None:
+        raise ValueError("demo builder principal not found for tenant 9001")
+
+    return ActorContext(
+        tenant_id=int(row.tenant_id),
+        user_id=int(row.id),
+        site_id=DEMO_SITE_ID,
+        role=str(row.role or "admin"),
+    )
+
+
+def _ensure_builder_content(*, anchor_day: date, actor: ActorContext):
     import_result = build_demo_menu_import_result(csv_path=demo_menu_csv_path(), anchor_day=anchor_day)
-    _materialize_demo_builder_library(import_result)
+    _materialize_demo_builder_library(import_result, actor=actor)
     return import_menu_result_to_builder_canonical(
         import_result,
         tenant_id=DEMO_TENANT_ID,
@@ -401,9 +475,9 @@ def _ensure_builder_content(*, anchor_day: date):
     )
 
 
-def _materialize_demo_builder_library(import_result):
+def _materialize_demo_builder_library(import_result, *, actor: ActorContext) -> None:
     lines = [str(item.dish_name or "").strip() for week in import_result.weeks for item in week.items if str(item.dish_name or "").strip()]
-    drafts = _build_import_review_drafts(lines)
+    drafts = _build_import_review_drafts(lines, actor=actor)
     selected_items = [
         {
             **draft,
@@ -414,7 +488,7 @@ def _materialize_demo_builder_library(import_result):
         if draft.get("classification") == "importable_dish"
     ]
     if selected_items:
-        _publish_review_drafts(selected_items)
+        _publish_review_drafts(selected_items, actor=actor)
 
 
 def _ensure_legacy_menu_and_publication(builder_menu_id: str, *, year: int, week: int) -> int:
@@ -628,7 +702,7 @@ def _ensure_work_menu_decisions(work_period_id: int) -> int:
         db.close()
 
 
-def _ensure_prep_tasks() -> int:
+def _ensure_prep_tasks(*, actor: ActorContext) -> int:
     db = get_session()
     try:
         service_events = (
@@ -647,7 +721,7 @@ def _ensure_prep_tasks() -> int:
         "Demo Offshore Soppa",
         "Demo Offshore Vegetariskt",
     ]
-    component_ids = [builder_flow.create_standalone_component(name).component_id for name in component_names]
+    component_ids = [builder_flow.create_standalone_component(name, actor=actor).component_id for name in component_names]
 
     created_count = 0
     for index, event in enumerate(service_events):
@@ -704,6 +778,7 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
     iso_year, iso_week, *_ = anchor_day.isocalendar()
     _ensure_tenant_and_site()
     _ensure_feature_flags()
+    _ensure_demo_builder_principal()
     _require_commun_builder_schema()
     _clear_scoped_offshore_rows()
     _clear_scoped_builder_rows()
@@ -719,7 +794,8 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
             prep_task_count=0,
         )
 
-    outcomes = _ensure_builder_content(anchor_day=anchor_day)
+    demo_actor = _demo_builder_actor()
+    outcomes = _ensure_builder_content(anchor_day=anchor_day, actor=demo_actor)
     publication_service = CommunBuilderPublicationService()
     for outcome in outcomes:
         publication_service.publish_week(
@@ -732,7 +808,7 @@ def seed_demo(*, reset_only: bool = False) -> DemoSeedSummary:
 
     _, _, work_period_id = _ensure_offshore_domain(anchor_day=anchor_day)
     _ensure_work_menu_decisions(work_period_id)
-    prep_task_count = _ensure_prep_tasks()
+    prep_task_count = _ensure_prep_tasks(actor=demo_actor)
     service_event_count = len(period_service.list_service_events(DEMO_TENANT_ID, DEMO_SITE_ID, work_period_id))
 
     first_outcome = outcomes[0] if outcomes else None

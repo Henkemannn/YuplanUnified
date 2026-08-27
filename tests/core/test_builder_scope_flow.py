@@ -121,6 +121,139 @@ def test_create_scoped_composition_persists_organisation_scope() -> None:
     )
 
 
+def test_scoped_component_create_requires_actor() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+
+    with pytest.raises(ValueError, match="actor is required for scoped component creation"):
+        flow.create_standalone_component("Actorless component")
+
+
+def test_scoped_composition_create_requires_actor() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+
+    with pytest.raises(ValueError, match="actor is required for scoped composition creation"):
+        flow.create_composition_with_generated_id("Actorless dish")
+
+
+def test_create_private_scoped_composition_persists_private_user_scope() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    actor = _actor(tenant_id=7, user_id=101)
+
+    composition = flow.create_private_composition_with_generated_id("Free dish", actor=actor)
+
+    assert composition.composition_name == "Free dish"
+    assert scope_repo.get_scope("composition", composition.composition_id) == ObjectScope(
+        tenant_id=7,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=101,
+        visibility="private",
+        source_object_id=None,
+    )
+
+
+def test_create_private_scoped_component_persists_private_user_scope() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    owner = _actor(tenant_id=7, user_id=101)
+    other_user = _actor(tenant_id=7, user_id=102)
+
+    component = flow.create_private_standalone_component("Privat komponent", actor=owner)
+
+    assert component.canonical_name == "Privat komponent"
+    assert scope_repo.get_scope("component", component.component_id) == ObjectScope(
+        tenant_id=7,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=101,
+        visibility="private",
+        source_object_id=None,
+    )
+    assert component.component_id in {item.component_id for item in flow.list_library_components(actor=owner)}
+    assert component.component_id not in {item.component_id for item in flow.list_library_components(actor=other_user)}
+
+
+def test_private_component_collision_never_reuses_unreadable_private_component() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    cook_b = _actor(tenant_id=7, user_id=202)
+    cook_a = _actor(tenant_id=7, user_id=101)
+
+    cook_b_result = flow.create_private_component("Tomatsås", actor=cook_b)
+    cook_b_component = cook_b_result.component
+    assert cook_b_result.reused is False
+
+    cook_b_scope = scope_repo.get_scope("component", cook_b_component.component_id)
+    assert cook_b_scope is not None
+    assert can_read_object(cook_a, cook_b_scope) is False
+
+    cook_a_result = flow.create_private_component("Tomatsås", actor=cook_a)
+    cook_a_component = cook_a_result.component
+    cook_a_scope = scope_repo.get_scope("component", cook_a_component.component_id)
+
+    assert cook_a_result.reused is False
+    assert cook_a_component.component_id != cook_b_component.component_id
+    assert cook_a_component.canonical_name == "Tomatsås"
+    assert cook_a_scope == ObjectScope(
+        tenant_id=7,
+        owner_scope="user",
+        owner_site_id=None,
+        owner_user_id=101,
+        visibility="private",
+        source_object_id=None,
+    )
+    assert scope_repo.get_scope("component", cook_b_component.component_id) == cook_b_scope
+    assert cook_b_component.component_id in {item.component_id for item in flow.list_library_components(actor=cook_b)}
+    assert cook_b_component.component_id not in {item.component_id for item in flow.list_library_components(actor=cook_a)}
+
+
+def test_private_component_reuses_readable_organisation_component_and_own_private_component() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    org_actor = _actor(tenant_id=8, user_id=303)
+    cook_a = _actor(tenant_id=8, user_id=101)
+
+    organisation_component = flow.create_standalone_component("Tomatsås", actor=org_actor)
+    org_result = flow.create_private_component("Tomatsås", actor=cook_a)
+
+    assert org_result.reused is True
+    assert org_result.component.component_id == organisation_component.component_id
+
+    own_created = flow.create_private_component("Rödbetssås", actor=cook_a)
+    own_reused = flow.create_private_component("Rödbetssås", actor=cook_a)
+
+    assert own_created.reused is False
+    assert own_reused.reused is True
+    assert own_reused.component.component_id == own_created.component.component_id
+
+
+def test_private_component_reuse_does_not_mutate_existing_categories() -> None:
+    scope_repo = _MemoryScopeRepository()
+    flow = _build_flow(scope_repo)
+    org_actor = _actor(tenant_id=9, user_id=401)
+    cook = _actor(tenant_id=9, user_id=402)
+
+    organisation_component = flow.create_standalone_component("Tomatsås", actor=org_actor)
+    original_org_categories = list(organisation_component.categories or [])
+
+    org_result = flow.create_private_component("Tomatsås", category="sauce", actor=cook)
+    assert org_result.reused is True
+    assert org_result.component.component_id == organisation_component.component_id
+    assert list(org_result.component.categories or []) == original_org_categories
+    assert list(flow.get_library_component(organisation_component.component_id, actor=org_actor).categories or []) == original_org_categories
+
+    own_created = flow.create_private_component("Egen sås", category="sauce", actor=cook)
+    original_own_categories = list(own_created.component.categories or [])
+    own_reused = flow.create_private_component("Egen sås", category="dessert", actor=cook)
+
+    assert own_reused.reused is True
+    assert own_reused.component.component_id == own_created.component.component_id
+    assert list(own_reused.component.categories or []) == original_own_categories
+
+
 def test_seeded_components_receive_scope() -> None:
     scope_repo = _MemoryScopeRepository()
     flow = _build_flow(scope_repo)
@@ -146,7 +279,7 @@ def test_reused_object_keeps_existing_scope() -> None:
     flow = _build_flow(scope_repo)
     actor = _actor(tenant_id=4, user_id=404)
 
-    component = flow.create_standalone_component("Kokt potatis")
+    component = flow.create_standalone_component("Kokt potatis", actor=actor)
     existing_scope = ObjectScope(
         tenant_id=4,
         owner_scope="private",
@@ -161,7 +294,7 @@ def test_reused_object_keeps_existing_scope() -> None:
 
     assert reused.component_id == component.component_id
     assert scope_repo.get_scope("component", component.component_id) == existing_scope
-    assert scope_repo.set_calls == 1
+    assert scope_repo.set_calls == 2
 
 
 @pytest.mark.parametrize("object_type", ["component", "composition"])
@@ -231,11 +364,15 @@ def test_legacy_unscoped_objects_remain_visible(object_type: str) -> None:
     other_actor = _actor(tenant_id=32, user_id=2)
 
     if object_type == "component":
-        object_id = flow.create_standalone_component("Legacy visible").component_id
+        component = flow._component_service.create_component("legacy_visible", "Legacy visible")
+        object_id = component.component_id
+        assert scope_repo.get_scope("component", object_id) is None
         assert object_id in {item.component_id for item in flow.list_library_components(actor=actor)}
         assert object_id in {item.component_id for item in flow.list_library_components(actor=other_actor)}
     else:
-        object_id = flow.create_composition("legacy-plate", "Legacy plate").composition_id
+        composition = flow._composition_service.create_composition("legacy-plate", "Legacy plate")
+        object_id = composition.composition_id
+        assert scope_repo.get_scope("composition", object_id) is None
         assert object_id in {item.composition_id for item in flow.list_library_compositions(actor=actor)}
         assert object_id in {item.composition_id for item in flow.list_library_compositions(actor=other_actor)}
 

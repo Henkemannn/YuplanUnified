@@ -22,6 +22,7 @@
  *   config.openSimpleModal: (modalId: string) => void
  *   config.closeModalById: (modalId: string) => void
  *   config.renderComponentPalette: () => void
+ *   config.openComponentCreateModal: () => void
  *
  * @param {{
  *   compositionRoot: Element,
@@ -57,6 +58,7 @@ function createBuilderModalController(config) {
     openSimpleModal: config.openSimpleModal || null,
     closeModalById: config.closeModalById || null,
     renderComponentPalette: config.renderComponentPalette || null,
+    openComponentCreateModal: config.openComponentCreateModal || null,
     notifyHostClose: config.notifyHostClose || null,
   };
 
@@ -126,6 +128,30 @@ function createBuilderModalController(config) {
     modal.classList.add("hidden");
     modal.removeAttribute("aria-hidden");
     modal.inert = false;
+  }
+
+  function _openAddComponentModal() {
+    if (_state.currentBuilderComposition && _state.currentBuilderComposition.composition_id) {
+      _state.pendingComponentCreateForCompositionId = String(_state.currentBuilderComposition.composition_id || "").trim() || null;
+      _state.pendingComponentCreateForCompositionName = String(_state.currentBuilderComposition.composition_name || "").trim() || null;
+      _state.pendingComponentCreateReturnTab = "components";
+    }
+    _openSimpleModal("addComponentModal");
+    if (typeof _callbacks.renderComponentPalette === "function") {
+      _callbacks.renderComponentPalette();
+    }
+    const searchInput = document.getElementById("builderPaletteSearch");
+    if (searchInput) {
+      try {
+        searchInput.focus();
+      } catch (error) {
+        // Ignore focus failures in restricted environments.
+      }
+    }
+  }
+
+  function _closeAddComponentModal() {
+    _closeModalById("addComponentModal");
   }
 
   function _showLoading(targetId) {
@@ -492,12 +518,20 @@ function createBuilderModalController(config) {
     _state.currentDishAllergenSummaryToken += 1;
     _state.currentDishCalculationSummaryToken += 1;
     closeDishComponentOverflowMenus();
-    const activeCompositionId = String(_state.currentBuilderComposition?.composition_id || "").trim();
+    const finalComposition = _state.currentBuilderComposition
+      ? {
+          ..._state.currentBuilderComposition,
+          components: Array.isArray(_state.currentBuilderComposition.components)
+            ? _state.currentBuilderComposition.components.map((component) => ({ ...component }))
+            : [],
+        }
+      : null;
+    const activeCompositionId = String(finalComposition?.composition_id || "").trim();
     _closeModalById("componentDetailEditorModal");
     _closeModalById("resolveModal");
     _state.currentBuilderComposition = null;
     _state.currentBuilderDishTab = "overview";
-    _notifyHostClose({ kind: "composition", composition_id: activeCompositionId });
+    _notifyHostClose({ kind: "composition", composition_id: activeCompositionId, composition: finalComposition });
   }
 
   async function _returnComponentDetailToDish() {
@@ -876,6 +910,30 @@ function createBuilderModalController(config) {
       });
     }
 
+    const openAddComponentModalBtn = compositionRoot.querySelector("#openAddComponentModalBtn");
+    if (openAddComponentModalBtn) {
+      openAddComponentModalBtn.addEventListener("click", () => {
+        _openAddComponentModal();
+      });
+    }
+
+    const addComponentModalCloseBtn = document.getElementById("addComponentModalClose");
+    if (addComponentModalCloseBtn) {
+      addComponentModalCloseBtn.addEventListener("click", () => {
+        _closeAddComponentModal();
+      });
+    }
+
+    const addComponentBtn = document.getElementById("btnAddComponent");
+    if (addComponentBtn) {
+      addComponentBtn.addEventListener("click", () => {
+        _closeAddComponentModal();
+        if (typeof _callbacks.openComponentCreateModal === "function") {
+          _callbacks.openComponentCreateModal();
+        }
+      });
+    }
+
     // ── Dish modal: backdrop click to close ───────────────────────────
     compositionRoot.addEventListener("click", (event) => {
       if (event.target === compositionRoot) {
@@ -1005,6 +1063,14 @@ function createBuilderModalController(config) {
       if (typeof _callbacks.renderComponentPalette === "function") {
         _callbacks.renderComponentPalette();
       }
+    },
+
+    openAddComponentModal() {
+      _openAddComponentModal();
+    },
+
+    closeAddComponentModal() {
+      _closeAddComponentModal();
     },
 
     /**

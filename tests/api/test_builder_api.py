@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import tempfile
 import os
+from pathlib import Path
 
 from docx import Document
 from openpyxl import Workbook
@@ -114,14 +115,81 @@ def test_create_composition_endpoint_supports_generated_id_without_menu_context(
     body = rv.get_json() or {}
     assert body.get("ok") is True
     composition = body.get("composition") or {}
+    assert composition.get("composition_name") == "Free Dish"
     generated_id = composition.get("composition_id")
     assert isinstance(generated_id, str)
     assert generated_id.startswith("cmp_")
     assert len(generated_id) == 10
-    assert composition.get("composition_name") == "Free Dish"
-    components = composition.get("components") or []
-    assert len(components) == 1
-    assert components[0].get("component_name") == "Free Dish"
+    assert len(composition.get("components") or []) == 1
+    assert (composition.get("components") or [])[0].get("component_name") == "Free Dish"
+
+
+def test_create_private_composition_endpoint_generates_private_composition() -> None:
+    client = _sqlite_client()
+
+    rv = client.post(
+        "/api/builder/compositions/private",
+        json={
+            "composition_name": "Private Dish",
+            "library_group": "ovrigt",
+        },
+        headers=_headers(role="viewer"),
+    )
+
+    assert rv.status_code == 201
+    body = rv.get_json() or {}
+    assert body.get("ok") is True
+    composition = body.get("composition") or {}
+    generated_id = composition.get("composition_id")
+    assert isinstance(generated_id, str)
+    assert generated_id.startswith("cmp_")
+    assert len(generated_id) == 10
+    assert composition.get("composition_name") == "Private Dish"
+
+
+def test_create_private_component_endpoint_limits_visibility_to_owner() -> None:
+    fd, db_path = tempfile.mkstemp(prefix="builder_api_private_component_", suffix=".db")
+    os.close(fd)
+    app = _app_with_builder_db(db_path)
+    owner_client = app.test_client()
+    other_client = app.test_client()
+    owner_headers = _headers(role="cook", tenant_id=1, user_id=4)
+    other_headers = _headers(role="cook", tenant_id=1, user_id=5)
+    _seed_session(owner_client, role="cook", tenant_id=1, user_id=4)
+    _seed_session(other_client, role="cook", tenant_id=1, user_id=5)
+
+    created = owner_client.post(
+        "/api/builder/components/private",
+        json={"component_name": "Private palette component"},
+        headers=owner_headers,
+    )
+
+    assert created.status_code == 201
+    body = created.get_json() or {}
+    component = body.get("component") or {}
+    component_id = str(component.get("component_id") or "")
+    assert component.get("component_name") == "Private palette component"
+    assert component_id
+
+    owner_list = owner_client.get("/api/builder/components", headers=owner_headers)
+    other_list = other_client.get("/api/builder/components", headers=other_headers)
+    assert owner_list.status_code == 200
+    assert other_list.status_code == 200
+    owner_ids = {str(item.get("component_id") or "") for item in (owner_list.get_json() or {}).get("components", [])}
+    other_ids = {str(item.get("component_id") or "") for item in (other_list.get_json() or {}).get("components", [])}
+    assert component_id in owner_ids
+    assert component_id not in other_ids
+
+
+def test_private_component_endpoint_delegates_matching_to_builder_flow() -> None:
+    api_source = Path("core/builder_api.py").read_text(encoding="utf-8")
+    private_route_start = api_source.index('@bp.post("/components/private")')
+    private_route_end = api_source.index('@bp.patch("/components/<component_id>")', private_route_start)
+    private_route_block = api_source[private_route_start:private_route_end]
+
+    assert "create_private_component(" in private_route_block
+    assert "_normalize_component_key" not in private_route_block
+    assert "list_library_components(actor=actor)" not in private_route_block
 
 
 def test_create_composition_endpoint_supports_empty_shell_when_seed_components_false() -> None:

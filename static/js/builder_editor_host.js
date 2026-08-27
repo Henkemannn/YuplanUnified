@@ -18,14 +18,18 @@
   };
 
   const state = {
-    cachedComponents: [],
     cachedCompositions: [],
     controller: null,
     compositionId: '',
     componentId: '',
     hostKind: '',
     hostTargetId: '',
+    hostMode: 'idle',
+    createdCompositionId: '',
+    createdCompositionReadySent: false,
   };
+
+  let componentLibraryRuntime = null;
 
   const componentLoadPromises = new Map();
   const compositionLoadPromises = new Map();
@@ -108,29 +112,8 @@
     modal.inert = false;
   }
 
-  function getCachedComponents() {
-    return state.cachedComponents;
-  }
-
   function getCachedCompositions() {
     return state.cachedCompositions;
-  }
-
-  function upsertCachedComponent(component) {
-    const componentId = normalizeId(component && component.component_id);
-    if (!componentId) {
-      return null;
-    }
-    const next = { ...(component || {}), component_id: componentId };
-    const index = state.cachedComponents.findIndex(
-      (item) => normalizeId(item && item.component_id) === componentId
-    );
-    if (index >= 0) {
-      state.cachedComponents[index] = next;
-    } else {
-      state.cachedComponents.push(next);
-    }
-    return next;
   }
 
   function upsertCachedComposition(composition) {
@@ -150,11 +133,63 @@
     return next;
   }
 
-  function renderComponentPalette() {}
-  function filterLibraryComponents() {}
-  function updateComponentCategoryChipCounts() {}
-  function currentComponentSearchQuery() { return ''; }
+  function getComponentLibraryRuntime() {
+    if (componentLibraryRuntime) {
+      return componentLibraryRuntime;
+    }
+
+    const runtime = BuilderComponentLibraryRuntime.create({
+      callApi,
+      getCurrentComposition,
+      attachComponent: (componentId) => attachExistingComponentToCurrentComposition(componentId),
+      onAttachSuccess: async (composition) => {
+        if (state.controller && typeof state.controller.closeAddComponentModal === 'function') {
+          state.controller.closeAddComponentModal();
+        }
+        if (state.controller && typeof state.controller.setDishBuilderTab === 'function') {
+          state.controller.setDishBuilderTab('components');
+        }
+        if (state.controller && typeof state.controller.renderBuilderPanel === 'function') {
+          state.controller.renderBuilderPanel(composition);
+        }
+        getComponentLibraryRuntime().renderPalette();
+      },
+    });
+    runtime.bindPalette({
+      paletteElement: document.getElementById('builderComponentPalette'),
+      searchInputElement: document.getElementById('builderPaletteSearch'),
+    });
+    componentLibraryRuntime = runtime;
+    return componentLibraryRuntime;
+  }
+
   const resolveComponentCategoryThemeKey = BuilderComponentTheme.resolveComponentCategoryThemeKey;
+
+  function openBuilderComponentCreateModal() {
+    const createController = globalThis.BuilderComponentCreateModal;
+    if (createController && typeof createController.open === 'function') {
+      createController.open({
+        title: 'Skapa komponent',
+        createEndpoint: '/api/builder/components/private',
+        onSuccess: async (createdComponent) => {
+          const createdComponentId = normalizeId(createdComponent && createdComponent.component_id);
+          if (createdComponent) {
+            getComponentLibraryRuntime().upsertCachedComponent(createdComponent);
+          }
+          if (createdComponentId) {
+            state.controller.setState('pendingComponentCreateComponentId', createdComponentId);
+            await state.controller.openComponentDetailEditor(createdComponentId, 'overview');
+          }
+        },
+      });
+      return;
+    }
+    openSimpleModal('componentCreateModal');
+    const input = document.getElementById('freeComponentName');
+    if (input) {
+      input.focus();
+    }
+  }
 
   async function loadAllCompositions() {
     const result = await callApi('/api/builder/compositions', { method: 'GET' });
@@ -165,23 +200,12 @@
     return state.cachedCompositions;
   }
 
-  async function loadAllComponents() {
-    const result = await callApi('/api/builder/components', { method: 'GET' });
-    if (!(result && result.status < 400 && result.data && result.data.ok && Array.isArray(result.data.components))) {
-      throw new Error('Could not load components.');
-    }
-    state.cachedComponents = result.data.components.slice();
-    return state.cachedComponents;
-  }
-
   async function loadComponentById(componentId) {
     const idValue = normalizeId(componentId);
     if (!idValue) {
       return null;
     }
-    const cached = state.cachedComponents.find(
-      (item) => normalizeId(item && item.component_id) === idValue
-    );
+    const cached = getComponentLibraryRuntime().resolveComponentById(idValue);
     if (cached) {
       return cached;
     }
@@ -195,7 +219,7 @@
       if (!(result && result.status < 400 && result.data && result.data.ok && result.data.component)) {
         throw new Error('Could not load component.');
       }
-      return upsertCachedComponent(result.data.component);
+      return getComponentLibraryRuntime().upsertCachedComponent(result.data.component);
     })();
 
     componentLoadPromises.set(idValue, loadPromise);
@@ -274,7 +298,7 @@
     if (!(result && result.status < 400 && result.data && result.data.ok && result.data.component && result.data.composition)) {
       throw new Error('Could not prepare linked component for edit.');
     }
-    const component = upsertCachedComponent(result.data.component);
+    const component = getComponentLibraryRuntime().upsertCachedComponent(result.data.component);
     const composition = upsertCachedComposition(result.data.composition);
     if (composition) {
       state.controller && typeof state.controller.renderBuilderPanel === 'function' && state.controller.renderBuilderPanel(composition);
@@ -296,21 +320,38 @@
   }
 
   async function loadLibrary() {
-    await Promise.all([loadAllCompositions(), loadAllComponents()]);
+    await Promise.all([loadAllCompositions(), getComponentLibraryRuntime().loadAllComponents()]);
+  }
+
+  function openCreateCompositionModal() {
+    if (!globalThis.BuilderDishCreateModal || typeof globalThis.BuilderDishCreateModal.open !== 'function') {
+      throw new Error('Create Dish UI is not available.');
+    }
+    globalThis.BuilderDishCreateModal.open({
+      title: 'Skapa rätt',
+      createEndpoint: '/api/builder/compositions/private',
+      includeSeedComponents: false,
+      onSuccess: async (composition) => {
+        state.hostMode = 'create-composition-open';
+        state.createdCompositionId = String(composition && composition.composition_id || '').trim();
+        state.createdCompositionReadySent = false;
+        state.compositionId = state.createdCompositionId;
+        state.componentId = '';
+        state.hostKind = 'composition';
+        state.hostTargetId = state.compositionId;
+        state.controller.openComposition(composition, 'components');
+        setHostStatus(true);
+      },
+      onCancel: () => {
+        state.createdCompositionId = '';
+        state.createdCompositionReadySent = false;
+        notifyHostClose({ kind: 'create-composition', cancelled: true });
+      },
+    });
   }
 
   function resolveComponentById(componentId) {
-    const idValue = normalizeId(componentId);
-    if (!idValue) {
-      return null;
-    }
-    const cached = state.cachedComponents.find(
-      (item) => normalizeId(item && item.component_id) === idValue
-    );
-    if (cached) {
-      return cached;
-    }
-    return null;
+    return getComponentLibraryRuntime().resolveComponentById(componentId);
   }
 
   async function resolveCompositionById(compositionId) {
@@ -415,13 +456,56 @@
     if (!state.hostTargetId) {
       return;
     }
+    const currentComposition = getCurrentComposition();
+    const detailComposition = detail && detail.composition ? detail.composition : null;
+    const finalComposition = detailComposition || (!(detail && detail.cancelled) ? currentComposition || null : null);
+    const finalCompositionId = normalizeId(finalComposition && finalComposition.composition_id);
+    const normalizedDetail = {
+      source: 'builder-editor-host',
+      host_target_id: state.hostTargetId,
+      ...(state.hostMode === 'create-composition-open'
+        ? {
+            composition: finalComposition || undefined,
+          }
+        : {
+            composition: detailComposition || currentComposition || undefined,
+          }),
+      ...detail,
+    };
+    if (
+      state.hostMode === 'create-composition-open'
+      && !state.createdCompositionReadySent
+      && state.createdCompositionId
+      && finalCompositionId
+      && finalCompositionId === state.createdCompositionId
+      && !normalizedDetail.cancelled
+    ) {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(
+          {
+            type: 'builder-host-created-composition-ready',
+            detail: {
+              source: 'builder-editor-host',
+              host_target_id: state.hostTargetId,
+              kind: 'composition',
+              composition: finalComposition || undefined,
+            },
+          },
+          window.location.origin,
+        );
+      }
+      state.createdCompositionReadySent = true;
+      state.createdCompositionId = '';
+      state.hostMode = 'idle';
+    }
+    if (normalizedDetail.cancelled) {
+      state.createdCompositionId = '';
+      state.createdCompositionReadySent = false;
+      state.hostMode = 'idle';
+    }
     const payload = {
       type: 'builder-host-close',
-      detail: {
-        source: 'builder-editor-host',
-        host_target_id: state.hostTargetId,
-        ...detail,
-      },
+      detail: normalizedDetail,
     };
     if (window.parent && window.parent !== window) {
       window.parent.postMessage(payload, window.location.origin);
@@ -472,6 +556,26 @@
       return;
     }
 
+    if (payload.type === 'builder-host-create-composition') {
+      state.hostMode = 'create-composition';
+      state.hostKind = 'create-composition';
+      state.hostTargetId = 'create-composition';
+      state.compositionId = '';
+      state.componentId = '';
+      state.createdCompositionId = '';
+      state.createdCompositionReadySent = false;
+      try {
+        openCreateCompositionModal();
+        setHostStatus(true);
+        notifyHostReady({ kind: 'create-composition' });
+      } catch (error) {
+        showJson('builderOut', { status: 0, data: { ok: false, error: String(error && error.message || error) } });
+        notifyHostClose({ kind: 'create-composition', error: String(error && error.message || error) });
+        setHostStatus(false, String(error && error.message || error));
+      }
+      return;
+    }
+
     if (payload.type !== 'builder-host-open') {
       return;
     }
@@ -487,11 +591,13 @@
       state.componentId = '';
       state.hostKind = 'composition';
       state.hostTargetId = targetId;
+      state.hostMode = 'composition';
     } else {
       state.componentId = targetId;
       state.compositionId = '';
       state.hostKind = 'component';
       state.hostTargetId = targetId;
+      state.hostMode = 'component';
     }
 
     await openRequestedTarget();
@@ -523,6 +629,8 @@
         state.compositionId = editableComposition.composition_id;
         await preloadLinkedComponents(editableComposition);
         state.controller.openComposition(editableComposition, 'overview');
+      } else if (state.hostKind === 'create-composition') {
+        openCreateCompositionModal();
       } else {
         const component = await loadComponentById(state.componentId);
         if (!component) {
@@ -560,20 +668,18 @@
         },
       },
       loadLibrary,
-      getCachedComponents,
+      getCachedComponents: () => getComponentLibraryRuntime().getCachedComponents(),
       getCachedCompositions,
       resolveComponentById,
       prepareLinkedComponentForEdit,
       resolveComponentCategoryThemeKey,
-      filterLibraryComponents,
-      currentComponentSearchQuery,
-      updateComponentCategoryChipCounts,
-      upsertCachedComponent,
+      upsertCachedComponent: (component) => getComponentLibraryRuntime().upsertCachedComponent(component),
+      openComponentCreateModal: openBuilderComponentCreateModal,
       showLoading,
       showJson,
       openSimpleModal,
       closeModalById,
-      renderComponentPalette,
+      renderComponentPalette: () => getComponentLibraryRuntime().renderPalette(),
       loadCompositionTextPreviewForCurrentComposition,
       refreshCurrentCompositionView,
       reopenPendingCompositionForReturn,
@@ -585,6 +691,12 @@
         ...modalState,
       },
     });
+
+    if (globalThis.BuilderDishCreateModal && typeof globalThis.BuilderDishCreateModal.bind === 'function') {
+      globalThis.BuilderDishCreateModal.bind({
+        includeSeedComponents: false,
+      });
+    }
 
     notifyHostRuntimeReady();
 

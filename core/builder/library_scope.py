@@ -128,13 +128,22 @@ def fork_object_scope(
     if getattr(actor, "user_id", None) is None:
         raise ValueError("actor.user_id is required for private fork creation")
 
+    return private_object_scope(actor, source_object_id=canonical_source_id)
+
+
+def private_object_scope(actor: ActorContext, *, source_object_id: str | None = None) -> ObjectScope:
+    """Build the scope for a newly created private user-owned object."""
+
+    if getattr(actor, "user_id", None) is None:
+        raise ValueError("actor.user_id is required for private object creation")
+
     return ObjectScope(
         tenant_id=actor.tenant_id,
         owner_scope="user",
         owner_site_id=None,
         owner_user_id=actor.user_id,
         visibility="private",
-        source_object_id=canonical_source_id,
+        source_object_id=None if source_object_id is None else (str(source_object_id).strip() or None),
     )
 
 

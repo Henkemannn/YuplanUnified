@@ -3,6 +3,8 @@ from __future__ import annotations
 from decimal import Decimal
 
 from core.builder import BuilderFlow
+from core.builder.library_scope import ActorContext
+from core.builder.library_scope import ObjectScope
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.components import (
     ComponentService,
@@ -15,6 +17,23 @@ from core.components import (
     RecipeIngredientLine,
 )
 from core.menu import ImportedMenuRow, InMemoryCompositionAliasRepository, MenuService, create_composition_alias
+
+
+class _MemoryScopeRepository:
+    def __init__(self) -> None:
+        self.scopes: dict[tuple[str, str], ObjectScope] = {}
+
+    def get_scope(self, object_type: str, object_id: str) -> ObjectScope | None:
+        return self.scopes.get((object_type, object_id))
+
+    def find_private_fork_id(self, object_type: str, source_object_id: str, *, tenant_id: int, owner_user_id: int) -> str | None:
+        return None
+
+    def set_scope(self, object_type: str, object_id: str, scope: ObjectScope) -> None:
+        self.scopes[(object_type, object_id)] = scope
+
+    def delete_scope(self, object_type: str, object_id: str) -> None:
+        self.scopes.pop((object_type, object_id), None)
 
 
 def _build_flows() -> tuple[BuilderFlow, BuilderMenuContextFlow]:
@@ -43,6 +62,36 @@ def _build_flows() -> tuple[BuilderFlow, BuilderMenuContextFlow]:
         library_flow=builder_flow,
     )
     return builder_flow, menu_context_flow
+
+
+def _build_scoped_flows() -> tuple[BuilderFlow, BuilderMenuContextFlow, _MemoryScopeRepository]:
+    component_repository = InMemoryComponentRepository()
+    composition_repository = InMemoryCompositionRepository()
+    alias_repository = InMemoryCompositionAliasRepository()
+    recipe_repository = InMemoryRecipeRepository()
+    ingredient_repository = InMemoryRecipeIngredientLineRepository()
+    scope_repository = _MemoryScopeRepository()
+
+    component_service = ComponentService(repository=component_repository)
+    composition_service = CompositionService(repository=composition_repository)
+    menu_service = MenuService(composition_repository=composition_repository)
+
+    builder_flow = BuilderFlow(
+        component_service=component_service,
+        composition_service=composition_service,
+        composition_repository=composition_repository,
+        alias_repository=alias_repository,
+        object_scope_repository=scope_repository,  # type: ignore[arg-type]
+    )
+    menu_context_flow = BuilderMenuContextFlow(
+        menu_service=menu_service,
+        composition_repository=composition_repository,
+        alias_repository=alias_repository,
+        recipe_repository=recipe_repository,
+        ingredient_repository=ingredient_repository,
+        library_flow=builder_flow,
+    )
+    return builder_flow, menu_context_flow, scope_repository
 
 
 def test_create_menu_and_import_rows_through_menu_context_flow() -> None:
@@ -331,7 +380,8 @@ def test_menu_context_flow_is_orchestration_not_logic_duplication() -> None:
 
 
 def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
-    _, flow = _build_flows()
+    _, flow, scope_repo = _build_scoped_flows()
+    actor = ActorContext(tenant_id=7, user_id=101, site_id=None, role="admin")
     flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
     summary = flow.import_menu_rows(
         menu_id="menu_1",
@@ -343,6 +393,7 @@ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
         menu_id="menu_1",
         menu_detail_id=detail_id,
         composition_name="New Plate",
+        actor=actor,
     )
 
     assert created.composition_id.startswith("cmp_")
@@ -352,10 +403,19 @@ def test_create_composition_from_unresolved_row_creates_and_resolves() -> None:
     assert updated.composition_id == created.composition_id
     assert updated.unresolved_text is None
     assert warnings == []
+    assert scope_repo.get_scope("composition", created.composition_id) == ObjectScope(
+        tenant_id=7,
+        owner_scope="organisation",
+        owner_site_id=None,
+        owner_user_id=None,
+        visibility="organisation",
+        source_object_id=None,
+    )
 
 
 def test_create_composition_from_unresolved_row_adds_suggested_components() -> None:
-    _, flow = _build_flows()
+    _, flow, scope_repo = _build_scoped_flows()
+    actor = ActorContext(tenant_id=7, user_id=101, site_id=None, role="admin")
     flow.create_menu(menu_id="menu_1", site_id="site_1", week_key="2026-W16")
     summary = flow.import_menu_rows(
         menu_id="menu_1",
@@ -373,12 +433,22 @@ def test_create_composition_from_unresolved_row_adds_suggested_components() -> N
         menu_id="menu_1",
         menu_detail_id=detail_id,
         composition_name="Fiskratt",
+        actor=actor,
     )
 
     component_ids = [item.component_id for item in created.components]
     assert component_ids == ["kokt_torsk", "aggsas", "pressad_potatis"]
     component_names = [item.component_name for item in created.components]
     assert component_names == ["Kokt torsk", "Äggsås", "Pressad potatis"]
+    for component_id in component_ids:
+        assert scope_repo.get_scope("component", component_id) == ObjectScope(
+            tenant_id=7,
+            owner_scope="organisation",
+            owner_site_id=None,
+            owner_user_id=None,
+            visibility="organisation",
+            source_object_id=None,
+        )
 
 
 def test_reimport_same_text_resolves_via_auto_created_alias() -> None:

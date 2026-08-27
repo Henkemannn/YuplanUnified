@@ -1,0 +1,27 @@
+<div id="quickCreateModal" class="modal hidden">
+  <div class="modal-content modal-content-compact">
+    <div class="workspace-modal-header">
+      <div>
+        <p class="workspace-modal-kicker">Skapa rätt</p>
+        <h3>Skapa rätt</h3>
+      </div>
+      <button id="quickCreateModalClose" type="button">Avbryt</button>
+    </div>
+
+    <section class="workspace-quick-card">
+      <label>Rättnamn
+        <input id="freeDishName" type="text" placeholder="Kottbullar med potatis">
+      </label>
+      <label>Kategori
+        <select id="freeDishCategory">
+          <option value="ovrigt" selected>Övrigt</option>
+          <option value="fisk">Fisk</option>
+          <option value="kott">Kött</option>
+          <option value="dessert">Dessert</option>
+        </select>
+      </label>
+      <button id="btnCreateDish" type="button">Skapa rätt</button>
+      <div id="createDishOut" class="workspace-feedback" aria-live="polite"></div>
+    </section>
+  </div>
+</div>

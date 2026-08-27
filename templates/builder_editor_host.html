@@ -12,8 +12,15 @@
   <div id="builderEditorHostStatus" class="builder-editor-host-status" aria-live="polite"></div>
   {% include "builder/_composition_modal.html" %}
   {% include "builder/_component_detail_modal.html" %}
+  {% include "builder/_component_create_modal.html" %}
+  {% include "builder/_add_component_modal.html" %}
+
+  {% include "builder/_dish_create_modal.html" %}
 
   <script src="/static/js/builder_component_theme.js"></script>
+  <script src="/static/js/builder_component_library_runtime.js"></script>
+  <script src="/static/js/builder_component_create.js"></script>
+  <script src="/static/js/builder_dish_create.js"></script>
   <script src="/static/js/builder_component_editor.js"></script>
   <script src="/static/js/builder_dish_editor.js"></script>
   <script src="/static/js/builder_modal_controller.js?v=builder-b1-modal-controller-v1"></script>

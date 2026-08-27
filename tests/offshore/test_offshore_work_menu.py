@@ -248,6 +248,7 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert 'src="/builder-editor-host"' in html
     assert 'src="about:blank"' not in html
     assert 'target="_blank"' not in html
+    assert 'data-public-title="' in html
     assert html.count('class="app-shell__card offshore-work-menu-controls"') == 1
     assert html.count('class="offshore-work-menu-controls__header"') == 1
     assert html.count('class="offshore-work-menu-track-filter" data-work-menu-track-filter') == 1
@@ -319,7 +320,7 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "setPickerViewMode('confirm');" in js_source
     assert "pickerConfirmSelected.textContent = `→ ${selected.label || 'Vald rätt'}`;" in js_source
     assert "pickerConfirmMeta.textContent = [pickerActiveTrack ? pickerActiveTrack.dataset.dayLabel" in js_source
-    assert "pickerResetTitle.textContent = pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || '';" in js_source
+    assert "pickerResetTitle.textContent = pickerActiveTrack.dataset.publicTitle || pickerActiveTrack.dataset.effectiveTitle || '';" in js_source
     assert "pickerBrowse.hidden = !browsing;" in js_source
     assert "pickerInstruction.hidden = !browsing;" in js_source
     assert "pickerResultsSection.hidden = pickerViewMode === 'confirm' || defaultBrowse;" in js_source
@@ -338,6 +339,14 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "window.requestAnimationFrame(() => {" in js_source
     assert "function openModalFromTrack(trackButton, mode = 'default')" in js_source
     assert "modal.dataset.workMenuMode = mode;" in js_source
+    assert "function openBuilderHostForCreate(trackButton)" in js_source
+    assert "builder-host-create-composition" in js_source
+    assert "builder-host-created-composition-ready" in js_source
+    assert "pendingBuilderHostCreate = null;" in js_source
+    assert "if (payload.type === 'builder-host-created-composition-ready') {" in js_source
+    assert "if (lastBuilderHostKind === 'create-composition') {" in js_source
+    assert "setPickerViewMode('confirm');" in js_source
+    assert "closeBuilderHost();" in js_source
     assert "openModalFromTrack(button, 'chooser');" in js_source
     assert "decisionTypeField.value = 'use_builder_composition';" in js_source
     assert "syncModalSections(mode);" in js_source
@@ -357,11 +366,16 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "builder-host-open" in js_source
     assert "window.addEventListener('message'" in js_source
     assert "lastBuilderHostKind" in js_source
+    assert "if (lastBuilderHostKind === 'create-composition') {" in js_source
+    assert "String(detail.host_target_id || '') !== 'create-composition'" in js_source
+    assert "String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')" in js_source
     assert "String(detail.kind || '') !== lastBuilderHostKind" in js_source
     assert "builder-host-ready" in js_source
     assert "offshore-work-menu-builder-host--ready" in js_source
     assert "offshore-work-menu-builder-host--open" in js_source
     assert "window.scrollTo(lastBuilderHostScrollX, lastBuilderHostScrollY);" in js_source
+    assert "pickerResetTitle.textContent = pickerActiveTrack.dataset.publicTitle || pickerActiveTrack.dataset.effectiveTitle || '';" in js_source
+    assert "pickerConfirmCurrent.textContent = `Nuvarande rätt: ${pickerActiveTrack ? (pickerActiveTrack.dataset.effectiveTitle || pickerActiveTrack.dataset.publicTitle || '—') : '—'}`;" in js_source
 
     css_path = "static/offshore2/offshore.css"
     with open(css_path, encoding="utf-8") as f:

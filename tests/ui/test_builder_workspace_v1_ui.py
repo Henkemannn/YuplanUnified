@@ -18,14 +18,17 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert '<script src="/static/js/builder_component_editor.js"></script>' in html
     assert '<script src="/static/js/builder_dish_editor.js"></script>' in html
     assert '<script src="/static/js/builder_component_theme.js"></script>' in html
+    assert '<script src="/static/js/builder_component_library_runtime.js"></script>' in html
+    assert html.count('<script src="/static/js/builder_component_theme.js"></script>') == 1
     assert '<script src="/static/js/builder.js?v=builder-modal-system-reset-1"></script>' in html
     ce_pos = html.find("builder_component_editor.js")
     de_pos = html.find("builder_dish_editor.js")
     theme_pos = html.find("builder_component_theme.js")
+    runtime_pos = html.find("builder_component_library_runtime.js")
     ctrl_pos = html.find("builder_modal_controller.js")
     builder_pos = html.find("builder.js?v=")
     assert ce_pos < de_pos < ctrl_pos < builder_pos
-    assert theme_pos < ce_pos < builder_pos
+    assert theme_pos < runtime_pos < ce_pos < builder_pos
 
     # Legacy modal identified in stuck screenshot should be present.
     assert 'id="addComponentModal"' in html
@@ -228,6 +231,7 @@ def test_builder_workspace_v1_route_renders_product_surface(client_admin) -> Non
     assert 'data-dish-panel' in js
     assert 'const VALID_DISH_LIBRARY_GROUPS = new Set(["fisk", "kott", "dessert", "ovrigt"]);' in js
     assert 'function normalizeDishLibraryGroupValue(value) {' in js
+    assert 'const normalizeCategoryThemeValue = BuilderComponentTheme.normalizeCategoryThemeValue;' in js
     assert 'function syncDishModalHeader(composition) {' in js
     assert 'function syncDishOverviewInputs(composition) {' in js
     assert 'function renderDishOverview(composition) {' in js
@@ -632,6 +636,28 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'window.BUILDER_JS_VERSION = "builder-modal-system-reset-1";' in script
     assert 'console.log("Builder JS active: builder-modal-system-reset-1");' in script
     assert 'function resetGlobalModalSafetyState() {' in script
+    assert 'function getComponentLibraryRuntime() {' in script
+    assert 'BuilderComponentLibraryRuntime.create({' in script
+    assert 'getComponentLibraryRuntime().renderPalette();' in script
+    assert 'const runtime = BuilderComponentLibraryRuntime.create({' in script
+    assert 'const [result] = await Promise.all([' in script
+    assert 'callApi("/api/builder/library", { method: "GET" })' in script
+    assert 'runtime.loadAllComponents(),' in script
+    assert 'renderLibrary(result);' in script
+    assert script.index('const [result] = await Promise.all([') < script.index('renderLibrary(result);')
+    assert 'function getLibraryComponents() {' in script
+    assert 'return getComponentLibraryRuntime().getCachedComponents();' in script
+    assert 'const components = getLibraryComponents();' in script
+    assert 'renderComponentCategoryFilters(categoryNav, components, activeFilter);' in script
+    assert 'renderComponentTagFilterOptions(tagFilterSelect, components, activeTag);' in script
+    assert 'const searchFiltered = components.filter((item) => componentMatchesSearch(item, q));' in script
+    assert 'const target = getLibraryComponents().find((item) => String(item.component_id || "") === idValue);' in script
+    assert 'getComponentLibraryRuntime().upsertCachedComponent(updatedComponent);' in script
+    assert 'const palette = document.getElementById("builderComponentPalette");' not in script
+    assert 'pill.addEventListener("click", async () => {' not in script
+    assert 'openAddComponentModalBtn.addEventListener("click"' not in script
+    assert 'addComponentBtn.addEventListener("click"' not in script
+    assert 'componentCreateModalCloseBtn.addEventListener("click"' not in script
     assert 'document.body.classList.remove("modal-open", "modal-locked");' in script
     assert 'document.documentElement.classList.remove("modal-open", "modal-locked");' in script
     assert 'document.body.style.pointerEvents = "";' in script
@@ -725,8 +751,8 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'componentDetailSaveChangesBtn' in script
     assert 'window.confirm("Save changes before leaving?")' in script
     assert 'window.confirm("Discard changes and close?")' in script
-    assert 'if (modal.id === "componentDetailEditorModal") {' in script
-    assert 'await closeComponentDetailEditor();' in script
+    assert 'if (modal.id === "componentDetailEditorModal") {' not in script
+    assert 'await closeComponentDetailEditor();' not in script
     assert 'function renderRecipeIngredientRows(rows) {' in script
     assert 'function syncCalculationRowsFromRecipeRows() {' in script
     assert 'deleteComponentFromLibrary' in script
@@ -767,7 +793,8 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'function componentTagCatalog(items) {' in script
     assert 'function renderComponentTagFilterOptions(selectEl, items, activeTag) {' in script
     assert 'const tagFilterSelect = document.getElementById("libraryComponentsCategoryFilter");' in script
-    assert 'renderComponentTagFilterOptions(tagFilterSelect, _cachedLibraryComponents, activeTag);' in script
+    assert 'const components = getLibraryComponents();' in script
+    assert 'renderComponentTagFilterOptions(tagFilterSelect, components, activeTag);' in script
     assert 'const activeTag = currentComponentTagFilter();' in script
     assert 'const componentTags = componentTagValues(item);' in script
     assert 'return componentTags.includes(activeTag);' in script
@@ -794,30 +821,31 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'defineBuilderModalStateAccessor("pendingComponentCreateReturnTab");' in script
     assert 'defineBuilderModalStateAccessor("pendingComponentCreateComponentId");' in script
     assert 'function updateComponentDetailReturnAction() {' in script
-    add_component_handler_start = script.find('if (addComponentBtn) {')
-    add_component_handler_end = script.find('if (recipeCreateBtn) {')
-    assert add_component_handler_start != -1 and add_component_handler_end != -1 and add_component_handler_start < add_component_handler_end
-    add_component_handler_js = script[add_component_handler_start:add_component_handler_end]
-    assert 'setPendingComponentCreateForCurrentComposition();' in add_component_handler_js
-    assert 'closeModalById("addComponentModal");' in add_component_handler_js
-    assert 'hideResolveModalForComponentCreation();' in add_component_handler_js
-    assert 'openSimpleModal("componentCreateModal");' in add_component_handler_js
     assert 'await openComponentDetailEditor(createdComponentId);' in script
     assert 'await attachComponentToPendingComposition(createdComponentId);' not in script
     assert 'pendingComponentCreateComponentId = createdComponentId;' in script
     assert 'if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate)' in script
-    assert 'else if (createdComponentId && result.data.duplicate)' in script
-    assert 'clearPendingComponentCreateForComposition();' in add_component_handler_js or 'clearPendingComponentCreateForComposition();' in script
-    assert 'else if (createdComponentId) {' in script
+    assert 'isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);' in script
+    assert 'openComponentCreateModal: openBuilderComponentCreateModal,' in script
+    assert 'clearPendingComponentCreateForComposition();' in script
+    assert 'getCachedComponents: () => getComponentLibraryRuntime().getCachedComponents(),' in script
+    assert 'resolveComponentById: (componentId) => getComponentLibraryRuntime().resolveComponentById(componentId),' in script
+    assert 'getComponentLibraryRuntime().upsertCachedComponent(createdComponent);' in script
+    assert 'upsertCachedComponent: (component) => getComponentLibraryRuntime().upsertCachedComponent(component),' in script
+    assert '_cachedLibraryComponents' not in script
+    assert 'const categoryById = new Map();' in script
+    assert 'for (const component of getLibraryComponents()) {' in script
     # Dish return orchestration stays in builder.js; Component editor receives it as a callback.
     assert 'async function reopenPendingCompositionForReturn() {' in script
     assert 'clearPendingComponentCreateForComposition();' in script
     assert 'await loadLibrary();' in script
-    assert 'const freeDishCategoryEl = document.getElementById("freeDishCategory");' in script
-    assert 'const library_group = freeDishCategoryEl ? String(freeDishCategoryEl.value || "").trim() : "ovrigt";' in script
-    assert 'seed_components: false,' in script
-    assert 'openBuilderModalForComposition(result.data.composition, "components");' in script
-    assert 'freeDishCategoryEl.value = "ovrigt";' in script
+    assert 'function openBuilderDishCreateModal() {' in script
+    assert 'BuilderDishCreateModal.bind({});' in script
+    assert 'includeSeedComponents: true' in script
+    assert 'createEndpoint: "/api/builder/compositions"' in script or 'createEndpoint: "/api/builder/compositions",' in script
+    assert 'openBuilderModalForComposition(composition, "components");' in script
+    assert 'freeDishCategoryEl' not in script
+    assert 'seed_components: false,' not in script
     assert 'body: { composition_name },' not in script
     assert 'Create dish' not in script
     assert 'Dish creation' not in script
@@ -840,6 +868,26 @@ def test_builder_script_uses_clean_feedback_on_workspace_v1(client_admin) -> Non
     assert 'console.info("Builder UI version: foundation-v1");' in script
     assert 'setWorkspaceSurface("home");' in script
     assert 'function setWorkspaceSurface(surface)' in script
+
+
+def test_builder_component_library_runtime_contract(client_admin) -> None:
+    rv = client_admin.get("/static/js/builder_component_library_runtime.js")
+
+    assert rv.status_code == 200
+    script = rv.data.decode("utf-8")
+    assert 'globalThis.BuilderComponentLibraryRuntime = Object.freeze({' in script
+    assert 'function create(options) {' in script
+    assert "'/api/builder/components'" in script
+    assert 'const searchValue = getSearchValue().toLowerCase();' in script
+    assert "searchInputElement.addEventListener('input'" in script
+    assert "button.addEventListener('click', async () => {" in script
+    assert 'button.disabled = true;' in script
+    assert 'attachedIds.has(componentId)' in script
+    assert 'const attachResult = await handleAttach(componentId);' in script
+    assert 'async function handleAttach(componentId) {' in script
+    assert 'component-palette-pill-included' in script
+    assert 'No components match search' in script
+    assert 'No reusable components yet' in script
 
 
 def test_builder_component_editor_sets_category_on_every_open(client_admin) -> None:
@@ -905,10 +953,11 @@ def test_builder_legacy_modal_close_system_contract(client_admin) -> None:
     assert 'document.documentElement.classList.remove("modal-open", "modal-locked");' in script
 
     # Explicit close mappings for all legacy Done/Cancel controls.
-    assert 'closeModalById("addComponentModal");' in script
+    assert 'closeModalById("addComponentModal");' not in script
     assert 'closeModalById("importLibraryModal");' in script
-    assert 'closeModalById("componentCreateModal");' in script
-    assert 'closeModalById("quickCreateModal");' in script
+    assert 'closeModalById("componentCreateModal");' not in script
+    assert 'function openBuilderDishCreateModal() {' in script
+    assert 'includeSeedComponents: true' in script
     assert 'closeModalById("dishesLibraryModal");' in script
     assert 'closeModalById("importEditModal");' in script
     assert 'closeModalById("importInboxModal");' in script
@@ -920,6 +969,13 @@ def test_builder_legacy_modal_close_system_contract(client_admin) -> None:
     assert 'window.closeAllBuilderModals();' in script
 
     # ESC closes top visible modal and backdrop click closes owning modal.
+    click_block_start = script.find('document.addEventListener("click", (event) => {')
+    click_block_end = script.find('document.addEventListener("keydown", (event) => {', click_block_start)
+    assert click_block_start != -1 and click_block_end != -1 and click_block_start < click_block_end
+    click_block = script[click_block_start:click_block_end]
+    assert 'closeTopVisibleLegacyBuilderModal()' not in click_block
+    assert 'closeComponentActionPopoverOnly()' in click_block
+    assert 'closeDishComponentOverflowMenus()' in click_block
     assert 'function closeTopVisibleLegacyBuilderModal() {' in script
     assert 'if (event.key !== "Escape") {' in script
     assert 'const didClosePopover = closeComponentActionPopoverOnly();' in script

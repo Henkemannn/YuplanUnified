@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from .app_authz import require_roles
 from .builder import BuilderFlow
+from .builder.library_scope import ActorContext
 from .builder_menu_context_flow import BuilderMenuContextFlow
 from .builder_sqlite import (
     initialize_builder_sqlite,
@@ -589,10 +590,18 @@ def create_composition_from_row(menu_id: str):
         composition_name = _require_str(payload, "composition_name")
 
         flow = _get_menu_context_flow()
+        actor: ActorContext | None = None
+        try:
+            from .builder_api import _get_builder_actor
+
+            actor = _get_builder_actor()
+        except Exception:
+            actor = None
         composition, updated_menu_detail, warnings = flow.create_composition_from_unresolved_row(
             menu_id=str(menu_id),
             menu_detail_id=menu_detail_id,
             composition_name=composition_name,
+            actor=actor,
         )
     except ValueError as exc:
         return _bad_request(str(exc))

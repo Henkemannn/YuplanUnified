@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy import create_engine
 
+from core.admin_user_repo import AdminUserRepo
 from core.app_factory import create_app
 from core.db import get_session
+from core.offshore_demo_seed import DEMO_BUILDER_ADMIN_EMAIL
+from core.offshore_demo_seed import DEMO_BUILDER_ADMIN_FULL_NAME
+from core.offshore_demo_seed import DEMO_BUILDER_ADMIN_PASSWORD
+from core.offshore_demo_seed import DEMO_BUILDER_ADMIN_USERNAME
+from core.offshore_demo_seed import DEMO_TENANT_ID
+from core.offshore_demo_seed import _demo_builder_actor
 from modules.offshore2.work_menu import _service as work_menu_service
 from modules.offshore2.models import OffshoreWorkMenuDecision
 
@@ -71,19 +79,112 @@ def test_offshore_demo_seed_cli_creates_idempotent_demo_rows(tmp_path: Path) -> 
     assert second.exit_code == 0, second.output
 
     with app.app_context():
-        assert _count_rows("tenants", "id = :id", {"id": 9001}) == 1
-        assert _count_rows("sites", "id = :id AND tenant_id = :tenant_id", {"id": "demo-offshore", "tenant_id": 9001}) == 1
-        assert _count_rows("offshore_installation_settings", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
-        assert _count_rows("offshore_work_positions", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 3
-        assert _count_rows("offshore_menu_cycles", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
-        assert _count_rows("offshore_period_templates", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
-        assert _count_rows("offshore_work_periods", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
-        assert _count_rows("offshore_service_events", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
-        assert _count_rows("offshore_service_event_menu_contexts", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
-        assert _count_rows("offshore_work_menu_decisions", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 56
-        assert _count_rows("offshore_prep_tasks", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
-        assert _count_rows("commun_builder_menu_links", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
-        assert _count_rows("commun_builder_publication_pins", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
+        from core.db import get_session
+
+        db = get_session()
+        try:
+            demo_user_count = _count_rows("users", "tenant_id = :tenant_id AND lower(email) = lower(:email)", {"tenant_id": DEMO_TENANT_ID, "email": DEMO_BUILDER_ADMIN_EMAIL})
+            assert demo_user_count == 1
+            assert _count_rows("tenants", "id = :id", {"id": 9001}) == 1
+            assert _count_rows("sites", "id = :id AND tenant_id = :tenant_id", {"id": "demo-offshore", "tenant_id": 9001}) == 1
+            assert _count_rows("offshore_installation_settings", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
+            assert _count_rows("offshore_work_positions", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 3
+            assert _count_rows("offshore_menu_cycles", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
+            assert _count_rows("offshore_period_templates", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
+            assert _count_rows("offshore_work_periods", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 1
+            assert _count_rows("offshore_service_events", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
+            assert _count_rows("offshore_service_event_menu_contexts", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
+            assert _count_rows("offshore_work_menu_decisions", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 56
+            assert _count_rows("offshore_prep_tasks", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 14
+            assert _count_rows("commun_builder_menu_links", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
+            assert _count_rows("commun_builder_publication_pins", "tenant_id = :tenant_id AND site_id = :site_id", {"tenant_id": 9001, "site_id": "demo-offshore"}) == 4
+
+            builder_db_path = Path(app.config["BUILDER_DB_PATH"])
+            with sqlite3.connect(builder_db_path) as builder_db:
+                builder_db.row_factory = sqlite3.Row
+                component_scope_count = builder_db.execute(
+                    "SELECT COUNT(*) AS count FROM builder_object_scopes WHERE tenant_id = ? AND object_type = 'component'",
+                    (9001,),
+                ).fetchone()["count"]
+                composition_scope_count = builder_db.execute(
+                    "SELECT COUNT(*) AS count FROM builder_object_scopes WHERE tenant_id = ? AND object_type = 'composition'",
+                    (9001,),
+                ).fetchone()["count"]
+                assert int(component_scope_count or 0) > 0
+                assert int(composition_scope_count or 0) > 0
+
+                demo_component_row = builder_db.execute(
+                    "SELECT component_id FROM builder_components WHERE canonical_name = ? LIMIT 1",
+                    ("Demo Offshore Kött",),
+                ).fetchone()
+                assert demo_component_row is not None
+                assert (
+                    builder_db.execute(
+                        "SELECT COUNT(*) AS count FROM builder_object_scopes WHERE object_type = 'component' AND object_id = ? AND tenant_id = ? AND owner_scope = 'organisation' AND visibility = 'organisation'",
+                        (str(demo_component_row[0]), 9001),
+                    ).fetchone()["count"]
+                    == 1
+                )
+
+                demo_composition_row = builder_db.execute(
+                    "SELECT object_id FROM builder_object_scopes WHERE object_type = 'composition' AND tenant_id = ? ORDER BY object_id LIMIT 1",
+                    (9001,),
+                ).fetchone()
+                assert demo_composition_row is not None
+                assert (
+                    builder_db.execute(
+                        "SELECT COUNT(*) AS count FROM builder_object_scopes WHERE object_type = 'composition' AND object_id = ? AND tenant_id = ? AND owner_scope = 'organisation' AND visibility = 'organisation'",
+                        (str(demo_composition_row[0]), 9001),
+                    ).fetchone()["count"]
+                    == 1
+                )
+        finally:
+            db.close()
+
+    with app.app_context():
+        demo_user_count_after_second_run = _count_rows("users", "tenant_id = :tenant_id AND lower(email) = lower(:email)", {"tenant_id": DEMO_TENANT_ID, "email": DEMO_BUILDER_ADMIN_EMAIL})
+        assert demo_user_count_after_second_run == 1
+
+
+def test_demo_builder_actor_resolves_only_tenant_9001_demo_admin(tmp_path: Path) -> None:
+    app = _build_app(tmp_path)
+    runner = app.test_cli_runner()
+
+    result = runner.invoke(args=["offshore-demo-seed"])
+    assert result.exit_code == 0, result.output
+
+    with app.app_context():
+        db = get_session()
+        try:
+            demo_row = db.execute(
+                text("SELECT id, tenant_id, role, email, username, full_name FROM users WHERE tenant_id = :tenant_id AND lower(email) = lower(:email) LIMIT 1"),
+                {"tenant_id": DEMO_TENANT_ID, "email": DEMO_BUILDER_ADMIN_EMAIL},
+            ).fetchone()
+            assert demo_row is not None
+            assert int(demo_row[1]) == DEMO_TENANT_ID
+            assert str(demo_row[2]) == "admin"
+            assert str(demo_row[3]).lower() == DEMO_BUILDER_ADMIN_EMAIL
+            assert str(demo_row[4]) == DEMO_BUILDER_ADMIN_USERNAME
+            assert str(demo_row[5]) == DEMO_BUILDER_ADMIN_FULL_NAME
+
+            foreign_user_id = AdminUserRepo().create_user(
+                tenant_id=51,
+                username="tenant51-admin@example.local",
+                email="tenant51-admin@example.local",
+                password=DEMO_BUILDER_ADMIN_PASSWORD,
+                full_name="Tenant 51 Admin",
+                role="admin",
+                is_active=True,
+            )
+            assert foreign_user_id != int(demo_row[0])
+
+            actor = _demo_builder_actor()
+            assert actor.tenant_id == DEMO_TENANT_ID
+            assert actor.user_id == int(demo_row[0])
+            assert actor.role == "admin"
+            assert actor.site_id == "demo-offshore"
+        finally:
+            db.close()
 
 
 def test_offshore_demo_seed_cli_refuses_in_production(tmp_path: Path) -> None:

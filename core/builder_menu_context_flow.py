@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import logging
 
 from .builder import BuilderFlow
+from .builder.library_scope import ActorContext
 from .builder.declaration_readiness import (
     ComponentDeclarationReadiness,
     MenuDeclarationReadiness,
@@ -402,6 +403,8 @@ class BuilderMenuContextFlow:
         menu_id: str,
         menu_detail_id: str,
         composition_name: str,
+        *,
+        actor: ActorContext | None = None,
     ) -> tuple[Composition, MenuDetail, list[str]]:
         details = self._menu_service.list_menu_details(menu_id)
         match = next((detail for detail in details if detail.menu_detail_id == menu_detail_id), None)
@@ -413,13 +416,14 @@ class BuilderMenuContextFlow:
         if not unresolved_text:
             raise ValueError("unresolved row required")
 
-        composition = self._library_flow.create_composition_with_generated_id(composition_name=composition_name)
+        composition = self._library_flow.create_composition_with_generated_id(composition_name=composition_name, actor=actor)
 
         for suggestion in self._library_flow.suggest_components_from_text(unresolved_text):
             composition = self._library_flow.add_component_to_composition(
                 composition_id=composition.composition_id,
                 component_name=suggestion,
                 role="component",
+                actor=actor,
             )
 
         warnings: list[str] = []

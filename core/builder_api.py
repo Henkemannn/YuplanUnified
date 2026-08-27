@@ -530,9 +530,9 @@ def _run_library_import(
     return summary, metrics
 
 
-def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
+def _build_import_review_drafts(lines: list[str], *, actor: ActorContext | None = None) -> list[dict[str, Any]]:
     flow = _get_builder_flow()
-    actor = _get_builder_actor()
+    effective_actor = actor if actor is not None else _get_builder_actor()
     classified = classify_builder_import_lines(lines)
     drafts: list[dict[str, Any]] = []
     for index, item in enumerate(classified):
@@ -548,7 +548,7 @@ def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
             components = [{"name": name} for name in component_suggestions]
             suggested_tags = suggest_component_tags(normalized_name)
             for name in component_suggestions:
-                match = flow.match_component_name(name, actor=actor)
+                match = flow.match_component_name(name, actor=effective_actor)
                 if str(match.status or "") in {"exact_match", "alias_match", "possible_match"}:
                     hints.append(
                         {
@@ -582,12 +582,12 @@ def _build_import_review_drafts(lines: list[str]) -> list[dict[str, Any]]:
     return drafts
 
 
-def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
+def _publish_review_drafts(items: list[dict[str, Any]], *, actor: ActorContext | None = None) -> dict[str, Any]:
     flow = _get_builder_flow()
-    actor = _get_builder_actor()
+    effective_actor = actor if actor is not None else _get_builder_actor()
     known_component_ids = {
         str(component.component_id)
-        for component in flow.list_library_components(actor=actor)
+        for component in flow.list_library_components(actor=effective_actor)
         if str(component.component_id).strip()
     }
 
@@ -626,7 +626,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
             component = flow.create_standalone_component(
                 name,
                 category=_normalize_component_category(suggest_component_category(name)),
-                actor=actor,
+                actor=effective_actor,
             )
             if item_tags:
                 details = _load_component_details(component.component_id)
@@ -675,7 +675,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
                 composition_name=name,
                 library_group=None,
                 seed_components=False,
-                actor=actor,
+                actor=effective_actor,
             )
             created_composition_count += 1
             if source_text and sanitize_builder_import_text(source_text) != name:
@@ -710,7 +710,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
                 component = flow.create_standalone_component(
                     component_name,
                     category=_normalize_component_category(suggest_component_category(component_name)),
-                    actor=actor,
+                    actor=effective_actor,
                 )
                 component_tags = suggest_component_tags(component_name)
                 if component_tags:
@@ -733,7 +733,7 @@ def _publish_review_drafts(items: list[dict[str, Any]]) -> dict[str, Any]:
                     composition_id=composition.composition_id,
                     component_id=component.component_id,
                     role="component",
-                    actor=actor,
+                    actor=effective_actor,
                 )
 
         row_results.append(
@@ -1675,6 +1675,35 @@ def create_composition():
     return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
 
 
+@bp.post("/compositions/private")
+@require_roles("viewer", "editor", "admin", "superuser")
+def create_private_composition():
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        if actor is None:
+            return _unauthorized()
+        if "composition_id" in payload:
+            return _bad_request("composition_id is not allowed")
+        if "seed_components" in payload:
+            return _bad_request("seed_components is not allowed")
+        composition_name = _require_str(payload, "composition_name")
+        library_group = _require_dish_library_group(payload)
+        composition = flow.create_private_composition_with_generated_id(
+            composition_name=composition_name,
+            library_group=library_group,
+            actor=actor,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    return jsonify({"ok": True, "composition": _serialize_composition(composition)}), 201
+
+
 @bp.delete("/compositions/<composition_id>")
 @require_roles("editor", "admin", "superuser")
 def delete_composition(composition_id: str):
@@ -1819,6 +1848,35 @@ def create_component():
         return _bad_request(str(exc))
 
     return jsonify({"ok": True, "component": _serialize_component(component)}), 201
+
+
+@bp.post("/components/private")
+@require_roles("viewer", "editor", "admin", "superuser")
+def create_private_component():
+    payload = _require_json_object()
+    if isinstance(payload, tuple):
+        return payload
+
+    try:
+        flow = _get_builder_flow()
+        actor = _get_builder_actor()
+        if actor is None:
+            return _unauthorized()
+        component_name_value = _require_str(payload, "component_name")
+        result = flow.create_private_component(
+            component_name=component_name_value,
+            category=_optional_str(payload, "category"),
+            actor=actor,
+        )
+    except ValueError as exc:
+        return _bad_request(str(exc))
+
+    status_code = 200 if result.reused else 201
+    response_body = {"ok": True, "component": _serialize_component(result.component)}
+    if result.reused:
+        response_body["duplicate"] = True
+        response_body["message"] = f"Komponenten finns redan: {result.component.canonical_name}"
+    return jsonify(response_body), status_code
 
 
 @bp.patch("/components/<component_id>")

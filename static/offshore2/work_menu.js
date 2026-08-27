@@ -157,6 +157,7 @@
     let lastBuilderHostScrollY = window.scrollY || 0;
     let builderHostRuntimeReady = false;
     let pendingBuilderHostOpen = null;
+    let pendingBuilderHostCreate = null;
     let pickerActiveTrack = null;
     let pickerSelectedOption = '';
     let pickerActiveCategory = 'all';
@@ -343,7 +344,7 @@
       pickerConfirm.hidden = false;
       pickerConfirmText.textContent = 'Byt rätt?';
       if (pickerConfirmCurrent) {
-        pickerConfirmCurrent.textContent = `Nuvarande rätt: ${pickerActiveTrack ? (pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || '—') : '—'}`;
+        pickerConfirmCurrent.textContent = `Nuvarande rätt: ${pickerActiveTrack ? (pickerActiveTrack.dataset.effectiveTitle || pickerActiveTrack.dataset.publicTitle || '—') : '—'}`;
       }
       if (pickerConfirmSelected) {
         pickerConfirmSelected.textContent = `→ ${selected.label || 'Vald rätt'}`;
@@ -414,7 +415,7 @@
         pickerSearch.value = '';
       }
       if (pickerResetTitle) {
-        pickerResetTitle.textContent = pickerActiveTrack.dataset.publishedTitle || pickerActiveTrack.dataset.effectiveTitle || '';
+        pickerResetTitle.textContent = pickerActiveTrack.dataset.publicTitle || pickerActiveTrack.dataset.effectiveTitle || '';
       }
       if (picker) {
         picker.hidden = false;
@@ -528,6 +529,7 @@
       builderHost.classList.remove('offshore-work-menu-builder-host--ready');
       document.body.classList.remove('offshore-work-menu-builder-host-open');
       pendingBuilderHostOpen = null;
+      pendingBuilderHostCreate = null;
       window.scrollTo(lastBuilderHostScrollX, lastBuilderHostScrollY);
       if (lastBuilderHostActiveElement && typeof lastBuilderHostActiveElement.focus === 'function') {
         lastBuilderHostActiveElement.focus();
@@ -560,6 +562,21 @@
             source: 'offshore-work-menu',
             kind: hostKind,
             host_target_id: bridge.composition_id,
+          },
+        },
+        window.location.origin,
+      );
+    }
+
+    function postBuilderHostCreateComposition() {
+      if (!builderHostFrame || !builderHostFrame.contentWindow || !lastBuilderBridge) {
+        return;
+      }
+      builderHostFrame.contentWindow.postMessage(
+        {
+          type: 'builder-host-create-composition',
+          detail: {
+            source: 'offshore-work-menu',
           },
         },
         window.location.origin,
@@ -614,6 +631,46 @@
         return false;
       }
       return openBuilderHost(bridge);
+    }
+
+    function openBuilderHostForCreate(trackButton) {
+      const trackCard = getTrackCard(trackButton);
+      if (!trackCard) {
+        return false;
+      }
+      const rawBridge = trackCard.dataset.builderBridge || '';
+      if (!rawBridge) {
+        return false;
+      }
+      let bridge = null;
+      try {
+        bridge = JSON.parse(rawBridge);
+      } catch (error) {
+        return false;
+      }
+      if (!bridge || !bridge.builder_url) {
+        return false;
+      }
+      lastBuilderHostActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      lastBuilderBridge = bridge;
+      lastBuilderHostKind = 'create-composition';
+      lastBuilderHostScrollX = window.scrollX || 0;
+      lastBuilderHostScrollY = window.scrollY || 0;
+      if (builderHostTitle) {
+        builderHostTitle.textContent = 'Skapa rätt';
+      }
+      builderHost.hidden = false;
+      builderHost.setAttribute('aria-hidden', 'false');
+      builderHost.classList.add('offshore-work-menu-builder-host--open');
+      builderHost.classList.remove('offshore-work-menu-builder-host--ready');
+      document.body.classList.add('offshore-work-menu-builder-host-open');
+      pendingBuilderHostCreate = { bridge };
+      if (builderHostRuntimeReady) {
+        postBuilderHostCreateComposition();
+      } else {
+        postBuilderHostPing();
+      }
+      return true;
     }
 
     function syncModalFields(trackButton) {
@@ -981,6 +1038,10 @@
     if (pickerCreateNew) {
       pickerCreateNew.addEventListener('click', (event) => {
         event.preventDefault();
+        if (!pickerActiveTrack) {
+          return;
+        }
+        openBuilderHostForCreate(pickerActiveTrack);
       });
     }
 
@@ -1012,7 +1073,39 @@
         builderHostRuntimeReady = true;
         if (pendingBuilderHostOpen) {
           postBuilderHostOpen(pendingBuilderHostOpen.bridge, pendingBuilderHostOpen.hostKind);
+        } else if (pendingBuilderHostCreate) {
+          postBuilderHostCreateComposition();
         }
+        return;
+      }
+      if (payload.type === 'builder-host-created-composition-ready') {
+        if (lastBuilderHostKind !== 'create-composition') {
+          return;
+        }
+        const created = detail && detail.composition;
+        if (!created || !created.composition_id) {
+          return;
+        }
+        const option = {
+          value: created.composition_id,
+          label: created.composition_name || created.composition_id,
+          library_group: created.library_group || 'ovrigt',
+        };
+        const existingIndex = compositionOptions.findIndex((entry) => String(entry.value) === String(option.value));
+        if (existingIndex >= 0) {
+          compositionOptions[existingIndex] = option;
+        } else {
+          compositionOptions.unshift(option);
+        }
+        pickerSelectedOption = String(option.value);
+        if (builderField) {
+          builderField.value = String(option.value);
+        }
+        renderPickerCategories();
+        renderPickerResults();
+        updatePickerConfirm();
+        setPickerViewMode('confirm');
+        pendingBuilderHostCreate = null;
         return;
       }
       if (!builderHost || builderHost.hidden) {
@@ -1022,11 +1115,20 @@
         return;
       }
       if (payload.type === 'builder-host-ready') {
-        if (String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
-          return;
-        }
-        if (String(detail.kind || '') !== lastBuilderHostKind) {
-          return;
+        if (lastBuilderHostKind === 'create-composition') {
+          if (String(detail.host_target_id || '') !== 'create-composition') {
+            return;
+          }
+          if (String(detail.kind || '') !== 'create-composition') {
+            return;
+          }
+        } else {
+          if (String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
+            return;
+          }
+          if (String(detail.kind || '') !== lastBuilderHostKind) {
+            return;
+          }
         }
         builderHost.classList.add('offshore-work-menu-builder-host--ready');
         if (builderHostFrame) {
@@ -1041,11 +1143,14 @@
       if (payload.type !== 'builder-host-close') {
         return;
       }
-      if (String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
+      if (lastBuilderHostKind !== 'create-composition' && String(detail.host_target_id || '') !== String(lastBuilderBridge.composition_id || '')) {
         return;
       }
-      if (String(detail.kind || '') !== lastBuilderHostKind) {
+      if (lastBuilderHostKind !== 'create-composition' && String(detail.kind || '') !== lastBuilderHostKind) {
         return;
+      }
+      if (lastBuilderHostKind === 'create-composition') {
+        pendingBuilderHostCreate = null;
       }
       closeBuilderHost();
     });

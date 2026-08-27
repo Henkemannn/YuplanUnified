@@ -117,7 +117,6 @@ const COMPONENT_RAIL_CATEGORY_OPTIONS = ["main", "side", "sauce", "dessert", "ov
 const COMPONENT_DEFAULT_LIBRARY_CATEGORIES = COMPONENT_RAIL_CATEGORY_OPTIONS;
 
 let _lastImportSession = null;
-let _cachedLibraryComponents = [];
 let _cachedLibraryCompositions = [];
 let _recentComponentIds = [];
 let _recentCompositionIds = [];
@@ -1925,6 +1924,8 @@ const DISH_LIBRARY_GROUPS = [
 
 let _dishCategoryFilter = "all";
 
+const normalizeCategoryThemeValue = BuilderComponentTheme.normalizeCategoryThemeValue;
+
 function normalizeDishCategoryKey(value) {
   const folded = normalizeCategoryThemeValue(value).replace(/[^a-z0-9]+/g, "");
   if (!folded) {
@@ -2192,7 +2193,7 @@ function computeComponentCategoryCounts() {
     ovrigt: 0,
   };
 
-  for (const item of _cachedLibraryComponents || []) {
+  for (const item of getLibraryComponents()) {
     counts.all += 1;
     const category = componentCategoryValue(item);
     if (COMPONENT_RAIL_CATEGORY_OPTIONS.includes(category)) {
@@ -2326,10 +2327,11 @@ function applyComponentLibraryFilter(query) {
   const q = String(query || "").trim().toLowerCase();
   const activeFilter = currentComponentCategoryFilter();
   const activeTag = currentComponentTagFilter();
-  renderComponentCategoryFilters(categoryNav, _cachedLibraryComponents, activeFilter);
-  renderComponentTagFilterOptions(tagFilterSelect, _cachedLibraryComponents, activeTag);
+  const components = getLibraryComponents();
+  renderComponentCategoryFilters(categoryNav, components, activeFilter);
+  renderComponentTagFilterOptions(tagFilterSelect, components, activeTag);
 
-  const searchFiltered = (_cachedLibraryComponents || []).filter((item) => componentMatchesSearch(item, q));
+  const searchFiltered = components.filter((item) => componentMatchesSearch(item, q));
   const categoryFiltered = searchFiltered.filter((item) => {
     if (activeFilter === "all") {
       return true;
@@ -2346,7 +2348,7 @@ function applyComponentLibraryFilter(query) {
 
   grid.innerHTML = "";
 
-  if (filtered.length === 0 && _cachedLibraryComponents.length > 0) {
+  if (filtered.length === 0 && components.length > 0) {
     const noMatch = document.createElement("div");
     noMatch.className = "workspace-library-hint workspace-library-empty-state";
     const message = document.createElement("p");
@@ -2418,7 +2420,7 @@ async function setComponentCategory(componentId, category) {
     return;
   }
   const categoryValue = String(category || "").trim().toLowerCase();
-  const target = (_cachedLibraryComponents || []).find((item) => String(item.component_id || "") === idValue);
+  const target = getLibraryComponents().find((item) => String(item.component_id || "") === idValue);
   const previousCategory = target ? componentCategoryValue(target) : "";
   if (target) {
     target.category = categoryValue || "";
@@ -2448,7 +2450,12 @@ async function setComponentCategory(componentId, category) {
     window.alert(message);
     return;
   }
-  await loadLibrary();
+  const updatedComponent = (result && result.data && result.data.component) || {
+    ...target,
+    component_id: idValue,
+    category: categoryValue || null,
+  };
+  getComponentLibraryRuntime().upsertCachedComponent(updatedComponent);
   const search = document.getElementById("libraryComponentsSearch");
   const query = search ? String(search.value || "") : "";
   filterLibraryComponents(query);
@@ -2505,11 +2512,18 @@ async function saveInlineComponentEdit(componentId) {
     return;
   }
 
-  const target = (_cachedLibraryComponents || []).find((entry) => String(entry.component_id || "") === idValue);
+  const target = getLibraryComponents().find((entry) => String(entry.component_id || "") === idValue);
   if (target) {
     target.component_name = nextName;
     target.category = nextCategory || "";
   }
+  const updatedComponent = (result && result.data && result.data.component) || {
+    ...target,
+    component_id: idValue,
+    component_name: nextName,
+    category: nextCategory || null,
+  };
+  getComponentLibraryRuntime().upsertCachedComponent(updatedComponent);
   _componentInlineEditId = "";
   _componentActionPopoverId = "";
   updateComponentCategoryChipCounts();
@@ -2677,11 +2691,9 @@ function renderLibrary(result) {
   }
 
   const data = (result && result.data) || {};
-  const components = Array.isArray(data.components) ? data.components : [];
+  const components = getLibraryComponents();
   const compositions = Array.isArray(data.compositions) ? data.compositions : [];
   _lastLibraryResult = result || null;
-
-  _cachedLibraryComponents = components;
   _cachedLibraryCompositions = compositions;
   updateComponentCategoryChipCounts();
 
@@ -2838,7 +2850,7 @@ function deriveDishCategoryKey(components) {
   }
 
   const categoryById = new Map();
-  for (const component of _cachedLibraryComponents || []) {
+  for (const component of getLibraryComponents()) {
     categoryById.set(String(component.component_id || ""), componentCategoryValue(component));
   }
 
@@ -2949,14 +2961,18 @@ async function openCompositionFromLibrary(compositionId) {
 async function loadLibrary() {
   const previousComponentIds = captureCurrentComponentIds();
   const previousCompositionIds = captureCurrentCompositionIds();
-  const result = await callApi("/api/builder/library", { method: "GET" });
+  const runtime = getComponentLibraryRuntime();
+  const [result] = await Promise.all([
+    callApi("/api/builder/library", { method: "GET" }),
+    runtime.loadAllComponents(),
+  ]);
   renderLibrary(result);
   updateRecentComponentsFromSnapshot(previousComponentIds);
   updateRecentCompositionsFromSnapshot(previousCompositionIds);
   await refreshWorkspaceOverviewCounts(result);
 }
 
-let reusableComponentsCache = [];
+let componentLibraryRuntime = null;
 let draggedComponentEntryKey = null;
 let pendingAddedPulseComponentId = null;
 let pendingSelectedPulseComponentId = null;
@@ -3692,34 +3708,7 @@ function findCachedComponentById(componentId) {
   if (!idValue) {
     return null;
   }
-  for (const item of _cachedLibraryComponents) {
-    if (String(item.component_id || "") === idValue) {
-      return item;
-    }
-  }
-  return null;
-}
-
-function upsertCachedLibraryComponent(component) {
-  const incoming = component && typeof component === "object" ? component : null;
-  if (!incoming) {
-    return null;
-  }
-  const componentId = String(incoming.component_id || "").trim();
-  if (!componentId) {
-    return null;
-  }
-
-  let target = findCachedComponentById(componentId);
-  if (!target) {
-    target = { component_id: componentId };
-    _cachedLibraryComponents = _cachedLibraryComponents.concat([target]);
-    if (_lastLibraryResult && _lastLibraryResult.data && Array.isArray(_lastLibraryResult.data.components)) {
-      _lastLibraryResult.data.components = _lastLibraryResult.data.components.concat([target]);
-    }
-  }
-  Object.assign(target, incoming, { component_id: componentId });
-  return target;
+  return getLibraryComponents().find((item) => String(item.component_id || "") === idValue) || null;
 }
 
 function traceCompositionRenderContext(composition, sourceLabel) {
@@ -4127,90 +4116,48 @@ function renderExistingComponentSuggestions(components) {
 }
 
 function renderComponentPalette() {
-  const palette = document.getElementById("builderComponentPalette");
-  const searchInput = document.getElementById("builderPaletteSearch");
-  if (!palette) {
-    return;
+  getComponentLibraryRuntime().renderPalette();
+}
+
+function getComponentLibraryRuntime() {
+  if (componentLibraryRuntime) {
+    return componentLibraryRuntime;
   }
 
-  palette.innerHTML = "";
-  const composition = currentBuilderComposition;
-  const components = Array.isArray(reusableComponentsCache) ? reusableComponentsCache : [];
+  const runtime = BuilderComponentLibraryRuntime.create({
+    callApi,
+    getCurrentComposition: () => currentBuilderComposition,
+    attachComponent: (componentId) => attachExistingComponentToCurrentComposition(componentId),
+  });
+  runtime.bindPalette({
+    paletteElement: document.getElementById("builderComponentPalette"),
+    searchInputElement: document.getElementById("builderPaletteSearch"),
+  });
+  componentLibraryRuntime = runtime;
+  return componentLibraryRuntime;
+}
 
-  if (!composition || components.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "component-palette-empty";
-    empty.textContent = "No reusable components yet";
-    palette.appendChild(empty);
-    return;
-  }
-
-  const searchValue = searchInput ? String(searchInput.value || "").trim().toLowerCase() : "";
-  const existingIds = new Set(
-    (Array.isArray(composition.components) ? composition.components : []).map((item) =>
-      String(item.component_id || ""),
-    ),
-  );
-
-  let renderedCount = 0;
-
-  for (const component of components) {
-    const componentId = String(component.component_id || "");
-    const componentName = String(component.component_name || componentId || "");
-    if (searchValue && !componentName.toLowerCase().includes(searchValue)) {
-      continue;
-    }
-    const isAlreadyIncluded = existingIds.has(componentId);
-    const hasPrimaryRecipe = Boolean(String(component.primary_recipe_id || "").trim());
-
-    const pill = document.createElement("button");
-    pill.type = "button";
-    pill.className = "component-palette-pill";
-    pill.textContent = componentName;
-    pill.title = isAlreadyIncluded ? "Already included in this dish" : "Add component to dish";
-    if (hasPrimaryRecipe) {
-      pill.classList.add("component-palette-pill-has-data");
-    }
-    if (isAlreadyIncluded) {
-      pill.classList.add("component-palette-pill-included");
-      pill.disabled = true;
-    } else {
-      pill.addEventListener("click", async () => {
-        pill.classList.add("component-palette-pill-pick");
-        setTimeout(() => {
-          pill.classList.remove("component-palette-pill-pick");
-        }, 260);
-        await attachExistingComponentToCurrentComposition(componentId);
-      });
-    }
-
-    palette.appendChild(pill);
-    renderedCount += 1;
-  }
-
-  if (renderedCount === 0) {
-    const empty = document.createElement("div");
-    empty.className = "component-palette-empty";
-    empty.textContent = searchValue ? "No components match search" : "No reusable components yet";
-    palette.appendChild(empty);
-  }
+function getLibraryComponents() {
+  return getComponentLibraryRuntime().getCachedComponents();
 }
 
 async function loadReusableComponents(query) {
-  const queryValue = String(query || "").trim();
-  let url = "/api/builder/components";
-  if (queryValue) {
-    url += "?q=" + encodeURIComponent(queryValue);
-  }
-
-  const result = await callApi(url, { method: "GET" });
-  const items = (result && result.data && result.data.components) || [];
-  reusableComponentsCache = Array.isArray(items) ? items : [];
-  renderExistingComponentSuggestions(reusableComponentsCache);
+  const runtime = getComponentLibraryRuntime();
+  await runtime.loadAllComponents();
+  const queryValue = String(query || "").trim().toLowerCase();
+  const items = runtime.getCachedComponents();
+  const filteredItems = queryValue
+    ? items.filter((item) => {
+        const componentName = String(item.component_name || item.canonical_name || item.component_id || "").toLowerCase();
+        const componentId = String(item.component_id || "").toLowerCase();
+        return componentName.includes(queryValue) || componentId.includes(queryValue);
+      })
+    : items;
+  renderExistingComponentSuggestions(filteredItems);
   if (_builderModalController) {
     _builderModalController.onReusableComponentsRefreshed();
   } else {
-    renderComponentPalette();
+    runtime.renderPalette();
   }
 }
 
@@ -4565,16 +4512,64 @@ function openBuilderModalForComposition(composition, initialTab = "overview") {
   });
 }
 
-function closeResolveModal() {
-  currentDishAllergenSummaryToken += 1;
-  currentDishCalculationSummaryToken += 1;
-  closeDishComponentOverflowMenus();
-  closeModalById("resolveModal");
-  currentBuilderComposition = null;
-  currentBuilderDishTab = "overview";
+function openBuilderDishCreateModal() {
+  const createController = globalThis.BuilderDishCreateModal;
+  if (createController && typeof createController.open === "function") {
+    createController.open({
+      title: "Skapa rätt",
+      createEndpoint: "/api/builder/compositions",
+      includeSeedComponents: true,
+      onSuccess: async (composition) => {
+        closeSimpleModal("dishesLibraryModal");
+        openBuilderModalForComposition(composition, "components");
+        await loadLibrary();
+      },
+    });
+    return;
+  }
+  openSimpleModal("quickCreateModal");
+  const input = document.getElementById("freeDishName");
+  if (input) {
+    input.focus();
+  }
 }
 
-function hideResolveModalForComponentCreation() {
+function openBuilderComponentCreateModal() {
+  const createController = globalThis.BuilderComponentCreateModal;
+  if (createController && typeof createController.open === "function") {
+    createController.open({
+      title: "Create component",
+      createEndpoint: "/api/builder/components",
+      onSuccess: async (createdComponent, result) => {
+        const createdComponentId = String((createdComponent && createdComponent.component_id) || "").trim();
+        const isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);
+        if (createdComponent) {
+          getComponentLibraryRuntime().upsertCachedComponent(createdComponent);
+        }
+        updateComponentCategoryChipCounts();
+        filterLibraryComponents(currentComponentSearchQuery());
+        if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate) {
+          pendingComponentCreateComponentId = createdComponentId;
+          await openComponentDetailEditor(createdComponentId);
+        } else if (createdComponentId && isDuplicateCreate) {
+          clearPendingComponentCreateForComposition();
+          setWorkspaceSurface("components");
+          await openComponentDetailEditor(createdComponentId);
+        } else if (createdComponentId) {
+          await openComponentDetailEditor(createdComponentId);
+        }
+      },
+    });
+    return;
+  }
+  openSimpleModal("componentCreateModal");
+  const input = document.getElementById("freeComponentName");
+  if (input) {
+    input.focus();
+  }
+}
+
+function closeResolveModal() {
   currentDishAllergenSummaryToken += 1;
   currentDishCalculationSummaryToken += 1;
   closeDishComponentOverflowMenus();
@@ -4951,7 +4946,7 @@ async function createStructuredMenusFromImport(groupedMenu, summary) {
 }
 
 function captureCurrentComponentIds() {
-  return new Set((_cachedLibraryComponents || []).map((item) => String(item.component_id || "")));
+  return new Set(getLibraryComponents().map((item) => String(item.component_id || "")));
 }
 
 function captureCurrentCompositionIds() {
@@ -4960,7 +4955,7 @@ function captureCurrentCompositionIds() {
 
 function updateRecentComponentsFromSnapshot(previousSet) {
   const before = previousSet instanceof Set ? previousSet : new Set();
-  const now = (_cachedLibraryComponents || []).map((item) => String(item.component_id || ""));
+  const now = getLibraryComponents().map((item) => String(item.component_id || ""));
   _recentComponentIds = now.filter((id) => id && !before.has(id));
 }
 
@@ -5017,19 +5012,14 @@ function bindBuilderHandlers() {
   const componentsBackHomeBtn = document.getElementById("componentsBackHomeBtn");
   const dishesBackHomeBtn = document.getElementById("dishesBackHomeBtn");
   const openNewDishFromDishesViewBtn = document.getElementById("openNewDishFromDishesViewBtn");
-  const componentCreateModalCloseBtn = document.getElementById("componentCreateModalClose");
   const openNewDishModalBtn = document.getElementById("openNewDishModalBtn");
   const dishesLibraryModalCloseBtn = document.getElementById("dishesLibraryModalClose");
-  const quickCreateModalCloseBtn = document.getElementById("quickCreateModalClose");
   const importLibraryModalCloseBtn = document.getElementById("importLibraryModalClose");
-  const openAddComponentModalBtn = document.getElementById("openAddComponentModalBtn");
-  const addComponentModalCloseBtn = document.getElementById("addComponentModalClose");
   const createDishBtn = document.getElementById("btnCreateDish");
   const createComponentBtn = document.getElementById("btnCreateComponent");
   const importLibraryBtn = document.getElementById("btnImportLibrary");
   const importLibraryPreviewBtn = document.getElementById("btnImportLibraryPreview");
   const resolveCancelBtn = document.getElementById("resolveCancel");
-  const addComponentBtn = document.getElementById("btnAddComponent");
   const paletteSearchInput = document.getElementById("builderPaletteSearch");
   const newComponentInput = document.getElementById("newComponentName");
   const importFilePreviewBtn = document.getElementById("btnImportFilePreview");
@@ -5073,6 +5063,30 @@ function bindBuilderHandlers() {
   const componentDetailCalcSyncRowsBtn = document.getElementById("componentDetailCalcSyncRows");
   const componentDetailTabs = document.getElementById("componentDetailTabs");
 
+  if (dishesLibraryModalCloseBtn) {
+    dishesLibraryModalCloseBtn.addEventListener("click", () => {
+      closeModalById("dishesLibraryModal");
+    });
+  }
+
+  if (importLibraryModalCloseBtn) {
+    importLibraryModalCloseBtn.addEventListener("click", () => {
+      closeModalById("importLibraryModal");
+    });
+  }
+
+  if (importInboxModalClose) {
+    importInboxModalClose.addEventListener("click", () => {
+      closeModalById("importInboxModal");
+    });
+  }
+
+  if (importEditModalCloseBtn) {
+    importEditModalCloseBtn.addEventListener("click", () => {
+      closeModalById("importEditModal");
+    });
+  }
+
   _componentDetailTagsDraft = [];
 
   window.closeAllBuilderModals = function () {
@@ -5087,6 +5101,14 @@ function bindBuilderHandlers() {
   };
 
   window.closeAllBuilderModals();
+
+  document.querySelectorAll(".modal").forEach((modal) => {
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal && modal.id) {
+        closeModalById(modal.id);
+      }
+    });
+  });
 
   function resetGlobalModalSafetyState() {
     document.body.classList.remove("modal-open", "modal-locked");
@@ -5117,10 +5139,10 @@ function bindBuilderHandlers() {
     initialState: _builderModalShadowState,
     callApi: callApi,
     loadCompositionTextPreviewForCurrentComposition: loadCompositionTextPreviewForCurrentComposition,
-    getCachedComponents: () => _cachedLibraryComponents,
+    getCachedComponents: () => getComponentLibraryRuntime().getCachedComponents(),
     getCachedCompositions: () => _cachedLibraryCompositions,
-    resolveComponentById: (componentId) => findCachedComponentById(componentId),
-    upsertCachedComponent: upsertCachedLibraryComponent,
+    resolveComponentById: (componentId) => getComponentLibraryRuntime().resolveComponentById(componentId),
+    upsertCachedComponent: (component) => getComponentLibraryRuntime().upsertCachedComponent(component),
     renderComponentPalette: renderComponentPalette,
     showLoading: showLoading,
     showJson: showJson,
@@ -5129,6 +5151,7 @@ function bindBuilderHandlers() {
     reopenPendingCompositionForReturn: reopenPendingCompositionForReturn,
     attachExistingComponentToCurrentComposition: attachExistingComponentToCurrentComposition,
     clearPendingComponentCreateForComposition: clearPendingComponentCreateForComposition,
+    openComponentCreateModal: openBuilderComponentCreateModal,
     componentEditorFactory: createBuilderComponentEditor,
   });
   // ─────────────────────────────────────────────────────────────────────────
@@ -5310,21 +5333,17 @@ function bindBuilderHandlers() {
   if (openComponentCreateModalBtn) {
     openComponentCreateModalBtn.addEventListener("click", () => {
       clearPendingComponentCreateForComposition();
-      openSimpleModal("componentCreateModal");
-      const freeComponentNameEl = document.getElementById("freeComponentName");
-      if (freeComponentNameEl) {
-        freeComponentNameEl.focus();
-      }
+      openBuilderComponentCreateModal();
     });
+  }
+
+  if (globalThis.BuilderDishCreateModal && typeof globalThis.BuilderDishCreateModal.bind === "function") {
+    globalThis.BuilderDishCreateModal.bind({});
   }
 
   if (primaryCreateDishBtn) {
     primaryCreateDishBtn.addEventListener("click", () => {
-      openSimpleModal("quickCreateModal");
-      const freeDishNameEl = document.getElementById("freeDishName");
-      if (freeDishNameEl) {
-        freeDishNameEl.focus();
-      }
+      openBuilderDishCreateModal();
     });
   }
 
@@ -5338,11 +5357,7 @@ function bindBuilderHandlers() {
   if (homeActionCreateComponentBtn) {
     homeActionCreateComponentBtn.addEventListener("click", () => {
       clearPendingComponentCreateForComposition();
-      openSimpleModal("componentCreateModal");
-      const freeComponentNameEl = document.getElementById("freeComponentName");
-      if (freeComponentNameEl) {
-        freeComponentNameEl.focus();
-      }
+      openBuilderComponentCreateModal();
     });
   }
 
@@ -5363,13 +5378,6 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (componentCreateModalCloseBtn) {
-    componentCreateModalCloseBtn.addEventListener("click", () => {
-      clearPendingComponentCreateForComposition();
-      closeModalById("componentCreateModal");
-    });
-  }
-
   if (openImportsViewBtn) {
     openImportsViewBtn.addEventListener("click", () => {
       openSimpleModal("importInboxModal");
@@ -5379,11 +5387,7 @@ function bindBuilderHandlers() {
 
   if (openNewDishFromDishesViewBtn) {
     openNewDishFromDishesViewBtn.addEventListener("click", () => {
-      openSimpleModal("quickCreateModal");
-      const freeDishNameEl = document.getElementById("freeDishName");
-      if (freeDishNameEl) {
-        freeDishNameEl.focus();
-      }
+      openBuilderDishCreateModal();
     });
   }
 
@@ -5424,95 +5428,7 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (openNewDishModalBtn) {
-    openNewDishModalBtn.addEventListener("click", () => {
-      openSimpleModal("quickCreateModal");
-      const freeDishNameEl = document.getElementById("freeDishName");
-      if (freeDishNameEl) {
-        freeDishNameEl.focus();
-      }
-    });
-  }
-
-  if (importInboxModalClose) {
-    importInboxModalClose.addEventListener("click", () => {
-      closeModalById("importInboxModal");
-    });
-  }
-
-  if (importEditModalCloseBtn) {
-    importEditModalCloseBtn.addEventListener("click", () => {
-      closeModalById("importEditModal");
-    });
-  }
-
-  if (btnImportEditSave) {
-    btnImportEditSave.addEventListener("click", async () => {
-      await saveImportEditModal();
-    });
-  }
-
-  if (dishesLibraryModalCloseBtn) {
-    dishesLibraryModalCloseBtn.addEventListener("click", () => {
-      closeModalById("dishesLibraryModal");
-    });
-  }
-
-  if (quickCreateModalCloseBtn) {
-    quickCreateModalCloseBtn.addEventListener("click", () => {
-      closeModalById("quickCreateModal");
-    });
-  }
-
-  if (importLibraryModalCloseBtn) {
-    importLibraryModalCloseBtn.addEventListener("click", () => {
-      closeModalById("importLibraryModal");
-    });
-  }
-
-  if (openAddComponentModalBtn) {
-    openAddComponentModalBtn.addEventListener("click", () => {
-      openSimpleModal("addComponentModal");
-      const paletteSearch = document.getElementById("builderPaletteSearch");
-      if (paletteSearch) {
-        paletteSearch.focus();
-      }
-    });
-  }
-
-
-
-
-
-
-
-
-
-  if (addComponentModalCloseBtn) {
-    addComponentModalCloseBtn.addEventListener("click", () => {
-      clearPendingComponentCreateForComposition();
-      closeModalById("addComponentModal");
-    });
-  }
-
-
-
-  document.querySelectorAll(".modal").forEach((modal) => {
-    modal.addEventListener("click", async (event) => {
-      if (event.target === modal && modal.id) {
-        if (modal.id === "componentDetailEditorModal") {
-          await closeComponentDetailEditor();
-          return;
-        }
-        closeModalById(modal.id);
-      }
-    });
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") {
-      return;
-    }
+  document.addEventListener("click", (event) => {
     const didCloseDishOverflow = closeDishComponentOverflowMenus();
     if (didCloseDishOverflow) {
       event.preventDefault();
@@ -5523,100 +5439,17 @@ function bindBuilderHandlers() {
       event.preventDefault();
       return;
     }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+      return;
+    }
     const didClose = closeTopVisibleLegacyBuilderModal();
     if (didClose) {
       event.preventDefault();
     }
   });
-
-  if (createDishBtn) {
-    createDishBtn.addEventListener("click", async () => {
-      const freeDishNameEl = document.getElementById("freeDishName");
-      const freeDishCategoryEl = document.getElementById("freeDishCategory");
-      const composition_name = freeDishNameEl ? String(freeDishNameEl.value || "").trim() : "";
-      const library_group = freeDishCategoryEl ? String(freeDishCategoryEl.value || "").trim() : "ovrigt";
-      if (!composition_name) {
-        showJson("createDishOut", { status: 0, data: { ok: false, error: "dish name is required" } });
-        return;
-      }
-
-      showLoading("createDishOut");
-      try {
-        const result = await callApi("/api/builder/compositions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: {
-            composition_name,
-            library_group,
-            seed_components: false,
-          },
-        });
-        showJson("createDishOut", result);
-        if (result && result.data && result.data.ok && result.data.composition) {
-          closeSimpleModal("dishesLibraryModal");
-          closeSimpleModal("quickCreateModal");
-          openBuilderModalForComposition(result.data.composition, "components");
-          if (freeDishNameEl) {
-            freeDishNameEl.value = "";
-          }
-          if (freeDishCategoryEl) {
-            freeDishCategoryEl.value = "ovrigt";
-          }
-          await loadLibrary();
-        }
-      } catch (error) {
-        showJson("createDishOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
-      }
-    });
-  }
-
-  if (createComponentBtn) {
-    createComponentBtn.addEventListener("click", async () => {
-      const freeComponentNameEl = document.getElementById("freeComponentName");
-      const component_name = freeComponentNameEl ? String(freeComponentNameEl.value || "").trim() : "";
-      if (!component_name) {
-        showJson("createComponentOut", { status: 0, data: { ok: false, error: "component name is required" } });
-        return;
-      }
-
-      showLoading("createComponentOut");
-      try {
-        const result = await callApi("/api/builder/components", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: { component_name },
-        });
-        showJson("createComponentOut", result);
-        if (result && result.data && result.data.ok) {
-          const createdComponent = ((result || {}).data || {}).component || null;
-          const createdComponentId = String((createdComponent && createdComponent.component_id) || "").trim();
-          const isDuplicateCreate = Boolean(result && result.data && result.data.duplicate);
-          closeSimpleModal("componentCreateModal");
-          if (freeComponentNameEl) {
-            freeComponentNameEl.value = "";
-          }
-          if (createdComponent) {
-            upsertCachedLibraryComponent(createdComponent);
-          }
-          updateComponentCategoryChipCounts();
-          filterLibraryComponents(currentComponentSearchQuery());
-          if (createdComponentId && pendingComponentCreateForCompositionId && !isDuplicateCreate) {
-            pendingComponentCreateComponentId = createdComponentId;
-            await openComponentDetailEditor(createdComponentId);
-          } else if (createdComponentId && result.data.duplicate) {
-            clearPendingComponentCreateForComposition();
-            setWorkspaceSurface("components");
-            await openComponentDetailEditor(createdComponentId);
-          } else if (createdComponentId) {
-            await openComponentDetailEditor(createdComponentId);
-          }
-        }
-      } catch (error) {
-        clearPendingComponentCreateForComposition();
-        showJson("createComponentOut", { status: 0, data: { ok: false, error: String(error.message || error) } });
-      }
-    });
-  }
 
   if (importLibraryBtn) {
     importLibraryBtn.addEventListener("click", async () => {
@@ -5960,28 +5793,6 @@ function bindBuilderHandlers() {
     });
   }
 
-  if (paletteSearchInput) {
-    paletteSearchInput.addEventListener("input", () => {
-      renderComponentPalette();
-    });
-  }
-
-  if (addComponentBtn) {
-    addComponentBtn.addEventListener("click", async () => {
-      if (!currentBuilderComposition || !currentBuilderComposition.composition_id) {
-        showJson("builderOut", { status: 0, data: { ok: false, error: "no_composition_selected" } });
-        return;
-      }
-      setPendingComponentCreateForCurrentComposition();
-      closeModalById("addComponentModal");
-      hideResolveModalForComponentCreation();
-      openSimpleModal("componentCreateModal");
-      const freeComponentNameEl = document.getElementById("freeComponentName");
-      if (freeComponentNameEl) {
-        freeComponentNameEl.focus();
-      }
-    });
-  }
 
   if (recipeCreateBtn) {
     recipeCreateBtn.addEventListener("click", async () => {
