@@ -3,7 +3,8 @@
 Builds `DepartmentPortalWeekPayload` by aggregating:
  - Department/site metadata
  - Weekview marks (diets), residents counts, alt2 flags
- - Menu choice (Alt1/Alt2) per weekday from Alt2Repo (reusing existing storage)
+ - Explicit department menu choice (Alt1/Alt2) per weekday from dedicated MenuChoiceRepo; Weekview Alt2 remains separate operational state
+ - Canonical published Builder menu text via publication/projection
 
 Read-only: no mutations. ETag map derived from signatures.
 """
@@ -15,6 +16,10 @@ from typing import List
 from datetime import datetime, timedelta
 from sqlalchemy import text
 
+from core.commun_builder_publication import CommunBuilderPublicationService
+from core.commun_builder_projection import get_shadow_projection_reader
+from core.db import get_session
+from portal.department.menu_choice_repo import MenuChoiceRepo
 from portal.department.models import (
     DepartmentPortalWeekPayload,
     PortalFacts,
@@ -23,10 +28,6 @@ from portal.department.models import (
     PortalDay,
 )
 from core.weekview.repo import WeekviewRepo
-from core.menu_choice_api import _current_signature as _menu_choice_sig
-from core.menu_choice_api import _DAY_MAP as _MENU_DAY_MAP
-from flask import current_app
-from core.db import get_session
 
 _WEEKDAY_NAMES_SV = [
     "Måndag",
@@ -37,6 +38,18 @@ _WEEKDAY_NAMES_SV = [
     "Lördag",
     "Söndag",
 ]
+
+_DAY_NAME_TO_CODE = {
+    "monday": "mon",
+    "tuesday": "tue",
+    "wednesday": "wed",
+    "thursday": "thu",
+    "friday": "fri",
+    "saturday": "sat",
+    "sunday": "sun",
+}
+
+_MENU_DAY_MAP = {1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat", 7: "sun"}
 
 
 def _iso_week_start(year: int, week: int) -> datetime:
@@ -67,14 +80,47 @@ def _fetch_department_meta(department_id: str) -> tuple[str, str, str, str | Non
         db.close()
 
 
+def _load_canonical_menu_struct(*, tenant_id: int | str, site_id: str, year: int, week: int) -> dict[str, dict[str, dict[str, dict[str, object]]]]:
+    publication = CommunBuilderPublicationService().get_publication_for_week(
+        tenant_id=int(tenant_id),
+        site_id=site_id,
+        year=year,
+        week=week,
+    )
+    if publication is None:
+        return {}
+
+    outcome = get_shadow_projection_reader().get_projection_for_pinned_menu(
+        tenant_id=int(tenant_id),
+        site_id=site_id,
+        year=year,
+        week=week,
+        builder_menu_id=str(publication.builder_menu_id),
+        builder_menu_version=int(publication.builder_menu_version),
+    )
+    projection = outcome.projection
+    if outcome.status == "no_publication":
+        return {}
+    if outcome.status != "ok" or projection is None:
+        raise RuntimeError(f"publication_projection_broken:{outcome.error or outcome.status}")
+        return {}
+
+    menu_struct: dict[str, dict[str, dict[str, dict[str, object]]]] = {}
+    for row in projection.rows:
+        menu_day = _DAY_NAME_TO_CODE.get(str(row.day).strip().lower(), str(row.day).strip().lower())
+        menu_struct.setdefault(menu_day, {}).setdefault(row.meal, {})[row.variant_type] = {"dish_name": row.text}
+    return menu_struct
+
+
 def _build_days(
     department_id: str,
     year: int,
     week: int,
+    menu_struct: dict[str, dict[str, dict[str, dict[str, object]]]],
     marks: list[dict],
     counts: list[dict],
     alt2_days: list[int],
-    menu_choice_map: dict[str, str],
+    menu_choice_map: dict[str, str | None],
 ) -> List[PortalDay]:
     week_start = _iso_week_start(year, week)
     # Organize counts per (day, meal)
@@ -90,15 +136,6 @@ def _build_days(
         dname = str(m["diet_type"])  # already canonical in tests
         diets_map.setdefault(key, {})[dname] = diets_map.setdefault(key, {}).get(dname, 0) + 1
     days: List[PortalDay] = []
-    # Fetch menu week view (if menu_service attached)
-    menu_struct: dict[str, dict[str, dict[str, dict[str, object]]]] = {}
-    try:
-        menu_service = getattr(current_app, "menu_service", None)
-        if menu_service and hasattr(menu_service, "get_week_view"):
-            mv = menu_service.get_week_view(1, week, year)  # tenant_id hardcoded 1 for tests
-            menu_struct = mv.get("days", {})  # type: ignore[assignment]
-    except Exception:
-        menu_struct = {}
 
     def _pick(meals: dict[str, dict[str, dict[str, object]]], meal: str, variants: list[str]) -> str | None:
         m = meals.get(meal)
@@ -122,8 +159,8 @@ def _build_days(
         day_meals = menu_struct.get(day_key, {}) if day_key else {}
         lunch_alt1 = _pick(day_meals, "lunch", ["alt1"]) if day_meals else None
         lunch_alt2 = _pick(day_meals, "lunch", ["alt2"]) if day_meals else None
-        dessert = _pick(day_meals, "dessert", ["dessert", "default"]) if day_meals else None
-        dinner = _pick(day_meals, "dinner", ["dinner", "default"]) if day_meals else None
+        dessert = _pick(day_meals, "lunch", ["dessert", "default"]) if day_meals else None
+        dinner = _pick(day_meals, "dinner", ["alt1", "main", "dinner", "default"]) if day_meals else None
         # Selected alt derived from menu_choice_map (mon..sun keys) -> Alt1/Alt2
         day_key = _MENU_DAY_MAP.get(weekday_num)
         selected_alt = None
@@ -193,22 +230,19 @@ def build_department_week_payload(
     counts = dep_summary.get("residents_counts", []) if dep_summary else []
     alt2_days = dep_summary.get("alt2_days", []) if dep_summary else []
 
-    # Menu choice map (Alt1 default unless Alt2 flagged in storage) via signature repo
-    # Reuse Alt2Repo listing indirectly by computing signature then deriving days from existing API logic.
-    from core.admin_repo import Alt2Repo
+    menu_struct = _load_canonical_menu_struct(tenant_id=tenant_id, site_id=site_id, year=year, week=week)
 
-    repo_alt2 = Alt2Repo()
-    rows_choice = repo_alt2.list_for_department_week(department_id, week)
-    menu_choice_map = {v: "Alt1" for v in _MENU_DAY_MAP.values()}
-    for r in rows_choice:
-        if r.get("enabled"):
-            wk = int(r.get("weekday") or 0)
-            dk = _MENU_DAY_MAP.get(wk)
-            if dk:
-                menu_choice_map[dk] = "Alt2"
+    choice_repo = MenuChoiceRepo()
+    menu_choice_map = choice_repo.derive_map(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=department_id,
+        year=year,
+        week=week,
+    )
 
     # Days build
-    days = _build_days(department_id, year, week, marks, counts, alt2_days, menu_choice_map)
+    days = _build_days(department_id, year, week, menu_struct, marks, counts, alt2_days, menu_choice_map)
 
     # Facts & progress
     facts: PortalFacts = {
@@ -225,7 +259,13 @@ def build_department_week_payload(
     diet_days_count = sum(1 for d in days if d.get("has_diets"))
 
     # ETag map signatures
-    menu_sig = _menu_choice_sig(department_id, week)
+    menu_sig = choice_repo.get_signature(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=department_id,
+        year=year,
+        week=week,
+    )
     # Weekview signature: hash of counts + marked diets + alt2 days
     h_source = []
     for c in counts:
@@ -243,7 +283,7 @@ def build_department_week_payload(
         )
     wv_hash = sha1("|".join(sorted(h_source)).encode()).hexdigest()[:16]
     etag_map: PortalEtagMap = {
-        "menu_choice": f'W/"portal-menu-choice:{department_id}:{year}-{week}:v{menu_sig}"',
+        "menu_choice": menu_sig,
         "weekview": f'W/"portal-weekview:{department_id}:{year}-{week}:{wv_hash}"',
     }
 

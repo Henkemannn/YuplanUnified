@@ -3,9 +3,9 @@ from typing import List, Optional
 
 @dataclass
 class DepartmentDayVM:
-    index: int = 0
     name: str
     date: str
+    index: int = 0
     lunch_alt1: Optional[str] = None
     lunch_alt2: Optional[str] = None
     dinner: Optional[str] = None

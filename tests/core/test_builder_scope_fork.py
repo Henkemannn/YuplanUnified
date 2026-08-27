@@ -539,14 +539,16 @@ def test_edit_target_reuses_private_fork_by_type_and_tenant_isolation() -> None:
     scope_repo = _MemoryScopeRepository()
     flow = _build_flow(scope_repo)
     editor = _actor(tenant_id=1, user_id=10, role="editor")
+    editor_t2 = _actor(tenant_id=2, user_id=11, role="editor")
     cook_a = _actor(tenant_id=1, user_id=20, role="cook")
     cook_b = _actor(tenant_id=2, user_id=30, role="cook")
 
-    shared_component = flow.create_standalone_component("Cross match soup")
-    shared_composition = flow.create_composition(shared_component.component_id, "Cross match plate")
+    shared_component = flow.create_standalone_component("Cross match soup", actor=editor)
+    shared_composition = flow.create_composition(shared_component.component_id, "Cross match plate", actor=editor)
     flow.add_component_to_composition(
         composition_id=shared_composition.composition_id,
         component_name=shared_component.canonical_name,
+        actor=editor,
     )
 
     cook_a_composition = flow.resolve_composition_edit_target(shared_composition.composition_id, actor=cook_a)
@@ -556,10 +558,18 @@ def test_edit_target_reuses_private_fork_by_type_and_tenant_isolation() -> None:
         actor=cook_a,
     )
 
-    cook_b_composition = flow.resolve_composition_edit_target(shared_composition.composition_id, actor=cook_b)
+    shared_component_t2 = flow.create_standalone_component("Cross match soup tenant 2", actor=editor_t2)
+    shared_composition_t2 = flow.create_composition(shared_component_t2.component_id, "Cross match plate tenant 2", actor=editor_t2)
+    flow.add_component_to_composition(
+        composition_id=shared_composition_t2.composition_id,
+        component_name=shared_component_t2.canonical_name,
+        actor=editor_t2,
+    )
+
+    cook_b_composition = flow.resolve_composition_edit_target(shared_composition_t2.composition_id, actor=cook_b)
     cook_b_component_composition, cook_b_component = flow.resolve_linked_component_edit_target(
         cook_b_composition.composition_id,
-        shared_component.component_id,
+        shared_component_t2.component_id,
         actor=cook_b,
     )
 

@@ -11,6 +11,7 @@ from core.planera_v2.adapters import build_planera_input_from_effective_menu_con
 from core.planera_v2.adapters import build_effective_planning_menu_payload
 from core.planera_v2.contracts import EffectiveMenuReadiness, EffectiveMenuSourceType
 from core.planera_v2.service import build_plan_request_from_adapter_payload
+from core.builder.library_scope import ActorContext
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.components import (
     ComponentService,
@@ -212,7 +213,8 @@ def test_effective_menu_adapter_resolves_published_override_and_free_text() -> N
     )
 
     with app.app_context():
-        context = effective_menu_service.build_context(tenant_id=1, site_id=site_id, locale="sv", work_period_id=period_id)
+        actor = ActorContext(tenant_id=1, user_id=42, site_id=site_id, role="cook")
+        context = effective_menu_service.build_context(tenant_id=1, site_id=site_id, locale="sv", work_period_id=period_id, actor=actor)
 
     assert context.work_period is not None
     assert context.work_period.id == period_id
@@ -258,7 +260,8 @@ def test_effective_menu_adapter_resolves_published_override_and_free_text() -> N
     )
 
     with app.app_context():
-        reset_context = effective_menu_service.build_context(tenant_id=1, site_id=site_id, locale="sv", work_period_id=period_id)
+        actor = ActorContext(tenant_id=1, user_id=42, site_id=site_id, role="cook")
+        reset_context = effective_menu_service.build_context(tenant_id=1, site_id=site_id, locale="sv", work_period_id=period_id, actor=actor)
 
     reset_first_items = {item.track_key: item for item in reset_context.service_events[0].items}
     assert reset_first_items["fisk"].source_type == EffectiveMenuSourceType.PUBLISHED_BUILDER_ITEM

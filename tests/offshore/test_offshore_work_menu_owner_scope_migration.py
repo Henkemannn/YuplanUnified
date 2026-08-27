@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 from alembic import command
 from alembic.config import Config
@@ -13,9 +14,10 @@ def _alembic_cfg(db_url: str) -> Config:
     return cfg
 
 
-def test_offshore_work_menu_owner_scope_migration_exposes_owner_scoped_unique_constraint(tmp_path: Path) -> None:
+def test_offshore_work_menu_owner_scope_migration_exposes_owner_scoped_unique_constraint(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "offshore_work_menu_owner_scope.db"
     db_url = f"sqlite:///{db_path.as_posix()}"
+    monkeypatch.setenv("DATABASE_URL", db_url)
 
     command.upgrade(_alembic_cfg(db_url), "head")
 

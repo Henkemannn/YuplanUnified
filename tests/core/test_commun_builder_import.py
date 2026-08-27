@@ -284,11 +284,13 @@ def test_canonical_import_end_to_end_projection_roundtrip(app_session, monkeypat
         assert rows[1]["unresolved_text"] == "Unknown Salad"
         assert rows[2]["composition_id"] == "plate_2"
 
-        projection = CommunBuilderMenuProjectionReader().get_projection(
+        projection = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
             tenant_id=1,
             site_id="site-a",
             year=2026,
             week=21,
+            builder_menu_id=menu_id,
+            builder_menu_version=1,
         )
         assert projection.status == "ok"
         assert projection.projection is not None
@@ -378,7 +380,9 @@ def test_canonical_import_end_to_end_projection_roundtrip(app_session, monkeypat
             builder_menu_id=publication_after_update.builder_menu_id,
             builder_menu_version=publication_after_update.builder_menu_version,
         )
-        assert pinned_projection.status == "version_mismatch"
+        assert pinned_projection.status == "ok"
+        assert pinned_projection.projection is not None
+        assert [row.text for row in pinned_projection.projection.rows] == ["Fish Plate", "Unknown Salad", "Soup"]
 
         publication_service.republish_week(
             tenant_id=1,

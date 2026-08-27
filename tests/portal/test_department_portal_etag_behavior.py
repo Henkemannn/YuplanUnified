@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Dict
 from sqlalchemy import text
+from core.db import get_session
 
 YEAR = 2025
 WEEK = 47
@@ -46,6 +47,7 @@ def _seed_base(db, alt2_enabled_monday: int = 1, dish_name_alt1: str = "Pannbiff
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_registrations(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, meal TEXT, diet_type TEXT, marked INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week,meal,diet_type))"))
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_residents_count(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, meal TEXT, count INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week,meal))"))
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_alt2_flags(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, is_alt2 INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week))"))
+    db.execute(text("CREATE TABLE IF NOT EXISTS department_menu_choices(id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, department_id TEXT NOT NULL, year INTEGER NOT NULL, week INTEGER NOT NULL, weekday INTEGER NOT NULL, meal TEXT NOT NULL DEFAULT 'lunch', selected_variant TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at TEXT, updated_at TEXT, UNIQUE(tenant_id,site_id,department_id,year,week,weekday,meal))"))
     # Cleanup existing rows for idempotent seeding across tests
     db.execute(text("DELETE FROM weekview_registrations WHERE tenant_id='1' AND department_id=:d AND year=:y AND week=:w"), {"d": DEPT_ID, "y": YEAR, "w": WEEK})
     db.execute(text("DELETE FROM weekview_residents_count WHERE tenant_id='1' AND department_id=:d AND year=:y AND week=:w"), {"d": DEPT_ID, "y": YEAR, "w": WEEK})
@@ -83,13 +85,9 @@ def _seed_base(db, alt2_enabled_monday: int = 1, dish_name_alt1: str = "Pannbiff
     db.commit()
 
 
-def test_portal_etag_no_change_304(client_admin):
-    from core.db import get_session
-    db = get_session()
-    try:
-        _seed_base(db, alt2_enabled_monday=1)
-    finally:
-        db.close()
+def test_portal_etag_no_change_304(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
+    seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=YEAR, week=WEEK, alt2_enabled_monday=1)
+    seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK)
 
     url = f"/portal/department/week?year={YEAR}&week={WEEK}"
     r1 = client_admin.get(url, headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
@@ -102,13 +100,9 @@ def test_portal_etag_no_change_304(client_admin):
     assert r2.get_data() in (b"", b"\n")
 
 
-def test_portal_etag_changes_on_menu_text_update(client_admin):
-    from core.db import get_session
-    db = get_session()
-    try:
-        _seed_base(db, alt2_enabled_monday=1, dish_name_alt1="Pannbiff")
-    finally:
-        db.close()
+def test_portal_etag_stays_frozen_until_republish(client_admin, app_session, seed_portal_department_data, seed_canonical_builder_publication):
+    seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=YEAR, week=WEEK, alt2_enabled_monday=1)
+    composition_service = seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK, alt1_name="Pannbiff")
 
     url = f"/portal/department/week?year={YEAR}&week={WEEK}"
     r_before = client_admin.get(url, headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
@@ -117,34 +111,37 @@ def test_portal_etag_changes_on_menu_text_update(client_admin):
     lunch_alt1_before = r_before.get_json()["days"][0]["menu"]["lunch_alt1"]
     assert lunch_alt1_before == "Pannbiff"
 
-    # Change dish name used by alt1 variant → should affect weekview signature → new portal ETag
-    db2 = get_session()
-    try:
-        db2.execute(text("UPDATE dishes SET name='Köttbullar' WHERE id=501"))
-        db2.commit()
-    finally:
-        db2.close()
+    # Change the canonical Builder composition name → the already published snapshot must stay frozen.
+    with app_session.app_context():
+        composition_service.update_composition_metadata("builder-alt1", composition_name="Köttbullar")
 
     r_after = client_admin.get(url, headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
     assert r_after.status_code == 200
     etag_after = r_after.headers.get("ETag")
-    assert etag_after and etag_before and etag_after != etag_before
+    assert etag_after == etag_before
     lunch_alt1_after = r_after.get_json()["days"][0]["menu"]["lunch_alt1"]
-    assert lunch_alt1_after == "Köttbullar"
+    assert lunch_alt1_after == "Pannbiff"
+
+    # Explicit republish creates the new immutable snapshot.
+    seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK, alt1_name="Köttbullar")
+
+    r_republished = client_admin.get(url, headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
+    assert r_republished.status_code == 200
+    etag_republished = r_republished.headers.get("ETag")
+    assert etag_republished and etag_republished != etag_before
+    lunch_alt1_republished = r_republished.get_json()["days"][0]["menu"]["lunch_alt1"]
+    assert lunch_alt1_republished == "Köttbullar"
 
     # 304 check for new ETag
-    r_304 = client_admin.get(url, headers={**_h(), "If-None-Match": etag_after}, environ_overrides={"test_claims": {"department_id": DEPT_ID}})
+    r_304 = client_admin.get(url, headers={**_h(), "If-None-Match": etag_republished}, environ_overrides={"test_claims": {"department_id": DEPT_ID}})
     assert r_304.status_code == 304
 
 
-def test_portal_etag_changes_on_selected_alt_update(client_admin):
-    from core.db import get_session
-    db = get_session()
-    try:
-        # Start with alt2 disabled (selected_alt expected Alt1)
-        _seed_base(db, alt2_enabled_monday=0)
-    finally:
-        db.close()
+def test_portal_etag_changes_on_selected_alt_update(client_admin, seed_portal_department_data, seed_canonical_builder_publication, seed_portal_menu_choice):
+    # Start with an explicit Alt1 choice; changing the explicit choice should move the ETag.
+    seed_portal_department_data(dept_id=DEPT_ID, site_id=SITE_ID, year=YEAR, week=WEEK, alt2_enabled_monday=0)
+    seed_canonical_builder_publication(site_id=SITE_ID, year=YEAR, week=WEEK)
+    seed_portal_menu_choice(tenant_id=1, site_id=SITE_ID, department_id=DEPT_ID, year=YEAR, week=WEEK, weekday=1, selected_variant="Alt1")
 
     url = f"/portal/department/week?year={YEAR}&week={WEEK}"
     r_before = client_admin.get(url, headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
@@ -153,13 +150,7 @@ def test_portal_etag_changes_on_selected_alt_update(client_admin):
     assert payload_before["days"][0]["choice"]["selected_alt"] == "Alt1"
     etag_before = r_before.headers.get("ETag")
 
-    # Toggle alt2 flag for Monday to enabled → selected_alt becomes Alt2
-    db2 = get_session()
-    try:
-        db2.execute(text("UPDATE alt2_flags SET enabled=1 WHERE department_id=:d AND week=:w AND weekday=1"), {"d": DEPT_ID, "w": WEEK})
-        db2.commit()
-    finally:
-        db2.close()
+    seed_portal_menu_choice(tenant_id=1, site_id=SITE_ID, department_id=DEPT_ID, year=YEAR, week=WEEK, weekday=1, selected_variant="Alt2")
 
     r_after = client_admin.get(url, headers=_h(), environ_overrides={"test_claims": {"department_id": DEPT_ID}})
     assert r_after.status_code == 200

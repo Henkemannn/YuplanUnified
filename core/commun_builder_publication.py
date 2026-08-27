@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -20,6 +21,7 @@ class CommunBuilderPublicationState:
     builder_menu_id: str
     builder_menu_version: int
     source: str
+    projection_snapshot_json: str | None
 
 
 class CommunBuilderPublicationRepository:
@@ -55,6 +57,7 @@ class CommunBuilderPublicationRepository:
         builder_menu_id: str,
         builder_menu_version: int,
         source: str,
+        projection_snapshot_json: str | None = None,
         db: Session | None = None,
     ) -> CommunBuilderPublicationPin:
         owns_session = db is None
@@ -76,6 +79,7 @@ class CommunBuilderPublicationRepository:
                     builder_menu_id=builder_menu_id,
                     builder_menu_version=builder_menu_version,
                     source=source,
+                    projection_snapshot_json=projection_snapshot_json,
                     created_at=now,
                     updated_at=now,
                 )
@@ -85,6 +89,7 @@ class CommunBuilderPublicationRepository:
                 existing.builder_menu_id = builder_menu_id
                 existing.builder_menu_version = builder_menu_version
                 existing.source = source
+                existing.projection_snapshot_json = projection_snapshot_json
                 existing.updated_at = now
                 pin = existing
             db.flush()
@@ -117,7 +122,7 @@ class CommunBuilderPublicationService:
     def _verify_projection(self, *, tenant_id: int, site_id: str, year: int, week: int, builder_menu_id: str, builder_menu_version: int) -> None:
         from .commun_builder_projection import get_shadow_projection_reader
 
-        outcome = get_shadow_projection_reader().get_projection_for_pinned_menu(
+        outcome = get_shadow_projection_reader().get_projection_for_builder_menu(
             tenant_id=tenant_id,
             site_id=site_id,
             year=year,
@@ -129,6 +134,59 @@ class CommunBuilderPublicationService:
             raise RuntimeError(f"projection_verification_failed:{outcome.error or outcome.status}")
         if any(bool(row.error) for row in outcome.projection.rows):
             raise RuntimeError(f"projection_verification_failed:{outcome.error or 'row_error'}")
+
+    def _capture_projection_snapshot(
+        self,
+        *,
+        tenant_id: int,
+        site_id: str,
+        year: int,
+        week: int,
+        builder_menu_id: str,
+        builder_menu_version: int,
+    ) -> str:
+        from .commun_builder_projection import get_shadow_projection_reader
+
+        outcome = get_shadow_projection_reader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id=builder_menu_id,
+            builder_menu_version=builder_menu_version,
+        )
+        if outcome.status != "ok" or outcome.projection is None:
+            raise RuntimeError(f"projection_capture_failed:{outcome.error or outcome.status}")
+        rows_payload: list[dict[str, Any]] = []
+        for row in outcome.projection.rows:
+            rows_payload.append(
+                {
+                    "day": row.day,
+                    "meal": row.meal,
+                    "variant_type": row.variant_type,
+                    "sort_order": int(row.sort_order),
+                    "builder_menu_row_id": row.builder_menu_row_id,
+                    "composition_id": row.composition_id,
+                    "resolved": bool(row.resolved),
+                    "text": row.text,
+                    "unresolved_text": row.unresolved_text,
+                    "error": row.error,
+                }
+            )
+        snapshot = {
+            "schema_version": 1,
+            "tenant_id": int(outcome.projection.tenant_id),
+            "site_id": str(outcome.projection.site_id),
+            "year": int(outcome.projection.year),
+            "week": int(outcome.projection.week),
+            "builder_menu_id": str(outcome.projection.builder_menu_id),
+            "builder_menu_version": int(outcome.projection.builder_menu_version),
+            "builder_status": str(outcome.projection.builder_status),
+            "projection_version": int(outcome.projection.projection_version),
+            "source": str(outcome.projection.source),
+            "rows": rows_payload,
+        }
+        return json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
 
     def sync_from_legacy_menu(
         self,
@@ -161,6 +219,14 @@ class CommunBuilderPublicationService:
                 builder_menu_id=str(link.builder_menu_id),
                 builder_menu_version=int(link.builder_menu_version),
             )
+        projection_snapshot_json = self._capture_projection_snapshot(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id=str(link.builder_menu_id),
+            builder_menu_version=int(link.builder_menu_version),
+        )
         return self._repository.upsert_publication(
             tenant_id=tenant_id,
             site_id=site_id,
@@ -170,6 +236,7 @@ class CommunBuilderPublicationService:
             builder_menu_id=str(link.builder_menu_id),
             builder_menu_version=int(link.builder_menu_version),
             source=str(link.source or "pilot"),
+            projection_snapshot_json=projection_snapshot_json,
             db=db,
         )
 
@@ -232,4 +299,5 @@ class CommunBuilderPublicationService:
             builder_menu_id=str(row.builder_menu_id),
             builder_menu_version=int(row.builder_menu_version),
             source=str(row.source),
+            projection_snapshot_json=str(row.projection_snapshot_json) if row.projection_snapshot_json is not None else None,
         )

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from hashlib import sha1
 import json
 from flask import Blueprint, request, jsonify, Response
+from sqlalchemy import text
 
 from portal.department.models import DepartmentPortalWeekPayload
 from portal.department.service import build_department_week_payload
@@ -23,6 +24,7 @@ from portal.department.auth import get_department_id_from_claims
 from portal.department.menu_choice_repo import MenuChoiceRepo
 from core.http_errors import forbidden
 from core.errors import bad_request
+from core.db import get_session
 
 bp = Blueprint("portal_department", __name__, url_prefix="/portal/department")
 
@@ -115,14 +117,35 @@ def change_menu_choice():  # type: ignore[override]
         return bad_request("invalid_weekday")
     if selected_alt not in {"Alt1","Alt2"}:
         return bad_request("invalid_selected_alt")
-    # Current signature
+    weekday_num = _WK_MAP[weekday_norm]
+    db = get_session()
+    try:
+        scope_row = db.execute(
+            text("SELECT d.site_id, COALESCE(s.tenant_id, 1) FROM departments d LEFT JOIN sites s ON s.id = d.site_id WHERE d.id=:id"),
+            {"id": dept_id},
+        ).fetchone()
+    finally:
+        db.close()
+    if not scope_row:
+        return bad_request("department_not_found")
+    site_id = str(scope_row[0])
+    tenant_id = int(scope_row[1] or 1)
+
     repo = MenuChoiceRepo()
-    current_sig = repo.get_signature(dept_id, year, week)
+    current_sig = repo.get_signature(tenant_id=tenant_id, site_id=site_id, department_id=dept_id, year=year, week=week)
     if if_match != current_sig:
         # Concurrency failure – current signature differs from provided If-Match
         from core.http_errors import problem as _problem
         return _problem(412, "etag_mismatch", "Precondition Failed", "etag_mismatch")
     # Persist choice
-    repo.set_choice(dept_id, week, _WK_MAP[weekday_norm], selected_alt)
-    new_sig = repo.get_signature(dept_id, year, week)
+    repo.set_choice(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=dept_id,
+        year=year,
+        week=week,
+        weekday=weekday_num,
+        selected_alt=selected_alt,
+    )
+    new_sig = repo.get_signature(tenant_id=tenant_id, site_id=site_id, department_id=dept_id, year=year, week=week)
     return jsonify({"new_etag": new_sig, "selected_alt": selected_alt})

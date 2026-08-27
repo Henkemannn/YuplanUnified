@@ -46,17 +46,31 @@ def _seed_portal_week(db, dept_id: str, site_id: str, year: int, week: int):
     db.commit()
 
 
-def test_portal_department_week_ui_renders_page(client_admin):
+def test_portal_department_week_ui_renders_page(client_admin, seed_portal_department_data, seed_canonical_builder_publication, seed_portal_menu_choice):
     year = 2025
     week = 47
     dept_id = "22222222-3333-4444-5555-666666666666"
     site_id = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
-    from core.db import get_session
-    db = get_session()
-    try:
-        _seed_portal_week(db, dept_id, site_id, year, week)
-    finally:
-        db.close()
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=year, week=week)
+    seed_canonical_builder_publication(
+        site_id=site_id,
+        year=year,
+        week=week,
+        alt1_name="Pannbiff",
+        alt1_menu_name="Pannbiff med lök",
+        alt2_name="Fisk",
+        dessert_name="Chokladpudding",
+        dinner_name="Kvällsgröt",
+    )
+    seed_portal_menu_choice(
+        tenant_id=1,
+        site_id=site_id,
+        department_id=dept_id,
+        year=year,
+        week=week,
+        weekday=1,
+        selected_variant="Alt2",
+    )
     resp = client_admin.get(
         f"/ui/portal/department/week?year={year}&week={week}",
         environ_overrides={"test_claims": {"department_id": dept_id}},
@@ -67,7 +81,8 @@ def test_portal_department_week_ui_renders_page(client_admin):
     assert "Avd 1" in html
     assert "Faktaruta" in html
     assert "Inga risrätter" in html
-    assert "Pannbiff" in html or "Köttbullar" in html
+    assert "Pannbiff med lök" in html
+    assert "Legacy Pannbiff" not in html
     assert "Valda dagar:" in html
     assert "portal-alt-selected" in html  # Monday Alt2 highlight
     assert "Gluten" in html or "Laktos" in html

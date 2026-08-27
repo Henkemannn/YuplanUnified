@@ -14,6 +14,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
+    Text,
     String,
     UniqueConstraint,
 )
@@ -167,6 +168,7 @@ class CommunBuilderPublicationPin(Base):
     builder_menu_id: Mapped[str] = mapped_column(String(64), nullable=False)
     builder_menu_version: Mapped[int] = mapped_column(Integer, nullable=False)
     source: Mapped[str] = mapped_column(String(24), nullable=False)
+    projection_snapshot_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -181,6 +183,46 @@ class CommunBuilderPublicationPin(Base):
         CheckConstraint("length(trim(builder_menu_id)) > 0", name="ck_commun_builder_publication_pins_builder_menu_id_not_empty"),
         CheckConstraint("builder_menu_version > 0", name="ck_commun_builder_publication_pins_builder_menu_version_positive"),
         CheckConstraint("lower(source) IN ('manual', 'import', 'migration', 'pilot')", name="ck_commun_builder_publication_pins_source_allowed"),
+    )
+
+
+class DepartmentMenuChoice(Base):
+    __tablename__ = "department_menu_choices"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    department_id: Mapped[str] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    week: Mapped[int] = mapped_column(Integer, nullable=False)
+    weekday: Mapped[int] = mapped_column(Integer, nullable=False)
+    meal: Mapped[str] = mapped_column(String(20), nullable=False, default="lunch", server_default="lunch")
+    selected_variant: Mapped[str] = mapped_column(String(8), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "site_id",
+            "department_id",
+            "year",
+            "week",
+            "weekday",
+            "meal",
+            name="uq_department_menu_choices_business_key",
+        ),
+        CheckConstraint("year > 0", name="ck_department_menu_choices_year_positive"),
+        CheckConstraint("week BETWEEN 1 AND 53", name="ck_department_menu_choices_week_range"),
+        CheckConstraint("weekday BETWEEN 1 AND 7", name="ck_department_menu_choices_weekday_range"),
+        CheckConstraint("length(trim(selected_variant)) > 0", name="ck_department_menu_choices_selected_variant_not_empty"),
+        CheckConstraint("lower(selected_variant) IN ('alt1', 'alt2')", name="ck_department_menu_choices_selected_variant_allowed"),
+        CheckConstraint("lower(meal) = 'lunch'", name="ck_department_menu_choices_meal_lunch_only"),
     )
 
 

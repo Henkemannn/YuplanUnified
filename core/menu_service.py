@@ -538,7 +538,11 @@ class MenuServiceDB:
                     publication_service.publish_week(**publication_args)
             menu.status = "published"
             menu.updated_at = datetime.now(timezone.utc)
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
         finally:
             db.close()
     
@@ -583,7 +587,11 @@ class MenuServiceDB:
                 )
             menu.status = "draft"
             menu.updated_at = datetime.now(timezone.utc)
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
         finally:
             db.close()
 

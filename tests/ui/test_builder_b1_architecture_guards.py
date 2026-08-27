@@ -184,13 +184,12 @@ def test_workspace_state_stays_in_builder_js(client_admin) -> None:
     script = _builder_js(client_admin)
     controller = _controller_js(client_admin)
 
-    assert "let reusableComponentsCache = [];" in script
     assert "let _workspaceSurface = \"home\";" in script
-    assert "let _cachedLibraryComponents = [];" in script
     assert "let _cachedLibraryCompositions = [];" in script
     assert "_workspaceSurface" not in controller
-    assert "_cachedLibraryComponents" not in controller
     assert "_cachedLibraryCompositions" not in controller
+    assert "currentBuilderComposition: null" in controller
+    assert "_componentDetailDirty: false" in controller
 
 
 def test_workspace_js_has_no_host_entry_logic(client_admin) -> None:
@@ -218,13 +217,13 @@ def test_reusable_component_refresh_is_palette_only(client_admin) -> None:
 def test_component_create_flow_avoids_full_library_wait(client_admin) -> None:
     """Creating a component from the builder should upsert cache and open the editor without awaiting loadLibrary()."""
     script = _builder_js(client_admin)
-    start = script.find('if (createComponentBtn) {')
-    end = script.find('if (importLibraryBtn) {')
+    start = script.find('function openBuilderComponentCreateModal() {')
+    end = script.find('function closeResolveModal() {')
     assert start != -1 and end != -1 and start < end
     block = script[start:end]
-    assert 'upsertCachedLibraryComponent(createdComponent);' in block
     assert 'await loadLibrary();' not in block
-    assert 'await openComponentDetailEditor(createdComponentId);' in block
+    assert 'getComponentLibraryRuntime().upsertCachedComponent(createdComponent);' in block
+    assert 'openComponentDetailEditor(createdComponentId);' in block
 
 
 def test_component_editor_callbacks_are_forwarded_and_dish_name_is_canonical(client_admin) -> None:
@@ -501,9 +500,12 @@ def test_offshore_files_not_modified(client_admin) -> None:
     assert 'builder_light' not in html
     assert 'id="resolveModal"' not in html
     assert 'id="componentDetailEditorModal"' not in html
-    assert 'createBuilderDishEditor' not in work_menu_js
-    assert 'createBuilderComponentEditor' not in work_menu_js
-    assert '/api/builder/' not in work_menu_js
+    assert 'function createBuilderDishEditor(' not in work_menu_js
+    assert 'function createBuilderComponentEditor(' not in work_menu_js
+    assert 'function createBuilderModalController(' not in work_menu_js
+    assert 'saveDishOverviewMetadata(' not in work_menu_js
+    assert 'saveActiveComponentDetailDraft(' not in work_menu_js
+    assert 'renderDishAllergenSummary(' not in work_menu_js
     assert 'builder_light' not in work_menu_js
     assert 'builder_light' not in controller
 
@@ -633,8 +635,9 @@ def test_builder_js_passes_editor_factory_to_controller(client_admin) -> None:
     """builder.js passes createBuilderComponentEditor as a factory to the controller."""
     script = _builder_js(client_admin)
     assert "componentEditorFactory: createBuilderComponentEditor" in script
-    assert "getCachedComponents: () => _cachedLibraryComponents" in script
-    assert "getCachedCompositions: () => _cachedLibraryCompositions" in script
+    assert "dishEditorFactory: createBuilderDishEditor" in script
+    assert "loadLibrary: loadLibrary" in script
+    assert "refreshCurrentCompositionView: () => {" in script
 
 
 # ── Guard C1-5: No builder_modal_runtime.js ───────────────────────────────────

@@ -49,17 +49,41 @@ def _seed_portal_week(db, dept_id: str, site_id: str, year: int, week: int):
     db.commit()
 
 
-def test_portal_week_endpoint_populate(client_admin):
+def test_portal_week_endpoint_populate(client_admin, app_session, seed_portal_department_data, seed_canonical_builder_publication, seed_portal_menu_choice):
     year = 2025
     week = 47
     dept_id = "11111111-2222-3333-4444-555555555555"
     site_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-    from core.db import get_session
-    db = get_session()
-    try:
-        _seed_portal_week(db, dept_id, site_id, year, week)
-    finally:
-        db.close()
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=year, week=week)
+    seed_canonical_builder_publication(
+        site_id=site_id,
+        year=year,
+        week=week,
+        alt1_name="Pannbiff med lök",
+        alt2_name="Fiskgratäng",
+        dessert_name="Fruktsallad",
+        dinner_name="Kvällsgröt",
+    )
+    seed_portal_menu_choice(
+        tenant_id=1,
+        site_id=site_id,
+        department_id=dept_id,
+        year=year,
+        week=week,
+        weekday=1,
+        selected_variant="Alt2",
+    )
+    seed_portal_menu_choice(
+        tenant_id=1,
+        site_id=site_id,
+        department_id=dept_id,
+        year=year,
+        week=week,
+        weekday=2,
+        selected_variant="Alt1",
+    )
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     r1 = client_admin.get(
         f"/portal/department/week?year={year}&week={week}",
         headers=_h(),
@@ -102,18 +126,36 @@ def test_portal_week_endpoint_populate(client_admin):
     assert r2.headers.get("ETag") == etag
 
 
-def test_portal_week_basic_access(client_admin):
-    from core.db import get_session
+def test_portal_week_basic_access(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
     dept_id = "55555555-2222-3333-4444-111111111111"
     site_id = "zzzzzzzz-bbbb-cccc-dddd-yyyyyyyyyyyy"
-    db = get_session()
-    try:
-        _seed_portal_week(db, dept_id, site_id, 2025, 47)
-    finally:
-        db.close()
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=2025, week=47)
+    seed_canonical_builder_publication(site_id=site_id, year=2025, week=47)
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site_id
     resp_ok = client_admin.get(
         "/portal/department/week?year=2025&week=47",
         headers=_h(),
         environ_overrides={"test_claims": {"department_id": dept_id}},
     )
     assert resp_ok.status_code == 200
+
+
+def test_portal_week_without_publication_has_empty_menu(client_admin, seed_portal_department_data):
+    year = 2025
+    week = 47
+    dept_id = "66666666-7777-8888-9999-000000000000"
+    site_id = "ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb"
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=year, week=week)
+    resp = client_admin.get(
+        f"/portal/department/week?year={year}&week={week}",
+        headers=_h(),
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert resp.status_code == 200
+    payload = resp.get_json()
+    monday = payload["days"][0]
+    assert monday["menu"]["lunch_alt1"] is None
+    assert monday["menu"]["lunch_alt2"] is None
+    assert monday["menu"]["dessert"] is None
+    assert monday["menu"]["dinner"] is None

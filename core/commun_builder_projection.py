@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
@@ -80,6 +81,89 @@ class CommunBuilderProjectionOutcome:
     error: str | None = None
 
 
+def _snapshot_from_projection(projection: CommunMenuWeekProjection) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "tenant_id": int(projection.tenant_id),
+        "site_id": str(projection.site_id),
+        "year": int(projection.year),
+        "week": int(projection.week),
+        "builder_menu_id": str(projection.builder_menu_id),
+        "builder_menu_version": int(projection.builder_menu_version),
+        "builder_status": str(projection.builder_status),
+        "projection_version": int(projection.projection_version),
+        "source": str(projection.source),
+        "rows": [
+            {
+                "day": row.day,
+                "meal": row.meal,
+                "variant_type": row.variant_type,
+                "sort_order": int(row.sort_order),
+                "builder_menu_row_id": row.builder_menu_row_id,
+                "composition_id": row.composition_id,
+                "resolved": bool(row.resolved),
+                "text": row.text,
+                "unresolved_text": row.unresolved_text,
+                "error": row.error,
+            }
+            for row in projection.rows
+        ],
+    }
+
+
+def _projection_from_snapshot(snapshot: dict[str, Any]) -> CommunBuilderProjectionOutcome:
+    try:
+        rows_raw = snapshot.get("rows") or []
+        rows_out: list[CommunMenuProjectionRow] = []
+        row_errors: list[str] = []
+        for row in rows_raw:
+            if not isinstance(row, dict):
+                continue
+            error = str(row.get("error") or "").strip() or None
+            resolved = bool(row.get("resolved"))
+            rows_out.append(
+                CommunMenuProjectionRow(
+                    day=str(row.get("day") or "").strip().lower(),
+                    meal=str(row.get("meal") or "").strip().lower(),
+                    variant_type=str(row.get("variant_type") or "").strip().lower(),
+                    sort_order=int(row.get("sort_order") or 0),
+                    builder_menu_id=str(snapshot.get("builder_menu_id") or ""),
+                    builder_menu_version=int(snapshot.get("builder_menu_version") or 0),
+                    builder_menu_row_id=str(row.get("builder_menu_row_id") or ""),
+                    composition_id=str(row.get("composition_id") or "").strip() or None,
+                    resolved=resolved,
+                    text=str(row.get("text") or "").strip(),
+                    unresolved_text=str(row.get("unresolved_text") or "").strip() or None,
+                    error=error,
+                )
+            )
+            if error:
+                row_errors.append(error)
+
+        projection = CommunMenuWeekProjection(
+            tenant_id=int(snapshot.get("tenant_id") or 0),
+            site_id=str(snapshot.get("site_id") or ""),
+            year=int(snapshot.get("year") or 0),
+            week=int(snapshot.get("week") or 0),
+            builder_menu_id=str(snapshot.get("builder_menu_id") or ""),
+            builder_menu_version=int(snapshot.get("builder_menu_version") or 0),
+            builder_status=str(snapshot.get("builder_status") or "draft").strip() or "draft",
+            rows=rows_out,
+            projection_version=int(snapshot.get("projection_version") or 1),
+            source=str(snapshot.get("source") or "commun.builder.projection_snapshot_v1"),
+        )
+        return CommunBuilderProjectionOutcome(
+            status="projection_error" if row_errors else "ok",
+            projection=projection,
+            builder_menu_id=projection.builder_menu_id,
+            linked_version=projection.builder_menu_version,
+            current_version=projection.builder_menu_version,
+            error=row_errors[0] if row_errors else None,
+        )
+    except Exception as exc:
+        return CommunBuilderProjectionOutcome(status="projection_error", error=f"publication_snapshot_invalid:{exc}")
+
+
 def _normalize_day(value: str) -> str:
     raw = str(value or "").strip().lower()
     aliases = {
@@ -119,9 +203,16 @@ def _normalize_row_sort_key(row: dict[str, Any]) -> tuple[int, str]:
     return (int(row.get("sort_order") or 0), str(row.get("builder_menu_row_id") or ""))
 
 
-def _projection_text(*, resolved: bool, composition_name: str | None, unresolved_text: str | None) -> str:
+def _projection_text(
+    *,
+    resolved: bool,
+    composition_name: str | None,
+    unresolved_text: str | None,
+    composition_effective_name: str | None = None,
+) -> str:
     if resolved:
-        return str(composition_name or "").strip() if composition_name is not None else ""
+        effective_name = composition_effective_name if composition_effective_name is not None else composition_name
+        return str(effective_name or "").strip() if effective_name is not None else ""
     return str(unresolved_text or "").strip() if unresolved_text is not None else ""
 
 
@@ -345,6 +436,7 @@ class CommunBuilderMenuProjectionReader:
             composition_id = str(row.get("composition_id") or "").strip() or None
             unresolved_text = str(row.get("unresolved_text") or "").strip() or None
             composition_name = str(row.get("composition_name") or "").strip() or None
+            composition_effective_name = composition_name
             resolved = bool(composition_id)
             error = None
             if explicit_variant is None:
@@ -356,6 +448,12 @@ class CommunBuilderMenuProjectionReader:
                     error = "composition_missing"
                     composition_id = None
                     composition_name = None
+                    composition_effective_name = None
+                else:
+                    composition_name = str(getattr(composition, "composition_name", "") or "").strip() or None
+                    composition_effective_name = str(
+                        getattr(composition, "effective_menu_name", composition_name) or ""
+                    ).strip() or None
             if not resolved and unresolved_text is None and error is None:
                 error = "unresolved_text_missing"
 
@@ -363,6 +461,7 @@ class CommunBuilderMenuProjectionReader:
                 resolved=resolved,
                 composition_name=composition_name,
                 unresolved_text=unresolved_text,
+                composition_effective_name=composition_effective_name,
             )
             rows_out.append(
                 CommunMenuProjectionRow(
@@ -402,7 +501,7 @@ class CommunBuilderMenuProjectionReader:
             error=row_errors[0] if row_errors else None,
         )
 
-    def get_projection_for_pinned_menu(
+    def get_projection_for_builder_menu(
         self,
         *,
         tenant_id: int,
@@ -421,6 +520,68 @@ class CommunBuilderMenuProjectionReader:
             builder_menu_version=builder_menu_version,
         )
 
+    def get_projection_for_pinned_menu(
+        self,
+        *,
+        tenant_id: int,
+        site_id: str,
+        year: int,
+        week: int,
+        builder_menu_id: str,
+        builder_menu_version: int,
+    ) -> CommunBuilderProjectionOutcome:
+        from .commun_builder_publication import CommunBuilderPublicationService
+
+        publication = CommunBuilderPublicationService().get_publication_for_week(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=year,
+            week=week,
+        )
+        if publication is None:
+            return CommunBuilderProjectionOutcome(
+                status="no_publication",
+                builder_menu_id=builder_menu_id,
+                linked_version=int(builder_menu_version),
+                error="publication_missing",
+            )
+        if str(publication.builder_menu_id) != str(builder_menu_id) or int(publication.builder_menu_version) != int(builder_menu_version):
+            return CommunBuilderProjectionOutcome(
+                status="version_mismatch",
+                builder_menu_id=str(publication.builder_menu_id),
+                linked_version=int(builder_menu_version),
+                current_version=int(publication.builder_menu_version),
+                error="publication_version_mismatch",
+            )
+        snapshot_json = str(publication.projection_snapshot_json or "").strip()
+        if not snapshot_json:
+            return CommunBuilderProjectionOutcome(
+                status="projection_error",
+                builder_menu_id=str(publication.builder_menu_id),
+                linked_version=int(publication.builder_menu_version),
+                error="publication_snapshot_missing",
+            )
+        try:
+            snapshot = json.loads(snapshot_json)
+        except Exception as exc:
+            return CommunBuilderProjectionOutcome(
+                status="projection_error",
+                builder_menu_id=str(publication.builder_menu_id),
+                linked_version=int(publication.builder_menu_version),
+                error=f"publication_snapshot_invalid:{exc}",
+            )
+        outcome = _projection_from_snapshot(snapshot if isinstance(snapshot, dict) else {})
+        if outcome.projection is not None:
+            outcome = CommunBuilderProjectionOutcome(
+                status=outcome.status,
+                projection=outcome.projection,
+                builder_menu_id=str(publication.builder_menu_id),
+                linked_version=int(publication.builder_menu_version),
+                current_version=int(publication.builder_menu_version),
+                error=outcome.error,
+            )
+        return outcome
+
     def get_projection(
         self,
         *,
@@ -429,21 +590,23 @@ class CommunBuilderMenuProjectionReader:
         year: int,
         week: int,
     ) -> CommunBuilderProjectionOutcome:
-        link = self._linkage_service.get_link_for_week(
+        from .commun_builder_publication import CommunBuilderPublicationService
+
+        publication = CommunBuilderPublicationService().get_publication_for_week(
             tenant_id=tenant_id,
             site_id=site_id,
             year=year,
             week=week,
         )
-        if link is None:
-            return CommunBuilderProjectionOutcome(status="no_link")
-        return self._get_projection_for_menu(
+        if publication is None:
+            return CommunBuilderProjectionOutcome(status="no_publication", error="publication_missing")
+        return self.get_projection_for_pinned_menu(
             tenant_id=tenant_id,
             site_id=site_id,
             year=year,
             week=week,
-            builder_menu_id=link.builder_menu_id,
-            builder_menu_version=int(link.builder_menu_version),
+            builder_menu_id=str(publication.builder_menu_id),
+            builder_menu_version=int(publication.builder_menu_version),
         )
 
     def compare_with_legacy(
@@ -455,14 +618,27 @@ class CommunBuilderMenuProjectionReader:
         week: int,
         legacy_weekview: dict[str, Any],
     ) -> CommunBuilderProjectionComparison:
-        outcome = self.get_projection(tenant_id=tenant_id, site_id=site_id, year=year, week=week)
-        if outcome.status == "no_link":
+        link = self._linkage_service.get_link_for_week(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=year,
+            week=week,
+        )
+        if link is None:
             return CommunBuilderProjectionComparison(
                 status="no_link",
                 legacy_row_count=len(_get_legacy_weekview_rows(legacy_weekview)),
                 builder_row_count=0,
                 builder_menu_id=None,
             )
+        outcome = self._get_projection_for_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id=str(link.builder_menu_id),
+            builder_menu_version=int(link.builder_menu_version),
+        )
         if outcome.status == "version_mismatch":
             return CommunBuilderProjectionComparison(
                 status="version_mismatch",

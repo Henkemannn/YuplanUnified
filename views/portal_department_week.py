@@ -6,6 +6,7 @@ from core.weekview.service import WeekviewService
 from core.meal_registration_repo import MealRegistrationRepo
 from core.db import get_session
 from sqlalchemy import text
+from portal.department.menu_choice_repo import MenuChoiceRepo
 
 from viewmodels.portal.department_week_vm import DepartmentWeekViewModel, DepartmentDayVM, DepartmentDaySelectionVM
 
@@ -36,6 +37,15 @@ def build_department_week_vm(tenant_id: int, year: int, week: int, department_id
         regs = []
     reg_map = {(r["date"], r["meal_type"]): bool(r.get("registered")) for r in regs}
 
+    choice_repo = MenuChoiceRepo()
+    choice_map = choice_repo.derive_map(
+        tenant_id=tenant_id,
+        site_id=str(site_id or ""),
+        department_id=str(department_id),
+        year=year,
+        week=week,
+    )
+
     day_vms = []
     any_menu = False
     missing_choice_days = []
@@ -47,9 +57,12 @@ def build_department_week_vm(tenant_id: int, year: int, week: int, department_id
         dinner = mt.get("dinner") or {}
         any_menu = any_menu or bool(lunch.get("alt1") or lunch.get("alt2") or dinner.get("alt1") or dinner.get("alt2"))
         lunch_registered = reg_map.get((date_str, "lunch"), False)
-        alt2_marked = bool(d.get("alt2_lunch"))
-        # Simple completion rule: lunch registered OR explicit choice present (alt2 flag as proxy)
-        is_complete = bool(lunch_registered or alt2_marked)
+        weekday_key = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][idx - 1]
+        selected_variant = choice_map.get(weekday_key)
+        choice_marked = selected_variant in {"Alt1", "Alt2"}
+        alt2_marked = selected_variant == "Alt2"
+        # Completion follows explicit choice presence, not operational Weekview drift.
+        is_complete = bool(lunch_registered or choice_marked)
         if (weekday_name in ("Måndag","Tisdag","Onsdag","Torsdag","Fredag")) and not is_complete:
             missing_choice_days.append(weekday_name)
         day_vms.append(
@@ -158,21 +171,16 @@ def set_department_lunch_choice_alt2(
     alt2_selected: bool,
 ) -> None:
     """
-    Persist Alt2 lunch choice for a specific department/day using existing Alt2Repo.
-    Reuses the same keys (site_id, department_id, week, weekday) as Weekview enrichment.
+    Persist an explicit department menu choice for a specific department/day.
+    This updates portal-owned choice storage only.
     """
-    from core.admin_repo import Alt2Repo
-    repo = Alt2Repo()
-    # Alt2Repo.bulk_upsert expects items with site_id, department_id, week, weekday, enabled
-    items = [{
-        "site_id": str(site_id),
-        "department_id": str(department_id),
-        "week": int(week),
-        "weekday": int(day_index),
-        "enabled": bool(alt2_selected),
-    }]
-    try:
-        repo.bulk_upsert(items)
-    except Exception:
-        # For scaffolding step, swallow errors; later we can surface flash messages
-        pass
+    choice_repo = MenuChoiceRepo()
+    choice_repo.set_choice(
+        tenant_id=int(tenant_id),
+        site_id=str(site_id),
+        department_id=str(department_id),
+        year=int(year),
+        week=int(week),
+        weekday=int(day_index),
+        selected_alt="Alt2" if bool(alt2_selected) else "Alt1",
+    )

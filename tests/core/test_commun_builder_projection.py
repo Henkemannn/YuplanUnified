@@ -172,7 +172,14 @@ def test_projection_reader_explicit_slots_map_directly(app_session):
         )
 
         reader = CommunBuilderMenuProjectionReader()
-        result = reader.get_projection(tenant_id=tenant_id, site_id=site_id, year=2026, week=16)
+        result = reader.get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-1",
+            builder_menu_version=1,
+        )
 
     assert result.status == "ok"
     assert result.projection is not None
@@ -215,7 +222,14 @@ def test_projection_reader_generic_meal_slots_remain_unresolved(app_session):
             builder_menu_id="builder-menu-1",
             source="manual",
         )
-        result = CommunBuilderMenuProjectionReader().get_projection(tenant_id=tenant_id, site_id=site_id, year=2026, week=16)
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-1",
+            builder_menu_version=1,
+        )
 
     assert result.status == "projection_error"
     assert result.error == "variant_mapping_missing"
@@ -256,7 +270,14 @@ def test_projection_reader_generic_meal_rows_do_not_infer_alt_positions(app_sess
             builder_menu_id="builder-menu-1",
             source="manual",
         )
-        result = CommunBuilderMenuProjectionReader().get_projection(tenant_id=tenant_id, site_id=site_id, year=2026, week=16)
+        result = CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-1",
+            builder_menu_version=1,
+        )
 
     assert result.status == "projection_error"
     assert result.error == "variant_mapping_missing"
@@ -283,8 +304,8 @@ def test_projection_reader_reports_no_link_and_version_mismatch(app_session):
             composition_id="comp_1",
         )
         reader = CommunBuilderMenuProjectionReader()
-        no_link = reader.get_projection(tenant_id=tenant_id, site_id=site_id, year=2026, week=16)
-        assert no_link.status == "no_link"
+        no_publication = reader.get_projection(tenant_id=tenant_id, site_id=site_id, year=2026, week=16)
+        assert no_publication.status == "no_publication"
 
         CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
             tenant_id=tenant_id,
@@ -307,7 +328,14 @@ def test_projection_reader_reports_no_link_and_version_mismatch(app_session):
             )
         )
 
-        mismatch = reader.get_projection(tenant_id=tenant_id, site_id=site_id, year=2026, week=16)
+        mismatch = reader.get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-1",
+            builder_menu_version=1,
+        )
 
     assert mismatch.status == "version_mismatch"
     assert mismatch.linked_version == 1
@@ -338,7 +366,14 @@ def test_projection_reader_marks_missing_composition_as_projection_error(app_ses
             source="manual",
         )
         reader = CommunBuilderMenuProjectionReader()
-        result = reader.get_projection(tenant_id=tenant_id, site_id=site_id, year=2026, week=16)
+        result = reader.get_projection_for_builder_menu(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            year=2026,
+            week=16,
+            builder_menu_id="builder-menu-1",
+            builder_menu_version=1,
+        )
 
     assert result.status == "projection_error"
     assert result.error == "composition_missing"
@@ -370,7 +405,14 @@ def test_projection_reader_rejects_unknown_explicit_variant_suffix(app_session):
             source="manual",
         )
         with pytest.raises(ValueError, match="unknown variant slot: lunch_alt9"):
-            CommunBuilderMenuProjectionReader().get_projection(tenant_id=tenant_id, site_id=site_id, year=2026, week=16)
+            CommunBuilderMenuProjectionReader().get_projection_for_builder_menu(
+                tenant_id=tenant_id,
+                site_id=site_id,
+                year=2026,
+                week=16,
+                builder_menu_id="builder-menu-1",
+                builder_menu_version=1,
+            )
 
 
 def test_week_view_shadow_flag_off_does_not_touch_shadow_path(app_session, monkeypatch):
@@ -401,7 +443,7 @@ def test_week_view_shadow_flag_off_does_not_touch_shadow_path(app_session, monke
     assert result == baseline
 
 
-@pytest.mark.parametrize("case", ["full_match", "no_link", "version_mismatch", "missing_composition"])
+@pytest.mark.parametrize("case", ["full_match", "no_publication", "version_mismatch", "missing_composition"])
 def test_week_view_shadow_mode_preserves_legacy_response_for_shadow_states(app_session, case):
     tenant_id, site_id = _seed_tenant_and_site(app_session)
     builder_flow, composition_service, composition_repo = _build_builder_menu_context_flow()
