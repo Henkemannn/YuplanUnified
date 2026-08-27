@@ -346,6 +346,19 @@ def test_offshore_work_menu_renders_tracks_and_saves_decision():
     assert "if (payload.type === 'builder-host-created-composition-ready') {" in js_source
     assert "if (lastBuilderHostKind === 'create-composition') {" in js_source
     assert "setPickerViewMode('confirm');" in js_source
+    assert "function ensureBuilderFieldOption(option) {" in js_source
+    assert "fieldOption.selected = true;" in js_source
+    assert "ensureBuilderFieldOption(option);" in js_source
+    assert "function buildBuilderBridgeFromComposition(composition, fallbackBridge = null) {" in js_source
+    assert "function applyBuilderCompositionPresentation(composition, fallbackBridge = null) {" in js_source
+    assert "async function refreshBuilderCompositionPresentation(compositionId, fallbackBridge = null) {" in js_source
+    assert "fetch(`/api/builder/compositions/${encodeURIComponent(idValue)}`" in js_source
+    assert "row.dataset.builderBridge = serializedBridge;" in js_source
+    assert "title.textContent = refreshedBridge.composition_name || compositionId;" in js_source
+    assert "const shouldAutoApplyCreateComposition = lastBuilderHostKind === 'create-composition' && Boolean(pickerSelectedOption) && Boolean(saveForm);" in js_source
+    assert "const shouldRefreshExistingComposition = lastBuilderHostKind === 'composition' && Boolean(lastBuilderBridge && lastBuilderBridge.composition_id);" in js_source
+    assert "if (shouldAutoApplyCreateComposition && saveForm && !pickerSubmitting) {" in js_source
+    assert "void refreshBuilderCompositionPresentation(lastBuilderBridge.composition_id, lastBuilderBridge);" in js_source
     assert "closeBuilderHost();" in js_source
     assert "openModalFromTrack(button, 'chooser');" in js_source
     assert "decisionTypeField.value = 'use_builder_composition';" in js_source

@@ -365,6 +365,109 @@
       updatePickerConfirm();
     }
 
+    function ensureBuilderFieldOption(option) {
+      if (!builderField || !option || !option.value) {
+        return;
+      }
+      const optionValue = String(option.value);
+      let fieldOption = Array.from(builderField.options).find((entry) => String(entry.value) === optionValue) || null;
+      if (!fieldOption) {
+        fieldOption = document.createElement('option');
+        fieldOption.value = optionValue;
+        builderField.appendChild(fieldOption);
+      }
+      fieldOption.textContent = option.label || optionValue;
+      fieldOption.selected = true;
+      builderField.value = optionValue;
+    }
+
+    function buildBuilderBridgeFromComposition(composition, fallbackBridge = null) {
+      const compositionId = String(composition && composition.composition_id || '').trim();
+      if (!compositionId) {
+        return null;
+      }
+      const components = Array.isArray(composition && composition.components) ? composition.components : [];
+      return {
+        tenant_id: fallbackBridge && fallbackBridge.tenant_id ? fallbackBridge.tenant_id : undefined,
+        composition_id: compositionId,
+        composition_name: String(composition && composition.composition_name || compositionId).trim() || compositionId,
+        library_group: String(composition && composition.library_group || fallbackBridge && fallbackBridge.library_group || 'ovrigt').trim() || 'ovrigt',
+        component_count: components.length,
+        builder_url: fallbackBridge && fallbackBridge.builder_url ? fallbackBridge.builder_url : `/builder-editor-host?composition_id=${encodeURIComponent(compositionId)}`,
+        render_url: fallbackBridge && fallbackBridge.render_url ? fallbackBridge.render_url : `/builder-editor-host?composition_id=${encodeURIComponent(compositionId)}`,
+        readiness_url: fallbackBridge && fallbackBridge.readiness_url ? fallbackBridge.readiness_url : `/builder-editor-host?composition_id=${encodeURIComponent(compositionId)}`,
+        components: components.map((component) => {
+          const componentId = String(component && component.component_id || '').trim();
+          return {
+            component_id: componentId,
+            component_name: String(component && component.component_name || componentId).trim() || componentId,
+            role: String(component && component.role || '').trim() || undefined,
+            sort_order: Number(component && component.sort_order || 0) || 0,
+            details_url: componentId ? `/builder-editor-host?component_id=${encodeURIComponent(componentId)}` : '',
+            recipes_url: componentId ? `/builder-editor-host?component_id=${encodeURIComponent(componentId)}` : '',
+          };
+        }),
+      };
+    }
+
+    function applyBuilderCompositionPresentation(composition, fallbackBridge = null) {
+      const refreshedBridge = buildBuilderBridgeFromComposition(composition, fallbackBridge || lastBuilderBridge);
+      if (!refreshedBridge) {
+        return null;
+      }
+      const compositionId = String(refreshedBridge.composition_id || '').trim();
+      const serializedBridge = JSON.stringify(refreshedBridge);
+      lastBuilderBridge = refreshedBridge;
+
+      const option = {
+        value: compositionId,
+        label: refreshedBridge.composition_name || compositionId,
+        library_group: refreshedBridge.library_group || 'ovrigt',
+      };
+      const existingIndex = compositionOptions.findIndex((entry) => String(entry.value) === String(option.value));
+      if (existingIndex >= 0) {
+        compositionOptions[existingIndex] = option;
+      } else {
+        compositionOptions.unshift(option);
+      }
+      if (builderField) {
+        ensureBuilderFieldOption(option);
+      }
+
+      trackCards.forEach((row) => {
+        if (String(row.dataset.builderCompositionId || '') !== compositionId) {
+          return;
+        }
+        row.dataset.builderBridge = serializedBridge;
+        row.dataset.effectiveTitle = refreshedBridge.composition_name || compositionId;
+        const title = row.querySelector('[data-work-menu-track-open] .offshore-work-menu-track-row__title-text');
+        if (title) {
+          title.textContent = refreshedBridge.composition_name || compositionId;
+        }
+      });
+
+      return refreshedBridge;
+    }
+
+    async function refreshBuilderCompositionPresentation(compositionId, fallbackBridge = null) {
+      const idValue = String(compositionId || '').trim();
+      if (!idValue) {
+        return null;
+      }
+      try {
+        const response = await fetch(`/api/builder/compositions/${encodeURIComponent(idValue)}`, {
+          credentials: 'same-origin',
+        });
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload || !payload.ok || !payload.composition) {
+          return null;
+        }
+        return applyBuilderCompositionPresentation(payload.composition, fallbackBridge);
+      } catch (error) {
+        return null;
+      }
+    }
+
     function returnToPickerBrowse() {
       setPickerViewMode('browse');
       if (pickerConfirm) {
@@ -1098,9 +1201,7 @@
           compositionOptions.unshift(option);
         }
         pickerSelectedOption = String(option.value);
-        if (builderField) {
-          builderField.value = String(option.value);
-        }
+        ensureBuilderFieldOption(option);
         renderPickerCategories();
         renderPickerResults();
         updatePickerConfirm();
@@ -1149,10 +1250,20 @@
       if (lastBuilderHostKind !== 'create-composition' && String(detail.kind || '') !== lastBuilderHostKind) {
         return;
       }
+      const shouldAutoApplyCreateComposition = lastBuilderHostKind === 'create-composition' && Boolean(pickerSelectedOption) && Boolean(saveForm);
+      const shouldRefreshExistingComposition = lastBuilderHostKind === 'composition' && Boolean(lastBuilderBridge && lastBuilderBridge.composition_id);
       if (lastBuilderHostKind === 'create-composition') {
         pendingBuilderHostCreate = null;
       }
       closeBuilderHost();
+      if (shouldAutoApplyCreateComposition && saveForm && !pickerSubmitting) {
+        pickerSubmitting = true;
+        window.requestAnimationFrame(() => {
+          saveForm.requestSubmit ? saveForm.requestSubmit() : saveForm.submit();
+        });
+      } else if (shouldRefreshExistingComposition) {
+        void refreshBuilderCompositionPresentation(lastBuilderBridge.composition_id, lastBuilderBridge);
+      }
     });
 
     if (modal) {
