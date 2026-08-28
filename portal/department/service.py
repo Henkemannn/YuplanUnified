@@ -62,20 +62,12 @@ def _fetch_department_meta(department_id: str) -> tuple[str, str, str | None]:
     db = get_session()
     try:
         row = db.execute(
-            text("SELECT id, name FROM departments WHERE id=:id"), {"id": department_id}
+            text("SELECT id, name, COALESCE(notes, '') FROM departments WHERE id=:id"),
+            {"id": department_id},
         ).fetchone()
         if not row:
             raise ValueError("department_not_found")
-        # Notes may reside in separate table (admin notes) – optional lookup
-        note_row = db.execute(
-            text(
-                "SELECT notes FROM department_notes WHERE department_id=:id"
-            ),
-            {"id": department_id},
-        ).fetchone()
-        note_val = None
-        if note_row and note_row[0]:
-            note_val = str(note_row[0])
+        note_val = str(row[2]) if row[2] is not None else ""
         return str(row[0]), str(row[1]) if row[1] else "", note_val
     finally:
         db.close()

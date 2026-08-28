@@ -1,5 +1,10 @@
 from datetime import datetime
+import pytest
 from sqlalchemy import text
+
+from core.db import get_session
+from portal.department.auth import DepartmentPortalScope
+from portal.department.service import build_department_week_payload
 
 
 def _h(role: str = "admin"):
@@ -12,12 +17,11 @@ def _seed_portal_week(db, dept_id: str, site_id: str, year: int, week: int):
             id TEXT PRIMARY KEY,
             site_id TEXT NOT NULL,
             name TEXT,
+            notes TEXT NULL,
             resident_count_mode TEXT NOT NULL DEFAULT 'manual'
         )
     """))
-    db.execute(text("CREATE TABLE IF NOT EXISTS department_notes(department_id TEXT PRIMARY KEY, notes TEXT)"))
-    db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:i,:s,:n,'manual')"), {"i": dept_id, "s": site_id, "n": "Avd 1"})
-    db.execute(text("INSERT OR REPLACE INTO department_notes(department_id, notes) VALUES(:i,:n)"), {"i": dept_id, "n": "Inga risrätter"})
+    db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, notes, resident_count_mode) VALUES(:i,:s,:n,:note,'manual')"), {"i": dept_id, "s": site_id, "n": "Avd 1", "note": "Inga risrätter"})
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_registrations(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, meal TEXT, diet_type TEXT, marked INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week,meal,diet_type))"))
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_residents_count(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, meal TEXT, count INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week,meal))"))
     db.execute(text("CREATE TABLE IF NOT EXISTS weekview_alt2_flags(tenant_id TEXT, department_id TEXT, year INTEGER, week INTEGER, day_of_week INTEGER, is_alt2 INTEGER, UNIQUE(tenant_id,department_id,year,week,day_of_week))"))
@@ -124,6 +128,78 @@ def test_portal_week_endpoint_populate(client_admin, app_session, seed_portal_de
     assert r2.status_code == 304
     assert r2.get_data() in (b"", b"\n")
     assert r2.headers.get("ETag") == etag
+
+
+def test_portal_week_endpoint_reads_departments_notes_without_department_notes_table(
+    client_admin,
+    seed_portal_department_data,
+    seed_canonical_builder_publication,
+):
+    year = 2025
+    week = 47
+    dept_id = "77777777-8888-9999-aaaa-bbbbbbbbbbbb"
+    site_id = "cccccccc-dddd-eeee-ffff-111111111111"
+    seed_portal_department_data(
+        dept_id=dept_id,
+        site_id=site_id,
+        year=year,
+        week=week,
+        note="Department note from departments",
+    )
+    seed_canonical_builder_publication(site_id=site_id, year=year, week=week)
+
+    with client_admin.application.app_context():
+        db = get_session()
+        try:
+            table_row = db.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='department_notes'")
+            ).fetchone()
+            assert table_row is None
+        finally:
+            db.close()
+
+    resp = client_admin.get(
+        f"/ui/portal/department/week?year={year}&week={week}",
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Department note from departments" in html
+
+
+def test_portal_week_endpoint_empty_department_note_is_empty_string(
+    client_admin,
+    seed_portal_department_data,
+    seed_canonical_builder_publication,
+):
+    year = 2025
+    week = 47
+    dept_id = "88888888-9999-aaaa-bbbb-cccccccccccc"
+    site_id = "dddddddd-eeee-ffff-0000-222222222222"
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=year, week=week, note="")
+    seed_canonical_builder_publication(site_id=site_id, year=year, week=week)
+
+    resp = client_admin.get(
+        f"/portal/department/week?year={year}&week={week}",
+        headers=_h(),
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert resp.status_code == 200
+    payload = resp.get_json()
+    assert payload["facts"]["note"] == ""
+
+
+def test_portal_week_payload_unknown_department_is_controlled(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
+    year = 2025
+    week = 47
+    dept_id = "99999999-aaaa-bbbb-cccc-dddddddddddd"
+    site_id = "eeeeeeee-ffff-0000-1111-222222222222"
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=year, week=week)
+    seed_canonical_builder_publication(site_id=site_id, year=year, week=week)
+
+    scope = DepartmentPortalScope(user_id=1, role="admin", tenant_id=1, department_id="missing-dept", site_id=site_id)
+    with pytest.raises(ValueError, match="department_not_found"):
+        build_department_week_payload(scope, year, week)
 
 
 def test_portal_week_basic_access(client_admin, seed_portal_department_data, seed_canonical_builder_publication):

@@ -11,10 +11,8 @@ def _h():
 
 
 def _seed_basic(db):
-    db.execute(text("CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT, name TEXT, resident_count_mode TEXT NOT NULL DEFAULT 'manual')"))
-    db.execute(text("CREATE TABLE IF NOT EXISTS department_notes(department_id TEXT PRIMARY KEY, notes TEXT)"))
-    db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:i,'site', 'Dept','manual')"), {"i": DEPT_ID})
-    db.execute(text("INSERT OR REPLACE INTO department_notes(department_id, notes) VALUES(:i,'Note')"), {"i": DEPT_ID})
+    db.execute(text("CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT, name TEXT, notes TEXT NULL, resident_count_mode TEXT NOT NULL DEFAULT 'manual')"))
+    db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, notes, resident_count_mode) VALUES(:i,'site', 'Dept','Note','manual')"), {"i": DEPT_ID})
     # Alt2 flags storage
     db.execute(text("CREATE TABLE IF NOT EXISTS alt2_flags(site_id TEXT, department_id TEXT, week INTEGER, weekday INTEGER, enabled INTEGER, version INTEGER, UNIQUE(site_id,department_id,week,weekday))"))
     # Ensure clean slate for this department/week to avoid cross-test leakage

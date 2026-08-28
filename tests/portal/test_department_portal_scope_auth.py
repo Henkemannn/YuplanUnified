@@ -34,19 +34,17 @@ def _seed_scope(db, *, dept_id: str, site_id: str, tenant_id: int, tenant_name: 
     db.execute(text("CREATE TABLE IF NOT EXISTS tenants(id INTEGER PRIMARY KEY, name TEXT, active INTEGER)"))
     db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, tenant_id INTEGER, version INTEGER)"))
     db.execute(
-        text("CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT NOT NULL, name TEXT, resident_count_mode TEXT NOT NULL DEFAULT 'manual')")
+        text("CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT NOT NULL, name TEXT, notes TEXT NULL, resident_count_mode TEXT NOT NULL DEFAULT 'manual')")
     )
-    db.execute(text("CREATE TABLE IF NOT EXISTS department_notes(department_id TEXT PRIMARY KEY, notes TEXT)"))
     db.execute(text("INSERT OR REPLACE INTO tenants(id,name,active) VALUES(:id,:name,1)"), {"id": tenant_id, "name": tenant_name})
     db.execute(
         text("INSERT OR REPLACE INTO sites(id,name,tenant_id,version) VALUES(:id,:name,:tid,0)"),
         {"id": site_id, "name": f"Site {tenant_id}", "tid": tenant_id},
     )
     db.execute(
-        text("INSERT OR REPLACE INTO departments(id,site_id,name,resident_count_mode) VALUES(:id,:sid,:name,'manual')"),
-        {"id": dept_id, "sid": site_id, "name": "Avd 1"},
+        text("INSERT OR REPLACE INTO departments(id,site_id,name,notes,resident_count_mode) VALUES(:id,:sid,:name,:notes,'manual')"),
+        {"id": dept_id, "sid": site_id, "name": "Avd 1", "notes": "Inga risrätter"},
     )
-    db.execute(text("INSERT OR REPLACE INTO department_notes(department_id, notes) VALUES(:id,'Inga risrätter')"), {"id": dept_id})
 
 
 def test_unit_portal_scope_uses_bound_department_and_ignores_client_overrides(
