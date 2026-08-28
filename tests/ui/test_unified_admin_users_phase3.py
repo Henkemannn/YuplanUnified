@@ -11,6 +11,7 @@ Tests cover:
 - Regression checks
 """
 
+import re
 import uuid
 import pytest
 from sqlalchemy import text
@@ -21,6 +22,24 @@ from core.db import get_session
 def _h(role):
     """Helper to create auth headers for tests."""
     return {"X-User-Role": role, "X-Tenant-Id": "1", "X-User-Id": "1"}
+
+
+def _csrf_from_html(html: str) -> str:
+    match = re.search(r'name="csrf_token" value="([^"]+)"', html)
+    assert match is not None, "CSRF token missing from rendered HTML"
+    return match.group(1)
+
+
+def _form_csrf(client_admin, path: str) -> str:
+    resp = client_admin.get(path, headers=_h("admin"))
+    assert resp.status_code == 200
+    return _csrf_from_html(resp.data.decode("utf-8"))
+
+
+def _list_csrf(client_admin) -> str:
+    resp = client_admin.get("/ui/admin/users", headers=_h("admin"))
+    assert resp.status_code == 200
+    return _csrf_from_html(resp.data.decode("utf-8"))
 
 
 def _seed_unit_portal_department(app, *, tenant_id: int, site_id: str, department_id: str, site_name: str = "Site") -> None:
@@ -198,18 +217,21 @@ def test_users_new_form_renders(client_admin):
     assert "E-post" in html
     assert "Lösenord" in html
     assert "Roll" in html
+    assert 'name="csrf_token"' in html
 
 
 def test_users_create_success(client_admin):
     """Test creating a new user"""
     app = client_admin.application
+    csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     
     resp = client_admin.post("/ui/admin/users/new", data={
         "username": "newuser_create_test",
         "email": "newuser_create@test.com",
         "full_name": "New User Create",
         "password": "password123",
-        "role": "staff"
+        "role": "staff",
+        "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
     
     html = resp.data.decode("utf-8")
@@ -234,13 +256,39 @@ def test_users_create_success(client_admin):
 def test_users_create_validates_required_fields(client_admin):
     """Test user creation requires username, email, password"""
     # Missing username
+    csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     resp = client_admin.post("/ui/admin/users/new", data={
         "email": "test_validation@test.com",
         "password": "pass123",
-        "role": "staff"
+        "role": "staff",
+        "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
     html = resp.data.decode("utf-8")
     assert "måste anges" in html.lower()
+
+
+def test_users_create_invalid_csrf_rejected(client_admin):
+    """Test invalid CSRF blocks user creation."""
+    app = client_admin.application
+    prev_strict = app.config.get("STRICT_CSRF_IN_TESTS")
+    app.config["STRICT_CSRF_IN_TESTS"] = True
+    resp = client_admin.post(
+        "/ui/admin/users/new",
+        data={
+            "username": "badcsrf_user",
+            "email": "badcsrf@test.com",
+            "full_name": "Bad CSRF",
+            "password": "password123",
+            "role": "staff",
+            "csrf_token": "bogus",
+        },
+        headers=_h("admin"),
+        follow_redirects=False,
+    )
+    app.config["STRICT_CSRF_IN_TESTS"] = prev_strict
+    assert resp.status_code == 403
+    body = resp.get_json(silent=True) or {}
+    assert body.get("detail") == "invalid_csrf" or "invalid_csrf" in resp.get_data(as_text=True)
 
 
 def test_users_create_prevents_duplicate_username(client_admin):
@@ -263,11 +311,13 @@ def test_users_create_prevents_duplicate_username(client_admin):
         finally:
             db.close()
     
+    csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     resp = client_admin.post("/ui/admin/users/new", data={
         "username": "existing_user_dup",  # Already exists
         "email": "different_dup@test.com",
         "password": "pass123",
-        "role": "staff"
+        "role": "staff",
+        "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
     
     html = resp.data.decode("utf-8")
@@ -294,11 +344,13 @@ def test_users_create_prevents_duplicate_email(client_admin):
         finally:
             db.close()
     
+    csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     resp = client_admin.post("/ui/admin/users/new", data={
         "username": "newuser_dup_email",
         "email": "existing_dup_email@test.com",  # Already exists
         "password": "pass123",
-        "role": "staff"
+        "role": "staff",
+        "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
     
     html = resp.data.decode("utf-8")
@@ -312,6 +364,7 @@ def test_users_create_unit_portal_requires_tenant_department(client_admin):
     site_id = str(uuid.uuid4())
     _seed_unit_portal_department(app, tenant_id=1, site_id=site_id, department_id=dept_id)
 
+    csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     resp = client_admin.post(
         "/ui/admin/users/new",
         data={
@@ -321,6 +374,7 @@ def test_users_create_unit_portal_requires_tenant_department(client_admin):
             "password": "password123",
             "role": "unit_portal",
             "department_id": dept_id,
+            "csrf_token": csrf_token,
         },
         headers=_h("admin"),
         follow_redirects=True,
@@ -347,6 +401,7 @@ def test_users_create_unit_portal_rejects_cross_tenant_department(client_admin):
     site_id = str(uuid.uuid4())
     _seed_unit_portal_department(app, tenant_id=2, site_id=site_id, department_id=dept_id, site_name="Other Site")
 
+    csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     resp = client_admin.post(
         "/ui/admin/users/new",
         data={
@@ -356,6 +411,7 @@ def test_users_create_unit_portal_rejects_cross_tenant_department(client_admin):
             "password": "password123",
             "role": "unit_portal",
             "department_id": dept_id,
+            "csrf_token": csrf_token,
         },
         headers=_h("admin"),
         follow_redirects=True,
@@ -399,6 +455,7 @@ def test_users_edit_form_renders(client_admin):
     assert "Redigera användare" in html
     assert "edit_form_user" in html
     assert "edit_form_test@test.com" in html
+    assert 'name="csrf_token"' in html
 
 
 def test_users_update_success(client_admin):
@@ -424,6 +481,30 @@ def test_users_update_success(client_admin):
             user_id = db.execute(
                 text("SELECT id FROM users WHERE email='update@test.com' LIMIT 1")
             ).fetchone()[0]
+        finally:
+            db.close()
+    csrf_token = _form_csrf(client_admin, f"/ui/admin/users/{user_id}/edit")
+
+    resp = client_admin.post(f"/ui/admin/users/{user_id}/edit", data={
+        "email": "portal_edit_updated2@test.com",
+        "full_name": "Updated Name",
+        "role": "cook",
+        "csrf_token": csrf_token,
+    }, headers=_h("admin"), follow_redirects=True)
+
+    assert resp.status_code == 200
+
+    # Verify changes
+    with app.app_context():
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT email, full_name, role FROM users WHERE id = :uid"),
+                {"uid": user_id}
+            ).fetchone()
+            assert row[0] == "portal_edit_updated2@test.com"
+            assert row[1] == "Updated Name"
+            assert row[2] == "cook"
         finally:
             db.close()
 
@@ -456,6 +537,7 @@ def test_users_update_unit_portal_rejects_cross_tenant_department(client_admin):
         finally:
             db.close()
 
+    csrf_token = _form_csrf(client_admin, f"/ui/admin/users/{user_id}/edit")
     resp = client_admin.post(
         f"/ui/admin/users/{user_id}/edit",
         data={
@@ -463,6 +545,7 @@ def test_users_update_unit_portal_rejects_cross_tenant_department(client_admin):
             "full_name": "Portal Edit Updated",
             "role": "unit_portal",
             "department_id": dept_b,
+            "csrf_token": csrf_token,
         },
         headers=_h("admin"),
         follow_redirects=True,
@@ -472,10 +555,12 @@ def test_users_update_unit_portal_rejects_cross_tenant_department(client_admin):
     html = resp.data.decode("utf-8")
     assert "tillhör inte din tenant" in html.lower()
     
+    csrf_token = _form_csrf(client_admin, f"/ui/admin/users/{user_id}/edit")
     resp = client_admin.post(f"/ui/admin/users/{user_id}/edit", data={
         "email": "updated@test.com",
         "full_name": "Updated Name",
-        "role": "cook"
+        "role": "cook",
+        "csrf_token": csrf_token,
     }, headers=_h("admin"), follow_redirects=True)
     
     assert resp.status_code == 200
@@ -525,7 +610,8 @@ def test_users_deactivate_success(client_admin):
         finally:
             db.close()
     
-    resp = client_admin.post(f"/ui/admin/users/{user_id}/deactivate", headers=_h("admin"), follow_redirects=True)
+    csrf_token = _list_csrf(client_admin)
+    resp = client_admin.post(f"/ui/admin/users/{user_id}/deactivate", data={"csrf_token": csrf_token}, headers=_h("admin"), follow_redirects=True)
     
     assert resp.status_code == 200
     
@@ -550,7 +636,8 @@ def test_users_deactivate_prevents_self(client_admin):
         from core.db import create_all
         create_all()
     
-    resp = client_admin.post("/ui/admin/users/1/deactivate", headers=_h("admin"), follow_redirects=True)
+    csrf_token = _list_csrf(client_admin)
+    resp = client_admin.post("/ui/admin/users/1/deactivate", data={"csrf_token": csrf_token}, headers=_h("admin"), follow_redirects=True)
     html = resp.data.decode("utf-8")
     
     assert "eget konto" in html.lower() or "kan inte" in html.lower()
@@ -586,7 +673,8 @@ def test_users_reset_password_stub(client_admin):
         finally:
             db.close()
     
-    resp = client_admin.post(f"/ui/admin/users/{user_id}/reset-password", headers=_h("admin"), follow_redirects=True)
+    csrf_token = _list_csrf(client_admin)
+    resp = client_admin.post(f"/ui/admin/users/{user_id}/reset-password", data={"csrf_token": csrf_token}, headers=_h("admin"), follow_redirects=True)
     html = resp.data.decode("utf-8")
     
     assert resp.status_code == 200

@@ -83,6 +83,7 @@
                                   action="{{ url_for('ui.admin_users_reset_password', user_id=user.id) }}"
                                   style="display:inline;"
                                   onsubmit="return confirm('Återställ lösenord för {{ user.username }}?');">
+                                {{ csrf_token_input()|safe }}
                                 <button type="submit" class="yp-button yp-button-warning yp-button-sm" title="Återställ lösenord">
                                     🔑 Återställ
                                 </button>
@@ -91,6 +92,7 @@
                                   action="{{ url_for('ui.admin_users_deactivate', user_id=user.id) }}"
                                   style="display:inline;"
                                   onsubmit="return confirm('Inaktivera användare {{ user.username }}?');">
+                                {{ csrf_token_input()|safe }}
                                 <button type="submit" class="yp-button yp-button-danger yp-button-sm" title="Inaktivera">
                                     🗑️ Inaktivera
                                 </button>

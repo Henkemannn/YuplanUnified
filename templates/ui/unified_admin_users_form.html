@@ -25,6 +25,7 @@
         <form method="post" 
               action="{% if vm.mode == 'new' %}{{ url_for('ui.admin_users_create') }}{% else %}{{ url_for('ui.admin_users_update', user_id=vm.user.id) }}{% endif %}"
               class="yp-form user-form">
+                        {{ csrf_token_input()|safe }}
             
             <!-- Username (only for new users) -->
             {% if vm.mode == 'new' %}
