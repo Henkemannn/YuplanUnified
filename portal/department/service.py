@@ -54,7 +54,7 @@ _MENU_DAY_MAP = {1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat", 7: 
 
 
 def _iso_week_start(year: int, week: int) -> datetime:
-    return datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+    return datetime.fromisocalendar(int(year), int(week), 1)
 
 
 def _fetch_department_meta(department_id: str) -> tuple[str, str, str | None]:

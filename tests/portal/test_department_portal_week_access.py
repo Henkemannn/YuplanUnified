@@ -1,3 +1,4 @@
+from datetime import date as _date
 from datetime import datetime
 import pytest
 from sqlalchemy import text
@@ -235,3 +236,53 @@ def test_portal_week_without_publication_has_empty_menu(client_admin, seed_porta
     assert monday["menu"]["lunch_alt2"] is None
     assert monday["menu"]["dessert"] is None
     assert monday["menu"]["dinner"] is None
+
+
+@pytest.mark.parametrize(
+    ("year", "week", "expected_monday", "expected_sunday"),
+    [
+        (2026, 35, "2026-08-24", "2026-08-30"),
+        (2026, 36, "2026-08-31", "2026-09-06"),
+        (2026, 1, "2025-12-29", "2026-01-04"),
+        (2020, 53, "2020-12-28", "2021-01-03"),
+    ],
+)
+def test_portal_week_iso_dates_are_aligned(client_admin, seed_portal_department_data, seed_canonical_builder_publication, year, week, expected_monday, expected_sunday):
+    dept_id = f"iso-{year}-{week}-dept"
+    site_id = f"iso-{year}-{week}-site"
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=year, week=week)
+    seed_canonical_builder_publication(site_id=site_id, year=year, week=week)
+
+    resp = client_admin.get(
+        f"/portal/department/week?year={year}&week={week}",
+        headers=_h(),
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert resp.status_code == 200
+    payload = resp.get_json()
+    expected_dates = [_date.fromisocalendar(year, week, dow).isoformat() for dow in range(1, 8)]
+    actual_dates = [day["date"] for day in payload["days"]]
+    assert actual_dates == expected_dates
+    assert actual_dates[0] == expected_monday
+    assert actual_dates[-1] == expected_sunday
+    assert payload["week"] == week
+    assert payload["year"] == year
+
+
+def test_portal_week_iso_dates_rendered_html_matches_payload(client_admin, seed_portal_department_data, seed_canonical_builder_publication):
+    year = 2026
+    week = 35
+    dept_id = "iso-render-dept"
+    site_id = "iso-render-site"
+    seed_portal_department_data(dept_id=dept_id, site_id=site_id, year=year, week=week)
+    seed_canonical_builder_publication(site_id=site_id, year=year, week=week)
+
+    resp = client_admin.get(
+        f"/ui/portal/department/week?year={year}&week={week}",
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert "Vecka 35" in html
+    for dow in range(1, 8):
+        assert _date.fromisocalendar(year, week, dow).isoformat() in html
