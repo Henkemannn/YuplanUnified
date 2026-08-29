@@ -33,7 +33,7 @@ def ui_login():  # Simple HTML login that sets session directly or redirects to 
     from werkzeug.security import check_password_hash
     from .db import get_session as _get_session
     from .models import User
-    from .auth import set_csrf_cookie as _set_csrf_cookie
+    from .auth import set_csrf_cookie as _set_csrf_cookie, _lookup_user_by_email as _get_user_by_email
     from flask import make_response
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
@@ -42,7 +42,7 @@ def ui_login():  # Simple HTML login that sets session directly or redirects to 
             return render_template("login.html", vm={"error": "Saknade uppgifter"})
         db = _get_session()
         try:
-            user = db.query(User).filter(User.email == email).first()
+            user = _get_user_by_email(db, email)
             if not user or not check_password_hash(user.password_hash, password):
                 return render_template("login.html", vm={"error": "Ogiltiga uppgifter"})
             # Set session
@@ -158,7 +158,9 @@ def ui_dev_login():  # pragma: no cover
     from .models import User
     db = _get_session()
     try:
-        user = db.query(User).filter(User.email == email.lower()).first()
+        from .auth import _lookup_user_by_email as _get_user_by_email
+
+        user = _get_user_by_email(db, email)
         if not user:
             return redirect(url_for("home.ui_login"))
         session["user_id"] = user.id

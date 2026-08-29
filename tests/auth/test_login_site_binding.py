@@ -39,6 +39,24 @@ def _seed_single_site(db, tenant_id: int) -> str:
     return site_id
 
 
+def _seed_user_with_email(db, *, email: str, role: str = "superuser", password: str = "Passw0rd!") -> int:
+    t = db.query(Tenant).first()
+    if not t:
+        t = Tenant(name="Primary")
+        db.add(t)
+        db.flush()
+    user = User(
+        tenant_id=t.id,
+        email=email,
+        username=email.lower(),
+        password_hash=generate_password_hash(password),
+        role=role,
+    )
+    db.add(user)
+    db.commit()
+    return user.id
+
+
 def _make_isolated_app():
     import os as _os
     import tempfile as _tf
@@ -218,3 +236,109 @@ def test_login_replaces_display_identity_in_same_session(monkeypatch):
         assert page.status_code == 200
         html = page.get_data(as_text=True)
         assert "Yuplan Cook A (superuser)" not in html
+
+
+def test_login_accepts_legacy_mixed_case_email(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        try:
+            _seed_user_with_email(db, email="Legacy.Mixed@Example.Com", role="superuser", password="SuperPassw0rd!")
+            c = app.test_client()
+            r = c.post(
+                "/auth/login",
+                json={"email": "legacy.mixed@example.com", "password": "SuperPassw0rd!"},
+                headers={"Accept": "application/json"},
+            )
+            assert r.status_code == 200
+            j = r.get_json() or {}
+            assert j.get("ok") is True
+            with c.session_transaction() as sess:
+                assert sess.get("user_email") == "Legacy.Mixed@Example.Com"
+        finally:
+            db.close()
+
+
+def test_login_accepts_arbitrary_client_casing(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        try:
+            stored_email = _seed_tenant_and_user(db, role="superuser")
+            c = app.test_client()
+            client_email = stored_email.swapcase()
+            r = c.post(
+                "/auth/login",
+                json={"email": client_email, "password": "Passw0rd!"},
+                headers={"Accept": "application/json"},
+            )
+            assert r.status_code == 200
+            j = r.get_json() or {}
+            assert j.get("ok") is True
+            with c.session_transaction() as sess:
+                assert sess.get("user_id") is not None
+                assert (sess.get("user_email") or "").lower() == stored_email.lower()
+
+            row = db.execute(
+                text("SELECT email FROM users WHERE email = :email LIMIT 1"),
+                {"email": stored_email.lower()},
+            ).fetchone()
+            assert row is not None
+            assert row[0] == stored_email.lower()
+        finally:
+            db.close()
+
+
+def test_login_fails_closed_for_ambiguous_case_variants(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        try:
+            from werkzeug.security import generate_password_hash
+
+            tenant = db.query(Tenant).first()
+            if not tenant:
+                tenant = Tenant(name="Primary")
+                db.add(tenant)
+                db.flush()
+
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, username, password_hash, role, is_active) "
+                    "VALUES (:tid, 'ambiguous@example.com', 'ambiguous_a', :ph, 'superuser', 1)"
+                ),
+                {"tid": tenant.id, "ph": generate_password_hash("Passw0rd!")},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, username, password_hash, role, is_active) "
+                    "VALUES (:tid, 'Ambiguous@Example.com', 'ambiguous_b', :ph, 'superuser', 1)"
+                ),
+                {"tid": tenant.id, "ph": generate_password_hash("Passw0rd!")},
+            )
+            db.commit()
+
+            c = app.test_client()
+            r = c.post(
+                "/auth/login",
+                json={"email": "ambiguous@example.com", "password": "Passw0rd!"},
+                headers={"Accept": "application/json"},
+            )
+            assert r.status_code == 401
+            body = r.get_json() or {}
+            assert body.get("error") == "invalid credentials"
+            assert body.get("message") == "invalid credentials"
+
+            with c.session_transaction() as sess:
+                assert sess.get("user_id") is None
+                assert sess.get("role") is None
+
+            rows = db.execute(
+                text("SELECT id, email FROM users WHERE lower(email) = 'ambiguous@example.com' ORDER BY id"),
+            ).fetchall()
+            assert len(rows) == 2
+        finally:
+            db.close()

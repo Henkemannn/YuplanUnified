@@ -227,7 +227,7 @@ def test_users_create_success(client_admin):
     
     resp = client_admin.post("/ui/admin/users/new", data={
         "username": "newuser_create_test",
-        "email": "newuser_create@test.com",
+        "email": "NewUser_Create@Test.com",
         "full_name": "New User Create",
         "password": "password123",
         "role": "staff",
@@ -347,7 +347,7 @@ def test_users_create_prevents_duplicate_email(client_admin):
     csrf_token = _form_csrf(client_admin, "/ui/admin/users/new")
     resp = client_admin.post("/ui/admin/users/new", data={
         "username": "newuser_dup_email",
-        "email": "existing_dup_email@test.com",  # Already exists
+        "email": "Existing_Dup_Email@Test.com",  # Already exists
         "password": "pass123",
         "role": "staff",
         "csrf_token": csrf_token,
@@ -355,6 +355,65 @@ def test_users_create_prevents_duplicate_email(client_admin):
     
     html = resp.data.decode("utf-8")
     assert "används redan" in html.lower() or "finns redan" in html.lower()
+
+
+def test_users_update_rejects_case_insensitive_duplicate_email(client_admin):
+    """Test updating a user rejects duplicate email ignoring case."""
+    app = client_admin.application
+
+    with app.app_context():
+        db = get_session()
+        try:
+            from werkzeug.security import generate_password_hash
+
+            pw_hash = generate_password_hash("pass123")
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, 'existing@example.com', :ph, 'staff', 'existing_user_case', 'Existing User Case', 1)"
+                ),
+                {"ph": pw_hash},
+            )
+            db.execute(
+                text(
+                    "INSERT INTO users (tenant_id, email, password_hash, role, username, full_name, is_active) "
+                    "VALUES (1, 'other@example.com', :ph, 'staff', 'other_user_case', 'Other User Case', 1)"
+                ),
+                {"ph": pw_hash},
+            )
+            db.commit()
+            user_b_id = db.execute(text("SELECT id FROM users WHERE username = 'other_user_case' LIMIT 1")).fetchone()[0]
+        finally:
+            db.close()
+
+    csrf_token = _form_csrf(client_admin, f"/ui/admin/users/{user_b_id}/edit")
+    resp = client_admin.post(
+        f"/ui/admin/users/{user_b_id}/edit",
+        data={
+            "email": "Existing@Example.COM",
+            "full_name": "Other User Case",
+            "role": "staff",
+            "csrf_token": csrf_token,
+        },
+        headers=_h("admin"),
+        follow_redirects=True,
+    )
+
+    html = resp.data.decode("utf-8")
+    assert resp.status_code == 200
+    assert "används redan" in html.lower() or "finns redan" in html.lower()
+
+    with app.app_context():
+        db = get_session()
+        try:
+            row = db.execute(
+                text("SELECT email FROM users WHERE id = :uid"),
+                {"uid": user_b_id},
+            ).fetchone()
+            assert row is not None
+            assert row[0] == "other@example.com"
+        finally:
+            db.close()
 
 
 def test_users_create_unit_portal_requires_tenant_department(client_admin):
@@ -486,7 +545,7 @@ def test_users_update_success(client_admin):
     csrf_token = _form_csrf(client_admin, f"/ui/admin/users/{user_id}/edit")
 
     resp = client_admin.post(f"/ui/admin/users/{user_id}/edit", data={
-        "email": "portal_edit_updated2@test.com",
+        "email": "Portal_Edit_Updated2@Test.com",
         "full_name": "Updated Name",
         "role": "cook",
         "csrf_token": csrf_token,

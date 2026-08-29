@@ -6,6 +6,7 @@ from collections.abc import Callable
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, make_response, request, session, render_template
+from sqlalchemy import func
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_session
@@ -168,6 +169,22 @@ def _emit_dev_auth_fingerprint(tag: str) -> None:
         pass
 
 
+def _lookup_user_by_email(db, email: str) -> User | None:
+    normalized_email = (email or "").strip().lower()
+    if not normalized_email:
+        return None
+    candidates = (
+        db.query(User)
+        .filter(func.lower(User.email) == normalized_email)
+        .order_by(User.id.asc())
+        .limit(2)
+        .all()
+    )
+    if len(candidates) != 1:
+        return None
+    return candidates[0]
+
+
 # --- Routes ---
 @bp.post("/login")
 def login():
@@ -235,9 +252,8 @@ def login():
         store[key] = rec
     db = get_session()
     try:
-        # Login user lookup: filter by exact match on email with lowercased input from above.
-        # No tenant/site filters; no is_active enforced.
-        user = db.query(User).filter(User.email == email).first()
+        # Login user lookup: case-insensitive on stored email, but fail closed when duplicates exist.
+        user = _lookup_user_by_email(db, email)
         user_found = bool(user)
         password_ok = bool(user and check_password_hash(user.password_hash, password))
         if (not user_found) or (not password_ok):

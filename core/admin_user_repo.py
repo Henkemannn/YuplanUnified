@@ -12,6 +12,10 @@ from .db import get_session
 from .models import User
 
 
+def _normalize_email(email: Optional[str]) -> str:
+    return str(email or "").strip().lower()
+
+
 class AdminUserRepo:
     """Repository for user CRUD operations in admin panel"""
 
@@ -102,6 +106,7 @@ class AdminUserRepo:
         Returns the new user ID.
         """
         password_hash = generate_password_hash(password)
+        normalized_email = _normalize_email(email)
         
         db = get_session()
         try:
@@ -109,7 +114,7 @@ class AdminUserRepo:
             user = User(
                 tenant_id=tenant_id,
                 username=username,
-                email=email,
+            email=normalized_email,
                 password_hash=password_hash,
                 full_name=full_name,
                 role=role,
@@ -144,7 +149,7 @@ class AdminUserRepo:
             
             if email is not None:
                 updates.append("email = :email")
-                params["email"] = email
+                params["email"] = _normalize_email(email)
             
             if full_name is not None:
                 updates.append("full_name = :full_name")
@@ -238,17 +243,20 @@ class AdminUserRepo:
 
     def email_exists(self, email: str, exclude_user_id: Optional[int] = None) -> bool:
         """Check if email already exists"""
+        normalized_email = _normalize_email(email)
+        if not normalized_email:
+            return False
         db = get_session()
         try:
             if exclude_user_id:
                 row = db.execute(
-                    text("SELECT 1 FROM users WHERE email = :e AND id != :eid LIMIT 1"),
-                    {"e": email, "eid": exclude_user_id}
+                    text("SELECT 1 FROM users WHERE lower(email) = :e AND id != :eid LIMIT 1"),
+                    {"e": normalized_email, "eid": exclude_user_id}
                 ).fetchone()
             else:
                 row = db.execute(
-                    text("SELECT 1 FROM users WHERE email = :e LIMIT 1"),
-                    {"e": email}
+                    text("SELECT 1 FROM users WHERE lower(email) = :e LIMIT 1"),
+                    {"e": normalized_email}
                 ).fetchone()
             return row is not None
         finally:
