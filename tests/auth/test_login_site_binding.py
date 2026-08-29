@@ -1,7 +1,8 @@
 import uuid
+import pytest
 from core.app_factory import create_app
 from core.db import get_session, create_all
-from core.models import User, Tenant
+from core.models import User, Tenant, Site, Department
 from werkzeug.security import generate_password_hash
 from sqlalchemy import text
 
@@ -55,6 +56,40 @@ def _seed_user_with_email(db, *, email: str, role: str = "superuser", password: 
     db.add(user)
     db.commit()
     return user.id
+
+
+def _seed_html_login_user(db, *, role: str, password: str = "Passw0rd!") -> tuple[str, str, str | None]:
+    t = db.query(Tenant).first()
+    if not t:
+        t = Tenant(name="Primary")
+        db.add(t)
+        db.flush()
+    site = Site(id=f"site-{uuid.uuid4().hex}", name="Primary Site", tenant_id=t.id)
+    db.add(site)
+    db.flush()
+    department_id = None
+    if role == "unit_portal":
+        department_id = f"dept-{uuid.uuid4().hex}"
+        dept = Department(
+            id=department_id,
+            site_id=site.id,
+            name="Portal Dept",
+            resident_count_mode="manual",
+        )
+        db.add(dept)
+        db.flush()
+    email = f"{role}.{uuid.uuid4().hex[:8]}@example.com"
+    user = User(
+        tenant_id=t.id,
+        email=email.lower(),
+        username=email.lower(),
+        password_hash=generate_password_hash(password),
+        role=role,
+        department_id=department_id,
+    )
+    db.add(user)
+    db.commit()
+    return email.lower(), site.id, department_id
 
 
 def _make_isolated_app():
@@ -236,6 +271,102 @@ def test_login_replaces_display_identity_in_same_session(monkeypatch):
         assert page.status_code == 200
         html = page.get_data(as_text=True)
         assert "Yuplan Cook A (superuser)" not in html
+
+
+@pytest.mark.parametrize(
+    ("role", "expected_target"),
+    [
+        ("unit_portal", "/ui/portal/department/week"),
+        ("staff", "/ui/portal/week"),
+        ("department", "/ui/portal/week"),
+        ("admin", "/ui/admin"),
+        ("kitchen", "/ui/kitchen"),
+        ("superuser", "/ui/systemadmin/dashboard"),
+    ],
+)
+def test_login_html_lands_roles_on_expected_target(monkeypatch, role, expected_target):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        try:
+            email, _, _ = _seed_html_login_user(db, role=role, password="RolePassw0rd!")
+            c = app.test_client()
+            resp = c.post(
+                "/auth/login",
+                data={"email": email, "password": "RolePassw0rd!"},
+                headers={"Accept": "text/html"},
+                follow_redirects=False,
+            )
+            assert resp.status_code in (301, 302)
+            assert expected_target in (resp.headers.get("Location") or "")
+        finally:
+            db.close()
+
+
+def test_login_unit_portal_follow_redirect_reaches_department_portal(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        try:
+            email, _, department_id = _seed_html_login_user(db, role="unit_portal", password="PortalPassw0rd!")
+            assert department_id is not None
+            c = app.test_client()
+            resp = c.post(
+                "/auth/login",
+                data={"email": email, "password": "PortalPassw0rd!"},
+                headers={"Accept": "text/html"},
+                follow_redirects=True,
+            )
+            assert resp.status_code == 200
+            html = resp.get_data(as_text=True)
+            assert "Avdelningsportal" in html
+        finally:
+            db.close()
+
+
+def test_login_unit_portal_missing_department_binding_is_denied(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    app = _make_isolated_app()
+    with app.app_context():
+        db = get_session()
+        try:
+            t = db.query(Tenant).first()
+            if not t:
+                t = Tenant(name="Primary")
+                db.add(t)
+                db.flush()
+            site = Site(id=f"site-{uuid.uuid4().hex}", name="Primary Site", tenant_id=t.id)
+            db.add(site)
+            db.flush()
+            email = f"unit_portal.{uuid.uuid4().hex[:8]}@example.com"
+            user = User(
+                tenant_id=t.id,
+                email=email.lower(),
+                username=email.lower(),
+                password_hash=generate_password_hash("PortalPassw0rd!"),
+                role="unit_portal",
+                department_id=None,
+            )
+            db.add(user)
+            db.commit()
+
+            c = app.test_client()
+            resp = c.post(
+                "/auth/login",
+                data={"email": email.lower(), "password": "PortalPassw0rd!"},
+                headers={"Accept": "text/html"},
+                follow_redirects=False,
+            )
+            assert resp.status_code in (301, 302)
+            location = resp.headers.get("Location") or ""
+            assert "/ui/portal/department/week" in location
+
+            next_resp = c.get(location)
+            assert next_resp.status_code == 403
+        finally:
+            db.close()
 
 
 def test_login_accepts_legacy_mixed_case_email(monkeypatch):

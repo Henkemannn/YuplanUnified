@@ -8,6 +8,21 @@ from portal.department.service import build_department_week_payload
 
 portal_dept_ui_bp = Blueprint("portal_dept_ui", __name__)
 
+_SV_MONTHS = {
+    1: "januari",
+    2: "februari",
+    3: "mars",
+    4: "april",
+    5: "maj",
+    6: "juni",
+    7: "juli",
+    8: "augusti",
+    9: "september",
+    10: "oktober",
+    11: "november",
+    12: "december",
+}
+
 
 def _is_pilot_or_prod() -> bool:
     env = (current_app.config.get("DEPLOY_ENV") or current_app.config.get("APP_ENV") or "").lower()
@@ -31,6 +46,20 @@ def _resolve_year_week(year_raw: str | None, week_raw: str | None) -> tuple[int,
     if year < 2000 or year > 2100 or week < 1 or week > 53:
         raise ValueError("invalid_year_week")
     return year, week
+
+
+def _format_sv_date_span(start_date: _date, end_date: _date) -> str:
+    if start_date.year == end_date.year and start_date.month == end_date.month:
+        return f"{start_date.day}–{end_date.day} {_SV_MONTHS[start_date.month]} {start_date.year}"
+    if start_date.year == end_date.year:
+        return (
+            f"{start_date.day} {_SV_MONTHS[start_date.month]}–"
+            f"{end_date.day} {_SV_MONTHS[end_date.month]} {start_date.year}"
+        )
+    return (
+        f"{start_date.day} {_SV_MONTHS[start_date.month]} {start_date.year}–"
+        f"{end_date.day} {_SV_MONTHS[end_date.month]} {end_date.year}"
+    )
 
 
 @portal_dept_ui_bp.get("/ui/portal/department/week")
@@ -83,20 +112,19 @@ def portal_department_week_ui():  # type: ignore[override]
     else:
         scope = resolve_department_portal_scope()
     payload = build_department_week_payload(scope, year, week)
+    week_start = _date.fromisoformat(payload["days"][0]["date"])
+    week_end = _date.fromisoformat(payload["days"][-1]["date"])
     vm = {
         "department_name": payload["department_name"],
         "site_name": payload["site_name"],
         "year": payload["year"],
         "week": payload["week"],
+        "week_span_label": _format_sv_date_span(week_start, week_end),
         "facts": payload["facts"],
         "progress": payload["progress"],
         "days": payload["days"],
         "etag_map": payload["etag_map"],
         "summary": payload.get("summary", {"registered_lunch_days": 0, "registered_dinner_days": 0}),
-        "links": {
-            "weekview": f"/ui/weekview?site_id={payload['site_id']}&department_id={payload['department_id']}&year={payload['year']}&week={payload['week']}",
-            "report_weekview": f"/ui/reports/weekview?site_id={payload['site_id']}&year={payload['year']}&week={payload['week']}",
-        },
     }
     return render_template("portal_department_week.html", vm=vm)
 

@@ -45,6 +45,10 @@ def test_portal_shows_menu_choice_and_controls(client_admin: FlaskClient):
     assert "class=\"portal-alt-cell portal-alt2-cell" in html
     assert "aria-label=\"Välj Alt 1" in html
     assert "aria-label=\"Välj Alt 2" in html
+    assert "Öppna veckovy" not in html
+    assert "Visa rapport" not in html
+    assert "/ui/weekview?" not in html
+    assert "/ui/reports/weekview?" not in html
 
 
 def test_menu_choice_change_updates_selection(client_admin: FlaskClient):

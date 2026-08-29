@@ -71,3 +71,37 @@ def test_global_navigation_present(client_admin):
     html = resp.get_data(as_text=True)
     assert '<nav class="main-nav"' in html
     assert 'Avdelningsportal' in html
+    assert 'Veckovy' in html
+    assert 'Planera' in html
+    assert 'Rapport' in html
+    assert 'Admin' in html
+
+
+def test_global_navigation_unit_portal_shell_is_department_only(client_admin):
+    year = 2025
+    week = 47
+    dept_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff"
+    site_id = "11111111-2222-3333-4444-555555555555"
+    from core.db import get_session
+    db = get_session()
+    try:
+        _seed_portal_week(db, dept_id, site_id, year, week)
+    finally:
+        db.close()
+    resp = client_admin.get(
+        f"/ui/portal/department/week?year={year}&week={week}&department_id={dept_id}",
+        headers=_h("unit_portal", user_id=11),
+        environ_overrides={"test_claims": {"department_id": dept_id}},
+    )
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert '<nav class="main-nav"' in html
+    assert 'Avdelningsportal' in html
+    assert '/ui/portal/department/week' in html
+    assert 'Veckovy' not in html
+    assert 'Planera' not in html
+    assert 'Rapport' not in html
+    assert 'Admin' not in html
+    assert '/ui/weekview' not in html
+    denied = client_admin.get("/ui/admin", headers=_h("unit_portal", user_id=11))
+    assert denied.status_code == 403

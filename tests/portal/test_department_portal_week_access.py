@@ -284,5 +284,15 @@ def test_portal_week_iso_dates_rendered_html_matches_payload(client_admin, seed_
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "Vecka 35" in html
+    assert "24–30 augusti 2026" in html
+    assert "Vecka 35" in html
+    assert "Öppna veckovy" not in html
+    assert "Visa rapport" not in html
+    assert "/ui/weekview?" not in html
+    assert "/ui/reports/weekview?" not in html
+    assert "← Föregående" in html
+    assert "Nästa →" in html
+    assert "/ui/portal/department/week?year=2026&amp;week=34" in html
+    assert "/ui/portal/department/week?year=2026&amp;week=36" in html
     for dow in range(1, 8):
         assert _date.fromisocalendar(year, week, dow).isoformat() in html

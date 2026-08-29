@@ -436,7 +436,9 @@ def login():
                         return resp
                     else:
                         target = url_for("ui.admin_dashboard")
-                elif r in ("unit_portal", "staff", "department"):
+                elif r == "unit_portal":
+                    target = url_for("portal_dept_ui.portal_department_week_ui")
+                elif r in ("staff", "department"):
                     target = url_for("ui.portal_week")
                 else:
                     target = url_for("ui.admin_dashboard")

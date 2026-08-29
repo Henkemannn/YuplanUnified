@@ -12,12 +12,14 @@
   <header class="portal-header">
     <div>
       <h1>{{ vm.site_name }} – {{ vm.department_name }}</h1>
-      <p class="portal-subtitle">År {{ vm.year }} • Vecka {{ vm.week }}</p>
     </div>
     <div class="portal-week-nav">
-      <a href="{{ url_for('portal_dept_ui.portal_department_week_ui', year=vm.year, week=vm.week-1) }}">← Föregående vecka</a>
-      <span>|</span>
-      <a href="{{ url_for('portal_dept_ui.portal_department_week_ui', year=vm.year, week=vm.week+1) }}">Nästa vecka →</a>
+      <a href="{{ url_for('portal_dept_ui.portal_department_week_ui', year=vm.year, week=vm.week-1) }}">← Föregående</a>
+      <div class="portal-week-nav-center">
+        <div class="portal-week-badge">Vecka {{ vm.week }}</div>
+        <div class="portal-week-span">{{ vm.week_span_label }}</div>
+      </div>
+      <a href="{{ url_for('portal_dept_ui.portal_department_week_ui', year=vm.year, week=vm.week+1) }}">Nästa →</a>
     </div>
   </header>
 
@@ -204,10 +206,6 @@
     {% if vm.summary.diet_days_count is not none %}
       <p>Dagar med specialkost: {{ vm.summary.diet_days_count }}</p>
     {% endif %}
-    <div class="portal-actions">
-      <a class="yp-btn" href="{{ vm.links.weekview }}">Öppna veckovy</a>
-      <a class="yp-btn yp-btn-secondary" href="{{ vm.links.report_weekview }}">Visa rapport</a>
-    </div>
   </section>
   <!-- Conflict overlay permanently removed for demo/dev -->
   <!--

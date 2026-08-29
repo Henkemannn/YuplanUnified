@@ -24,12 +24,15 @@
 </head>
 <body>
 {% if not hide_global_nav %}
+{% set is_unit_portal = (session.get('role') == 'unit_portal') or (current_user and current_user.role == 'unit_portal') %}
 <nav class="main-nav">
   {% set is_systemadmin_ctx = (request.endpoint=='ui.admin_system_page' or request.path.startswith('/ui/admin/system')) %}
   {% if is_systemadmin_ctx and has_role('superuser') %}
     {# Systemadmin context: show only systemadmin navigation #}
     <a href="{{ url_for('ui.admin_system_page') }}" class="active">Systemadministration</a>
     {# Optional: add Kunder/Logga ut links if available in routes #}
+  {% elif is_unit_portal %}
+    <a href="{{ url_for('portal_dept_ui.portal_department_week_ui') }}" class="{% if request.path.startswith('/ui/portal/department') %}active{% endif %}">Avdelningsportal</a>
   {% else %}
     <a href="{{ url_for('ui.weekview_ui') }}">Veckovy</a>
     <a href="{{ url_for('ui.portal_week') }}" class="{% if request.path.startswith('/portal/week') %}active{% endif %}">Avdelningsportal</a>
@@ -68,7 +71,9 @@
   <div class="wrap">
     <nav>
       <strong>Yuplan</strong>
+      {% if not is_unit_portal %}
       · <a href="{{ url_for('ui.weekview_ui') }}" class="{% if request.endpoint=='ui.weekview_ui' %}active{% endif %}">Översikt</a>
+      {% endif %}
       {% if current_user %}<span class="pill">Tenant {{ tenant_id }}</span>{% endif %}
       <span style="float:right">
         {% if current_user and current_user.role in ('admin','superuser') %}
