@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-27
+Last reviewed: 2026-08-29
 
 # Decision Log
 
@@ -42,3 +42,11 @@ Last reviewed: 2026-08-27
 - The shared Builder/Menu/Offshore seam is accepted and broad Builder/Menu MVP work is frozen. Only a concrete pilot-blocking regression or deliberate Ground Truth change may reopen it before Kommun 1.0 Ready for Pilot.
 - Legacy unscoped read compatibility remains technical debt and does not define fresh-tenant architecture or justify reopening broad Builder product scope.
 - Active launch work moves to Portal Foundation / Avdelningsportal canonical-path consolidation for Kommun 1.0.
+
+## 2026-08-29
+- Portal Foundation is confirmed as cross-domain shared platform infrastructure, not a Kommun-only model.
+- Kommun is the first Portal Foundation adapter; it does not define the generic portal platform.
+- Shared portal behavior should remain domain-neutral where genuinely shared: scoped identity/access, published menu consumption, week/day context, explicit choices or confirmations, status/progress, reminders/communication, and responsive/iPad shell.
+- Kommun-specific `DepartmentPortalScope`, `Department`, resident/diet context, and `department_menu_choices` remain valid Kommun implementations and must not be promoted into the generic Portal Foundation model.
+- Offshore must be able to reuse the shared Portal Foundation with its own installation/vessel/site and crew/section context without replacing or weakening valid Kommun domain models.
+- Shared naming should be domain-neutral only when the concept is truly shared; avoid premature generic schemas or refactors solely for reuse.

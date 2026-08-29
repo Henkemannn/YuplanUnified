@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-27
+Last reviewed: 2026-08-29
 
 # Portals Architecture Lock
 
@@ -15,6 +15,40 @@ Create or reuse a common Portal Foundation where practical:
 - information and messages
 - canonical menu identity and data consumption
 - portals consume the published or external menu truth.
+
+## Cross-domain Portal Rule
+Portal Foundation is shared platform infrastructure and must not be designed as Kommun-only.
+
+Shared or potentially shared portal capabilities include:
+- scoped authentication and portal identity
+- published menu consumption
+- week and day context
+- explicit user choices or confirmations
+- status and progress
+- reminders and communication
+- responsive and iPad shell
+
+Business-specific adapters own their own domain context and must not be forced into one generic domain model merely to share portal capabilities.
+
+Kommun is the first Portal Foundation adapter, not the definition of the portal platform.
+
+Kommun-specific portal context may include:
+- Department scope
+- residents and resident counts
+- department dietary and deviation context
+- explicit department menu choices
+
+`DepartmentPortalScope`, `Department`, and `department_menu_choices` are valid Kommun-specific implementations. They must not become the generic Portal Foundation model.
+
+Offshore must be able to reuse the same Portal Foundation while using offshore-specific scope and context such as:
+- installation, vessel or site
+- crew or section context
+- published offshore menu presentation
+- relevant confirmations, communication and handover-oriented portal functions
+
+Future shared portal concepts should use domain-neutral naming where the concept is genuinely shared. For example, a future shared week-status concept should be framed as portal-level status rather than hard-coded as a department-only platform concept.
+
+Do not prematurely generalize away valid Kommun or Offshore domain models. Reuse should happen through shared contracts, services and adapters where the behavior is truly shared.
 
 ## Avdelningsportal
 - scoped to a department.
