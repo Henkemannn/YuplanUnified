@@ -361,20 +361,45 @@
   color: var(--text);
   font-weight: 650;
   min-height: 34px;
-  padding: 4px 12px;
-  min-width: 0;
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  line-height: 1.2;
+  padding: 4px 11px;
+  min-width: 46px;
+  max-width: 72px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
   text-align: center;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 
-.admin-alt2-modal .alt2-day.is-selected {
-  background: color-mix(in srgb, var(--accent) 22%, var(--chip-bg));
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
-  color: var(--text);
+.admin-alt2-modal .alt2-day.is-none {
+  opacity: 0.78;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--chip-bg) 90%, transparent 10%);
+}
+
+.admin-alt2-modal .alt2-day.is-alt1 {
+  opacity: 1;
+  border-style: solid;
+  background: var(--chip-bg);
+}
+
+.admin-alt2-modal .alt2-day.is-alt2 {
+  background: color-mix(in srgb, var(--yp-alt2-bg) 88%, var(--surface) 12%);
+  border-color: color-mix(in srgb, var(--yp-alt2-text) 48%, var(--border));
+  color: var(--yp-alt2-fg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yp-alt2-text) 14%, transparent);
+  opacity: 1;
+}
+
+.app-shell--dark .admin-alt2-modal .alt2-day.is-alt2 {
+  background: color-mix(in srgb, var(--yp-alt2-bg) 72%, var(--surface) 28%);
+  color: var(--yp-alt2-fg);
+}
+
+.admin-alt2-modal .alt2-day:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--yp-alt2-text) 55%, var(--accent) 45%);
+  outline-offset: 2px;
 }
 
 .admin-alt2-modal__footer {

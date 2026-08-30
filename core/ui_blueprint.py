@@ -6184,15 +6184,15 @@ def admin_departments_edit_form(dept_id: str):
 @ui_bp.get("/ui/admin/departments/<dept_id>/alt2")
 @require_roles(*ADMIN_ROLES)
 def admin_department_alt2_get(dept_id: str):
-    """Return Alt2 flags for a department for a given ISO week (read-only, JSON).
+    """Return canonical menu choices for a department for a given ISO week (read-only, JSON).
 
     Query params: year, week. Defaults to current if missing. Site-scoped via active session site.
     """
     from datetime import date as _dt
     from flask import jsonify, abort
-    from sqlalchemy import text
     from core.db import get_session
-    from core.menu_planning_repo import MenuPlanningRepo
+    from core.department_menu_choice_repo import MenuChoiceRepo
+    from core.db import get_site_tenant
 
     # Resolve year/week
     try:
@@ -6219,8 +6219,9 @@ def admin_department_alt2_get(dept_id: str):
     # Active site required
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
-    active_site_id = ctx.get("site_id")
+    active_site_id = (ctx.get("site_id") or "").strip() or None
     explicit_site_id = (request.args.get("site_id") or "").strip() or None
+    tenant_id = ctx.get("tenant_id") or session.get("tenant_id")
 
     # Verify department belongs to active site
     db = get_session()
@@ -6235,6 +6236,9 @@ def admin_department_alt2_get(dept_id: str):
     if not row:
         return jsonify({"error": "not_found"}), 404
     dept_site_id = str(row[0])
+    dept_site_tenant_id = get_site_tenant(dept_site_id)
+    if tenant_id and dept_site_tenant_id is not None and int(tenant_id) != int(dept_site_tenant_id):
+        return jsonify({"error": "forbidden"}), 403
 
     if explicit_site_id:
         if str(explicit_site_id) != dept_site_id:
@@ -6248,43 +6252,42 @@ def admin_department_alt2_get(dept_id: str):
         # Fallback for stale/missing session context while editing a concrete department.
         effective_site_id = dept_site_id
 
-    # Fetch Alt2 flags via repo (site-scoped)
-    tid = session.get("tenant_id")
-    repo = MenuPlanningRepo()
-    alt2_map = repo.get_alt2_for_week(tid, year, week, effective_site_id)
-    dept_days = alt2_map.get(str(dept_id), {})
-
-    # Collect enabled days as short codes
+    repo = MenuChoiceRepo()
+    choices = repo.derive_map(
+        tenant_id=int(tenant_id or 0),
+        site_id=effective_site_id,
+        department_id=str(dept_id),
+        year=year,
+        week=week,
+    )
     day_short = {1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat", 7: "sun"}
-    enabled_days = []
-    for k, v in dept_days.items():
-        try:
-            dow = int(k)
-        except ValueError:
-            continue
-        if v is True and 1 <= dow <= 7:
-            enabled_days.append(day_short[dow])
+    enabled_days = [day_short[i] for i in range(1, 8) if choices.get(day_short[i]) == "Alt2"]
 
     return jsonify({
         "department_id": str(dept_id),
         "year": year,
         "week": week,
         "alt2_days": sorted(enabled_days),
+        "choices": {day_short[i]: choices.get(day_short[i]) for i in range(1, 8)},
     })
 
 
 @ui_bp.post("/ui/admin/departments/<dept_id>/alt2")
 @require_roles(*ADMIN_ROLES)
 def admin_department_alt2_save(dept_id: str):
-    """Save Alt2 flags for a department for a given ISO week.
+    """Save canonical menu choices for a department for a given ISO week.
 
-    Body JSON: { "year": 2026, "week": 4, "alt2_days": ["mon","tue", ...] }
-    Sets enabled=true for provided days and false for others in the week.
+    Body JSON supports the new explicit contract:
+    { "year": 2026, "week": 4, "choices": {"mon": "Alt2", "tue": "Alt1", ...} }
+
+    For backward compatibility, the legacy full-week body is also accepted:
+    { "year": 2026, "week": 4, "alt2_days": ["mon", "tue", ...] }
     """
     from flask import jsonify
-    from sqlalchemy import text
     from core.db import get_session
+    from core.department_menu_choice_repo import MenuChoiceRepo
     from core.menu_planning_repo import MenuPlanningRepo
+    from core.db import get_site_tenant
 
     data = request.get_json(silent=True) or {}
     try:
@@ -6298,8 +6301,9 @@ def admin_department_alt2_save(dept_id: str):
 
     from .context import get_active_context as _get_ctx
     ctx = _get_ctx()
-    active_site_id = ctx.get("site_id")
+    active_site_id = (ctx.get("site_id") or "").strip() or None
     explicit_site_id = (str(data.get("site_id") or "").strip() or None)
+    tenant_id = ctx.get("tenant_id") or session.get("tenant_id")
 
     # Verify department belongs to active site
     db = get_session()
@@ -6310,6 +6314,9 @@ def admin_department_alt2_save(dept_id: str):
     if not row:
         return jsonify({"error": "not_found"}), 404
     dept_site_id = str(row[0])
+    dept_site_tenant_id = get_site_tenant(dept_site_id)
+    if tenant_id and dept_site_tenant_id is not None and int(tenant_id) != int(dept_site_tenant_id):
+        return jsonify({"error": "forbidden"}), 403
 
     if explicit_site_id:
         if str(explicit_site_id) != dept_site_id:
@@ -6322,35 +6329,80 @@ def admin_department_alt2_save(dept_id: str):
     else:
         effective_site_id = dept_site_id
 
-    # Parse days list
     short_to_idx = {"mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6, "sun": 7}
-    body_days = data.get("alt2_days") or []
-    selected: set[int] = set()
-    try:
-        for it in body_days:
-            s = str(it).strip().lower()
-            if s in short_to_idx:
-                selected.add(short_to_idx[s])
-    except Exception:
-        selected = set()
+    idx_to_short = {v: k for k, v in short_to_idx.items()}
+    repo = MenuChoiceRepo()
+    selected_days: set[int] = set()
+    normalized_choices: dict[str, str | None] = {}
+    choices_body = data.get("choices")
+    if isinstance(choices_body, dict):
+        for short, idx in short_to_idx.items():
+            raw_choice = choices_body.get(short)
+            choice = str(raw_choice).strip() if raw_choice is not None else ""
+            if choice in {"Alt1", "Alt2"}:
+                normalized_choices[short] = choice
+            else:
+                normalized_choices[short] = None
+    else:
+        body_days = data.get("alt2_days") or []
+        try:
+            for it in body_days:
+                s = str(it).strip().lower()
+                if s in short_to_idx:
+                    selected_days.add(short_to_idx[s])
+        except Exception:
+            selected_days = set()
+        for short, idx in short_to_idx.items():
+            normalized_choices[short] = "Alt2" if idx in selected_days else "Alt1"
 
-    # Build alt2_map for exactly this department with all 7 days
-    alt2_map = {str(dept_id): {str(d): (d in selected) for d in range(1, 8)}}
-    tid = session.get("tenant_id")
-    repo = MenuPlanningRepo()
+    updated_days: set[int] = set()
     try:
-        repo.set_alt2_for_week(tid, year, week, alt2_map, str(effective_site_id))
+        for short, choice in normalized_choices.items():
+            if choice not in {"Alt1", "Alt2"}:
+                continue
+            repo.set_choice(
+                tenant_id=int(tenant_id or 0),
+                site_id=str(effective_site_id),
+                department_id=str(dept_id),
+                year=year,
+                week=week,
+                weekday=int(short_to_idx[short]),
+                selected_alt=choice,
+                meal="lunch",
+            )
+            updated_days.add(int(short_to_idx[short]))
     except Exception as e:
         return jsonify({"error": "server_error", "message": str(e)}), 500
 
+    current_choices = repo.derive_map(
+        tenant_id=int(tenant_id or 0),
+        site_id=str(effective_site_id),
+        department_id=str(dept_id),
+        year=year,
+        week=week,
+    )
+    alt2_map = {
+        str(dept_id): {
+            str(d): (current_choices.get(idx_to_short[d]) == "Alt2")
+            for d in range(1, 8)
+        }
+    }
+    repo = MenuPlanningRepo()
+    try:
+        repo.set_alt2_for_week(int(tenant_id or 0), year, week, alt2_map, str(effective_site_id))
+    except Exception as e:
+        # Secondary mirror only; canonical choices already saved.
+        pass
+
     # Respond with normalized payload
-    idx_to_short = {1: "mon", 2: "tue", 3: "wed", 4: "thu", 5: "fri", 6: "sat", 7: "sun"}
-    out_days = sorted([idx_to_short[d] for d in selected])
+    day_order = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+    out_days = [day for day in day_order if current_choices.get(day) == "Alt2"]
     return jsonify({
         "department_id": str(dept_id),
         "year": year,
         "week": week,
         "alt2_days": out_days,
+        "choices": current_choices,
     })
 
 

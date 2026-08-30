@@ -1,4 +1,5 @@
 from sqlalchemy import text
+from pathlib import Path
 
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
@@ -27,3 +28,15 @@ def test_admin_edit_alt2_modal_has_day_buttons_and_save(app_session, client_admi
     # Pre-rendered 7 day buttons and save button class
     assert html.count('class="alt2-day js-alt2-day"') == 7
     assert 'class="yp-button yp-button-primary js-alt2-save"' in html
+    assert 'Välj explicit Alt1 eller Alt2 per dag denna vecka.' in html
+
+
+def test_admin_edit_alt2_modal_renderer_handles_explicit_choices(app_session):
+    js_path = Path(__file__).resolve().parents[2] / "static" / "js" / "admin_alt2.js"
+    source = js_path.read_text(encoding="utf-8")
+    assert "choicesByDay" in source
+    assert "btn.textContent = label;" in source
+    assert "is-none" in source
+    assert "is-alt1" in source
+    assert "is-alt2" in source
+    assert "aria-label" in source

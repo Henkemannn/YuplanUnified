@@ -4,20 +4,27 @@ from __future__ import annotations
 
 Implements GET/PUT /admin/menu-choice with ETag concurrency similar to other admin endpoints.
 
-ETag format (per department+week collection): W/"admin:menu-choice:<department_id>:<week>:v<version>"
+ETag format (per department+year+week collection): W/"admin:menu-choice:<department_id>:<year>:<week>:v<version>"
 
-Days mapping: 1..7 -> mon..sun. Absence of a flag row => Alt1.
+Days mapping: 1..7 -> mon..sun. Absence of a canonical row => None / no explicit choice.
 Weekend (sat/sun) does not allow Alt2 – returns 422 ProblemDetails.
 """
 
-from flask import Blueprint, request, jsonify
+from datetime import date as _date
+from hashlib import sha1
+import json
+
+from flask import Blueprint, jsonify, request
 from sqlalchemy import text
+
+from core.context import get_active_context
 
 from .auth import require_roles
 from .http_errors import bad_request, problem
 from .etag import parse_if_match, make_etag
-from .admin_repo import Alt2Repo
 from .db import get_session
+from core.db import get_site_tenant
+from core.department_menu_choice_repo import MenuChoiceRepo
 
 bp = Blueprint("menu_choice", __name__, url_prefix="/admin")
 
@@ -26,25 +33,136 @@ _REV_DAY_MAP = {v: k for k, v in _DAY_MAP.items()}
 _WEEKEND = {6, 7}
 
 
-def _current_signature(department_id: str, week: int) -> int:
-    """Compute a deterministic integer signature for dept/week menu-choice.
+def _tenant_id() -> int:
+    ctx = get_active_context()
+    tenant_id = ctx.get("tenant_id")
+    if isinstance(tenant_id, int) and tenant_id > 0:
+        return tenant_id
+    if isinstance(tenant_id, str) and tenant_id.isdigit():
+        return int(tenant_id)
+    return 0
 
-    Bitmask (1..7 -> mon..sun) with bit set when Alt2 is enabled for that day.
-    Default (no rows or all disabled) -> 0. Any change to choices changes signature.
+
+def _resolve_department_scope(department_id: str, tenant_id: int, active_site_id: str | None) -> tuple[str, int]:
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT site_id FROM departments WHERE id=:id"),
+            {"id": department_id},
+        ).fetchone()
+        if not row:
+            raise ValueError("department_not_found")
+        site_id = str(row[0] or "").strip()
+        if not site_id:
+            raise ValueError("department_not_found")
+        site_tenant_id = get_site_tenant(site_id)
+        if site_tenant_id is None:
+            raise ValueError("department_not_found")
+        if tenant_id and int(site_tenant_id) != int(tenant_id):
+            raise ValueError("department_not_found")
+        if active_site_id and str(active_site_id).strip() != site_id:
+            raise ValueError("department_not_found")
+        return site_id, int(site_tenant_id)
+    finally:
+        db.close()
+
+
+def _current_iso_year() -> int:
+    return int(_date.today().isocalendar()[0])
+
+
+def _collection_version_from_rows(rows: list) -> int:
+    payload = [
+        {
+            "weekday": int(row.weekday),
+            "meal": str(row.meal),
+            "selected_variant": str(row.selected_variant),
+            "version": int(row.version),
+        }
+        for row in rows
+    ]
+    sig = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return int(sha1(sig.encode()).hexdigest()[:12], 16)
+
+
+def _admin_current_etag(*, repo: MenuChoiceRepo, tenant_id: int, site_id: str, department_id: str, year: int, week: int) -> str:
+    rows = repo.list_for_department_week(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=department_id,
+        year=year,
+        week=week,
+    )
+    version = _collection_version_from_rows(rows)
+    return _make_coll_etag(department_id, year, week, version)
+
+
+def _mirror_legacy_alt2_flag(*, site_id: str, department_id: str, year: int, week: int, weekday_num: int, choice: str) -> None:
+    """Temporary compatibility mirror for legacy Alt2 readers.
+
+    Canonical truth is written first to department_menu_choices.
+    The legacy alt2_flags table is updated only as a one-way projection:
+    - canonical Alt2 -> legacy Alt2 row present
+    - canonical Alt1 / no explicit choice -> legacy Alt2 row absent
     """
-    repo = Alt2Repo()
-    rows = repo.list_for_department_week(department_id, week)
-    sig = 0
-    for r in rows:
-        if bool(r.get("enabled")):
-            day = int(r.get("weekday") or 0)
-            if 1 <= day <= 7:
-                sig |= 1 << (day - 1)
-    return sig
+    if int(year) != int(_current_iso_year()):
+        return
+    db = get_session()
+    try:
+        if choice == "Alt2":
+            db.execute(
+                text(
+                    """
+                    INSERT INTO alt2_flags(site_id, department_id, week, weekday, enabled)
+                    VALUES(:site_id, :department_id, :week, :weekday, 1)
+                    ON CONFLICT(site_id, department_id, week, weekday)
+                    DO UPDATE SET enabled=excluded.enabled, version=alt2_flags.version+1, updated_at=CURRENT_TIMESTAMP
+                    WHERE alt2_flags.enabled IS DISTINCT FROM excluded.enabled
+                    """
+                ),
+                {
+                    "site_id": str(site_id),
+                    "department_id": str(department_id),
+                    "week": int(week),
+                    "weekday": int(weekday_num),
+                },
+            )
+        else:
+            db.execute(
+                text(
+                    "DELETE FROM alt2_flags WHERE site_id=:site_id AND department_id=:department_id AND week=:week AND weekday=:weekday"
+                ),
+                {
+                    "site_id": str(site_id),
+                    "department_id": str(department_id),
+                    "week": int(week),
+                    "weekday": int(weekday_num),
+                },
+            )
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
-def _make_coll_etag(department_id: str, week: int, version: int) -> str:
-    return make_etag("admin", "menu-choice", f"{department_id}:{week}", version)
+def _make_coll_etag(department_id: str, year: int, week: int, version: int) -> str:
+    return make_etag("admin", "menu-choice", f"{department_id}:{year}:{week}", version)
+
+
+def _resolve_year_arg(value: str | None) -> int:
+    if value is None or str(value).strip() == "":
+        return _current_iso_year()
+    try:
+        year = int(value)
+    except Exception:
+        raise ValueError("invalid_year")
+    if year < 2000 or year > 2100:
+        raise ValueError("invalid_year")
+    return year
 
 
 @bp.get("/menu-choice")
@@ -56,21 +174,36 @@ def get_menu_choice():  # type: ignore[return-value]
         return bad_request("week query param required/int")
     if week < 1 or week > 53:
         return bad_request("Week must be between 1 and 53")
+    try:
+        year = _resolve_year_arg(request.args.get("year"))
+    except ValueError:
+        return bad_request("invalid_year")
     department_id = request.args.get("department") or request.args.get("department_id")
     if not department_id:
         return bad_request("department query param required")
 
-    repo = Alt2Repo()
-    rows = repo.list_for_department_week(department_id, week)
-    # Build days mapping; default Alt1
-    days: dict[str, str] = {v: "Alt1" for v in _DAY_MAP.values()}
-    for r in rows:
-        if r["enabled"]:
-            day_key = _DAY_MAP.get(int(r["weekday"]))
-            if day_key:
-                days[day_key] = "Alt2"
-    version = _current_signature(department_id, week)
-    etag = _make_coll_etag(department_id, week, version)
+    ctx = get_active_context()
+    tenant_id = _tenant_id()
+    try:
+        site_id, _site_tenant_id = _resolve_department_scope(str(department_id), tenant_id, ctx.get("site_id"))
+    except ValueError:
+        return bad_request("department_not_found")
+    repo = MenuChoiceRepo()
+    days = repo.derive_map(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=str(department_id),
+        year=year,
+        week=week,
+    )
+    etag = _admin_current_etag(
+        repo=repo,
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=str(department_id),
+        year=year,
+        week=week,
+    )
     if_none = request.headers.get("If-None-Match")
     if if_none and etag in [p.strip() for p in if_none.split(",") if p.strip()]:
         from flask import Response
@@ -95,6 +228,10 @@ def put_menu_choice():  # type: ignore[return-value]
         return bad_request("week required/int")
     if week < 1 or week > 53:
         return bad_request("Week must be between 1 and 53")
+    try:
+        year = _resolve_year_arg(str(data.get("year")) if data.get("year") is not None else None)
+    except ValueError:
+        return bad_request("invalid_year")
     department_id = str(data.get("department") or data.get("department_id") or "").strip()
     if not department_id:
         return bad_request("department required")
@@ -121,13 +258,27 @@ def put_menu_choice():  # type: ignore[return-value]
     # Concurrency (If-Match)
     if_match = request.headers.get("If-Match")
     ns, kind, ident, version = parse_if_match(if_match)
-    if version is None or ns != "admin" or kind != "menu-choice" or ident != f"{department_id}:{week}":
+    if version is None or ns != "admin" or kind != "menu-choice" or ident != f"{department_id}:{year}:{week}":
         from .http_errors import problem as _pb
         return _pb(412, "etag_mismatch", "Precondition Failed", "etag_mismatch")
-    current_v = _current_signature(department_id, week)
-    if version != current_v:
+    ctx = get_active_context()
+    tenant_id = _tenant_id()
+    try:
+        site_id, _site_tenant_id = _resolve_department_scope(department_id, tenant_id, ctx.get("site_id"))
+    except ValueError:
+        return bad_request("department_not_found")
+    repo = MenuChoiceRepo()
+    current_etag = _admin_current_etag(
+        repo=repo,
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=department_id,
+        year=year,
+        week=week,
+    )
+    if version is None or if_match != current_etag:
         from .http_errors import problem as _pb
-        cur_etag = _make_coll_etag(department_id, week, current_v)
+        cur_etag = current_etag
         resp = _pb(412, "etag_mismatch", "Precondition Failed", "Resource has been modified")
         try:
             payload = resp.get_json()
@@ -139,34 +290,34 @@ def put_menu_choice():  # type: ignore[return-value]
         except Exception:
             return resp
 
-    # Upsert single flag row
-    # Need site_id for Alt2Repo bulk_upsert
-    db = get_session()
-    try:
-        row = db.execute(
-            text("SELECT site_id FROM departments WHERE id=:id"), {"id": department_id}
-        ).fetchone()
-        if not row:
-            return bad_request("department_not_found")
-        site_id = str(row[0])
-    finally:
-        db.close()
-    repo = Alt2Repo()
-    enabled = choice == "Alt2"
-    # Use bulk_upsert with single item; ensure weekday numbering matches storage (1..7)
-    repo.bulk_upsert(
-        [
-            {
-                "site_id": site_id,
-                "department_id": department_id,
-                "week": week,
-                "weekday": weekday_num,
-                "enabled": enabled,
-            }
-        ]
+    # Canonical write first.
+    repo.set_choice(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=department_id,
+        year=year,
+        week=week,
+        weekday=weekday_num,
+        selected_alt=choice,
+        meal="lunch",
     )
-    new_version = _current_signature(department_id, week)
-    new_etag = _make_coll_etag(department_id, week, new_version)
+    # Temporary compatibility mirror for legacy Alt2 readers.
+    _mirror_legacy_alt2_flag(
+        site_id=site_id,
+        department_id=department_id,
+        year=year,
+        week=week,
+        weekday_num=weekday_num,
+        choice=choice,
+    )
+    new_etag = _admin_current_etag(
+        repo=repo,
+        tenant_id=tenant_id,
+        site_id=site_id,
+        department_id=department_id,
+        year=year,
+        week=week,
+    )
     from flask import Response
     resp = Response(status=204)
     resp.headers["ETag"] = new_etag
