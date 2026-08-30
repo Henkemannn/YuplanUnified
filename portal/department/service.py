@@ -20,7 +20,7 @@ from core.commun_builder_publication import CommunBuilderPublicationService
 from core.commun_builder_projection import get_shadow_projection_reader
 from core.db import get_session
 from portal.department.auth import DepartmentPortalScope
-from portal.department.menu_choice_repo import MenuChoiceRepo
+from core.department_menu_choice_repo import MenuChoiceRepo
 from portal.department.models import (
     DepartmentPortalWeekPayload,
     PortalFacts,

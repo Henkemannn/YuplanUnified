@@ -21,7 +21,7 @@ from sqlalchemy import text
 from portal.department.models import DepartmentPortalWeekPayload
 from portal.department.service import build_department_week_payload
 from portal.department.auth import DepartmentPortalScope, resolve_department_portal_scope
-from portal.department.menu_choice_repo import MenuChoiceRepo
+from core.department_menu_choice_repo import MenuChoiceRepo
 from core.http_errors import forbidden
 from core.errors import bad_request
 from core.db import get_session

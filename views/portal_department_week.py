@@ -6,7 +6,7 @@ from core.weekview.service import WeekviewService
 from core.meal_registration_repo import MealRegistrationRepo
 from core.db import get_session
 from sqlalchemy import text
-from portal.department.menu_choice_repo import MenuChoiceRepo
+from core.department_menu_choice_repo import MenuChoiceRepo
 
 from viewmodels.portal.department_week_vm import DepartmentWeekViewModel, DepartmentDayVM, DepartmentDaySelectionVM
 
