@@ -65,7 +65,7 @@
               data-week="{{ vm.week }}"
               data-day-index="{{ dinner.day_index }}"
               data-meal="dinner"
-              aria-label="Middag {{ row.diet_type_name }} dag {{ dinner.day_index }}"
+              aria-label="{{ meal_labels.dinner }} {{ row.diet_type_name }} dag {{ dinner.day_index }}"
               {% if not interactive %}disabled aria-disabled="true" tabindex="-1" data-readonly="1"{% endif %}>
               {{ dinner.count }}
             </button>

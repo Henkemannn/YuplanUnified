@@ -56,8 +56,7 @@
       <th style="width:16%">Lunch Alt 2</th>
       <th style="width:12%">Dessert</th>
       {% if vm.has_dinner %}
-      <th style="width:16%">{{ meal_labels.dinner }} Alt 1</th>
-      <th style="width:16%">{{ meal_labels.dinner }} Alt 2</th>
+      <th style="width:32%">{{ meal_labels.dinner }}</th>
       {% endif %}
       <th style="width:6%">Boende</th>
     </tr>
@@ -73,13 +72,12 @@
         <td class="{% if d.alt2_lunch %}alt2-gul{% endif %}">{{ d.lunch_alt2 or '' }}</td>
         <td>{{ d.lunch_dessert or '' }}</td>
         {% if vm.has_dinner %}
-        <td>{{ d.dinner_alt1 or '' }}</td>
-        <td>{{ d.dinner_alt2 or '' }}</td>
+        <td>{{ d.dinner_main or d.dinner_alt1 or d.dinner_alt2 or '' }}</td>
         {% endif %}
         <td>
           <div class="subtle">L {{ d.residents_lunch or 0 }}</div>
           {% if vm.has_dinner %}
-          <div class="subtle">{{ meal_labels.dinner[0] }} {{ d.residents_dinner or 0 }}</div>
+          <div class="subtle">{{ meal_labels.dinner }} {{ d.residents_dinner or 0 }}</div>
           {% endif %}
         </td>
       </tr>
@@ -112,7 +110,7 @@
               role="button"
               tabindex="0"
               aria-pressed="{{ 'true' if diet.marked else 'false' }}"
-              aria-label="{{ diet.diet_name }} {{ diet.resident_count }} för {{ meal_labels.dinner }} {{ d.weekday_name }}"
+                aria-label="{{ diet.diet_name }} {{ diet.resident_count }} för {{ meal_labels.dinner }} {{ d.weekday_name }}"
                   data-diet-type-id="{{ diet.diet_type_id }}"
                   data-meal="dinner"
                   data-date="{{ d.date }}"

@@ -61,6 +61,7 @@ def import_menu_result_to_builder_canonical(
     tenant_id: int,
     site_id: str,
     import_type: str = "menu",
+    legacy_menu_ids_by_week: dict[tuple[int, int], int] | None = None,
 ) -> list[CommunBuilderCanonicalImportOutcome]:
     flow = _get_builder_menu_context_flow()
     linkage_service = CommunBuilderMenuLinkService(builder_menu_context_flow=flow)
@@ -94,6 +95,7 @@ def import_menu_result_to_builder_canonical(
                 tenant_id=int(tenant_id),
                 site_id=str(site_id),
                 import_type=import_type,
+                legacy_menu_ids_by_week=legacy_menu_ids_by_week,
                 import_warnings=list(import_result.warnings),
             )
             outcomes.append(outcome)
@@ -111,6 +113,7 @@ def _import_week(
     tenant_id: int,
     site_id: str,
     import_type: str,
+    legacy_menu_ids_by_week: dict[tuple[int, int], int] | None,
     import_warnings: list[str],
 ) -> CommunBuilderCanonicalImportOutcome:
     menu_id = build_canonical_menu_id(
@@ -168,13 +171,18 @@ def _import_week(
     if builder_menu is None:
         raise RuntimeError("builder menu missing after canonical import")
 
+    legacy_menu_id = None
+    if legacy_menu_ids_by_week is not None:
+        legacy_menu_id = legacy_menu_ids_by_week.get((int(week_import.year), int(week_import.week)))
+
     linkage_service.create_or_replace_link(
         tenant_id=tenant_id,
         site_id=site_id,
         year=int(week_import.year),
         week=int(week_import.week),
         builder_menu_id=menu_id,
-        source="pilot",
+        legacy_menu_id=legacy_menu_id,
+        source="import",
     )
 
     return CommunBuilderCanonicalImportOutcome(
@@ -277,9 +285,10 @@ def _canonical_meal_slot(item: ImportedMenuItem) -> str:
     meal = str(item.meal or "").strip().lower()
     variant = str(item.variant_type or "").strip().lower()
 
-    if meal == "evening":
+    if meal in {"evening", "kväll", "kvall", "kvällsmat", "kvallsmat", "dinner"}:
         meal = "dinner"
-        variant = "main"
+        if variant in {"", "main", "kvall"}:
+            variant = "main"
 
     if variant == "main":
         return f"{meal}_main"

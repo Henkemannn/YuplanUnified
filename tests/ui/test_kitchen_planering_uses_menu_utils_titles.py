@@ -19,6 +19,7 @@ def test_planering_uses_menu_utils_titles_prefers_main_over_alt1():
     app.config.update({"TESTING": True})
     with app.app_context():
         db = get_session()
+        from unittest.mock import patch
         try:
             site_id = "site-canary"
             _seed_site(db, site_id)
@@ -35,7 +36,8 @@ def test_planering_uses_menu_utils_titles_prefers_main_over_alt1():
             menu = svc.create_or_get_menu(tenant_id=1, site_id=site_id, week=9, year=2026)
             svc.set_variant(tenant_id=1, menu_id=menu.id, day="sat", meal="lunch", variant_type="main", dish_id=main_dish.id)
             svc.set_variant(tenant_id=1, menu_id=menu.id, day="sat", meal="lunch", variant_type="alt1", dish_id=alt1_dish.id)
-            svc.publish_menu(tenant_id=1, menu_id=menu.id)
+            with patch("core.commun_builder_publication.CommunBuilderPublicationService.get_publication_for_week", return_value=None), patch("core.commun_builder_publication.CommunBuilderPublicationService.publish_week", return_value=object()), patch("core.commun_builder_publication.CommunBuilderPublicationService.republish_week", return_value=object()):
+                svc.publish_menu(tenant_id=1, menu_id=menu.id)
         finally:
             db.close()
     client = app.test_client()

@@ -554,7 +554,7 @@ def test_week_view_renders_imported_dishes_for_2026_w11(seeded_imported_week_11,
     assert "Lunch alt 1" in html
     assert "Lunch alt 2" in html
     assert "Dessert" in html
-    assert "Middag" in html
+    assert "Kvällsmat" in html
     assert "Lasagne" in html
     assert "Fiskgryta" in html
     assert "Chokladpudding" in html

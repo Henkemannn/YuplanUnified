@@ -24,6 +24,7 @@ def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int) ->
     from core.menu_service import MenuServiceDB
     from core.db import get_new_session
     from core.models import Dish
+    from unittest.mock import patch
 
     svc = MenuServiceDB()
     menu = svc.create_or_get_menu(tenant_id, site_id, week, year)
@@ -37,7 +38,8 @@ def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int) ->
     finally:
         db.close()
     svc.set_variant(tenant_id, menu.id, "mon", "lunch", "alt1", dish_id)
-    svc.publish_menu(tenant_id, menu.id)
+    with patch("core.commun_builder_publication.CommunBuilderPublicationService.get_publication_for_week", return_value=None), patch("core.commun_builder_publication.CommunBuilderPublicationService.publish_week", return_value=object()), patch("core.commun_builder_publication.CommunBuilderPublicationService.republish_week", return_value=object()):
+        svc.publish_menu(tenant_id, menu.id)
 
 
 def _seed_weekview_expected_for_report(department_id: str, year: int, week: int) -> None:
@@ -45,6 +47,24 @@ def _seed_weekview_expected_for_report(department_id: str, year: int, week: int)
     from core.db import get_session
     conn = get_session()
     try:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS weekview_items (
+                    id TEXT PRIMARY KEY,
+                    tenant_id INTEGER NOT NULL,
+                    department_id TEXT NOT NULL,
+                    local_date TEXT NOT NULL,
+                    meal TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    notes TEXT,
+                    status TEXT,
+                    version INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT
+                )
+                """
+            )
+        )
         monday = _date.fromisocalendar(year, week, 1).isoformat()
         # Insert a weekview item with non-empty title to count as expected
         conn.execute(

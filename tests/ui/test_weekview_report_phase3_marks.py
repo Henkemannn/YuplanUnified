@@ -106,7 +106,7 @@ def test_weekview_report_phase3_debiterbar_marks(app_session):
     # Labels present
     assert "Gjorda specialkoster" in html
     assert "Gjorda specialkoster (lunch)" in html
-    assert "Gjorda specialkoster (kväll)" in html
+    assert "Gjorda specialkoster (kvällsmat)" in html
 
     # Expectation:
     # Mon lunch: gluten(2) + timbal(3) = 5

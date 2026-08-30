@@ -45,7 +45,7 @@ def test_kitchen_menu_overview_renders():
         svc.set_variant(1, menu.id, "mon", "lunch", "main", d1.id)
         svc.set_variant(1, menu.id, "mon", "lunch", "alt2", d2.id)
         svc.set_variant(1, menu.id, "mon", "lunch", "dessert", d3.id)
-        svc.set_variant(1, menu.id, "mon", "dinner", "main", d4.id)
+        svc.set_variant(1, menu.id, "mon", "dinner", "kvall", d4.id)
     client: FlaskClient = app.test_client()
     headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
     with client.session_transaction() as sess:
@@ -54,6 +54,8 @@ def test_kitchen_menu_overview_renders():
     rv = client.get(f"/ui/kitchen/menu?site_id={site_id}&year={year}&week={week}", headers=headers)
     assert rv.status_code == 200
     html = rv.data.decode("utf-8")
+    week_view = MenuServiceDB().get_week_view(1, site_id, week, year)
+    assert week_view["days"]["mon"]["dinner"]["main"]["dish_name"] == "Kvällsmat Soppa"
     assert "Menyöversikt" in html
     assert "Kvällsmat" in html
     assert "Dessert" in html

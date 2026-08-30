@@ -235,7 +235,44 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
             if svc is not None:
                 site_id = payload.get("site_id") if isinstance(payload, dict) else None
                 mv = svc.get_week_view(int(tenant_id), site_id, week, year, source=source)
-                menu_days = dict(mv.get("days", {}))
+                raw_days = mv.get("days", {}) if isinstance(mv, dict) else {}
+                day_aliases = {
+                    "monday": "mon",
+                    "mon": "mon",
+                    "måndag": "mon",
+                    "mån": "mon",
+                    "tuesday": "tue",
+                    "tue": "tue",
+                    "tisdag": "tue",
+                    "tis": "tue",
+                    "wednesday": "wed",
+                    "wed": "wed",
+                    "onsdag": "wed",
+                    "ons": "wed",
+                    "thursday": "thu",
+                    "thu": "thu",
+                    "torsdag": "thu",
+                    "tor": "thu",
+                    "friday": "fri",
+                    "fri": "fri",
+                    "fredag": "fri",
+                    "fre": "fri",
+                    "saturday": "sat",
+                    "sat": "sat",
+                    "lördag": "sat",
+                    "lör": "sat",
+                    "sunday": "sun",
+                    "sun": "sun",
+                    "söndag": "sun",
+                    "sön": "sun",
+                }
+                normalized_days: dict[str, Any] = {}
+                if isinstance(raw_days, dict):
+                    for raw_day, raw_meals in raw_days.items():
+                        day_key = day_aliases.get(str(raw_day).strip().lower())
+                        if day_key and isinstance(raw_meals, dict):
+                            normalized_days[day_key] = raw_meals
+                menu_days = normalized_days
         except Exception:
             menu_days = {}
 
@@ -292,11 +329,25 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                 # menu_texts lookup
                 menu_for_day = menu_days.get(dkey, {}) if isinstance(menu_days, dict) else {}
                 def _dish_name(meal: str, variant: str) -> str | None:
+                    meal_aliases = {
+                        "lunch": ["lunch", "Lunch"],
+                        "dinner": ["dinner", "Dinner", "Kväll", "kväll", "kvall"],
+                    }
+                    variant_aliases = {
+                        ("dinner", "main"): ["main", "kvall", "dinner"],
+                    }
                     try:
-                        v = menu_for_day.get(meal, {}).get(variant)
-                        if v is None:
-                            return None
-                        return v.get("dish_name")
+                        for meal_key in meal_aliases.get(meal, [meal]):
+                            meal_bucket = menu_for_day.get(meal_key, {})
+                            for variant_key in variant_aliases.get((meal, variant), [variant]):
+                                v = meal_bucket.get(variant_key)
+                                if v is not None:
+                                    return v.get("dish_name")
+                            if meal == "dinner" and variant == "main":
+                                for v in meal_bucket.values():
+                                    if isinstance(v, dict) and v.get("dish_name"):
+                                        return v.get("dish_name")
+                        return None
                     except Exception:
                         return None
 
@@ -318,8 +369,11 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
 
                 # dinner (kväll) optional in Phase 1
                 dinner_obj: dict[str, Any] = {}
+                d0 = _dish_name("dinner", "main")
                 d1 = _dish_name("dinner", "alt1")
                 d2 = _dish_name("dinner", "alt2")
+                if d0 is not None:
+                    dinner_obj["main"] = d0
                 if d1 is not None:
                     dinner_obj["alt1"] = d1
                 if d2 is not None:

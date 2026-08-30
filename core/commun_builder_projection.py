@@ -347,14 +347,29 @@ def _get_builder_menu_context_flow() -> Any:
 def _get_legacy_weekview_rows(legacy_weekview: dict[str, Any]) -> list[dict[str, Any]]:
     if isinstance(legacy_weekview.get("rows"), list):
         rows_out: list[dict[str, Any]] = []
+        seen_keys: set[tuple[str, str, str, int | None, str]] = set()
         for index, row in enumerate(legacy_weekview.get("rows") or []):
             if not isinstance(row, dict):
                 continue
+            meal = _normalize_builder_meal_slot(str(row.get("meal") or row.get("meal_slot") or ""))[0]
+            variant_type = str(row.get("variant_type") or "").strip().lower()
+            if meal == "dinner" and variant_type in {"dinner", "kvall"}:
+                variant_type = "main"
+            identity = (
+                _normalize_day(str(row.get("day") or "")),
+                meal,
+                variant_type,
+                row.get("dish_id"),
+                str(row.get("text") or row.get("dish_name") or "").strip(),
+            )
+            if identity in seen_keys:
+                continue
+            seen_keys.add(identity)
             rows_out.append(
                 {
                     "day": _normalize_day(str(row.get("day") or "")),
-                    "meal": _normalize_builder_meal_slot(str(row.get("meal") or row.get("meal_slot") or ""))[0],
-                    "variant_type": str(row.get("variant_type") or "").strip().lower(),
+                    "meal": meal,
+                    "variant_type": variant_type,
                     "sort_order": int(row.get("sort_order") or index),
                     "dish_id": row.get("dish_id"),
                     "text": str(row.get("text") or row.get("dish_name") or "").strip(),
@@ -363,15 +378,41 @@ def _get_legacy_weekview_rows(legacy_weekview: dict[str, Any]) -> list[dict[str,
         return rows_out
 
     rows: list[dict[str, Any]] = []
+    seen_keys: set[tuple[str, str, str, int | None, str]] = set()
     days = legacy_weekview.get("days") or {}
+    canonical_day_keys = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+    raw_day_keys = {str(day).strip().lower() for day in days}
+    normalized_day_keys = {
+        _normalize_day(str(day))
+        for day in days
+        if _normalize_day(str(day)) in canonical_day_keys
+    }
     for day, meals in days.items():
+        normalized_day = _normalize_day(str(day))
+        day_key = str(day).strip().lower()
+        if normalized_day in canonical_day_keys and normalized_day in raw_day_keys and day_key != normalized_day:
+            continue
         for meal, variants in (meals or {}).items():
+            meal_key = _normalize_builder_meal_slot(str(meal))[0]
             for variant_type, info in (variants or {}).items():
+                canonical_variant_type = str(variant_type or "").strip().lower()
+                if meal_key == "dinner" and canonical_variant_type in {"dinner", "kvall"}:
+                    canonical_variant_type = "main"
+                identity = (
+                    normalized_day,
+                    meal_key,
+                    canonical_variant_type,
+                    info.get("dish_id") if isinstance(info, dict) else None,
+                    str(info.get("dish_name") or "").strip() if isinstance(info, dict) else "",
+                )
+                if identity in seen_keys:
+                    continue
+                seen_keys.add(identity)
                 rows.append(
                     {
-                        "day": _normalize_day(str(day)),
-                        "meal": _normalize_builder_meal_slot(str(meal))[0],
-                        "variant_type": str(variant_type or "").strip().lower(),
+                        "day": normalized_day,
+                        "meal": meal_key,
+                        "variant_type": canonical_variant_type,
                         "sort_order": len(rows),
                         "dish_id": info.get("dish_id") if isinstance(info, dict) else None,
                         "text": str(info.get("dish_name") or "").strip() if isinstance(info, dict) else "",

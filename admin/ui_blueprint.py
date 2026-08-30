@@ -943,7 +943,7 @@ def admin_menu_import_week(year: int, week: int) -> str:  # type: ignore[overrid
         },
         {
             "key": "dinner",
-            "label": "Middag",
+            "label": "Kvällsmat",
             "field": ("Kväll", "kvall"),
             "candidates": [
                 ("kväll", "kvall"),

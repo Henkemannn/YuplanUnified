@@ -30,6 +30,27 @@ document.addEventListener("DOMContentLoaded", () => {
   // Expose for external helpers (bindConflictReloadIfVisible defined outside this closure)
   window.portalSetStatus = setStatus;
 
+  const WEEKDAY_CODE_BY_LABEL = {
+    "Måndag": "mon",
+    "Tisdag": "tue",
+    "Onsdag": "wed",
+    "Torsdag": "thu",
+    "Fredag": "fri",
+    "Lördag": "sat",
+    "Söndag": "sun",
+  };
+
+  function getWeekdayLabel(row) {
+    const dayNameCell = row.querySelector(".portal-day-name");
+    if (!dayNameCell) return "";
+    const label = dayNameCell.querySelector("div")?.textContent || dayNameCell.textContent || "";
+    return String(label).trim();
+  }
+
+  function weekdayDisplayToApiCode(weekdayDisplay) {
+    return WEEKDAY_CODE_BY_LABEL[String(weekdayDisplay || "").trim()] || "";
+  }
+
   function applySelectionHighlight(weekdayName, selectedAlt) {
     const rows = document.querySelectorAll(".portal-day-row");
     rows.forEach((row) => {
@@ -52,21 +73,70 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function syncProgressFromDOM() {
+    const rows = Array.from(document.querySelectorAll(".portal-day-row"));
+    const dots = Array.from(document.querySelectorAll(".portal-week-dot"));
+    if (!rows.length || !dots.length) return;
+    let selectedCount = 0;
+    rows.forEach((row, index) => {
+      const weekdayLabel = getWeekdayLabel(row);
+      const alt1 = row.querySelector(".portal-alt1-cell");
+      const alt2 = row.querySelector(".portal-alt2-cell");
+      const isSelected = Boolean((alt1 && alt1.classList.contains("portal-alt-selected")) || (alt2 && alt2.classList.contains("portal-alt-selected")));
+      if (isSelected) selectedCount += 1;
+      const dot = dots[index];
+      if (dot) {
+        dot.classList.toggle("chosen", isSelected);
+        dot.setAttribute("aria-label", `${weekdayLabel}${isSelected ? " vald" : " ej vald"}`);
+      }
+    });
+    const totalCount = dots.length;
+    const progressText = `${selectedCount} / ${totalCount}`;
+    const progressLine = document.querySelector(".portal-progress p");
+    const progressCount = document.querySelector(".portal-week-status-count");
+    if (progressLine) progressLine.textContent = `Valda dagar: ${progressText}`;
+    if (progressCount) progressCount.textContent = progressText;
+  }
+
+  function getSelectionStateSnapshot() {
+    const snapshot = new Map();
+    const rows = document.querySelectorAll(".portal-day-row");
+    rows.forEach((row) => {
+      const weekdayLabel = getWeekdayLabel(row);
+      const alt1 = row.querySelector(".portal-alt1-cell");
+      const alt2 = row.querySelector(".portal-alt2-cell");
+      let selectedAlt = null;
+      if (alt1 && alt1.classList.contains("portal-alt-selected")) selectedAlt = "Alt1";
+      if (alt2 && alt2.classList.contains("portal-alt-selected")) selectedAlt = "Alt2";
+      snapshot.set(weekdayLabel, selectedAlt);
+    });
+    return snapshot;
+  }
+
+  function applySelectionState(selectionByWeekday) {
+    const rows = document.querySelectorAll(".portal-day-row");
+    rows.forEach((row) => {
+      const weekdayLabel = getWeekdayLabel(row);
+      applySelectionHighlight(weekdayLabel, selectionByWeekday.get(weekdayLabel) || null);
+    });
+    syncProgressFromDOM();
+  }
+
   let autoRetriedOnce = false; // for demo mode auto-retry
   function handleAltClick(cell) {
     const weekdayName = cell.dataset.weekday;
+    const weekdayCode = weekdayDisplayToApiCode(weekdayName);
     const selectedAlt = cell.dataset.selectedAlt;
-    if (!weekdayName || !selectedAlt || !menuChoiceEtag) return;
+    const previousSelectionState = getSelectionStateSnapshot();
+    if (!weekdayName || !weekdayCode || !selectedAlt || !menuChoiceEtag) return;
     setStatus("Sparar val…", "saving");
-    // Optimistic update
-    applySelectionHighlight(weekdayName, selectedAlt);
     fetch("/portal/department/menu-choice/change", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "If-Match": menuChoiceEtag,
       },
-      body: JSON.stringify({ year, week, weekday: weekdayName, selected_alt: selectedAlt }),
+      body: JSON.stringify({ year, week, weekday: weekdayCode, selected_alt: selectedAlt }),
     })
       .then(async (resp) => {
         if (resp.status === 200) {
@@ -75,8 +145,11 @@ document.addEventListener("DOMContentLoaded", () => {
             menuChoiceEtag = data.new_etag;
             root.dataset.menuChoiceEtag = data.new_etag;
           }
+          applySelectionHighlight(weekdayName, selectedAlt);
+          syncProgressFromDOM();
           setStatus("Val sparat.", "ok");
         } else if (resp.status === 412) {
+          applySelectionState(previousSelectionState);
           // Concurrency conflict.
           if (demoMode) {
             // Demo: try silent refresh; if still stale, do a one-time full reload
@@ -114,12 +187,15 @@ document.addEventListener("DOMContentLoaded", () => {
           });
           return;
         } else if (resp.status === 400) {
+          applySelectionState(previousSelectionState);
           setStatus("Ogiltig förfrågan – försök igen eller kontakta admin.", "error");
         } else {
+          applySelectionState(previousSelectionState);
           setStatus("Ett fel uppstod vid sparning.", "error");
         }
       })
       .catch(() => {
+        applySelectionState(previousSelectionState);
         setStatus("Nätverksfel – försök igen.", "error");
       });
   }
@@ -184,6 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   attachHandlers();
+  syncProgressFromDOM();
   // Auto attempt refresh if overlay somehow visible on initial load
   const initialConflict = document.getElementById("portal-conflict-overlay");
   if (initialConflict && !initialConflict.hidden) {
@@ -306,11 +383,12 @@ async function attemptSilentRefresh() {
     root.dataset.menuChoiceEtag = payload.etag_map.menu_choice;
     // Reapply current selections from payload days
     if (Array.isArray(payload.days)) {
+      const selectionByWeekday = new Map();
       payload.days.forEach((d) => {
-        if (d && d.choice && d.choice.selected_alt && d.weekday_name) {
-          applySelectionHighlight(d.weekday_name, d.choice.selected_alt);
-        }
+        if (!d || !d.weekday_name) return;
+        selectionByWeekday.set(d.weekday_name, d.choice && d.choice.selected_alt ? d.choice.selected_alt : null);
       });
+      applySelectionState(selectionByWeekday);
     }
     console.log("[portal] silent refresh success, new etag", root.dataset.menuChoiceEtag);
     return true;

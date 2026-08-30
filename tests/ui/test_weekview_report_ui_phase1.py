@@ -58,9 +58,9 @@ def test_weekview_report_basic_structure():
     assert "Avd B" in html
     # Table headers (Swedish)
     assert "Lunch – Boende" in html
-    assert "Middag – Boende" in html
+    assert "Kvällsmat – Boende" in html
     # Totals row per department and global summary
     assert "Totalt" in html
     # Basic presence of global summary labels
     assert "Totalt boende (lunch):" in html
-    assert "Totalt boende (middag):" in html
+    assert "Totalt boende (kvällsmat):" in html

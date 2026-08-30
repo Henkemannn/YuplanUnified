@@ -59,8 +59,8 @@ def test_kitchen_week_v3_renders_and_flags():
             _seed_site_and_departments(db, site_id, [dep1, dep2])
             # Create diet types
             dt_repo = DietTypesRepo()
-            dt1 = dt_repo.create(site_id=site_id, name="Glutenfri", default_select=False)
-            dt2 = dt_repo.create(site_id=site_id, name="Laktosfri", default_select=False)
+            dt1 = dt_repo.create(site_id=site_id, name=f"Glutenfri {site_id}", default_select=False)
+            dt2 = dt_repo.create(site_id=site_id, name=f"Laktosfri {site_id}", default_select=False)
             # Link dt1 only to dep1; dt2 only to dep2
             _link_diets(db, dep1[0], [(dt1, 2)])
             _link_diets(db, dep2[0], [(dt2, 1)])
@@ -123,7 +123,7 @@ def test_kitchen_week_v3_mark_toggle():
             dep = ("dep-3", "Avd Tre", 10)
             _seed_site_and_departments(db, site_id, [dep])
             dt_repo = DietTypesRepo()
-            dt = dt_repo.create(site_id=site_id, name="Glutenfri", default_select=False)
+            dt = dt_repo.create(site_id=site_id, name=f"Glutenfri {site_id}", default_select=False)
             _link_diets(db, dep[0], [(dt, 2)])
         finally:
             db.close()
@@ -168,7 +168,7 @@ def test_kitchen_week_v3_default_select_premarked_cells():
             dep = ("dep-k3-default-on", "Avd Default On", 11)
             _seed_site_and_departments(db, site_id, [dep])
             dt_repo = DietTypesRepo()
-            dt = dt_repo.create(site_id=site_id, name="Timbal", default_select=True)
+            dt = dt_repo.create(site_id=site_id, name=f"Timbal {site_id}", default_select=True)
             _link_diets(db, dep[0], [(dt, 3)])
         finally:
             db.close()
@@ -198,7 +198,7 @@ def test_kitchen_week_v3_default_select_false_not_premarked_cells():
             dep = ("dep-k3-default-off", "Avd Default Off", 11)
             _seed_site_and_departments(db, site_id, [dep])
             dt_repo = DietTypesRepo()
-            dt = dt_repo.create(site_id=site_id, name="Timbal Off", default_select=False)
+            dt = dt_repo.create(site_id=site_id, name=f"Timbal Off {site_id}", default_select=False)
             _link_diets(db, dep[0], [(dt, 3)])
         finally:
             db.close()

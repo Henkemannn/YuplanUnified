@@ -16,8 +16,7 @@
     <h1>Veckorapport – Registrering</h1>
     <span style="position:absolute;left:-9999px;">Statistik – vecka</span>
     <span class="report-meta">År {{ vm.year }} • Vecka {{ vm.week }}</span>
-      <span class="report-meta" aria-hidden="true">Lunch – Boende · Kväll – Boende</span>
-      <span class="report-meta" aria-hidden="true">Lunch – Boende · Middag – Boende</span>
+      <span class="report-meta" aria-hidden="true">Lunch – Boende · Kvällsmat – Boende</span>
     <a class="btn btn-primary" href="{{ url_for('ui.reports_weekly_csv', site_id=vm.site_id, year=vm.year, week=vm.week) }}">Exportera CSV</a>
     {% if vm.department_scope == 'single' and vm.departments and vm.departments|length == 1 %}
       <span class="report-meta">Avdelning: {{ vm.departments[0].department_name }}</span>
@@ -25,7 +24,7 @@
       <span class="report-meta">Alla avdelningar</span>
     {% endif %}
   </div>
-  <div class="report-meta">Lunch och Kväll summeras per avdelning.</div>
+  <div class="report-meta">Lunch och Kvällsmat summeras per avdelning.</div>
   <div class="coming">
     <strong>Registreringsöversikt</strong>
     {% if vm.prev_week and vm.next_week %}
@@ -70,7 +69,7 @@
           <tr>
             <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Dag</th>
             <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Gjorda specialkoster (lunch)</th>
-            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Gjorda specialkoster (kväll)</th>
+            <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #eee;">Gjorda specialkoster (kvällsmat)</th>
           </tr>
         </thead>
         <tbody>
@@ -83,12 +82,12 @@
           {% endfor %}
         </tbody>
       </table>
-      <div class="report-meta" aria-hidden="true">Gjorda specialkoster (lunch) · Gjorda specialkoster (kväll)</div>
+      <div class="report-meta" aria-hidden="true">Gjorda specialkoster (lunch) · Gjorda specialkoster (kvällsmat)</div>
     </div>
   {% endfor %}
   <div class="dept-card">
     <h2>Totalt</h2>
-    <p class="report-meta">Totalt boende (lunch): {{ vm.summary.total_lunch_residents }} · Totalt boende (middag): {{ vm.summary.total_dinner_residents }}</p>
+    <p class="report-meta">Totalt boende (lunch): {{ vm.summary.total_lunch_residents }} · Totalt boende (kvällsmat): {{ vm.summary.total_dinner_residents }}</p>
   </div>
 </div>
 {% endblock %}

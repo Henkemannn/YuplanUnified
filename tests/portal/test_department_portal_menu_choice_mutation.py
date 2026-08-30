@@ -1,4 +1,5 @@
 from sqlalchemy import text
+from portal.department.menu_choice_repo import MenuChoiceRepo
 
 YEAR = 2025
 WEEK = 47
@@ -15,8 +16,10 @@ def _seed_basic(db):
     db.execute(text("INSERT OR REPLACE INTO departments(id, site_id, name, notes, resident_count_mode) VALUES(:i,'site', 'Dept','Note','manual')"), {"i": DEPT_ID})
     # Alt2 flags storage
     db.execute(text("CREATE TABLE IF NOT EXISTS alt2_flags(site_id TEXT, department_id TEXT, week INTEGER, weekday INTEGER, enabled INTEGER, version INTEGER, UNIQUE(site_id,department_id,week,weekday))"))
+    db.execute(text("CREATE TABLE IF NOT EXISTS department_menu_choices(id INTEGER PRIMARY KEY, tenant_id INTEGER NOT NULL, site_id TEXT NOT NULL, department_id TEXT NOT NULL, year INTEGER NOT NULL, week INTEGER NOT NULL, weekday INTEGER NOT NULL, meal TEXT NOT NULL DEFAULT 'lunch', selected_variant TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at TEXT, updated_at TEXT, UNIQUE(tenant_id,site_id,department_id,year,week,weekday,meal))"))
     # Ensure clean slate for this department/week to avoid cross-test leakage
     db.execute(text("DELETE FROM alt2_flags WHERE department_id=:d AND week=:w"), {"d": DEPT_ID, "w": WEEK})
+    db.execute(text("DELETE FROM department_menu_choices WHERE department_id=:d AND year=:y AND week=:w"), {"d": DEPT_ID, "y": YEAR, "w": WEEK})
     db.commit()
 
 
@@ -100,3 +103,67 @@ def test_menu_choice_mutation_stale_etag(client_admin):
     _, payload_after = _get_menu_choice_etag(client_admin)
     day_map_after = {d["weekday_name"]: d for d in payload_after["days"]}
     assert day_map_after["Måndag"]["choice"]["selected_alt"] == "Alt2"
+
+
+def test_menu_choice_mutation_persists_reload_counts_and_keeps_weekview_drift_separate(client_admin):
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        _seed_basic(db)
+    finally:
+        db.close()
+
+    repo = MenuChoiceRepo()
+    etag_before, payload_before = _get_menu_choice_etag(client_admin)
+    site_id = payload_before["site_id"]
+    assert payload_before["progress"]["days_with_choice"] == 0
+    assert payload_before["progress"]["total_days"] == 7
+    assert payload_before["days"][0]["flags"]["alt2_lunch"] is False
+
+    monday_resp = client_admin.post(
+        "/portal/department/menu-choice/change",
+        json={"year": YEAR, "week": WEEK, "weekday": "Mon", "selected_alt": "Alt2"},
+        headers={**_h(), "If-Match": etag_before},
+        environ_overrides={"test_claims": {"department_id": DEPT_ID}},
+    )
+    assert monday_resp.status_code == 200
+    etag_after_monday = monday_resp.get_json()["new_etag"]
+
+    rows_after_monday = repo.list_for_department_week(
+        tenant_id=1,
+        site_id=site_id,
+        department_id=DEPT_ID,
+        year=YEAR,
+        week=WEEK,
+    )
+    assert [(row.weekday, row.selected_variant) for row in rows_after_monday] == [(1, "alt2")]
+
+    _, payload_after_monday = _get_menu_choice_etag(client_admin)
+    assert payload_after_monday["days"][0]["choice"]["selected_alt"] == "Alt2"
+    assert payload_after_monday["days"][0]["flags"]["alt2_lunch"] is False
+    assert payload_after_monday["progress"]["days_with_choice"] == 1
+    assert payload_after_monday["progress"]["total_days"] == 7
+
+    tuesday_resp = client_admin.post(
+        "/portal/department/menu-choice/change",
+        json={"year": YEAR, "week": WEEK, "weekday": "Tue", "selected_alt": "Alt1"},
+        headers={**_h(), "If-Match": etag_after_monday},
+        environ_overrides={"test_claims": {"department_id": DEPT_ID}},
+    )
+    assert tuesday_resp.status_code == 200
+
+    rows_after_tuesday = repo.list_for_department_week(
+        tenant_id=1,
+        site_id=site_id,
+        department_id=DEPT_ID,
+        year=YEAR,
+        week=WEEK,
+    )
+    assert [(row.weekday, row.selected_variant) for row in rows_after_tuesday] == [(1, "alt2"), (2, "alt1")]
+
+    _, payload_after_tuesday = _get_menu_choice_etag(client_admin)
+    assert payload_after_tuesday["days"][0]["choice"]["selected_alt"] == "Alt2"
+    assert payload_after_tuesday["days"][1]["choice"]["selected_alt"] == "Alt1"
+    assert payload_after_tuesday["progress"]["days_with_choice"] == 2
+    assert payload_after_tuesday["progress"]["total_days"] == 7

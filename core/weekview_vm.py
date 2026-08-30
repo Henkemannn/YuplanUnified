@@ -7,6 +7,7 @@ from sqlalchemy import text
 from flask import session
 
 from .db import get_session
+from .menu_service import MenuServiceDB
 from .weekview.service import WeekviewService
 from .admin_repo import Alt2Repo, DietDefaultsRepo, DietTypesRepo
 
@@ -48,6 +49,33 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
         summaries = payload.get("department_summaries") or []
         s = summaries[0] if summaries else {}
         days = s.get("days") or []
+        try:
+            legacy_week_view = MenuServiceDB().get_week_view(tid, site_id, week, year)
+            legacy_days = legacy_week_view.get("days", {}) if isinstance(legacy_week_view, dict) else {}
+            day_keys = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+            for idx, day in enumerate(days):
+                if idx >= len(day_keys):
+                    break
+                legacy_day = legacy_days.get(day_keys[idx], {}) if isinstance(legacy_days, dict) else {}
+                dinner_bucket = legacy_day.get("dinner") or legacy_day.get("Kväll") or legacy_day.get("kväll") or legacy_day.get("kvall") or {}
+                dinner_text = ""
+                if isinstance(dinner_bucket, dict):
+                    for variant_key in ("main", "kvall", "dinner", "alt1", "alt2"):
+                        variant_val = dinner_bucket.get(variant_key)
+                        if isinstance(variant_val, dict):
+                            dinner_text = str(variant_val.get("dish_name") or "").strip()
+                            if dinner_text:
+                                break
+                if not dinner_text:
+                    continue
+                menu_texts = day.setdefault("menu_texts", {})
+                dinner_obj = menu_texts.setdefault("dinner", {})
+                if not dinner_obj.get("main"):
+                    dinner_obj["main"] = dinner_text
+                if not day.get("dinner_main"):
+                    day["dinner_main"] = dinner_text
+        except Exception:
+            pass
         alt2_days = set(s.get("alt2_days") or [])
         try:
             alt2_rows = Alt2Repo().list_for_department_week(dep_id, week)
@@ -165,6 +193,11 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                 diet_name = name_by_id.get(str(dtid), str(dtid))
                 diet_rows.append({"diet_type_id": str(dtid), "diet_type_name": diet_name, "cells": cells})
         info_text = (dep.get("info_text") or "").strip()
+        has_dinner = any(
+            bool((day.get("menu_texts") or {}).get("dinner", {}).get(key))
+            for day in days
+            for key in ("main", "alt1", "alt2")
+        )
         deps_out.append(
             {
                 "id": dep_id,
@@ -175,6 +208,7 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                 "no_diets": (not default_ids),
                 "diet_rows": diet_rows,
                 "days": days,
+                "has_dinner": has_dinner,
             }
         )
 

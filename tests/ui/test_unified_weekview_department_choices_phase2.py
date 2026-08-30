@@ -24,6 +24,7 @@ def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int) ->
     from core.menu_service import MenuServiceDB
     from core.db import get_new_session
     from core.models import Dish
+    from unittest.mock import patch
 
     svc = MenuServiceDB()
     menu = svc.create_or_get_menu(tenant_id, site_id, week, year)
@@ -37,7 +38,8 @@ def _ensure_menu_for_week(tenant_id: int, site_id: str, year: int, week: int) ->
     finally:
         db.close()
     svc.set_variant(tenant_id, menu.id, "mon", "lunch", "alt1", dish_id)
-    svc.publish_menu(tenant_id, menu.id)
+    with patch("core.commun_builder_publication.CommunBuilderPublicationService.get_publication_for_week", return_value=None), patch("core.commun_builder_publication.CommunBuilderPublicationService.publish_week", return_value=object()), patch("core.commun_builder_publication.CommunBuilderPublicationService.republish_week", return_value=object()):
+        svc.publish_menu(tenant_id, menu.id)
 
 
 def test_weekview_reflects_department_registration_choice(app_session):

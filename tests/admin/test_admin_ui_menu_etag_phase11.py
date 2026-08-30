@@ -5,6 +5,21 @@ import pytest
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import text
 
+from core.builder import BuilderFlow
+from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.components import (
+    ComponentService,
+    CompositionService,
+    InMemoryComponentAliasRepository,
+    InMemoryComponentRepository,
+    InMemoryCompositionRepository,
+    InMemoryRecipeIngredientLineRepository,
+    InMemoryRecipeRepository,
+)
+from core.commun_builder_import import import_menu_result_to_builder_canonical
+from core.importers.base import ImportedMenuItem, MenuImportResult, WeekImport
+from core.menu import MenuService, InMemoryCompositionAliasRepository
+
 
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
@@ -14,6 +29,60 @@ def _client_with_site(app, site_id: str):
     with client.session_transaction() as sess:
         sess["site_id"] = site_id
     return client
+
+
+def _seed_canonical_builder_menu(app_session, *, site_id: str, year: int, week: int) -> None:
+    with app_session.app_context():
+        component_repository = InMemoryComponentRepository()
+        composition_repository = InMemoryCompositionRepository()
+        alias_repository = InMemoryCompositionAliasRepository()
+        recipe_repository = InMemoryRecipeRepository()
+        ingredient_repository = InMemoryRecipeIngredientLineRepository()
+
+        builder_flow = BuilderFlow(
+            component_service=ComponentService(repository=component_repository),
+            composition_service=CompositionService(repository=composition_repository),
+            composition_repository=composition_repository,
+            alias_repository=alias_repository,
+            component_alias_repository=InMemoryComponentAliasRepository(),
+        )
+        menu_context_flow = BuilderMenuContextFlow(
+            menu_service=MenuService(composition_repository=composition_repository),
+            composition_repository=composition_repository,
+            alias_repository=alias_repository,
+            recipe_repository=recipe_repository,
+            ingredient_repository=ingredient_repository,
+            library_flow=builder_flow,
+        )
+        app_session.extensions["builder_menu_context_flow"] = menu_context_flow
+        app_session.extensions["builder_flow"] = builder_flow
+
+        composition_service = CompositionService(repository=composition_repository)
+        composition_service.create_composition(
+            composition_id="comp_kottbullar",
+            composition_name="Köttbullar",
+        )
+
+        import_menu_result_to_builder_canonical(
+            MenuImportResult(
+                weeks=[
+                    WeekImport(
+                        year=year,
+                        week=week,
+                        items=[
+                            ImportedMenuItem(
+                                day="monday",
+                                meal="lunch",
+                                variant_type="alt1",
+                                dish_name="Köttbullar",
+                            )
+                        ],
+                    )
+                ]
+            ),
+            tenant_id=1,
+            site_id=site_id,
+        )
 
 
 @pytest.fixture
@@ -61,6 +130,8 @@ def seeded_menu_with_updated_at(app_session):
         db.commit()
     finally:
         db.close()
+
+    _seed_canonical_builder_menu(app_session, site_id="site-etag", year=2025, week=48)
     
     return app_session
 

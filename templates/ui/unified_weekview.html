@@ -52,7 +52,7 @@
                 </span>
                 {% if vm.week_summary.dinner %}
                   <span class="summary-divider">•</span>
-                  <span class="summary-label">Middag</span>
+                  <span class="summary-label">{{ meal_labels.dinner }}</span>
                   <span class="summary-count">
                     <span class="summary-registered">{{ vm.week_summary.dinner.registered }}</span>
                     <span class="summary-separator">/</span>
@@ -69,7 +69,7 @@
 
           {% set ns = namespace(has_menu=false) %}
           {% for day in vm.days %}
-            {% if day.lunch_alt1 or day.lunch_alt2 or day.lunch_dessert or day.dinner_alt1 or day.dinner_alt2 %}
+            {% if day.lunch_alt1 or day.lunch_alt2 or day.lunch_dessert or day.dinner_main or day.dinner_alt1 or day.dinner_alt2 %}
               {% set ns.has_menu = true %}
             {% endif %}
           {% endfor %}
@@ -130,10 +130,10 @@
 
                 {% if vm.has_dinner %}
                   {% set dinner_is_alt2 = day.dinner_alt2 %}
-                  {% set dinner_has_menu = day.dinner_alt1 or day.dinner_alt2 %}
-                  <div class="meal-section meal-section--dinner{% if dinner_is_alt2 %} is-alt2{% endif %}{% if day.dinner_registered or dinner_has_menu %} is-done{% endif %}" data-meal-cell data-date="{{ day.date }}" data-meal-type="dinner" data-registered="{{ 'true' if day.dinner_registered else 'false' }}" role="button" tabindex="0" aria-label="Middag {{ day.weekday_name }} {{ day.date }} {{ 'registrerad' if day.dinner_registered else 'ej registrerad' }}">
+                  {% set dinner_has_menu = day.dinner_main or day.dinner_alt1 or day.dinner_alt2 %}
+                  <div class="meal-section meal-section--dinner{% if dinner_is_alt2 %} is-alt2{% endif %}{% if day.dinner_registered or dinner_has_menu %} is-done{% endif %}" data-meal-cell data-date="{{ day.date }}" data-meal-type="dinner" data-registered="{{ 'true' if day.dinner_registered else 'false' }}" role="button" tabindex="0" aria-label="{{ meal_labels.dinner }} {{ day.weekday_name }} {{ day.date }} {{ 'registrerad' if day.dinner_registered else 'ej registrerad' }}">
                     <div class="meal-header">
-                      <div class="meal-label"><span class="meal-icon">🌙</span> MIDDAG</div>
+                      <div class="meal-label"><span class="meal-icon">🌙</span> {{ meal_labels.dinner }}</div>
                       {% if day.dinner_registered %}
                         <span class="yp-badge registration-badge">✓ Registrerad</span>
                       {% else %}
@@ -143,10 +143,15 @@
                     {% if dinner_is_alt2 %}
                       <span class="yp-badge alt2-badge">ALT 2</span>
                     {% endif %}
-                    {% if day.dinner_alt1 %}
+                    {% if day.dinner_main %}
+                      <div class="meal-text">{{ day.dinner_main }}</div>
+                    {% elif day.dinner_alt1 %}
                       <div class="meal-text">{{ day.dinner_alt1 }}</div>
                     {% else %}
                       <div class="meal-text meal-text--empty">Ingen meny</div>
+                    {% endif %}
+                    {% if day.dinner_alt1 and day.dinner_main %}
+                      <div class="meal-text meal-text--alt2">Alt 1: {{ day.dinner_alt1 }}</div>
                     {% endif %}
                     {% if day.dinner_alt2 %}
                       <div class="meal-text meal-text--alt2">ALT 2: {{ day.dinner_alt2 }}</div>

@@ -1928,6 +1928,7 @@ def weekview_ui():
             "lunch_alt1": lunch.get("alt1"),
             "lunch_alt2": lunch.get("alt2"),
             "lunch_dessert": lunch.get("dessert"),
+            "dinner_main": dinner.get("main"),
             "dinner_alt1": dinner.get("alt1"),
             "dinner_alt2": dinner.get("alt2"),
             "alt2_lunch": bool(d.get("alt2_lunch")),
@@ -1943,7 +1944,7 @@ def weekview_ui():
                 "dinner": dinner_summary
             }
         }
-        if day_vm["dinner_alt1"] or day_vm["dinner_alt2"]:
+        if day_vm["dinner_main"] or day_vm["dinner_alt1"] or day_vm["dinner_alt2"]:
             has_dinner = True
         day_vms.append(day_vm)
 
@@ -3614,7 +3615,7 @@ def kitchen_veckovy_week():
             "allow_site_switch": False,
             "nav_context": "kitchen",
         }
-        return render_template("ui/kitchen_week_v3.html", vm=vm)
+        return render_template("ui/kitchen_week_v3.html", vm=vm, meal_labels=get_meal_labels_for_site(site_id))
     # Legacy path rendering remains unchanged below
     site_id = q_site_id
     department_id = q_department_id
@@ -4277,7 +4278,7 @@ def weekview_registration_save():
         )
         
         # Success feedback
-        meal_label = "Lunch" if meal_type == "lunch" else "Middag"
+        meal_label = "Lunch" if meal_type == "lunch" else "Kvällsmat"
         status_text = "registrerad" if registered else "avregistrerad"
         flash(f"{meal_label} för {date_str} {status_text}", "success")
         
@@ -4389,9 +4390,9 @@ def weekview_overview_ui():
             dinner = mt.get("dinner", {}) if isinstance(mt, dict) else {}
             has_menu_icon = bool(
                 (lunch.get("alt1") or lunch.get("alt2") or lunch.get("dessert"))
-                or (dinner.get("alt1") or dinner.get("alt2"))
+                or (dinner.get("main") or dinner.get("alt1") or dinner.get("alt2"))
             )
-            if dinner.get("alt1") or dinner.get("alt2"):
+            if dinner.get("main") or dinner.get("alt1") or dinner.get("alt2"):
                 has_any_dinner = True
             r = (d.get("residents") or {})
             res_l += int(r.get("lunch", 0) or 0)
@@ -4430,6 +4431,7 @@ def weekview_overview_ui():
                         "lunch_alt1": lunch.get("alt1"),
                         "lunch_alt2": lunch.get("alt2"),
                         "lunch_dessert": lunch.get("dessert"),
+                        "dinner_main": dinner.get("main"),
                         "dinner_alt1": dinner.get("alt1"),
                         "dinner_alt2": dinner.get("alt2"),
                     },

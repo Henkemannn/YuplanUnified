@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .commun_builder_import import import_menu_result_to_builder_canonical
 from .db import get_session
 from .importers.base import ImportedMenuItem, MenuImportResult
 from .menu_service import MenuServiceDB
@@ -20,6 +21,7 @@ class MenuImportService:
 
     def apply(self, tenant_id: int, site_id: str, result: MenuImportResult) -> dict:
         summary = []
+        legacy_menu_ids_by_week: dict[tuple[int, int], int] = {}
         db = get_session()
         try:
             effective_tenant_id = self.menu_service._resolve_site_tenant_id(db, site_id, tenant_id)  # type: ignore[attr-defined]
@@ -32,6 +34,7 @@ class MenuImportService:
                 menu = self.menu_service.create_or_get_menu(
                     effective_tenant_id, site_id, week_block.week, week_block.year
                 )
+                legacy_menu_ids_by_week[(int(week_block.year), int(week_block.week))] = int(menu.id)
                 # Preload existing variants map
                 existing_map = self._existing_variant_map(db, menu.id)
                 for item in week_block.items:
@@ -57,6 +60,15 @@ class MenuImportService:
                         "skipped": skipped,
                         "total": len(week_block.items),
                     }
+                )
+
+            if result.weeks:
+                import_menu_result_to_builder_canonical(
+                    result,
+                    tenant_id=int(effective_tenant_id),
+                    site_id=str(site_id),
+                    import_type="menu",
+                    legacy_menu_ids_by_week=legacy_menu_ids_by_week,
                 )
             return {"weeks": summary, "warnings": result.warnings, "errors": result.errors}
         finally:

@@ -5,6 +5,7 @@ import copy
 from types import SimpleNamespace
 
 from flask import current_app
+import pytest
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.components import (
@@ -343,11 +344,10 @@ def test_publish_legacy_published_menu_without_builder_link_keeps_legacy_publish
 
     from core.menu_service import MenuServiceDB
     menu_id = MenuServiceDB().create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year).id
-    _mark_menu_published(menu_id)
-
     monkeypatch.setattr(CommunBuilderPublicationService, "get_publication_for_week", lambda self, **kwargs: None)
 
-    MenuServiceDB().publish_menu(tenant_id=1, menu_id=menu_id)
+    with pytest.raises(RuntimeError, match="canonical_publication_missing"):
+        MenuServiceDB().publish_menu(tenant_id=1, menu_id=menu_id)
 
     from core.db import get_session
 
@@ -358,7 +358,7 @@ def test_publish_legacy_published_menu_without_builder_link_keeps_legacy_publish
             text("SELECT 1 FROM commun_builder_publication_pins WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"),
             {"tid": 1, "sid": site_id, "year": year, "week": week},
         ).fetchone()
-        assert menu_status is not None and menu_status[0] == "published"
+        assert menu_status is not None and menu_status[0] == "draft"
         assert pin is None
     finally:
         db.close()

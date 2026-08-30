@@ -108,11 +108,12 @@
                             {% if d.menu.lunch_dessert %}<br/>Efterrätt: {{ d.menu.lunch_dessert }}{% endif %}
                           </dd>
                         {% endif %}
-                        {% if d.menu.dinner_alt1 or d.menu.dinner_alt2 %}
+                        {% if d.menu.dinner_alt1 or d.menu.dinner_alt2 or d.menu.dinner_main %}
                           <dt>{{ meal_labels.dinner }}</dt>
                           <dd>
+                            {% if d.menu.dinner_main %}{{ d.menu.dinner_main }}{% endif %}
                             {% if d.menu.dinner_alt1 %}Alt 1: {{ d.menu.dinner_alt1 }}{% endif %}
-                            {% if d.menu.dinner_alt2 %}<br/>Alt 2: {{ d.menu.dinner_alt2 }}{% endif %}
+                            {% if d.menu.dinner_alt2 %}{% if d.menu.dinner_main %}<br/>{% endif %}Alt 2: {{ d.menu.dinner_alt2 }}{% endif %}
                           </dd>
                         {% endif %}
                       </dl>
