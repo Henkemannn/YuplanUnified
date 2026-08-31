@@ -40,3 +40,41 @@ def test_planera_day_etag_304(client_admin):
     r2 = client_admin.get(f"/api/planera/day?site_id={site_id}&date={d}&department_id={dep_id}", headers={**_h("admin"), "If-None-Match": etag})
     assert r2.status_code == 304
     assert r2.get_data(as_text=True) == ""
+
+
+def test_planera_day_compute_day_counts_default_select_specialkost(client_admin):
+    app = client_admin.application
+    day = date(2025, 11, 24).isoformat()
+
+    from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
+    from core.planera_service import PlaneraService
+    from core.weekview.service import WeekviewService
+
+    with app.app_context():
+        site, _ = SitesRepo().create_site(name=f"PlaneraSite-{uuid.uuid4().hex[:8]}", tenant_id=1)
+        dept, _ = DepartmentsRepo().create_department(
+            site_id=site["id"],
+            name=f"AvdP-{uuid.uuid4().hex[:8]}",
+            resident_count_mode="fixed",
+            resident_count_fixed=10,
+        )
+        diet_id = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=True)
+        DepartmentsRepo().upsert_department_diet_defaults(
+            dept["id"],
+            0,
+            [{"diet_type_id": diet_id, "default_count": 2}],
+        )
+
+        result = PlaneraService(WeekviewService()).compute_day(
+            tenant_id=1,
+            site_id=site["id"],
+            iso_date=day,
+            departments=[(dept["id"], dept["name"])],
+        )
+
+    lunch = result["departments"][0]["meals"]["lunch"]
+    special = next((item for item in lunch["special_diets"] if item["diet_type_id"] == str(diet_id)), None)
+
+    assert lunch["residents_total"] == 10
+    assert special is not None and special["count"] == 2
+    assert lunch["normal_diet_count"] == 8

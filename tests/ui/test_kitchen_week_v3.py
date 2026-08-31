@@ -2,11 +2,12 @@ from flask.testing import FlaskClient
 from sqlalchemy import text
 from datetime import date as _date
 from pathlib import Path
+import uuid
 import re
 
-from core.app_factory import create_app
 from core.db import get_session
 from core.admin_repo import DietTypesRepo, Alt2Repo
+from core.department_menu_choice_repo import MenuChoiceRepo
 
 
 def _seed_site_and_departments(db, site_id: str, deps: list[tuple[str, str, int]]):
@@ -47,15 +48,15 @@ def _link_diets(db, dept_id: str, items: list[tuple[str, int]]):
     db.commit()
 
 
-def test_kitchen_week_v3_renders_and_flags():
-    app = create_app()
-    app.config.update({"TESTING": True})
+def test_kitchen_week_v3_renders_and_flags(app_session):
+    app = app_session
+    suffix = uuid.uuid4().hex[:8]
     with app.app_context():
         db = get_session()
         try:
-            site_id = "site-k3"
-            dep1 = ("dep-1", "Avd Ett", 12)
-            dep2 = ("dep-2", "Avd Två", 9)
+            site_id = f"site-k3-{suffix}"
+            dep1 = (f"dep-1-{suffix}", f"Avd Ett {suffix}", 12)
+            dep2 = (f"dep-2-{suffix}", f"Avd Två {suffix}", 9)
             _seed_site_and_departments(db, site_id, [dep1, dep2])
             # Create diet types
             dt_repo = DietTypesRepo()
@@ -64,8 +65,16 @@ def test_kitchen_week_v3_renders_and_flags():
             # Link dt1 only to dep1; dt2 only to dep2
             _link_diets(db, dep1[0], [(dt1, 2)])
             _link_diets(db, dep2[0], [(dt2, 1)])
-            # Seed an alt2 lunch flag for dep1, week 5, Monday
-            Alt2Repo().bulk_upsert([{"site_id": site_id, "department_id": dep1[0], "week": 5, "weekday": 1, "enabled": True}])
+            # Seed canonical explicit Alt2 for dep1, week 5, Monday.
+            MenuChoiceRepo().set_choice(
+                tenant_id=1,
+                site_id=site_id,
+                department_id=dep1[0],
+                year=2026,
+                week=5,
+                weekday=1,
+                selected_alt="Alt2",
+            )
         finally:
             db.close()
     client: FlaskClient = app.test_client()
@@ -113,14 +122,92 @@ def test_kitchen_week_v3_renders_and_flags():
     assert re.search(r"app-shell__nav-item--active[^>]*>\s*Veckovy\s*<", html)
 
 
-def test_kitchen_week_v3_mark_toggle():
-    app = create_app()
-    app.config.update({"TESTING": True})
+def test_kitchen_week_v3_canonical_alt2_beats_stale_legacy_flags(app_session):
+    app = app_session
+    week = 7
+    suffix = uuid.uuid4().hex[:8]
     with app.app_context():
         db = get_session()
         try:
-            site_id = "site-k3b"
-            dep = ("dep-3", "Avd Tre", 10)
+            site_id = f"site-k3-canonical-{suffix}"
+            dep = (f"dep-k3-canonical-{suffix}", f"Avd Canon {suffix}", 10)
+            _seed_site_and_departments(db, site_id, [dep])
+            dt_repo = DietTypesRepo()
+            dt = dt_repo.create(site_id=site_id, name=f"Glutenfri {site_id}", default_select=False)
+            _link_diets(db, dep[0], [(dt, 2)])
+            # Stale legacy flag must never override canonical None/Alt1.
+            Alt2Repo().bulk_upsert([{"site_id": site_id, "department_id": dep[0], "week": week, "weekday": 1, "enabled": True}])
+            choice_repo = MenuChoiceRepo()
+            choice_repo.set_choice(
+                tenant_id=1,
+                site_id=site_id,
+                department_id=dep[0],
+                year=2026,
+                week=week,
+                weekday=1,
+                selected_alt="Alt2",
+            )
+        finally:
+            db.close()
+
+    client: FlaskClient = app.test_client()
+    headers = {"X-User-Role": "cook", "X-Tenant-Id": "1"}
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["site_id"] = site_id
+
+    rv_alt2 = client.get(f"/ui/kitchen/week?year=2026&week={week}", headers=headers)
+    assert rv_alt2.status_code == 200
+    html_alt2 = rv_alt2.data.decode("utf-8")
+    assert "is-alt2" in html_alt2
+
+    with app.app_context():
+        db = get_session()
+        try:
+            choice_repo = MenuChoiceRepo()
+            choice_repo.set_choice(
+                tenant_id=1,
+                site_id=site_id,
+                department_id=dep[0],
+                year=2026,
+                week=week,
+                weekday=1,
+                selected_alt="Alt1",
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    rv_alt1 = client.get(f"/ui/kitchen/week?year=2026&week={week}", headers=headers)
+    assert rv_alt1.status_code == 200
+    html_alt1 = rv_alt1.data.decode("utf-8")
+    assert "is-alt2" not in html_alt1
+
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text("DELETE FROM department_menu_choices WHERE tenant_id=1 AND site_id=:s AND department_id=:d AND year=2026 AND week=:w AND weekday=1 AND meal='lunch'"),
+                {"s": site_id, "d": dep[0], "w": week},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    rv_none = client.get(f"/ui/kitchen/week?year=2026&week={week}", headers=headers)
+    assert rv_none.status_code == 200
+    html_none = rv_none.data.decode("utf-8")
+    assert "is-alt2" not in html_none
+
+
+def test_kitchen_week_v3_mark_toggle(app_session):
+    app = app_session
+    suffix = uuid.uuid4().hex[:8]
+    with app.app_context():
+        db = get_session()
+        try:
+            site_id = str(uuid.uuid4())
+            dep = (str(uuid.uuid4()), f"Avd Tre {suffix}", 10)
             _seed_site_and_departments(db, site_id, [dep])
             dt_repo = DietTypesRepo()
             dt = dt_repo.create(site_id=site_id, name=f"Glutenfri {site_id}", default_select=False)
@@ -150,7 +237,7 @@ def test_kitchen_week_v3_mark_toggle():
         "marked": True,
     }
     resp2 = client.post("/api/weekview/specialdiets/mark", json=payload, headers={**headers, "If-Match": etag})
-    assert resp2.status_code in (200, 412)
+    assert resp2.status_code == 200
     # Refresh page and expect is-done class to appear at least once
     rv2 = client.get(f"/ui/kitchen/week?year=2026&week=6", headers=headers)
     assert rv2.status_code == 200
@@ -158,14 +245,14 @@ def test_kitchen_week_v3_mark_toggle():
     assert "is-done" in html2
 
 
-def test_kitchen_week_v3_default_select_premarked_cells():
-    app = create_app()
-    app.config.update({"TESTING": True})
+def test_kitchen_week_v3_default_select_premarked_cells(app_session):
+    app = app_session
+    suffix = uuid.uuid4().hex[:8]
     with app.app_context():
         db = get_session()
         try:
-            site_id = "site-k3-default-on"
-            dep = ("dep-k3-default-on", "Avd Default On", 11)
+            site_id = f"site-k3-default-on-{suffix}"
+            dep = (f"dep-k3-default-on-{suffix}", f"Avd Default On {suffix}", 11)
             _seed_site_and_departments(db, site_id, [dep])
             dt_repo = DietTypesRepo()
             dt = dt_repo.create(site_id=site_id, name=f"Timbal {site_id}", default_select=True)
@@ -188,14 +275,14 @@ def test_kitchen_week_v3_default_select_premarked_cells():
     )
 
 
-def test_kitchen_week_v3_default_select_false_not_premarked_cells():
-    app = create_app()
-    app.config.update({"TESTING": True})
+def test_kitchen_week_v3_default_select_false_not_premarked_cells(app_session):
+    app = app_session
+    suffix = uuid.uuid4().hex[:8]
     with app.app_context():
         db = get_session()
         try:
-            site_id = "site-k3-default-off"
-            dep = ("dep-k3-default-off", "Avd Default Off", 11)
+            site_id = f"site-k3-default-off-{suffix}"
+            dep = (f"dep-k3-default-off-{suffix}", f"Avd Default Off {suffix}", 11)
             _seed_site_and_departments(db, site_id, [dep])
             dt_repo = DietTypesRepo()
             dt = dt_repo.create(site_id=site_id, name=f"Timbal Off {site_id}", default_select=False)

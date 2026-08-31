@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Iterable, Tuple, List, Dict, Any
 
 from .weekview.service import WeekviewService
-from .admin_repo import DietDefaultsRepo
 
 
 def compute_weekview_report(
@@ -24,23 +23,9 @@ def compute_weekview_report(
         payload, _etag = svc.fetch_weekview(tenant_id, year, week, dep_id)
         summaries = payload.get("department_summaries") or []
         days = (summaries[0].get("days") if summaries else []) or []
-        marks_raw = (summaries[0].get("marks") if summaries else []) or []
-        # Build mark index: (dow, meal, diet_type_id)
-        marked_idx: set[tuple[int, str, str]] = set()
-        try:
-            for m in marks_raw:
-                if bool(m.get("marked")):
-                    marked_idx.add((int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type"))))
-        except Exception:
-            marked_idx = set()
-        # Planned defaults and always_mark flags per department
-        defaults_items = DietDefaultsRepo().list_for_department(dep_id)
-        planned_map: Dict[str, int] = {str(it["diet_type_id"]): int(it.get("default_count", 0)) for it in defaults_items}
-        always_map: Dict[str, bool] = {str(it["diet_type_id"]): bool(it.get("always_mark", False)) for it in defaults_items}
         # Accumulators
         residents_total = {"lunch": 0, "dinner": 0}
         debiterbar_total = {"lunch": 0, "dinner": 0}
-        diet_names: Dict[str, str] = {}
         day_rows: List[Dict[str, Any]] = []
         for d in days:
             res = (d.get("residents") or {})
@@ -49,32 +34,26 @@ def compute_weekview_report(
                     residents_total[meal] += int(res.get(meal, 0) or 0)
                 except Exception:
                     pass
-            # Compute debiterbar specialkost for the day per meal
-            dow = int(d.get("day_of_week") or 0)
+            diets_by_meal = d.get("diets") or {}
+            day_debiterbar: Dict[str, int] = {"lunch": 0, "dinner": 0}
             for meal in ("lunch", "dinner"):
+                diets = (diets_by_meal.get(meal) or []) if isinstance(diets_by_meal, dict) else []
                 deb_day = 0
-                for dtid, planned_cnt in planned_map.items():
-                    if planned_cnt <= 0:
-                        continue
-                    if always_map.get(dtid) or ((dow, meal, dtid) in marked_idx):
-                        deb_day += planned_cnt
+                for diet in diets:
+                    if bool(diet.get("marked")):
+                        try:
+                            deb_day += int(diet.get("resident_count") or 0)
+                        except Exception:
+                            continue
+                day_debiterbar[meal] = deb_day
                 debiterbar_total[meal] += deb_day
-                # Collect day row once
             day_rows.append(
                 {
                     "weekday_name": d.get("weekday_name"),
                     "lunch_residents": int(res.get("lunch", 0) or 0),
                     "dinner_residents": int(res.get("dinner", 0) or 0),
-                    "lunch_debiterbar": sum(
-                        planned_map.get(dt, 0)
-                        for dt in planned_map.keys()
-                        if planned_map.get(dt, 0) > 0 and (always_map.get(dt) or ((dow, "lunch", dt) in marked_idx))
-                    ),
-                    "dinner_debiterbar": sum(
-                        planned_map.get(dt, 0)
-                        for dt in planned_map.keys()
-                        if planned_map.get(dt, 0) > 0 and (always_map.get(dt) or ((dow, "dinner", dt) in marked_idx))
-                    ),
+                    "lunch_debiterbar": day_debiterbar["lunch"],
+                    "dinner_debiterbar": day_debiterbar["dinner"],
                 }
             )
         meals_out: Dict[str, Any] = {}
@@ -85,7 +64,7 @@ def compute_weekview_report(
                 normal = 0
             meals_out[meal] = {
                 "residents_total": residents_total[meal],
-                # Phase 3: debiterbar specialkost totals based on marks + always_mark
+                # Phase 3: debiterbar specialkost totals based on enriched Weekview marks
                 "debiterbar_specialkost_count": total_deb,
                 "normal_diet_count": normal,
             }

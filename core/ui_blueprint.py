@@ -280,13 +280,11 @@ def api_weekview_specialdiets_mark():
     svc = WeekviewService()
     # Align tenant resolution with the ETag endpoint to avoid scope mismatches
     tid = getattr(g, "tenant_id", None) or session.get("tenant_id") or 0
-    from .weekview.repo import WeekviewRepo as _WRepo
-    repo = _WRepo()
-    # Compute current version and ETag in a single place (site-scoped if site_id provided)
-    version = repo.get_version(tid, year, week, department_id)
-    current_dept_etag = svc.build_etag(tid, department_id, year, week, version)
     # Prefer explicit site_id from payload; else fall back to session context
     site_ctx = site_id_payload or (session.get("site_id") if "site_id" in session else None)
+    # Compute the canonical-aware effective version in a single place.
+    version = svc.get_effective_version(tid, year, week, department_id, site_ctx)
+    current_dept_etag = svc.build_etag(tid, department_id, year, week, version)
     current_site_etag = (
         f"W/\"weekview:site:{site_ctx}:dept:{department_id}:year:{year}:week:{week}:v{version}\""
         if site_ctx else None
@@ -321,17 +319,6 @@ def api_weekview_specialdiets_mark():
         resp = jsonify(dbg)
         resp.headers["ETag"] = current_etag
         return resp, 412
-    # Proceed to toggle marks; use site-scoped flow when site_id is present
-    if site_ctx:
-        try:
-            # Apply operations directly via repo (site-scoped request validated above)
-            new_version = repo.apply_operations(tid, year, week, department_id, [op])
-            new_etag = f"W/\"weekview:site:{site_ctx}:dept:{department_id}:year:{year}:week:{week}:v{new_version}\""
-            resp = jsonify({"status": "ok", "marked": desired_state})
-            resp.headers["ETag"] = new_etag
-            return resp, 200
-        except Exception:
-            return jsonify({"type": "about:blank", "title": "server_error"}), 500
     try:
         new_etag = svc.toggle_marks(tid, year, week, department_id, current_dept_etag, [op])
         resp = jsonify({"status": "ok", "marked": desired_state})
@@ -440,15 +427,9 @@ def api_weekview_get_etag():
     repo = WeekviewRepo()
     svc = _WVS(repo)
     try:
-        # Base version lookup is per tenant+department+year+week
-        version = repo.get_version(tid, year, week, department_id)
-        # Backwards-compat: if no site_id supplied, return dept-scoped ETag
-        if not site_id:
-            etag = svc.build_etag(tid, department_id, year, week, version)
-        else:
-            # Site-scoped ETag: include site in the strong key to match mark validation
-            # Compose using the same fields but with site_id prefix to avoid collisions
-            etag = f"W/\"weekview:site:{site_id}:dept:{department_id}:year:{year}:week:{week}:v{version}\""
+        # Effective version includes canonical menu-choice state.
+        version = svc.get_effective_version(tid, year, week, department_id, site_id)
+        etag = svc.build_etag(tid, department_id, year, week, version)
         resp = jsonify({"etag": etag})
         resp.headers["ETag"] = etag
         return resp
@@ -3514,30 +3495,6 @@ def kitchen_veckovy_week():
             summaries = payload.get("department_summaries") or []
             s = summaries[0] if summaries else {}
             days = s.get("days") or []
-            alt2_days = set()
-            try:
-                from core.admin_repo import Alt2Repo
-                alt2_rows = Alt2Repo().list_for_department_week(dep_id, week)
-                alt2_days = {int(r.get("weekday")) for r in alt2_rows if bool(r.get("enabled"))}
-            except Exception:
-                alt2_days = set()
-            try:
-                for d in days:
-                    if not d.get("alt2_lunch"):
-                        dow_val = int(d.get("day_of_week") or 0)
-                        if dow_val in alt2_days:
-                            d["alt2_lunch"] = True
-            except Exception:
-                pass
-            # Build mark index from persisted state to ensure VM reflects what /mark writes
-            raw_marks = s.get("marks") or []
-            marked_idx = set()
-            try:
-                for m in raw_marks:
-                    if bool(m.get("marked")):
-                        marked_idx.add((int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type"))))
-            except Exception:
-                marked_idx = set()
             defaults = []
             try:
                 from core.admin_repo import DietDefaultsRepo, DietTypesRepo
@@ -3546,11 +3503,9 @@ def kitchen_veckovy_week():
                 types = types_repo.list_all(site_id=site_id)
                 name_by_id = {str(it["id"]): str(it["name"]) for it in types}
                 allowed_diet_ids = {str(it["id"]) for it in types}
-                preselected_ids = {str(it["id"]) for it in types if bool(it.get("default_select"))}
             except Exception:
                 name_by_id = {}
                 allowed_diet_ids = set()
-                preselected_ids = set()
             # Filter to only diets with configured count > 0 for K3
             defaults_pos = [it for it in (defaults or []) if int(it.get("default_count", 0) or 0) > 0]
             default_ids = [str(it.get("diet_type_id")) for it in defaults_pos]
@@ -3564,18 +3519,22 @@ def kitchen_veckovy_week():
                         day_obj = next((x for x in days if int(x.get("day_of_week")) == dow), None)
                         diets_l = ((day_obj.get("diets") or {}).get("lunch") if day_obj else []) or []
                         diets_d = ((day_obj.get("diets") or {}).get("dinner") if day_obj else []) or []
-                        rl = 0; rd = 0
+                        rl = 0
+                        rd = 0
+                        lunch_marked = False
+                        dinner_marked = False
                         for it in diets_l:
                             if str(it.get("diet_type_id")) == str(dtid):
                                 rl = int(it.get("resident_count") or 0)
+                                lunch_marked = bool(it.get("marked"))
                                 break
                         for it in diets_d:
                             if str(it.get("diet_type_id")) == str(dtid):
                                 rd = int(it.get("resident_count") or 0)
+                                dinner_marked = bool(it.get("marked"))
                                 break
-                        # Keep persisted marks, but premark default-select diets in weekly lists.
-                        ml = ((dow, "lunch", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rl > 0)
-                        md = ((dow, "dinner", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rd > 0)
+                        ml = lunch_marked
+                        md = dinner_marked
                         is_alt2 = False
                         try:
                             is_alt2 = bool(day_obj.get("alt2_lunch")) if day_obj else False

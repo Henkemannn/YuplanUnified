@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import re
+import json
 from datetime import date
+from hashlib import sha1
 from typing import Sequence, Any
 from flask import current_app
-from ..admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo
+from ..admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo, DietTypesRepo
+from ..department_menu_choice_repo import MenuChoiceRepo
 from sqlalchemy import text
 from ..residents_weekly_repo import ResidentsWeeklyRepo
 from ..residents_schedule_repo import ResidentsScheduleRepo
@@ -27,9 +30,50 @@ class WeekviewService:
         # Weak ETag format per spec
         return f'W/"weekview:dept:{department_id}:year:{year}:week:{week}:v{version}"'
 
+    def get_effective_version(self, tenant_id: int | str, year: int, week: int, department_id: str, site_id: str | None = None) -> int:
+        try:
+            base_version = int(self.repo.get_version(tenant_id, year, week, department_id))
+        except Exception:
+            base_version = 0
+
+        resolved_site_id = str(site_id or "").strip()
+        if not resolved_site_id:
+            db = get_session()
+            try:
+                row = db.execute(text("SELECT site_id FROM departments WHERE id=:dep"), {"dep": department_id}).fetchone()
+                resolved_site_id = str(row[0]) if row and row[0] is not None else ""
+            finally:
+                db.close()
+
+        choice_sig = 0
+        if resolved_site_id:
+            try:
+                rows = MenuChoiceRepo().list_for_department_week(
+                    tenant_id=int(tenant_id),
+                    site_id=resolved_site_id,
+                    department_id=department_id,
+                    year=year,
+                    week=week,
+                )
+                sig_source = [
+                    {
+                        "weekday": int(row.weekday),
+                        "meal": str(row.meal),
+                        "selected_variant": str(row.selected_variant),
+                        "version": int(row.version),
+                    }
+                    for row in rows
+                ]
+                if sig_source:
+                    choice_sig = int(sha1(json.dumps(sig_source, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:12], 16)
+            except Exception:
+                choice_sig = 0
+
+        return base_version ^ choice_sig
+
     def fetch_weekview(self, tenant_id: int | str, year: int, week: int, department_id: str | None, site_id: str | None = None, source: str | None = None) -> tuple[dict, str]:
         dep = department_id or "__none__"
-        version = 0 if not department_id else self.repo.get_version(tenant_id, year, week, department_id)
+        version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
         payload = self.repo.get_weekview(tenant_id, year, week, department_id, site_id)
         if site_id and isinstance(payload, dict) and not payload.get("site_id"):
             payload["site_id"] = site_id
@@ -69,11 +113,11 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         v = int(m.group("v"))
         if dep != department_id or yy != year or ww != week:
             raise EtagMismatchError("etag_mismatch")
-        current = self.repo.get_version(tenant_id, year, week, department_id)
+        current = self.get_effective_version(tenant_id, year, week, department_id)
         if current != v:
             raise EtagMismatchError("etag_mismatch")
         new_version = self.repo.apply_operations(tenant_id, year, week, department_id, ops)
-        return self.build_etag(tenant_id, department_id, year, week, new_version)
+        return self.build_etag(tenant_id, department_id, year, week, self.get_effective_version(tenant_id, year, week, department_id))
 
     def fetch_weekview_conditional(
         self,
@@ -88,7 +132,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         Returns (not_modified, payload, etag). If not_modified is True, payload will be None.
         """
         dep = department_id or "__none__"
-        version = 0 if not department_id else self.repo.get_version(tenant_id, year, week, department_id)
+        version = 0 if not department_id else self.get_effective_version(tenant_id, year, week, department_id, site_id)
         etag = self.build_etag(tenant_id, dep, year, week, version)
         if if_none_match and if_none_match == etag:
             return True, None, etag
@@ -119,11 +163,11 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         v = int(m.group("v"))
         if dep != department_id or yy != year or ww != week:
             raise EtagMismatchError("etag_mismatch")
-        current = self.repo.get_version(tenant_id, year, week, department_id)
+        current = self.get_effective_version(tenant_id, year, week, department_id)
         if current != v:
             raise EtagMismatchError("etag_mismatch")
         new_v = self.repo.set_residents_counts(tenant_id, year, week, department_id, items)
-        return self.build_etag(tenant_id, department_id, year, week, new_v)
+        return self.build_etag(tenant_id, department_id, year, week, self.get_effective_version(tenant_id, year, week, department_id))
 
     def update_alt2_flags(
         self,
@@ -144,11 +188,11 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         v = int(m.group("v"))
         if dep != department_id or yy != year or ww != week:
             raise EtagMismatchError("etag_mismatch")
-        current = self.repo.get_version(tenant_id, year, week, department_id)
+        current = self.get_effective_version(tenant_id, year, week, department_id, site_id)
         if current != v:
             raise EtagMismatchError("etag_mismatch")
         new_v = self.repo.set_alt2_flags(tenant_id, year, week, department_id, days, site_id)
-        return self.build_etag(tenant_id, department_id, year, week, new_v)
+        return self.build_etag(tenant_id, department_id, year, week, self.get_effective_version(tenant_id, year, week, department_id, site_id))
 
     # --- Residents helpers (v1) ---
     def get_effective_residents_for_week(self, department_id: str, year: int, week: int) -> dict:
@@ -301,6 +345,26 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                     diet_defaults = {str(it["diet_type_id"]): int(it.get("default_count", 0)) for it in items}
             except Exception:
                 diet_defaults = {}
+
+            diet_default_select: dict[str, bool] = {}
+            try:
+                if dept_id:
+                    site_id_for_defaults = str(payload.get("site_id") or "").strip()
+                    if not site_id_for_defaults:
+                        db = get_session()
+                        try:
+                            row = db.execute(text("SELECT site_id FROM departments WHERE id=:dep"), {"dep": dept_id}).fetchone()
+                            site_id_for_defaults = str(row[0]) if row and row[0] is not None else ""
+                        finally:
+                            db.close()
+                    if site_id_for_defaults:
+                        diet_default_select = {
+                            str(it["id"]): bool(it.get("default_select"))
+                            for it in DietTypesRepo().list_all(site_id=site_id_for_defaults)
+                        }
+            except Exception:
+                diet_default_select = {}
+
             diet_override_counts: dict[tuple[int, str, str], int] = {}
             try:
                 if dept_id:
@@ -308,15 +372,19 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
             except Exception:
                 diet_override_counts = {}
 
-            # Build mark index from raw marks list if present
+            # Build explicit mark map from raw marks list if present.
+            # Marked semantics:
+            # - explicit marked=True => marked
+            # - default_select=True + planned_count > 0 => marked
+            # - explicit marked=False does not suppress automatic default_select
             marks = summary.get("marks", []) or []
-            marked_idx: set[tuple[int, str, str]] = set()
+            explicit_mark_map: dict[tuple[int, str, str], bool] = {}
             try:
                 for m in marks:
-                    if bool(m.get("marked")):
-                        marked_idx.add((int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type"))))
+                    key = (int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type")))
+                    explicit_mark_map[key] = bool(m.get("marked"))
             except Exception:
-                marked_idx = set()
+                explicit_mark_map = {}
 
             days_out: list[dict[str, Any]] = []
             for dow in range(1, 8):
@@ -386,6 +454,8 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                     out: list[dict[str, Any]] = []
                     for dt_id, default_cnt in sorted(diet_defaults.items()):
                         planned_cnt = int(diet_override_counts.get((dow, meal_name, dt_id), int(default_cnt)))
+                        explicit_mark = explicit_mark_map.get((dow, meal_name, dt_id))
+                        marked = bool(explicit_mark) or (bool(diet_default_select.get(dt_id, False)) and planned_cnt > 0)
                         out.append(
                             {
                                 "diet_type_id": dt_id,
@@ -394,7 +464,7 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
                                 "planned_count": planned_cnt,
                                 "base_count": int(default_cnt),
                                 "has_override": planned_cnt != int(default_cnt),
-                                "marked": (dow, meal_name, dt_id) in marked_idx,
+                                "marked": marked,
                             }
                         )
                     return out

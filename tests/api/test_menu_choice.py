@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import date as _date
+import uuid
 
 from core.db import get_session
+from core.admin_repo import SitesRepo, DepartmentsRepo
 from core.department_menu_choice_repo import MenuChoiceRepo
 from portal.department.auth import DepartmentPortalScope
 from portal.department.service import build_department_week_payload
@@ -30,36 +32,24 @@ def _set_auth_session(client, *, tenant_id: int = 1, user_id: int = 1, role: str
 def _ensure_department(client):
     if getattr(client, "_mc_dept", None):
         return getattr(client, "_mc_dept")
-    r_site = client.post(
-        "/admin/sites",
-        headers=_auth_headers(),
-        json={"name": "MC-Site"},
+    suffix = uuid.uuid4().hex[:8]
+    site_repo = SitesRepo()
+    dept_repo = DepartmentsRepo()
+    site, _ = site_repo.create_site(f"MC-Site-{suffix}", tenant_id=1)
+    dep, _ = dept_repo.create_department(
+        site_id=site["id"],
+        name=f"MC-Dept-{suffix}",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
     )
-    assert r_site.status_code == 200, r_site.data
-    site_id = r_site.get_json()["id"]
-    r_dep = client.post(
-        "/admin/departments",
-        headers=_auth_headers(),
-        json={
-            "site_id": site_id,
-            "name": "MC-Dept",
-            "resident_count_mode": "fixed",
-            "resident_count_fixed": 10,
-        },
-    )
-    assert r_dep.status_code == 200, r_dep.data
-    dep_id = r_dep.get_json()["id"]
+    site_id = site["id"]
+    dep_id = dep["id"]
     setattr(client, "_mc_dept", dep_id)
     setattr(client, "_mc_site", site_id)
     return dep_id
 
 
 def _seed_legacy_alt2(db, *, site_id: str, department_id: str, year: int, week: int, weekday: int, enabled: int = 1) -> None:
-    db.execute(
-        text(
-            "CREATE TABLE IF NOT EXISTS alt2_flags(site_id TEXT, department_id TEXT, week INTEGER, weekday INTEGER, enabled INTEGER, version INTEGER, updated_at TEXT, UNIQUE(site_id,department_id,week,weekday))"
-        )
-    )
     db.execute(
         text("DELETE FROM alt2_flags WHERE site_id=:s AND department_id=:d AND week=:w AND weekday=:dow"),
         {"s": site_id, "d": department_id, "w": week, "dow": weekday},
@@ -79,22 +69,8 @@ def _seed_basic(client) -> tuple[str, str]:
     assert site_id
     db = get_session()
     try:
-        db.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT, name TEXT, resident_count_mode TEXT NOT NULL DEFAULT 'manual')"
-            )
-        )
-        db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT, tenant_id INTEGER, version INTEGER)"))
-        db.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS alt2_flags(site_id TEXT, department_id TEXT, week INTEGER, weekday INTEGER, enabled INTEGER, version INTEGER, updated_at TEXT, UNIQUE(site_id,department_id,week,weekday))"
-            )
-        )
-        db.execute(text("INSERT OR REPLACE INTO sites(id, name, tenant_id, version) VALUES(:id, 'MC-Site', 1, 0)"), {"id": site_id})
-        db.execute(
-            text("INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode) VALUES(:i,:s, 'MC-Dept','manual')"),
-            {"i": dep_id, "s": site_id},
-        )
+        db.execute(text("DELETE FROM alt2_flags WHERE site_id=:s AND department_id=:d"), {"s": site_id, "d": dep_id})
+        db.execute(text("DELETE FROM department_menu_choices WHERE site_id=:s AND department_id=:d"), {"s": site_id, "d": dep_id})
         db.commit()
     finally:
         db.close()

@@ -167,3 +167,81 @@ def test_weekview_report_aggregation_api_and_ui(client_admin):
     assert "Avd A" in html and "Avd B" in html
     assert "Lunch" in html and "Kvällsmat" in html
     assert "Ingen specialkost" not in html  # we have some
+
+
+@pytest.mark.usefixtures("enable_weekview")
+def test_weekview_report_default_select_marked_specialkost_comes_from_weekview_payload(client_admin):
+    app = client_admin.application
+    year, week = 2025, 49
+
+    from core.admin_repo import DepartmentsRepo, DietTypesRepo, DepartmentDietOverridesRepo, SitesRepo
+
+    with app.app_context():
+        site, _ = SitesRepo().create_site(name=f"ReportSite-{uuid.uuid4().hex[:8]}", tenant_id=1)
+        dept, _ = DepartmentsRepo().create_department(
+            site_id=site["id"],
+            name=f"Avd C-{uuid.uuid4().hex[:8]}",
+            resident_count_mode="fixed",
+            resident_count_fixed=10,
+        )
+        diet_id = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=True)
+        DepartmentsRepo().upsert_department_diet_defaults(
+            dept["id"],
+            0,
+            [{"diet_type_id": diet_id, "default_count": 2}],
+        )
+        DepartmentDietOverridesRepo().replace_for_department_diet(
+            dept["id"],
+            diet_id,
+            [
+                {"day": 1, "meal": "lunch", "count": 2},
+                {"day": 1, "meal": "dinner", "count": 0},
+                {"day": 2, "meal": "lunch", "count": 0},
+                {"day": 2, "meal": "dinner", "count": 0},
+                {"day": 3, "meal": "lunch", "count": 0},
+                {"day": 3, "meal": "dinner", "count": 0},
+                {"day": 4, "meal": "lunch", "count": 0},
+                {"day": 4, "meal": "dinner", "count": 0},
+                {"day": 5, "meal": "lunch", "count": 0},
+                {"day": 5, "meal": "dinner", "count": 0},
+                {"day": 6, "meal": "lunch", "count": 0},
+                {"day": 6, "meal": "dinner", "count": 0},
+                {"day": 7, "meal": "lunch", "count": 0},
+                {"day": 7, "meal": "dinner", "count": 0},
+            ],
+        )
+
+    base = f"/api/weekview?year={year}&week={week}&department_id={dept['id']}"
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+        sess["tenant_id"] = 1
+    r0 = client_admin.get(base, headers=_h("admin"))
+    assert r0.status_code == 200
+    etag = r0.headers.get("ETag")
+    assert etag
+
+    r_res = client_admin.patch(
+        "/api/weekview/residents",
+        headers={**_h("admin"), "If-Match": etag},
+        json={
+            "tenant_id": 1,
+            "site_id": site["id"],
+            "department_id": dept["id"],
+            "year": year,
+            "week": week,
+            "items": [{"day_of_week": 1, "meal": "lunch", "count": 10}],
+        },
+    )
+    assert r_res.status_code in (200, 201)
+
+    r_api = client_admin.get(f"/api/reports/weekview?site_id={site['id']}&year={year}&week={week}&department_id={dept['id']}", headers=_h("admin"))
+    assert r_api.status_code == 200
+    data = r_api.get_json()
+    dept_vm = data["departments"][0]
+    lunch = dept_vm["meals"]["lunch"]
+    monday = dept_vm["days"][0]
+
+    assert lunch["residents_total"] == 70
+    assert lunch["debiterbar_specialkost_count"] == 2
+    assert lunch["normal_diet_count"] == 68
+    assert monday["lunch_debiterbar"] == 2

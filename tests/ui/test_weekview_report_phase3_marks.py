@@ -1,103 +1,91 @@
 import re
 from datetime import date as _date
 from flask.testing import FlaskClient
-from sqlalchemy import text
+
+import pytest
+
+from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
 
 ADMIN = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
 
-def _seed_setup(site_id: str, dep_id: str, year: int, week: int):
-    from core.db import get_session
-    db = get_session()
-    try:
-        # Site + department
-        db.execute(text("CREATE TABLE IF NOT EXISTS sites(id TEXT PRIMARY KEY, name TEXT)"))
-        db.execute(text("CREATE TABLE IF NOT EXISTS departments(id TEXT PRIMARY KEY, site_id TEXT, name TEXT, resident_count_mode TEXT NOT NULL DEFAULT 'manual')"))
-        if not db.execute(text("SELECT 1 FROM sites WHERE id=:i"), {"i": site_id}).fetchone():
-            db.execute(text("INSERT INTO sites(id,name) VALUES(:i,'Test Site')"), {"i": site_id})
-        if not db.execute(text("SELECT 1 FROM departments WHERE id=:i"), {"i": dep_id}).fetchone():
-            db.execute(text("INSERT INTO departments(id,site_id,name,resident_count_mode) VALUES(:i,:s,'Avd A','manual')"), {"i": dep_id, "s": site_id})
-        # Department diet defaults with always_mark flag
-        db.execute(text(
-            """
-            CREATE TABLE IF NOT EXISTS department_diet_defaults (
-                department_id TEXT NOT NULL,
-                diet_type_id TEXT NOT NULL,
-                default_count INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY (department_id, diet_type_id)
-            )
-            """
-        ))
-        # Ensure optional always_mark column exists
-        cols = {r[1] for r in db.execute(text("PRAGMA table_info('department_diet_defaults')")).fetchall()}
-        if "always_mark" not in cols:
-            try:
-                db.execute(text("ALTER TABLE department_diet_defaults ADD COLUMN always_mark INTEGER NOT NULL DEFAULT 0"))
-            except Exception:
-                pass
-        # Defaults: gluten=2, laktos=1, timbal=3 (always)
-        db.execute(text("INSERT OR REPLACE INTO department_diet_defaults(department_id,diet_type_id,default_count,always_mark) VALUES(:d,'gluten',2,0)"), {"d": dep_id})
-        db.execute(text("INSERT OR REPLACE INTO department_diet_defaults(department_id,diet_type_id,default_count,always_mark) VALUES(:d,'laktos',1,0)"), {"d": dep_id})
-        db.execute(text("INSERT OR REPLACE INTO department_diet_defaults(department_id,diet_type_id,default_count,always_mark) VALUES(:d,'timbal',3,1)"), {"d": dep_id})
-        # Weekview schema for marks
-        db.execute(text(
-            """
-            CREATE TABLE IF NOT EXISTS weekview_registrations (
-              tenant_id TEXT NOT NULL,
-              department_id TEXT NOT NULL,
-              year INTEGER NOT NULL,
-              week INTEGER NOT NULL,
-              day_of_week INTEGER NOT NULL,
-              meal TEXT NOT NULL,
-              diet_type TEXT NOT NULL,
-              marked INTEGER NOT NULL DEFAULT 0,
-              UNIQUE (tenant_id, department_id, year, week, day_of_week, meal, diet_type)
-            )
-            """
-        ))
-        db.execute(text(
-            """
-            CREATE TABLE IF NOT EXISTS weekview_versions (
-              tenant_id TEXT NOT NULL,
-              department_id TEXT NOT NULL,
-              year INTEGER NOT NULL,
-              week INTEGER NOT NULL,
-              version INTEGER NOT NULL DEFAULT 0,
-              UNIQUE (tenant_id, department_id, year, week)
-            )
-            """
-        ))
-        # Seed version row
-        db.execute(text("INSERT OR IGNORE INTO weekview_versions(tenant_id,department_id,year,week,version) VALUES('1',:dep,:yy,:ww,0)"), {"dep": dep_id, "yy": year, "ww": week})
-        db.commit()
-    finally:
-        db.close()
+def _enable_weekview(app) -> None:
+    with app.app_context():
+        reg = getattr(app, "feature_registry", None)
+        if reg:
+            if not reg.has("ff.weekview.enabled"):
+                reg.add("ff.weekview.enabled")
+            reg.set("ff.weekview.enabled", True)
 
 
-def _seed_marks(dep_id: str, year: int, week: int):
-    from core.db import get_session
-    db = get_session()
-    try:
-        # Monday lunch: gluten (mark)
-        db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES('1',:dep,:yy,:ww,1,'lunch','gluten',1)"), {"dep": dep_id, "yy": year, "ww": week})
-        # Tuesday lunch: laktos (mark)
-        db.execute(text("INSERT OR REPLACE INTO weekview_registrations(tenant_id,department_id,year,week,day_of_week,meal,diet_type,marked) VALUES('1',:dep,:yy,:ww,2,'lunch','laktos',1)"), {"dep": dep_id, "yy": year, "ww": week})
-        # Bump version
-        db.execute(text("UPDATE weekview_versions SET version=version+1 WHERE tenant_id='1' AND department_id=:dep AND year=:yy AND week=:ww"), {"dep": dep_id, "yy": year, "ww": week})
-        db.commit()
-    finally:
-        db.close()
+def _seed_setup(app, year: int, week: int):
+    with app.app_context():
+        site, _ = SitesRepo().create_site(name=f"Test Site {week}", tenant_id=1)
+        dept, _ = DepartmentsRepo().create_department(
+            site_id=site["id"],
+            name="Avd A",
+            resident_count_mode="manual",
+            resident_count_fixed=0,
+        )
+        gluten_id = DietTypesRepo().create(site_id=site["id"], name="Gluten", default_select=False)
+        laktos_id = DietTypesRepo().create(site_id=site["id"], name="Laktos", default_select=False)
+        timbal_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=True)
+        DepartmentsRepo().upsert_department_diet_defaults(
+            dept["id"],
+            0,
+            [
+                {"diet_type_id": gluten_id, "default_count": 2},
+                {"diet_type_id": laktos_id, "default_count": 1},
+                {"diet_type_id": timbal_id, "default_count": 3},
+            ],
+        )
+    return site["id"], dept["id"], str(gluten_id), str(laktos_id), str(timbal_id)
+
+
+def _seed_marks(client: FlaskClient, site_id: str, dep_id: str, year: int, week: int, gluten_id: str, laktos_id: str):
+    base = f"/api/weekview?year={year}&week={week}&department_id={dep_id}"
+    with client.session_transaction() as sess:
+        sess["site_id"] = site_id
+        sess["tenant_id"] = 1
+    r0 = client.get(base, headers=ADMIN)
+    assert r0.status_code == 200
+    etag = r0.headers.get("ETag")
+    assert etag
+    client.patch(
+        "/api/weekview/specialdiets/mark",
+        headers={**ADMIN, "If-Match": etag},
+        json={
+            "site_id": site_id,
+            "department_id": dep_id,
+            "local_date": _date.fromisocalendar(year, week, 1).isoformat(),
+            "meal": "lunch",
+            "diet_type_id": gluten_id,
+            "marked": True,
+        },
+    )
+    r1 = client.get(base, headers=ADMIN)
+    etag2 = r1.headers.get("ETag") or etag
+    client.patch(
+        "/api/weekview/specialdiets/mark",
+        headers={**ADMIN, "If-Match": etag2},
+        json={
+            "site_id": site_id,
+            "department_id": dep_id,
+            "local_date": _date.fromisocalendar(year, week, 2).isoformat(),
+            "meal": "lunch",
+            "diet_type_id": laktos_id,
+            "marked": True,
+        },
+    )
 
 
 def test_weekview_report_phase3_debiterbar_marks(app_session):
     client: FlaskClient = app_session.test_client()
-    site_id = "00000000-0000-0000-0000-00000000aaaa"
-    dep_id = "00000000-0000-0000-0000-00000000bbbb"
-    # Use a fixed week
     year = 2025
     week = 49
-    _seed_setup(site_id, dep_id, year, week)
-    _seed_marks(dep_id, year, week)
+    _enable_weekview(client.application)
+    site_id, dep_id, gluten_id, laktos_id, timbal_id = _seed_setup(client.application, year, week)
+    _seed_marks(client, site_id, dep_id, year, week, gluten_id, laktos_id)
 
     # GET HTML report
     r = client.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=ADMIN)
@@ -122,11 +110,10 @@ def test_weekview_report_phase3_debiterbar_marks(app_session):
 
 def test_weekview_report_phase3_no_marks_defaults_only(app_session):
     client: FlaskClient = app_session.test_client()
-    site_id = "00000000-0000-0000-0000-00000000cccc"
-    dep_id = "00000000-0000-0000-0000-00000000dddd"
     year = 2025
     week = 50
-    _seed_setup(site_id, dep_id, year, week)
+    _enable_weekview(client.application)
+    site_id, dep_id, _, _, _ = _seed_setup(client.application, year, week)
     # No marks seeded
 
     r = client.get(f"/ui/reports/weekview?site_id={site_id}&year={year}&week={week}", headers=ADMIN)

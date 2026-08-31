@@ -9,7 +9,7 @@ from flask import session
 from .db import get_session
 from .menu_service import MenuServiceDB
 from .weekview.service import WeekviewService
-from .admin_repo import Alt2Repo, DietDefaultsRepo, DietTypesRepo
+from .admin_repo import DietDefaultsRepo, DietTypesRepo
 
 
 def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None = None) -> dict[str, Any]:
@@ -78,28 +78,6 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
             pass
         alt2_days = set(s.get("alt2_days") or [])
         try:
-            alt2_rows = Alt2Repo().list_for_department_week(dep_id, week)
-            alt2_days.update({int(r.get("weekday")) for r in alt2_rows if bool(r.get("enabled"))})
-        except Exception:
-            pass
-        try:
-            db_alt2 = get_session()
-            rows = db_alt2.execute(
-                text(
-                    "SELECT day_of_week FROM weekview_alt2_flags "
-                    "WHERE site_id=:s AND department_id=:d AND year=:y AND week=:w AND enabled=1"
-                ),
-                {"s": site_id, "d": dep_id, "y": year, "w": week},
-            ).fetchall()
-            alt2_days.update({int(r[0]) for r in rows})
-        except Exception:
-            pass
-        finally:
-            try:
-                db_alt2.close()
-            except Exception:
-                pass
-        try:
             for d in days:
                 if not d.get("alt2_lunch"):
                     dow_val = int(d.get("day_of_week") or 0)
@@ -107,25 +85,15 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                         d["alt2_lunch"] = True
         except Exception:
             pass
-        raw_marks = s.get("marks") or []
-        marked_idx = set()
-        try:
-            for m in raw_marks:
-                if bool(m.get("marked")):
-                    marked_idx.add((int(m.get("day_of_week")), str(m.get("meal")), str(m.get("diet_type"))))
-        except Exception:
-            marked_idx = set()
         defaults = []
         try:
             defaults = DietDefaultsRepo().list_for_department(dep_id)
             types = DietTypesRepo().list_all(site_id=site_id)
             name_by_id = {str(it["id"]): str(it["name"]) for it in types}
             allowed_diet_ids = {str(it["id"]) for it in types}
-            preselected_ids = {str(it["id"]) for it in types if bool(it.get("default_select"))}
         except Exception:
             name_by_id = {}
             allowed_diet_ids = set()
-            preselected_ids = set()
         defaults_pos = [it for it in (defaults or []) if int(it.get("default_count", 0) or 0) > 0]
         default_count_by_id = {
             str(it.get("diet_type_id")): int(it.get("default_count") or 0)
@@ -146,11 +114,14 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                     rd = 0
                     ol = False
                     od = False
+                    lunch_marked = False
+                    dinner_marked = False
                     if diets_l:
                         for it in diets_l:
                             if str(it.get("diet_type_id")) == str(dtid):
                                 rl = int(it.get("resident_count") or 0)
                                 ol = bool(it.get("has_override"))
+                                lunch_marked = bool(it.get("marked"))
                                 break
                     else:
                         rl = int(default_count_by_id.get(str(dtid), 0) or 0)
@@ -158,9 +129,8 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                         if str(it.get("diet_type_id")) == str(dtid):
                             rd = int(it.get("resident_count") or 0)
                             od = bool(it.get("has_override"))
+                            dinner_marked = bool(it.get("marked"))
                             break
-                    ml = ((dow, "lunch", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rl > 0)
-                    md = ((dow, "dinner", str(dtid)) in marked_idx) or (str(dtid) in preselected_ids and rd > 0)
                     is_alt2 = False
                     try:
                         is_alt2 = bool(day_obj.get("alt2_lunch")) if day_obj else False
@@ -174,7 +144,7 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                             "meal": "lunch",
                             "count": rl,
                             "is_override": ol,
-                            "is_done": ml,
+                            "is_done": lunch_marked,
                             "is_alt2": is_alt2,
                             "diet_type_id": str(dtid),
                         }
@@ -185,7 +155,7 @@ def build_weekview_vm(site_id: str, year: int, week: int, tenant_id: int | None 
                             "meal": "dinner",
                             "count": rd,
                             "is_override": od,
-                            "is_done": md,
+                            "is_done": dinner_marked,
                             "is_alt2": False,
                             "diet_type_id": str(dtid),
                         }

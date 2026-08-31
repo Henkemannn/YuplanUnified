@@ -75,11 +75,6 @@ def seed_portal_department_data(app_session):
             db.execute(text("INSERT OR REPLACE INTO weekview_registrations VALUES(:t,:d,:y,:w,1,'lunch','Gluten',1)"), {"t": 1, "d": dept_id, "y": year, "w": week})
             db.execute(text("INSERT OR REPLACE INTO weekview_registrations VALUES(:t,:d,:y,:w,1,'lunch','Laktos',1)"), {"t": 1, "d": dept_id, "y": year, "w": week})
             db.execute(text("INSERT OR REPLACE INTO weekview_alt2_flags VALUES(:s,:d,:y,:w,1,:enabled)"), {"s": site_id, "d": dept_id, "y": year, "w": week, "enabled": alt2_enabled_monday})
-            db.execute(
-                text(
-                    "CREATE TABLE IF NOT EXISTS alt2_flags(site_id TEXT, department_id TEXT, week INTEGER, weekday INTEGER, enabled INTEGER, version INTEGER, UNIQUE(site_id,department_id,week,weekday))"
-                )
-            )
             db.execute(text("INSERT OR REPLACE INTO alt2_flags(site_id,department_id,week,weekday,enabled,version) VALUES(:s,:d,:w,1,:enabled,1)"), {"s": site_id, "d": dept_id, "w": week, "enabled": alt2_enabled_monday})
             db.execute(
                 text(
