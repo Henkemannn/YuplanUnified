@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from .adapters.kommun_from_weekview import build_plan_request_from_weekview_day
+from .adapters.kommun_from_weekview import (
+    build_plan_request_from_planera_day_payload,
+    build_plan_request_from_weekview_day,
+)
 from .domain import PlanRequest, PlanResult
 from .engine import compute_plan
 from .formatter import (
@@ -41,6 +44,41 @@ def run_planera_v2_from_current_day(
         iso_date=iso_date,
         meal=meal_key,
         planera_service=planera_service,
+        departments=departments,
+        component_id=component_id,
+        component_name=component_name,
+        component_role=component_role,
+        component_mode=component_mode,
+    )
+    result = compute_plan(request)
+
+    return PlaneraV2DevRun(
+        request=request,
+        result=result,
+        formatted_debug=format_plan_result(result),
+        formatted_clean=format_plan_result_clean(result),
+        formatted_kitchen=format_plan_result_kitchen_view(result),
+    )
+
+
+def run_planera_v2_from_day_payload(
+    day_payload: dict[str, object],
+    meal_key: str,
+    *,
+    site_id: str,
+    iso_date: str,
+    tenant_id: int | str = 0,
+    departments: Iterable[tuple[str, str]] | None = None,
+    component_id: str | None = None,
+    component_name: str | None = None,
+    component_role: str | None = None,
+    component_mode: str | None = None,
+) -> PlaneraV2DevRun:
+    request = build_plan_request_from_planera_day_payload(
+        day_payload,
+        site_id=site_id,
+        iso_date=iso_date,
+        meal_key=meal_key,
         departments=departments,
         component_id=component_id,
         component_name=component_name,

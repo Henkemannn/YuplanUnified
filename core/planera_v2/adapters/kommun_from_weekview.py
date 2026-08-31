@@ -152,12 +152,6 @@ def _build_request_from_planera_day_payload(
     if menu_option_by_unit:
         context["menu_option_by_unit"] = menu_option_by_unit
 
-    if deviations:
-        context["compatibility_status"] = "aggregate_only"
-        context["compatibility_warnings"] = [
-            "Weekview day payload only exposes aggregate special_diets totals; overlap between markers is unknown."
-        ]
-
     component_id_value = str(component_id or "").strip()
     if component_id_value:
         context["component_id"] = component_id_value
@@ -181,6 +175,30 @@ def _build_request_from_planera_day_payload(
         units=units,
         deviations=deviations,
         context=context,
+    )
+
+
+def build_plan_request_from_planera_day_payload(
+    day_payload: dict[str, Any],
+    *,
+    site_id: str,
+    iso_date: str,
+    meal_key: str,
+    departments: Iterable[tuple[str, str]] | None = None,
+    component_id: str | None = None,
+    component_name: str | None = None,
+    component_role: str | None = None,
+    component_mode: str | None = None,
+) -> PlanRequest:
+    return _build_request_from_planera_day_payload(
+        day_payload,
+        site_id=site_id,
+        iso_date=iso_date,
+        meal_key=meal_key,
+        component_id=component_id,
+        component_name=component_name,
+        component_role=component_role,
+        component_mode=component_mode,
     )
 
 
@@ -224,3 +242,18 @@ def build_plan_request_from_weekview_day(
         component_role=component_role,
         component_mode=component_mode,
     )
+
+
+def _resolve_departments_from_day_payload(day_payload: dict[str, Any]) -> list[tuple[str, str]]:
+    departments = day_payload.get("departments")
+    if not isinstance(departments, list):
+        return []
+    out: list[tuple[str, str]] = []
+    for dep in departments:
+        if not isinstance(dep, dict):
+            continue
+        dep_id = str(dep.get("department_id") or "").strip()
+        dep_name = str(dep.get("department_name") or dep.get("name") or dep_id).strip()
+        if dep_id:
+            out.append((dep_id, dep_name))
+    return out

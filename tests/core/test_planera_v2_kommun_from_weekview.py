@@ -74,8 +74,6 @@ def test_bridge_maps_unit_baselines_and_effective_day_deviations() -> None:
     assert request.context["date"] == "2026-04-14"
     assert request.context["meal_key"] == "lunch"
     assert request.context["menu_option_by_unit"] == {"unit_a": "Alt1", "unit_b": "Alt2"}
-    assert request.context["compatibility_status"] == "aggregate_only"
-    assert "aggregate special_diets totals" in request.context["compatibility_warnings"][0]
 
 
 def test_bridge_does_not_use_raw_marks_as_deviations_without_effective_special_counts() -> None:

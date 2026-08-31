@@ -8,7 +8,7 @@ from sqlalchemy import text
 from ..db import get_session
 from ..planera_service import PlaneraService
 from .utils import normalize_key
-from .dev_runner import PlaneraV2DevRun, run_planera_v2_from_current_day
+from .dev_runner import PlaneraV2DevRun, run_planera_v2_from_current_day, run_planera_v2_from_day_payload
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,9 @@ class PlaneraComparison:
     matches: dict[str, bool]
     mismatches: list[str]
     caveats: list[str]
+    parity_verdict: str
+    compatibility_verdict: str
+    compatibility_notes: list[str]
 
 
 def _to_int(value: object, default: int = 0) -> int:
@@ -108,7 +111,7 @@ def _summarize_current_day(day_payload: dict[str, Any], meal_key: str) -> Planer
 def _summarize_v2(run: PlaneraV2DevRun) -> PlaneraDaySummary:
     unit_baselines: dict[str, int] = {unit.unit_id: int(unit.baseline_total) for unit in run.request.units}
 
-    unit_special_deviations: dict[str, dict[str, int]] = {}
+    unit_special_deviations: dict[str, dict[str, int]] = {unit.unit_id: {} for unit in run.request.units}
     for deviation in run.request.deviations:
         unit_id = str(deviation.unit_id or "").strip()
         if not unit_id:
@@ -196,9 +199,24 @@ def compare_current_planera_vs_v2_day(
         mismatches.append("Total normal differs.")
 
     caveats = [
-        "Form semantics are currently adapter fallback labels and are not authoritative for parity.",
         "Comparison is strongest on totals, unit baselines, and effective unit deviations.",
     ]
+
+    compatibility_status = str((run.request.context or {}).get("compatibility_status") or "").strip().lower()
+    compatibility_notes: list[str] = []
+    raw_compatibility_warnings = (run.request.context or {}).get("compatibility_warnings")
+    if isinstance(raw_compatibility_warnings, list):
+        compatibility_notes.extend(str(item) for item in raw_compatibility_warnings if str(item).strip())
+    if compatibility_status == "ambiguous":
+        compatibility_verdict = "NOT_PROVABLE"
+        if not compatibility_notes:
+            compatibility_notes.append(
+                "aggregate-only source data cannot prove recipient-level compatibility"
+            )
+    else:
+        compatibility_verdict = "PASS"
+
+    parity_verdict = "PASS" if not mismatches else "FAIL"
 
     return PlaneraComparison(
         context={
@@ -212,6 +230,93 @@ def compare_current_planera_vs_v2_day(
         matches=matches,
         mismatches=mismatches,
         caveats=caveats,
+        parity_verdict=parity_verdict,
+        compatibility_verdict=compatibility_verdict,
+        compatibility_notes=compatibility_notes,
+    )
+
+
+def compare_current_planera_vs_v2_day_from_payload(
+    day_payload: dict[str, Any],
+    tenant_id: int | str,
+    site_id: str,
+    iso_date: str,
+    meal_key: str,
+    *,
+    departments: Iterable[tuple[str, str]] | None = None,
+    shadow_runner: Callable[..., PlaneraV2DevRun] = run_planera_v2_from_day_payload,
+) -> PlaneraComparison:
+    current_summary = _summarize_current_day(day_payload, meal_key)
+
+    run = shadow_runner(
+        day_payload,
+        meal_key,
+        site_id=site_id,
+        iso_date=iso_date,
+        tenant_id=tenant_id,
+        departments=departments,
+    )
+    v2_summary = _summarize_v2(run)
+
+    matches = {
+        "context": bool(run.request.context.get("site_id") == site_id and run.request.context.get("date") == iso_date),
+        "unit_list": current_summary.unit_ids == v2_summary.unit_ids,
+        "unit_baselines": current_summary.unit_baselines == v2_summary.unit_baselines,
+        "unit_special_deviations": current_summary.unit_special_deviations == v2_summary.unit_special_deviations,
+        "total_baseline": current_summary.totals["baseline_total"] == v2_summary.totals["baseline_total"],
+        "total_deviations": current_summary.totals["deviation_total"] == v2_summary.totals["deviation_total"],
+        "total_normal": current_summary.totals["normal_total"] == v2_summary.totals["normal_total"],
+    }
+
+    mismatches: list[str] = []
+    if not matches["unit_list"]:
+        mismatches.append("Unit list differs between current Planera and Planera 2.0 run.")
+    if not matches["unit_baselines"]:
+        mismatches.append("Unit baselines differ.")
+    if not matches["unit_special_deviations"]:
+        mismatches.append("Effective unit special deviations differ.")
+    if not matches["total_baseline"]:
+        mismatches.append("Total baseline differs.")
+    if not matches["total_deviations"]:
+        mismatches.append("Total deviations differs.")
+    if not matches["total_normal"]:
+        mismatches.append("Total normal differs.")
+
+    caveats = [
+        "Comparison is strongest on totals, unit baselines, and effective unit deviations.",
+    ]
+
+    compatibility_status = str((run.request.context or {}).get("compatibility_status") or "").strip().lower()
+    compatibility_notes: list[str] = []
+    raw_compatibility_warnings = (run.request.context or {}).get("compatibility_warnings")
+    if isinstance(raw_compatibility_warnings, list):
+        compatibility_notes.extend(str(item) for item in raw_compatibility_warnings if str(item).strip())
+    if compatibility_status == "ambiguous":
+        compatibility_verdict = "NOT_PROVABLE"
+        if not compatibility_notes:
+            compatibility_notes.append(
+                "aggregate-only source data cannot prove recipient-level compatibility"
+            )
+    else:
+        compatibility_verdict = "PASS"
+
+    parity_verdict = "PASS" if not mismatches else "FAIL"
+
+    return PlaneraComparison(
+        context={
+            "site_id": site_id,
+            "date": iso_date,
+            "meal_key": meal_key,
+            "tenant_id": str(tenant_id),
+        },
+        current=current_summary,
+        v2=v2_summary,
+        matches=matches,
+        mismatches=mismatches,
+        caveats=caveats,
+        parity_verdict=parity_verdict,
+        compatibility_verdict=compatibility_verdict,
+        compatibility_notes=compatibility_notes,
     )
 
 
@@ -239,12 +344,20 @@ def build_day_comparison_report(comparison: PlaneraComparison) -> str:
 
     lines.append("")
     lines.append("Match / Mismatch")
+    lines.append(f"  Parity verdict: {comparison.parity_verdict}")
+    lines.append(f"  Compatibility verdict: {comparison.compatibility_verdict}")
     for key in sorted(comparison.matches.keys()):
         lines.append(f"  - {key}: {'match' if comparison.matches[key] else 'mismatch'}")
     if comparison.mismatches:
         lines.append("  Notes:")
         for note in comparison.mismatches:
             lines.append(f"    - {note}")
+
+    if comparison.compatibility_notes:
+        lines.append("")
+        lines.append("Compatibility caveats")
+        for note in comparison.compatibility_notes:
+            lines.append(f"  - {note}")
 
     lines.append("")
     lines.append("Caveats")
