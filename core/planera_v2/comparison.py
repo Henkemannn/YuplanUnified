@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from ..db import get_session
 from ..planera_service import PlaneraService
+from .utils import normalize_key
 from .dev_runner import PlaneraV2DevRun, run_planera_v2_from_current_day
 
 
@@ -114,9 +115,10 @@ def _summarize_v2(run: PlaneraV2DevRun) -> PlaneraDaySummary:
             continue
         if not deviation.category_keys:
             continue
-        category_key = str(deviation.category_keys[0] or "").strip()
-        if not category_key:
+        normalized_categories = sorted({normalize_key(category) for category in deviation.category_keys if normalize_key(category)})
+        if not normalized_categories:
             continue
+        category_key = "__".join(normalized_categories)
         bucket = unit_special_deviations.setdefault(unit_id, {})
         bucket[category_key] = bucket.get(category_key, 0) + int(deviation.quantity)
 

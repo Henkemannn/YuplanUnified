@@ -25,6 +25,27 @@ class PlanRequest:
     context: dict[str, object] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class PlanningSlice:
+    baseline: int = 0
+    units: tuple[UnitInput, ...] = ()
+    deviations: tuple[Deviation, ...] = ()
+    context: dict[str, object] = field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
+    compatibility_status: str = "resolved"
+
+    def to_plan_request(self) -> PlanRequest:
+        context = dict(self.context)
+        context["compatibility_status"] = self.compatibility_status
+        context["compatibility_warnings"] = list(self.warnings)
+        return PlanRequest(
+            baseline=int(self.baseline),
+            units=list(self.units),
+            deviations=list(self.deviations),
+            context=context,
+        )
+
+
 @dataclass(frozen=True)
 class Totals:
     baseline_total: int = 0

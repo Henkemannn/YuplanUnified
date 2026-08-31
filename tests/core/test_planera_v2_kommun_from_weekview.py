@@ -66,14 +66,16 @@ def test_bridge_maps_unit_baselines_and_effective_day_deviations() -> None:
         UnitInput(unit_id="unit_b", baseline_total=8),
     ]
     assert request.deviations == [
-        Deviation(form="specialkost", category_keys=["ej_fisk"], quantity=2, unit_id="unit_a"),
-        Deviation(form="specialkost", category_keys=["laktosfri"], quantity=1, unit_id="unit_a"),
-        Deviation(form="specialkost", category_keys=["not_fri"], quantity=3, unit_id="unit_b"),
+        Deviation(form="unspecified", category_keys=["ej_fisk"], quantity=2, unit_id="unit_a"),
+        Deviation(form="unspecified", category_keys=["laktosfri"], quantity=1, unit_id="unit_a"),
+        Deviation(form="unspecified", category_keys=["not_fri"], quantity=3, unit_id="unit_b"),
     ]
     assert request.context["site_id"] == "site_1"
     assert request.context["date"] == "2026-04-14"
     assert request.context["meal_key"] == "lunch"
     assert request.context["menu_option_by_unit"] == {"unit_a": "Alt1", "unit_b": "Alt2"}
+    assert request.context["compatibility_status"] == "aggregate_only"
+    assert "aggregate special_diets totals" in request.context["compatibility_warnings"][0]
 
 
 def test_bridge_does_not_use_raw_marks_as_deviations_without_effective_special_counts() -> None:
@@ -188,7 +190,7 @@ def test_bridge_supports_dessert_meal_key() -> None:
     assert request.baseline == 9
     assert request.units == [UnitInput(unit_id="unit_a", baseline_total=9)]
     assert request.deviations == [
-        Deviation(form="specialkost", category_keys=["sockerreducerad"], quantity=2, unit_id="unit_a")
+        Deviation(form="unspecified", category_keys=["sockerreducerad"], quantity=2, unit_id="unit_a")
     ]
     assert request.context["meal_key"] == "dessert"
 
@@ -222,7 +224,7 @@ def test_bridge_supports_kvallsmat_alias_to_dinner_data() -> None:
     assert request.baseline == 6
     assert request.units == [UnitInput(unit_id="unit_a", baseline_total=6)]
     assert request.deviations == [
-        Deviation(form="specialkost", category_keys=["ej_fisk"], quantity=1, unit_id="unit_a")
+        Deviation(form="unspecified", category_keys=["ej_fisk"], quantity=1, unit_id="unit_a")
     ]
 
 

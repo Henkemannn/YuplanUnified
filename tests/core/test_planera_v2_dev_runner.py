@@ -48,8 +48,8 @@ def test_dev_runner_passes_bridge_output_and_returns_engine_result() -> None:
     assert run.request.baseline == 12
     assert run.request.units == [UnitInput(unit_id="unit_a", baseline_total=12)]
     assert run.request.deviations == [
-        Deviation(form="specialkost", category_keys=["ej_fisk"], quantity=2, unit_id="unit_a"),
-        Deviation(form="specialkost", category_keys=["laktosfri"], quantity=1, unit_id="unit_a"),
+        Deviation(form="unspecified", category_keys=["ej_fisk"], quantity=2, unit_id="unit_a"),
+        Deviation(form="unspecified", category_keys=["laktosfri"], quantity=1, unit_id="unit_a"),
     ]
 
     assert run.result.totals.baseline_total == 12

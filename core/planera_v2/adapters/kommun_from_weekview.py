@@ -123,12 +123,11 @@ def _build_request_from_planera_day_payload(
             if not category_key:
                 continue
 
-            # Temporary adapter-level fallback label:
-            # - "specialkost" here is NOT authoritative form semantics.
-            # - Exact form truth requires upstream source support in current Planera/Weekview data.
+            # Weekview day payload exposes aggregate category totals only.
+            # The form value is intentionally neutral because overlap between markers is unknown here.
             deviations.append(
                 Deviation(
-                    form="specialkost",
+                    form="unspecified",
                     category_keys=[category_key],
                     quantity=quantity,
                     unit_id=unit_id,
@@ -152,6 +151,12 @@ def _build_request_from_planera_day_payload(
 
     if menu_option_by_unit:
         context["menu_option_by_unit"] = menu_option_by_unit
+
+    if deviations:
+        context["compatibility_status"] = "aggregate_only"
+        context["compatibility_warnings"] = [
+            "Weekview day payload only exposes aggregate special_diets totals; overlap between markers is unknown."
+        ]
 
     component_id_value = str(component_id or "").strip()
     if component_id_value:
