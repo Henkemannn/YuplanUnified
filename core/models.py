@@ -14,7 +14,6 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
-    Text,
     String,
     UniqueConstraint,
 )
@@ -254,7 +253,9 @@ class DietaryType(Base):
     __tablename__ = "dietary_types"
     id: Mapped[int] = mapped_column(primary_key=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"))
+    site_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(120))
+    diet_family: Mapped[str | None] = mapped_column(Text, nullable=True)
     default_select: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
