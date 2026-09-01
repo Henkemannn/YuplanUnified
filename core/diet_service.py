@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .diet_family import DIET_FAMILY_OTHER
 from .db import get_session
 from .models import DietaryType, Unit, UnitDietAssignment
 
@@ -55,9 +56,7 @@ class DietService:
     def list_diet_types(self, tenant_id: int) -> list[dict[str, Any]]:
         db = get_session()
         try:
-            rows = (
-                db.query(DietaryType).filter_by(tenant_id=tenant_id).order_by(DietaryType.id).all()
-            )
+            rows = db.query(DietaryType).filter_by(tenant_id=tenant_id).order_by(DietaryType.id).all()
             return [{"id": r.id, "name": r.name, "default_select": r.default_select} for r in rows]
         finally:
             db.close()
@@ -65,8 +64,16 @@ class DietService:
     def create_diet_type(self, tenant_id: int, name: str, default_select: bool = False) -> int:
         db = get_session()
         try:
-            dt = DietaryType(tenant_id=tenant_id, name=name.strip(), default_select=default_select)
+            dt = DietaryType(
+                tenant_id=tenant_id,
+                name=name.strip(),
+                diet_family=DIET_FAMILY_OTHER,
+                default_select=default_select,
+                semantics="legacy_bucket",
+            )
             db.add(dt)
+            db.flush()
+            dt.requirement_key = f"legacy_{dt.id}"
             db.commit()
             db.refresh(dt)
             return dt.id

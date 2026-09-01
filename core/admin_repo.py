@@ -14,6 +14,7 @@ from .etag import ConcurrencyError
 
 
 SERVICE_ADDON_FAMILIES: tuple[str, str, str] = ("mos", "sallad", "ovrigt")
+ALLOWED_REQUIREMENT_SEMANTICS = {"legacy_bucket", "atomic"}
 
 
 def normalize_addon_family(value: str | None) -> str:
@@ -23,6 +24,23 @@ def normalize_addon_family(value: str | None) -> str:
     if raw in SERVICE_ADDON_FAMILIES:
         return raw
     return "ovrigt"
+
+
+def _normalize_requirement_semantics(value: str | None, *, default: str = "legacy_bucket") -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return default
+    if raw not in ALLOWED_REQUIREMENT_SEMANTICS:
+        raise ValueError("invalid_requirement_semantics")
+    return raw
+
+
+def _legacy_requirement_key_for_id(diet_type_id: int) -> str:
+    return f"legacy_{int(diet_type_id)}"
+
+
+def _atomic_requirement_key() -> str:
+    return f"req_{uuid.uuid4().hex}"
 
 
 def _addon_family_rank(value: str | None) -> int:
@@ -1735,6 +1753,83 @@ class DietTypeDeleteBlockedError(Exception):
 class DietTypesRepo:
     """Repository for managing dietary types (specialkost), now scoped per site."""
 
+    def _requirement_identity_backfill(self, db) -> None:
+        try:
+            cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
+        except Exception:
+            cols = set()
+        if "requirement_key" not in cols:
+            db.execute(text("ALTER TABLE dietary_types ADD COLUMN requirement_key TEXT"))
+        if "semantics" not in cols:
+            db.execute(text("ALTER TABLE dietary_types ADD COLUMN semantics TEXT"))
+
+        row = db.execute(
+            text(
+                """
+                SELECT id
+                FROM dietary_types
+                WHERE semantics IS NOT NULL AND trim(CAST(semantics AS TEXT)) <> ''
+                  AND lower(trim(CAST(semantics AS TEXT))) NOT IN ('legacy_bucket', 'atomic')
+                LIMIT 1
+                """
+            )
+        ).fetchone()
+        if row is not None:
+            raise RuntimeError(f"invalid preexisting semantics on dietary_types.id={int(row[0])}")
+
+        db.execute(
+            text(
+                """
+                UPDATE dietary_types
+                SET requirement_key = CASE
+                    WHEN requirement_key IS NULL OR trim(CAST(requirement_key AS TEXT)) = ''
+                    THEN 'legacy_' || CAST(id AS TEXT)
+                    ELSE requirement_key
+                END,
+                semantics = CASE
+                    WHEN semantics IS NULL OR trim(CAST(semantics AS TEXT)) = ''
+                    THEN 'legacy_bucket'
+                    WHEN lower(trim(CAST(semantics AS TEXT))) IN ('legacy_bucket', 'atomic')
+                    THEN lower(trim(CAST(semantics AS TEXT)))
+                    ELSE 'legacy_bucket'
+                END
+                """
+            )
+        )
+
+    def _existing_requirement_key_duplicates(self, db) -> bool:
+        row = db.execute(
+            text(
+                """
+                SELECT requirement_key
+                FROM dietary_types
+                WHERE requirement_key IS NOT NULL AND trim(CAST(requirement_key AS TEXT)) <> ''
+                GROUP BY requirement_key
+                HAVING COUNT(*) > 1
+                LIMIT 1
+                """
+            )
+        ).fetchone()
+        return row is not None
+
+    def _ensure_requirement_key_index(self, db, *, strict: bool = False) -> None:
+        try:
+            index_rows = db.execute(text("PRAGMA index_list('dietary_types')")).fetchall()
+            index_names = {str(r[1]) for r in index_rows}
+        except Exception:
+            index_names = set()
+        if "uq_dietary_types_requirement_key" in index_names:
+            return
+        if strict and self._existing_requirement_key_duplicates(db):
+            raise RuntimeError("duplicate requirement_key values prevent unique index creation")
+        if not strict and self._existing_requirement_key_duplicates(db):
+            return
+        try:
+            db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_dietary_types_requirement_key ON dietary_types(requirement_key)"))
+        except Exception:
+            if strict:
+                raise
+
     def _backfill_missing_families(self, db) -> None:
         rows = db.execute(
             text(
@@ -1791,6 +1886,8 @@ class DietTypesRepo:
                         site_id TEXT NULL,
                         name TEXT NOT NULL,
                         diet_family TEXT NOT NULL DEFAULT 'Övrigt',
+                        requirement_key TEXT NULL,
+                        semantics TEXT NULL,
                         default_select INTEGER NOT NULL DEFAULT 0
                     )
                     """
@@ -1803,10 +1900,15 @@ class DietTypesRepo:
                     db.execute(text("ALTER TABLE dietary_types ADD COLUMN site_id TEXT"))
                 if "diet_family" not in cols:
                     db.execute(text("ALTER TABLE dietary_types ADD COLUMN diet_family TEXT"))
+                if "requirement_key" not in cols:
+                    db.execute(text("ALTER TABLE dietary_types ADD COLUMN requirement_key TEXT"))
+                if "semantics" not in cols:
+                    db.execute(text("ALTER TABLE dietary_types ADD COLUMN semantics TEXT"))
             except Exception:
                 pass
             try:
                 self._backfill_missing_families(db)
+                self._requirement_identity_backfill(db)
                 db.execute(
                     text(
                         "UPDATE dietary_types SET diet_family=:fallback "
@@ -1814,11 +1916,18 @@ class DietTypesRepo:
                     ),
                     {"fallback": DIET_FAMILY_OTHER},
                 )
+            except RuntimeError:
+                db.rollback()
+                raise
             except Exception:
                 pass
             # Helpful index for lookups
             try:
                 db.execute(text("CREATE INDEX IF NOT EXISTS idx_dietary_types_site_name ON dietary_types(site_id, name)"))
+            except Exception:
+                pass
+            try:
+                self._ensure_requirement_key_index(db)
             except Exception:
                 pass
 
@@ -1844,7 +1953,7 @@ class DietTypesRepo:
                             text(
                                 "SELECT id, site_id, name, "
                                 "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
-                                "default_select "
+                                "requirement_key, semantics, default_select "
                                 "FROM dietary_types WHERE site_id=:s ORDER BY name"
                             ),
                             {"s": site_id, "fallback": DIET_FAMILY_OTHER},
@@ -1855,7 +1964,7 @@ class DietTypesRepo:
                             text(
                                 "SELECT id, site_id, name, "
                                 "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
-                                "default_select "
+                                "requirement_key, semantics, default_select "
                                 "FROM dietary_types ORDER BY name"
                             ),
                             {"fallback": DIET_FAMILY_OTHER},
@@ -1871,7 +1980,9 @@ class DietTypesRepo:
                     "site_id": (str(r[1]) if r[1] is not None else None),
                     "name": str(r[2]),
                     "diet_family": normalize_diet_family(str(r[3] or "")),
-                    "default_select": bool(r[4]),
+                    "requirement_key": str(r[4]) if r[4] is not None else None,
+                    "semantics": str(r[5]) if r[5] is not None else None,
+                    "default_select": bool(r[6]),
                 }
                 for r in rows
             ]
@@ -1887,7 +1998,7 @@ class DietTypesRepo:
                 text(
                     "SELECT id, site_id, name, "
                     "COALESCE(NULLIF(trim(CAST(diet_family AS TEXT)), ''), :fallback) AS diet_family, "
-                    "default_select "
+                    "requirement_key, semantics, default_select "
                     "FROM dietary_types WHERE id=:id"
                 ),
                 {"id": diet_type_id, "fallback": DIET_FAMILY_OTHER},
@@ -1899,7 +2010,9 @@ class DietTypesRepo:
                 "site_id": (str(row[1]) if row[1] is not None else None),
                 "name": str(row[2]),
                 "diet_family": normalize_diet_family(str(row[3] or "")),
-                "default_select": bool(row[4]),
+                "requirement_key": str(row[4]) if row[4] is not None else None,
+                "semantics": str(row[5]) if row[5] is not None else None,
+                "default_select": bool(row[6]),
             }
         finally:
             db.close()
@@ -1912,78 +2025,135 @@ class DietTypesRepo:
         - create(site_id="s1", name="Glutenfri", default_select=False)
         - create(tenant_id=1, name="Glutenfri", default_select=False)  # legacy
         """
-        # Normalize arguments
         site_id = kwargs.get("site_id")
         tenant_id = kwargs.get("tenant_id")
         name = kwargs.get("name")
         diet_family = normalize_diet_family(kwargs.get("diet_family"))
         default_select = bool(kwargs.get("default_select", False))
-        # Allow positional pattern (site_id, name, default_select)
+
         if not name and len(args) >= 2 and isinstance(args[1], str):
-            # Either (site_id, name, default_select) or (name, default_select)
             if len(args) >= 3 and isinstance(args[2], (bool, int)):
-                # Assume (site_id, name, default_select)
                 site_id = args[0]
                 name = args[1]
                 default_select = bool(args[2])
             else:
-                # (name, default_select)
                 name = args[0]
                 default_select = bool(args[1]) if len(args) >= 2 else False
         elif not name and len(args) >= 1 and isinstance(args[0], str):
             name = args[0]
             default_select = bool(args[1]) if len(args) >= 2 else default_select
+
         if not name:
             raise ValueError("name is required")
         name = str(name).strip()
-        # Hard guard: name must not be purely numeric
         try:
             if str(name).strip().isdigit():
                 raise ValueError("invalid name: purely numeric")
         except Exception:
             pass
+
         db = get_session()
         try:
             self._ensure_table(db)
+            semantics = _normalize_requirement_semantics(kwargs.get("semantics"))
+            requirement_key = _atomic_requirement_key() if semantics == "atomic" else None
             if self._name_exists(db, name=name, site_id=(str(site_id) if site_id else None)):
                 raise ValueError("duplicate_name")
+
             if _is_sqlite(db):
                 cols = {r[1] for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
                 if "tenant_id" in cols:
-                    # If legacy NOT NULL constraint exists, provide a default value (1)
                     notnull_map = {str(r[1]): int(r[3] or 0) for r in db.execute(text("PRAGMA table_info('dietary_types')")).fetchall()}
                     needs_tenant = bool(notnull_map.get("tenant_id", 0))
                     if needs_tenant:
-                        tval = int(tenant_id) if tenant_id is not None else 1
+                        tenant_value = int(tenant_id) if tenant_id is not None else 1
                         db.execute(
-                            text("INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, default_select) VALUES(:t, :s, :n, :f, :d)"),
-                            {"t": tval, "s": site_id, "n": name, "f": diet_family, "d": 1 if default_select else 0},
+                            text(
+                                "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
+                                "VALUES(:t, :s, :n, :f, :rk, :sem, :d)"
+                            ),
+                            {
+                                "t": tenant_value,
+                                "s": site_id,
+                                "n": name,
+                                "f": diet_family,
+                                "rk": requirement_key,
+                                "sem": semantics,
+                                "d": 1 if default_select else 0,
+                            },
                         )
                     else:
                         db.execute(
-                            text("INSERT INTO dietary_types(site_id, name, diet_family, default_select) VALUES(:s, :n, :f, :d)"),
-                            {"s": site_id, "n": name, "f": diet_family, "d": 1 if default_select else 0},
+                            text(
+                                "INSERT INTO dietary_types(site_id, name, diet_family, requirement_key, semantics, default_select) "
+                                "VALUES(:s, :n, :f, :rk, :sem, :d)"
+                            ),
+                            {
+                                "s": site_id,
+                                "n": name,
+                                "f": diet_family,
+                                "rk": requirement_key,
+                                "sem": semantics,
+                                "d": 1 if default_select else 0,
+                            },
                         )
                 else:
                     db.execute(
-                        text("INSERT INTO dietary_types(site_id, name, diet_family, default_select) VALUES(:s, :n, :f, :d)"),
-                        {"s": site_id, "n": name, "f": diet_family, "d": 1 if default_select else 0},
+                        text(
+                            "INSERT INTO dietary_types(site_id, name, diet_family, requirement_key, semantics, default_select) "
+                            "VALUES(:s, :n, :f, :rk, :sem, :d)"
+                        ),
+                        {
+                            "s": site_id,
+                            "n": name,
+                            "f": diet_family,
+                            "rk": requirement_key,
+                            "sem": semantics,
+                            "d": 1 if default_select else 0,
+                        },
                     )
-                row = db.execute(text("SELECT last_insert_rowid()")).fetchone()
+                row = db.execute(text("SELECT last_insert_rowid()" )).fetchone()
                 new_id = int(row[0]) if row else 0
             else:
                 if tenant_id is not None:
                     res = db.execute(
-                        text("INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, default_select) VALUES(:t, :s, :n, :f, :d) RETURNING id"),
-                        {"t": int(tenant_id), "s": site_id, "n": name, "f": diet_family, "d": default_select},
+                        text(
+                            "INSERT INTO dietary_types(tenant_id, site_id, name, diet_family, requirement_key, semantics, default_select) "
+                            "VALUES(:t, :s, :n, :f, :rk, :sem, :d) RETURNING id"
+                        ),
+                        {
+                            "t": int(tenant_id),
+                            "s": site_id,
+                            "n": name,
+                            "f": diet_family,
+                            "rk": requirement_key,
+                            "sem": semantics,
+                            "d": default_select,
+                        },
                     )
                 else:
                     res = db.execute(
-                        text("INSERT INTO dietary_types(site_id, name, diet_family, default_select) VALUES(:s, :n, :f, :d) RETURNING id"),
-                        {"s": site_id, "n": name, "f": diet_family, "d": default_select},
+                        text(
+                            "INSERT INTO dietary_types(site_id, name, diet_family, requirement_key, semantics, default_select) "
+                            "VALUES(:s, :n, :f, :rk, :sem, :d) RETURNING id"
+                        ),
+                        {
+                            "s": site_id,
+                            "n": name,
+                            "f": diet_family,
+                            "rk": requirement_key,
+                            "sem": semantics,
+                            "d": default_select,
+                        },
                     )
                 row = res.fetchone()
                 new_id = int(row[0]) if row else 0
+
+            if semantics != "atomic":
+                db.execute(
+                    text("UPDATE dietary_types SET requirement_key=:rk WHERE id=:id"),
+                    {"rk": _legacy_requirement_key_for_id(new_id), "id": new_id},
+                )
             db.commit()
             return new_id
         except Exception:

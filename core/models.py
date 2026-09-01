@@ -256,6 +256,8 @@ class DietaryType(Base):
     site_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(120))
     diet_family: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requirement_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    semantics: Mapped[str | None] = mapped_column(String(32), nullable=True)
     default_select: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
