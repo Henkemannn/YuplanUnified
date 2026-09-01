@@ -139,6 +139,7 @@ def _build_request_from_planera_day_payload(
         "site_id": site_id,
         "date": iso_date,
         "meal_key": meal_key,
+        "compatibility_source_precision": "legacy_aggregate",
     }
     try:
         d = date.fromisoformat(iso_date)
@@ -190,7 +191,7 @@ def build_plan_request_from_planera_day_payload(
     component_role: str | None = None,
     component_mode: str | None = None,
 ) -> PlanRequest:
-    return _build_request_from_planera_day_payload(
+    request = _build_request_from_planera_day_payload(
         day_payload,
         site_id=site_id,
         iso_date=iso_date,
@@ -200,6 +201,8 @@ def build_plan_request_from_planera_day_payload(
         component_role=component_role,
         component_mode=component_mode,
     )
+    request.context["compatibility_source_precision"] = "legacy_aggregate"
+    return request
 
 
 def build_plan_request_from_weekview_day(
@@ -232,7 +235,7 @@ def build_plan_request_from_weekview_day(
     if not isinstance(day_payload, dict):
         day_payload = {}
 
-    return _build_request_from_planera_day_payload(
+    request = _build_request_from_planera_day_payload(
         day_payload,
         site_id=site_id,
         iso_date=iso_date,
@@ -242,6 +245,8 @@ def build_plan_request_from_weekview_day(
         component_role=component_role,
         component_mode=component_mode,
     )
+    request.context["compatibility_source_precision"] = "legacy_aggregate"
+    return request
 
 
 def _resolve_departments_from_day_payload(day_payload: dict[str, Any]) -> list[tuple[str, str]]:

@@ -88,7 +88,8 @@ def _summarize_current_day(day_payload: dict[str, Any], meal_key: str) -> Planer
             quantity = _to_int(item.get("count"), default=0)
             if not category_key or quantity <= 0:
                 continue
-            category_map[category_key] = category_map.get(category_key, 0) + quantity
+            bucket_key = category_key
+            category_map[bucket_key] = category_map.get(bucket_key, 0) + quantity
 
         unit_special_deviations[unit_id] = dict(sorted(category_map.items()))
 
@@ -202,12 +203,12 @@ def compare_current_planera_vs_v2_day(
         "Comparison is strongest on totals, unit baselines, and effective unit deviations.",
     ]
 
-    compatibility_status = str((run.request.context or {}).get("compatibility_status") or "").strip().lower()
+    compatibility_source_precision = str((run.request.context or {}).get("compatibility_source_precision") or "").strip().lower()
     compatibility_notes: list[str] = []
     raw_compatibility_warnings = (run.request.context or {}).get("compatibility_warnings")
     if isinstance(raw_compatibility_warnings, list):
         compatibility_notes.extend(str(item) for item in raw_compatibility_warnings if str(item).strip())
-    if compatibility_status == "ambiguous":
+    if compatibility_source_precision == "legacy_aggregate":
         compatibility_verdict = "NOT_PROVABLE"
         if not compatibility_notes:
             compatibility_notes.append(
@@ -286,12 +287,12 @@ def compare_current_planera_vs_v2_day_from_payload(
         "Comparison is strongest on totals, unit baselines, and effective unit deviations.",
     ]
 
-    compatibility_status = str((run.request.context or {}).get("compatibility_status") or "").strip().lower()
+    compatibility_source_precision = str((run.request.context or {}).get("compatibility_source_precision") or "").strip().lower()
     compatibility_notes: list[str] = []
     raw_compatibility_warnings = (run.request.context or {}).get("compatibility_warnings")
     if isinstance(raw_compatibility_warnings, list):
         compatibility_notes.extend(str(item) for item in raw_compatibility_warnings if str(item).strip())
-    if compatibility_status == "ambiguous":
+    if compatibility_source_precision == "legacy_aggregate":
         compatibility_verdict = "NOT_PROVABLE"
         if not compatibility_notes:
             compatibility_notes.append(

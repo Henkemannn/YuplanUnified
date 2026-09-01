@@ -156,7 +156,7 @@ def test_case_f_conservation_for_supported_projection() -> None:
     assert result.totals.baseline_total == result.totals.deviation_total + result.totals.normal_total
 
 
-def test_case_g_aggregate_only_input_is_marked_ambiguous() -> None:
+def test_case_g_aggregate_only_input_is_marked_legacy_aggregate() -> None:
     planning_slice = build_planning_slice_from_kommun_input(
         {
             "baseline": 10,
@@ -182,10 +182,11 @@ def test_case_g_aggregate_only_input_is_marked_ambiguous() -> None:
         }
     )
 
-    assert planning_slice.compatibility_status == "ambiguous"
+    assert planning_slice.context["compatibility_source_precision"] == "legacy_aggregate"
+    assert planning_slice.compatibility_status == "resolved"
     assert planning_slice.deviations == ()
     assert planning_slice.warnings
-    assert payload["context"]["compatibility_status"] == "ambiguous"
+    assert payload["context"]["compatibility_source_precision"] == "legacy_aggregate"
     assert payload["context"]["compatibility_warnings"]
 
 

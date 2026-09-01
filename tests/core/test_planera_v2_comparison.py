@@ -69,7 +69,7 @@ def test_comparison_matching_case_for_totals_units_and_effective_deviations() ->
     assert all(comparison.matches.values())
     assert comparison.mismatches == []
     assert comparison.parity_verdict == "PASS"
-    assert comparison.compatibility_verdict == "PASS"
+    assert comparison.compatibility_verdict == "NOT_PROVABLE"
 
 
 def test_comparison_mismatch_case_reports_notes() -> None:
@@ -120,7 +120,7 @@ def test_comparison_mismatch_case_reports_notes() -> None:
     assert comparison.parity_verdict == "FAIL"
 
 
-def test_comparison_reports_not_provable_when_shadow_input_is_ambiguous() -> None:
+def test_comparison_reports_not_provable_for_legacy_aggregate_source() -> None:
     payload = {
         "departments": [
             {
@@ -135,40 +135,13 @@ def test_comparison_reports_not_provable_when_shadow_input_is_ambiguous() -> Non
         ]
     }
 
-    def _fake_dev_runner(**kwargs: object) -> PlaneraV2DevRun:
-        return PlaneraV2DevRun(
-            request=PlanRequest(
-                baseline=10,
-                units=[UnitInput(unit_id="unit_a", baseline_total=10)],
-                context={
-                    "site_id": "site_1",
-                    "date": "2026-04-14",
-                    "meal_key": "lunch",
-                    "compatibility_status": "ambiguous",
-                    "compatibility_warnings": ["aggregate-only source data cannot prove recipient-level compatibility"],
-                },
-            ),
-            result=PlanResult(
-                totals=Totals(baseline_total=10, deviation_total=0, normal_total=10),
-                per_form={},
-                per_combination={},
-                per_unit={},
-                per_unit_breakdown={},
-                warnings=[],
-            ),
-            formatted_debug="Totals:\n",
-            formatted_clean="Plan Result\n",
-            formatted_kitchen="TOTAL\n",
-        )
-
-    comparison = compare_current_planera_vs_v2_day(
+    comparison = compare_current_planera_vs_v2_day_from_payload(
+        payload,
         tenant_id=1,
         site_id="site_1",
         iso_date="2026-04-14",
         meal_key="lunch",
-        planera_service=_FakePlaneraService(payload),
         departments=[("unit_a", "Unit A")],
-        dev_runner=_fake_dev_runner,
     )
 
     report = build_day_comparison_report(comparison)
@@ -381,4 +354,4 @@ def test_comparison_report_contains_sections_and_caveats() -> None:
     assert "Caveats" in report
     assert "Comparison is strongest on totals, unit baselines, and effective unit deviations." in report
     assert "Parity verdict: PASS" in report
-    assert "Compatibility verdict:" in report
+    assert "Compatibility verdict: NOT_PROVABLE" in report

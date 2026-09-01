@@ -97,6 +97,7 @@ def build_planning_slice_from_kommun_input(data: dict[str, Any]) -> PlanningSlic
     unit_units: dict[str, UnitInput] = {}
     unit_deviations: dict[str, list[Deviation]] = {}
     warnings: list[str] = []
+    has_aggregate_only_input = False
 
     for unit in units:
         if not isinstance(unit, dict):
@@ -111,7 +112,8 @@ def build_planning_slice_from_kommun_input(data: dict[str, Any]) -> PlanningSlic
         unit_units[unit_id] = UnitInput(unit_id=unit_id, baseline_total=baseline_total)
 
         projected_deviations: list[Deviation] = []
-        for raw_requirement in _collect_unit_requirements(unit):
+        requirement_items = _collect_unit_requirements(unit)
+        for raw_requirement in requirement_items:
             deviation = _project_requirement(raw_requirement, unit_id=unit_id)
             if deviation is not None:
                 projected_deviations.append(deviation)
@@ -124,6 +126,7 @@ def build_planning_slice_from_kommun_input(data: dict[str, Any]) -> PlanningSlic
                 "aggregate_requirements",
             )
         ):
+            has_aggregate_only_input = True
             warnings.append(f"unit[{unit_id}] aggregate category totals cannot prove overlap; no deviations emitted")
 
         unit_deviations[unit_id] = projected_deviations
@@ -134,9 +137,10 @@ def build_planning_slice_from_kommun_input(data: dict[str, Any]) -> PlanningSlic
     for unit_id in ordered_unit_ids:
         ordered_deviations.extend(unit_deviations.get(unit_id, []))
 
-    compatibility_status = "ambiguous" if warnings else "resolved"
-    if compatibility_status != "resolved":
-        context["compatibility_status"] = compatibility_status
+    if has_aggregate_only_input:
+        context["compatibility_source_precision"] = "legacy_aggregate"
+
+    if warnings:
         context["compatibility_warnings"] = list(warnings)
 
     return PlanningSlice(
@@ -145,7 +149,7 @@ def build_planning_slice_from_kommun_input(data: dict[str, Any]) -> PlanningSlic
         deviations=tuple(ordered_deviations),
         context=context,
         warnings=tuple(warnings),
-        compatibility_status=compatibility_status,
+        compatibility_status="resolved",
     )
 
 
@@ -168,14 +172,7 @@ def build_payload_from_kommun_input(data: dict[str, Any]) -> dict[str, Any]:
         ],
         "context": {
             **planning_slice.context,
-            **(
-                {
-                    "compatibility_status": planning_slice.compatibility_status,
-                    "compatibility_warnings": list(planning_slice.warnings),
-                }
-                if planning_slice.compatibility_status != "resolved"
-                else {}
-            ),
+            **({"compatibility_warnings": list(planning_slice.warnings)} if planning_slice.warnings else {}),
         },
     }
 
