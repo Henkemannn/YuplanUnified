@@ -1,7 +1,18 @@
 from __future__ import annotations
 
+import uuid
+
+from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
+from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+from core.department_requirement_group_service_overrides_repo import (
+    DepartmentRequirementGroupServiceOverridesRepo,
+)
+from core.planera_v2.dev_runner import (
+    format_dev_run_report,
+    run_planera_v2_from_canonical_requirement_groups,
+    run_planera_v2_from_current_day,
+)
 from core.planera_v2.domain import Deviation, PlanRequest, UnitInput
-from core.planera_v2.dev_runner import format_dev_run_report, run_planera_v2_from_current_day
 
 
 class _FakePlaneraService:
@@ -16,6 +27,17 @@ class _FakePlaneraService:
         departments: list[tuple[str, str]],
     ) -> dict[str, object]:
         return dict(self._payload)
+
+
+def _seed_canonical_group(site_id: str, department_id: str, *, quantity: int, label: str) -> str:
+    requirement_id = DietTypesRepo().create(
+        site_id=site_id,
+        name=f"Requirement {uuid.uuid4().hex[:8]}",
+        default_select=False,
+        semantics="atomic",
+    )
+    group = DepartmentRequirementGroupsRepo().create_group(department_id, quantity, [requirement_id], label=label)
+    return str(group["id"])
 
 
 def test_dev_runner_passes_bridge_output_and_returns_engine_result() -> None:
@@ -204,3 +226,31 @@ def test_engine_totals_unchanged_when_component_context_is_present() -> None:
     assert component_run.result.totals == base_run.result.totals
     assert component_run.result.per_form == base_run.result.per_form
     assert component_run.result.per_combination == base_run.result.per_combination
+
+
+def test_canonical_runner_uses_requirement_groups_and_preserves_canonical_meal_key() -> None:
+    site, _ = SitesRepo().create_site(f"Canonical runner site {uuid.uuid4()}")
+    department, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name=f"Department {uuid.uuid4()}",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    group_id = _seed_canonical_group(site["id"], department["id"], quantity=2, label="Group A")
+    DepartmentRequirementGroupServiceOverridesRepo().set_override(group_id, "2026-04-16", "evening", 4)
+
+    run = run_planera_v2_from_canonical_requirement_groups(
+        site_id=site["id"],
+        service_date="2026-04-16",
+        meal_key=" EVENING ",
+        unit_baselines={department["id"]: 10},
+    )
+
+    assert run.request.context["meal_key"] == "evening"
+    assert run.request.context["compatibility_source_precision"] == "canonical_atomic_groups"
+    assert run.request.units == [UnitInput(unit_id=department["id"], baseline_total=10)]
+    assert run.request.deviations[0].quantity == 4
+    assert run.request.deviations[0].unit_id == department["id"]
+    assert run.result.totals.baseline_total == 10
+    assert run.result.totals.deviation_total == 4
+    assert run.result.totals.normal_total == 6

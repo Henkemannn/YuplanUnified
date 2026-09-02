@@ -60,7 +60,8 @@ def test_single_atomic_group_maps_to_one_deviation_and_requirement_key(app_sessi
     with app_session.app_context():
         site, _ = SitesRepo().create_site(f"Planera 1E site {uuid.uuid4()}")
         department = _seed_department(site["id"], "Unit A")
-        requirement_id = _seed_requirement_with_key(site["id"], "Gluten", "req_gluten")
+        gluten_key = f"req_gluten_{uuid.uuid4().hex[:8]}"
+        requirement_id = _seed_requirement_with_key(site["id"], "Gluten", gluten_key)
         _create_group(site["id"], department["id"], [requirement_id], quantity=1, label="Group A")
 
         slice_ = build_planning_slice_from_requirement_groups(
@@ -75,7 +76,7 @@ def test_single_atomic_group_maps_to_one_deviation_and_requirement_key(app_sessi
         assert len(slice_.deviations) == 1
         deviation = slice_.deviations[0]
         assert deviation.form == "unspecified"
-        assert deviation.category_keys == ["req_gluten"]
+        assert deviation.category_keys == [gluten_key]
         assert deviation.quantity == 1
         assert deviation.unit_id == department["id"]
         assert slice_.context["source"] == "canonical_requirement_groups"
@@ -87,8 +88,10 @@ def test_multi_requirement_group_preserves_quantity_and_conserves_plan_total(app
     with app_session.app_context():
         site, _ = SitesRepo().create_site(f"Planera 1E multi site {uuid.uuid4()}")
         department = _seed_department(site["id"], "Unit A")
-        req_a = _seed_requirement_with_key(site["id"], "Gluten", "req_gluten")
-        req_b = _seed_requirement_with_key(site["id"], "Lactose", "req_lactose")
+        gluten_key = f"req_gluten_{uuid.uuid4().hex[:8]}"
+        lactose_key = f"req_lactose_{uuid.uuid4().hex[:8]}"
+        req_a = _seed_requirement_with_key(site["id"], "Gluten", gluten_key)
+        req_b = _seed_requirement_with_key(site["id"], "Lactose", lactose_key)
         _create_group(site["id"], department["id"], [req_a, req_b], quantity=3, label="Group AB")
 
         slice_ = build_planning_slice_from_requirement_groups(
@@ -100,7 +103,7 @@ def test_multi_requirement_group_preserves_quantity_and_conserves_plan_total(app
         result = compute_plan(slice_.to_plan_request())
 
         assert len(slice_.deviations) == 1
-        assert slice_.deviations[0].category_keys == ["req_gluten", "req_lactose"]
+        assert slice_.deviations[0].category_keys == [gluten_key, lactose_key]
         assert slice_.deviations[0].quantity == 3
         assert result.totals.baseline_total == 10
         assert result.totals.deviation_total == 3
@@ -111,7 +114,8 @@ def test_service_override_zero_inactive_reactivate_and_date_meal_isolation(app_s
     with app_session.app_context():
         site, _ = SitesRepo().create_site(f"Planera 1E override site {uuid.uuid4()}")
         department = _seed_department(site["id"], "Unit A")
-        requirement_id = _seed_requirement_with_key(site["id"], "Gluten", "req_gluten")
+        gluten_key = f"req_gluten_{uuid.uuid4().hex[:8]}"
+        requirement_id = _seed_requirement_with_key(site["id"], "Gluten", gluten_key)
         group_id = _create_group(site["id"], department["id"], [requirement_id], quantity=2, label="Group A")
         overrides = DepartmentRequirementGroupServiceOverridesRepo()
 
@@ -190,7 +194,8 @@ def test_canonical_context_spoof_protection(app_session) -> None:
     with app_session.app_context():
         site, _ = SitesRepo().create_site(f"Planera 1E spoof site {uuid.uuid4()}")
         department = _seed_department(site["id"], "Unit A")
-        requirement_id = _seed_requirement_with_key(site["id"], "Gluten", "req_gluten")
+        gluten_key = f"req_gluten_{uuid.uuid4().hex[:8]}"
+        requirement_id = _seed_requirement_with_key(site["id"], "Gluten", gluten_key)
         group_id = _create_group(site["id"], department["id"], [requirement_id], quantity=1, label="Group A")
 
         slice_ = build_planning_slice_from_requirement_groups(
@@ -221,7 +226,7 @@ def test_canonical_context_spoof_protection(app_session) -> None:
             {
                 "group_id": group_id,
                 "unit_id": department["id"],
-                "category_keys": ["req_gluten"],
+                "category_keys": [gluten_key],
                 "quantity": 1,
             }
         ]
@@ -234,9 +239,12 @@ def test_two_groups_two_units_deterministic_refs_and_context(app_session) -> Non
         site, _ = SitesRepo().create_site(f"Planera 1E deterministic site {uuid.uuid4()}")
         dept_a = _seed_department(site["id"])
         dept_b = _seed_department(site["id"])
-        req_a = _seed_requirement_with_key(site["id"], "Gluten", "req_gluten")
-        req_b = _seed_requirement_with_key(site["id"], "Lactose", "req_lactose")
-        req_c = _seed_requirement_with_key(site["id"], "Fish", "req_fish")
+        gluten_key = f"req_gluten_{uuid.uuid4().hex[:8]}"
+        lactose_key = f"req_lactose_{uuid.uuid4().hex[:8]}"
+        fish_key = f"req_fish_{uuid.uuid4().hex[:8]}"
+        req_a = _seed_requirement_with_key(site["id"], "Gluten", gluten_key)
+        req_b = _seed_requirement_with_key(site["id"], "Lactose", lactose_key)
+        req_c = _seed_requirement_with_key(site["id"], "Fish", fish_key)
         group1 = _create_group(site["id"], dept_a["id"], [req_a, req_b], quantity=1, label="G1")
         group2 = _create_group(site["id"], dept_a["id"], [req_c], quantity=2, label="G2")
 
@@ -270,7 +278,7 @@ def test_cross_site_missing_and_negative_baseline_fail_closed(app_session) -> No
         site_b, _ = SitesRepo().create_site(f"Planera 1E site B {uuid.uuid4()}")
         dept_a = _seed_department(site_a["id"])
         dept_b = _seed_department(site_b["id"])
-        _seed_requirement_with_key(site_a["id"], "Gluten", "req_gluten")
+        _seed_requirement_with_key(site_a["id"], "Gluten", f"req_gluten_{uuid.uuid4().hex[:8]}")
 
         with pytest.raises(ValueError, match="department_site_mismatch"):
             build_planning_slice_from_requirement_groups(
@@ -502,7 +510,7 @@ def test_deviation_exceeds_baseline_adds_warning_and_compute_plan_clamps_normal(
     with app_session.app_context():
         site, _ = SitesRepo().create_site(f"Planera 1E warning site {uuid.uuid4()}")
         department = _seed_department(site["id"])
-        requirement_id = _seed_requirement_with_key(site["id"], "Gluten", "req_gluten")
+        requirement_id = _seed_requirement_with_key(site["id"], "Gluten", f"req_gluten_{uuid.uuid4().hex[:8]}")
         _create_group(site["id"], department["id"], [requirement_id], quantity=2, label="Too much")
 
         slice_ = build_planning_slice_from_requirement_groups(

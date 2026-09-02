@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
+from .adapters.kommun_from_requirement_groups import build_planning_slice_from_requirement_groups
 from .adapters.kommun_from_weekview import (
     build_plan_request_from_planera_day_payload,
     build_plan_request_from_weekview_day,
@@ -50,6 +51,33 @@ def run_planera_v2_from_current_day(
         component_role=component_role,
         component_mode=component_mode,
     )
+    result = compute_plan(request)
+
+    return PlaneraV2DevRun(
+        request=request,
+        result=result,
+        formatted_debug=format_plan_result(result),
+        formatted_clean=format_plan_result_clean(result),
+        formatted_kitchen=format_plan_result_kitchen_view(result),
+    )
+
+
+def run_planera_v2_from_canonical_requirement_groups(
+    *,
+    site_id: str,
+    service_date,
+    meal_key: str,
+    unit_baselines: dict[str, object],
+    context: dict[str, object] | None = None,
+) -> PlaneraV2DevRun:
+    slice_ = build_planning_slice_from_requirement_groups(
+        site_id=site_id,
+        service_date=service_date,
+        meal_key=meal_key,
+        unit_baselines=unit_baselines,
+        context=context,
+    )
+    request = slice_.to_plan_request()
     result = compute_plan(request)
 
     return PlaneraV2DevRun(
