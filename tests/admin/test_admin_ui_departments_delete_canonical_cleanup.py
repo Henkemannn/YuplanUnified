@@ -7,12 +7,16 @@ in the same delete transaction and does not rely on SQLite foreign key cascades.
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from flask.testing import FlaskClient
 from sqlalchemy import text
 
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+from core.department_requirement_group_service_overrides_repo import (
+    DepartmentRequirementGroupServiceOverridesRepo,
+)
 
 ADMIN_HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
 
@@ -178,4 +182,41 @@ def test_department_delete_cleans_canonical_rows_with_sqlite_fk_off(app_session,
         assert dept_row is None
         assert group_row is None
         assert join_row is None
+        assert requirement_row is not None
+
+
+def test_department_delete_cleans_service_override_rows(app_session, client_admin: FlaskClient) -> None:
+    with app_session.app_context():
+        site_id, dept_id, requirement_id, group_id = _seed_site_department_group("Override Delete Site")
+        override_repo = DepartmentRequirementGroupServiceOverridesRepo()
+        override_repo.set_override(group_id, date(2026, 9, 8), "lunch", 4)
+
+        with client_admin.session_transaction() as sess:
+            sess["site_id"] = site_id
+
+        response = client_admin.post(
+            f"/ui/admin/departments/{dept_id}/delete",
+            headers=ADMIN_HEADERS,
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+
+        from core.db import get_session
+
+        conn = get_session()
+        try:
+            override_row = conn.execute(
+                text(
+                    "SELECT group_id, service_date, meal_key FROM department_requirement_group_service_overrides WHERE group_id=:gid"
+                ),
+                {"gid": group_id},
+            ).fetchone()
+            requirement_row = conn.execute(
+                text("SELECT id FROM dietary_types WHERE id=:id"),
+                {"id": requirement_id},
+            ).fetchone()
+        finally:
+            conn.close()
+
+        assert override_row is None
         assert requirement_row is not None

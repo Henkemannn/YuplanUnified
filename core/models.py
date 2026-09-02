@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     String,
     UniqueConstraint,
+    true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from typing import Optional
@@ -235,7 +236,7 @@ class DepartmentRequirementGroup(Base):
     )
     label: Mapped[str | None] = mapped_column(String(120), nullable=True)
     default_quantity: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
@@ -245,7 +246,6 @@ class DepartmentRequirementGroup(Base):
 
     __table_args__ = (
         CheckConstraint("default_quantity >= 0", name="ck_department_requirement_groups_default_quantity_non_negative"),
-        CheckConstraint("is_active IN (0, 1)", name="ck_department_requirement_groups_is_active_bool"),
         Index("ix_department_requirement_groups_department_id", "department_id"),
     )
 
@@ -262,6 +262,35 @@ class DepartmentRequirementGroupRequirement(Base):
 
     __table_args__ = (
         Index("ix_department_requirement_group_requirements_dietary_type_id", "dietary_type_id"),
+    )
+
+
+class DepartmentRequirementGroupServiceOverride(Base):
+    __tablename__ = "department_requirement_group_service_overrides"
+
+    group_id: Mapped[str] = mapped_column(
+        ForeignKey("department_requirement_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    service_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    meal_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("quantity >= 0", name="ck_department_requirement_group_service_overrides_quantity_non_negative"),
+        CheckConstraint(
+            "length(trim(meal_key)) > 0",
+            name="ck_department_requirement_group_service_overrides_meal_key_not_empty",
+        ),
+        CheckConstraint(
+            "meal_key = lower(trim(meal_key))",
+            name="ck_department_requirement_group_service_overrides_meal_key_normalized",
+        ),
     )
 
 

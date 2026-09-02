@@ -7,6 +7,10 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.schema import CreateTable
+from sqlalchemy.dialects import postgresql
+
+from core.models import DepartmentRequirementGroup
 
 
 def _alembic_cfg(db_url: str) -> Config:
@@ -97,3 +101,9 @@ def test_0036_upgrade_downgrade_and_reupgrade(tmp_path: Path, monkeypatch) -> No
         assert "department_requirement_group_requirements" in inspector.get_table_names()
     finally:
         engine.dispose()
+
+
+def test_0036_boolean_ddl_is_postgresql_portable() -> None:
+    ddl = str(CreateTable(DepartmentRequirementGroup.__table__).compile(dialect=postgresql.dialect()))
+    assert "is_active BOOLEAN DEFAULT true NOT NULL" in ddl or "is_active BOOLEAN DEFAULT true" in ddl
+    assert "ck_department_requirement_groups_is_active_bool" not in ddl

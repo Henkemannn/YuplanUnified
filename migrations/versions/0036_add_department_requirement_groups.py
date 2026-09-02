@@ -31,7 +31,7 @@ def upgrade() -> None:
             sa.Column("department_id", sa.String(length=64), nullable=False),
             sa.Column("label", sa.String(length=120), nullable=True),
             sa.Column("default_quantity", sa.Integer(), nullable=False, server_default=sa.text("0")),
-            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.ForeignKeyConstraint(
@@ -43,10 +43,6 @@ def upgrade() -> None:
             sa.CheckConstraint(
                 "default_quantity >= 0",
                 name="ck_department_requirement_groups_default_quantity_non_negative",
-            ),
-            sa.CheckConstraint(
-                "is_active IN (0, 1)",
-                name="ck_department_requirement_groups_is_active_bool",
             ),
         )
         op.create_index(
