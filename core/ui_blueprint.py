@@ -6796,6 +6796,20 @@ def admin_departments_delete(dept_id: str):
             return redirect(url_for("ui.admin_departments_list"))
         
         dept_name = dept_row[0]
+
+        # Explicit canonical ownership cleanup in the same transaction.
+        # This must not rely on SQLite foreign-key enforcement.
+        db.execute(
+            text(
+                "DELETE FROM department_requirement_group_requirements "
+                "WHERE group_id IN (SELECT id FROM department_requirement_groups WHERE department_id = :id)"
+            ),
+            {"id": dept_id},
+        )
+        db.execute(
+            text("DELETE FROM department_requirement_groups WHERE department_id = :id"),
+            {"id": dept_id},
+        )
         
         # Delete department within site scope
         db.execute(

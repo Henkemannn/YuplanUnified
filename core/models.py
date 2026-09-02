@@ -226,6 +226,45 @@ class DepartmentMenuChoice(Base):
     )
 
 
+class DepartmentRequirementGroup(Base):
+    __tablename__ = "department_requirement_groups"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_new_link_id)
+    department_id: Mapped[str] = mapped_column(
+        ForeignKey("departments.id", ondelete="CASCADE"), nullable=False
+    )
+    label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    default_quantity: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("default_quantity >= 0", name="ck_department_requirement_groups_default_quantity_non_negative"),
+        CheckConstraint("is_active IN (0, 1)", name="ck_department_requirement_groups_is_active_bool"),
+        Index("ix_department_requirement_groups_department_id", "department_id"),
+    )
+
+
+class DepartmentRequirementGroupRequirement(Base):
+    __tablename__ = "department_requirement_group_requirements"
+
+    group_id: Mapped[str] = mapped_column(
+        ForeignKey("department_requirement_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    dietary_type_id: Mapped[int] = mapped_column(
+        ForeignKey("dietary_types.id"), primary_key=True
+    )
+
+    __table_args__ = (
+        Index("ix_department_requirement_group_requirements_dietary_type_id", "dietary_type_id"),
+    )
+
+
 class MenuVariant(Base):
     __tablename__ = "menu_variants"
     id: Mapped[int] = mapped_column(primary_key=True)

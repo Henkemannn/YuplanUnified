@@ -1830,6 +1830,17 @@ class DietTypesRepo:
             if strict:
                 raise
 
+    def _canonical_requirement_group_reference_count(self, db, diet_type_id: int) -> int:
+        if not _table_has_column(db, "department_requirement_group_requirements", "dietary_type_id"):
+            return 0
+        row = db.execute(
+            text(
+                "SELECT COUNT(*) FROM department_requirement_group_requirements WHERE CAST(dietary_type_id AS TEXT)=:id"
+            ),
+            {"id": str(int(diet_type_id))},
+        ).fetchone()
+        return int(row[0] or 0) if row else 0
+
     def _backfill_missing_families(self, db) -> None:
         rows = db.execute(
             text(
@@ -2222,6 +2233,10 @@ class DietTypesRepo:
             self._ensure_table(db)
             did_txt = str(int(diet_type_id))
 
+            canonical_refs = self._canonical_requirement_group_reference_count(db, diet_type_id)
+            if canonical_refs > 0:
+                raise DietTypeDeleteBlockedError({"department_requirement_group_requirements": canonical_refs})
+
             dependency_tables = (
                 ("department_diet_defaults", "diet_type_id"),
                 ("normal_exclusions", "diet_type_id"),
@@ -2280,6 +2295,9 @@ class DietTypesRepo:
             has_reg = _exists('weekview_registrations')
             for did in invalid_ids:
                 sid = str(did)
+                canonical_refs = self._canonical_requirement_group_reference_count(db, did)
+                if canonical_refs > 0:
+                    continue
                 if has_defaults:
                     db.execute(text("DELETE FROM department_diet_defaults WHERE diet_type_id=:id"), {"id": sid})
                 if has_exclusions:
