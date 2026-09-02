@@ -100,6 +100,33 @@ def sqlite_file_path_from_url(database_url: str) -> str | None:
         return None
 
 
+def _bootstrap_sqlite_alt2_compat_tables(conn) -> None:
+    """Create the legacy Alt2 compatibility tables used by SQLite tests/dev."""
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS alt2_flags (
+            site_id TEXT NOT NULL,
+            department_id TEXT NOT NULL,
+            week INTEGER NOT NULL,
+            weekday INTEGER NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT 0,
+            version INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT,
+            PRIMARY KEY (site_id, department_id, week, weekday)
+        )
+    """))
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
+            site_id TEXT NOT NULL,
+            department_id TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            week INTEGER NOT NULL,
+            day_of_week INTEGER NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (site_id, department_id, year, week, day_of_week)
+        )
+    """))
+
+
 def ensure_sqlite_file_ready(database_url: str) -> str | None:
     """Ensure parent directory exists and SQLite file is creatable when file-backed."""
     db_path = sqlite_file_path_from_url(database_url)
@@ -172,6 +199,10 @@ def create_all() -> (
         log.warning("create_all: TESTING -> drop_all enabled")
         Base.metadata.drop_all(_engine)
         Base.metadata.create_all(_engine)
+        if _engine.dialect.name == "sqlite" and os.getenv("YP_ENABLE_SQLITE_BOOTSTRAP", "0") in ("1", "true", "yes"):
+            with _engine.connect() as conn:
+                _bootstrap_sqlite_alt2_compat_tables(conn)
+                conn.commit()
         return
     # For sqlite test runs we want a clean schema each invocation to avoid
     # primary key collisions when tests call create_all() multiple times.
@@ -382,30 +413,7 @@ def create_all() -> (
                     )
                 """))
                 # Alt2 flags table
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS alt2_flags (
-                        site_id TEXT NOT NULL,
-                        department_id TEXT NOT NULL,
-                        week INTEGER NOT NULL,
-                        weekday INTEGER NOT NULL,
-                        enabled BOOLEAN NOT NULL DEFAULT 0,
-                        version INTEGER NOT NULL DEFAULT 0,
-                        updated_at TEXT,
-                        PRIMARY KEY (site_id, department_id, week, weekday)
-                    )
-                """))
-                # Weekview Alt2 flags table (legacy/weekview compatibility)
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS weekview_alt2_flags (
-                        site_id TEXT NOT NULL,
-                        department_id TEXT NOT NULL,
-                        year INTEGER NOT NULL,
-                        week INTEGER NOT NULL,
-                        day_of_week INTEGER NOT NULL,
-                        enabled INTEGER NOT NULL DEFAULT 0,
-                        UNIQUE (site_id, department_id, year, week, day_of_week)
-                    )
-                """))
+                _bootstrap_sqlite_alt2_compat_tables(conn)
                 # Weekview items table (for menus)
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS weekview_items (
