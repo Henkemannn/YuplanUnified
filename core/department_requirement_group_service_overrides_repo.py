@@ -8,6 +8,58 @@ from .db import get_session
 from .models import DepartmentRequirementGroup, DepartmentRequirementGroupServiceOverride
 
 
+def _normalize_service_date(value) -> _date:
+    if isinstance(value, _datetime):
+        raise ValueError("service_date_invalid")
+    if isinstance(value, _date):
+        return value
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValueError("service_date_invalid")
+    try:
+        return _date.fromisoformat(raw)
+    except Exception as exc:
+        raise ValueError("service_date_invalid") from exc
+
+
+def _normalize_meal_key(value) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        raise ValueError("meal_key_empty")
+    return raw
+
+
+def resolve_effective_quantity_in_session(
+    db,
+    group_id,
+    default_quantity,
+    is_active,
+    service_date,
+    meal_key,
+) -> int:
+    normalized_date = _normalize_service_date(service_date)
+    normalized_meal_key = _normalize_meal_key(meal_key)
+    if not bool(is_active):
+        return 0
+    row = db.execute(
+        text(
+            """
+            SELECT quantity
+            FROM department_requirement_group_service_overrides
+            WHERE group_id = :group_id AND service_date = :service_date AND meal_key = :meal_key
+            """
+        ),
+        {
+            "group_id": str(group_id),
+            "service_date": normalized_date,
+            "meal_key": normalized_meal_key,
+        },
+    ).fetchone()
+    if row is not None:
+        return int(row[0] or 0)
+    return int(default_quantity or 0)
+
+
 class DepartmentRequirementGroupServiceOverridesRepo:
     def _ensure_table(self, db) -> None:
         bind = getattr(db, "bind", None)
@@ -16,23 +68,10 @@ class DepartmentRequirementGroupServiceOverridesRepo:
         DepartmentRequirementGroupServiceOverride.__table__.create(bind=bind, checkfirst=True)
 
     def _normalize_service_date(self, value) -> _date:
-        if isinstance(value, _datetime):
-            raise ValueError("service_date_invalid")
-        if isinstance(value, _date):
-            return value
-        raw = str(value or "").strip()
-        if not raw:
-            raise ValueError("service_date_invalid")
-        try:
-            return _date.fromisoformat(raw)
-        except Exception as exc:
-            raise ValueError("service_date_invalid") from exc
+        return _normalize_service_date(value)
 
     def _normalize_meal_key(self, value) -> str:
-        raw = str(value or "").strip().lower()
-        if not raw:
-            raise ValueError("meal_key_empty")
-        return raw
+        return _normalize_meal_key(value)
 
     def _normalize_quantity(self, value) -> int:
         quantity = int(value)
@@ -204,14 +243,16 @@ class DepartmentRequirementGroupServiceOverridesRepo:
         try:
             self._ensure_table(db)
             group = self._load_group(db, group_id)
-            if not bool(group.is_active):
-                return 0
-            row, _, _ = self._get_override_row(db, group_id, service_date, meal_key)
-            if row is not None:
-                return int(row[3] or 0)
-            return int(group.default_quantity or 0)
+            return resolve_effective_quantity_in_session(
+                db,
+                group.id,
+                group.default_quantity,
+                group.is_active,
+                service_date,
+                meal_key,
+            )
         finally:
             db.close()
 
 
-__all__ = ["DepartmentRequirementGroupServiceOverridesRepo"]
+__all__ = ["DepartmentRequirementGroupServiceOverridesRepo", "resolve_effective_quantity_in_session"]

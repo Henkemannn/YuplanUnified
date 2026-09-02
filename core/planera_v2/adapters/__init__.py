@@ -1,4 +1,5 @@
 from .kommun_adapter import build_payload_from_kommun_input
+from .kommun_from_requirement_groups import build_planning_slice_from_requirement_groups
 from .kommun_from_weekview import build_plan_request_from_weekview_day
 from .menu_composition_adapter import build_menu_composition_payload
 from .menu_composition_adapter import build_menu_composition_grouped_payload
@@ -8,6 +9,7 @@ from .effective_menu_adapter import build_planera_input_from_effective_menu_cont
 
 __all__ = [
 	"build_payload_from_kommun_input",
+	"build_planning_slice_from_requirement_groups",
 	"build_plan_request_from_weekview_day",
 	"build_menu_composition_payload",
 	"build_menu_composition_grouped_payload",

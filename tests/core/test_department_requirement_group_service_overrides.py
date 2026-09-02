@@ -6,9 +6,11 @@ import uuid
 import pytest
 
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
+from core.db import get_session
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_service_overrides_repo import (
     DepartmentRequirementGroupServiceOverridesRepo,
+    resolve_effective_quantity_in_session,
 )
 
 
@@ -134,3 +136,21 @@ def test_internal_resolution_does_not_depend_on_public_get_override(app_session,
         monkeypatch.setattr(repo, "get_override", _boom)
         assert repo.resolve_effective_quantity(group["id"], date(2026, 9, 8), "lunch") == 4
         assert repo.resolve_effective_quantity(group["id"], date(2026, 9, 9), "lunch") == 2
+
+
+def test_shared_effective_quantity_helper_uses_open_session_without_nested_session(app_session, monkeypatch) -> None:
+    with app_session.app_context():
+        _site, _department, group = _seed_group_with_requirements(site_name="Shared helper site", requirement_count=1)
+        repo = DepartmentRequirementGroupServiceOverridesRepo()
+        repo.set_override(group["id"], date(2026, 9, 8), "lunch", 4)
+
+        db = get_session()
+        try:
+            def _boom():
+                raise AssertionError("helper must not open a new session")
+
+            monkeypatch.setattr("core.department_requirement_group_service_overrides_repo.get_session", _boom)
+            assert resolve_effective_quantity_in_session(db, group["id"], 2, True, date(2026, 9, 8), "lunch") == 4
+            assert resolve_effective_quantity_in_session(db, group["id"], 2, False, date(2026, 9, 8), "lunch") == 0
+        finally:
+            db.close()
