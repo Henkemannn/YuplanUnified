@@ -285,7 +285,8 @@ def patch_weekview_residents() -> Response:
         if cnt < 0:
             return bad_request("invalid_count")
     try:
-        new_etag = _service.update_residents_counts(tid, year, week, department_id, etag, items)
+        site_for_write = site_body or site_ctx or None
+        new_etag = _service.update_residents_counts(tid, year, week, department_id, etag, items, site_for_write)
     except EtagMismatchError:
         return problem(412, "https://example.com/errors/etag_mismatch", "Precondition Failed", "etag_mismatch")
     resp = jsonify({"updated": len(items), "status": "ok"})

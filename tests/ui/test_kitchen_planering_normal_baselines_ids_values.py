@@ -12,10 +12,18 @@ def _seed_site_deps(site_id: str):
 
 
 def _ensure_alt2_for_dep(department_id: str, site_id: str, year: int, week: int, day_index: int):
-    # Directly set alt2 flag for the given department/day in SQLite
-    from core.weekview.repo import WeekviewRepo
-    repo = WeekviewRepo()
-    repo.set_alt2_flags(tenant_id=1, year=year, week=week, department_id=department_id, days=[day_index], site_id=site_id)
+    from core.department_menu_choice_repo import MenuChoiceRepo
+
+    MenuChoiceRepo().set_choice(
+        tenant_id=1,
+        site_id=site_id,
+        department_id=department_id,
+        year=year,
+        week=week,
+        weekday=day_index,
+        selected_alt="Alt2",
+        meal="lunch",
+    )
 
 
 

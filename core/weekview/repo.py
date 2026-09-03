@@ -482,6 +482,17 @@ class WeekviewRepo:
                     {"dep": department_id},
                 ).fetchone()
                 site_id_val = str(row_site[0]) if row_site and row_site[0] is not None else None
+            if site_id_val:
+                MenuChoiceRepo().replace_alt2_days_in_session(
+                    db,
+                    tenant_id=int(tenant_id),
+                    site_id=str(site_id_val),
+                    department_id=str(department_id),
+                    year=int(year),
+                    week=int(week),
+                    days=sorted(day_set),
+                    meal="lunch",
+                )
             # Upsert true for provided days
             for d in day_set:
                 params = {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week, "dow": d}

@@ -29,14 +29,12 @@ def test_site_level_weekview_shows_alt2_on_lunch_cell(client_admin):
     iso = _date.today().isocalendar()
     year, week = int(iso[0]), int(iso[1])
 
-    from core.db import create_all, get_session
-    from sqlalchemy import text
+    from core.db import create_all
     from core.admin_repo import SitesRepo, DepartmentsRepo, DietTypesRepo
-    from core.weekview.repo import WeekviewRepo
+    from core.department_menu_choice_repo import MenuChoiceRepo
 
     with app.app_context():
         create_all()
-        WeekviewRepo()._ensure_schema()
         # Create site and a department with fixed resident counts
         srepo = SitesRepo()
         site, _ = srepo.create_site("Alt2 Site-Level Demo")
@@ -51,18 +49,16 @@ def test_site_level_weekview_shows_alt2_on_lunch_cell(client_admin):
 
     # Seed Alt2 flag for Tuesday (day_of_week = 2)
     with app.app_context():
-        db = get_session()
-        try:
-            db.execute(
-                text(
-                    "INSERT OR REPLACE INTO weekview_alt2_flags (site_id, department_id, year, week, day_of_week, enabled) "
-                    "VALUES (:s,:d,:y,:w,:dow,1)"
-                ),
-                {"s": site_id, "d": dep_id, "y": year, "w": week, "dow": 2},
-            )
-            db.commit()
-        finally:
-            db.close()
+        MenuChoiceRepo().set_choice(
+            tenant_id=1,
+            site_id=site_id,
+            department_id=dep_id,
+            year=year,
+            week=week,
+            weekday=2,
+            selected_alt="Alt2",
+            meal="lunch",
+        )
 
     # Render site-level overview (no department_id) and assert lunch cell contains is-alt2
     resp = client_admin.get(

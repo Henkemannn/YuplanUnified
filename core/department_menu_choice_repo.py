@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
 from hashlib import sha1
+from typing import Sequence
 
 from core.db import get_session
 from core.models import DepartmentMenuChoice
@@ -169,6 +170,92 @@ class MenuChoiceRepo:
             )
         finally:
             db.close()
+
+    def replace_alt2_days(
+        self,
+        *,
+        tenant_id: int,
+        site_id: str,
+        department_id: str,
+        year: int,
+        week: int,
+        days: Sequence[int],
+        meal: str = "lunch",
+    ) -> None:
+        db = get_session()
+        try:
+            self.replace_alt2_days_in_session(
+                db,
+                tenant_id=tenant_id,
+                site_id=site_id,
+                department_id=department_id,
+                year=year,
+                week=week,
+                days=days,
+                meal=meal,
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def replace_alt2_days_in_session(
+        self,
+        db,
+        *,
+        tenant_id: int,
+        site_id: str,
+        department_id: str,
+        year: int,
+        week: int,
+        days: Sequence[int],
+        meal: str = "lunch",
+    ) -> None:
+        day_set = {int(day) for day in days}
+        self._ensure_table(db)
+        now = datetime.now(UTC)
+        existing = (
+            db.query(DepartmentMenuChoice)
+            .filter_by(
+                tenant_id=int(tenant_id),
+                site_id=str(site_id),
+                department_id=str(department_id),
+                year=int(year),
+                week=int(week),
+                meal=str(meal),
+            )
+            .all()
+        )
+        existing_by_weekday = {int(row.weekday): row for row in existing}
+
+        for weekday in sorted(day_set):
+            row = existing_by_weekday.get(weekday)
+            if row is None:
+                db.add(
+                    DepartmentMenuChoice(
+                        tenant_id=int(tenant_id),
+                        site_id=str(site_id),
+                        department_id=str(department_id),
+                        year=int(year),
+                        week=int(week),
+                        weekday=int(weekday),
+                        meal=str(meal),
+                        selected_variant="alt2",
+                        version=1,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            elif row.selected_variant != "alt2":
+                row.selected_variant = "alt2"
+                row.version = int(row.version or 0) + 1
+                row.updated_at = now
+
+        for weekday, row in existing_by_weekday.items():
+            if weekday not in day_set and str(row.selected_variant) == "alt2":
+                db.delete(row)
 
     def derive_map(self, *, tenant_id: int, site_id: str, department_id: str, year: int, week: int) -> dict[str, str | None]:
         rows = self.list_for_department_week(
