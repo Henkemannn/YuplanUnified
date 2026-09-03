@@ -184,6 +184,100 @@ def test_expected_none_allows_actual_unit_without_expected_set_rejection() -> No
     assert result.issues == ()
 
 
+def test_authoritative_units_matching_baseline_sum_are_accepted() -> None:
+    request = PlanRequest(
+        baseline=20,
+        units=[_unit("a", 10), _unit("b", 10)],
+        deviations=[],
+    )
+
+    result = validate_plan_request_for_production(request, expected_unit_ids=["a", "b"])
+
+    assert result.accepted is True
+    assert result.issues == ()
+
+
+def test_authoritative_units_baseline_sum_too_high_is_rejected() -> None:
+    request = PlanRequest(
+        baseline=30,
+        units=[_unit("a", 10), _unit("b", 10)],
+        deviations=[],
+    )
+
+    result = validate_plan_request_for_production(request, expected_unit_ids=["a", "b"])
+
+    assert result.accepted is False
+    assert [issue.code for issue in result.issues] == ["unit_baseline_sum_mismatch"]
+
+
+def test_authoritative_units_baseline_sum_too_low_is_rejected() -> None:
+    request = PlanRequest(
+        baseline=10,
+        units=[_unit("a", 10), _unit("b", 10)],
+        deviations=[],
+    )
+
+    result = validate_plan_request_for_production(request, expected_unit_ids=["a", "b"])
+
+    assert result.accepted is False
+    assert [issue.code for issue in result.issues] == ["unit_baseline_sum_mismatch"]
+
+
+def test_same_mismatch_without_expected_unit_contract_stays_generic() -> None:
+    request = PlanRequest(
+        baseline=30,
+        units=[_unit("a", 10), _unit("b", 10)],
+        deviations=[],
+    )
+
+    result = validate_plan_request_for_production(request, expected_unit_ids=None)
+
+    assert result.accepted is True
+    assert result.issues == ()
+
+
+def test_authoritative_empty_population_with_zero_baseline_is_accepted() -> None:
+    request = PlanRequest(
+        baseline=0,
+        units=[],
+        deviations=[],
+    )
+
+    result = validate_plan_request_for_production(request, expected_unit_ids=[])
+
+    assert result.accepted is True
+    assert result.issues == ()
+
+
+def test_authoritative_empty_population_with_nonzero_baseline_is_rejected() -> None:
+    request = PlanRequest(
+        baseline=5,
+        units=[],
+        deviations=[],
+    )
+
+    result = validate_plan_request_for_production(request, expected_unit_ids=[])
+
+    assert result.accepted is False
+    assert [issue.code for issue in result.issues] == ["unit_baseline_sum_mismatch"]
+
+
+def test_valid_deviations_do_not_alter_baseline_equality_result() -> None:
+    request = PlanRequest(
+        baseline=20,
+        units=[_unit("a", 10), _unit("b", 10)],
+        deviations=[
+            _deviation("form-a", ["category-a"], 3, "a"),
+            _deviation("form-b", ["category-b"], 2, "b"),
+        ],
+    )
+
+    result = validate_plan_request_for_production(request, expected_unit_ids=["a", "b"])
+
+    assert result.accepted is True
+    assert result.issues == ()
+
+
 def test_unit_deviation_overflow_is_rejected() -> None:
     request = PlanRequest(
         baseline=10,

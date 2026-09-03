@@ -61,6 +61,7 @@ def validate_plan_request_for_production(
     unit_counts: dict[str, int] = {}
     unit_baselines: dict[str, int] = {}
     valid_unit_order: list[str] = []
+    structural_unit_issues = False
 
     for unit in request.units:
         unit_id = _normalize_unit_id(unit.unit_id)
@@ -74,6 +75,7 @@ def validate_plan_request_for_production(
                     "unit_id is blank",
                 )
             )
+            structural_unit_issues = True
             continue
 
         unit_counts[unit_id] = unit_counts.get(unit_id, 0) + 1
@@ -89,6 +91,7 @@ def validate_plan_request_for_production(
                     unit_id=unit_id,
                 )
             )
+            structural_unit_issues = True
 
         if baseline_total < 0:
             issues.append(
@@ -99,8 +102,10 @@ def validate_plan_request_for_production(
                     unit_id=unit_id,
                 )
             )
+            structural_unit_issues = True
 
     baseline_total = int(request.baseline)
+    global_baseline_valid = baseline_total >= 0
     if baseline_total < 0:
         issues.append(
             _issue(
@@ -111,10 +116,12 @@ def validate_plan_request_for_production(
         )
 
     expected_unit_ids_normalized = _normalize_expected_unit_ids(expected_unit_ids)
+    expected_unit_ids_exact_match = True
     if expected_unit_ids is not None:
         actual_unit_ids = tuple(sorted(unit_counts))
         missing_unit_ids = [unit_id for unit_id in expected_unit_ids_normalized if unit_id not in actual_unit_ids]
         unexpected_unit_ids = [unit_id for unit_id in actual_unit_ids if unit_id not in expected_unit_ids_normalized]
+        expected_unit_ids_exact_match = not missing_unit_ids and not unexpected_unit_ids
 
         for unit_id in missing_unit_ids:
             issues.append(
@@ -133,6 +140,22 @@ def validate_plan_request_for_production(
                     "error",
                     "request contains an unexpected unit",
                     unit_id=unit_id,
+                )
+            )
+
+    if (
+        expected_unit_ids is not None
+        and global_baseline_valid
+        and expected_unit_ids_exact_match
+        and not structural_unit_issues
+    ):
+        authoritative_unit_baseline_total = sum(unit_baselines[unit_id] for unit_id in valid_unit_order)
+        if baseline_total != authoritative_unit_baseline_total:
+            issues.append(
+                _issue(
+                    "unit_baseline_sum_mismatch",
+                    "error",
+                    "request baseline does not match authoritative unit baseline sum",
                 )
             )
 
