@@ -2,8 +2,9 @@ import re
 import uuid
 
 import pytest
+from sqlalchemy import text
 
-ETAG_RE = re.compile(r'^W/"weekview:dept:[0-9a-f-]+:year:\d{4}:week:\d{1,2}:v\d+"$')
+ETAG_RE = re.compile(r'^W/"weekview:dept:[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*:year:\d{4}:week:\d{1,2}:v\d+"$')
 
 
 def _get(client, role, path):
@@ -131,3 +132,50 @@ def test_batch_semantics_and_idempotence(client_admin):
     dep_summ = data.get("department_summaries")[0]
     marks = {(m["day_of_week"], m["meal"], m["diet_type"]) for m in dep_summ.get("marks", [])}
     assert (1, "lunch", "normal") in marks and (2, "dinner", "veg") in marks
+
+
+def test_etag_parser_accepts_hyphenated_department_id_and_rejects_malformed_if_match(app_session):
+    from core.db import get_session
+    from core.weekview.service import EtagMismatchError, WeekviewService
+
+    site_id = "site-example"
+    department_id = "dep-example"
+    year, week = 2025, 45
+
+    with app_session.app_context():
+        db = get_session()
+        try:
+            db.execute(text("INSERT OR REPLACE INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "Example Site"})
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0)"
+                ),
+                {"i": department_id, "s": site_id, "n": "Example Dept"},
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        svc = WeekviewService()
+        etag = svc.build_etag(tenant_id=1, department_id=department_id, year=year, week=week, version=0)
+        assert svc._ETAG_RE.match(etag)
+
+        returned = svc.toggle_marks(
+            tenant_id=1,
+            year=year,
+            week=week,
+            department_id=department_id,
+            if_match=etag,
+            ops=[{"day_of_week": 1, "meal": "lunch", "diet_type": "normal", "marked": True}],
+        )
+        assert returned.startswith('W/"weekview:dept:dep-example:year:2025:week:45:v')
+
+        with pytest.raises(EtagMismatchError, match="invalid_if_match"):
+            svc.toggle_marks(
+                tenant_id=1,
+                year=year,
+                week=week,
+                department_id=department_id,
+                if_match='W/"weekview:dept:dep-example:year:2025:week:45"',
+                ops=[],
+            )

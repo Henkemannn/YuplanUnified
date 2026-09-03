@@ -92,7 +92,7 @@ class EtagMismatchError(Exception):
 
 
 class WeekviewService(WeekviewService):  # type: ignore[misc]
-    _ETAG_RE = re.compile(r'^W/"weekview:dept:(?P<dep>[0-9a-fA-F\-]+):year:(?P<yy>\d{4}):week:(?P<ww>\d{1,2}):v(?P<v>\d+)"$')
+    _ETAG_RE = re.compile(r'^W/"weekview:dept:(?P<dep>[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*):year:(?P<yy>\d{4}):week:(?P<ww>\d{1,2}):v(?P<v>\d+)"$')
 
     def toggle_marks(
         self,
