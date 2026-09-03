@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -103,3 +104,29 @@ def test_fresh_head_upgrade_creates_0037_schema(tmp_path: Path, monkeypatch) -> 
         assert "department_requirement_group_requirements" in inspector.get_table_names()
     finally:
         engine.dispose()
+
+
+def test_head_upgrade_does_not_disable_existing_loggers(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "logger_isolation_department_requirement_group_service_overrides.db"
+    db_url = f"sqlite:///{db_path.as_posix()}"
+    monkeypatch.setenv("DATABASE_URL", db_url)
+
+    probe_logger = logging.getLogger("alembic.logger.isolation.probe")
+    previous_state = {
+        "handlers": list(probe_logger.handlers),
+        "filters": list(probe_logger.filters),
+        "level": probe_logger.level,
+        "propagate": probe_logger.propagate,
+        "disabled": probe_logger.disabled,
+    }
+    probe_logger.disabled = False
+
+    try:
+        command.upgrade(_alembic_cfg(db_url), "head")
+        assert probe_logger.disabled is False
+    finally:
+        probe_logger.handlers = list(previous_state["handlers"])
+        probe_logger.filters = list(previous_state["filters"])
+        probe_logger.setLevel(int(previous_state["level"]))
+        probe_logger.propagate = bool(previous_state["propagate"])
+        probe_logger.disabled = bool(previous_state["disabled"])

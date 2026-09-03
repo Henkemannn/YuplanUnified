@@ -12,6 +12,11 @@ def _enable_logging_backend(app):
 def test_metrics_logging_cook(client_admin, caplog):
     caplog.set_level("INFO", logger="metrics")
     _enable_logging_backend(client_admin.application)
+    client_admin.post(
+        "/features/set",
+        json={"name": "allow_legacy_cook_create", "enabled": True},
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
     resp = client_admin.post(
         "/tasks/",
         json={"title": "Cook metric"},
