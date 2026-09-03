@@ -228,29 +228,30 @@ def test_engine_totals_unchanged_when_component_context_is_present() -> None:
     assert component_run.result.per_combination == base_run.result.per_combination
 
 
-def test_canonical_runner_uses_requirement_groups_and_preserves_canonical_meal_key() -> None:
-    site, _ = SitesRepo().create_site(f"Canonical runner site {uuid.uuid4()}")
-    department, _ = DepartmentsRepo().create_department(
-        site_id=site["id"],
-        name=f"Department {uuid.uuid4()}",
-        resident_count_mode="fixed",
-        resident_count_fixed=10,
-    )
-    group_id = _seed_canonical_group(site["id"], department["id"], quantity=2, label="Group A")
-    DepartmentRequirementGroupServiceOverridesRepo().set_override(group_id, "2026-04-16", "evening", 4)
+def test_canonical_runner_uses_requirement_groups_and_preserves_canonical_meal_key(app_session) -> None:
+    with app_session.app_context():
+        site, _ = SitesRepo().create_site(f"Canonical runner site {uuid.uuid4()}")
+        department, _ = DepartmentsRepo().create_department(
+            site_id=site["id"],
+            name=f"Department {uuid.uuid4()}",
+            resident_count_mode="fixed",
+            resident_count_fixed=10,
+        )
+        group_id = _seed_canonical_group(site["id"], department["id"], quantity=2, label="Group A")
+        DepartmentRequirementGroupServiceOverridesRepo().set_override(group_id, "2026-04-16", "evening", 4)
 
-    run = run_planera_v2_from_canonical_requirement_groups(
-        site_id=site["id"],
-        service_date="2026-04-16",
-        meal_key=" EVENING ",
-        unit_baselines={department["id"]: 10},
-    )
+        run = run_planera_v2_from_canonical_requirement_groups(
+            site_id=site["id"],
+            service_date="2026-04-16",
+            meal_key=" EVENING ",
+            unit_baselines={department["id"]: 10},
+        )
 
-    assert run.request.context["meal_key"] == "evening"
-    assert run.request.context["compatibility_source_precision"] == "canonical_atomic_groups"
-    assert run.request.units == [UnitInput(unit_id=department["id"], baseline_total=10)]
-    assert run.request.deviations[0].quantity == 4
-    assert run.request.deviations[0].unit_id == department["id"]
-    assert run.result.totals.baseline_total == 10
-    assert run.result.totals.deviation_total == 4
-    assert run.result.totals.normal_total == 6
+        assert run.request.context["meal_key"] == "evening"
+        assert run.request.context["compatibility_source_precision"] == "canonical_atomic_groups"
+        assert run.request.units == [UnitInput(unit_id=department["id"], baseline_total=10)]
+        assert run.request.deviations[0].quantity == 4
+        assert run.request.deviations[0].unit_id == department["id"]
+        assert run.result.totals.baseline_total == 10
+        assert run.result.totals.deviation_total == 4
+        assert run.result.totals.normal_total == 6
