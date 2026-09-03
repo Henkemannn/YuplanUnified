@@ -1,4 +1,17 @@
-from sqlalchemy import text
+from sqlalchemy import inspect, text
+
+
+def _restore_canonical_dietary_types_schema(db) -> None:
+    from core.models import DietaryType
+
+    db.execute(text("DROP TABLE IF EXISTS dietary_types"))
+    DietaryType.__table__.create(bind=db.bind, checkfirst=True)
+    db.commit()
+
+
+def _canonical_dietary_types_columns(db) -> list[str]:
+    inspector = inspect(db.bind)
+    return [column["name"] for column in inspector.get_columns("dietary_types")]
 
 
 def test_diet_family_column_backfilled_from_existing_names(app_session):
@@ -33,17 +46,28 @@ def test_diet_family_column_backfilled_from_existing_names(app_session):
             text("INSERT INTO dietary_types(site_id, name, default_select) VALUES('site-1', 'Special A', 0)")
         )
         db.commit()
+
+        repo = DietTypesRepo()
+        rows = repo.list_all(tenant_id=1)
+        by_name = {str(r.get("name")): str(r.get("diet_family")) for r in rows}
+
+        assert by_name.get("Timbal-Fisk") == "Textur"
+        assert by_name.get("Glutenfri") == "Allergi / Exkludering"
+        assert by_name.get("Vegan") == "Kostval"
+        assert by_name.get("Special A") == "Övrigt"
     finally:
-        db.close()
+        try:
+            db = get_session()
+            _restore_canonical_dietary_types_schema(db)
+            canonical_columns = _canonical_dietary_types_columns(db)
+        finally:
+            db.close()
 
-    repo = DietTypesRepo()
-    rows = repo.list_all(tenant_id=1)
-    by_name = {str(r.get("name")): str(r.get("diet_family")) for r in rows}
-
-    assert by_name.get("Timbal-Fisk") == "Textur"
-    assert by_name.get("Glutenfri") == "Allergi / Exkludering"
-    assert by_name.get("Vegan") == "Kostval"
-    assert by_name.get("Special A") == "Övrigt"
+    assert "tenant_id" in canonical_columns
+    assert "site_id" in canonical_columns
+    assert "diet_family" in canonical_columns
+    assert "requirement_key" in canonical_columns
+    assert "semantics" in canonical_columns
 
 
 def test_diet_family_utils_normalize_and_infer():
