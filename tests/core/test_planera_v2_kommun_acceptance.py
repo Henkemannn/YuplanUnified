@@ -113,6 +113,7 @@ def test_realistic_kommun_multi_unit_canonical_day_acceptance(app_session) -> No
             site_id=site["id"],
             iso_date="2026-09-08",
             meal_key="lunch",
+            expected_unit_ids=[dept_a["id"], dept_b["id"], dept_c["id"]],
         )
 
         canonical_run = run_planera_v2_from_canonical_requirement_groups(
@@ -132,6 +133,7 @@ def test_realistic_kommun_multi_unit_canonical_day_acceptance(app_session) -> No
         assert three_way.canonical.numerical_parity_verdict == "PASS"
         assert three_way.canonical.representation_verdict == "NOT_COMPARABLE"
         assert three_way.canonical.compatibility_verdict == "PASS"
+        assert three_way.canonical.production_acceptance_verdict == "PASS"
 
         canonical = three_way.canonical.canonical_v2
         assert canonical.unit_baselines == {

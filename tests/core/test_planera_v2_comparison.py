@@ -5,6 +5,9 @@ import uuid
 
 from sqlalchemy import text
 
+from core.planera_v2 import comparison as comparison_module
+from core.planera_v2 import shadow
+from core.planera_v2.acceptance import ProductionAcceptanceIssue, ProductionAcceptanceResult
 from core.planera_v2.comparison import (
     CanonicalPlaneraComparison,
     build_day_comparison_report,
@@ -54,6 +57,10 @@ def _current_payload_for(meal_key: str, rows: list[tuple[str, int, int]]) -> dic
             }
         )
     return {"departments": departments}
+
+
+def _expected_unit_ids(*unit_ids: str) -> list[str]:
+    return list(unit_ids)
 
 
 def _seed_canonical_department(site_id: str, name: str) -> dict:
@@ -435,6 +442,7 @@ def test_three_way_standard_only_keeps_legacy_shadow_unchanged(app_session) -> N
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
 
     assert isinstance(three_way.canonical, CanonicalPlaneraComparison)
@@ -444,7 +452,73 @@ def test_three_way_standard_only_keeps_legacy_shadow_unchanged(app_session) -> N
     assert three_way.canonical.numerical_parity_verdict == "PASS"
     assert three_way.canonical.representation_verdict == "PASS"
     assert three_way.canonical.compatibility_verdict == "PASS"
+    assert three_way.canonical.production_acceptance_verdict == "PASS"
     assert three_way.canonical.context["tenant_id"] == "1"
+
+
+def test_three_way_parity_can_stay_green_while_acceptance_is_blocked(app_session, monkeypatch: pytest.MonkeyPatch) -> None:
+    with app_session.app_context():
+        site = SitesRepo().create_site(f"Blocked acceptance site {uuid.uuid4()}")[0]
+        department = _seed_canonical_department(site["id"], "Unit A")
+        payload = _current_payload_for("lunch", [(department["id"], 10, 0)])
+        captured: list[dict[str, object]] = []
+
+        def _fake_shadow_runner(**kwargs: object) -> shadow.ProductionShadowRun:
+            captured.append(kwargs)
+            return shadow.ProductionShadowRun(
+                request=PlanRequest(
+                    baseline=10,
+                    units=[UnitInput(unit_id=department["id"], baseline_total=10)],
+                    deviations=[],
+                    context={
+                        "site_id": site["id"],
+                        "date": "2026-04-14",
+                        "meal_key": "lunch",
+                        "tenant_id": "1",
+                        "compatibility_source_precision": "canonical_atomic_groups",
+                        "compatibility_status": "resolved",
+                    },
+                ),
+                acceptance=ProductionAcceptanceResult(
+                    accepted=False,
+                    issues=(
+                        ProductionAcceptanceIssue(
+                            code="expected_unit_missing",
+                            severity="error",
+                            message="expected unit is missing from the request",
+                            unit_id="unit-b",
+                        ),
+                    ),
+                ),
+                diagnostic_result=PlanResult(
+                    totals=Totals(baseline_total=10, deviation_total=0, normal_total=10),
+                    per_form={},
+                    per_combination={},
+                    per_unit={},
+                    per_unit_breakdown={},
+                    warnings=[],
+                ),
+            )
+
+        monkeypatch.setattr(comparison_module, "run_canonical_requirement_groups_in_production_shadow", _fake_shadow_runner)
+
+        three_way = compare_current_legacy_and_canonical_v2_day_from_payload(
+            payload,
+            tenant_id=1,
+            site_id=site["id"],
+            iso_date="2026-04-14",
+            meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(department["id"], "unit-b"),
+        )
+
+    assert len(captured) == 1
+    assert captured[0]["expected_unit_ids"] == [department["id"], "unit-b"]
+    assert three_way.canonical.baseline_parity_verdict == "PASS"
+    assert three_way.canonical.numerical_parity_verdict == "PASS"
+    assert three_way.canonical.compatibility_verdict == "PASS"
+    assert three_way.canonical.production_acceptance_verdict == "BLOCKED"
+    assert three_way.canonical.production_acceptance_issue_codes == ("expected_unit_missing",)
+    assert three_way.canonical.production_acceptance.issues[0].unit_id == "unit-b"
 
 
 def test_three_way_atomic_and_combined_representation_rules(app_session) -> None:
@@ -460,12 +534,14 @@ def test_three_way_atomic_and_combined_representation_rules(app_session) -> None
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
 
         assert three_way_atomic.canonical.baseline_parity_verdict == "PASS"
         assert three_way_atomic.canonical.numerical_parity_verdict == "PASS"
         assert three_way_atomic.canonical.representation_verdict == "NOT_COMPARABLE"
         assert three_way_atomic.canonical.compatibility_verdict == "PASS"
+        assert three_way_atomic.canonical.production_acceptance_verdict == "PASS"
         assert three_way_atomic.canonical.context["tenant_id"] == "1"
 
         site_two = SitesRepo().create_site(f"Canonical combined site {uuid.uuid4()}")[0]
@@ -479,19 +555,23 @@ def test_three_way_atomic_and_combined_representation_rules(app_session) -> None
             site_id=site_two["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(department_two["id"]),
         )
 
         assert three_way_combined.canonical.numerical_parity_verdict == "PASS"
         assert three_way_combined.canonical.representation_verdict == "NOT_COMPARABLE"
         assert three_way_combined.canonical.compatibility_verdict == "PASS"
+        assert three_way_combined.canonical.production_acceptance_verdict == "PASS"
+        canonical_summary = three_way_combined.canonical.canonical_v2
+        assert canonical_summary.totals["deviation_total"] == 1
+        assert canonical_summary.totals["normal_total"] == 9
+        assert canonical_summary.unit_deviation_totals[department_two["id"]] == 1
         canonical_run = run_planera_v2_from_canonical_requirement_groups(
             site_id=site_two["id"],
             service_date="2026-04-14",
             meal_key="lunch",
             unit_baselines={department_two["id"]: 10},
         )
-        assert canonical_run.result.totals.deviation_total == 1
-        assert canonical_run.result.totals.normal_total == 9
         assert len(canonical_run.request.context["requirement_group_refs"]) == 1
         assert canonical_run.request.context["requirement_group_refs"][0]["group_id"] == combined_group
 
@@ -511,11 +591,13 @@ def test_three_way_numerical_parity_matches_and_swapped_units_fail(app_session) 
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(dept_a["id"], dept_b["id"]),
         )
         assert three_way_correct.canonical.baseline_parity_verdict == "PASS"
         assert three_way_correct.canonical.numerical_parity_verdict == "PASS"
         assert three_way_correct.canonical.context["tenant_id"] == "1"
         assert three_way_correct.canonical.canonical_v2.unit_deviation_totals == {dept_a["id"]: 3, dept_b["id"]: 1}
+        assert three_way_correct.canonical.production_acceptance_verdict == "PASS"
 
         swapped_site = SitesRepo().create_site(f"Canonical swapped site {uuid.uuid4()}")[0]
         swapped_a = _seed_canonical_department(swapped_site["id"], "Unit A")
@@ -530,6 +612,7 @@ def test_three_way_numerical_parity_matches_and_swapped_units_fail(app_session) 
             site_id=swapped_site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(swapped_a["id"], swapped_b["id"]),
         )
 
         assert three_way_swapped.canonical.baseline_parity_verdict == "PASS"
@@ -551,6 +634,7 @@ def test_three_way_override_and_state_rules(app_session) -> None:
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
         assert three_way_match.canonical.numerical_parity_verdict == "PASS"
         assert three_way_match.canonical.context["tenant_id"] == "1"
@@ -559,6 +643,7 @@ def test_three_way_override_and_state_rules(app_session) -> None:
             in note
             for note in three_way_match.canonical.notes
         )
+        assert three_way_match.canonical.production_acceptance_verdict == "PASS"
 
         mismatch_payload = _current_payload_for("lunch", [(department["id"], 10, 2)])
         three_way_mismatch = compare_current_legacy_and_canonical_v2_day_from_payload(
@@ -567,10 +652,12 @@ def test_three_way_override_and_state_rules(app_session) -> None:
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
         assert three_way_mismatch.canonical.baseline_parity_verdict == "PASS"
         assert three_way_mismatch.canonical.numerical_parity_verdict == "FAIL"
         assert three_way_mismatch.canonical.compatibility_verdict == "PASS"
+        assert three_way_mismatch.canonical.production_acceptance_verdict == "PASS"
 
         zero_group_site = SitesRepo().create_site(f"Canonical zero site {uuid.uuid4()}")[0]
         zero_department = _seed_canonical_department(zero_group_site["id"], "Unit Zero")
@@ -583,6 +670,7 @@ def test_three_way_override_and_state_rules(app_session) -> None:
             site_id=zero_group_site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(zero_department["id"]),
         )
         assert three_way_zero.canonical.numerical_parity_verdict == "PASS"
 
@@ -604,11 +692,12 @@ def test_three_way_override_and_state_rules(app_session) -> None:
             site_id=inactive_site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(inactive_department["id"]),
         )
         assert three_way_inactive.canonical.numerical_parity_verdict == "PASS"
 
 
-def test_three_way_baseline_mismatch_meal_normalization_and_determinism(app_session) -> None:
+def test_three_way_baseline_mismatch_meal_normalization_and_determinism(app_session, monkeypatch: pytest.MonkeyPatch) -> None:
     with app_session.app_context():
         site = SitesRepo().create_site(f"Canonical baseline site {uuid.uuid4()}")[0]
         department = _seed_canonical_department(site["id"], "Unit A")
@@ -619,6 +708,7 @@ def test_three_way_baseline_mismatch_meal_normalization_and_determinism(app_sess
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="EVENING",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
         three_way_b = compare_current_legacy_and_canonical_v2_day_from_payload(
             payload,
@@ -626,28 +716,42 @@ def test_three_way_baseline_mismatch_meal_normalization_and_determinism(app_sess
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="EVENING",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
 
         assert three_way_a.canonical.context["meal_key"] == "evening"
         assert three_way_a == three_way_b
 
-        def _fake_canonical_runner(**kwargs: object) -> object:
-            from core.planera_v2.dev_runner import PlaneraV2DevRun
+        shadow_calls: list[dict[str, object]] = []
+
+        def _fake_shadow_runner(**kwargs: object) -> shadow.ProductionShadowRun:
+            from core.planera_v2.acceptance import ProductionAcceptanceResult
             from core.planera_v2.domain import PlanRequest, PlanResult, Totals, UnitInput
 
-            unit_id = department["id"]
-            return PlaneraV2DevRun(
+            shadow_calls.append(kwargs)
+            unit_id = str(kwargs["unit_baselines"].keys().__iter__().__next__())
+            site_id = str(kwargs["site_id"])
+            service_date = str(kwargs["service_date"])
+            meal_key = str(kwargs["meal_key"])
+            return shadow.ProductionShadowRun(
                 request=PlanRequest(
                     baseline=12,
                     units=[UnitInput(unit_id=unit_id, baseline_total=12)],
                     deviations=[],
-                    context={"site_id": site["id"], "date": "2026-04-14", "meal_key": "evening", "tenant_id": "1", "compatibility_source_precision": "canonical_atomic_groups", "compatibility_status": "resolved"},
+                    context={
+                        "site_id": site_id,
+                        "date": service_date,
+                        "meal_key": meal_key,
+                        "tenant_id": "1",
+                        "compatibility_source_precision": "canonical_atomic_groups",
+                        "compatibility_status": "resolved",
+                    },
                 ),
-                result=PlanResult(totals=Totals(baseline_total=12, deviation_total=0, normal_total=12), per_form={}, per_combination={}, per_unit={}, per_unit_breakdown={}, warnings=[]),
-                formatted_debug="",
-                formatted_clean="",
-                formatted_kitchen="",
+                acceptance=ProductionAcceptanceResult(accepted=True, issues=()),
+                diagnostic_result=PlanResult(totals=Totals(baseline_total=12, deviation_total=0, normal_total=12), per_form={}, per_combination={}, per_unit={}, per_unit_breakdown={}, warnings=[]),
             )
+
+        monkeypatch.setattr(comparison_module, "run_canonical_requirement_groups_in_production_shadow", _fake_shadow_runner)
 
         mismatch = compare_current_legacy_and_canonical_v2_day_from_payload(
             payload,
@@ -655,9 +759,11 @@ def test_three_way_baseline_mismatch_meal_normalization_and_determinism(app_sess
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="EVENING",
-            canonical_runner=_fake_canonical_runner,
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
         assert mismatch.canonical.baseline_parity_verdict == "FAIL"
+        assert len(shadow_calls) == 1
+        assert shadow_calls[0]["expected_unit_ids"] == [department["id"]]
 
         lunch_payload = _current_payload_for("lunch", [(department["id"], 10, 0)])
         lunch_three_way = compare_current_legacy_and_canonical_v2_day_from_payload(
@@ -666,8 +772,10 @@ def test_three_way_baseline_mismatch_meal_normalization_and_determinism(app_sess
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key=" Lunch ",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
         assert lunch_three_way.canonical.context["meal_key"] == "lunch"
+        assert len(shadow_calls) == 2
 
 
 def test_two_groups_same_department_produce_two_group_refs_and_numerical_pass(app_session) -> None:
@@ -684,6 +792,7 @@ def test_two_groups_same_department_produce_two_group_refs_and_numerical_pass(ap
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
 
         assert three_way.canonical.numerical_parity_verdict == "PASS"
@@ -712,6 +821,7 @@ def test_multi_key_canonical_group_counts_as_three_not_six(app_session) -> None:
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
 
         assert three_way.canonical.canonical_v2.unit_deviation_totals[department["id"]] == 3
@@ -724,30 +834,30 @@ def test_multi_key_canonical_group_counts_as_three_not_six(app_session) -> None:
         assert three_way.canonical.compatibility_verdict == "PASS"
 
 
-def test_total_normal_mismatch_forces_numerical_fail(app_session) -> None:
+def test_total_normal_mismatch_forces_numerical_fail(app_session, monkeypatch: pytest.MonkeyPatch) -> None:
     with app_session.app_context():
         site = SitesRepo().create_site(f"Canonical total normal site {uuid.uuid4()}")[0]
         department = _seed_canonical_department(site["id"], "Unit A")
         _seed_canonical_group(site["id"], department["id"], 1, quantity=3, label="Group A")
         payload = _current_payload_for("lunch", [(department["id"], 10, 3)])
 
-        def _fake_canonical_runner(**kwargs: object):
-            from core.planera_v2.dev_runner import PlaneraV2DevRun
+        def _fake_shadow_runner(**kwargs: object) -> shadow.ProductionShadowRun:
+            from core.planera_v2.acceptance import ProductionAcceptanceResult
             from core.planera_v2.domain import PlanRequest, PlanResult, Totals, UnitInput
 
             unit_id = str(kwargs["unit_baselines"].keys().__iter__().__next__())
-            return PlaneraV2DevRun(
+            return shadow.ProductionShadowRun(
                 request=PlanRequest(
                     baseline=10,
                     units=[UnitInput(unit_id=unit_id, baseline_total=10)],
                     deviations=[],
                     context={"site_id": site["id"], "date": "2026-04-14", "meal_key": "lunch", "tenant_id": "1", "compatibility_source_precision": "canonical_atomic_groups", "compatibility_status": "resolved"},
                 ),
-                result=PlanResult(totals=Totals(baseline_total=10, deviation_total=3, normal_total=6), per_form={}, per_combination={}, per_unit={}, per_unit_breakdown={}, warnings=[]),
-                formatted_debug="",
-                formatted_clean="",
-                formatted_kitchen="",
+                acceptance=ProductionAcceptanceResult(accepted=True, issues=()),
+                diagnostic_result=PlanResult(totals=Totals(baseline_total=10, deviation_total=3, normal_total=6), per_form={}, per_combination={}, per_unit={}, per_unit_breakdown={}, warnings=[]),
             )
+
+        monkeypatch.setattr(comparison_module, "run_canonical_requirement_groups_in_production_shadow", _fake_shadow_runner)
 
         three_way = compare_current_legacy_and_canonical_v2_day_from_payload(
             payload,
@@ -755,7 +865,7 @@ def test_total_normal_mismatch_forces_numerical_fail(app_session) -> None:
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
-            canonical_runner=_fake_canonical_runner,
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
 
         assert three_way.canonical.matches["total_normal"] is False
@@ -775,6 +885,7 @@ def test_canonical_deviation_exceeds_baseline_preserves_warning_notes(app_sessio
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
 
         assert three_way.canonical.baseline_parity_verdict == "PASS"
@@ -783,29 +894,32 @@ def test_canonical_deviation_exceeds_baseline_preserves_warning_notes(app_sessio
         assert any("canonical deviations exceed baseline" in note for note in three_way.canonical.notes)
 
 
-def test_baseline_mismatch_uses_fake_canonical_runner_without_override_argument(app_session) -> None:
+def test_baseline_mismatch_uses_fake_canonical_runner_without_override_argument(app_session, monkeypatch: pytest.MonkeyPatch) -> None:
     with app_session.app_context():
         site = SitesRepo().create_site(f"Canonical baseline mismatch site {uuid.uuid4()}")[0]
         department = _seed_canonical_department(site["id"], "Unit A")
         payload = _current_payload_for("lunch", [(department["id"], 10, 0)])
 
-        def _fake_canonical_runner(**kwargs: object):
-            from core.planera_v2.dev_runner import PlaneraV2DevRun
+        captured: list[dict[str, object]] = []
+
+        def _fake_shadow_runner(**kwargs: object) -> shadow.ProductionShadowRun:
+            from core.planera_v2.acceptance import ProductionAcceptanceResult
             from core.planera_v2.domain import PlanRequest, PlanResult, Totals, UnitInput
 
+            captured.append(kwargs)
             unit_id = str(kwargs["unit_baselines"].keys().__iter__().__next__())
-            return PlaneraV2DevRun(
+            return shadow.ProductionShadowRun(
                 request=PlanRequest(
                     baseline=12,
                     units=[UnitInput(unit_id=unit_id, baseline_total=12)],
                     deviations=[],
                     context={"site_id": site["id"], "date": "2026-04-14", "meal_key": "lunch", "tenant_id": "1", "compatibility_source_precision": "canonical_atomic_groups", "compatibility_status": "resolved"},
                 ),
-                result=PlanResult(totals=Totals(baseline_total=12, deviation_total=0, normal_total=12), per_form={}, per_combination={}, per_unit={}, per_unit_breakdown={}, warnings=[]),
-                formatted_debug="",
-                formatted_clean="",
-                formatted_kitchen="",
+                acceptance=ProductionAcceptanceResult(accepted=True, issues=()),
+                diagnostic_result=PlanResult(totals=Totals(baseline_total=12, deviation_total=0, normal_total=12), per_form={}, per_combination={}, per_unit={}, per_unit_breakdown={}, warnings=[]),
             )
+
+        monkeypatch.setattr(comparison_module, "run_canonical_requirement_groups_in_production_shadow", _fake_shadow_runner)
 
         mismatch = compare_current_legacy_and_canonical_v2_day_from_payload(
             payload,
@@ -813,7 +927,8 @@ def test_baseline_mismatch_uses_fake_canonical_runner_without_override_argument(
             site_id=site["id"],
             iso_date="2026-04-14",
             meal_key="lunch",
-            canonical_runner=_fake_canonical_runner,
+            expected_unit_ids=_expected_unit_ids(department["id"]),
         )
 
         assert mismatch.canonical.baseline_parity_verdict == "FAIL"
+        assert captured[0]["expected_unit_ids"] == [department["id"]]

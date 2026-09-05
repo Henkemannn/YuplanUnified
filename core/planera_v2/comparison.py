@@ -7,13 +7,10 @@ from sqlalchemy import text
 
 from ..db import get_session
 from ..planera_service import PlaneraService
+from .acceptance import ProductionAcceptanceResult
+from .shadow import ProductionShadowRun, run_canonical_requirement_groups_in_production_shadow
 from .utils import normalize_key
-from .dev_runner import (
-    PlaneraV2DevRun,
-    run_planera_v2_from_canonical_requirement_groups,
-    run_planera_v2_from_current_day,
-    run_planera_v2_from_day_payload,
-)
+from .dev_runner import PlaneraV2DevRun, run_planera_v2_from_current_day, run_planera_v2_from_day_payload
 
 
 @dataclass(frozen=True)
@@ -51,12 +48,21 @@ class CanonicalPlaneraComparison:
     context: dict[str, object]
     current: CanonicalPlaneraSummary
     canonical_v2: CanonicalPlaneraSummary
+    production_acceptance: ProductionAcceptanceResult
     matches: dict[str, bool]
     notes: list[str]
     baseline_parity_verdict: str
     numerical_parity_verdict: str
     representation_verdict: str
     compatibility_verdict: str
+
+    @property
+    def production_acceptance_verdict(self) -> str:
+        return "PASS" if self.production_acceptance.accepted else "BLOCKED"
+
+    @property
+    def production_acceptance_issue_codes(self) -> tuple[str, ...]:
+        return tuple(issue.code for issue in self.production_acceptance.issues)
 
 
 @dataclass(frozen=True)
@@ -250,17 +256,17 @@ def _summarize_current_day_numeric(day_payload: dict[str, Any], meal_key: str) -
     )
 
 
-def _summarize_canonical_run(run: PlaneraV2DevRun) -> CanonicalPlaneraSummary:
+def _summarize_canonical_request_result(request: PlanRequest, result: PlanResult) -> CanonicalPlaneraSummary:
     unit_baselines: dict[str, int] = {}
     unit_deviation_totals: dict[str, int] = {}
     unit_normal_totals: dict[str, int] = {}
 
-    for unit in run.request.units:
+    for unit in request.units:
         unit_id = str(unit.unit_id).strip()
         if not unit_id:
             continue
         baseline_total = int(unit.baseline_total)
-        breakdown = run.result.per_unit_breakdown.get(unit_id)
+        breakdown = result.per_unit_breakdown.get(unit_id)
         deviation_total = int(breakdown.deviation_total) if breakdown is not None else 0
         normal_total = int(breakdown.normal_total) if breakdown is not None else max(0, baseline_total - deviation_total)
         unit_baselines[unit_id] = baseline_total
@@ -273,11 +279,15 @@ def _summarize_canonical_run(run: PlaneraV2DevRun) -> CanonicalPlaneraSummary:
         unit_deviation_totals=dict(sorted(unit_deviation_totals.items())),
         unit_normal_totals=dict(sorted(unit_normal_totals.items())),
         totals={
-            "baseline_total": int(run.result.totals.baseline_total),
-            "deviation_total": int(run.result.totals.deviation_total),
-            "normal_total": int(run.result.totals.normal_total),
+            "baseline_total": int(result.totals.baseline_total),
+            "deviation_total": int(result.totals.deviation_total),
+            "normal_total": int(result.totals.normal_total),
         },
     )
+
+
+def _summarize_canonical_run(run: PlaneraV2DevRun) -> CanonicalPlaneraSummary:
+    return _summarize_canonical_request_result(run.request, run.result)
 
 
 def _build_canonical_comparison_notes(
@@ -306,7 +316,7 @@ def _build_canonical_comparison_notes(
     return notes
 
 
-def _canonical_compatibility_verdict(run: PlaneraV2DevRun) -> str:
+def _canonical_compatibility_verdict(run: ProductionShadowRun) -> str:
     context = run.request.context or {}
     precision = str(context.get("compatibility_source_precision") or "").strip().lower()
     status = str(context.get("compatibility_status") or "").strip().lower()
@@ -315,12 +325,12 @@ def _canonical_compatibility_verdict(run: PlaneraV2DevRun) -> str:
     return "NOT_PROVABLE"
 
 
-def _collect_canonical_notes(run: PlaneraV2DevRun) -> list[str]:
+def _collect_canonical_notes(run: ProductionShadowRun) -> list[str]:
     notes: list[str] = []
     context = run.request.context or {}
     for source in (
         context.get("compatibility_warnings"),
-        run.result.warnings,
+        run.diagnostic_result.warnings if run.diagnostic_result is not None else [],
     ):
         if not isinstance(source, list):
             continue
@@ -334,7 +344,7 @@ def _collect_canonical_notes(run: PlaneraV2DevRun) -> list[str]:
 def _compare_canonical_summaries(
     current_summary: CanonicalPlaneraSummary,
     canonical_summary: CanonicalPlaneraSummary,
-    run: PlaneraV2DevRun,
+    run: ProductionShadowRun,
 ) -> CanonicalPlaneraComparison:
     matches = {
         "unit_list": current_summary.unit_ids == canonical_summary.unit_ids,
@@ -366,6 +376,7 @@ def _compare_canonical_summaries(
         },
         current=current_summary,
         canonical_v2=canonical_summary,
+        production_acceptance=run.acceptance,
         matches=matches,
         notes=notes,
         baseline_parity_verdict=baseline_parity_verdict,
@@ -563,7 +574,7 @@ def compare_current_legacy_and_canonical_v2_day_from_payload(
     meal_key: str,
     *,
     departments: Iterable[tuple[str, str]] | None = None,
-    canonical_runner: Callable[..., PlaneraV2DevRun] = run_planera_v2_from_canonical_requirement_groups,
+    expected_unit_ids: Iterable[str],
 ) -> ThreeWayPlaneraComparison:
     normalized_meal_key = _normalize_meal_key(meal_key)
     legacy = compare_current_planera_vs_v2_day_from_payload(
@@ -577,11 +588,12 @@ def compare_current_legacy_and_canonical_v2_day_from_payload(
 
     current_summary = _summarize_current_day_numeric(day_payload, normalized_meal_key)
     extracted_unit_baselines = _extract_unit_baselines_from_day_payload(day_payload, normalized_meal_key)
-    canonical_run = canonical_runner(
+    canonical_run = run_canonical_requirement_groups_in_production_shadow(
         site_id=site_id,
         service_date=iso_date,
         meal_key=normalized_meal_key,
         unit_baselines=extracted_unit_baselines,
+        expected_unit_ids=expected_unit_ids,
         context={
             "source": "current_planera_day",
             "site_id": site_id,
@@ -590,8 +602,15 @@ def compare_current_legacy_and_canonical_v2_day_from_payload(
             "tenant_id": str(tenant_id),
             "compatibility_source_precision": "canonical_atomic_groups",
         },
+        compute_diagnostics_when_blocked=True,
     )
-    canonical_comparison = _compare_canonical_summaries(current_summary, _summarize_canonical_run(canonical_run), canonical_run)
+    if canonical_run.diagnostic_result is None:
+        raise RuntimeError("canonical diagnostic_result missing")
+    canonical_comparison = _compare_canonical_summaries(
+        current_summary,
+        _summarize_canonical_request_result(canonical_run.request, canonical_run.diagnostic_result),
+        canonical_run,
+    )
 
     return ThreeWayPlaneraComparison(
         legacy=legacy,
