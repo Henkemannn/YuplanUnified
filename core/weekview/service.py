@@ -233,37 +233,58 @@ class WeekviewService(WeekviewService):  # type: ignore[misc]
         }
 
     def get_effective_residents_for_day(self, department_id: str, year: int, week: int, weekday: int) -> dict:
-        """Precedence:
-        1) Weekly per-day schedule in department_residents_schedule
-        2) Forever per-day schedule
-        3) Weekly override (legacy same-for-week)
-        4) Fixed
+        return resolve_effective_resident_counts_for_day(department_id, year, week, weekday)
 
-        Returns {"lunch": int, "dinner": int, "source": "schedule_week"|"schedule_forever"|"weekly_override"|"fixed"}.
-        """
-        # 1/2: per-day schedules
-        try:
-            repo = ResidentsScheduleRepo()
-            week_items = { (int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_week(department_id, week) }
-            forever_items = { (int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_forever(department_id) }
-        except Exception:
-            week_items, forever_items = {}, {}
-        if (weekday, "lunch") in week_items or (weekday, "dinner") in week_items:
-            return {
-                "lunch": int(week_items.get((weekday, "lunch"), 0)),
-                "dinner": int(week_items.get((weekday, "dinner"), 0)),
-                "source": "schedule_week",
-            }
-        if (weekday, "lunch") in forever_items or (weekday, "dinner") in forever_items:
-            return {
-                "lunch": int(forever_items.get((weekday, "lunch"), 0)),
-                "dinner": int(forever_items.get((weekday, "dinner"), 0)),
-                "source": "schedule_forever",
-            }
-        # 3/4: legacy weekly override or fixed
-        wk = self.get_effective_residents_for_week(department_id, year, week)
-        src = "weekly_override" if wk.get("has_override") else "fixed"
-        return {"lunch": int(wk["lunch"]), "dinner": int(wk["dinner"]), "source": src}
+
+def resolve_effective_resident_counts_for_day(department_id: str, year: int, week: int, weekday: int) -> dict[str, Any]:
+    """Return the current effective lunch/dinner resident counts for a day.
+
+    Precedence matches existing WeekviewService day logic:
+    1) Weekly per-day schedule in department_residents_schedule
+    2) Forever per-day schedule
+    3) Weekly override (legacy same-for-week)
+    4) Fixed
+    """
+    try:
+        repo = ResidentsScheduleRepo()
+        week_items = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_week(department_id, week)}
+        forever_items = {(int(it["weekday"]), str(it["meal"])): int(it["count"]) for it in repo.get_forever(department_id)}
+    except Exception:
+        week_items, forever_items = {}, {}
+    if (weekday, "lunch") in week_items or (weekday, "dinner") in week_items:
+        return {
+            "lunch": int(week_items.get((weekday, "lunch"), 0)),
+            "dinner": int(week_items.get((weekday, "dinner"), 0)),
+            "source": "schedule_week",
+        }
+    if (weekday, "lunch") in forever_items or (weekday, "dinner") in forever_items:
+        return {
+            "lunch": int(forever_items.get((weekday, "lunch"), 0)),
+            "dinner": int(forever_items.get((weekday, "dinner"), 0)),
+            "source": "schedule_forever",
+        }
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT COALESCE(resident_count_fixed,0) FROM departments WHERE id=:id"),
+            {"id": department_id},
+        ).fetchone()
+        fixed = int(row[0] or 0) if row else 0
+    finally:
+        db.close()
+    # Weekly override
+    ov = {}
+    try:
+        ov = ResidentsWeeklyRepo().get_for_week(department_id, year, week) or {}
+    except Exception:
+        ov = {}
+    lunch = int((ov.get("residents_lunch") if ov else None) or fixed)
+    dinner = int((ov.get("residents_dinner") if ov else None) or fixed)
+    src = "weekly_override" if ov.get("residents_lunch") or ov.get("residents_dinner") else "fixed"
+    return {"lunch": lunch, "dinner": dinner, "source": src}
+
+
+class WeekviewService(WeekviewService):  # type: ignore[misc]
 
     # --- Internal helpers ---
     def _enrich_days(self, payload: dict, tenant_id: int | str, year: int, week: int, source: str | None = None) -> None:
