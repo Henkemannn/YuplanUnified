@@ -9,11 +9,7 @@ from ..admin_repo import DepartmentsRepo
 from ..db import get_session, get_site_tenant
 from ..department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from ..weekview.service import resolve_effective_resident_counts_for_day
-from .day_orchestration import (
-    KommunDayBusinessContext,
-    KommunDepartmentProjectionContext,
-    KommunGroupCompatibilityMetadata,
-)
+from .day_orchestration import KommunDayBusinessContext, KommunDepartmentProjectionContext, KommunGroupCompatibilityMetadata
 
 
 class KommunDayContextResolverError(ValueError):

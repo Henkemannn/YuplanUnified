@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from __future__ import annotations
+
 import inspect
 import uuid
 
@@ -9,7 +11,6 @@ from sqlalchemy import text
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
 from core.db import get_session
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
-from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
 from core.planera_v2 import day_context_resolver
 from core.planera_v2.day_context_resolver import KommunDayContextResolverError, resolve_kommun_day_business_context
 
@@ -31,7 +32,21 @@ def _seed_department(site_id: str, name: str, fixed: int) -> dict:
     return department
 
 
-def _seed_required_schema() -> None:
+def _seed_requirement_group(site_id: str, department_id: str, *, label: str | None, requirement_names: list[str], quantity: int) -> str:
+    requirement_ids: list[int] = []
+    diet_repo = DietTypesRepo()
+    for requirement_name in requirement_names:
+        requirement_ids.append(
+            diet_repo.create(site_id=site_id, name=requirement_name, default_select=False, semantics="atomic")
+        )
+    group = DepartmentRequirementGroupsRepo().create_group(department_id, quantity, requirement_ids, label=label)
+    return str(group["id"])
+
+
+def _seed_weekview_counts(department_id: str, service_date: str, *, lunch: int, dinner: int) -> None:
+    from datetime import date as _date
+
+    year, week, weekday = _date.fromisoformat(service_date).isocalendar()
     db = get_session()
     try:
         db.execute(
@@ -50,18 +65,6 @@ def _seed_required_schema() -> None:
                 """
             )
         )
-        db.commit()
-    finally:
-        db.close()
-
-
-def _seed_explicit_day_count(department_id: str, service_date: str, meal: str, count: int) -> None:
-    _seed_required_schema()
-    from datetime import date as _date
-
-    year, week, weekday = _date.fromisoformat(service_date).isocalendar()
-    db = get_session()
-    try:
         db.execute(
             text(
                 """
@@ -76,8 +79,26 @@ def _seed_explicit_day_count(department_id: str, service_date: str, meal: str, c
                 "year": year,
                 "week": week,
                 "day_of_week": weekday,
-                "meal": meal,
-                "count": count,
+                "meal": "lunch",
+                "count": lunch,
+            },
+        )
+        db.execute(
+            text(
+                """
+                INSERT OR REPLACE INTO weekview_residents_count(
+                    tenant_id, department_id, year, week, day_of_week, meal, count
+                ) VALUES(:tenant_id,:department_id,:year,:week,:day_of_week,:meal,:count)
+                """
+            ),
+            {
+                "tenant_id": "1",
+                "department_id": department_id,
+                "year": year,
+                "week": week,
+                "day_of_week": weekday,
+                "meal": "dinner",
+                "count": dinner,
             },
         )
         db.commit()
@@ -85,7 +106,10 @@ def _seed_explicit_day_count(department_id: str, service_date: str, meal: str, c
         db.close()
 
 
-def _seed_schedule_week(department_id: str, week: int, lunch: int | None = None, dinner: int | None = None) -> None:
+def _seed_schedule_week(department_id: str, service_date: str, *, lunch: int | None = None, dinner: int | None = None) -> None:
+    from datetime import date as _date
+
+    _year, week, weekday = _date.fromisoformat(service_date).isocalendar()
     db = get_session()
     try:
         db.execute(
@@ -103,15 +127,28 @@ def _seed_schedule_week(department_id: str, week: int, lunch: int | None = None,
             )
         )
         if lunch is not None:
-            db.execute(text("INSERT OR REPLACE INTO department_residents_schedule(department_id, week, weekday, meal, count) VALUES(:d,:w,1,'lunch',:c)"), {"d": department_id, "w": week, "c": lunch})
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO department_residents_schedule(department_id, week, weekday, meal, count) VALUES(:d,:w,:day,'lunch',:c)"
+                ),
+                {"d": department_id, "w": week, "day": weekday, "c": lunch},
+            )
         if dinner is not None:
-            db.execute(text("INSERT OR REPLACE INTO department_residents_schedule(department_id, week, weekday, meal, count) VALUES(:d,:w,1,'dinner',:c)"), {"d": department_id, "w": week, "c": dinner})
+            db.execute(
+                text(
+                    "INSERT OR REPLACE INTO department_residents_schedule(department_id, week, weekday, meal, count) VALUES(:d,:w,:day,'dinner',:c)"
+                ),
+                {"d": department_id, "w": week, "day": weekday, "c": dinner},
+            )
         db.commit()
     finally:
         db.close()
 
 
-def _seed_weekly_override(department_id: str, week: int, lunch: int | None = None, dinner: int | None = None) -> None:
+def _seed_weekly_override(department_id: str, service_date: str, *, lunch: int | None = None, dinner: int | None = None) -> None:
+    from datetime import date as _date
+
+    year, week, _weekday = _date.fromisoformat(service_date).isocalendar()
     db = get_session()
     try:
         db.execute(
@@ -133,30 +170,19 @@ def _seed_weekly_override(department_id: str, week: int, lunch: int | None = Non
             text(
                 """
                 INSERT OR REPLACE INTO department_residents_weekly(id, department_id, year, week, residents_lunch, residents_dinner)
-                VALUES(:id,:d,2026,:w,:lunch,:dinner)
+                VALUES(:id,:d,:y,:w,:lunch,:dinner)
                 """
             ),
-            {"id": str(uuid.uuid4()), "d": department_id, "w": week, "lunch": lunch, "dinner": dinner},
+            {"id": str(uuid.uuid4()), "d": department_id, "y": year, "w": week, "lunch": lunch, "dinner": dinner},
         )
         db.commit()
     finally:
         db.close()
 
 
-def _seed_requirement_group(site_id: str, department_id: str, *, label: str | None, requirement_names: list[str], quantity: int) -> str:
-    requirement_ids: list[int] = []
-    diet_repo = DietTypesRepo()
-    for requirement_name in requirement_names:
-        requirement_ids.append(
-            diet_repo.create(site_id=site_id, name=requirement_name, default_select=False, semantics="atomic")
-        )
-    group = DepartmentRequirementGroupsRepo().create_group(department_id, quantity, requirement_ids, label=label)
-    return str(group["id"])
-
-
 def test_resolver_rejects_wrong_tenant_site() -> None:
     site = _seed_site("Site A")
-    dept = _seed_department(site["id"], "Dept A", 10)
+    _seed_department(site["id"], "Dept A", 10)
 
     with pytest.raises(KommunDayContextResolverError, match="site_not_owned"):
         resolve_kommun_day_business_context(
@@ -230,15 +256,13 @@ def test_resolver_omits_unlabeled_groups() -> None:
     assert context.requirement_projection_by_group_id == {}
 
 
-def test_resolver_preserves_explicit_day_override_before_all_other_precedence() -> None:
+def test_resolver_explicit_day_override_wins_over_lower_precedence() -> None:
     site = _seed_site("Site F")
     dept = _seed_department(site["id"], "Dept", 10)
     service_date = "2026-09-07"
-    year, week, _weekday = __import__("datetime").date.fromisoformat(service_date).isocalendar()
-    _seed_schedule_week(dept["id"], week, lunch=7, dinner=8)
-    _seed_weekly_override(dept["id"], week, lunch=6, dinner=5)
-    _seed_explicit_day_count(dept["id"], service_date, "lunch", 11)
-    _seed_explicit_day_count(dept["id"], service_date, "dinner", 9)
+    _seed_schedule_week(dept["id"], service_date, lunch=7, dinner=8)
+    _seed_weekly_override(dept["id"], service_date, lunch=6, dinner=5)
+    _seed_weekview_counts(dept["id"], service_date, lunch=11, dinner=9)
 
     context = resolve_kommun_day_business_context(
         tenant_id=1,
@@ -251,12 +275,11 @@ def test_resolver_preserves_explicit_day_override_before_all_other_precedence() 
     assert context.dinner_baselines[dept["id"]] == 9
 
 
-def test_resolver_uses_schedule_then_weekly_then_fixed() -> None:
+def test_resolver_schedule_week_precedence() -> None:
     site = _seed_site("Site G")
     dept = _seed_department(site["id"], "Dept", 10)
     service_date = "2026-09-07"
-    year, week, _weekday = __import__("datetime").date.fromisoformat(service_date).isocalendar()
-    _seed_schedule_week(dept["id"], week, lunch=7, dinner=8)
+    _seed_schedule_week(dept["id"], service_date, lunch=7, dinner=8)
 
     context = resolve_kommun_day_business_context(
         tenant_id=1,
@@ -269,12 +292,11 @@ def test_resolver_uses_schedule_then_weekly_then_fixed() -> None:
     assert context.dinner_baselines[dept["id"]] == 8
 
 
-def test_resolver_uses_weekly_override_when_no_schedule_exists() -> None:
+def test_resolver_weekly_override_fallback() -> None:
     site = _seed_site("Site H")
     dept = _seed_department(site["id"], "Dept", 10)
     service_date = "2026-09-07"
-    year, week, _weekday = __import__("datetime").date.fromisoformat(service_date).isocalendar()
-    _seed_weekly_override(dept["id"], week, lunch=6, dinner=5)
+    _seed_weekly_override(dept["id"], service_date, lunch=6, dinner=5)
 
     context = resolve_kommun_day_business_context(
         tenant_id=1,
@@ -287,7 +309,7 @@ def test_resolver_uses_weekly_override_when_no_schedule_exists() -> None:
     assert context.dinner_baselines[dept["id"]] == 5
 
 
-def test_resolver_preserves_supplied_meal_labels_and_rejects_missing_labels() -> None:
+def test_resolver_supplied_meal_labels_preserved_and_missing_rejected() -> None:
     site = _seed_site("Site I")
     _seed_department(site["id"], "Dept", 10)
 
@@ -309,7 +331,7 @@ def test_resolver_preserves_supplied_meal_labels_and_rejects_missing_labels() ->
         )
 
 
-def test_resolver_maps_labeled_groups_once_and_keeps_multi_key_groups_single() -> None:
+def test_resolver_labeled_requirement_groups_mapped_once_multi_key_remains_one_group() -> None:
     site = _seed_site("Site J")
     dept = _seed_department(site["id"], "Dept", 10)
     _seed_requirement_group(site["id"], dept["id"], label="One", requirement_names=["A"], quantity=1)
@@ -326,7 +348,7 @@ def test_resolver_maps_labeled_groups_once_and_keeps_multi_key_groups_single() -
     assert {meta.diet_name for meta in context.requirement_projection_by_group_id.values()} == {"One", "Two Keys"}
 
 
-def test_resolver_rejects_positive_blank_group_label_and_omits_zero_blank_group() -> None:
+def test_resolver_blank_groups_omitted_regardless_of_effective_quantity() -> None:
     site = _seed_site("Site K")
     dept = _seed_department(site["id"], "Dept", 10)
     zero_group = _seed_requirement_group(site["id"], dept["id"], label="", requirement_names=["Zero"], quantity=0)
