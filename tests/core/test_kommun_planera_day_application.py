@@ -7,6 +7,7 @@ from datetime import date
 import pytest
 
 from core.admin_repo import DepartmentsRepo, DietTypesRepo, SitesRepo
+from core.db import get_session
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.kommun_planera_day_application import compare_kommun_day_payloads, run_kommun_day_application
 from core.planera_v2.adapters.kommun_day_projection import KommunDayProjectionError
@@ -14,15 +15,21 @@ from core.planera_v2.day_context_resolver import KommunDayContextResolverError, 
 from core.planera_v2.day_orchestration import (
     KommunDayBusinessContext,
     KommunDepartmentProjectionContext,
-    KommunGroupCompatibilityMetadata,
 )
 from core.planera_v2.kommun_day_application import run_canonical_kommun_day
 from core.weekview.repo import WeekviewRepo
+from sqlalchemy import text
 
 pytestmark = pytest.mark.usefixtures("app_session")
 
 
 def _seed_site(name: str = "Planera app site") -> dict:
+    db = get_session()
+    try:
+        db.execute(text("INSERT OR IGNORE INTO tenants(id, name, active) VALUES(1, 'Tenant 1', 1)"))
+        db.commit()
+    finally:
+        db.close()
     site, _ = SitesRepo().create_site(name, tenant_id=1)
     return site
 

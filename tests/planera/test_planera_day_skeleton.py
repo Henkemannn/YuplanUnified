@@ -14,19 +14,20 @@ def test_planera_day_api_and_ui_skeleton(client_admin):
     dep_id = str(uuid.uuid4())
     d = date(2025, 11, 20).isoformat()
 
-    from core.db import create_all, get_session
-    from sqlalchemy import text
-    import os
+    from core.admin_repo import DepartmentsRepo, SitesRepo
+    from core.db import create_all
+
     with app.app_context():
-        os.environ["YP_ENABLE_SQLITE_BOOTSTRAP"] = "1"
         create_all()
-        db = get_session()
-        try:
-            db.execute(text("INSERT INTO sites(id, name, version) VALUES(:i,:n,0)"), {"i": site_id, "n": "PlaneraSite"})
-            db.execute(text("INSERT INTO departments(id, site_id, name, resident_count_mode, resident_count_fixed, version) VALUES(:i,:s,:n,'fixed',0,0)"), {"i": dep_id, "s": site_id, "n": "Avd P"})
-            db.commit()
-        finally:
-            db.close()
+        site, _ = SitesRepo().create_site(name="PlaneraSite", tenant_id=1)
+        site_id = site["id"]
+        department, _ = DepartmentsRepo().create_department(
+            site_id=site_id,
+            name="Avd P",
+            resident_count_mode="fixed",
+            resident_count_fixed=0,
+        )
+        dep_id = department["id"]
 
     # Ensure feature flag enabled (add or set True)
     with app.app_context():

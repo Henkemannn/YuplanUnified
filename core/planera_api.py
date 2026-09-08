@@ -10,6 +10,8 @@ from .auth import require_roles
 from .csrf import csrf_protect
 from .http_errors import bad_request, not_found
 from .db import get_session
+from .kommun_planera_day_application import run_kommun_day_application
+from .planera_v2.day_context_resolver import KommunDayContextResolverError
 
 bp = Blueprint("planera_api", __name__, url_prefix="/api")
 _service: "PlaneraService | None" = None
@@ -156,24 +158,21 @@ def get_planera_day():
         _d = _date.fromisoformat(date_str)
     except Exception:
         return bad_request("invalid_parameters")
-    ok = _validate_site_and_department(site_id, department_id)
-    if not ok:
-        return not_found("site_or_department_not_found")
-    site_name, deps = ok
-    global _service
-    if _service is None:
-        from .planera_service import PlaneraService
-        _service = PlaneraService()
     meal_labels = _meal_labels(site_id)
-    agg = _service.compute_day(tid, site_id, date_str, [(d["department_id"], d["department_name"]) for d in deps])
-    payload = {
-        "site_id": site_id,
-        "site_name": site_name,
-        "date": date_str,
-        "meal_labels": meal_labels,
-        "departments": agg["departments"],
-        "totals": agg["totals"],
-    }
+    mode = "shadow" if _feature_enabled("ff.planera2.shadow") else "legacy"
+    try:
+        payload = run_kommun_day_application(
+            mode=mode,
+            tenant_id=tid,
+            site_id=site_id,
+            service_date=date_str,
+            meal_labels=meal_labels,
+            department_id=department_id,
+        )
+    except KommunDayContextResolverError as exc:
+        if exc.code in {"site_not_owned", "site_not_found", "department_scope_mismatch"}:
+            return not_found("site_or_department_not_found")
+        return bad_request(exc.code)
     etag = _build_etag("day", payload)
     maybe = _conditional(etag)
     if maybe is not None:
