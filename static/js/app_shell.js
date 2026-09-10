@@ -10,6 +10,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const applyTheme = (theme) => {
     const isDark = theme === "dark";
     root.classList.toggle("app-shell--dark", isDark);
+    root.setAttribute("data-theme", theme);
+    document.documentElement.style.colorScheme = isDark ? "dark" : "light";
     if (themeToggle) {
       themeToggle.setAttribute("aria-pressed", isDark ? "true" : "false");
     }

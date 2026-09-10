@@ -32,9 +32,9 @@ class TestYuplanBranding:
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
         
-        # Logo should be present
+        # Logo should be present (canonical Brand Base asset)
         assert "yuplan" in html.lower()
-        assert "/static/img/logo-proposal.svg" in html
+        assert "/static/brand/v1/logo/yuplan-mark-primary.svg" in html
     
     def test_test_login_page_has_branding(self, app_session: Flask, client: FlaskClient):
         """Test login page should have Yuplan branding"""
@@ -147,7 +147,7 @@ class TestNavigation:
         
         # App shell brand should be present
         assert "app-shell__brand" in html
-        assert "/static/img/logo-proposal.svg" in html
+        assert "/static/brand/v1/logo/yuplan-mark-primary.svg" in html
 
     def test_admin_sidebar_has_navigation_icons(self, app_session: Flask, client_admin: FlaskClient):
         """Admin sidebar should have navigation with icons"""
@@ -208,9 +208,9 @@ class TestFavicons:
         assert resp.status_code == 200
         html = resp.data.decode("utf-8")
         
-        # Favicon link should be present (logo-proposal.svg is canonical)
+        # Favicon link should be present (canonical Brand Base asset)
         assert 'rel="icon"' in html
-        assert "/static/img/logo-proposal.svg" in html
+        assert "/static/brand/v1/logo/yuplan-mark-primary.svg" in html
 
     def test_admin_dashboard_has_favicon(self, app_session: Flask, client_admin: FlaskClient):
         """Admin dashboard should link to favicon"""
@@ -220,7 +220,7 @@ class TestFavicons:
         
         # Favicon link should be present
         assert 'rel="icon"' in html
-        assert "/static/img/logo-proposal.svg" in html
+        assert "/static/brand/v1/logo/yuplan-mark-primary.svg" in html
 
     def test_test_login_has_favicon(self, app_session: Flask, client: FlaskClient):
         """Test login page should have favicon"""

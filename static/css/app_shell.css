@@ -12,24 +12,45 @@ body {
 }
 
 .app-shell {
-  --yp-color-primary: #2563eb;
-  --yp-color-primary-hover: #1d4ed8;
-  --yp-color-primary-light: #dbeafe;
-  --yp-color-secondary-light: #f1f5f9;
-  --yp-alt2-bg: #fde68a;
-  --yp-alt2-fg: #5c3b00;
-  --yp-alt2-text: #9a6700;
-  --yp-color-bg: #ffffff;
-  --yp-bg: #eef3f8;
-  --yp-color-bg-alt: var(--yp-bg);
-  --yp-color-bg-elevated: #ffffff;
-  --yp-color-text: #0f172a;
-  --yp-color-text-muted: #64748b;
-  --yp-color-border: #e2e8f0;
-  --yp-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --yp-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --yp-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --yp-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --yp-shell-bg: #eaf7f8;
+  --yp-shell-surface: #ffffff;
+  --yp-shell-surface-2: #f5fbfb;
+  --yp-shell-surface-elevated: #ffffff;
+  --yp-shell-sidebar: #ffffff;
+  --yp-shell-text: #101828;
+  --yp-shell-text-muted: #035590;
+  --yp-shell-border: rgba(3, 85, 144, 0.16);
+  --yp-shell-border-strong: rgba(3, 85, 144, 0.26);
+  --yp-shell-action: #00aeb8;
+  --yp-shell-action-hover: #035590;
+  --yp-shell-action-soft: #eaf7f8;
+  --yp-shell-focus: #02aec3;
+  --yp-shell-accent: #02aec3;
+  --yp-shell-accent-strong: #00aeb8;
+  --yp-shell-shadow: 0 1px 3px rgb(7 20 38 / 0.08), 0 10px 24px rgb(7 20 38 / 0.08);
+  --yp-shell-shadow-strong: 0 16px 32px rgb(7 20 38 / 0.12);
+  --yp-alt2-bg: #f1e15e;
+  --yp-alt2-fg: #071426;
+  --yp-alt2-text: #101828;
+  --yp-color-primary: var(--yp-shell-action);
+  --yp-color-primary-hover: var(--yp-shell-action-hover);
+  --yp-color-primary-light: var(--yp-shell-action-soft);
+  --yp-color-secondary: #035590;
+  --yp-color-secondary-hover: #071426;
+  --yp-color-secondary-light: #f5fbfb;
+  --yp-color-accent: var(--yp-shell-accent);
+  --yp-color-accent-hover: var(--yp-shell-accent-strong);
+  --yp-color-accent-light: #eaf7f8;
+  --yp-color-bg: var(--yp-shell-surface);
+  --yp-color-bg-alt: var(--yp-shell-bg);
+  --yp-color-bg-elevated: var(--yp-shell-surface-elevated);
+  --yp-color-text: var(--yp-shell-text);
+  --yp-color-text-muted: var(--yp-shell-text-muted);
+  --yp-color-border: var(--yp-shell-border);
+  --yp-shadow-sm: 0 1px 2px 0 rgb(7 20 38 / 0.06);
+  --yp-shadow: 0 1px 3px 0 rgb(7 20 38 / 0.08), 0 1px 2px -1px rgb(7 20 38 / 0.08);
+  --yp-shadow-md: 0 6px 14px -4px rgb(7 20 38 / 0.12), 0 2px 4px -2px rgb(7 20 38 / 0.08);
+  --yp-shadow-lg: 0 12px 26px -8px rgb(7 20 38 / 0.14), 0 4px 8px -4px rgb(7 20 38 / 0.09);
   --yp-radius-sm: 0.25rem;
   --yp-radius: 0.5rem;
   --yp-radius-lg: 0.75rem;
@@ -42,18 +63,18 @@ body {
   --yp-font-size-2xl: 1.5rem;
   --yp-font-size-3xl: 1.875rem;
 
-  --bg: var(--yp-color-bg-alt);
-  --surface: var(--yp-color-bg-elevated);
-  --surface-2: var(--yp-color-secondary-light);
-  --surface-elevated: var(--yp-color-bg-elevated);
-  --chip-bg: var(--yp-color-secondary-light);
-  --main-bg: var(--yp-color-bg-alt);
-  --border-subtle: var(--yp-color-border);
-  --border: var(--yp-color-border);
-  --text: var(--yp-color-text);
-  --muted: var(--yp-color-text-muted);
-  --accent: var(--yp-color-primary);
-  --accent-soft: var(--yp-color-primary-light);
+  --bg: var(--yp-shell-bg);
+  --surface: var(--yp-shell-surface);
+  --surface-2: var(--yp-shell-surface-2);
+  --surface-elevated: var(--yp-shell-surface-elevated);
+  --chip-bg: var(--yp-shell-surface-2);
+  --main-bg: var(--yp-shell-bg);
+  --border-subtle: var(--yp-shell-border);
+  --border: var(--yp-shell-border);
+  --text: var(--yp-shell-text);
+  --muted: var(--yp-shell-text-muted);
+  --accent: var(--yp-shell-action);
+  --accent-soft: var(--yp-shell-action-soft);
   --r-sm: var(--yp-radius-sm);
   --r-md: var(--yp-radius);
   --r-lg: var(--yp-radius-lg);
@@ -84,26 +105,50 @@ body {
 
 .app-shell:not(.app-shell--dark) {
   background-image:
-    radial-gradient(85% 70% at 12% 0%, rgba(37, 99, 235, 0.12), transparent 62%);
+    radial-gradient(90% 72% at 10% 0%, rgba(0, 174, 184, 0.14), transparent 58%),
+    radial-gradient(70% 52% at 100% 0%, rgba(2, 174, 195, 0.08), transparent 52%);
 }
 
 .app-shell--dark {
-  --bg: #0f172a;
-  --surface: #111b2e;
-  --surface-2: #16233a;
-  --surface-elevated: #121f35;
-  --chip-bg: #1a2840;
-  --main-bg: #101b2f;
-  --border-subtle: #26344a;
-  --border: #2a3b56;
-  --text: #e2e8f0;
-  --muted: #9aa6bf;
+  --yp-shell-bg: #071426;
+  --yp-shell-surface: #0b1f34;
+  --yp-shell-surface-2: #102945;
+  --yp-shell-surface-elevated: #0f2239;
+  --yp-shell-sidebar: #0b1f34;
+  --yp-shell-text: #eaf7f8;
+  --yp-shell-text-muted: #9bb7c6;
+  --yp-shell-border: rgba(2, 174, 195, 0.18);
+  --yp-shell-border-strong: rgba(2, 174, 195, 0.28);
+  --yp-shell-action: #02aec3;
+  --yp-shell-action-hover: #00aeb8;
+  --yp-shell-action-soft: rgba(2, 174, 195, 0.12);
+  --yp-shell-focus: #02aec3;
+  --yp-shell-accent: #02aec3;
+  --yp-shell-accent-strong: #00aeb8;
+  --yp-shell-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --yp-shell-shadow-strong: 0 14px 34px rgb(0 0 0 / 0.4);
+  --yp-alt2-bg: #f1e15e;
+  --yp-alt2-fg: #071426;
+  --yp-alt2-text: #101828;
+  --yp-color-primary: var(--yp-shell-action);
+  --yp-color-primary-hover: var(--yp-shell-action-hover);
+  --yp-color-primary-light: var(--yp-shell-action-soft);
+  --yp-color-secondary: #035590;
+  --yp-color-secondary-hover: #071426;
+  --yp-color-secondary-light: #102945;
+  --yp-color-accent: var(--yp-shell-accent);
+  --yp-color-accent-hover: var(--yp-shell-accent-strong);
+  --yp-color-accent-light: rgba(2, 174, 195, 0.14);
+  --yp-color-bg: var(--yp-shell-surface);
+  --yp-color-bg-alt: var(--yp-shell-bg);
+  --yp-color-bg-elevated: var(--yp-shell-surface-elevated);
+  --yp-color-text: var(--yp-shell-text);
+  --yp-color-text-muted: var(--yp-shell-text-muted);
+  --yp-color-border: var(--yp-shell-border);
   --yp-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.35);
-  --yp-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
-  --yp-shadow-md: 0 6px 12px -4px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.35);
-  --yp-alt2-bg: #fbbf24;
-  --yp-alt2-fg: #2c1a00;
-  --yp-alt2-text: #facc15;
+  --yp-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.28), 0 1px 2px -1px rgb(0 0 0 / 0.28);
+  --yp-shadow-md: 0 8px 18px -8px rgb(0 0 0 / 0.42), 0 2px 6px -4px rgb(0 0 0 / 0.35);
+  --yp-shadow-lg: 0 16px 30px -10px rgb(0 0 0 / 0.44), 0 4px 10px -6px rgb(0 0 0 / 0.36);
 }
 
 .app-shell--dark .yp-input,
@@ -118,13 +163,13 @@ body {
 .app-shell--dark .yp-select:focus,
 .app-shell--dark .yp-textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  box-shadow: 0 0 0 3px rgba(2, 174, 195, 0.22);
 }
 
 [data-theme="dark"] .app-shell {
-  --yp-alt2-bg: #fbbf24;
-  --yp-alt2-fg: #2c1a00;
-  --yp-alt2-text: #facc15;
+  --yp-alt2-bg: #f1e15e;
+  --yp-alt2-fg: #071426;
+  --yp-alt2-text: #101828;
 }
 
 .app-shell.is-ready {
@@ -154,9 +199,11 @@ body {
   left: 0;
   right: 0;
   height: var(--topbar-offset);
-  background: linear-gradient(90deg, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0.04) 40%, rgba(255, 255, 255, 0) 78%),
+  background:
+    linear-gradient(180deg, rgba(0, 174, 184, 0.12) 0%, rgba(0, 174, 184, 0.04) 54%, rgba(255, 255, 255, 0) 100%),
     var(--surface);
   box-shadow: var(--yp-shadow-sm);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -166,11 +213,11 @@ body {
 
 .app-shell:not(.app-shell--dark) .app-shell__topbar {
   background:
-    linear-gradient(180deg, rgba(37, 99, 235, 0.10) 0%, rgba(37, 99, 235, 0.03) 55%, rgba(255, 255, 255, 0) 100%),
-    linear-gradient(90deg, rgba(37, 99, 235, 0.08) 0%, rgba(37, 99, 235, 0.02) 45%, rgba(255, 255, 255, 0) 78%),
-    rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(10px) saturate(140%);
-  box-shadow: var(--yp-shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    linear-gradient(180deg, rgba(0, 174, 184, 0.10) 0%, rgba(0, 174, 184, 0.03) 55%, rgba(255, 255, 255, 0) 100%),
+    linear-gradient(90deg, rgba(2, 174, 195, 0.08) 0%, rgba(2, 174, 195, 0.02) 45%, rgba(255, 255, 255, 0) 78%),
+    rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px) saturate(130%);
+  box-shadow: var(--yp-shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .app-shell__topbar::after {
@@ -184,29 +231,30 @@ body {
 }
 
 .app-shell:not(.app-shell--dark) .app-shell__topbar::after {
-  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.18), transparent);
+  background: linear-gradient(90deg, transparent, rgba(0, 174, 184, 0.22), transparent);
 }
 
 .app-shell--dark .app-shell__topbar::after {
-  background: linear-gradient(to right, transparent, rgba(0, 200, 255, 0.28), transparent);
+  background: linear-gradient(to right, transparent, rgba(2, 174, 195, 0.28), transparent);
 }
 
 .app-shell__brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .app-shell__logo {
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 42px;
   display: block;
 }
 
 .app-shell__brand-text {
   font-size: var(--yp-font-size-lg);
   font-weight: 600;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.24px;
+  color: var(--text);
 }
 
 .app-shell__topbar-actions {
@@ -231,17 +279,18 @@ body {
   justify-content: center;
   cursor: pointer;
   font-size: 0.95rem;
-  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
 }
 
 .app-shell__theme-toggle:hover {
-  background: var(--surface-2);
-  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+  border-color: var(--accent);
   transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(0, 174, 184, 0.06);
 }
 
 .app-shell__theme-toggle:focus-visible {
-  outline: 2px solid var(--accent-soft);
+  outline: 2px solid var(--yp-shell-focus);
   outline-offset: 2px;
 }
 
@@ -278,12 +327,12 @@ body {
 }
 
 .app-shell__user-pill:hover {
-  background: var(--surface-2);
-  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
 .app-shell__user-pill:focus-visible {
-  outline: 2px solid var(--accent-soft);
+  outline: 2px solid var(--yp-shell-focus);
   outline-offset: 2px;
 }
 
@@ -529,7 +578,7 @@ body {
 }
 
 .app-shell__sidebar-panel {
-  background: var(--surface-2);
+  background: var(--yp-shell-sidebar);
   border: 1px solid var(--border-subtle);
   border-radius: calc(var(--r-lg) + 4px);
   padding: 16px;
@@ -542,11 +591,11 @@ body {
 }
 
 .app-shell:not(.app-shell--dark) .app-shell__sidebar-panel {
-  background: #f9fbfd;
-  border-color: rgba(15, 23, 42, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(234, 247, 248, 0.9));
+  border-color: rgba(3, 85, 144, 0.12);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 8px 18px rgba(15, 23, 42, 0.06);
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 10px 24px rgba(7, 20, 38, 0.06);
 }
 
 .app-shell__nav {
@@ -575,13 +624,13 @@ body {
 }
 
 .app-shell__nav-item:hover {
-  background: var(--surface-2);
+  background: var(--accent-soft);
   color: var(--text);
   transform: translateX(2px);
 }
 
 .app-shell__nav-item--active {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--accent-soft) 70%, white);
   color: var(--text);
   font-weight: 600;
 }
@@ -595,7 +644,7 @@ body {
   height: 24px;
   transform: translateY(-50%);
   border-radius: var(--r-sm);
-  background: color-mix(in srgb, var(--accent) 80%, transparent);
+  background: color-mix(in srgb, var(--accent) 88%, transparent);
 }
 
 .app-shell__main {
@@ -665,68 +714,68 @@ body {
 }
 
 .app-shell:not(.app-shell--dark) .app-shell__card {
-  background: #f9fbfd;
-  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 251, 251, 0.96));
+  border: 1px solid rgba(3, 85, 144, 0.08);
   box-shadow:
-    0 6px 18px rgba(16, 24, 40, 0.05),
-    0 2px 6px rgba(16, 24, 40, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    0 8px 22px rgba(7, 20, 38, 0.06),
+    0 2px 6px rgba(7, 20, 38, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76);
 }
 
 .app-shell__card:hover {
   transform: translateY(-2px);
   box-shadow:
-    0 10px 20px rgba(16, 24, 40, 0.086),
-    0 2px 4px rgba(16, 24, 40, 0.065),
-    0 0 0 1px rgba(37, 99, 235, 0.06);
-  border-color: rgba(16, 24, 40, 0.04);
+    0 12px 24px rgba(7, 20, 38, 0.10),
+    0 2px 4px rgba(7, 20, 38, 0.06),
+    0 0 0 1px rgba(0, 174, 184, 0.08);
+  border-color: rgba(3, 85, 144, 0.08);
 }
 
 .app-shell:not(.app-shell--dark) .app-shell__card:hover {
   box-shadow:
-    0 10px 22px rgba(16, 24, 40, 0.08),
-    0 3px 6px rgba(16, 24, 40, 0.06),
-    0 0 0 1px rgba(37, 99, 235, 0.08);
+    0 12px 24px rgba(7, 20, 38, 0.08),
+    0 3px 6px rgba(7, 20, 38, 0.06),
+    0 0 0 1px rgba(0, 174, 184, 0.08);
 }
 
 .app-shell--dark .app-shell__nav-item:hover {
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
   color: var(--text);
 }
 
 .app-shell--dark .app-shell__nav-item--active {
-  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+  background: color-mix(in srgb, var(--surface-2) 86%, transparent);
 }
 
 .app-shell--dark .app-shell__nav-item--active::before {
-  background: color-mix(in srgb, var(--accent) 75%, transparent);
+  background: color-mix(in srgb, var(--accent) 90%, transparent);
 }
 
 .app-shell--dark .app-shell__sidebar-panel {
-  border-color: transparent;
-  box-shadow: 0 0 0 1px rgba(0, 200, 255, 0.08), 0 10px 30px rgba(0, 0, 0, 0.4);
+  border-color: rgba(2, 174, 195, 0.12);
+  box-shadow: 0 0 0 1px rgba(2, 174, 195, 0.08), 0 16px 34px rgba(0, 0, 0, 0.34);
 }
 
 .app-shell--dark .app-shell__card {
-  border-color: rgba(148, 163, 184, 0.12);
-  box-shadow: 0 10px 18px -18px rgba(15, 23, 42, 0.75), var(--yp-shadow-sm);
+  border-color: rgba(2, 174, 195, 0.10);
+  box-shadow: 0 10px 18px -18px rgba(7, 20, 38, 0.7), var(--yp-shadow-sm);
 }
 
 .app-shell--dark .app-shell__card:hover {
   transform: translateY(-1px);
   border-color: transparent;
   box-shadow:
-    0 16px 26px -18px rgba(10, 20, 35, 0.75),
-    0 0 0 1px rgba(37, 99, 235, 0.12),
-    0 0 24px rgba(37, 99, 235, 0.12);
+    0 16px 26px -18px rgba(7, 20, 38, 0.75),
+    0 0 0 1px rgba(2, 174, 195, 0.12),
+    0 0 20px rgba(2, 174, 195, 0.10);
 }
 
 .app-shell--dark .app-shell__card:focus-within {
   outline: none;
   box-shadow:
-    0 16px 26px -18px rgba(10, 20, 35, 0.75),
-    0 0 0 1px rgba(37, 99, 235, 0.14),
-    0 0 20px rgba(37, 99, 235, 0.12);
+    0 16px 26px -18px rgba(7, 20, 38, 0.75),
+    0 0 0 1px rgba(2, 174, 195, 0.16),
+    0 0 20px rgba(2, 174, 195, 0.10);
 }
 
 .app-shell__card-title {
@@ -748,15 +797,15 @@ body {
 }
 
 .app-shell--dark .app-shell__card-title {
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(234, 247, 248, 0.96);
 }
 
 .app-shell--dark .app-shell__card-text {
-  color: rgba(255, 255, 255, 0.86);
+  color: rgba(234, 247, 248, 0.84);
 }
 
 .app-shell--dark .app-shell__title {
-  color: rgba(255, 255, 255, 0.96);
+  color: rgba(234, 247, 248, 0.98);
 }
 
 .app-shell--dark .app-shell__subtitle {
