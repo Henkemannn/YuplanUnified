@@ -7,7 +7,9 @@ This file gives the AI assistant (Copilot) the full context needed to continue i
 ## ⚡ YUPLAN UNIFIED – BRANDING RULES (DO NOT VIOLATE)
 
 ### 1. Logo
-- **Use ONLY:** `{{ url_for('static', filename='img/logo-proposal.svg') }}`
+- **Canonical primary logo:** `static/brand/v1/logo/yuplan-mark-primary.svg`
+- **Canonical brand documentation:** `docs/brand/YUPLAN_BRAND_BASE_1_0.md`
+- Do **not** use legacy Blue/Green/Duotone files for new UI work.
 - In all headers, wrap it in `.yp-header-brand` and set `class="yp-logo"`.
 - **Desktop/tablet:** height 28px, max 32px, width auto, object-fit: contain.
 - **Mobile:** height 22px, max 24px.
@@ -25,7 +27,7 @@ This file gives the AI assistant (Copilot) the full context needed to continue i
 
 ### 4. No new branding
 - **Do NOT invent** new palettes, gradients, or logos.
-- Follow `BRANDING.md` exactly.
+- Follow `docs/brand/YUPLAN_BRAND_BASE_1_0.md` for brand truth and `BRANDING.md` only for legacy/implementation reference.
 
 **📖 Full spec:** See `BRANDING.md` in project root.
 

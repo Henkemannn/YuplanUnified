@@ -1,3 +1,14 @@
+# LEGACY / STALE
+
+Canonical brand documentation: [docs/brand/YUPLAN_BRAND_BASE_1_0.md](docs/brand/YUPLAN_BRAND_BASE_1_0.md)
+
+Canonical asset root: `static/brand/v1/`
+
+The branding content below is retained for historical reference only.
+The older token and logo details in this file are legacy implementation reference, not future brand truth.
+Do not base new UI decisions on the older blue/purple token examples in this file.
+Existing product code may remain unchanged until the dedicated migration gate.
+
 # Yuplan Unified – Branding & UI System (Master Spec)
 
 Detta dokument definierar den OFFICIELLA brandingen för Yuplan Unified.
@@ -82,6 +93,8 @@ Loggan får aldrig skalas i procent, endast i px.
 ---
 
 ## 2. Färgpalett (CSS-variabler)
+
+Legacy/current implementation reference only. Do not treat these values as the future brand truth.
 
 Alla färger ska komma från `unified_ui.css` via dessa tokens:
 

@@ -1,3 +1,9 @@
+# LEGACY / SUPERSEDED
+
+Canonical brand source: [docs/brand/YUPLAN_BRAND_BASE_1_0.md](docs/brand/YUPLAN_BRAND_BASE_1_0.md)
+
+This document is retained for historical asset notes only.
+
 # Branding Assets
 
 This directory documents current Yuplan logo variants and usage guidelines.
