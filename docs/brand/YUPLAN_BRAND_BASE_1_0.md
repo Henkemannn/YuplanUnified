@@ -59,7 +59,8 @@ Viktigt: `static/img/logo-proposal.svg` har rätt grundidé, men använder äldr
 
 ## Mascot / helper-riktning
 
-- Maskot är ännu inte verifierad som repo-asset.
+- Maskotens canonical asset är nu installerad och verifierad i repo som `static/brand/v1/mascot/yuplan-mascot-primary-2048.png`.
+- PNG-versionerna är canonical tills en riktig vector-mascot finns.
 - Profilen ska vara turkos, Ocean/Teal, med korrekt versalt Y.
 - Maskoten ska kännas vänlig och kompetent.
 - Den ska användas som diskret helper, inte som pynt.

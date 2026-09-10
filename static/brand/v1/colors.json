@@ -5,6 +5,7 @@
   "logo_yellow": "#FFD166",
   "white": "#FFFFFF",
   "supporting_ocean": "#035590",
-  "supporting_ink": "#071426",
+  "supporting_deep_ocean": "#071426",
+  "supporting_ink": "#101828",
   "font_family": "Manrope"
 }
