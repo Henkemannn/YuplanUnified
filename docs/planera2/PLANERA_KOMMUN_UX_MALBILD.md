@@ -2,10 +2,107 @@
 
 **Status:** Living document / produktmålbild  
 **Version:** v0.1  
-**Senast uppdaterad:** 2026-09-08  
+**Senast uppdaterad:** 2026-09-19  
 **Aktiv utvecklingsbranch:** `feat/planera-app-shell-2026-03-03`
 
 Detta dokument är den aktuella UX- och produktmålbilden för Planera 2.0 i Kommun-spåret. Det ska uppdateras löpande när vi lär oss mer i mockups, tester och implementation.
+
+---
+
+## Yuplan Product UI Reference 1.0
+
+Följande visuella riktning är nu låst för Planera sida 1.
+
+**Canonical mockup:** `docs/mockups/planera-kommun-ux-1.html`
+
+**Brand reference:** `docs/brand/YUPLAN_BRAND_BASE_1_0.md`
+
+**Canonical logo:** `static/brand/v1/logo/yuplan-mark-primary.svg`
+
+### App shell
+
+- Global produktidentitet ligger i topbaren.
+- Topbar vänster: canonical Yuplan-logo + `Yuplan · Planera`.
+- Topbar höger: användare/profile + rund Light/Dark-toggle.
+- Ingen notch/cutout/specialgeometri runt loggan.
+- Sidebar äger verksamhetskontext + navigation.
+- Sidebar börjar med:
+  - Centralköket
+  - Kommun
+- Navigation:
+  - Översikt
+  - Planera
+  - Meny
+  - Veckovy
+  - Rapporter
+- Inställningar längst ned.
+
+### Light / Dark
+
+LIGHT:
+
+- Mist / Pale Ocean
+- ljus verksamhetsnavigation
+- Ink/Ocean text
+- Teal/Cyan interaction
+- inte kritvit
+
+DARK:
+
+- Deep Ocean / Ocean
+- Mist/White text
+- Teal/Cyan interaction
+- Signal Yellow mycket sparsamt, exempelvis sol-icon
+
+Samma layout och informationshierarki i båda themes.
+
+### Planera sida 1
+
+- Datum är contentområdets huvudrubrik.
+- Visa sju dagar i veckonavigationen.
+- Vald dag ska vara tydlig.
+- `IDAG` och vald dag är två separata koncept.
+- Lunch är primär arbetsyta.
+- Alt 1 och Alt 2 visas direkt och jämbördigt.
+- Hela rätten visas: huvudkomponent + tillbehör.
+- Inga matbilder krävs.
+- Totals: mottagande enheter + portioner.
+- Primär CTA: `Planera lunch`.
+- Kväll, Dessert och Tillägg visas som kompakta sekundära rader.
+- Färre stora cards.
+- Färre ramar.
+- Professionell operations-density.
+
+### Visuell princip
+
+Användaren ska inom 2–3 sekunder kunna förstå:
+
+1. vilken dag som visas
+2. vad lunch Alt 1 är
+3. vad lunch Alt 2 är
+4. omfattningen
+5. var planeringen startas
+6. vad som finns senare under dagen
+
+### Status
+
+SIDA 1 VISUELLT LÅST.
+
+Det betyder inte att sida 2–4 är visuellt låsta ännu.
+
+### Återstår att designa sida för sida
+
+Följande återstår att designa sida för sida:
+
+- sida 2: bedöm normalkost
+- sida 3: kontroll/sammanställning
+- sida 4: sparad plan/resultat
+- produktionsunderlag
+- senare Dagens produktion
+
+Ingen ny funktion får härledas bara från mockupens utseende.
+
+De redan låsta Planera-produktprinciperna gäller fortsatt.
 
 ---
 

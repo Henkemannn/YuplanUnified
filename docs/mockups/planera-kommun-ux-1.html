@@ -1,0 +1,2481 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLANERA - Kommun UX 1</title>
+  <style>
+    :root {
+      --bg: #eaf7f8;
+      --bg-2: #f5fbfb;
+      --panel: rgba(255, 255, 255, 0.92);
+      --panel-strong: #ffffff;
+      --ink: #101828;
+      --muted: #3f6476;
+      --muted-2: #7b94a4;
+      --line: rgba(3, 85, 144, 0.14);
+      --line-strong: rgba(3, 85, 144, 0.24);
+      --accent: #00aeb8;
+      --accent-2: #035590;
+      --accent-3: #02aec3;
+      --accent-soft: rgba(0, 174, 184, 0.12);
+      --accent-soft-2: rgba(2, 174, 195, 0.16);
+      --warn: #f1e15e;
+      --shadow: 0 24px 70px rgba(7, 20, 38, 0.14);
+      --shadow-soft: 0 14px 32px rgba(7, 20, 38, 0.09);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+      --tap: 56px;
+      --content: 1180px;
+      --sidebar: 184px;
+    }
+
+    [data-theme="dark"] {
+      --bg: #071426;
+      --bg-2: #0b1f34;
+      --panel: rgba(11, 31, 52, 0.88);
+      --panel-strong: #0b1f34;
+      --ink: #eaf7f8;
+      --muted: #9bb7c6;
+      --muted-2: #6c8796;
+      --line: rgba(2, 174, 195, 0.18);
+      --line-strong: rgba(2, 174, 195, 0.28);
+      --accent: #02aec3;
+      --accent-2: #00aeb8;
+      --accent-3: #035590;
+      --accent-soft: rgba(2, 174, 195, 0.14);
+      --accent-soft-2: rgba(2, 174, 195, 0.18);
+      --warn: #f1e15e;
+      --shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+      --shadow-soft: 0 16px 34px rgba(0, 0, 0, 0.28);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(0, 174, 184, 0.22), transparent 30%),
+        radial-gradient(circle at top right, rgba(2, 174, 195, 0.14), transparent 26%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .shell {
+      min-height: 100%;
+      display: flex;
+      justify-content: center;
+      padding: 22px;
+    }
+
+    .app {
+      width: min(var(--content), 100%);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+    }
+
+    .topbar {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 62px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(243, 248, 251, 0.98), rgba(234, 242, 247, 0.97));
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow-soft);
+      overflow: hidden;
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .topbar {
+      background: linear-gradient(180deg, rgba(11, 31, 52, 0.98), rgba(7, 20, 38, 0.96));
+      border-color: rgba(2, 174, 195, 0.14);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+    }
+
+    .topbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      position: relative;
+      z-index: 1;
+      margin-left: 0;
+    }
+
+    .topbar-brand__mark {
+      width: 46px;
+      height: 46px;
+      flex: 0 0 auto;
+      background: transparent;
+      border: 0;
+      display: block;
+      overflow: hidden;
+      margin: 0;
+      object-fit: contain;
+    }
+
+    .topbar-brand__copy {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .topbar-brand__copy strong {
+      display: block;
+      font-size: 0.98rem;
+      letter-spacing: 0.01em;
+      line-height: 1.1;
+    }
+
+    .topbar-brand__copy span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      line-height: 1.1;
+    }
+
+    .status-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--muted);
+      font-size: 0.92rem;
+      white-space: nowrap;
+    }
+
+    .status-pill strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .status-pill.selected {
+      border-color: rgba(2, 174, 195, 0.24);
+      background: rgba(2, 174, 195, 0.10);
+      color: var(--accent-2);
+    }
+
+    .status-date {
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.74);
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      font-size: 0.92rem;
+    }
+
+    .status-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    .theme-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .theme-toggle svg {
+      width: 22px;
+      height: 22px;
+      display: block;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.9;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    [data-theme="light"] .theme-toggle {
+      background: linear-gradient(180deg, #f7fbfb, #eef5f6);
+      border-color: rgba(7, 20, 38, 0.10);
+      color: #035590;
+    }
+
+    [data-theme="dark"] .theme-toggle {
+      background: linear-gradient(180deg, #0f2941, #0b1f34);
+      border-color: rgba(241, 225, 94, 0.18);
+      color: #f1e15e;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+    }
+
+    .shell-layout {
+      display: grid;
+      grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .shell-sidebar {
+      position: sticky;
+      top: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px 14px;
+      border-radius: 28px;
+      border: 1px solid rgba(2, 174, 195, 0.12);
+      background: linear-gradient(180deg, #0b1f34 0%, #091a2c 100%);
+      box-shadow: var(--shadow-soft);
+      backdrop-filter: blur(14px);
+      min-height: 100%;
+    }
+
+    [data-theme="dark"] .shell-sidebar {
+      background: linear-gradient(180deg, #0b1f34 0%, #091a2c 100%);
+    }
+
+    .shell-sidebar,
+    .shell-sidebar__brand-copy span,
+    .shell-nav__item,
+    .shell-helper__text {
+      color: rgba(234, 247, 248, 0.88);
+    }
+
+    .shell-sidebar__context {
+      display: grid;
+      gap: 3px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(2, 174, 195, 0.12);
+    }
+
+    .shell-sidebar__context strong {
+      display: block;
+      font-size: 0.98rem;
+      letter-spacing: 0.02em;
+      line-height: 1.1;
+    }
+
+    .shell-sidebar__context span {
+      display: block;
+      font-size: 0.8rem;
+      color: rgba(234, 247, 248, 0.68);
+      line-height: 1.1;
+    }
+
+    .shell-nav {
+      display: grid;
+      gap: 4px;
+    }
+
+    .shell-nav__item {
+      min-height: 38px;
+      padding: 0 12px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: rgba(234, 247, 248, 0.78);
+      font-size: 0.96rem;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .shell-nav__item.active {
+      background: linear-gradient(180deg, rgba(2, 174, 195, 0.18), rgba(2, 174, 195, 0.10));
+      border-color: rgba(2, 174, 195, 0.22);
+      color: #eaf7f8;
+      box-shadow: none;
+    }
+
+    .shell-sidebar__bottom {
+      margin-top: auto;
+      display: grid;
+      gap: 10px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(2, 174, 195, 0.12);
+    }
+
+    .shell-sidebar__mascot-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    .shell-sidebar__mascot {
+      width: 34px;
+      height: 34px;
+      border-radius: 0;
+      overflow: visible;
+      background: transparent;
+      border: 0;
+      flex: 0 0 auto;
+    }
+
+    .shell-sidebar__mascot img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .shell-sidebar__footer {
+      color: rgba(234, 247, 248, 0.62);
+      line-height: 1.3;
+      font-size: 0.76rem;
+    }
+
+    .topbar-title {
+      display: none;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 2px;
+      font-size: 0.98rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      white-space: nowrap;
+    }
+
+    #app[data-screen="start"] .topbar {
+      background: linear-gradient(180deg, rgba(248, 252, 252, 0.94), rgba(240, 247, 248, 0.92));
+      border-color: rgba(3, 85, 144, 0.10);
+      box-shadow: 0 14px 32px rgba(7, 20, 38, 0.08);
+    }
+
+    #app[data-screen="start"] .brand,
+    #app[data-screen="start"] .status-date {
+      display: none;
+    }
+
+    #app[data-screen="start"] .topbar .status-strip {
+      margin-left: auto;
+    }
+
+    #app[data-screen="start"] .panel {
+      background: linear-gradient(180deg, rgba(248, 252, 252, 0.92), rgba(238, 247, 248, 0.94));
+      border-color: rgba(3, 85, 144, 0.10);
+      box-shadow: 0 20px 52px rgba(7, 20, 38, 0.10);
+    }
+
+    #app[data-screen="start"] .panel-inner {
+      padding: 22px;
+    }
+
+    #app[data-theme="light"] .planera-start-sidebar {
+      background: linear-gradient(180deg, rgba(229, 244, 247, 0.98), rgba(214, 236, 242, 0.98));
+      border-color: rgba(3, 85, 144, 0.12);
+      color: var(--ink);
+    }
+
+    #app[data-theme="dark"] .planera-start-sidebar {
+      background: linear-gradient(180deg, #0b1f34 0%, #091a2c 100%);
+      border-color: rgba(2, 174, 195, 0.14);
+      color: rgba(234, 247, 248, 0.88);
+    }
+
+    .planera-start-shell {
+      display: grid;
+      grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .planera-start-sidebar {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+      padding: 16px 14px;
+      border-radius: 28px;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-soft);
+      backdrop-filter: blur(14px);
+    }
+
+    #app[data-theme="light"] .planera-start-sidebar .planera-start-sidebar__brand-copy span,
+    #app[data-theme="light"] .planera-start-sidebar .planera-start-sidebar__item,
+    #app[data-theme="light"] .planera-start-sidebar .planera-start-sidebar__settings {
+      color: #244a62;
+    }
+
+    #app[data-theme="light"] .planera-start-sidebar .planera-start-sidebar__item.active {
+      color: var(--accent-2);
+    }
+
+    .planera-start-sidebar__brand {
+      display: none;
+    }
+
+    .planera-start-sidebar__brand-mark {
+      width: 30px;
+      height: 30px;
+      flex: 0 0 auto;
+      background: transparent;
+    }
+
+    .planera-start-sidebar__brand-mark img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .planera-start-sidebar__brand-copy strong {
+      display: block;
+      font-size: 0.88rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .planera-start-sidebar__brand-copy span {
+      display: block;
+      margin-top: 2px;
+      font-size: 0.84rem;
+      color: inherit;
+      opacity: 0.78;
+    }
+
+    .planera-start-sidebar__nav {
+      display: grid;
+      gap: 6px;
+      margin-top: 0;
+    }
+
+    .planera-start-sidebar__item {
+      min-height: 42px;
+      padding: 0 12px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: transparent;
+      text-align: left;
+      font-weight: 650;
+      color: inherit;
+      opacity: 0.88;
+    }
+
+    .planera-start-sidebar__item.active {
+      background: linear-gradient(180deg, rgba(2, 174, 195, 0.18), rgba(2, 174, 195, 0.10));
+      border-color: rgba(2, 174, 195, 0.24);
+      color: var(--accent-2);
+      opacity: 1;
+    }
+
+    .planera-start-sidebar__bottom {
+      margin-top: auto;
+      padding-top: 14px;
+      border-top: 1px solid rgba(3, 85, 144, 0.10);
+    }
+
+    #app[data-theme="dark"] .planera-start-sidebar__bottom {
+      border-top-color: rgba(2, 174, 195, 0.12);
+    }
+
+    #app[data-theme="dark"][data-screen="start"] {
+      color: var(--ink);
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .topbar-title {
+      color: #eaf7f8;
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .panel {
+      background: linear-gradient(180deg, rgba(9, 24, 43, 0.96), rgba(7, 20, 38, 0.98));
+      border-color: rgba(2, 174, 195, 0.14);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-shell {
+      color: var(--ink);
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-date,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-lunch__kicker,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-lunch__meta,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-option__title,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-row__value {
+      color: #eaf7f8;
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-weeklabel {
+      background: linear-gradient(180deg, rgba(16, 41, 69, 0.96), rgba(11, 31, 52, 0.96));
+      border-color: rgba(2, 174, 195, 0.18);
+      color: #eaf7f8;
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-weekbar .arrow,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-weekbar .weekday {
+      background: rgba(16, 41, 69, 0.72);
+      border-color: rgba(2, 174, 195, 0.16);
+      color: #eaf7f8;
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-weekbar .weekday.current,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-weekbar .weekday.today {
+      color: var(--accent);
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-weekbar .weekday.current strong,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-weekbar .weekday.today strong {
+      color: var(--accent);
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-lunch {
+      background: linear-gradient(180deg, rgba(11, 31, 52, 0.98), rgba(7, 20, 38, 0.96));
+      border-color: rgba(2, 174, 195, 0.16);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-option__text,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-row__chev,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-row__label,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-sidebar__settings {
+      color: rgba(234, 247, 248, 0.72);
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-secondary,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-row {
+      border-top-color: rgba(2, 174, 195, 0.14);
+      border-bottom-color: rgba(2, 174, 195, 0.14);
+    }
+
+    #app[data-theme="dark"][data-screen="start"] .planera-start-row:hover,
+    #app[data-theme="dark"][data-screen="start"] .planera-start-row:focus-visible {
+      background: rgba(2, 174, 195, 0.04);
+    }
+
+    .planera-start-sidebar__settings {
+      min-height: 34px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      opacity: 0.68;
+      text-align: left;
+      font-size: 0.84rem;
+      font-weight: 650;
+    }
+
+    .planera-start-main {
+      display: grid;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .planera-start-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .planera-start-date {
+      font-size: clamp(2.45rem, 1.05vw + 1.65rem, 2.75rem);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+    }
+
+    .planera-start-weekbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.62);
+      overflow: auto;
+      scrollbar-width: none;
+    }
+
+    #app[data-theme="light"] .planera-start-weekbar {
+      background: linear-gradient(180deg, rgba(247, 251, 251, 0.86), rgba(238, 247, 248, 0.92));
+    }
+
+    #app[data-theme="dark"] .planera-start-weekbar {
+      background: rgba(11, 31, 52, 0.92);
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    .planera-start-weekbar::-webkit-scrollbar { display: none; }
+
+    .planera-start-weeklabel {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0 14px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.74);
+      color: var(--accent-2);
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+
+    .planera-start-weekbar .arrow,
+    .planera-start-weekbar .weekday {
+      flex: 0 0 auto;
+    }
+
+    .planera-start-weekbar .arrow {
+      min-width: 44px;
+      width: 44px;
+      height: 44px;
+      min-height: 44px;
+      padding: 0;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--ink);
+      font-size: 1.15rem;
+      line-height: 1;
+      box-sizing: border-box;
+    }
+
+    .planera-start-weekbar .weekday {
+      min-width: 84px;
+    }
+
+    #app[data-theme="light"] .planera-start-weekbar .arrow {
+      background: linear-gradient(180deg, rgba(247, 251, 251, 0.92), rgba(238, 247, 248, 0.98));
+      border-color: rgba(3, 85, 144, 0.12);
+      color: var(--accent-2);
+      box-shadow: 0 8px 18px rgba(7, 20, 38, 0.06);
+    }
+
+    #app[data-theme="dark"] .planera-start-weekbar .arrow {
+      background: linear-gradient(180deg, rgba(16, 41, 69, 0.92), rgba(11, 31, 52, 0.96));
+      border-color: rgba(2, 174, 195, 0.18);
+      color: #eaf7f8;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+    }
+
+    #app[data-theme="light"] .planera-start-weekbar .arrow:hover,
+    #app[data-theme="light"] .planera-start-weekbar .arrow:focus-visible,
+    #app[data-theme="dark"] .planera-start-weekbar .arrow:hover,
+    #app[data-theme="dark"] .planera-start-weekbar .arrow:focus-visible {
+      outline: none;
+      border-color: rgba(2, 174, 195, 0.34);
+      box-shadow: 0 0 0 4px rgba(2, 174, 195, 0.10);
+    }
+
+    .planera-start-weekbar .weekday.current {
+      border-color: rgba(2, 174, 195, 0.26);
+      background: rgba(2, 174, 195, 0.12);
+      color: var(--accent-2);
+      box-shadow: inset 0 0 0 1px rgba(2, 174, 195, 0.10);
+    }
+
+    .planera-start-weekbar .weekday.current strong {
+      color: var(--accent-2);
+    }
+
+    #app[data-theme="dark"] .planera-start-weekbar .weekday.current {
+      background: linear-gradient(180deg, rgba(2, 174, 195, 0.24), rgba(2, 174, 195, 0.18));
+      border-color: rgba(2, 174, 195, 0.34);
+      color: #eaf7f8;
+      box-shadow: inset 0 0 0 1px rgba(2, 174, 195, 0.14);
+    }
+
+    #app[data-theme="dark"] .planera-start-weekbar .weekday.current strong {
+      color: #eaf7f8;
+    }
+
+    .planera-start-weekbar .weekday.today::after {
+      margin-top: 0;
+      font-size: 0.62rem;
+      letter-spacing: 0.11em;
+    }
+
+    #app[data-theme="dark"] .planera-start-weekbar .weekday.today::after {
+      color: var(--accent);
+    }
+
+    .planera-start-lunch {
+      display: grid;
+      gap: 12px;
+      padding: 16px 20px 16px;
+      border-radius: 28px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(242, 249, 250, 0.96));
+      box-shadow: var(--shadow-soft);
+    }
+
+    #app[data-theme="light"] .planera-start-lunch {
+      background: linear-gradient(180deg, rgba(248, 252, 252, 0.94), rgba(240, 247, 248, 0.98));
+      border-color: rgba(3, 85, 144, 0.10);
+      box-shadow: 0 14px 32px rgba(7, 20, 38, 0.08);
+    }
+
+    #app[data-theme="dark"] .planera-start-lunch {
+      background: linear-gradient(180deg, rgba(11, 31, 52, 0.98), rgba(7, 20, 38, 0.96));
+      border-color: rgba(2, 174, 195, 0.16);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+    }
+
+    .planera-start-lunch__head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .planera-start-lunch__kicker {
+      font-size: 1.2rem;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: var(--ink);
+      font-weight: 800;
+    }
+
+    .planera-start-lunch__meta {
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 650;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .planera-start-lunch__options {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .planera-start-divider {
+      width: 1px;
+      background: linear-gradient(180deg, transparent, rgba(3, 85, 144, 0.18), transparent);
+    }
+
+    #app[data-theme="dark"] .planera-start-divider {
+      background: linear-gradient(180deg, transparent, rgba(2, 174, 195, 0.22), transparent);
+    }
+
+    .planera-start-option {
+      display: grid;
+      gap: 5px;
+      align-content: start;
+      min-width: 0;
+    }
+
+    .planera-start-option__kicker {
+      font-size: 0.82rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      font-weight: 800;
+    }
+
+    .planera-start-option__title {
+      font-size: 1.28rem;
+      line-height: 1.1;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .planera-start-option__text {
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.92rem;
+    }
+
+    .planera-start-option--active .planera-start-option__kicker {
+      color: var(--accent);
+    }
+
+    .planera-start-lunch__footer {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .planera-start-cta {
+      min-height: 48px;
+      padding: 0 18px;
+    }
+
+    .planera-start-secondary {
+      display: grid;
+      gap: 0;
+      border-top: 1px solid var(--line);
+      margin-top: 0;
+    }
+
+    .planera-start-row {
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 14px;
+      min-height: 48px;
+      padding: 11px 6px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      color: var(--ink);
+      text-align: left;
+    }
+
+    #app[data-theme="light"] .planera-start-row {
+      border-bottom-color: rgba(3, 85, 144, 0.10);
+    }
+
+    .planera-start-row:last-child {
+      border-bottom: 0;
+    }
+
+    .planera-start-row__label {
+      font-size: 0.86rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      font-weight: 800;
+    }
+
+    .planera-start-row__value {
+      font-size: 1rem;
+      font-weight: 650;
+      color: var(--ink);
+    }
+
+    .planera-start-row__chev {
+      color: var(--muted);
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    #app[data-theme="light"] .planera-start-row:hover,
+    #app[data-theme="light"] .planera-start-row:focus-visible {
+      outline: none;
+      background: rgba(2, 174, 195, 0.05);
+    }
+
+    @media (max-width: 1040px) {
+      .planera-start-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .planera-start-sidebar {
+        min-height: auto;
+      }
+
+      .planera-start-head {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .planera-start-lunch__options {
+        grid-template-columns: 1fr;
+      }
+
+      .planera-start-divider {
+        width: 100%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(3, 85, 144, 0.18), transparent);
+      }
+
+      .planera-start-row {
+        grid-template-columns: 84px minmax(0, 1fr) auto;
+      }
+    }
+
+    [data-theme="dark"] .brand-copy span,
+    [data-theme="dark"] .shell-sidebar__brand-copy span {
+      color: rgba(234, 247, 248, 0.72);
+    }
+
+    [data-theme="dark"] .theme-toggle {
+      background: rgba(11, 31, 52, 0.96);
+      border-color: rgba(2, 174, 195, 0.16);
+      color: #eaf7f8;
+    }
+
+    [data-theme="dark"] .status-date {
+      background: rgba(11, 31, 52, 0.94);
+      color: rgba(234, 247, 248, 0.84);
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    [data-theme="dark"] .status-pill {
+      background: rgba(11, 31, 52, 0.94);
+      color: rgba(234, 247, 248, 0.72);
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    [data-theme="dark"] .status-date,
+    [data-theme="dark"] .status-avatar {
+      background: rgba(11, 31, 52, 0.94);
+      color: rgba(234, 247, 248, 0.84);
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    [data-theme="dark"] .theme-toggle {
+      background: linear-gradient(180deg, #0f2941, #0b1f34);
+      border-color: rgba(241, 225, 94, 0.18);
+      color: #f1e15e;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 18px;
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 30px;
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-inner {
+      padding: 24px;
+    }
+
+    .screen {
+      display: none;
+      animation: fadeIn 220ms ease-out;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .screen-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    .title {
+      font-size: clamp(2rem, 2.2vw + 1.2rem, 3.2rem);
+      line-height: 1.04;
+      letter-spacing: -0.04em;
+    }
+
+    .subtitle {
+      margin-top: 10px;
+      max-width: 68ch;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 1rem;
+    }
+
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 0 16px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 650;
+    }
+
+    .back-btn:hover,
+    .back-btn:focus-visible,
+    .icon-btn:hover,
+    .icon-btn:focus-visible,
+    .chip:hover,
+    .chip:focus-visible,
+    .card-btn:hover,
+    .card-btn:focus-visible,
+    .plan-btn:hover,
+    .plan-btn:focus-visible {
+      outline: none;
+      border-color: rgba(46, 125, 79, 0.36);
+      box-shadow: 0 0 0 4px rgba(46, 125, 79, 0.10);
+    }
+
+    .weekbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 12px 0 16px;
+      padding: 10px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--line);
+      overflow: auto;
+      scrollbar-width: none;
+    }
+
+    [data-theme="dark"] .weekbar {
+      background: rgba(11, 31, 52, 0.92);
+      border-color: rgba(2, 174, 195, 0.14);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    }
+
+    .weekbar::-webkit-scrollbar { display: none; }
+
+    .weekbar .arrow {
+      min-width: 44px;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.82);
+      border-radius: 14px;
+      color: var(--ink);
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    [data-theme="dark"] .weekbar .arrow {
+      background: var(--bg-2);
+      border-color: rgba(2, 174, 195, 0.16);
+      color: var(--ink);
+    }
+
+    .weekday {
+      min-width: 78px;
+      min-height: 44px;
+      padding: 0 12px;
+      border-radius: 14px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      transition: 140ms ease;
+    }
+
+    .weekday strong {
+      font-size: 0.98rem;
+      color: var(--ink);
+    }
+
+    .weekday span { font-size: 0.88rem; }
+
+    .weekday.current { color: var(--accent-2); }
+    .weekday.current strong { color: var(--accent-2); }
+    .weekday.today::after {
+      content: "IDAG";
+      margin-top: 2px;
+      display: inline-flex;
+      align-self: flex-start;
+      font-size: 0.66rem;
+      letter-spacing: 0.10em;
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    [data-theme="dark"] .weekday {
+      color: var(--muted);
+    }
+
+    [data-theme="dark"] .weekday strong {
+      color: var(--ink);
+    }
+
+    [data-theme="dark"] .weekday.current,
+    [data-theme="dark"] .weekday.current strong {
+      color: var(--accent);
+    }
+
+    [data-theme="dark"] .weekday.today::after {
+      color: var(--accent);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .hero-card {
+      grid-column: span 7;
+      min-height: 250px;
+      border-radius: 28px;
+      padding: 22px;
+      background:
+        radial-gradient(circle at top right, rgba(2, 174, 195, 0.12), transparent 42%),
+        linear-gradient(180deg, #ffffff 0%, #f7fbfb 100%);
+      border: 1px solid rgba(2, 174, 195, 0.14);
+      box-shadow: var(--shadow-soft);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .hero-card__head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .hero-card__meta {
+      display: grid;
+      gap: 4px;
+      justify-items: end;
+      text-align: right;
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 650;
+    }
+
+    .meal-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .meal-option {
+      min-height: 138px;
+      padding: 14px 14px 16px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+      display: grid;
+      gap: 6px;
+      align-content: start;
+    }
+
+    .meal-option--active {
+      border-color: rgba(2, 174, 195, 0.22);
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(243,250,250,0.96));
+    }
+
+    .meal-option__kicker {
+      font-size: 0.76rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      font-weight: 800;
+    }
+
+    .meal-option__title {
+      font-size: 1.2rem;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+      font-weight: 750;
+    }
+
+    .meal-option__text {
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.95rem;
+    }
+
+    .hero-card__footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    [data-theme="dark"] .hero-card {
+      background:
+        radial-gradient(circle at top right, rgba(2, 174, 195, 0.14), transparent 40%),
+        linear-gradient(180deg, rgba(11, 31, 52, 0.98), rgba(7, 20, 38, 0.96));
+      border-color: rgba(2, 174, 195, 0.16);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+    }
+
+    [data-theme="dark"] .hero-card__meta,
+    [data-theme="dark"] .meal-option__text {
+      color: rgba(234, 247, 248, 0.72);
+    }
+
+    [data-theme="dark"] .meal-option {
+      background: linear-gradient(180deg, rgba(14, 37, 60, 0.98), rgba(11, 31, 52, 0.94));
+      border-color: rgba(2, 174, 195, 0.12);
+    }
+
+    [data-theme="dark"] .meal-option--active {
+      border-color: rgba(2, 174, 195, 0.20);
+      background: linear-gradient(180deg, rgba(15, 40, 64, 0.98), rgba(11, 31, 52, 0.96));
+    }
+
+    [data-theme="dark"] .meal-option__kicker {
+      color: var(--accent);
+    }
+
+    [data-theme="dark"] .meal-option__title {
+      color: var(--ink);
+    }
+
+    .small-card {
+      grid-column: span 5;
+      display: grid;
+      gap: 12px;
+    }
+
+    [data-theme="dark"] .small-card {
+      gap: 18px;
+    }
+
+    .mini-card {
+      min-height: 68px;
+      border-radius: 20px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.88);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    [data-theme="dark"] .mini-card {
+      background: linear-gradient(180deg, rgba(14, 37, 60, 0.98), rgba(11, 31, 52, 0.94));
+      border-color: rgba(2, 174, 195, 0.12);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+    }
+
+    .mini-card .label {
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      color: var(--accent-2);
+      margin-bottom: 4px;
+    }
+
+    [data-theme="dark"] .mini-card .label {
+      color: var(--accent);
+    }
+
+    .mini-card .meta {
+      color: var(--muted);
+      margin-top: 4px;
+      font-size: 0.94rem;
+    }
+
+    [data-theme="dark"] .mini-card strong,
+    [data-theme="dark"] .mini-card .meta {
+      color: var(--ink);
+    }
+
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .data-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    [data-theme="dark"] .data-pill {
+      background: rgba(11, 31, 52, 0.94);
+      border-color: rgba(2, 174, 195, 0.14);
+      color: var(--ink);
+    }
+
+    .hero-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .eyebrow-large {
+      font-size: 0.86rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      font-weight: 800;
+    }
+
+    .hero-title {
+      margin-top: 8px;
+      font-size: clamp(1.8rem, 1.4vw + 1rem, 2.3rem);
+      line-height: 1;
+      letter-spacing: -0.05em;
+    }
+
+    .hero-copy {
+      margin-top: 10px;
+      color: var(--muted);
+      line-height: 1.55;
+      max-width: 54ch;
+      font-size: 0.98rem;
+    }
+
+    .hero-footer {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .stats-inline {
+      display: grid;
+      gap: 4px;
+      color: var(--accent-2);
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    .plan-btn {
+      min-height: 56px;
+      padding: 0 22px;
+      border: 0;
+      border-radius: 16px;
+      background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%);
+      color: #fff;
+      font-weight: 800;
+      box-shadow: 0 12px 24px rgba(2, 174, 195, 0.22);
+    }
+
+    .plan-btn.secondary {
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      box-shadow: none;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .alt-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .alt-card {
+      border-radius: 22px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(247,250,245,0.9));
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 208px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    [data-theme="dark"] .alt-card {
+      background: linear-gradient(180deg, rgba(14, 37, 60, 0.98), rgba(11, 31, 52, 0.94));
+      border-color: rgba(2, 174, 195, 0.12);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+    }
+
+    .alt-card.primary {
+      border-color: rgba(2, 174, 195, 0.18);
+      background:
+        radial-gradient(circle at top right, rgba(2, 174, 195, 0.12), transparent 44%),
+        linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,249,244,0.95));
+    }
+
+    [data-theme="dark"] .alt-card.primary {
+      background:
+        radial-gradient(circle at top right, rgba(2, 174, 195, 0.16), transparent 44%),
+        linear-gradient(180deg, rgba(15, 40, 64, 0.98), rgba(11, 31, 52, 0.96));
+      border-color: rgba(2, 174, 195, 0.16);
+    }
+
+    .alt-title {
+      font-size: 1.15rem;
+      letter-spacing: -0.03em;
+      margin-bottom: 2px;
+    }
+
+    .alt-subtitle {
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.96rem;
+    }
+
+    [data-theme="dark"] .alt-title,
+    [data-theme="dark"] .hero-title,
+    [data-theme="dark"] .title,
+    [data-theme="dark"] .summary-number,
+    [data-theme="dark"] .summary-stat strong,
+    [data-theme="dark"] .summary-stat .value,
+    [data-theme="dark"] .success-title {
+      color: var(--ink);
+    }
+
+    [data-theme="dark"] .alt-subtitle,
+    [data-theme="dark"] .hero-copy,
+    [data-theme="dark"] .subtitle,
+    [data-theme="dark"] .summary-note,
+    [data-theme="dark"] .success-copy,
+    [data-theme="dark"] .section-copy,
+    [data-theme="dark"] .selected-card .detail,
+    [data-theme="dark"] .summary-stat span,
+    [data-theme="dark"] .brand-copy span,
+    [data-theme="dark"] .shell-sidebar__brand-copy span {
+      color: var(--muted);
+    }
+
+    .alt-body {
+      display: grid;
+      gap: 12px;
+    }
+
+    .alt-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .metric {
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      font-weight: 650;
+    }
+
+    .builder-box {
+      margin-top: auto;
+      padding: 16px;
+      border-radius: 20px;
+      border: 1px solid rgba(2, 174, 195, 0.14);
+      background: rgba(2, 174, 195, 0.06);
+    }
+
+    [data-theme="dark"] .builder-box {
+      background: rgba(2, 174, 195, 0.08);
+      border-color: rgba(2, 174, 195, 0.16);
+    }
+
+    .builder-box .label {
+      font-size: 0.76rem;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      margin-bottom: 10px;
+      display: block;
+      font-weight: 800;
+    }
+
+    .builder-box .body {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .builder-box .note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+
+    .section-title {
+      font-size: 1.35rem;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+    }
+
+    .question {
+      margin-top: 8px;
+      font-size: clamp(1.6rem, 2vw + 1rem, 2.3rem);
+      line-height: 1.1;
+      letter-spacing: -0.04em;
+    }
+
+    .section-copy {
+      margin-top: 10px;
+      color: var(--muted);
+      line-height: 1.55;
+      max-width: 62ch;
+    }
+
+    .deviation-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .chip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      width: 100%;
+      min-height: 68px;
+      padding: 14px 16px 14px 18px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.88);
+      color: var(--ink);
+      text-align: left;
+      transition: 160ms ease;
+    }
+
+    .chip.selected {
+      border-color: rgba(2, 174, 195, 0.32);
+      background: rgba(2, 174, 195, 0.10);
+      box-shadow: inset 0 0 0 1px rgba(2, 174, 195, 0.08);
+    }
+
+    .chip .left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .chip .name {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 750;
+      font-size: 1.02rem;
+    }
+
+    .chip .count {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .chip .right {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 auto;
+    }
+
+    .builder-tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(46, 125, 79, 0.18);
+      background: rgba(46, 125, 79, 0.08);
+      color: var(--accent-2);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .icon-btn {
+      min-width: 36px;
+      min-height: 36px;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.96);
+      color: var(--accent-2);
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .detail-row {
+      display: grid;
+      gap: 10px;
+      margin: 0 10px 4px 10px;
+      padding-left: 12px;
+      border-left: 2px solid rgba(46, 125, 79, 0.18);
+    }
+
+    .detail-item {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(46, 125, 79, 0.10);
+      color: var(--ink);
+    }
+
+    .detail-item small { color: var(--muted); }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      gap: 14px;
+      align-items: start;
+      margin-top: 14px;
+    }
+
+    .summary-panel {
+      border-radius: 24px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: var(--shadow-soft);
+    }
+
+    [data-theme="dark"] .summary-panel {
+      background: linear-gradient(180deg, rgba(14, 37, 60, 0.98), rgba(11, 31, 52, 0.94));
+      border-color: rgba(2, 174, 195, 0.12);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+    }
+
+    .summary-kicker {
+      color: var(--accent-2);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    [data-theme="dark"] .summary-kicker {
+      color: var(--accent);
+    }
+
+    .summary-number {
+      font-size: clamp(1.8rem, 1.4vw + 1rem, 2.4rem);
+      letter-spacing: -0.06em;
+      line-height: 1;
+      margin-top: 4px;
+    }
+
+    .summary-note {
+      margin-top: 10px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .selected-list {
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .selected-card {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(249, 251, 248, 0.92);
+      padding: 14px 16px;
+    }
+
+    [data-theme="dark"] .selected-card {
+      background: rgba(7, 20, 38, 0.55);
+      border-color: rgba(2, 174, 195, 0.12);
+    }
+
+    .selected-card .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .selected-card .detail {
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .summary-stats {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .summary-stat {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,1), rgba(247,250,245,0.96));
+      border: 1px solid var(--line);
+    }
+
+    [data-theme="dark"] .summary-stat {
+      background: rgba(7, 20, 38, 0.48);
+      border-color: rgba(2, 174, 195, 0.12);
+    }
+
+    .summary-stat strong {
+      display: block;
+      font-size: 1.25rem;
+      letter-spacing: -0.03em;
+      margin-bottom: 2px;
+    }
+
+    .summary-stat span {
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+
+    .summary-stat .value {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--accent-2);
+      align-self: center;
+    }
+
+    .footer-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      margin-top: 18px;
+    }
+
+    .success-state {
+      min-height: 420px;
+      display: grid;
+      place-items: center;
+      border-radius: 30px;
+      padding: 28px;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(46, 125, 79, 0.16), transparent 36%),
+        linear-gradient(180deg, rgba(255,255,255,0.95), rgba(245,249,244,0.96));
+      border: 1px solid rgba(46, 125, 79, 0.16);
+      box-shadow: var(--shadow);
+    }
+
+    [data-theme="dark"] .success-state {
+      background:
+        radial-gradient(circle at 50% 0%, rgba(2, 174, 195, 0.18), transparent 36%),
+        linear-gradient(180deg, rgba(14, 37, 60, 0.98), rgba(11, 31, 52, 0.96));
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    .success-card {
+      width: min(620px, 100%);
+      text-align: center;
+      padding: 26px;
+    }
+
+    .success-mark {
+      width: 78px;
+      height: 78px;
+      border-radius: 24px;
+      margin: 0 auto 20px;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%);
+      box-shadow: 0 18px 36px rgba(2, 174, 195, 0.24);
+      font-size: 2rem;
+      font-weight: 900;
+    }
+
+    .success-title {
+      font-size: clamp(2rem, 2vw + 1.1rem, 3rem);
+      letter-spacing: -0.05em;
+      line-height: 1;
+    }
+
+    .success-copy {
+      margin: 12px auto 0;
+      max-width: 42ch;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .hidden { display: none !important; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 1040px) {
+      .grid,
+      .summary-grid,
+      .alt-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-card,
+      .small-card {
+        grid-column: auto;
+      }
+
+      .screen-head {
+        flex-direction: column;
+      }
+
+      .footer-actions {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell { padding: 12px; }
+      .panel-inner { padding: 18px; }
+      .topbar { padding: 14px 16px; }
+      .status-strip { justify-content: flex-start; }
+      .hero-card,
+      .alt-card,
+      .summary-panel,
+      .success-state {
+        border-radius: 24px;
+      }
+      .hero-top {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .weekbar { padding: 10px; }
+      .weekday {
+        min-width: 96px;
+        min-height: 62px;
+      }
+      .chip { align-items: flex-start; }
+      .chip .right { align-self: center; }
+      .summary-stat { flex-direction: column; }
+      .summary-stat .value { align-self: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="app" id="app" data-screen="start">
+      <header class="topbar" aria-label="Yuplan header">
+        <div class="topbar-brand">
+          <img class="topbar-brand__mark" src="../../static/brand/v1/logo/yuplan-mark-primary.svg" alt="Yuplan">
+          <div class="topbar-brand__copy">
+            <strong>Yuplan</strong>
+            <span>· Planera</span>
+          </div>
+        </div>
+        <div class="status-strip" aria-label="Progress and context">
+          <div class="status-date sr-only" id="statusDay">Tisdag 8 september</div>
+          <div class="status-avatar" aria-hidden="true">HJ</div>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false" aria-label="Växla till dark mode"></button>
+        </div>
+      </header>
+
+      <main class="main panel">
+        <div class="panel-inner">
+          <section class="screen active planera-start" id="screen-start" aria-labelledby="start-title">
+            <div class="planera-start-shell">
+              <aside class="planera-start-sidebar" aria-label="Yuplan navigation">
+                <div class="shell-sidebar__context">
+                  <strong>Centralköket</strong>
+                  <span>Kommun</span>
+                </div>
+                <nav class="planera-start-sidebar__nav" aria-label="Visuell navigering">
+                  <button class="planera-start-sidebar__item" type="button">Översikt</button>
+                  <button class="planera-start-sidebar__item active" type="button" aria-current="page">Planera</button>
+                  <button class="planera-start-sidebar__item" type="button">Meny</button>
+                  <button class="planera-start-sidebar__item" type="button">Veckovy</button>
+                  <button class="planera-start-sidebar__item" type="button">Rapporter</button>
+                </nav>
+                <div class="planera-start-sidebar__bottom">
+                  <button class="planera-start-sidebar__settings" type="button">Inställningar</button>
+                </div>
+              </aside>
+
+              <div class="planera-start-main">
+                <div class="planera-start-head">
+                  <h1 class="planera-start-date" id="start-title">Tisdag 8 september</h1>
+                </div>
+
+                <div class="planera-start-weekbar" role="toolbar" aria-label="Veckoväljare">
+                  <button class="arrow" type="button" aria-label="Föregående vecka">‹</button>
+                  <span class="planera-start-weeklabel">Vecka 37</span>
+                  <button class="weekday" type="button"><span>Mån</span><strong>7</strong></button>
+                  <button class="weekday current today" type="button" aria-current="date"><span>Tis</span><strong>8</strong></button>
+                  <button class="weekday" type="button"><span>Ons</span><strong>9</strong></button>
+                  <button class="weekday" type="button"><span>Tors</span><strong>10</strong></button>
+                  <button class="weekday" type="button"><span>Fre</span><strong>11</strong></button>
+                  <button class="weekday" type="button"><span>Lör</span><strong>12</strong></button>
+                  <button class="weekday" type="button"><span>Sön</span><strong>13</strong></button>
+                  <button class="arrow" type="button" aria-label="Nästa vecka">›</button>
+                </div>
+
+                <section class="planera-start-lunch" aria-label="Lunch">
+                  <div class="planera-start-lunch__head">
+                    <div class="planera-start-lunch__kicker">Lunch</div>
+                    <div class="planera-start-lunch__meta">18 mottagande enheter · 273 portioner</div>
+                  </div>
+
+                  <div class="planera-start-lunch__options">
+                    <article class="planera-start-option planera-start-option--active">
+                      <div class="planera-start-option__kicker">ALT 1</div>
+                      <div class="planera-start-option__title">Fläskkarré</div>
+                      <div class="planera-start-option__text">Potatismos · Gräddsås</div>
+                    </article>
+
+                    <div class="planera-start-divider" aria-hidden="true"></div>
+
+                    <article class="planera-start-option">
+                      <div class="planera-start-option__kicker">ALT 2</div>
+                      <div class="planera-start-option__title">Kokt torsk</div>
+                      <div class="planera-start-option__text">Äggsås · Kokt potatis</div>
+                    </article>
+                  </div>
+
+                  <div class="planera-start-lunch__footer">
+                    <button class="plan-btn planera-start-cta" type="button" data-jump="lunch">Planera lunch →</button>
+                  </div>
+                </section>
+
+                <section class="planera-start-secondary" aria-label="Senare idag">
+                  <button class="planera-start-row" type="button">
+                    <span class="planera-start-row__label">Kväll</span>
+                    <span class="planera-start-row__value">Köttfärssoppa</span>
+                    <span class="planera-start-row__chev">›</span>
+                  </button>
+                  <button class="planera-start-row" type="button">
+                    <span class="planera-start-row__label">Dessert</span>
+                    <span class="planera-start-row__value">Äppelpaj</span>
+                    <span class="planera-start-row__chev">›</span>
+                  </button>
+                  <button class="planera-start-row" type="button">
+                    <span class="planera-start-row__label">Tillägg</span>
+                    <span class="planera-start-row__value">Sallad · Mos · Övriga tillval</span>
+                    <span class="planera-start-row__chev">›</span>
+                  </button>
+                </section>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen" id="screen-lunch" aria-labelledby="lunch-title">
+            <div class="screen-head">
+              <div>
+                <div class="eyebrow">Lunch / dagens alternativ</div>
+                <h2 class="title" id="lunch-title">Lunch</h2>
+                <p class="subtitle">Här visas båda alternativen tydligt med mängd och en diskret rådgivande Builder-sektion för den rätt som har strukturerad information.</p>
+              </div>
+              <a class="back-btn" href="#" data-jump="start">‹ Tillbaka</a>
+            </div>
+
+            <div class="subtitle" style="margin-top:0; font-weight:600; color:var(--accent-2);">Tisdag 8 september</div>
+            <div class="alt-grid">
+              <article class="alt-card primary">
+                <div class="alt-body">
+                  <div>
+                    <div class="eyebrow-large">Alternativ 1</div>
+                    <h3 class="alt-title">Fläskkarré</h3>
+                    <p class="alt-subtitle">Potatismos · gräddsås</p>
+                  </div>
+                  <div class="alt-metrics">
+                    <span class="metric">12 mottagande enheter</span>
+                    <span class="metric">182 personer</span>
+                  </div>
+                </div>
+                <div class="builder-box">
+                  <span class="label">Registrerad information för rätten</span>
+                  <div class="body">
+                    <span class="builder-tag">Laktos</span>
+                    <span class="builder-tag">Timbal</span>
+                    <span class="builder-tag">Grov paté</span>
+                    <span class="builder-tag">Flytande kost</span>
+                  </div>
+                  <div class="note">Detta är rådgivande Builder-information. Den hjälper användaren att förstå rätten, men ingen avvikelse är automatiskt vald.</div>
+                </div>
+                <div class="button-row">
+                  <button class="plan-btn" type="button" data-jump="assess">Planera alternativ 1</button>
+                </div>
+              </article>
+
+              <article class="alt-card">
+                <div class="alt-body">
+                  <div>
+                    <div class="eyebrow-large">Alternativ 2</div>
+                    <h3 class="alt-title">Kokt torsk</h3>
+                    <p class="alt-subtitle">Äggsås · kokt potatis</p>
+                  </div>
+                  <div class="alt-metrics">
+                    <span class="metric">6 mottagande enheter</span>
+                    <span class="metric">91 personer</span>
+                  </div>
+                </div>
+                <div class="builder-box" style="background: rgba(255,255,255,0.7); border-color: rgba(35,55,39,0.10);">
+                  <span class="label">Builder-data saknas eller är tunn</span>
+                  <div class="note">Planera fungerar fortfarande. Den här rätten kan planeras utan att någon Builder-information behöver visas.</div>
+                </div>
+                <div class="button-row">
+                  <button class="plan-btn secondary" type="button" data-jump="assess">Visa som alternativ i prototypen</button>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="screen" id="screen-assess" aria-labelledby="assess-title">
+            <div class="screen-head">
+              <div>
+                <div class="eyebrow">Bedöm normalkosten</div>
+                <h2 class="title" id="assess-title">Fläskkarré</h2>
+                <p class="subtitle">Potatismos · gräddsås · 182 personer</p>
+              </div>
+              <a class="back-btn" href="#" data-jump="lunch">‹ Tillbaka och ändra</a>
+            </div>
+
+            <div class="question">Vilka kan inte äta den här rätten som den är?</div>
+            <p class="section-copy">Välj huvudavvikelserna direkt i huvudlistan. Builder-förslag kan hjälpa orienteringen, men de är aldrig automatiska beslut.</p>
+
+            <div class="deviation-list" id="deviationList" aria-label="Registrerade huvudavvikelser"></div>
+
+            <div class="summary-grid">
+              <div class="summary-panel">
+                <div class="summary-kicker">Live-sammanfattning</div>
+                <div class="summary-number" id="liveCount">182 totalt</div>
+                <div class="summary-stats">
+                  <div class="summary-stat">
+                    <div>
+                      <strong id="normalCount">182</strong>
+                      <span>Normalkost</span>
+                    </div>
+                    <div class="value" id="adjustmentCount">0</div>
+                  </div>
+                </div>
+                <div class="footer-actions">
+                  <button class="plan-btn" type="button" data-jump="review">Fortsätt</button>
+                </div>
+              </div>
+
+              <div class="summary-panel">
+                <div class="summary-kicker">Valt läge</div>
+                <div class="section-title">Valt läge</div>
+                <p class="summary-note">Här syns vilka huvudavvikelser som är markerade just nu och hur kombinationerna kan öppnas utan att påverka urvalet.</p>
+                <div class="selected-list" id="selectedSnapshot"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen" id="screen-review" aria-labelledby="review-title">
+            <div class="screen-head">
+              <div>
+                <div class="eyebrow">Kontrollera planering</div>
+                <h2 class="title" id="review-title">Kontrollera planering</h2>
+                <p class="subtitle">Innan bekräftelse visas en ren konsekvensöversikt. Du kan fortfarande öppna kombinationsspecifikation via plus utan att ändra urvalet.</p>
+              </div>
+              <a class="back-btn" href="#" data-jump="assess">‹ Tillbaka och ändra</a>
+            </div>
+
+            <div class="summary-grid">
+              <div class="summary-panel">
+                <div class="summary-kicker">Lunch</div>
+                <div class="section-title">Fläskkarré</div>
+                <div class="summary-number" id="reviewTotal">182 personer totalt</div>
+                <div class="summary-stats">
+                  <div class="summary-stat">
+                    <div>
+                      <strong id="reviewNormal">171</strong>
+                      <span>Normalkost</span>
+                    </div>
+                    <div class="value" id="reviewAdjustments">11</div>
+                  </div>
+                </div>
+                <div class="footer-actions">
+                  <button class="plan-btn secondary" type="button" data-jump="assess">Tillbaka och ändra</button>
+                  <button class="plan-btn" type="button" id="confirmBtn">Bekräfta planering</button>
+                </div>
+              </div>
+
+              <div class="summary-panel">
+                <div class="summary-kicker">Valda huvudavvikelser</div>
+                <div class="selected-list" id="reviewSelected"></div>
+                <div class="summary-note">UX:en visar bara begripliga totalsiffror. Detaljerna bakom plus-tecknet kan öppnas när du behöver se kombinationerna.</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen" id="screen-success" aria-labelledby="success-title">
+            <div class="success-state">
+              <div class="success-card">
+                <div class="success-mark">✓</div>
+                <h2 class="success-title" id="success-title">Lunch planerad</h2>
+                <p class="success-copy">Planeringen är bekräftad. Härifrån tar produktionsvyer och utskrift över när de behövs.</p>
+                <div class="footer-actions" style="justify-content:center; margin-top:24px;">
+                  <button class="plan-btn secondary" type="button" data-jump="review">Gå tillbaka i prototypen</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const app = document.getElementById('app');
+    const screens = {
+      start: document.getElementById('screen-start'),
+      lunch: document.getElementById('screen-lunch'),
+      assess: document.getElementById('screen-assess'),
+      review: document.getElementById('screen-review'),
+      success: document.getElementById('screen-success'),
+    };
+    const statusDay = document.getElementById('statusDay');
+    const themeToggle = document.getElementById('themeToggle');
+    const deviationList = document.getElementById('deviationList');
+    const selectedSnapshot = document.getElementById('selectedSnapshot');
+    const reviewSelected = document.getElementById('reviewSelected');
+    const liveCount = document.getElementById('liveCount');
+    const normalCount = document.getElementById('normalCount');
+    const adjustmentCount = document.getElementById('adjustmentCount');
+    const reviewNormal = document.getElementById('reviewNormal');
+    const reviewAdjustments = document.getElementById('reviewAdjustments');
+    const reviewTotal = document.getElementById('reviewTotal');
+    const confirmBtn = document.getElementById('confirmBtn');
+
+    const scenario = {
+      dayLabel: 'Tisdag 8 september',
+      mealTitle: 'Fläskkarré',
+      mealSub: 'Potatismos · gräddsås',
+      totalPersons: 182,
+      deviations: [
+        {
+          id: 'timbal',
+          label: 'Timbal',
+          count: 8,
+          suggestion: true,
+          combos: [
+            { label: 'Timbal', count: 5 },
+            { label: 'Timbal + Laktos', count: 2 },
+            { label: 'Timbal + Glutenfri', count: 1 },
+          ],
+          short: 'Förslag från Builder',
+        },
+        {
+          id: 'grovpaté',
+          label: 'Grov paté',
+          count: 4,
+          suggestion: true,
+          combos: [
+            { label: 'Grov paté', count: 2 },
+            { label: 'Grov paté + Timbal', count: 1 },
+            { label: 'Grov paté + Glutenfri', count: 1 },
+          ],
+          short: 'Förslag från Builder',
+        },
+        {
+          id: 'laktos',
+          label: 'Laktos',
+          count: 9,
+          suggestion: true,
+          combos: [
+            { label: 'Laktos', count: 2 },
+            { label: 'Timbal + Laktos', count: 2 },
+            { label: 'Laktos + Glutenfri', count: 3 },
+            { label: 'Laktos + Flytande kost', count: 2 },
+          ],
+          short: 'Förslag från Builder',
+        },
+        {
+          id: 'glutenfri',
+          label: 'Glutenfri',
+          count: 6,
+          suggestion: true,
+          combos: [
+            { label: 'Glutenfri', count: 1 },
+            { label: 'Timbal + Glutenfri', count: 1 },
+            { label: 'Grov paté + Glutenfri', count: 1 },
+            { label: 'Laktos + Glutenfri', count: 3 },
+          ],
+          short: 'Förslag från Builder',
+        },
+        {
+          id: 'flytande',
+          label: 'Flytande kost',
+          count: 2,
+          suggestion: false,
+          combos: [
+            { label: 'Laktos + Flytande kost', count: 2 },
+          ],
+          short: 'Registrerat behov',
+        },
+      ],
+      defaultSelection: new Set(),
+      defaultExpanded: new Set(),
+    };
+
+    let screen = 'start';
+    let selected = new Set(scenario.defaultSelection);
+    let expanded = new Set(scenario.defaultExpanded);
+    let theme = 'light';
+
+    function setTheme(nextTheme) {
+      theme = nextTheme === 'dark' ? 'dark' : 'light';
+      app.dataset.theme = theme;
+      document.documentElement.dataset.theme = theme;
+      if (themeToggle) {
+        themeToggle.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+        themeToggle.setAttribute('aria-label', theme === 'dark' ? 'Byt till ljust läge' : 'Byt till mörkt läge');
+        themeToggle.innerHTML = theme === 'dark'
+          ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2.9v2.1"></path><path d="M12 19v2.1"></path><path d="M4.95 4.95l1.5 1.5"></path><path d="M17.55 17.55l1.5 1.5"></path><path d="M2.9 12h2.1"></path><path d="M19 12h2.1"></path><path d="M4.95 19.05l1.5-1.5"></path><path d="M17.55 6.45l1.5-1.5"></path></svg>'
+          : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 12.7A8.5 8.5 0 1 1 11.3 3.5a7 7 0 0 0 9.2 9.2Z"></path></svg>';
+      }
+    }
+
+    function setScreen(next) {
+      screen = next;
+      Object.entries(screens).forEach(([name, el]) => {
+        el.classList.toggle('active', name === next);
+      });
+      statusDay.textContent = scenario.dayLabel;
+      app.dataset.screen = next;
+      if (next === 'assess' || next === 'review') {
+        renderSelections();
+      }
+      if (next === 'assess') {
+        liveCount.textContent = `${scenario.totalPersons} totalt`;
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function selectedCategories() {
+      return scenario.deviations.filter((item) => selected.has(item.id));
+    }
+
+    function unionCount() {
+      const active = selectedCategories();
+      if (!active.length) return 0;
+      let total = active.reduce((sum, item) => sum + item.count, 0);
+      if (selected.has('timbal') && selected.has('grovpaté')) total -= 1;
+      if (selected.has('timbal') && selected.has('laktos')) total -= 2;
+      if (selected.has('timbal') && selected.has('glutenfri')) total -= 1;
+      if (selected.has('grovpaté') && selected.has('glutenfri')) total -= 1;
+      if (selected.has('laktos') && selected.has('glutenfri')) total -= 3;
+      if (selected.has('laktos') && selected.has('flytande')) total -= 2;
+      return total;
+    }
+
+    function renderDeviationRow(item) {
+      const isSelected = selected.has(item.id);
+      const isOpen = expanded.has(item.id);
+      const hasCombos = item.combos.length > 1 || (item.combos.length === 1 && item.combos[0].label !== item.label);
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = `chip${isSelected ? ' selected' : ''}`;
+      row.setAttribute('aria-pressed', String(isSelected));
+
+      const left = document.createElement('div');
+      left.className = 'left';
+
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.innerHTML = `<span>${item.label}</span>${item.suggestion ? '<span class="builder-tag">Förslag från Builder</span>' : ''}`;
+
+      const count = document.createElement('div');
+      count.className = 'count';
+      count.textContent = `${item.count} ${item.count === 1 ? 'person' : 'personer'}`;
+      left.append(name, count);
+
+      const right = document.createElement('div');
+      right.className = 'right';
+
+      if (hasCombos) {
+        const plus = document.createElement('button');
+        plus.type = 'button';
+        plus.className = 'icon-btn';
+        plus.setAttribute('aria-label', `${isOpen ? 'Dölj' : 'Visa'} specifikation för ${item.label}`);
+        plus.textContent = isOpen ? '−' : '+';
+        plus.addEventListener('click', (event) => {
+          event.stopPropagation();
+          if (expanded.has(item.id)) expanded.delete(item.id);
+          else expanded.add(item.id);
+          renderSelections();
+        });
+        right.append(plus);
+      }
+
+      const status = document.createElement('span');
+      status.className = 'builder-tag';
+      status.style.background = isSelected ? 'rgba(46, 125, 79, 0.14)' : 'rgba(255, 255, 255, 0.96)';
+      status.style.borderColor = isSelected ? 'rgba(46, 125, 79, 0.24)' : 'rgba(35, 55, 39, 0.12)';
+      status.textContent = isSelected ? 'Vald' : 'Markera';
+      right.append(status);
+
+      row.append(left, right);
+      row.addEventListener('click', () => {
+        if (selected.has(item.id)) selected.delete(item.id);
+        else selected.add(item.id);
+        renderSelections();
+      });
+
+      if (isOpen) {
+        const detail = document.createElement('div');
+        detail.className = 'detail-row';
+        item.combos.forEach((combo) => {
+          const detailItem = document.createElement('div');
+          detailItem.className = 'detail-item';
+          detailItem.innerHTML = `<div><strong>${combo.label}</strong><br><small>Specifikation bakom huvudavvikelsen</small></div><div><strong>${combo.count}</strong></div>`;
+          detail.append(detailItem);
+        });
+        return [row, detail];
+      }
+
+      return [row];
+    }
+
+    function renderSelections() {
+      const union = unionCount();
+      const normal = scenario.totalPersons - union;
+
+      liveCount.textContent = `${scenario.totalPersons} totalt`;
+      normalCount.textContent = String(normal);
+      adjustmentCount.textContent = String(union);
+      reviewTotal.textContent = `${scenario.totalPersons} personer totalt`;
+      reviewNormal.textContent = String(normal);
+      reviewAdjustments.textContent = String(union);
+
+      deviationList.innerHTML = '';
+      selectedSnapshot.innerHTML = '';
+      reviewSelected.innerHTML = '';
+
+      scenario.deviations.forEach((item) => {
+        renderDeviationRow(item).forEach((node) => deviationList.append(node));
+      });
+
+      const active = selectedCategories();
+      if (!active.length) {
+        const empty = document.createElement('div');
+        empty.className = 'selected-card';
+        empty.innerHTML = '<div class="detail">Inga huvudavvikelser valda ännu. Välj en rad ovan för att se live-sammanfattningen.</div>';
+        selectedSnapshot.append(empty);
+        reviewSelected.append(empty.cloneNode(true));
+      } else {
+        active.forEach((item) => {
+          const summary = document.createElement('div');
+          summary.className = 'selected-card';
+          summary.innerHTML = `
+            <div class="row">
+              <span>${item.label}</span>
+              <span>${item.count} ${item.count === 1 ? 'person' : 'personer'}${item.combos.length ? ' [+]' : ''}</span>
+            </div>
+            <div class="detail">${item.combos.map((combo) => combo.label + ' · ' + combo.count).join(' · ')}</div>
+          `;
+          selectedSnapshot.append(summary.cloneNode(true));
+          reviewSelected.append(summary);
+        });
+      }
+
+      document.querySelectorAll('#deviationList .chip').forEach((node, index) => {
+        const item = scenario.deviations[index];
+        node.classList.toggle('selected', selected.has(item.id));
+        node.setAttribute('aria-pressed', String(selected.has(item.id)));
+      });
+
+      app.dataset.screen = screen;
+    }
+
+    document.querySelectorAll('[data-jump]').forEach((control) => {
+      control.addEventListener('click', (event) => {
+        event.preventDefault();
+        const target = control.dataset.jump;
+        setScreen(target);
+      });
+    });
+
+    confirmBtn.addEventListener('click', () => {
+      setScreen('success');
+    });
+
+    if (themeToggle) {
+      themeToggle.addEventListener('click', () => {
+        setTheme(theme === 'dark' ? 'light' : 'dark');
+      });
+    }
+
+    setTheme('dark');
+    setScreen('start');
+    renderSelections();
+  </script>
+</body>
+</html>
