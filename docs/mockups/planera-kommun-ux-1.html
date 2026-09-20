@@ -1040,10 +1040,14 @@
       border-color: rgba(2, 174, 195, 0.14);
     }
 
+    #workspaceProgress {
+      display: none;
+    }
+
     .workspace-nav {
       display: grid;
-      gap: 16px;
-      padding: 16px;
+      gap: 10px;
+      padding: 14px;
       border: 1px solid var(--line);
       border-radius: 24px;
       background: rgba(255, 255, 255, 0.56);
@@ -1056,51 +1060,197 @@
       border-color: rgba(2, 174, 195, 0.14);
     }
 
-    .workspace-nav__group {
+    .workspace-nav__summary {
       display: grid;
-      gap: 10px;
+      gap: 6px;
+      padding: 12px 12px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.56));
     }
 
-    .workspace-nav__label {
-      font-size: 0.8rem;
+    #app[data-theme="dark"] .workspace-nav__summary {
+      background: linear-gradient(180deg, rgba(11, 31, 52, 0.84), rgba(7, 20, 38, 0.80));
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    .workspace-nav__summary-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .workspace-nav__summary-label {
+      font-size: 0.78rem;
       letter-spacing: 0.14em;
       text-transform: uppercase;
       color: var(--muted);
       font-weight: 800;
     }
 
+    .workspace-nav__summary-text {
+      color: var(--muted);
+      font-size: 0.92rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .workspace-nav__track {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .workspace-nav__segment {
+      height: 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(3, 85, 144, 0.10);
+      background: rgba(3, 85, 144, 0.06);
+    }
+
+    #app[data-theme="dark"] .workspace-nav__segment {
+      border-color: rgba(2, 174, 195, 0.10);
+      background: rgba(2, 174, 195, 0.08);
+    }
+
+    .workspace-nav__segment.planned {
+      border-color: rgba(2, 174, 195, 0.20);
+      background: rgba(2, 174, 195, 0.16);
+    }
+
+    .workspace-nav__segment.active {
+      border-color: rgba(2, 174, 195, 0.34);
+      background: linear-gradient(180deg, rgba(2, 174, 195, 0.72), rgba(2, 174, 195, 0.42));
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
     .workspace-nav__row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      gap: 10px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: thin;
+      padding-bottom: 2px;
+      align-items: stretch;
+    }
+
+    .workspace-nav__row::-webkit-scrollbar {
+      height: 8px;
+    }
+
+    .workspace-nav__row::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .workspace-nav__row::-webkit-scrollbar-thumb {
+      background: rgba(3, 85, 144, 0.18);
+      border-radius: 999px;
+    }
+
+    #app[data-theme="dark"] .workspace-nav__row::-webkit-scrollbar-thumb {
+      background: rgba(2, 174, 195, 0.22);
     }
 
     .workspace-nav__item {
-      min-height: 42px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 0 14px;
-      border-radius: 999px;
+      position: relative;
+      min-height: 56px;
+      min-width: 0;
+      width: 100%;
+      display: grid;
+      align-content: center;
+      justify-items: start;
+      gap: 4px;
+      padding: 10px 12px 10px;
+      border-radius: 18px;
       border: 1px solid var(--line);
       background: rgba(255, 255, 255, 0.78);
       color: var(--muted);
       font-weight: 700;
-      white-space: nowrap;
+      text-align: left;
+      white-space: normal;
       transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
     }
 
     #app[data-theme="dark"] .workspace-nav__item {
-      background: rgba(11, 31, 52, 0.9);
+      background: rgba(11, 31, 52, 0.90);
       color: rgba(234, 247, 248, 0.82);
       border-color: rgba(2, 174, 195, 0.14);
     }
 
-    .workspace-nav__item.active {
+    .workspace-nav__item::after {
+      content: "";
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: transparent;
+      box-shadow: none;
+      transition: background 120ms ease, box-shadow 120ms ease;
+    }
+
+    .workspace-nav__item[data-active="true"] {
       border-color: rgba(2, 174, 195, 0.28);
-      background: rgba(2, 174, 195, 0.16);
+      background: linear-gradient(180deg, rgba(2, 174, 195, 0.14), rgba(2, 174, 195, 0.08));
       color: var(--accent-2);
       box-shadow: inset 0 0 0 1px rgba(2, 174, 195, 0.12), 0 0 0 1px rgba(2, 174, 195, 0.08);
+    }
+
+    .workspace-nav__item[data-active="true"]::after {
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(2, 174, 195, 0.12);
+    }
+
+    .workspace-nav__item[data-active="true"] .workspace-nav__item-label {
+      color: var(--accent-2);
+    }
+
+    .workspace-nav__item[data-planned="true"] .workspace-nav__item-state {
+      border-color: rgba(2, 174, 195, 0.18);
+      background: rgba(2, 174, 195, 0.10);
+      color: var(--accent-2);
+    }
+
+    .workspace-nav__item[data-planned="false"] .workspace-nav__item-state {
+      border-color: rgba(3, 85, 144, 0.12);
+      background: rgba(255, 255, 255, 0.52);
+      color: var(--muted);
+    }
+
+    #app[data-theme="dark"] .workspace-nav__item[data-planned="false"] .workspace-nav__item-state {
+      background: rgba(7, 20, 38, 0.50);
+      border-color: rgba(2, 174, 195, 0.12);
+      color: rgba(234, 247, 248, 0.74);
+    }
+
+    .workspace-nav__item-label {
+      font-size: 0.95rem;
+      line-height: 1.08;
+      font-weight: 800;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .workspace-nav__item-state {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      min-height: 24px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 0.78rem;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+      justify-self: start;
     }
 
     .workspace-nav__status {
@@ -2682,12 +2832,22 @@
       return planningItemsById[activePlanningItemId] || planningItems[0];
     }
 
+    function getPlanningItemState(itemId) {
+      if (!planningState[itemId]) {
+        planningState[itemId] = {
+          selectedNeeds: new Set(),
+          expandedNeed: null,
+        };
+      }
+      return planningState[itemId];
+    }
+
     function getActivePlanningState() {
-      return planningState[activePlanningItemId] || planningState.lunchAlt1;
+      return getPlanningItemState(activePlanningItemId);
     }
 
     function getPlannedCount() {
-      return planningItems.reduce((count, item) => count + (planningState[item.id].planned ? 1 : 0), 0);
+      return planningItems.reduce((count, item) => count + (getPlanningItemState(item.id).planned ? 1 : 0), 0);
     }
 
     function deriveRelevantNeeds(item) {
@@ -2719,7 +2879,7 @@
     }
 
     function setItemPlanned(itemId, planned) {
-      const state = planningState[itemId];
+      const state = getPlanningItemState(itemId);
       if (!state) return;
       state.planned = planned;
       renderWorkspace();
@@ -2757,32 +2917,55 @@
     function renderPlanningNav() {
       planningNav.innerHTML = '';
 
-      planningSlots.forEach((slot) => {
-        const group = document.createElement('div');
-        group.className = 'workspace-nav__group';
+      const progressCount = getPlannedCount();
+      const summary = document.createElement('div');
+      summary.className = 'workspace-nav__summary';
 
-        const label = document.createElement('div');
-        label.className = 'workspace-nav__label';
-        label.textContent = slot;
-        group.append(label);
+      const summaryRow = document.createElement('div');
+      summaryRow.className = 'workspace-nav__summary-row';
 
-        const row = document.createElement('div');
-        row.className = 'workspace-nav__row';
+      const summaryLabel = document.createElement('div');
+      summaryLabel.className = 'workspace-nav__summary-label';
+      summaryLabel.textContent = 'Dagens planering';
 
-        planningItems.filter((item) => item.slot === slot).forEach((item) => {
-          const itemState = planningState[item.id];
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = `workspace-nav__item${item.id === activePlanningItemId ? ' active' : ''}`;
-          button.setAttribute('aria-pressed', String(item.id === activePlanningItemId));
-          button.innerHTML = `<span class="workspace-nav__status">${itemState.planned ? '✓' : '○'}</span><span>${item.label}</span>`;
-          button.addEventListener('click', () => setActivePlanningItem(item.id));
-          row.append(button);
-        });
+      const summaryText = document.createElement('div');
+      summaryText.className = 'workspace-nav__summary-text';
+      summaryText.textContent = `${progressCount} av ${planningItems.length} planerade`;
 
-        group.append(row);
-        planningNav.append(group);
+      summaryRow.append(summaryLabel, summaryText);
+
+      const track = document.createElement('div');
+      track.className = 'workspace-nav__track';
+
+      planningItems.forEach((item) => {
+        const segment = document.createElement('span');
+        const itemState = getPlanningItemState(item.id);
+        segment.className = `workspace-nav__segment${itemState.planned ? ' planned' : ''}${item.id === activePlanningItemId ? ' active' : ''}`;
+        segment.setAttribute('aria-hidden', 'true');
+        track.append(segment);
       });
+
+      summary.append(summaryRow, track);
+      planningNav.append(summary);
+
+      const rail = document.createElement('div');
+      rail.className = 'workspace-nav__row';
+
+      planningItems.forEach((item) => {
+        const itemState = getPlanningItemState(item.id);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'workspace-nav__item';
+        button.setAttribute('aria-pressed', String(item.id === activePlanningItemId));
+        button.dataset.active = String(item.id === activePlanningItemId);
+        button.dataset.planned = String(Boolean(itemState.planned));
+        const itemTitle = item.slot === 'Lunch' ? `Lunch · ${item.label}` : item.label;
+        button.innerHTML = `<span class="workspace-nav__item-label">${itemTitle}</span><span class="workspace-nav__item-state">${itemState.planned ? '✓ Planerad' : '○ Ej planerad'}</span>`;
+        button.addEventListener('click', () => setActivePlanningItem(item.id));
+        rail.append(button);
+      });
+
+      planningNav.append(rail);
     }
 
     function toggleSelectedNeed(needId) {
