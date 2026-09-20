@@ -69,6 +69,11 @@
     button, input { font: inherit; }
     button { cursor: pointer; }
 
+    /* =========================================================
+       YUPLAN APP SHELL — LOCKED
+       Do not override from screen-specific CSS.
+       ========================================================= */
+
     .shell {
       min-height: 100%;
       display: flex;
@@ -80,6 +85,7 @@
       width: min(var(--content), 100%);
       display: grid;
       grid-template-columns: 1fr;
+      grid-template-rows: max-content minmax(0, 1fr);
       gap: 18px;
     }
 
@@ -99,7 +105,7 @@
       overflow: hidden;
     }
 
-    #app[data-theme="dark"][data-screen="start"] .topbar {
+    #app[data-theme="dark"] .topbar {
       background: linear-gradient(180deg, rgba(11, 31, 52, 0.98), rgba(7, 20, 38, 0.96));
       border-color: rgba(2, 174, 195, 0.14);
       box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
@@ -380,20 +386,10 @@
       white-space: nowrap;
     }
 
-    #app[data-screen="start"] .topbar {
-      background: linear-gradient(180deg, rgba(248, 252, 252, 0.94), rgba(240, 247, 248, 0.92));
-      border-color: rgba(3, 85, 144, 0.10);
-      box-shadow: 0 14px 32px rgba(7, 20, 38, 0.08);
-    }
-
-    #app[data-screen="start"] .brand,
-    #app[data-screen="start"] .status-date {
-      display: none;
-    }
-
-    #app[data-screen="start"] .topbar .status-strip {
-      margin-left: auto;
-    }
+    /*
+      SCREEN CONTENT STARTS HERE.
+      Do not override YUPLAN APP SHELL from this section.
+    */
 
     #app[data-screen="start"] .panel {
       background: linear-gradient(180deg, rgba(248, 252, 252, 0.92), rgba(238, 247, 248, 0.94));
@@ -517,11 +513,11 @@
       color: var(--ink);
     }
 
-    #app[data-theme="dark"][data-screen="start"] .topbar-title {
+    #app[data-theme="dark"] .topbar-title {
       color: #eaf7f8;
     }
 
-    #app[data-theme="dark"][data-screen="start"] .panel {
+    #app[data-theme="dark"] .panel {
       background: linear-gradient(180deg, rgba(9, 24, 43, 0.96), rgba(7, 20, 38, 0.98));
       border-color: rgba(2, 174, 195, 0.14);
       box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
@@ -970,6 +966,7 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 18px;
+      min-height: 0;
     }
 
     .panel {
@@ -983,6 +980,484 @@
 
     .panel-inner {
       padding: 24px;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 18px;
+    }
+
+    .workspace-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .workspace-headline {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .workspace-kicker {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .workspace-subtitle {
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.98rem;
+      font-weight: 600;
+    }
+
+    .workspace-subtitle strong {
+      color: var(--ink);
+      font-weight: 800;
+    }
+
+    .workspace-progress {
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.74);
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    #app[data-theme="dark"] .workspace-progress {
+      background: rgba(11, 31, 52, 0.94);
+      color: rgba(234, 247, 248, 0.84);
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    .workspace-nav {
+      display: grid;
+      gap: 16px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.56);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow-soft);
+    }
+
+    #app[data-theme="dark"] .workspace-nav {
+      background: rgba(11, 31, 52, 0.66);
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    .workspace-nav__group {
+      display: grid;
+      gap: 10px;
+    }
+
+    .workspace-nav__label {
+      font-size: 0.8rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .workspace-nav__row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .workspace-nav__item {
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+
+    #app[data-theme="dark"] .workspace-nav__item {
+      background: rgba(11, 31, 52, 0.9);
+      color: rgba(234, 247, 248, 0.82);
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    .workspace-nav__item.active {
+      border-color: rgba(2, 174, 195, 0.28);
+      background: rgba(2, 174, 195, 0.16);
+      color: var(--accent-2);
+      box-shadow: inset 0 0 0 1px rgba(2, 174, 195, 0.12), 0 0 0 1px rgba(2, 174, 195, 0.08);
+    }
+
+    .workspace-nav__status {
+      width: 1ch;
+      display: inline-block;
+      text-align: center;
+      flex: 0 0 auto;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    .workspace-nav__item:not(.active) .workspace-nav__status {
+      color: var(--muted-2);
+    }
+
+    .workspace-nav__item.active .workspace-nav__status {
+      color: var(--accent);
+    }
+
+    .workspace-context {
+      display: grid;
+      gap: 16px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .workspace-context__meta {
+      display: grid;
+      gap: 6px;
+    }
+
+    .workspace-context__slot {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .workspace-context__title {
+      font-size: clamp(1.4rem, 1.4vw + 1rem, 2.1rem);
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+      font-weight: 800;
+    }
+
+    .workspace-context__sub {
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 0.98rem;
+    }
+
+    .workspace-context__count {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .workspace-context__state {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      width: fit-content;
+      padding: 0 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.58);
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+
+    #app[data-theme="dark"] .workspace-context__state {
+      background: rgba(11, 31, 52, 0.74);
+      border-color: rgba(2, 174, 195, 0.14);
+      color: rgba(234, 247, 248, 0.84);
+    }
+
+    .workspace-context__state.planned {
+      border-color: rgba(55, 159, 90, 0.24);
+      background: rgba(55, 159, 90, 0.10);
+      color: #2f855a;
+    }
+
+    #app[data-theme="dark"] .workspace-context__state.planned {
+      border-color: rgba(55, 159, 90, 0.30);
+      background: rgba(55, 159, 90, 0.14);
+      color: #76d39e;
+    }
+
+    .workspace-context__question {
+      font-size: 1.02rem;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
+    .workspace-needs {
+      display: grid;
+      gap: 12px;
+    }
+
+    .workspace-summary {
+      display: grid;
+      gap: 10px;
+      padding: 14px 16px;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--muted);
+      font-size: 0.92rem;
+      font-weight: 700;
+      box-shadow: 0 10px 24px rgba(7, 20, 38, 0.06);
+    }
+
+    #app[data-theme="dark"] .workspace-summary {
+      background: rgba(11, 31, 52, 0.94);
+      border-color: rgba(2, 174, 195, 0.14);
+      color: rgba(234, 247, 248, 0.82);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+    }
+
+    .workspace-summary strong {
+      color: var(--ink);
+    }
+
+    #app[data-theme="dark"] .workspace-summary strong {
+      color: #eaf7f8;
+    }
+
+    .workspace-summary__counts {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      line-height: 1.2;
+    }
+
+    .workspace-summary__counts strong {
+      font-size: 1.02rem;
+    }
+
+    .workspace-summary__action {
+      display: inline-flex;
+      justify-content: flex-end;
+    }
+
+    .workspace-summary__cta {
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(2, 174, 195, 0.24);
+      background: rgba(2, 174, 195, 0.10);
+      color: var(--accent-2);
+      font-weight: 800;
+    }
+
+    #app[data-theme="dark"] .workspace-summary__cta {
+      border-color: rgba(2, 174, 195, 0.26);
+      background: rgba(2, 174, 195, 0.14);
+      color: #9de9f1;
+    }
+
+    .workspace-summary__planned {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(55, 159, 90, 0.26);
+      background: rgba(55, 159, 90, 0.10);
+      color: #2f855a;
+      font-weight: 800;
+    }
+
+    #app[data-theme="dark"] .workspace-summary__planned {
+      border-color: rgba(55, 159, 90, 0.30);
+      background: rgba(55, 159, 90, 0.14);
+      color: #76d39e;
+    }
+
+    .workspace-needs__head {
+      display: grid;
+      gap: 4px;
+    }
+
+    .workspace-needs__title {
+      font-size: 0.86rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .workspace-needs__hint {
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.93rem;
+      font-weight: 600;
+    }
+
+    .workspace-needs__empty {
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.62);
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    #app[data-theme="dark"] .workspace-needs__empty {
+      background: rgba(11, 31, 52, 0.74);
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    .workspace-needs__list {
+      display: grid;
+      gap: 6px;
+    }
+
+    .workspace-needs__row {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto 28px;
+      gap: 12px;
+      align-items: center;
+      min-height: 46px;
+      padding: 0 12px 0 10px;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.42);
+      box-sizing: border-box;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    #app[data-theme="dark"] .workspace-needs__row {
+      background: rgba(11, 31, 52, 0.44);
+    }
+
+    .workspace-needs__row:hover {
+      border-color: rgba(2, 174, 195, 0.16);
+      background: rgba(2, 174, 195, 0.06);
+    }
+
+    .workspace-needs__row.selected {
+      border-color: rgba(2, 174, 195, 0.28);
+      background: rgba(2, 174, 195, 0.10);
+    }
+
+    #app[data-theme="dark"] .workspace-needs__row.selected {
+      background: rgba(2, 174, 195, 0.14);
+    }
+
+    .workspace-needs__checkbox {
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      border: 1px solid var(--line-strong);
+      color: var(--accent-2);
+      font-size: 0.84rem;
+      font-weight: 800;
+      box-sizing: border-box;
+      flex: 0 0 auto;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    #app[data-theme="dark"] .workspace-needs__checkbox {
+      background: rgba(11, 31, 52, 0.9);
+      border-color: rgba(2, 174, 195, 0.18);
+      color: #eaf7f8;
+    }
+
+    .workspace-needs__row.selected .workspace-needs__checkbox {
+      border-color: rgba(2, 174, 195, 0.4);
+      background: rgba(2, 174, 195, 0.14);
+    }
+
+    .workspace-needs__name {
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .workspace-needs__count {
+      font-weight: 800;
+      color: var(--accent-2);
+      white-space: nowrap;
+    }
+
+    .workspace-needs__chev {
+      width: 28px;
+      justify-self: end;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.1rem;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .workspace-needs__details {
+      display: grid;
+      gap: 6px;
+      margin: 6px 0 0 38px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.52);
+    }
+
+    #app[data-theme="dark"] .workspace-needs__details {
+      background: rgba(11, 31, 52, 0.62);
+      border-color: rgba(2, 174, 195, 0.14);
+    }
+
+    .workspace-needs__detail-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .workspace-needs__detail-label {
+      color: var(--ink);
+      font-weight: 650;
+    }
+
+    .workspace-needs__detail-count {
+      white-space: nowrap;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .workspace-context__placeholder {
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px dashed var(--line-strong);
+      background: var(--accent-soft);
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .workspace-footer {
+      display: flex;
+      justify-content: flex-start;
+      color: var(--muted);
+      font-size: 0.92rem;
+      font-weight: 700;
     }
 
     .screen {
@@ -1043,6 +1518,19 @@
       color: var(--ink);
       text-decoration: none;
       font-weight: 650;
+    }
+
+    #app[data-theme="dark"] .back-btn {
+      background: linear-gradient(180deg, rgba(12, 31, 52, 0.98), rgba(8, 23, 39, 0.96));
+      border-color: rgba(2, 174, 195, 0.18);
+      color: #eaf7f8;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+    }
+
+    #app[data-theme="dark"] .back-btn:hover,
+    #app[data-theme="dark"] .back-btn:focus-visible {
+      border-color: rgba(2, 174, 195, 0.28);
+      box-shadow: 0 0 0 4px rgba(2, 174, 195, 0.10), 0 10px 24px rgba(0, 0, 0, 0.22);
     }
 
     .back-btn:hover,
@@ -2008,7 +2496,7 @@
                   </div>
 
                   <div class="planera-start-lunch__footer">
-                    <button class="plan-btn planera-start-cta" type="button" data-jump="lunch">Planera lunch →</button>
+                    <button class="plan-btn planera-start-cta" type="button" data-jump="workspace">Planera lunch →</button>
                   </div>
                 </section>
 
@@ -2033,158 +2521,20 @@
             </div>
           </section>
 
-          <section class="screen" id="screen-lunch" aria-labelledby="lunch-title">
-            <div class="screen-head">
-              <div>
-                <div class="eyebrow">Lunch / dagens alternativ</div>
-                <h2 class="title" id="lunch-title">Lunch</h2>
-                <p class="subtitle">Här visas båda alternativen tydligt med mängd och en diskret rådgivande Builder-sektion för den rätt som har strukturerad information.</p>
-              </div>
-              <a class="back-btn" href="#" data-jump="start">‹ Tillbaka</a>
-            </div>
-
-            <div class="subtitle" style="margin-top:0; font-weight:600; color:var(--accent-2);">Tisdag 8 september</div>
-            <div class="alt-grid">
-              <article class="alt-card primary">
-                <div class="alt-body">
-                  <div>
-                    <div class="eyebrow-large">Alternativ 1</div>
-                    <h3 class="alt-title">Fläskkarré</h3>
-                    <p class="alt-subtitle">Potatismos · gräddsås</p>
-                  </div>
-                  <div class="alt-metrics">
-                    <span class="metric">12 mottagande enheter</span>
-                    <span class="metric">182 personer</span>
-                  </div>
+          <section class="screen" id="screen-workspace" aria-labelledby="workspace-title">
+            <div class="workspace">
+              <div class="workspace-header">
+                <div class="workspace-headline">
+                  <div class="workspace-kicker">Planera dagen</div>
+                  <h2 class="title" id="workspace-title">Tisdag 8 september</h2>
+                  <div class="workspace-subtitle" id="workspaceProgress">4 planeringsobjekt · 0 av 4 planerade</div>
                 </div>
-                <div class="builder-box">
-                  <span class="label">Registrerad information för rätten</span>
-                  <div class="body">
-                    <span class="builder-tag">Laktos</span>
-                    <span class="builder-tag">Timbal</span>
-                    <span class="builder-tag">Grov paté</span>
-                    <span class="builder-tag">Flytande kost</span>
-                  </div>
-                  <div class="note">Detta är rådgivande Builder-information. Den hjälper användaren att förstå rätten, men ingen avvikelse är automatiskt vald.</div>
-                </div>
-                <div class="button-row">
-                  <button class="plan-btn" type="button" data-jump="assess">Planera alternativ 1</button>
-                </div>
-              </article>
-
-              <article class="alt-card">
-                <div class="alt-body">
-                  <div>
-                    <div class="eyebrow-large">Alternativ 2</div>
-                    <h3 class="alt-title">Kokt torsk</h3>
-                    <p class="alt-subtitle">Äggsås · kokt potatis</p>
-                  </div>
-                  <div class="alt-metrics">
-                    <span class="metric">6 mottagande enheter</span>
-                    <span class="metric">91 personer</span>
-                  </div>
-                </div>
-                <div class="builder-box" style="background: rgba(255,255,255,0.7); border-color: rgba(35,55,39,0.10);">
-                  <span class="label">Builder-data saknas eller är tunn</span>
-                  <div class="note">Planera fungerar fortfarande. Den här rätten kan planeras utan att någon Builder-information behöver visas.</div>
-                </div>
-                <div class="button-row">
-                  <button class="plan-btn secondary" type="button" data-jump="assess">Visa som alternativ i prototypen</button>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="screen" id="screen-assess" aria-labelledby="assess-title">
-            <div class="screen-head">
-              <div>
-                <div class="eyebrow">Bedöm normalkosten</div>
-                <h2 class="title" id="assess-title">Fläskkarré</h2>
-                <p class="subtitle">Potatismos · gräddsås · 182 personer</p>
-              </div>
-              <a class="back-btn" href="#" data-jump="lunch">‹ Tillbaka och ändra</a>
-            </div>
-
-            <div class="question">Vilka kan inte äta den här rätten som den är?</div>
-            <p class="section-copy">Välj huvudavvikelserna direkt i huvudlistan. Builder-förslag kan hjälpa orienteringen, men de är aldrig automatiska beslut.</p>
-
-            <div class="deviation-list" id="deviationList" aria-label="Registrerade huvudavvikelser"></div>
-
-            <div class="summary-grid">
-              <div class="summary-panel">
-                <div class="summary-kicker">Live-sammanfattning</div>
-                <div class="summary-number" id="liveCount">182 totalt</div>
-                <div class="summary-stats">
-                  <div class="summary-stat">
-                    <div>
-                      <strong id="normalCount">182</strong>
-                      <span>Normalkost</span>
-                    </div>
-                    <div class="value" id="adjustmentCount">0</div>
-                  </div>
-                </div>
-                <div class="footer-actions">
-                  <button class="plan-btn" type="button" data-jump="review">Fortsätt</button>
-                </div>
+                <a class="back-btn" href="#" data-jump="start">← Tillbaka</a>
               </div>
 
-              <div class="summary-panel">
-                <div class="summary-kicker">Valt läge</div>
-                <div class="section-title">Valt läge</div>
-                <p class="summary-note">Här syns vilka huvudavvikelser som är markerade just nu och hur kombinationerna kan öppnas utan att påverka urvalet.</p>
-                <div class="selected-list" id="selectedSnapshot"></div>
-              </div>
-            </div>
-          </section>
+              <div class="workspace-nav" id="planningNav" aria-label="Dagens planeringsobjekt"></div>
 
-          <section class="screen" id="screen-review" aria-labelledby="review-title">
-            <div class="screen-head">
-              <div>
-                <div class="eyebrow">Kontrollera planering</div>
-                <h2 class="title" id="review-title">Kontrollera planering</h2>
-                <p class="subtitle">Innan bekräftelse visas en ren konsekvensöversikt. Du kan fortfarande öppna kombinationsspecifikation via plus utan att ändra urvalet.</p>
-              </div>
-              <a class="back-btn" href="#" data-jump="assess">‹ Tillbaka och ändra</a>
-            </div>
-
-            <div class="summary-grid">
-              <div class="summary-panel">
-                <div class="summary-kicker">Lunch</div>
-                <div class="section-title">Fläskkarré</div>
-                <div class="summary-number" id="reviewTotal">182 personer totalt</div>
-                <div class="summary-stats">
-                  <div class="summary-stat">
-                    <div>
-                      <strong id="reviewNormal">171</strong>
-                      <span>Normalkost</span>
-                    </div>
-                    <div class="value" id="reviewAdjustments">11</div>
-                  </div>
-                </div>
-                <div class="footer-actions">
-                  <button class="plan-btn secondary" type="button" data-jump="assess">Tillbaka och ändra</button>
-                  <button class="plan-btn" type="button" id="confirmBtn">Bekräfta planering</button>
-                </div>
-              </div>
-
-              <div class="summary-panel">
-                <div class="summary-kicker">Valda huvudavvikelser</div>
-                <div class="selected-list" id="reviewSelected"></div>
-                <div class="summary-note">UX:en visar bara begripliga totalsiffror. Detaljerna bakom plus-tecknet kan öppnas när du behöver se kombinationerna.</div>
-              </div>
-            </div>
-          </section>
-
-          <section class="screen" id="screen-success" aria-labelledby="success-title">
-            <div class="success-state">
-              <div class="success-card">
-                <div class="success-mark">✓</div>
-                <h2 class="success-title" id="success-title">Lunch planerad</h2>
-                <p class="success-copy">Planeringen är bekräftad. Härifrån tar produktionsvyer och utskrift över när de behövs.</p>
-                <div class="footer-actions" style="justify-content:center; margin-top:24px;">
-                  <button class="plan-btn secondary" type="button" data-jump="review">Gå tillbaka i prototypen</button>
-                </div>
-              </div>
+              <div class="workspace-context" id="planningContext" aria-live="polite"></div>
             </div>
           </section>
         </div>
@@ -2196,98 +2546,111 @@
     const app = document.getElementById('app');
     const screens = {
       start: document.getElementById('screen-start'),
-      lunch: document.getElementById('screen-lunch'),
-      assess: document.getElementById('screen-assess'),
-      review: document.getElementById('screen-review'),
-      success: document.getElementById('screen-success'),
+      workspace: document.getElementById('screen-workspace'),
     };
-    const statusDay = document.getElementById('statusDay');
     const themeToggle = document.getElementById('themeToggle');
-    const deviationList = document.getElementById('deviationList');
-    const selectedSnapshot = document.getElementById('selectedSnapshot');
-    const reviewSelected = document.getElementById('reviewSelected');
-    const liveCount = document.getElementById('liveCount');
-    const normalCount = document.getElementById('normalCount');
-    const adjustmentCount = document.getElementById('adjustmentCount');
-    const reviewNormal = document.getElementById('reviewNormal');
-    const reviewAdjustments = document.getElementById('reviewAdjustments');
-    const reviewTotal = document.getElementById('reviewTotal');
-    const confirmBtn = document.getElementById('confirmBtn');
+    const planningNav = document.getElementById('planningNav');
+    const planningContext = document.getElementById('planningContext');
+    const workspaceProgress = document.getElementById('workspaceProgress');
 
-    const scenario = {
-      dayLabel: 'Tisdag 8 september',
-      mealTitle: 'Fläskkarré',
-      mealSub: 'Potatismos · gräddsås',
-      totalPersons: 182,
-      deviations: [
-        {
-          id: 'timbal',
-          label: 'Timbal',
-          count: 8,
-          suggestion: true,
-          combos: [
-            { label: 'Timbal', count: 5 },
-            { label: 'Timbal + Laktos', count: 2 },
-            { label: 'Timbal + Glutenfri', count: 1 },
-          ],
-          short: 'Förslag från Builder',
-        },
-        {
-          id: 'grovpaté',
-          label: 'Grov paté',
-          count: 4,
-          suggestion: true,
-          combos: [
-            { label: 'Grov paté', count: 2 },
-            { label: 'Grov paté + Timbal', count: 1 },
-            { label: 'Grov paté + Glutenfri', count: 1 },
-          ],
-          short: 'Förslag från Builder',
-        },
-        {
-          id: 'laktos',
-          label: 'Laktos',
-          count: 9,
-          suggestion: true,
-          combos: [
-            { label: 'Laktos', count: 2 },
-            { label: 'Timbal + Laktos', count: 2 },
-            { label: 'Laktos + Glutenfri', count: 3 },
-            { label: 'Laktos + Flytande kost', count: 2 },
-          ],
-          short: 'Förslag från Builder',
-        },
-        {
-          id: 'glutenfri',
-          label: 'Glutenfri',
-          count: 6,
-          suggestion: true,
-          combos: [
-            { label: 'Glutenfri', count: 1 },
-            { label: 'Timbal + Glutenfri', count: 1 },
-            { label: 'Grov paté + Glutenfri', count: 1 },
-            { label: 'Laktos + Glutenfri', count: 3 },
-          ],
-          short: 'Förslag från Builder',
-        },
-        {
-          id: 'flytande',
-          label: 'Flytande kost',
-          count: 2,
-          suggestion: false,
-          combos: [
-            { label: 'Laktos + Flytande kost', count: 2 },
-          ],
-          short: 'Registrerat behov',
-        },
-      ],
-      defaultSelection: new Set(),
-      defaultExpanded: new Set(),
+    const planningItems = [
+      {
+        id: 'lunchAlt1',
+        slot: 'Lunch',
+        label: 'Alt 1',
+        dish: 'Fläskkarré',
+        components: 'Potatismos · Gräddsås',
+        recipientCount: 182,
+        cohorts: [
+          { count: 6, needs: ['timbal'] },
+          { count: 1, needs: ['timbal', 'glutenfri'] },
+          { count: 1, needs: ['timbal', 'grovPate'] },
+          { count: 3, needs: ['grovPate'] },
+          { count: 8, needs: ['glutenfri'] },
+          { count: 12, needs: ['vegetarisk'] },
+          { count: 2, needs: ['aggfri'] },
+        ],
+      },
+      {
+        id: 'lunchAlt2',
+        slot: 'Lunch',
+        label: 'Alt 2',
+        dish: 'Kokt torsk',
+        components: 'Äggsås · Kokt potatis',
+        recipientCount: 91,
+        cohorts: [
+          { count: 4, needs: ['fiskfri'] },
+          { count: 2, needs: ['laktosfri'] },
+          { count: 1, needs: ['laktosfri', 'glutenfri'] },
+          { count: 4, needs: ['laktosfri', 'aggfri'] },
+          { count: 3, needs: ['glutenfri'] },
+          { count: 2, needs: ['mjolkproteinfri'] },
+          { count: 1, needs: ['aggfri'] },
+          { count: 4, needs: ['vegetarisk'] },
+        ],
+      },
+      {
+        id: 'evening',
+        slot: 'Övrigt',
+        label: 'Kväll',
+        dish: 'Köttfärssoppa',
+        components: '',
+        recipientCount: 273,
+        cohorts: [
+          { count: 7, needs: ['timbal'] },
+          { count: 5, needs: ['glutenfri'] },
+          { count: 6, needs: ['laktosfri'] },
+          { count: 8, needs: ['vegetarisk'] },
+          { count: 3, needs: ['mjolkproteinfri'] },
+          { count: 4, needs: ['aggfri'] },
+          { count: 2, needs: ['flytande'] },
+        ],
+      },
+      {
+        id: 'dessert',
+        slot: 'Övrigt',
+        label: 'Dessert',
+        dish: 'Äppelpaj',
+        components: '',
+        recipientCount: 273,
+        cohorts: [
+          { count: 5, needs: ['glutenfri'] },
+          { count: 6, needs: ['laktosfri'] },
+          { count: 3, needs: ['mjolkproteinfri'] },
+          { count: 4, needs: ['aggfri'] },
+          { count: 2, needs: ['diabetes'] },
+          { count: 4, needs: ['vegetarisk'] },
+        ],
+      },
+    ];
+
+    const needDefinitions = {
+      timbal: 'Timbal',
+      grovPate: 'Grov paté',
+      glutenfri: 'Glutenfri',
+      laktosfri: 'Laktosfri',
+      vegetarisk: 'Vegetarisk',
+      aggfri: 'Äggfri',
+      fiskfri: 'Fiskfri',
+      mjolkproteinfri: 'Mjölkproteinfri',
+      flytande: 'Flytande kost',
+      diabetes: 'Diabetes/anpassad',
     };
+
+    // Mock-only taxonomy for the workspace shell. Not canonical production taxonomy.
+    const needsOrder = Object.keys(needDefinitions);
+
+    const planningSlots = ['Lunch', 'Övrigt'];
+    const planningItemsById = Object.fromEntries(planningItems.map((item) => [item.id, item]));
+    const planningState = Object.fromEntries(
+      planningItems.map((item) => [item.id, {
+        selectedNeeds: new Set(),
+        expandedNeed: null,
+      }]),
+    );
 
     let screen = 'start';
-    let selected = new Set(scenario.defaultSelection);
-    let expanded = new Set(scenario.defaultExpanded);
+    let activePlanningItemId = 'lunchAlt1';
     let theme = 'light';
 
     function setTheme(nextTheme) {
@@ -2308,150 +2671,253 @@
       Object.entries(screens).forEach(([name, el]) => {
         el.classList.toggle('active', name === next);
       });
-      statusDay.textContent = scenario.dayLabel;
       app.dataset.screen = next;
-      if (next === 'assess' || next === 'review') {
-        renderSelections();
+      if (next === 'workspace') {
+        renderWorkspace();
       }
-      if (next === 'assess') {
-        liveCount.textContent = `${scenario.totalPersons} totalt`;
+      window.scrollTo({ top: 0 });
+    }
+
+    function getActivePlanningItem() {
+      return planningItemsById[activePlanningItemId] || planningItems[0];
+    }
+
+    function getActivePlanningState() {
+      return planningState[activePlanningItemId] || planningState.lunchAlt1;
+    }
+
+    function getPlannedCount() {
+      return planningItems.reduce((count, item) => count + (planningState[item.id].planned ? 1 : 0), 0);
+    }
+
+    function deriveRelevantNeeds(item) {
+      const counts = new Map();
+
+      item.cohorts.forEach((cohort) => {
+        cohort.needs.forEach((needId) => {
+          const current = counts.get(needId) || 0;
+          counts.set(needId, current + cohort.count);
+        });
+      });
+
+      return needsOrder
+        .map((needId) => ({
+          id: needId,
+          label: needDefinitions[needId],
+          count: counts.get(needId) || 0,
+        }))
+        .filter((need) => need.count > 0);
+    }
+
+    function deriveAffectedCount(item, selectedNeedIds) {
+      if (!selectedNeedIds.size) return 0;
+
+      return item.cohorts.reduce((total, cohort) => {
+        const affected = cohort.needs.some((needId) => selectedNeedIds.has(needId));
+        return affected ? total + cohort.count : total;
+      }, 0);
+    }
+
+    function setItemPlanned(itemId, planned) {
+      const state = planningState[itemId];
+      if (!state) return;
+      state.planned = planned;
+      renderWorkspace();
+    }
+
+    function buildNeedLabel(needIds) {
+      return needIds.map((needId) => needDefinitions[needId] || needId).join(' + ');
+    }
+
+    function getNeedBreakdown(item, needId) {
+      return item.cohorts
+        .filter((cohort) => cohort.needs.includes(needId))
+        .map((cohort) => ({
+          label: buildNeedLabel(cohort.needs),
+          count: cohort.count,
+        }));
+    }
+
+    function getActiveCounts(item, selectedNeedIds) {
+      const adjustments = deriveAffectedCount(item, selectedNeedIds);
+      const total = item.recipientCount;
+      return {
+        total,
+        adjustments,
+        normal: total - adjustments,
+      };
+    }
+
+    function setActivePlanningItem(itemId) {
+      if (!planningItemsById[itemId]) return;
+      activePlanningItemId = itemId;
+      renderWorkspace();
+    }
+
+    function renderPlanningNav() {
+      planningNav.innerHTML = '';
+
+      planningSlots.forEach((slot) => {
+        const group = document.createElement('div');
+        group.className = 'workspace-nav__group';
+
+        const label = document.createElement('div');
+        label.className = 'workspace-nav__label';
+        label.textContent = slot;
+        group.append(label);
+
+        const row = document.createElement('div');
+        row.className = 'workspace-nav__row';
+
+        planningItems.filter((item) => item.slot === slot).forEach((item) => {
+          const itemState = planningState[item.id];
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = `workspace-nav__item${item.id === activePlanningItemId ? ' active' : ''}`;
+          button.setAttribute('aria-pressed', String(item.id === activePlanningItemId));
+          button.innerHTML = `<span class="workspace-nav__status">${itemState.planned ? '✓' : '○'}</span><span>${item.label}</span>`;
+          button.addEventListener('click', () => setActivePlanningItem(item.id));
+          row.append(button);
+        });
+
+        group.append(row);
+        planningNav.append(group);
+      });
+    }
+
+    function toggleSelectedNeed(needId) {
+      const state = getActivePlanningState();
+      if (state.selectedNeeds.has(needId)) {
+        state.selectedNeeds.delete(needId);
+      } else {
+        state.selectedNeeds.add(needId);
       }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      state.planned = false;
+      renderWorkspace();
     }
 
-    function selectedCategories() {
-      return scenario.deviations.filter((item) => selected.has(item.id));
+    function toggleExpandedNeed(needId) {
+      const state = getActivePlanningState();
+      state.expandedNeed = state.expandedNeed === needId ? null : needId;
+      renderWorkspace();
     }
 
-    function unionCount() {
-      const active = selectedCategories();
-      if (!active.length) return 0;
-      let total = active.reduce((sum, item) => sum + item.count, 0);
-      if (selected.has('timbal') && selected.has('grovpaté')) total -= 1;
-      if (selected.has('timbal') && selected.has('laktos')) total -= 2;
-      if (selected.has('timbal') && selected.has('glutenfri')) total -= 1;
-      if (selected.has('grovpaté') && selected.has('glutenfri')) total -= 1;
-      if (selected.has('laktos') && selected.has('glutenfri')) total -= 3;
-      if (selected.has('laktos') && selected.has('flytande')) total -= 2;
-      return total;
-    }
-
-    function renderDeviationRow(item) {
-      const isSelected = selected.has(item.id);
-      const isOpen = expanded.has(item.id);
-      const hasCombos = item.combos.length > 1 || (item.combos.length === 1 && item.combos[0].label !== item.label);
+    function renderNeedRow(item, need, state) {
+      const isSelected = state.selectedNeeds.has(need.id);
+      const isExpanded = state.expandedNeed === need.id;
       const row = document.createElement('button');
       row.type = 'button';
-      row.className = `chip${isSelected ? ' selected' : ''}`;
+      row.className = `workspace-needs__row${isSelected ? ' selected' : ''}`;
       row.setAttribute('aria-pressed', String(isSelected));
+      row.setAttribute('aria-label', `${need.label}, ${need.count} personer`);
+      row.addEventListener('click', () => toggleSelectedNeed(need.id));
 
-      const left = document.createElement('div');
-      left.className = 'left';
+      const checkbox = document.createElement('span');
+      checkbox.className = 'workspace-needs__checkbox';
+      checkbox.textContent = isSelected ? '✓' : '□';
 
-      const name = document.createElement('div');
-      name.className = 'name';
-      name.innerHTML = `<span>${item.label}</span>${item.suggestion ? '<span class="builder-tag">Förslag från Builder</span>' : ''}`;
+      const label = document.createElement('span');
+      label.className = 'workspace-needs__name';
+      label.textContent = need.label;
 
-      const count = document.createElement('div');
-      count.className = 'count';
-      count.textContent = `${item.count} ${item.count === 1 ? 'person' : 'personer'}`;
-      left.append(name, count);
+      const count = document.createElement('span');
+      count.className = 'workspace-needs__count';
+      count.textContent = `${need.count} pers.`;
 
-      const right = document.createElement('div');
-      right.className = 'right';
-
-      if (hasCombos) {
-        const plus = document.createElement('button');
-        plus.type = 'button';
-        plus.className = 'icon-btn';
-        plus.setAttribute('aria-label', `${isOpen ? 'Dölj' : 'Visa'} specifikation för ${item.label}`);
-        plus.textContent = isOpen ? '−' : '+';
-        plus.addEventListener('click', (event) => {
-          event.stopPropagation();
-          if (expanded.has(item.id)) expanded.delete(item.id);
-          else expanded.add(item.id);
-          renderSelections();
-        });
-        right.append(plus);
-      }
-
-      const status = document.createElement('span');
-      status.className = 'builder-tag';
-      status.style.background = isSelected ? 'rgba(46, 125, 79, 0.14)' : 'rgba(255, 255, 255, 0.96)';
-      status.style.borderColor = isSelected ? 'rgba(46, 125, 79, 0.24)' : 'rgba(35, 55, 39, 0.12)';
-      status.textContent = isSelected ? 'Vald' : 'Markera';
-      right.append(status);
-
-      row.append(left, right);
-      row.addEventListener('click', () => {
-        if (selected.has(item.id)) selected.delete(item.id);
-        else selected.add(item.id);
-        renderSelections();
+      const disclosure = document.createElement('button');
+      disclosure.type = 'button';
+      disclosure.className = 'workspace-needs__chev';
+      disclosure.setAttribute('aria-label', `${isExpanded ? 'Dölj' : 'Visa'} detaljer för ${need.label}`);
+      disclosure.setAttribute('aria-expanded', String(isExpanded));
+      disclosure.textContent = isExpanded ? '⌄' : '›';
+      disclosure.addEventListener('click', (event) => {
+        event.stopPropagation();
+        toggleExpandedNeed(need.id);
       });
 
-      if (isOpen) {
-        const detail = document.createElement('div');
-        detail.className = 'detail-row';
-        item.combos.forEach((combo) => {
-          const detailItem = document.createElement('div');
-          detailItem.className = 'detail-item';
-          detailItem.innerHTML = `<div><strong>${combo.label}</strong><br><small>Specifikation bakom huvudavvikelsen</small></div><div><strong>${combo.count}</strong></div>`;
-          detail.append(detailItem);
-        });
-        return [row, detail];
+      row.append(checkbox, label, count, disclosure);
+
+      if (!isExpanded) {
+        return row;
       }
 
-      return [row];
+      const details = document.createElement('div');
+      details.className = 'workspace-needs__details';
+
+      getNeedBreakdown(item, need.id).forEach((breakdown) => {
+        const detailRow = document.createElement('div');
+        detailRow.className = 'workspace-needs__detail-row';
+        detailRow.innerHTML = `<span class="workspace-needs__detail-label">${breakdown.label}</span><span class="workspace-needs__detail-count">${breakdown.count}</span>`;
+        details.append(detailRow);
+      });
+
+      const fragment = document.createDocumentFragment();
+      fragment.append(row, details);
+      return fragment;
     }
 
-    function renderSelections() {
-      const union = unionCount();
-      const normal = scenario.totalPersons - union;
+    function renderActivePlanningItem() {
+      const item = getActivePlanningItem();
+      const state = getActivePlanningState();
+      const relevantNeeds = deriveRelevantNeeds(item);
+      const counts = getActiveCounts(item, state.selectedNeeds);
+      const progressCount = getPlannedCount();
+      const progressText = `${planningItems.length} planeringsobjekt · ${progressCount} av ${planningItems.length} planerade`;
+      if (workspaceProgress) {
+        workspaceProgress.textContent = progressText;
+      }
+      const plannedLabel = '✓ Planerad';
+      const ctaLabel = state.planned
+        ? plannedLabel
+        : (counts.adjustments === 0
+          ? 'Alla kan äta rätten som den är →'
+          : `Bekräfta – ${counts.adjustments} anpassningar →`);
+      const context = [
+        '<div class="workspace-context__meta">',
+        `<div class="workspace-context__slot">${item.slot} · ${item.label}</div>`,
+        `<div class="workspace-context__title">${item.dish}</div>`,
+        item.components ? `<div class="workspace-context__sub">${item.components}</div>` : '',
+        `<div class="workspace-context__count">${item.recipientCount} personer</div>`,
+        `<div class="workspace-context__state${state.planned ? ' planned' : ''}">${state.planned ? '✓ Planerad' : '○ Ej planerad'}</div>`,
+        '</div>',
+        '<div class="workspace-context__question">Vilka kan inte äta den här rätten som den är?</div>',
+        '<div class="workspace-context__sub">Markera de kostbehov som kräver en anpassning.</div>',
+        `<div class="workspace-summary"><div class="workspace-summary__counts"><strong>${counts.total} totalt</strong><span>${counts.normal} normalkost</span><span>${counts.adjustments} anpassningar</span></div><div class="workspace-summary__action">${state.planned ? '<span class="workspace-summary__planned">✓ Planerad</span>' : `<button class="workspace-summary__cta" type="button" id="confirmCurrentItemBtn">${ctaLabel}</button>`}</div></div>`,
+        '<div class="workspace-needs">',
+        '<div class="workspace-needs__head">',
+        '<div class="workspace-needs__title">Relevanta kostbehov</div>',
+        `<div class="workspace-needs__hint">Visar behov bland de ${item.recipientCount} personer som ska ha den här rätten.</div>`,
+        '</div>',
+        '</div>',
+      ].join('');
 
-      liveCount.textContent = `${scenario.totalPersons} totalt`;
-      normalCount.textContent = String(normal);
-      adjustmentCount.textContent = String(union);
-      reviewTotal.textContent = `${scenario.totalPersons} personer totalt`;
-      reviewNormal.textContent = String(normal);
-      reviewAdjustments.textContent = String(union);
+      planningContext.innerHTML = context;
 
-      deviationList.innerHTML = '';
-      selectedSnapshot.innerHTML = '';
-      reviewSelected.innerHTML = '';
+      const needsList = document.createElement('div');
+      needsList.className = 'workspace-needs__list';
 
-      scenario.deviations.forEach((item) => {
-        renderDeviationRow(item).forEach((node) => deviationList.append(node));
-      });
-
-      const active = selectedCategories();
-      if (!active.length) {
+      if (!relevantNeeds.length) {
         const empty = document.createElement('div');
-        empty.className = 'selected-card';
-        empty.innerHTML = '<div class="detail">Inga huvudavvikelser valda ännu. Välj en rad ovan för att se live-sammanfattningen.</div>';
-        selectedSnapshot.append(empty);
-        reviewSelected.append(empty.cloneNode(true));
+        empty.className = 'workspace-needs__empty';
+        empty.textContent = 'Inga registrerade kostbehov för denna rätts mottagare.';
+        needsList.append(empty);
       } else {
-        active.forEach((item) => {
-          const summary = document.createElement('div');
-          summary.className = 'selected-card';
-          summary.innerHTML = `
-            <div class="row">
-              <span>${item.label}</span>
-              <span>${item.count} ${item.count === 1 ? 'person' : 'personer'}${item.combos.length ? ' [+]' : ''}</span>
-            </div>
-            <div class="detail">${item.combos.map((combo) => combo.label + ' · ' + combo.count).join(' · ')}</div>
-          `;
-          selectedSnapshot.append(summary.cloneNode(true));
-          reviewSelected.append(summary);
+        relevantNeeds.forEach((need) => {
+          needsList.append(renderNeedRow(item, need, state));
         });
       }
 
-      document.querySelectorAll('#deviationList .chip').forEach((node, index) => {
-        const item = scenario.deviations[index];
-        node.classList.toggle('selected', selected.has(item.id));
-        node.setAttribute('aria-pressed', String(selected.has(item.id)));
-      });
+      planningContext.append(needsList);
 
+      const confirmButton = document.getElementById('confirmCurrentItemBtn');
+      if (confirmButton) {
+        confirmButton.addEventListener('click', () => setItemPlanned(item.id, true));
+      }
+    }
+
+    function renderWorkspace() {
+      renderPlanningNav();
+      renderActivePlanningItem();
       app.dataset.screen = screen;
     }
 
@@ -2459,12 +2925,11 @@
       control.addEventListener('click', (event) => {
         event.preventDefault();
         const target = control.dataset.jump;
+        if (target === 'workspace') {
+          activePlanningItemId = 'lunchAlt1';
+        }
         setScreen(target);
       });
-    });
-
-    confirmBtn.addEventListener('click', () => {
-      setScreen('success');
     });
 
     if (themeToggle) {
@@ -2473,9 +2938,19 @@
       });
     }
 
+    console.assert(deriveRelevantNeeds(planningItemsById.lunchAlt1).find((need) => need.id === 'timbal')?.count === 8, 'Alt 1 Timbal should be 8');
+    console.assert(deriveRelevantNeeds(planningItemsById.lunchAlt1).find((need) => need.id === 'grovPate')?.count === 4, 'Alt 1 Grov paté should be 4');
+    console.assert(deriveRelevantNeeds(planningItemsById.lunchAlt1).find((need) => need.id === 'laktosfri') === undefined, 'Alt 1 should not include Laktosfri');
+    console.assert(deriveRelevantNeeds(planningItemsById.lunchAlt2).find((need) => need.id === 'laktosfri')?.count === 7, 'Alt 2 Laktosfri should be 7');
+    console.assert(deriveAffectedCount(planningItemsById.lunchAlt1, new Set(['timbal'])) === 8, 'Alt 1 Timbal affected should be 8');
+    console.assert(deriveAffectedCount(planningItemsById.lunchAlt1, new Set(['grovPate'])) === 4, 'Alt 1 Grov paté affected should be 4');
+    console.assert(deriveAffectedCount(planningItemsById.lunchAlt1, new Set(['timbal', 'grovPate'])) === 11, 'Alt 1 Timbal + Grov paté affected should be 11');
+    console.assert(deriveAffectedCount(planningItemsById.lunchAlt2, new Set(['laktosfri'])) === 7, 'Alt 2 Laktosfri affected should be 7');
+    console.assert(getPlannedCount() === 0, 'Initial planned count should be 0');
+
     setTheme('dark');
     setScreen('start');
-    renderSelections();
+    renderWorkspace();
   </script>
 </body>
 </html>
