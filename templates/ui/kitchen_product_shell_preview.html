@@ -22,6 +22,7 @@
   <script src="{{ url_for('static', filename='js/kitchen_product_shell.js') }}" defer></script>
 </head>
 <body class="yp-product-body">
+  {% set page1 = vm.page1|default({}) %}
   <div class="yp-product-shell">
     <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start">
       <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
@@ -33,7 +34,7 @@
           </div>
         </div>
         <div class="yp-product-status-strip" aria-label="Progress and context">
-          <div class="yp-product-status-date sr-only" id="productStatusDay">Tisdag 8 september</div>
+          <div class="yp-product-status-date sr-only" id="productStatusDay">{{ page1.selected_date_label }}</div>
           <div class="yp-product-status-avatar" aria-hidden="true">HJ</div>
           <button class="yp-product-theme-toggle" id="ypProductThemeToggle" type="button" aria-pressed="false" aria-label="Växla till dark mode" data-theme-toggle>
             <span data-theme-icon>🌙</span>
@@ -47,7 +48,7 @@
             <div class="yp-planera-page1-layout">
               <aside class="yp-planera-page1-sidebar" aria-label="Yuplan navigation">
                 <div class="yp-planera-page1-sidebar__context">
-                  <strong>Centralköket</strong>
+                  <strong>{{ vm.site_display_name }}</strong>
                   <span>Kommun</span>
                 </div>
                 <nav class="yp-planera-page1-sidebar__nav" aria-label="Visuell navigering">
@@ -64,20 +65,18 @@
 
               <div class="yp-planera-page1-main">
                 <div class="yp-planera-page1-head">
-                  <h1 class="yp-planera-page1-title" id="yp-planera-page1-title">Tisdag 8 september</h1>
+                  <h1 class="yp-planera-page1-title" id="yp-planera-page1-title">{{ page1.selected_date_label }}</h1>
                 </div>
 
                 <div class="yp-planera-page1-weekbar" role="toolbar" aria-label="Veckoväljare">
-                  <button class="yp-planera-page1-weekbar__arrow" type="button" aria-label="Föregående vecka">‹</button>
-                  <span class="yp-planera-page1-weeklabel">Vecka 37</span>
-                  <button class="yp-planera-page1-weekday" type="button"><span>Mån</span><strong>7</strong></button>
-                  <button class="yp-planera-page1-weekday is-current is-today" type="button" aria-current="date"><span>Tis</span><strong>8</strong></button>
-                  <button class="yp-planera-page1-weekday" type="button"><span>Ons</span><strong>9</strong></button>
-                  <button class="yp-planera-page1-weekday" type="button"><span>Tors</span><strong>10</strong></button>
-                  <button class="yp-planera-page1-weekday" type="button"><span>Fre</span><strong>11</strong></button>
-                  <button class="yp-planera-page1-weekday" type="button"><span>Lör</span><strong>12</strong></button>
-                  <button class="yp-planera-page1-weekday" type="button"><span>Sön</span><strong>13</strong></button>
-                  <button class="yp-planera-page1-weekbar__arrow" type="button" aria-label="Nästa vecka">›</button>
+                  <a class="yp-planera-page1-weekbar__arrow" href="{{ page1.prev_url|e }}" aria-label="Föregående vecka">‹</a>
+                  <span class="yp-planera-page1-weeklabel">Vecka {{ page1.week }}</span>
+                  {% for day in page1.week_days %}
+                  <button class="yp-planera-page1-weekday{% if day.is_selected %} is-current{% endif %}{% if day.is_today %} is-today{% endif %}" type="button"{% if day.is_selected %} aria-current="date"{% endif %}>
+                    <span>{{ day.short_label }}</span><strong>{{ day.day_number }}</strong>
+                  </button>
+                  {% endfor %}
+                  <a class="yp-planera-page1-weekbar__arrow" href="{{ page1.next_url|e }}" aria-label="Nästa vecka">›</a>
                 </div>
 
                 <section class="yp-planera-page1-lunch" aria-label="Lunch">

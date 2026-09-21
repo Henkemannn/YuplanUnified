@@ -327,6 +327,90 @@ def api_weekview_specialdiets_mark():
     except Exception:
         return jsonify({"type": "about:blank", "title": "server_error"}), 500
 
+
+def _build_product2_page1_vm(*, site_id: str, year: int, week: int, selected_day: int | None, today: _date) -> dict[str, object]:
+    day_index = selected_day if isinstance(selected_day, int) and 0 <= selected_day <= 6 else None
+    today_iso = today.isocalendar()
+    if day_index is None:
+        day_index = today.weekday() if (int(today_iso[0]), int(today_iso[1])) == (int(year), int(week)) else 0
+
+    try:
+        selected_date = _date.fromisocalendar(int(year), int(week), int(day_index) + 1)
+    except Exception:
+        today_iso = today.isocalendar()
+        year = int(today_iso[0])
+        week = int(today_iso[1])
+        day_index = int(today.weekday())
+        selected_date = _date.fromisocalendar(year, week, day_index + 1)
+
+    monday = _date.fromisocalendar(year, week, 1)
+    prev_iso = (monday - timedelta(days=7)).isocalendar()
+    next_iso = (monday + timedelta(days=7)).isocalendar()
+
+    weekday_names = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
+    month_names = [
+        "januari",
+        "februari",
+        "mars",
+        "april",
+        "maj",
+        "juni",
+        "juli",
+        "augusti",
+        "september",
+        "oktober",
+        "november",
+        "december",
+    ]
+    day_labels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"]
+    selected_date_label = f"{weekday_names[selected_date.weekday()]} {selected_date.day} {month_names[selected_date.month - 1]}"
+
+    week_days = []
+    for index in range(7):
+        day_date = _date.fromisocalendar(year, week, index + 1)
+        week_days.append(
+            {
+                "index": index,
+                "short_label": day_labels[index],
+                "day_number": day_date.day,
+                "date_iso": day_date.isoformat(),
+                "is_selected": index == day_index,
+                "is_today": day_date == today,
+            }
+        )
+
+    prev_url = url_for(
+        "ui.kitchen_planering_v1",
+        ui="product2",
+        site_id=site_id,
+        year=int(prev_iso[0]),
+        week=int(prev_iso[1]),
+        day=int(day_index),
+    )
+    next_url = url_for(
+        "ui.kitchen_planering_v1",
+        ui="product2",
+        site_id=site_id,
+        year=int(next_iso[0]),
+        week=int(next_iso[1]),
+        day=int(day_index),
+    )
+
+    return {
+        "year": int(year),
+        "week": int(week),
+        "selected_day": int(day_index),
+        "selected_date_iso": selected_date.isoformat(),
+        "selected_date_label": selected_date_label,
+        "week_days": week_days,
+        "prev_year": int(prev_iso[0]),
+        "prev_week": int(prev_iso[1]),
+        "next_year": int(next_iso[0]),
+        "next_week": int(next_iso[1]),
+        "prev_url": prev_url,
+        "next_url": next_url,
+    }
+
 # Planering bulk mark: set produced for all departments' special diets with count>0
 @ui_bp.post("/api/planering/mark_produced_special")
 @require_roles("superuser", "admin")
@@ -2793,6 +2877,9 @@ def kitchen_planering_v1():
         return redirect(url_for("ui.select_site", next="/ui/kitchen/planering"))
 
     if (request.args.get("ui") or "").strip().lower() == "product2":
+        current_tenant_id = ctx.get("tenant_id") if ctx.get("tenant_id") is not None else session.get("tenant_id")
+        if current_tenant_id is None:
+            return abort(404)
         db = get_session()
         try:
             row = db.execute(text("SELECT tenant_id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
@@ -2800,7 +2887,6 @@ def kitchen_planering_v1():
             db.close()
         if not row:
             return abort(404)
-        current_tenant_id = session.get("tenant_id") or ctx.get("tenant_id")
         site_tenant_id = row[0]
         try:
             if current_tenant_id is not None and site_tenant_id is not None and int(current_tenant_id) != int(site_tenant_id):
@@ -2808,11 +2894,39 @@ def kitchen_planering_v1():
         except Exception:
             return abort(404)
 
+        today = _date.today()
+        try:
+            year = int(request.args.get("year") or today.year)
+        except Exception:
+            year = today.year
+        try:
+            week = int(request.args.get("week") or today.isocalendar()[1])
+        except Exception:
+            week = today.isocalendar()[1]
+        day_param = request.args.get("day")
+        selected_day = None
+        try:
+            if day_param is not None:
+                day_candidate = int(day_param)
+                if 0 <= day_candidate <= 6:
+                    selected_day = day_candidate
+        except Exception:
+            selected_day = None
+
+        page1_vm = _build_product2_page1_vm(
+            site_id=site_id,
+            year=year,
+            week=week,
+            selected_day=selected_day,
+            today=today,
+        )
+
         vm = {
             "shell_variant": "kitchen_product",
             "site_display_name": str(row[1] or "").strip(),
             "shell_tenant_label": "Kommun",
             "nav_context": "kitchen",
+            "page1": page1_vm,
         }
         return render_template("ui/kitchen_product_shell_preview.html", vm=vm)
 
