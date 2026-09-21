@@ -6,6 +6,10 @@ html {
 .yp-product-body {
   margin: 0;
   min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(0, 174, 184, 0.22), transparent 30%),
+    radial-gradient(circle at top right, rgba(2, 174, 195, 0.14), transparent 26%),
+    linear-gradient(180deg, #eaf7f8 0%, #f5fbfb 100%);
 }
 
 .yp-product-shell {
@@ -62,10 +66,7 @@ html {
   font-size: 16px;
   line-height: 1.5;
   color: var(--yp-product-ink);
-  background:
-    radial-gradient(circle at top left, rgba(0, 174, 184, 0.22), transparent 30%),
-    radial-gradient(circle at top right, rgba(2, 174, 195, 0.14), transparent 26%),
-    linear-gradient(180deg, var(--yp-product-bg) 0%, var(--yp-product-bg-2) 100%);
+  background: transparent;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -87,10 +88,13 @@ html {
   --yp-product-accent-soft-2: rgba(2, 174, 195, 0.18);
   --yp-product-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
   --yp-product-shadow-soft: 0 16px 34px rgba(0, 0, 0, 0.28);
+}
+
+.yp-product-body:has(#yp-product-app[data-theme="dark"]) {
   background:
     radial-gradient(circle at top left, rgba(2, 174, 195, 0.10), transparent 30%),
     radial-gradient(circle at top right, rgba(2, 174, 195, 0.08), transparent 26%),
-    linear-gradient(180deg, var(--yp-product-bg) 0%, var(--yp-product-bg-2) 100%);
+    linear-gradient(180deg, #071426 0%, #0b1f34 100%);
 }
 
 #yp-product-app[data-theme="dark"] .yp-product-topbar {
