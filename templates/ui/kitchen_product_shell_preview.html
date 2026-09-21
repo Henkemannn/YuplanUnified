@@ -18,13 +18,10 @@
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
   <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kitchen_product_shell.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_product2_page1.css') }}" />
   <script src="{{ url_for('static', filename='js/kitchen_product_shell.js') }}" defer></script>
 </head>
 <body class="yp-product-body">
-  {% set user_display = session.get('full_name') or session.get('user_email') or session.get('username') or 'Inloggad' %}
-  {% set user_short_label = ((user_display.split()[0][:1] ~ user_display.split()[1][:1]) | upper) if (user_display.split() | length) >= 2 else ((user_display.split()[0][:2]) | upper if (user_display.split() | length) == 1 else 'U') %}
-  {% set site_label = (vm.get('site_display_name') if vm is defined and vm is mapping and vm.get('site_display_name') else current_site_name) %}
-  {% set tenant_label = (vm.get('shell_tenant_label') if vm is defined and vm is mapping and vm.get('shell_tenant_label') else tenant_name) %}
   <div class="yp-product-shell">
     <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start">
       <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
@@ -37,7 +34,7 @@
         </div>
         <div class="yp-product-status-strip" aria-label="Progress and context">
           <div class="yp-product-status-date sr-only" id="productStatusDay">Tisdag 8 september</div>
-          <div class="yp-product-status-avatar" aria-hidden="true">{{ user_short_label }}</div>
+          <div class="yp-product-status-avatar" aria-hidden="true">HJ</div>
           <button class="yp-product-theme-toggle" id="ypProductThemeToggle" type="button" aria-pressed="false" aria-label="Växla till dark mode" data-theme-toggle>
             <span data-theme-icon>🌙</span>
           </button>
@@ -46,28 +43,90 @@
 
       <main class="yp-product-panel">
         <div class="yp-product-panel-inner">
-          <div class="yp-product-layout">
-            <aside class="yp-product-sidebar" aria-label="Yuplan navigation">
-              <div class="yp-product-sidebar__context">
-                <strong>{{ site_label or 'Centralköket' }}</strong>
-                <span>{{ tenant_label or 'Kommun' }}</span>
-              </div>
-              <nav class="yp-product-nav" aria-label="Visuell navigering">
-                <button class="yp-product-nav__item" type="button">Översikt</button>
-                <button class="yp-product-nav__item is-active" type="button" aria-current="page">Planera</button>
-                <button class="yp-product-nav__item" type="button">Meny</button>
-                <button class="yp-product-nav__item" type="button">Veckovy</button>
-                <button class="yp-product-nav__item" type="button">Rapporter</button>
-              </nav>
-              <div class="yp-product-sidebar__bottom">
-                <button class="yp-product-sidebar__settings" type="button">Inställningar</button>
-              </div>
-            </aside>
+          <section class="yp-planera-page1" aria-labelledby="yp-planera-page1-title">
+            <div class="yp-planera-page1-layout">
+              <aside class="yp-planera-page1-sidebar" aria-label="Yuplan navigation">
+                <div class="yp-planera-page1-sidebar__context">
+                  <strong>Centralköket</strong>
+                  <span>Kommun</span>
+                </div>
+                <nav class="yp-planera-page1-sidebar__nav" aria-label="Visuell navigering">
+                  <button class="yp-planera-page1-sidebar__item" type="button">Översikt</button>
+                  <button class="yp-planera-page1-sidebar__item is-active" type="button" aria-current="page">Planera</button>
+                  <button class="yp-planera-page1-sidebar__item" type="button">Meny</button>
+                  <button class="yp-planera-page1-sidebar__item" type="button">Veckovy</button>
+                  <button class="yp-planera-page1-sidebar__item" type="button">Rapporter</button>
+                </nav>
+                <div class="yp-planera-page1-sidebar__bottom">
+                  <button class="yp-planera-page1-sidebar__settings" type="button">Inställningar</button>
+                </div>
+              </aside>
 
-            <div class="yp-product-main-content">
-              <p class="product-shell-preview-marker">Product shell preview</p>
+              <div class="yp-planera-page1-main">
+                <div class="yp-planera-page1-head">
+                  <h1 class="yp-planera-page1-title" id="yp-planera-page1-title">Tisdag 8 september</h1>
+                </div>
+
+                <div class="yp-planera-page1-weekbar" role="toolbar" aria-label="Veckoväljare">
+                  <button class="yp-planera-page1-weekbar__arrow" type="button" aria-label="Föregående vecka">‹</button>
+                  <span class="yp-planera-page1-weeklabel">Vecka 37</span>
+                  <button class="yp-planera-page1-weekday" type="button"><span>Mån</span><strong>7</strong></button>
+                  <button class="yp-planera-page1-weekday is-current is-today" type="button" aria-current="date"><span>Tis</span><strong>8</strong></button>
+                  <button class="yp-planera-page1-weekday" type="button"><span>Ons</span><strong>9</strong></button>
+                  <button class="yp-planera-page1-weekday" type="button"><span>Tors</span><strong>10</strong></button>
+                  <button class="yp-planera-page1-weekday" type="button"><span>Fre</span><strong>11</strong></button>
+                  <button class="yp-planera-page1-weekday" type="button"><span>Lör</span><strong>12</strong></button>
+                  <button class="yp-planera-page1-weekday" type="button"><span>Sön</span><strong>13</strong></button>
+                  <button class="yp-planera-page1-weekbar__arrow" type="button" aria-label="Nästa vecka">›</button>
+                </div>
+
+                <section class="yp-planera-page1-lunch" aria-label="Lunch">
+                  <div class="yp-planera-page1-lunch__head">
+                    <div class="yp-planera-page1-lunch__kicker">Lunch</div>
+                    <div class="yp-planera-page1-lunch__meta">18 mottagande enheter · 273 portioner</div>
+                  </div>
+
+                  <div class="yp-planera-page1-lunch__options">
+                    <article class="yp-planera-page1-option is-active">
+                      <div class="yp-planera-page1-option__kicker">ALT 1</div>
+                      <div class="yp-planera-page1-option__title">Fläskkarré</div>
+                      <div class="yp-planera-page1-option__text">Potatismos · Gräddsås</div>
+                    </article>
+
+                    <div class="yp-planera-page1-divider" aria-hidden="true"></div>
+
+                    <article class="yp-planera-page1-option">
+                      <div class="yp-planera-page1-option__kicker">ALT 2</div>
+                      <div class="yp-planera-page1-option__title">Kokt torsk</div>
+                      <div class="yp-planera-page1-option__text">Äggsås · Kokt potatis</div>
+                    </article>
+                  </div>
+
+                  <div class="yp-planera-page1-lunch__footer">
+                    <button class="yp-planera-page1-cta" type="button">Planera lunch →</button>
+                  </div>
+                </section>
+
+                <section class="yp-planera-page1-secondary" aria-label="Senare idag">
+                  <button class="yp-planera-page1-row" type="button">
+                    <span class="yp-planera-page1-row__label">KVÄLL</span>
+                    <span class="yp-planera-page1-row__value">Köttfärssoppa</span>
+                    <span class="yp-planera-page1-row__chev">›</span>
+                  </button>
+                  <button class="yp-planera-page1-row" type="button">
+                    <span class="yp-planera-page1-row__label">DESSERT</span>
+                    <span class="yp-planera-page1-row__value">Äppelpaj</span>
+                    <span class="yp-planera-page1-row__chev">›</span>
+                  </button>
+                  <button class="yp-planera-page1-row" type="button">
+                    <span class="yp-planera-page1-row__label">TILLÄGG</span>
+                    <span class="yp-planera-page1-row__value">Sallad · Mos · Övriga tillval</span>
+                    <span class="yp-planera-page1-row__chev">›</span>
+                  </button>
+                </section>
+              </div>
             </div>
-          </div>
+          </section>
         </div>
       </main>
     </div>
