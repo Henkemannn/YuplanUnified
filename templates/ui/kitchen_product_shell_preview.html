@@ -1,15 +1,76 @@
-{% extends "ui/_layout/app_shell_base.html" %}
+<!DOCTYPE html>
+<html lang="sv" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="application-name" content="Yuplan" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Yuplan" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+  <title>{% block page_title %}Kök – Shell preview{% endblock %}</title>
+  {% set icon_version = asset_version|default('icon-20260310') %}
+  <link rel="manifest" href="/manifest.webmanifest?v={{ icon_version }}">
+  <link rel="icon" href="/favicon.ico?v={{ icon_version }}">
+  <link rel="shortcut icon" href="/favicon.ico?v={{ icon_version }}">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
+  <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kitchen_product_shell.css') }}" />
+  <script src="{{ url_for('static', filename='js/kitchen_product_shell.js') }}" defer></script>
+</head>
+<body class="yp-product-body">
+  {% set user_display = session.get('full_name') or session.get('user_email') or session.get('username') or 'Inloggad' %}
+  {% set user_short_label = ((user_display.split()[0][:1] ~ user_display.split()[1][:1]) | upper) if (user_display.split() | length) >= 2 else ((user_display.split()[0][:2]) | upper if (user_display.split() | length) == 1 else 'U') %}
+  {% set site_label = (vm.get('site_display_name') if vm is defined and vm is mapping and vm.get('site_display_name') else current_site_name) %}
+  {% set tenant_label = (vm.get('shell_tenant_label') if vm is defined and vm is mapping and vm.get('shell_tenant_label') else tenant_name) %}
+  <div class="yp-product-shell">
+    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start">
+      <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
+        <div class="yp-product-topbar-brand">
+          <img class="yp-product-topbar-brand__mark" src="{{ url_for('static', filename='brand/v1/logo/yuplan-mark-primary.svg') }}" alt="Yuplan" />
+          <div class="yp-product-topbar-brand__copy">
+            <strong>Yuplan</strong>
+            <span>· Planera</span>
+          </div>
+        </div>
+        <div class="yp-product-status-strip" aria-label="Progress and context">
+          <div class="yp-product-status-date sr-only" id="productStatusDay">Tisdag 8 september</div>
+          <div class="yp-product-status-avatar" aria-hidden="true">{{ user_short_label }}</div>
+          <button class="yp-product-theme-toggle" id="ypProductThemeToggle" type="button" aria-pressed="false" aria-label="Växla till dark mode" data-theme-toggle>
+            <span data-theme-icon>🌙</span>
+          </button>
+        </div>
+      </header>
 
-{% block page_title %}Kök – Shell preview{% endblock %}
+      <main class="yp-product-panel">
+        <div class="yp-product-panel-inner">
+          <div class="yp-product-layout">
+            <aside class="yp-product-sidebar" aria-label="Yuplan navigation">
+              <div class="yp-product-sidebar__context">
+                <strong>{{ site_label or 'Centralköket' }}</strong>
+                <span>{{ tenant_label or 'Kommun' }}</span>
+              </div>
+              <nav class="yp-product-nav" aria-label="Visuell navigering">
+                <button class="yp-product-nav__item" type="button">Översikt</button>
+                <button class="yp-product-nav__item is-active" type="button" aria-current="page">Planera</button>
+                <button class="yp-product-nav__item" type="button">Meny</button>
+                <button class="yp-product-nav__item" type="button">Veckovy</button>
+                <button class="yp-product-nav__item" type="button">Rapporter</button>
+              </nav>
+              <div class="yp-product-sidebar__bottom">
+                <button class="yp-product-sidebar__settings" type="button">Inställningar</button>
+              </div>
+            </aside>
 
-{% block unified_ui_css %}{% endblock %}
-
-{% block head_extra %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_day_product2.css') }}">
-{% endblock %}
-
-{% block content %}
-  <div class="shell-preview" aria-label="Product shell preview">
-    <p class="shell-preview__marker">Product shell preview</p>
+            <div class="yp-product-main-content">
+              <p class="product-shell-preview-marker">Product shell preview</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
   </div>
-{% endblock %}
+</body>
+</html>
