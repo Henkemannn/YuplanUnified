@@ -2792,6 +2792,30 @@ def kitchen_planering_v1():
     if not site_id:
         return redirect(url_for("ui.select_site", next="/ui/kitchen/planering"))
 
+    if (request.args.get("ui") or "").strip().lower() == "product2":
+        db = get_session()
+        try:
+            row = db.execute(text("SELECT tenant_id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+        finally:
+            db.close()
+        if not row:
+            return abort(404)
+        current_tenant_id = session.get("tenant_id") or ctx.get("tenant_id")
+        site_tenant_id = row[0]
+        try:
+            if current_tenant_id is not None and site_tenant_id is not None and int(current_tenant_id) != int(site_tenant_id):
+                return abort(404)
+        except Exception:
+            return abort(404)
+
+        vm = {
+            "shell_variant": "kitchen_product",
+            "site_display_name": str(row[1] or "").strip(),
+            "shell_tenant_label": "Kommun",
+            "nav_context": "kitchen",
+        }
+        return render_template("ui/kitchen_product_shell_preview.html", vm=vm)
+
     # Defaults: current year/week
     try:
         year = int(request.args.get("year") or _date.today().year)

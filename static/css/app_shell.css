@@ -661,6 +661,292 @@ body {
   width: min(1240px, 100%);
 }
 
+.app-shell--kitchen-product {
+  width: min(1180px, calc(100vw - 44px));
+  margin: 22px auto;
+  padding: 0;
+  min-height: calc(100vh - 44px);
+  display: grid;
+  grid-template-rows: max-content minmax(0, 1fr);
+  gap: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(0, 174, 184, 0.22), transparent 30%),
+    radial-gradient(circle at top right, rgba(2, 174, 195, 0.14), transparent 26%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+}
+
+.app-shell--kitchen-product.app-shell--dark {
+  background:
+    radial-gradient(circle at top left, rgba(2, 174, 195, 0.10), transparent 30%),
+    radial-gradient(circle at top right, rgba(2, 174, 195, 0.08), transparent 26%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+}
+
+.app-shell--kitchen-product .app-shell__topbar {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  height: auto;
+  min-height: 62px;
+  padding: 0 16px;
+  border-radius: 22px;
+  box-shadow: var(--yp-shadow-sm), 0 12px 24px rgba(7, 20, 38, 0.08);
+  background: linear-gradient(180deg, rgba(243, 248, 251, 0.98), rgba(234, 242, 247, 0.97));
+}
+
+.app-shell--kitchen-product.app-shell--dark .app-shell__topbar {
+  background: linear-gradient(180deg, rgba(11, 31, 52, 0.98), rgba(7, 20, 38, 0.96));
+  border-color: rgba(2, 174, 195, 0.14);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+.app-shell--kitchen-product .app-shell__brand {
+  gap: 12px;
+}
+
+.app-shell--kitchen-product .app-shell__logo {
+  width: 46px;
+  height: 46px;
+}
+
+.app-shell--kitchen-product .app-shell__brand-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-shell--kitchen-product .app-shell__brand-copy strong {
+  display: block;
+  font-size: 0.98rem;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+}
+
+.app-shell--kitchen-product .app-shell__brand-copy span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+.app-shell--kitchen-product .app-shell__topbar-actions {
+  gap: 10px;
+  max-width: none;
+}
+
+.app-shell--kitchen-product .app-shell__env-badge,
+.app-shell--kitchen-product .app-shell__topbar .app-shell__user-pill:not(.app-shell__user-pill--avatar) {
+  display: none;
+}
+
+.app-shell--kitchen-product .app-shell__user-pill--avatar {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.app-shell--kitchen-product .app-shell__body {
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr);
+  gap: 18px;
+  padding: 0;
+  min-width: 0;
+}
+
+.app-shell--kitchen-product .app-shell__sidebar {
+  position: sticky;
+  top: 18px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.app-shell--kitchen-product .app-shell__sidebar-panel {
+  background: linear-gradient(180deg, #0b1f34 0%, #091a2c 100%);
+  border: 1px solid rgba(2, 174, 195, 0.12);
+  border-radius: 28px;
+  padding: 16px 14px;
+  box-shadow: var(--yp-shadow-md);
+  backdrop-filter: blur(14px);
+}
+
+.app-shell--kitchen-product .app-shell__sidebar-context {
+  display: grid;
+  gap: 3px;
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(2, 174, 195, 0.12);
+}
+
+.app-shell--kitchen-product .app-shell__sidebar-context strong {
+  display: block;
+  font-size: 0.98rem;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  color: rgba(234, 247, 248, 0.94);
+}
+
+.app-shell--kitchen-product .app-shell__sidebar-context span {
+  display: block;
+  font-size: 0.8rem;
+  color: rgba(234, 247, 248, 0.68);
+  line-height: 1.1;
+}
+
+.app-shell--kitchen-product .app-shell__nav {
+  display: grid;
+  gap: 6px;
+}
+
+.app-shell--kitchen-product .app-shell__nav-item {
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(234, 247, 248, 0.78);
+  font-size: 0.96rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.app-shell--kitchen-product .app-shell__nav-item:hover {
+  background: rgba(2, 174, 195, 0.12);
+  color: #eaf7f8;
+  transform: none;
+}
+
+.app-shell--kitchen-product .app-shell__nav-item--active {
+  background: linear-gradient(180deg, rgba(2, 174, 195, 0.18), rgba(2, 174, 195, 0.10));
+  border-color: rgba(2, 174, 195, 0.22);
+  color: #eaf7f8;
+}
+
+.app-shell--kitchen-product .app-shell__nav-item--active::before {
+  background: color-mix(in srgb, var(--accent) 90%, transparent);
+}
+
+.app-shell--kitchen-product .app-shell__nav-item--disabled {
+  color: rgba(234, 247, 248, 0.48);
+  cursor: default;
+}
+
+.app-shell--kitchen-product .app-shell__sidebar-utility {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid rgba(2, 174, 195, 0.12);
+}
+
+.app-shell--kitchen-product .app-shell__sidebar-settings {
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(234, 247, 248, 0.68);
+  text-align: left;
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.app-shell--kitchen-product .app-shell__sidebar-footer {
+  margin-top: 10px;
+  text-align: left;
+  color: rgba(234, 247, 248, 0.62);
+}
+
+.app-shell--kitchen-product .app-shell__main {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  background: linear-gradient(180deg, rgba(248, 252, 252, 0.92), rgba(238, 247, 248, 0.94));
+  border: 1px solid rgba(3, 85, 144, 0.10);
+  border-radius: 30px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+  justify-items: start;
+  align-content: start;
+}
+
+.app-shell--kitchen-product.app-shell--dark .app-shell__main {
+  background: linear-gradient(180deg, rgba(9, 24, 43, 0.96), rgba(7, 20, 38, 0.98));
+  border-color: rgba(2, 174, 195, 0.14);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+.app-shell--kitchen-product .app-shell__main > * {
+  width: 100%;
+  max-width: none;
+}
+
+@media (max-width: 1024px) {
+  .app-shell--kitchen-product {
+    width: min(1180px, calc(100vw - 44px));
+  }
+
+  .app-shell--kitchen-product .app-shell__body {
+    grid-template-columns: 184px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell--kitchen-product {
+    width: min(1180px, calc(100vw - 28px));
+  }
+
+  .app-shell--kitchen-product .app-shell__body {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell--kitchen-product .app-shell__sidebar {
+    position: static;
+  }
+
+  .app-shell--kitchen-product .app-shell__sidebar-panel {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .app-shell--kitchen-product .app-shell__nav {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .app-shell--kitchen-product .app-shell__nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell--kitchen-product .app-shell__topbar {
+    padding: 0 16px;
+  }
+
+  .app-shell--kitchen-product .app-shell__brand-copy strong {
+    font-size: 0.94rem;
+  }
+
+  .app-shell--kitchen-product .app-shell__brand-copy span {
+    font-size: 0.78rem;
+  }
+}
+
 .app-shell__page-header {
   display: flex;
   align-items: flex-start;

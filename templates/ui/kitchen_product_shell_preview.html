@@ -1,0 +1,15 @@
+{% extends "ui/_layout/app_shell_base.html" %}
+
+{% block page_title %}Kök – Shell preview{% endblock %}
+
+{% block unified_ui_css %}{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_day_product2.css') }}">
+{% endblock %}
+
+{% block content %}
+  <div class="shell-preview" aria-label="Product shell preview">
+    <p class="shell-preview__marker">Product shell preview</p>
+  </div>
+{% endblock %}
