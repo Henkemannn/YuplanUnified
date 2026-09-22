@@ -15,6 +15,7 @@ from core.planera_v2.adapters.kommun_from_requirement_groups import (
     build_planning_slice_from_requirement_groups,
 )
 from core.planera_v2.engine import compute_plan
+from core.planera_v2.acceptance import validate_plan_request_for_production
 
 
 def _seed_department(site_id: str, name: str | None = None) -> dict:
@@ -108,6 +109,69 @@ def test_multi_requirement_group_preserves_quantity_and_conserves_plan_total(app
         assert result.totals.baseline_total == 10
         assert result.totals.deviation_total == 3
         assert result.totals.normal_total == 7
+
+
+def test_multiple_disjoint_cohorts_count_once_per_group(app_session) -> None:
+    with app_session.app_context():
+        site, _ = SitesRepo().create_site(f"Planera 1E disjoint site {uuid.uuid4()}")
+        department = _seed_department(site["id"], "Unit A")
+        gluten_key = f"req_gluten_{uuid.uuid4().hex[:8]}"
+        vegetarian_key = f"req_vegetarian_{uuid.uuid4().hex[:8]}"
+        lactose_key = f"req_lactose_{uuid.uuid4().hex[:8]}"
+        req_gluten = _seed_requirement_with_key(site["id"], "Gluten", gluten_key)
+        req_vegetarian = _seed_requirement_with_key(site["id"], "Vegetarian", vegetarian_key)
+        req_lactose = _seed_requirement_with_key(site["id"], "Lactose", lactose_key)
+        _create_group(site["id"], department["id"], [req_gluten], quantity=2, label="Gluten")
+        _create_group(site["id"], department["id"], [req_vegetarian], quantity=3, label="Vegetarian")
+        _create_group(site["id"], department["id"], [req_gluten, req_lactose], quantity=1, label="Gluten + Lactose")
+
+        slice_ = build_planning_slice_from_requirement_groups(
+            site_id=site["id"],
+            service_date=date(2026, 9, 8),
+            meal_key="lunch",
+            unit_baselines={department["id"]: 10},
+        )
+        result = compute_plan(slice_.to_plan_request())
+
+        assert len(slice_.deviations) == 3
+        assert {tuple(deviation.category_keys) for deviation in slice_.deviations} == {
+            (gluten_key,),
+            (vegetarian_key,),
+            (gluten_key, lactose_key),
+        }
+        assert sum(deviation.quantity for deviation in slice_.deviations) == 6
+        assert result.totals.baseline_total == 10
+        assert result.totals.deviation_total == 6
+        assert result.totals.normal_total == 4
+
+
+def test_cohort_total_above_baseline_is_blocked_by_acceptance(app_session) -> None:
+    with app_session.app_context():
+        site, _ = SitesRepo().create_site(f"Planera 1E overflow site {uuid.uuid4()}")
+        department = _seed_department(site["id"], "Unit A")
+        gluten_key = f"req_gluten_{uuid.uuid4().hex[:8]}"
+        vegetarian_key = f"req_vegetarian_{uuid.uuid4().hex[:8]}"
+        lactose_key = f"req_lactose_{uuid.uuid4().hex[:8]}"
+        req_gluten = _seed_requirement_with_key(site["id"], "Gluten", gluten_key)
+        req_vegetarian = _seed_requirement_with_key(site["id"], "Vegetarian", vegetarian_key)
+        req_lactose = _seed_requirement_with_key(site["id"], "Lactose", lactose_key)
+        _create_group(site["id"], department["id"], [req_gluten], quantity=2, label="Gluten")
+        _create_group(site["id"], department["id"], [req_vegetarian], quantity=3, label="Vegetarian")
+        _create_group(site["id"], department["id"], [req_gluten, req_lactose], quantity=1, label="Gluten + Lactose")
+
+        slice_ = build_planning_slice_from_requirement_groups(
+            site_id=site["id"],
+            service_date=date(2026, 9, 8),
+            meal_key="lunch",
+            unit_baselines={department["id"]: 5},
+        )
+        acceptance = validate_plan_request_for_production(slice_.to_plan_request(), expected_unit_ids=[department["id"]])
+
+        assert acceptance.accepted is False
+        assert [issue.code for issue in acceptance.issues] == [
+            "deviation_exceeds_baseline",
+            "unit_deviation_exceeds_baseline",
+        ]
 
 
 def test_service_override_zero_inactive_reactivate_and_date_meal_isolation(app_session) -> None:

@@ -107,6 +107,19 @@ Do not build those systems into Planera Core.
 - prove unit baselines, deviations, totals, and destinations.
 - only switch production truth after parity is accepted.
 
+## Requirement Group / Cohort Semantics
+- one DepartmentRequirementGroup represents one exact recipient cohort
+- cohort requirements may contain 1..N atomic requirement keys
+- quantities between groups are mutually exclusive within one destination and service context
+- a multi-requirement recipient belongs to the combined group, not to each individual requirement group separately
+- group quantity is counted once regardless of how many requirement keys the group contains
+- recipients not assigned to any requirement group remain in standard baseline production
+- the sum of active effective cohort quantities must not exceed the destination baseline
+- Planera Core may rely on adapter/application input already satisfying this cohort contract
+- Planera Core must remain unaware of Kommun/person-specific concepts
+- the aggregate cohort model does not persist recipient identities, so overlap detection is a business data invariant in Yuplan 1.0
+- future recipient-level persistence could verify cohort disjointness automatically, but it is not required for MVP
+
 ## Offshore Later Use
 Offshore later uses the same Planera Core through its own adapter: POB, shifts, visitors, crew requirements, and effective Work Menu.
 
