@@ -13,6 +13,14 @@ from .weekview.service import WeekviewService
 from .weekview_vm import build_weekview_vm
 # use string roles consistently elsewhere; avoid Role import
 from .meal_registration_repo import MealRegistrationRepo
+from .planning_option_review import (
+    ADAPTATION_REQUIRED,
+    PlanningOptionReviewError,
+    PlanningOptionReviewService,
+    REVIEW_STATE_NO_DEVIATIONS,
+    REVIEW_STATE_UNREVIEWED,
+    REVIEW_STATE_WITH_DEVIATIONS,
+)
 from .planera_product2_menu_vm import Product2MealOptionsError, build_product2_meal_options_vm
 from .planera_product2_page2_context import Product2Page2ContextError, build_product2_page2_planning_context
 from datetime import date as _date
@@ -489,15 +497,95 @@ def _format_product2_page2_date_label(service_date: _date) -> str:
     return f"{_PRODUCT2_PAGE2_WEEKDAY_NAMES[service_date.weekday()]} {service_date.day} {_PRODUCT2_PAGE2_MONTH_NAMES[service_date.month - 1]}"
 
 
+def _serialize_option_review_state(state) -> dict[str, object]:
+    decision_map = {
+        f"{decision.destination_id}::{decision.requirement_group_id}": str(decision.decision)
+        for decision in state.decisions
+    }
+    is_current = not bool(state.review_is_stale) and str(state.review_state) in {
+        REVIEW_STATE_NO_DEVIATIONS,
+        REVIEW_STATE_WITH_DEVIATIONS,
+    }
+    if state.review_is_stale:
+        banner_message = "Underlaget har ändrats – granska igen."
+        status_label = None
+        cta_label = "Alla kan äta rätten som den är →"
+    elif is_current:
+        banner_message = None
+        status_label = "Granskad"
+        cta_label = "Ändra granskning"
+    else:
+        banner_message = None
+        status_label = None
+        cta_label = "Alla kan äta rätten som den är →"
+    return {
+        "review_id": int(state.review_id) if state.review_id is not None else None,
+        "review_state": str(state.review_state),
+        "review_is_stale": bool(state.review_is_stale),
+        "review_basis_hash": str(state.review_basis_hash) if state.review_basis_hash is not None else None,
+        "current_basis_hash": str(state.current_basis_hash) if state.current_basis_hash is not None else None,
+        "reviewed_by_user_id": int(state.reviewed_by_user_id) if state.reviewed_by_user_id is not None else None,
+        "reviewed_at": state.reviewed_at.isoformat() if state.reviewed_at is not None else None,
+        "completed_at": state.completed_at.isoformat() if state.completed_at is not None else None,
+        "relevant_group_count": int(state.relevant_group_count),
+        "decision_count": int(state.decision_count),
+        "no_adaptation_count": int(state.no_adaptation_count),
+        "adaptation_count": int(state.adaptation_count),
+        "decision_map": decision_map,
+        "status_label": status_label,
+        "banner_message": banner_message,
+        "cta_label": cta_label,
+        "is_current": is_current,
+    }
+
+
 def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) -> dict[str, object]:
+    review_service = PlanningOptionReviewService()
+    review_by_option_id: dict[str, dict[str, object]] = {}
+    for option in context.options:
+        try:
+            review_state = review_service.get_option_review_state(
+                tenant_id=int(context.tenant_id) if hasattr(context, "tenant_id") else int(session.get("tenant_id") or 0),
+                site_id=str(context.site_id),
+                service_date=service_date,
+                meal=str(context.meal),
+                option_id=str(option.option_id),
+            )
+        except PlanningOptionReviewError:
+            review_state = None
+        if review_state is not None:
+            review_by_option_id[str(option.option_id)] = _serialize_option_review_state(review_state)
+
     options = []
     options_by_id: dict[str, dict[str, object]] = {}
     for option in context.options:
+        review_vm = review_by_option_id.get(str(option.option_id), _serialize_option_review_state(type("_Empty", (), {
+            "review_id": None,
+            "review_state": REVIEW_STATE_UNREVIEWED,
+            "review_is_stale": False,
+            "review_basis_hash": None,
+            "current_basis_hash": None,
+            "reviewed_by_user_id": None,
+            "reviewed_at": None,
+            "completed_at": None,
+            "relevant_group_count": 0,
+            "decision_count": 0,
+            "no_adaptation_count": 0,
+            "adaptation_count": 0,
+            "decisions": (),
+        })()))
         option_vm = {
             "option_id": option.option_id,
             "display_label": option.display_label,
             "display_title": option.display_title,
             "resolved": bool(option.resolved),
+            "review_state": review_vm["review_state"],
+            "review_is_stale": bool(review_vm["review_is_stale"]),
+            "review_status_label": review_vm["status_label"],
+            "review_banner_message": review_vm["banner_message"],
+            "review_cta_label": review_vm["cta_label"],
+            "review_is_current": bool(review_vm["is_current"]),
+            "review_decision_count": int(review_vm["decision_count"]),
         }
         options.append(option_vm)
         options_by_id[str(option.option_id)] = option_vm
@@ -526,8 +614,24 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
         selected_option = options_by_id.get(str(destination.selected_option_id or "")) if destination.selected_option_id else None
         if selected_option is None:
             selected_label = "Inget explicit menyval"
+            review_vm = None
         else:
             selected_label = f"{selected_option['display_label']} · {selected_option['display_title']}"
+            review_vm = review_by_option_id.get(str(destination.selected_option_id or ""))
+        requirement_groups = []
+        for group in requirement_groups_by_destination.get(destination.destination_id, []):
+            group_vm = dict(group)
+            decision_key = f"{destination.destination_id}::{group_vm['requirement_group_id']}"
+            decision_value = None
+            if review_vm is not None:
+                decision_value = review_vm["decision_map"].get(decision_key)
+            group_vm["review_decision"] = decision_value
+            group_vm["review_checked"] = bool(
+                review_vm is not None
+                and not bool(review_vm["review_is_stale"])
+                and decision_value == ADAPTATION_REQUIRED
+            )
+            requirement_groups.append(group_vm)
         destinations.append(
             {
                 "destination_id": destination.destination_id,
@@ -536,7 +640,12 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
                 "selected_option_id": destination.selected_option_id,
                 "choice_source": destination.choice_source,
                 "selected_label": selected_label,
-                "requirement_groups": requirement_groups_by_destination.get(destination.destination_id, []),
+                "requirement_groups": requirement_groups,
+                "review_state": review_vm["review_state"] if review_vm is not None else REVIEW_STATE_UNREVIEWED,
+                "review_is_stale": bool(review_vm["review_is_stale"]) if review_vm is not None else False,
+                "review_status_label": review_vm["status_label"] if review_vm is not None else None,
+                "review_banner_message": review_vm["banner_message"] if review_vm is not None else None,
+                "review_cta_label": review_vm["cta_label"] if review_vm is not None else "Alla kan äta rätten som den är →",
             }
         )
 
@@ -546,6 +655,7 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
         "site_name": site_name,
         "service_date": context.service_date,
         "service_date_label": _format_product2_page2_date_label(service_date),
+        "meal": context.meal,
         "meal_label": "Lunch" if context.meal == "lunch" else context.meal.capitalize(),
         "publication_identity": context.publication_identity,
         "options": options,
@@ -613,6 +723,62 @@ def kitchen_planering_product2_day():
         service_date=service_date,
     )
     return render_template("ui/kitchen_product_planera_page2.html", vm=vm)
+
+
+@ui_bp.post("/ui/kitchen/planering/day/review")
+@require_roles(*KITCHEN_UI_ROLES)
+def kitchen_planering_product2_day_review():
+    data = request.get_json(silent=True) or {}
+    site_id = str((data.get("site_id") or "").strip())
+    date_raw = str((data.get("service_date") or data.get("date") or "").strip())
+    meal = str((data.get("meal") or "").strip().lower())
+    option_id = str((data.get("option_id") or "").strip())
+    decisions = data.get("decisions") or []
+    if not site_id or not date_raw or meal != "lunch" or not option_id:
+        return jsonify({"error": "bad_request", "message": "Missing site_id/service_date/meal/option_id"}), 400
+    try:
+        service_date = _date.fromisoformat(date_raw)
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Invalid service_date"}), 400
+
+    ctx = None
+    try:
+        from .context import get_active_context as _get_ctx
+
+        ctx = _get_ctx()
+    except Exception:
+        ctx = None
+    tenant_id = ctx.get("tenant_id") if isinstance(ctx, dict) and ctx.get("tenant_id") is not None else session.get("tenant_id")
+    user_id = session.get("user_id")
+    try:
+        tenant_id = int(tenant_id)
+        user_id = int(user_id)
+    except Exception:
+        return jsonify({"error": "bad_request", "message": "Missing tenant or user context"}), 400
+    if tenant_id <= 0 or user_id <= 0:
+        return jsonify({"error": "bad_request", "message": "Missing tenant or user context"}), 400
+
+    service = PlanningOptionReviewService()
+    try:
+        review_state = service.save_option_review(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            service_date=service_date,
+            meal=meal,
+            option_id=option_id,
+            decisions=decisions,
+            reviewed_by_user_id=user_id,
+        )
+    except PlanningOptionReviewError as exc:
+        message = str(exc)
+        status_code = 400
+        if message == "site_tenant_mismatch":
+            status_code = 403
+        elif message == "option_not_published":
+            status_code = 404
+        return jsonify({"error": message, "message": message}), status_code
+
+    return jsonify({"ok": True, "review": _serialize_option_review_state(review_state)}), 200
 
 # Planering bulk mark: set produced for all departments' special diets with count>0
 @ui_bp.post("/api/planering/mark_produced_special")

@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+  <meta name="csrf-token" content="{{ csrf_meta_token() }}" />
   <title>{% block page_title %}Kök – Planera dag{% endblock %}</title>
   {% set icon_version = asset_version|default('icon-20260310') %}
   <link rel="manifest" href="/manifest.webmanifest?v={{ icon_version }}">
@@ -28,7 +29,7 @@
   {% set destinations = vm.destinations|default([]) %}
   {% set unassigned_destinations = destinations|selectattr('selected_option_id', 'equalto', none)|list %}
   <div class="yp-product-shell">
-    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start">
+    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start" data-page2-review-endpoint="{{ url_for('ui.kitchen_planering_product2_day_review') }}" data-page2-site-id="{{ vm.site_id }}" data-page2-service-date="{{ vm.service_date }}" data-page2-meal="{{ vm.meal }}">
       <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
         <div class="yp-product-topbar-brand">
           <img class="yp-product-topbar-brand__mark" src="{{ url_for('static', filename='brand/v1/logo/yuplan-mark-primary.svg') }}" alt="Yuplan" />
@@ -104,10 +105,18 @@
                 aria-labelledby="yp-planera-page2-tab-{{ loop.index }}"
                 {% if not loop.first %}hidden{% endif %}
                 data-page2-option-panel
+                data-page2-option-id="{{ option.option_id }}"
+                data-page2-review-state="{{ option.review_state }}"
+                data-page2-review-stale="{{ 'true' if option.review_is_stale else 'false' }}"
               >
                 <div class="yp-planera-page2-panel__kicker">{{ vm.meal_label|upper }} · {{ option.display_label|upper }}</div>
                 <h2 class="yp-planera-page2-panel__title">{{ option.display_title }}</h2>
                 <p class="yp-planera-page2-panel__question">Vilka kan inte äta den här rätten som den är?</p>
+                <p class="yp-planera-page2-panel__instruction">Markera de kostbehov som kräver en anpassning.</p>
+
+                <div class="yp-planera-page2-review-banner{% if option.review_is_stale %} is-warning{% elif option.review_status_label %} is-positive{% endif %}" data-page2-review-banner{% if not option.review_banner_message and not option.review_status_label %} hidden{% endif %}>
+                  <span data-page2-review-status>{% if option.review_banner_message %}{{ option.review_banner_message }}{% elif option.review_status_label %}{{ option.review_status_label }}{% endif %}</span>
+                </div>
 
                 {% if destination_count == 1 %}
                 {% set primary_destination = option_destinations[0] %}
@@ -120,7 +129,13 @@
                   <div class="yp-planera-page2-panel__section-head">
                     <h3 id="yp-planera-page2-panel-{{ loop.index }}-requirements">KOSTBEHOV</h3>
                   </div>
-                  {% if option_destinations %}
+                  {% set review_groups = namespace(has_groups=false) %}
+                  {% for destination in option_destinations %}
+                  {% if destination.requirement_groups|default([]) %}
+                  {% set review_groups.has_groups = true %}
+                  {% endif %}
+                  {% endfor %}
+                  {% if review_groups.has_groups %}
                   <div class="yp-planera-page2-requirement-list">
                     {% for destination in option_destinations %}
                     {% set destination_groups = destination.requirement_groups|default([]) %}
@@ -129,10 +144,21 @@
                     <div class="yp-planera-page2-requirement-context">{{ destination.display_name }}</div>
                     {% endif %}
                     {% for group in destination_groups %}
-                    <article class="yp-planera-page2-requirement-row" data-page2-requirement-row="{{ group.requirement_group_id }}">
-                      <strong>{{ group.label }}</strong>
-                      <span>{{ group.effective_quantity }}</span>
-                    </article>
+                    <label class="yp-planera-page2-review-row" data-page2-review-row>
+                      <input
+                        class="yp-planera-page2-review-row__input"
+                        type="checkbox"
+                        data-page2-review-checkbox
+                        data-page2-review-destination-id="{{ destination.destination_id }}"
+                        data-page2-review-group-id="{{ group.requirement_group_id }}"
+                        data-page2-review-initial="{{ '1' if group.review_checked else '0' }}"
+                        {% if group.review_checked %}checked{% endif %}
+                      />
+                      <span class="yp-planera-page2-review-row__mark" aria-hidden="true"></span>
+                      <span class="yp-planera-page2-review-row__label">{{ group.label }}</span>
+                      <span class="yp-planera-page2-review-row__quantity">{{ group.effective_quantity }}</span>
+                      <span class="yp-planera-page2-review-row__chevron" aria-hidden="true">›</span>
+                    </label>
                     {% endfor %}
                     {% endif %}
                     {% endfor %}
@@ -141,6 +167,14 @@
                   <p class="yp-planera-page2-empty__text">Inga relevanta kostbehov för den här rätten ännu.</p>
                   {% endif %}
                 </section>
+
+                <div class="yp-planera-page2-review-actions">
+                  <button class="yp-planera-page2-review-submit" type="button" data-page2-review-submit>{{ option.review_cta_label }}</button>
+                  <button class="yp-planera-page2-review-reset" type="button" data-page2-review-reset hidden>Återställ</button>
+                </div>
+                <p class="yp-planera-page2-review-feedback" data-page2-review-feedback hidden></p>
+
+                <p class="yp-planera-page2-review-switch-note" data-page2-review-switch-note hidden>Spara eller återställ ändringarna först.</p>
               </section>
               {% endfor %}
             </div>

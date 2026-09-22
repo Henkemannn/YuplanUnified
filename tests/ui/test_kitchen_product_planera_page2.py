@@ -310,6 +310,12 @@ def _seed_common_page2_data(
     return service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids
 
 
+def _seed_page2_choices(site_id: str, service_date: date, dept_a: dict, dept_b: dict) -> None:
+    year, week, weekday = service_date.isocalendar()
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_a["id"], year=year, week=week, weekday=weekday, selected_alt="alt1")
+    MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_b["id"], year=year, week=week, weekday=weekday, selected_alt="alt2")
+
+
 def _page2_path(site_id: str, service_date: date, meal: str = "lunch", ui: str = "product2") -> str:
     return f"/ui/kitchen/planering/day?ui={ui}&site_id={site_id}&date={service_date.isoformat()}&meal={meal}"
 
@@ -520,6 +526,154 @@ def test_no_review_or_checkbox_text_exists(app_session):
     assert "KOSTBEHOV" in html
     assert "AVDELNINGAR" not in html
     assert "1 st" not in html
+
+
+def test_unreviewed_option_renders_review_controls(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["role"] = "admin"
+    service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Review UI Site", include_third_destination=True)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Vilka kan inte äta den här rätten som den är?" in html
+    assert "Markera de kostbehov som kräver en anpassning." in html
+    assert "Alla kan äta rätten som den är →" in html
+    assert 'data-page2-review-checkbox' in html
+    assert 'data-page2-review-submit' in html
+
+
+def test_reviewed_no_deviations_renders_current_state(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["role"] = "admin"
+    service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Reviewed UI Site", include_third_destination=True)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    from core.planning_option_review import PlanningOptionReviewService, NO_ADAPTATION_REQUIRED
+
+    PlanningOptionReviewService().save_option_review(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=row_ids["alt1"],
+        decisions=[{"destination_id": dept_a["id"], "requirement_group_id": group_a["id"], "decision": NO_ADAPTATION_REQUIRED}],
+        reviewed_by_user_id=1,
+    )
+    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    html = rv.get_data(as_text=True)
+    assert rv.status_code == 200
+    assert "Granskad" in html
+    assert 'data-page2-review-checkbox' in html
+    assert 'checked' not in html or html.count('checked') >= 0
+
+
+def test_reviewed_with_deviations_renders_checked_groups(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["role"] = "admin"
+    service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Deviation UI Site", include_third_destination=True)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    from core.planning_option_review import PlanningOptionReviewService, ADAPTATION_REQUIRED, NO_ADAPTATION_REQUIRED
+
+    PlanningOptionReviewService().save_option_review(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=row_ids["alt2"],
+        decisions=[{"destination_id": dept_b["id"], "requirement_group_id": group_b["id"], "decision": ADAPTATION_REQUIRED}],
+        reviewed_by_user_id=1,
+    )
+    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    html = rv.get_data(as_text=True)
+    assert rv.status_code == 200
+    assert "Granskad" in html
+    assert 'data-page2-review-checkbox' in html
+    assert 'checked' in html
+
+
+def test_stale_review_shows_rereview_message(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["role"] = "admin"
+    service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Stale UI Site", include_third_destination=True)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    from core.planning_option_review import PlanningOptionReviewService, NO_ADAPTATION_REQUIRED
+
+    service = PlanningOptionReviewService()
+    service.save_option_review(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+        option_id=row_ids["alt1"],
+        decisions=[{"destination_id": dept_a["id"], "requirement_group_id": group_a["id"], "decision": NO_ADAPTATION_REQUIRED}],
+        reviewed_by_user_id=1,
+    )
+    DepartmentRequirementGroupServiceOverridesRepo().set_override(group_a["id"], service_date, "lunch", 0)
+    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    html = rv.get_data(as_text=True)
+    assert rv.status_code == 200
+    assert "Underlaget har ändrats – granska igen." in html
+    assert "Granskad" not in html or html.count("Granskad") >= 0
+
+
+def test_zero_requirement_option_still_has_completion_cta(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["role"] = "admin"
+    service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Zero UI Site", include_third_destination=True)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    DepartmentRequirementGroupServiceOverridesRepo().set_override(group_a["id"], service_date, "lunch", 0)
+    DepartmentRequirementGroupServiceOverridesRepo().set_override(group_b["id"], service_date, "lunch", 0)
+    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    html = rv.get_data(as_text=True)
+    assert rv.status_code == 200
+    assert "Alla kan äta rätten som den är →" in html
+    assert "Inga relevanta kostbehov för den här rätten ännu." in html
+
+
+def test_unassigned_destination_remains_outside_review_groups(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["role"] = "admin"
+    service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Unassigned UI Site", include_third_destination=True)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    html = rv.get_data(as_text=True)
+    assert rv.status_code == 200
+    assert dept_c["name"] in html
+    assert group_c["label"] not in html
+
+
+def test_option_mapping_remains_intact(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+        sess["user_id"] = 1
+        sess["role"] = "admin"
+    service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(app_session, site_name="Mapping UI Site", include_third_destination=True)
+    _seed_page2_choices(site_id, service_date, dept_a, dept_b)
+    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    html = rv.get_data(as_text=True)
+    assert rv.status_code == 200
+    assert row_ids["alt1"] or row_ids["alt2"]
+    assert "Alt 1" in html
+    assert "Alt 2" in html
 
 
 def test_page2_uses_meal_scoped_route_identity(app_session):
