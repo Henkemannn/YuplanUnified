@@ -294,6 +294,85 @@ class DepartmentRequirementGroupServiceOverride(Base):
     )
 
 
+class PlanningOptionReview(Base):
+    __tablename__ = "planning_option_reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    site_id: Mapped[str] = mapped_column(ForeignKey("sites.id"), nullable=False)
+    service_date: Mapped[date] = mapped_column(Date, nullable=False)
+    meal: Mapped[str] = mapped_column(String(20), nullable=False)
+    builder_menu_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    builder_menu_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    builder_menu_row_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    review_basis_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    review_basis_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reviewed_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "site_id",
+            "service_date",
+            "meal",
+            "builder_menu_id",
+            "builder_menu_version",
+            "builder_menu_row_id",
+            name="uq_planning_option_reviews_scope",
+        ),
+        CheckConstraint("length(trim(builder_menu_id)) > 0", name="ck_planning_option_reviews_builder_menu_id_not_empty"),
+        CheckConstraint("builder_menu_version > 0", name="ck_planning_option_reviews_builder_menu_version_positive"),
+        CheckConstraint("length(trim(builder_menu_row_id)) > 0", name="ck_planning_option_reviews_builder_menu_row_id_not_empty"),
+        CheckConstraint("review_basis_version > 0", name="ck_planning_option_reviews_review_basis_version_positive"),
+        Index("ix_planning_option_reviews_tenant_scope", "tenant_id", "site_id", "service_date", "meal"),
+        Index("ix_planning_option_reviews_tenant_row", "tenant_id", "builder_menu_row_id"),
+    )
+
+
+class PlanningOptionReviewDecision(Base):
+    __tablename__ = "planning_option_review_decisions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    review_id: Mapped[int] = mapped_column(
+        ForeignKey("planning_option_reviews.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    destination_id: Mapped[str] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    requirement_group_id: Mapped[str] = mapped_column(
+        ForeignKey("department_requirement_groups.id"), nullable=False
+    )
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "review_id",
+            "destination_id",
+            "requirement_group_id",
+            name="uq_planning_option_review_decisions_scope",
+        ),
+        CheckConstraint(
+            "decision IN ('NO_ADAPTATION_REQUIRED', 'ADAPTATION_REQUIRED')",
+            name="ck_planning_option_review_decisions_decision_allowed",
+        ),
+        Index("ix_planning_option_review_decisions_tenant_review", "tenant_id", "review_id"),
+        Index("ix_planning_option_review_decisions_tenant_destination", "tenant_id", "destination_id"),
+    )
+
+
 class MenuVariant(Base):
     __tablename__ = "menu_variants"
     id: Mapped[int] = mapped_column(primary_key=True)
