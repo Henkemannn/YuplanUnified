@@ -1,0 +1,290 @@
+.yp-planera-page2 {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  color: var(--yp-product-ink);
+}
+
+.yp-planera-page2-layout {
+  display: grid;
+  grid-template-columns: var(--yp-product-sidebar) minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+  min-width: 0;
+  width: 100%;
+}
+
+.yp-planera-page2-main {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.yp-planera-page2-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.yp-planera-page2-kicker {
+  margin-bottom: 8px;
+  color: var(--yp-product-accent-2);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.yp-planera-page2-title {
+  margin: 0;
+  font-size: clamp(2.15rem, 1.15vw + 1.5rem, 2.65rem);
+  line-height: 1.04;
+  letter-spacing: -0.04em;
+}
+
+.yp-planera-page2-subtitle {
+  margin: 10px 0 0;
+  color: var(--yp-product-muted);
+  font-size: 0.96rem;
+}
+
+.yp-planera-page2-meta {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 160px;
+  padding: 14px 16px;
+  border-radius: 22px;
+  border: 1px solid var(--yp-product-line);
+  background: linear-gradient(180deg, rgba(247, 251, 251, 0.94), rgba(238, 247, 248, 0.98));
+}
+
+.yp-planera-page2-meta__line {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--yp-product-ink);
+}
+
+.yp-planera-page2-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 26px;
+  border: 1px solid rgba(3, 85, 144, 0.12);
+  background: linear-gradient(180deg, rgba(247, 251, 251, 0.96), rgba(239, 247, 248, 0.98));
+  box-shadow: 0 14px 32px rgba(7, 20, 38, 0.08);
+  min-width: 0;
+}
+
+#yp-product-app[data-theme="dark"] .yp-planera-page2-meta,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-card {
+  border-color: rgba(2, 174, 195, 0.14);
+  background: linear-gradient(180deg, rgba(11, 31, 52, 0.98), rgba(9, 26, 44, 0.98));
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.26);
+}
+
+#yp-product-app[data-theme="dark"] .yp-planera-page2-meta__line,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-title,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-empty__title,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-card__title,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-destination__name,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-destination__choice,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-requirement-group__head strong {
+  color: #eef8f8;
+}
+
+#yp-product-app[data-theme="dark"] .yp-planera-page2-subtitle,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-card__meta,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-destination__quantity,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-empty__text,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-requirement-group-stack__destination,
+#yp-product-app[data-theme="dark"] .yp-planera-page2-requirement-group__requirements {
+  color: rgba(234, 247, 248, 0.74);
+}
+
+.yp-planera-page2-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.yp-planera-page2-card__title {
+  margin: 0;
+  font-size: 1.12rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.yp-planera-page2-card__meta {
+  color: var(--yp-product-muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.yp-planera-page2-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.yp-planera-page2-option,
+.yp-planera-page2-destination,
+.yp-planera-page2-requirement-group {
+  border-radius: 20px;
+  border: 1px solid rgba(3, 85, 144, 0.10);
+  background: rgba(255, 255, 255, 0.72);
+  min-width: 0;
+}
+
+.yp-planera-page2-option {
+  padding: 14px 16px;
+}
+
+.yp-planera-page2-option.is-active {
+  border-color: rgba(2, 174, 195, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(2, 174, 195, 0.10);
+}
+
+.yp-planera-page2-option__label {
+  color: var(--yp-product-accent-2);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.yp-planera-page2-option__title {
+  margin-top: 8px;
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.yp-planera-page2-destinations,
+.yp-planera-page2-requirements {
+  display: grid;
+  gap: 12px;
+}
+
+.yp-planera-page2-destination {
+  padding: 14px 16px;
+}
+
+.yp-planera-page2-destination__name {
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.yp-planera-page2-destination__quantity,
+.yp-planera-page2-destination__choice {
+  margin-top: 7px;
+  color: var(--yp-product-ink);
+  font-size: 0.94rem;
+  line-height: 1.35;
+}
+
+.yp-planera-page2-destination__choice {
+  color: var(--yp-product-muted);
+}
+
+.yp-planera-page2-requirement-group-stack {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.yp-planera-page2-requirement-group-stack__destination {
+  color: var(--yp-product-accent-2);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.yp-planera-page2-requirement-group {
+  padding: 12px 14px;
+}
+
+.yp-planera-page2-requirement-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.yp-planera-page2-requirement-group__head strong {
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.yp-planera-page2-requirement-group__head span {
+  min-width: 2.1rem;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(2, 174, 195, 0.12);
+  color: var(--yp-product-accent-2);
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.yp-planera-page2-requirement-group__requirements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 10px;
+  color: var(--yp-product-muted);
+  font-size: 0.9rem;
+}
+
+.yp-planera-page2-empty {
+  display: grid;
+  gap: 10px;
+  align-items: start;
+}
+
+.yp-planera-page2-card--empty {
+  padding: 22px;
+}
+
+.yp-planera-page2-empty__title {
+  font-size: 1.08rem;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.yp-planera-page2-empty__text {
+  margin: 0;
+  color: var(--yp-product-muted);
+  line-height: 1.5;
+}
+
+@media (max-width: 1100px) {
+  .yp-planera-page2-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .yp-planera-page2-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .yp-planera-page2-meta {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 780px) {
+  .yp-planera-page2-card {
+    padding: 16px;
+    border-radius: 22px;
+  }
+
+  .yp-planera-page2-options {
+    grid-template-columns: 1fr;
+  }
+}

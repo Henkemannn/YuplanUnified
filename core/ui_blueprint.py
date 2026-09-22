@@ -14,6 +14,7 @@ from .weekview_vm import build_weekview_vm
 # use string roles consistently elsewhere; avoid Role import
 from .meal_registration_repo import MealRegistrationRepo
 from .planera_product2_menu_vm import Product2MealOptionsError, build_product2_meal_options_vm
+from .planera_product2_page2_context import Product2Page2ContextError, build_product2_page2_planning_context
 from datetime import date as _date
 from datetime import datetime as _datetime
 from datetime import time as _time
@@ -456,6 +457,161 @@ def _build_product2_page1_menu_vm(*, tenant_id: int, site_id: str, year: int, we
 
     return {"status": "ok", "lunch": lunch_vm}
 
+
+_PRODUCT2_PAGE2_WEEKDAY_NAMES = (
+    "Måndag",
+    "Tisdag",
+    "Onsdag",
+    "Torsdag",
+    "Fredag",
+    "Lördag",
+    "Söndag",
+)
+
+_PRODUCT2_PAGE2_MONTH_NAMES = (
+    "januari",
+    "februari",
+    "mars",
+    "april",
+    "maj",
+    "juni",
+    "juli",
+    "augusti",
+    "september",
+    "oktober",
+    "november",
+    "december",
+)
+
+
+def _format_product2_page2_date_label(service_date: _date) -> str:
+    return f"{_PRODUCT2_PAGE2_WEEKDAY_NAMES[service_date.weekday()]} {service_date.day} {_PRODUCT2_PAGE2_MONTH_NAMES[service_date.month - 1]}"
+
+
+def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) -> dict[str, object]:
+    options = []
+    options_by_id: dict[str, dict[str, object]] = {}
+    for option in context.options:
+        option_vm = {
+            "option_id": option.option_id,
+            "display_label": option.display_label,
+            "display_title": option.display_title,
+            "resolved": bool(option.resolved),
+        }
+        options.append(option_vm)
+        options_by_id[str(option.option_id)] = option_vm
+
+    requirement_groups_by_destination: dict[str, list[dict[str, object]]] = {}
+    for group in context.requirement_groups:
+        requirement_groups_by_destination.setdefault(group.destination_id, []).append(
+            {
+                "requirement_group_id": group.requirement_group_id,
+                "label": group.label,
+                "effective_quantity": int(group.effective_quantity),
+                "requirements": [
+                    {
+                        "dietary_type_id": int(requirement.dietary_type_id),
+                        "requirement_key": requirement.requirement_key,
+                        "name": requirement.name,
+                        "semantics": requirement.semantics,
+                    }
+                    for requirement in group.requirements
+                ],
+            }
+        )
+
+    destinations = []
+    for destination in context.destinations:
+        selected_option = options_by_id.get(str(destination.selected_option_id or "")) if destination.selected_option_id else None
+        if selected_option is None:
+            selected_label = "Inget explicit menyval"
+        else:
+            selected_label = f"{selected_option['display_label']} · {selected_option['display_title']}"
+        destinations.append(
+            {
+                "destination_id": destination.destination_id,
+                "display_name": destination.display_name,
+                "baseline_quantity": int(destination.baseline_quantity),
+                "choice_source": destination.choice_source,
+                "selected_label": selected_label,
+                "requirement_groups": requirement_groups_by_destination.get(destination.destination_id, []),
+            }
+        )
+
+    return {
+        "status": context.status,
+        "site_id": context.site_id,
+        "site_name": site_name,
+        "service_date": context.service_date,
+        "service_date_label": _format_product2_page2_date_label(service_date),
+        "meal_label": "Lunch" if context.meal == "lunch" else context.meal.capitalize(),
+        "publication_identity": context.publication_identity,
+        "options": options,
+        "destinations": destinations,
+        "has_requirement_groups": any(bool(dest.get("requirement_groups")) for dest in destinations),
+    }
+
+
+KITCHEN_UI_ROLES = ("kitchen", "cook", "admin", "superuser")
+
+
+@ui_bp.get("/ui/kitchen/planering/day")
+@require_roles(*KITCHEN_UI_ROLES)
+def kitchen_planering_product2_day():
+    from .context import get_active_context as _get_ctx
+
+    if (request.args.get("ui") or "").strip().lower() != "product2":
+        return abort(404)
+
+    ctx = _get_ctx()
+    tenant_id = ctx.get("tenant_id") if ctx.get("tenant_id") is not None else session.get("tenant_id")
+    try:
+        tenant_id = int(tenant_id)
+    except Exception:
+        return abort(404)
+    if tenant_id <= 0:
+        return abort(404)
+
+    site_id = (request.args.get("site_id") or "").strip()
+    date_raw = (request.args.get("date") or "").strip()
+    meal = (request.args.get("meal") or "").strip().lower()
+    if not site_id or not date_raw or meal != "lunch":
+        return abort(404)
+    try:
+        service_date = _date.fromisoformat(date_raw)
+    except Exception:
+        return abort(404)
+
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT tenant_id, name FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+    finally:
+        db.close()
+    if not row:
+        return abort(404)
+    try:
+        if int(row[0]) != int(tenant_id):
+            return abort(404)
+    except Exception:
+        return abort(404)
+
+    try:
+        context = build_product2_page2_planning_context(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            service_date=service_date,
+            meal=meal,
+        )
+    except Product2Page2ContextError:
+        return abort(404)
+
+    vm = _build_product2_page2_vm(
+        context=context,
+        site_name=str(row[1] or "").strip(),
+        service_date=service_date,
+    )
+    return render_template("ui/kitchen_product_planera_page2.html", vm=vm)
+
 # Planering bulk mark: set produced for all departments' special diets with count>0
 @ui_bp.post("/api/planering/mark_produced_special")
 @require_roles("superuser", "admin")
@@ -582,7 +738,6 @@ SAFE_UI_ROLES = ("superuser", "admin", "cook", "unit_portal")
 ADMIN_ROLES = ("admin", "superuser")
 COOK_ALLOWED_ROLES = ("cook", "admin", "superuser", "unit_portal")
 ACCOUNT_ALLOWED_ROLES = ("admin", "superuser", "kitchen")
-KITCHEN_UI_ROLES = ("kitchen", "cook", "admin", "superuser")
 
 
 @ui_bp.post("/api/production-lists")
