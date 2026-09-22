@@ -399,6 +399,7 @@ def _build_product2_page1_vm(*, site_id: str, year: int, week: int, selected_day
     )
 
     return {
+        "site_id": site_id,
         "year": int(year),
         "week": int(week),
         "selected_day": int(day_index),

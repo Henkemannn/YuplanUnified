@@ -3,6 +3,7 @@ import re
 from datetime import date as _date, timedelta
 from html import unescape
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from flask import current_app
@@ -244,6 +245,7 @@ def test_kitchen_planering_product2_renders_shell_preview_only(client_admin):
     assert "TILLÄGG" in html
     assert "Sallad · Mos · Övriga tillval" in html
     assert "Planera lunch →" in html
+    assert 'href="/ui/kitchen/planering/day' not in html
     assert html.index('id="yp-product-app"') < html.index('class="yp-product-topbar"')
     assert html.index('class="yp-product-topbar"') < html.index('class="yp-product-panel"')
     assert html.index('class="yp-product-panel"') < html.index('class="yp-product-panel-inner"')
@@ -267,6 +269,55 @@ def test_kitchen_planering_product2_renders_shell_preview_only(client_admin):
     assert "planera-day-product2" not in html
     assert "Välj dag och måltid" not in html
     assert "Probe site" not in html
+
+
+def test_kitchen_planering_product2_published_lunch_cta_links_to_page2_with_selected_day(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="CTA Site")
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=40,
+        builder_menu_id="builder-menu-cta",
+        builder_menu_version=1,
+    )
+
+    html_tuesday = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
+    html_wednesday = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=2")
+
+    tuesday_href = next(href for href in re.findall(r'href="([^"]+)"', html_tuesday) if "/ui/kitchen/planering/day" in href)
+    wednesday_href = next(href for href in re.findall(r'href="([^"]+)"', html_wednesday) if "/ui/kitchen/planering/day" in href)
+
+    tuesday_url = urlparse(tuesday_href)
+    tuesday_qs = parse_qs(tuesday_url.query)
+    wednesday_url = urlparse(wednesday_href)
+    wednesday_qs = parse_qs(wednesday_url.query)
+
+    assert tuesday_url.path == "/ui/kitchen/planering/day"
+    assert wednesday_url.path == "/ui/kitchen/planering/day"
+    assert tuesday_qs.get("ui") == ["product2"]
+    assert wednesday_qs.get("ui") == ["product2"]
+    assert tuesday_qs.get("site_id") == [site_id]
+    assert wednesday_qs.get("site_id") == [site_id]
+    assert tuesday_qs.get("date") == [_date.fromisocalendar(2026, 40, 2).isoformat()]
+    assert wednesday_qs.get("date") == [_date.fromisocalendar(2026, 40, 3).isoformat()]
+    assert tuesday_qs.get("meal") == ["lunch"]
+    assert wednesday_qs.get("meal") == ["lunch"]
+    assert "option_id" not in tuesday_qs
+    assert "option_id" not in wednesday_qs
+    assert "alt1" not in tuesday_href and "alt2" not in tuesday_href
+    assert "alt1" not in wednesday_href and "alt2" not in wednesday_href
+
+
+def test_kitchen_planering_product2_no_publication_keeps_non_link_cta(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="No Link Site")
+
+    html = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
+
+    assert "Ingen publicerad lunchmeny" in html
+    assert "Planera lunch →" in html
+    assert 'href="/ui/kitchen/planering/day' not in html
+    assert 'class="yp-planera-page1-cta" type="button"' in html
 
 
 def test_kitchen_planering_product2_published_lunch_renders_publication_titles(client_admin):
