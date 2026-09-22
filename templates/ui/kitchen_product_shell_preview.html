@@ -23,6 +23,10 @@
 </head>
 <body class="yp-product-body">
   {% set page1 = vm.page1|default({}) %}
+  {% set page1_menu = page1.menu|default({}) %}
+  {% set page1_menu_status = page1_menu.status|default('no_publication') %}
+  {% set page1_lunch = page1_menu.lunch|default(none) %}
+  {% set page1_lunch_secondary_texts = ['Potatismos · Gräddsås', 'Äggsås · Kokt potatis'] %}
   <div class="yp-product-shell">
     <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start">
       <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
@@ -86,19 +90,24 @@
                   </div>
 
                   <div class="yp-planera-page1-lunch__options">
-                    <article class="yp-planera-page1-option is-active">
-                      <div class="yp-planera-page1-option__kicker">ALT 1</div>
-                      <div class="yp-planera-page1-option__title">Fläskkarré</div>
-                      <div class="yp-planera-page1-option__text">Potatismos · Gräddsås</div>
+                    {% if page1_menu_status == 'ok' and page1_lunch and page1_lunch.options %}
+                      {% for option in page1_lunch.options %}
+                      <article class="yp-planera-page1-option{% if loop.first %} is-active{% endif %}">
+                        <div class="yp-planera-page1-option__kicker">{{ option.display_label|upper }}</div>
+                        <div class="yp-planera-page1-option__title">{{ option.display_title }}</div>
+                        <div class="yp-planera-page1-option__text">{% if loop.index0 < page1_lunch_secondary_texts|length %}{{ page1_lunch_secondary_texts[loop.index0] }}{% endif %}</div>
+                      </article>
+                      {% if not loop.last %}
+                      <div class="yp-planera-page1-divider" aria-hidden="true"></div>
+                      {% endif %}
+                      {% endfor %}
+                    {% else %}
+                    <article class="yp-planera-page1-option is-active yp-planera-page1-option--empty">
+                      <div class="yp-planera-page1-option__kicker">Lunch</div>
+                      <div class="yp-planera-page1-option__title">Ingen publicerad lunchmeny</div>
+                      <div class="yp-planera-page1-option__text"></div>
                     </article>
-
-                    <div class="yp-planera-page1-divider" aria-hidden="true"></div>
-
-                    <article class="yp-planera-page1-option">
-                      <div class="yp-planera-page1-option__kicker">ALT 2</div>
-                      <div class="yp-planera-page1-option__title">Kokt torsk</div>
-                      <div class="yp-planera-page1-option__text">Äggsås · Kokt potatis</div>
-                    </article>
+                    {% endif %}
                   </div>
 
                   <div class="yp-planera-page1-lunch__footer">

@@ -88,7 +88,31 @@ def _seed_product2_publication(
     week: int,
     builder_menu_id: str,
     builder_menu_version: int = 1,
+    lunch_rows: list[dict[str, object]] | None = None,
 ) -> None:
+    rows = lunch_rows or [
+        {
+            "day": "monday",
+            "meal_slot": "lunch_alt1",
+            "composition_id": "comp-product2-mon",
+            "composition_name": "Måndagssoppa",
+            "sort_order": 5,
+        },
+        {
+            "day": "tuesday",
+            "meal_slot": "lunch_alt1",
+            "composition_id": "comp-product2-tue-a",
+            "composition_name": "Publicerad rätt A",
+            "sort_order": 10,
+        },
+        {
+            "day": "tuesday",
+            "meal_slot": "lunch_alt2",
+            "composition_id": "comp-product2-tue-b",
+            "composition_name": "Publicerad rätt B",
+            "sort_order": 20,
+        },
+    ]
     with app.app_context():
         builder_flow, composition_service = _build_builder_menu_context_flow()
         current_app.extensions["builder_menu_context_flow"] = builder_flow
@@ -100,42 +124,20 @@ def _seed_product2_publication(
             version=builder_menu_version,
             status="published",
         )
-        composition_service.create_composition(
-            composition_id="comp-product2-mon",
-            composition_name="Måndagssoppa",
-        )
-        composition_service.create_composition(
-            composition_id="comp-product2-tue-a",
-            composition_name="Publicerad rätt A",
-        )
-        composition_service.create_composition(
-            composition_id="comp-product2-tue-b",
-            composition_name="Publicerad rätt B",
-        )
-        builder_flow.add_composition_menu_row(
-            menu_id=builder_menu_id,
-            menu_detail_id="detail-mon-1",
-            day="monday",
-            meal_slot="lunch_alt1",
-            composition_id="comp-product2-mon",
-            sort_order=5,
-        )
-        builder_flow.add_composition_menu_row(
-            menu_id=builder_menu_id,
-            menu_detail_id="detail-tue-1",
-            day="tuesday",
-            meal_slot="lunch_alt1",
-            composition_id="comp-product2-tue-a",
-            sort_order=10,
-        )
-        builder_flow.add_composition_menu_row(
-            menu_id=builder_menu_id,
-            menu_detail_id="detail-tue-2",
-            day="tuesday",
-            meal_slot="lunch_alt2",
-            composition_id="comp-product2-tue-b",
-            sort_order=20,
-        )
+        for index, row in enumerate(rows, start=1):
+            composition_id = str(row["composition_id"])
+            composition_service.create_composition(
+                composition_id=composition_id,
+                composition_name=str(row["composition_name"]),
+            )
+            builder_flow.add_composition_menu_row(
+                menu_id=builder_menu_id,
+                menu_detail_id=f"detail-{index}",
+                day=str(row["day"]),
+                meal_slot=str(row["meal_slot"]),
+                composition_id=composition_id,
+                sort_order=int(row["sort_order"]),
+            )
         legacy_menu = MenuServiceDB().create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
         CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
             tenant_id=1,
@@ -232,10 +234,9 @@ def test_kitchen_planering_product2_renders_shell_preview_only(client_admin):
     assert "Kommun" in html
     assert "HJ" in html
     assert "18 mottagande enheter · 273 portioner" in html
-    assert "Fläskkarré" in html
-    assert "Potatismos · Gräddsås" in html
-    assert "Kokt torsk" in html
-    assert "Äggsås · Kokt potatis" in html
+    assert "Ingen publicerad lunchmeny" in html
+    assert "Fläskkarré" not in html
+    assert "Kokt torsk" not in html
     assert "KVÄLL" in html
     assert "Köttfärssoppa" in html
     assert "DESSERT" in html
@@ -266,6 +267,121 @@ def test_kitchen_planering_product2_renders_shell_preview_only(client_admin):
     assert "planera-day-product2" not in html
     assert "Välj dag och måltid" not in html
     assert "Probe site" not in html
+
+
+def test_kitchen_planering_product2_published_lunch_renders_publication_titles(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="Published Lunch Site")
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=40,
+        builder_menu_id="builder-menu-product2",
+        builder_menu_version=1,
+    )
+
+    html = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
+
+    assert "Publicerad rätt A" in html
+    assert "Publicerad rätt B" in html
+    assert "Fläskkarré" not in html
+    assert "Kokt torsk" not in html
+    assert html.index("Publicerad rätt A") < html.index("Publicerad rätt B")
+
+
+def test_kitchen_planering_product2_three_option_lunch_renders_collection(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="Three Option Site")
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=40,
+        builder_menu_id="builder-menu-product2-three",
+        builder_menu_version=1,
+        lunch_rows=[
+            {
+                "day": "monday",
+                "meal_slot": "lunch_alt1",
+                "composition_id": "comp-product2-mon",
+                "composition_name": "Måndagssoppa",
+                "sort_order": 5,
+            },
+            {
+                "day": "tuesday",
+                "meal_slot": "lunch_alt1",
+                "composition_id": "comp-product2-three-a",
+                "composition_name": "Publicerad rätt A",
+                "sort_order": 10,
+            },
+            {
+                "day": "tuesday",
+                "meal_slot": "lunch_alt2",
+                "composition_id": "comp-product2-three-b",
+                "composition_name": "Publicerad rätt B",
+                "sort_order": 20,
+            },
+            {
+                "day": "tuesday",
+                "meal_slot": "lunch_alt3",
+                "composition_id": "comp-product2-three-c",
+                "composition_name": "Publicerad rätt C",
+                "sort_order": 30,
+            },
+        ],
+    )
+
+    html = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
+
+    assert "Publicerad rätt A" in html
+    assert "Publicerad rätt B" in html
+    assert "Publicerad rätt C" in html
+    assert html.index("Publicerad rätt A") < html.index("Publicerad rätt B") < html.index("Publicerad rätt C")
+    assert html.count("yp-planera-page1-option") >= 3
+
+
+def test_kitchen_planering_product2_unresolved_free_text_renders_exactly(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="Free Text Site")
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=40,
+        builder_menu_id="builder-menu-product2-free-text",
+        builder_menu_version=1,
+    )
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text(
+                "SELECT projection_snapshot_json FROM commun_builder_publication_pins "
+                "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
+            ),
+            {"tid": 1, "sid": site_id, "year": 2026, "week": 40},
+        ).fetchone()
+        assert row is not None
+        snapshot = json.loads(str(row[0]))
+        for item in snapshot["rows"]:
+            if str(item.get("day")) == "tuesday" and str(item.get("variant_type")) == "alt2":
+                item["resolved"] = False
+                item["text"] = "Vegetarisk lasagne"
+                item["unresolved_text"] = "Vegetarisk lasagne"
+                break
+        db.execute(
+            text(
+                "UPDATE commun_builder_publication_pins SET projection_snapshot_json=:snapshot "
+                "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
+            ),
+            {"snapshot": json.dumps(snapshot, ensure_ascii=False), "tid": 1, "sid": site_id, "year": 2026, "week": 40},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    html = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
+
+    assert "Vegetarisk lasagne" in html
+    assert "Kokt torsk" not in html
 
 
 def test_kitchen_planering_product2_dynamic_frame_uses_selected_date_and_weekdays(client_admin, monkeypatch):
@@ -373,7 +489,7 @@ def test_kitchen_planering_product2_published_menu_seam_uses_projection(client_a
     lunch = vm["lunch"]
     assert lunch is not None
     assert lunch.meal == "lunch"
-    assert [option.option_id for option in lunch.options] == ["detail-tue-1", "detail-tue-2"]
+    assert [option.option_id for option in lunch.options] == ["detail-2", "detail-3"]
     assert [option.display_title for option in lunch.options] == ["Publicerad rätt A", "Publicerad rätt B"]
     assert [option.sort_order for option in lunch.options] == [10, 20]
     assert [option.variant_type for option in lunch.options] == ["alt1", "alt2"]
