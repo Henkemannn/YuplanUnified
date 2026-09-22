@@ -533,6 +533,7 @@ def _build_product2_page2_vm(*, context, site_name: str, service_date: _date) ->
                 "destination_id": destination.destination_id,
                 "display_name": destination.display_name,
                 "baseline_quantity": int(destination.baseline_quantity),
+                "selected_option_id": destination.selected_option_id,
                 "choice_source": destination.choice_source,
                 "selected_label": selected_label,
                 "requirement_groups": requirement_groups_by_destination.get(destination.destination_id, []),

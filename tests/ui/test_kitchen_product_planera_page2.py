@@ -28,6 +28,7 @@ from core.department_menu_choice_repo import MenuChoiceRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
 from core.menu import InMemoryCompositionAliasRepository, MenuService
+from core.planera_product2_page2_context import build_product2_page2_planning_context
 
 
 HEADERS = {"X-User-Role": "admin", "X-Tenant-Id": "1"}
@@ -270,7 +271,14 @@ def _seed_publication(
         }
 
 
-def _seed_common_page2_data(app, *, site_name: str, with_publication: bool = True, rows: list[tuple[str, str, str, int]] | None = None):
+def _seed_common_page2_data(
+    app,
+    *,
+    site_name: str,
+    with_publication: bool = True,
+    rows: list[tuple[str, str, str, int]] | None = None,
+    include_third_destination: bool = False,
+):
     service_date = date(2026, 9, 8)
     year, week, _weekday = service_date.isocalendar()
     site_id = _seed_site(app, site_name=site_name)
@@ -280,6 +288,12 @@ def _seed_common_page2_data(app, *, site_name: str, with_publication: bool = Tru
     req_b = _seed_requirement(site_id, "Timbal", f"req_timbal_{uuid.uuid4().hex[:8]}")
     group_a = _seed_group(department_id=dept_a["id"], requirement_ids=[req_a], quantity=9, label="Glutenfri")
     group_b = _seed_group(department_id=dept_b["id"], requirement_ids=[req_b], quantity=8, label="Timbal")
+    dept_c = None
+    group_c = None
+    if include_third_destination:
+        dept_c = _seed_department(site_id=site_id, name="Avdelning C", resident_count=16)
+        req_c = _seed_requirement(site_id, "Äggfri", f"req_egg_{uuid.uuid4().hex[:8]}")
+        group_c = _seed_group(department_id=dept_c["id"], requirement_ids=[req_c], quantity=1, label="Äggfri")
     row_ids = {}
     if with_publication:
         row_ids = _seed_publication(
@@ -293,7 +307,7 @@ def _seed_common_page2_data(app, *, site_name: str, with_publication: bool = Tru
                 ("tuesday", "lunch_alt2", "Kokt torsk", 20),
             ],
         )
-    return service_date, site_id, dept_a, dept_b, group_a, group_b, row_ids
+    return service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids
 
 
 def _page2_path(site_id: str, service_date: date, meal: str = "lunch", ui: str = "product2") -> str:
@@ -344,27 +358,67 @@ def test_two_options_render_titles_and_destination_labels(app_session):
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
-    service_date, site_id, dept_a, dept_b, group_a, group_b, row_ids = _seed_common_page2_data(app_session, site_name="Two Option Site")
+    service_date, site_id, dept_a, dept_b, dept_c, group_a, group_b, group_c, row_ids = _seed_common_page2_data(
+        app_session,
+        site_name="Two Option Site",
+        include_third_destination=True,
+    )
     year, week, weekday = service_date.isocalendar()
     MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_a["id"], year=year, week=week, weekday=weekday, selected_alt="alt1")
     MenuChoiceRepo().set_choice(tenant_id=1, site_id=site_id, department_id=dept_b["id"], year=year, week=week, weekday=weekday, selected_alt="alt2")
+
+    context = build_product2_page2_planning_context(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+    )
+    option_ids = {option.variant_type: option.option_id for option in context.options}
+    destinations = {destination.destination_id: destination for destination in context.destinations}
+    groups = {group.destination_id: group for group in context.requirement_groups}
+    assert [option.variant_type for option in context.options] == ["alt1", "alt2"]
+    assert destinations[dept_a["id"]].selected_option_id == option_ids["alt1"]
+    assert destinations[dept_b["id"]].selected_option_id == option_ids["alt2"]
+    assert destinations[dept_c["id"]].selected_option_id is None
+    assert destinations[dept_c["id"]].choice_source == "none"
+    assert groups[dept_a["id"]].label == "Glutenfri"
+    assert groups[dept_b["id"]].label == "Timbal"
+    assert groups[dept_c["id"]].label == "Äggfri"
+
     rv = client.get(_page2_path(site_id, service_date), headers=_headers())
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert "ALT 1" in html
+    assert "PLANERA DAGEN" in html
+    assert "Tisdag 8 september" in html
+    assert "LUNCH" in html
+    assert 'role="tablist"' in html
+    assert html.count('data-page2-option-tab') == 2
+    assert html.count('data-page2-option-panel') == 2
+    assert "2 val" in html
+    assert "Alt 1" in html
     assert "Fläskkarré" in html
-    assert "ALT 2" in html
+    assert "Alt 2" in html
     assert "Kokt torsk" in html
     assert "Avdelning A" in html
     assert "Avdelning B" in html
-    assert "Planeringsunderlag: 18" in html
-    assert "Planeringsunderlag: 12" in html
-    assert f"Vald meny: Alt 1 · Fläskkarré" in html
-    assert f"Vald meny: Alt 2 · Kokt torsk" in html
+    assert "Avdelning C" in html
+    assert "Vilka kan inte äta den här rätten som den är?" in html
+    assert "LUNCH · ALT 1" in html
+    assert "KOSTBEHOV" in html
+    assert "Avdelning A" in html
+    assert "Avdelning B" in html
     assert "Glutenfri" in html
     assert "Timbal" in html
-    assert "9" in html
-    assert "8" in html
+    assert "Äggfri" not in html
+    assert "1 avdelning saknar menyval" in html
+    assert "3 menyval" not in html
+    assert "Dagens planering" not in html
+    assert "Planeringsunderlag" not in html
+    assert "För tilldelade destinationer" not in html
+    assert "AVDELNINGAR" not in html
+    assert "1 st" not in html
+    assert "destination saknar menyval" not in html
+    assert "Inga relevanta kostbehov för den här rätten ännu." not in html
 
 
 def test_three_options_render_collection_shape(app_session):
@@ -386,19 +440,45 @@ def test_three_options_render_collection_shape(app_session):
     assert "Baguette" in html
     assert "Fläskkarré" in html
     assert "Kokt torsk" in html
-    assert html.count("yp-planera-page2-option") >= 3
+    assert html.count('data-page2-option-tab') == 3
+    assert html.count('role="tabpanel"') == 3
 
+    assert "3 val" in html
 
 def test_missing_choice_renders_neutral_label(app_session):
     client = app_session.test_client()
-    with client.session_transaction() as sess:
-        sess["tenant_id"] = 1
-    service_date, site_id, *_rest, row_ids = _seed_common_page2_data(app_session, site_name="Missing Choice Site")
+    service_date, site_id, *_rest, row_ids = _seed_common_page2_data(
+        app_session,
+        site_name="Missing Choice Site",
+        include_third_destination=True,
+    )
+    context = build_product2_page2_planning_context(
+        tenant_id=1,
+        site_id=site_id,
+        service_date=service_date,
+        meal="lunch",
+    )
+    destinations = {destination.destination_id: destination for destination in context.destinations}
+    assert all(destination.selected_option_id is None for destination in destinations.values())
+    assert all(destination.choice_source == "none" for destination in destinations.values())
     rv = client.get(_page2_path(site_id, service_date), headers=_headers())
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert "Inget explicit menyval" in html
-    assert "Vald meny: ALT 1" not in html
+    assert html.count("data-page2-option-tab") == 2
+    assert html.count("role=\"tabpanel\"") == 2
+    assert html.count("yp-planera-page2-unassigned__item") == 3
+    assert "Avdelning A" in html
+    assert "Avdelning B" in html
+    assert "Avdelning C" in html
+    assert "3 avdelningar saknar menyval" in html
+    assert "KOSTBEHOV" in html
+    assert "Planeringsunderlag" not in html
+    assert "Dagens planering" not in html
+    assert "Tilldelade destinationer" not in html
+    assert "För tilldelade destinationer" not in html
+    assert "destination saknar menyval" not in html
+    assert "AVDELNINGAR" not in html
+    assert "1 st" not in html
 
 
 def test_no_publication_renders_empty_state_and_not_work_area(app_session):
@@ -410,16 +490,17 @@ def test_no_publication_renders_empty_state_and_not_work_area(app_session):
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     assert "Ingen publicerad lunchmeny" in html
-    assert "Publicerade menyval" not in html
-    assert "Destinationer" not in html
-    assert "Relevanta kostbehov" not in html
+    assert "PLANERA DAGEN" in html
+    assert "role=\"tablist\"" not in html
+    assert 'data-page2-option-tab' not in html
+    assert 'role="tabpanel"' not in html
 
 
 def test_no_review_or_checkbox_text_exists(app_session):
     client = app_session.test_client()
     with client.session_transaction() as sess:
         sess["tenant_id"] = 1
-    service_date, site_id, *_rest, row_ids = _seed_common_page2_data(app_session, site_name="No Review Site")
+    service_date, site_id, *_rest, row_ids = _seed_common_page2_data(app_session, site_name="No Review Site", include_third_destination=True)
     rv = client.get(_page2_path(site_id, service_date), headers=_headers())
     html = rv.get_data(as_text=True)
     assert "Planerad" not in html
@@ -430,6 +511,29 @@ def test_no_review_or_checkbox_text_exists(app_session):
     assert "review_state" not in html
     assert "selected_deviations" not in html
     assert "special_diets" not in html
+    assert "data-page2-option-tab" in html
+    assert "data-page2-option-panel" in html
+    assert "Planeringsunderlag" not in html
+    assert "Tilldelade destinationer" not in html
+    assert "För tilldelade destinationer" not in html
+    assert "Dagens planering" not in html
+    assert "KOSTBEHOV" in html
+    assert "AVDELNINGAR" not in html
+    assert "1 st" not in html
+
+
+def test_page2_uses_meal_scoped_route_identity(app_session):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+    service_date, site_id, *_rest, row_ids = _seed_common_page2_data(app_session, site_name="Route Identity Site", include_third_destination=True)
+    rv = client.get(_page2_path(site_id, service_date), headers=_headers())
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Route Identity Site" in html
+    assert "Tisdag 8 september" in html
+    assert "LUNCH" in html
+    assert 'role="tablist"' in html
 
 
 def test_template_does_not_use_fixed_alt_fields_and_page1_remains_untouched():

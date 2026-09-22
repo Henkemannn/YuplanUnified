@@ -18,14 +18,15 @@
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
   <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kitchen_product_shell.css') }}" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_product2_page1.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_product2_page2.css') }}" />
   <script src="{{ url_for('static', filename='js/kitchen_product_shell.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/planera_product2_page2.js') }}" defer></script>
 </head>
 <body class="yp-product-body">
   {% set status = vm.status|default('no_publication') %}
   {% set options = vm.options|default([]) %}
   {% set destinations = vm.destinations|default([]) %}
+  {% set unassigned_destinations = destinations|selectattr('selected_option_id', 'equalto', none)|list %}
   <div class="yp-product-shell">
     <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="start">
       <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
@@ -46,121 +47,109 @@
       </header>
 
       <main class="yp-product-panel">
-        <div class="yp-product-panel-inner">
-          <section class="yp-planera-page2" aria-labelledby="yp-planera-page2-title">
-            <div class="yp-planera-page2-layout">
-              <aside class="yp-planera-page1-sidebar" aria-label="Yuplan navigation">
-                <div class="yp-planera-page1-sidebar__context">
-                  <strong>{{ vm.site_name }}</strong>
-                  <span>Kommun</span>
-                </div>
-                <nav class="yp-planera-page1-sidebar__nav" aria-label="Visuell navigering">
-                  <button class="yp-planera-page1-sidebar__item" type="button">Översikt</button>
-                  <button class="yp-planera-page1-sidebar__item is-active" type="button" aria-current="page">Planera</button>
-                  <button class="yp-planera-page1-sidebar__item" type="button">Meny</button>
-                  <button class="yp-planera-page1-sidebar__item" type="button">Veckovy</button>
-                  <button class="yp-planera-page1-sidebar__item" type="button">Rapporter</button>
-                </nav>
-                <div class="yp-planera-page1-sidebar__bottom">
-                  <button class="yp-planera-page1-sidebar__settings" type="button">Inställningar</button>
-                </div>
-              </aside>
+        <div class="yp-product-panel-inner yp-planera-page2-panel-inner">
+          <section class="yp-planera-page2-shell" aria-labelledby="yp-planera-page2-title">
+            <header class="yp-planera-page2-hero">
+              <p class="yp-planera-page2-hero__kicker">PLANERA DAGEN</p>
+              <h1 class="yp-planera-page2-hero__title" id="yp-planera-page2-title">{{ vm.service_date_label }}</h1>
+              <p class="yp-planera-page2-hero__site">{{ vm.site_name }}</p>
+            </header>
 
-              <div class="yp-planera-page2-main">
-                <section class="yp-planera-page2-head" aria-labelledby="yp-planera-page2-title">
-                  <div>
-                    <div class="yp-planera-page2-kicker">{{ vm.meal_label }}</div>
-                    <h1 class="yp-planera-page2-title" id="yp-planera-page2-title">{{ vm.service_date_label }}</h1>
-                    <p class="yp-planera-page2-subtitle">{{ vm.site_name }}</p>
-                  </div>
-                  <div class="yp-planera-page2-meta">
-                    <div class="yp-planera-page2-meta__line">{{ vm.meal_label }}</div>
-                    <div class="yp-planera-page2-meta__line">{{ vm.site_name }}</div>
-                  </div>
-                </section>
-
-                {% if status == 'no_publication' %}
-                <section class="yp-planera-page2-card yp-planera-page2-card--empty" aria-label="Tomt läge">
-                  <div class="yp-planera-page2-empty__title">Ingen publicerad lunchmeny</div>
-                  <p class="yp-planera-page2-empty__text">Det finns ingen publicerad lunchmeny för valt datum.</p>
-                </section>
-                {% else %}
-                <section class="yp-planera-page2-card" aria-labelledby="yp-planera-page2-options-title">
-                  <div class="yp-planera-page2-card__head">
-                    <h2 class="yp-planera-page2-card__title" id="yp-planera-page2-options-title">Publicerade menyval</h2>
-                    <span class="yp-planera-page2-card__meta">{{ options|length }} val</span>
-                  </div>
-                  {% if options %}
-                  <div class="yp-planera-page2-options">
-                    {% for option in options %}
-                    <article class="yp-planera-page2-option{% if loop.first %} is-active{% endif %}">
-                      <div class="yp-planera-page2-option__label">{{ option.display_label|upper }}</div>
-                      <div class="yp-planera-page2-option__title">{{ option.display_title }}</div>
-                    </article>
-                    {% endfor %}
-                  </div>
-                  {% else %}
-                  <p class="yp-planera-page2-empty__text">Ingen publicerad lunchmeny</p>
-                  {% endif %}
-                </section>
-
-                <section class="yp-planera-page2-card" aria-labelledby="yp-planera-page2-destinations-title">
-                  <div class="yp-planera-page2-card__head">
-                    <h2 class="yp-planera-page2-card__title" id="yp-planera-page2-destinations-title">Destinationer</h2>
-                    <span class="yp-planera-page2-card__meta">Planeringsunderlag</span>
-                  </div>
-                  {% if destinations %}
-                  <div class="yp-planera-page2-destinations">
-                    {% for destination in destinations %}
-                    <article class="yp-planera-page2-destination">
-                      <div class="yp-planera-page2-destination__name">{{ destination.display_name }}</div>
-                      <div class="yp-planera-page2-destination__quantity">Planeringsunderlag: {{ destination.baseline_quantity }}</div>
-                      <div class="yp-planera-page2-destination__choice">Vald meny: {{ destination.selected_label }}</div>
-                    </article>
-                    {% endfor %}
-                  </div>
-                  {% else %}
-                  <p class="yp-planera-page2-empty__text">Inga destinationer hittades för valt datum.</p>
-                  {% endif %}
-                </section>
-
-                <section class="yp-planera-page2-card" aria-labelledby="yp-planera-page2-requirements-title">
-                  <div class="yp-planera-page2-card__head">
-                    <h2 class="yp-planera-page2-card__title" id="yp-planera-page2-requirements-title">Relevanta kostbehov</h2>
-                    <span class="yp-planera-page2-card__meta">Kandidatbehov</span>
-                  </div>
-                  {% if vm.has_requirement_groups %}
-                  <div class="yp-planera-page2-requirements">
-                    {% for destination in destinations %}
-                      {% if destination.requirement_groups %}
-                      <section class="yp-planera-page2-requirement-group-stack" aria-label="{{ destination.display_name }}">
-                        <div class="yp-planera-page2-requirement-group-stack__destination">{{ destination.display_name }}</div>
-                        {% for group in destination.requirement_groups %}
-                        <article class="yp-planera-page2-requirement-group">
-                          <div class="yp-planera-page2-requirement-group__head">
-                            <strong>{{ group.label }}</strong>
-                            <span>{{ group.effective_quantity }}</span>
-                          </div>
-                          {% if group.requirements %}
-                          <div class="yp-planera-page2-requirement-group__requirements">
-                            {% for requirement in group.requirements %}
-                            <span>{{ requirement.name }}</span>
-                            {% endfor %}
-                          </div>
-                          {% endif %}
-                        </article>
-                        {% endfor %}
-                      </section>
-                      {% endif %}
-                    {% endfor %}
-                  </div>
-                  {% else %}
-                  <p class="yp-planera-page2-empty__text">Inga registrerade kostbehov för vald måltid</p>
-                  {% endif %}
-                </section>
-                {% endif %}
+            {% if status != 'no_publication' %}
+            {% if options %}
+            <section class="yp-planera-page2-selector" aria-labelledby="yp-planera-page2-selector-title">
+              <div class="yp-planera-page2-selector__head">
+                <h2 class="yp-planera-page2-selector__title" id="yp-planera-page2-selector-title">{{ vm.meal_label|upper }}</h2>
+                <span class="yp-planera-page2-selector__meta">{{ options|length }} val</span>
               </div>
+              <div class="yp-planera-page2-selector__tabs" role="tablist" aria-label="Publika menyval för lunch">
+                {% for option in options %}
+                <button
+                  class="yp-planera-page2-selector__tab{% if loop.first %} is-active{% endif %}"
+                  type="button"
+                  role="tab"
+                  id="yp-planera-page2-tab-{{ loop.index }}"
+                  aria-controls="yp-planera-page2-panel-{{ loop.index }}"
+                  aria-selected="{{ 'true' if loop.first else 'false' }}"
+                  {% if not loop.first %}tabindex="-1"{% endif %}
+                  data-page2-option-tab
+                >
+                  <span class="yp-planera-page2-selector__tab-kicker">{{ option.display_label }}</span>
+                  <span class="yp-planera-page2-selector__tab-title">{{ option.display_title }}</span>
+                </button>
+                {% endfor %}
+              </div>
+            </section>
+            {% endif %}
+
+            {% if unassigned_destinations %}
+            <details class="yp-planera-page2-unassigned">
+              <summary>{{ unassigned_destinations|length }} avdelning{{ 'ar' if unassigned_destinations|length != 1 else '' }} saknar menyval</summary>
+              <div class="yp-planera-page2-unassigned__body">
+                {% for destination in unassigned_destinations %}
+                <div class="yp-planera-page2-unassigned__item">{{ destination.display_name }}</div>
+                {% endfor %}
+              </div>
+            </details>
+            {% endif %}
+
+            <div class="yp-planera-page2-panels">
+              {% for option in options %}
+              {% set option_destinations = destinations|selectattr('selected_option_id', 'equalto', option.option_id)|list %}
+              {% set destination_count = option_destinations|length %}
+              <section
+                class="yp-planera-page2-panel{% if loop.first %} is-active{% endif %}"
+                id="yp-planera-page2-panel-{{ loop.index }}"
+                role="tabpanel"
+                aria-labelledby="yp-planera-page2-tab-{{ loop.index }}"
+                {% if not loop.first %}hidden{% endif %}
+                data-page2-option-panel
+              >
+                <div class="yp-planera-page2-panel__kicker">{{ vm.meal_label|upper }} · {{ option.display_label|upper }}</div>
+                <h2 class="yp-planera-page2-panel__title">{{ option.display_title }}</h2>
+                <p class="yp-planera-page2-panel__question">Vilka kan inte äta den här rätten som den är?</p>
+
+                {% if destination_count == 1 %}
+                {% set primary_destination = option_destinations[0] %}
+                <div class="yp-planera-page2-destination-context">{{ primary_destination.display_name }} · {{ primary_destination.baseline_quantity }}</div>
+                {% elif destination_count > 1 %}
+                <div class="yp-planera-page2-destination-context">{{ destination_count }} avdelningar</div>
+                {% endif %}
+
+                <section class="yp-planera-page2-panel__section" aria-labelledby="yp-planera-page2-panel-{{ loop.index }}-requirements">
+                  <div class="yp-planera-page2-panel__section-head">
+                    <h3 id="yp-planera-page2-panel-{{ loop.index }}-requirements">KOSTBEHOV</h3>
+                  </div>
+                  {% if option_destinations %}
+                  <div class="yp-planera-page2-requirement-list">
+                    {% for destination in option_destinations %}
+                    {% set destination_groups = destination.requirement_groups|default([]) %}
+                    {% if destination_groups %}
+                    {% if option_destinations|length > 1 %}
+                    <div class="yp-planera-page2-requirement-context">{{ destination.display_name }}</div>
+                    {% endif %}
+                    {% for group in destination_groups %}
+                    <article class="yp-planera-page2-requirement-row" data-page2-requirement-row="{{ group.requirement_group_id }}">
+                      <strong>{{ group.label }}</strong>
+                      <span>{{ group.effective_quantity }}</span>
+                    </article>
+                    {% endfor %}
+                    {% endif %}
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                  <p class="yp-planera-page2-empty__text">Inga relevanta kostbehov för den här rätten ännu.</p>
+                  {% endif %}
+                </section>
+              </section>
+              {% endfor %}
             </div>
+            {% else %}
+            <section class="yp-planera-page2-empty-state" aria-label="Tomt läge">
+              <div class="yp-planera-page2-empty__title">Ingen publicerad lunchmeny</div>
+              <p class="yp-planera-page2-empty__text">Det finns ingen publicerad lunchmeny för valt datum.</p>
+            </section>
+            {% endif %}
           </section>
         </div>
       </main>
