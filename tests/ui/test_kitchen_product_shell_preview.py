@@ -244,7 +244,8 @@ def test_kitchen_planering_product2_renders_shell_preview_only(client_admin):
     assert "Äppelpaj" in html
     assert "TILLÄGG" in html
     assert "Sallad · Mos · Övriga tillval" in html
-    assert "Planera lunch →" in html
+    assert "Planera lunch" in html
+    assert "Planera lunch →" not in html
     assert 'href="/ui/kitchen/planering/day' not in html
     assert html.index('id="yp-product-app"') < html.index('class="yp-product-topbar"')
     assert html.index('class="yp-product-topbar"') < html.index('class="yp-product-panel"')
@@ -315,9 +316,22 @@ def test_kitchen_planering_product2_no_publication_keeps_non_link_cta(client_adm
     html = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
 
     assert "Ingen publicerad lunchmeny" in html
-    assert "Planera lunch →" in html
+    assert "Publicera lunchmenyn för att börja planera." in html
+    assert ">Planera lunch<" in html
     assert 'href="/ui/kitchen/planering/day' not in html
-    assert 'class="yp-planera-page1-cta" type="button"' in html
+    assert 'class="yp-planera-page1-cta" type="button" disabled aria-disabled="true"' in html
+    assert '<a class="yp-planera-page1-cta"' not in html
+    assert 'yp-planera-page1-cta-help' in html
+
+
+def test_kitchen_planering_product2_no_publication_does_not_offer_active_page2_cta(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="No Publication CTA Site")
+
+    html = _product2_html(client_admin, site_id, query="&year=2026&week=40&day=1")
+
+    assert 'href="/ui/kitchen/planering/day' not in html
+    assert 'ui=product2' not in html or 'class="yp-planera-page1-cta" href=' not in html
+    assert 'disabled aria-disabled="true"' in html
 
 
 def test_kitchen_planering_product2_published_lunch_renders_publication_titles(client_admin):

@@ -388,6 +388,12 @@
   align-items: center;
 }
 
+.yp-planera-page1-cta-wrap {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
 .yp-planera-page1-cta {
   min-height: 56px;
   padding: 0 22px;
@@ -397,6 +403,31 @@
   color: #fff;
   font-weight: 800;
   box-shadow: 0 12px 24px rgba(2, 174, 195, 0.22);
+}
+
+.yp-planera-page1-cta:disabled {
+  cursor: default;
+  background: linear-gradient(180deg, rgba(175, 191, 199, 0.38) 0%, rgba(175, 191, 199, 0.26) 100%);
+  color: rgba(24, 43, 58, 0.58);
+  box-shadow: none;
+}
+
+.yp-planera-page1-cta-wrap--disabled .yp-planera-page1-cta:hover,
+.yp-planera-page1-cta-wrap--disabled .yp-planera-page1-cta:focus-visible {
+  box-shadow: none;
+}
+
+.yp-planera-page1-cta-help {
+  max-width: 240px;
+  font-size: 0.94rem;
+  line-height: 1.4;
+  color: var(--yp-product-muted);
+  text-align: right;
+}
+
+#yp-product-app[data-theme="dark"] .yp-planera-page1-cta:disabled {
+  background: linear-gradient(180deg, rgba(73, 96, 106, 0.55) 0%, rgba(73, 96, 106, 0.34) 100%);
+  color: rgba(234, 247, 248, 0.58);
 }
 
 .yp-planera-page1-secondary {

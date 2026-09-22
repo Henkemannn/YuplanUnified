@@ -117,7 +117,10 @@
                         href="{{ url_for('ui.kitchen_planering_product2_day', ui='product2', site_id=page1.site_id, date=page1.selected_date_iso, meal='lunch') }}"
                       >Planera lunch →</a>
                       {% else %}
-                      <button class="yp-planera-page1-cta" type="button">Planera lunch →</button>
+                      <div class="yp-planera-page1-cta-wrap yp-planera-page1-cta-wrap--disabled">
+                        <button class="yp-planera-page1-cta" type="button" disabled aria-disabled="true">Planera lunch</button>
+                        <div class="yp-planera-page1-cta-help">Publicera lunchmenyn för att börja planera.</div>
+                      </div>
                       {% endif %}
                   </div>
                 </section>
