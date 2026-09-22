@@ -1,10 +1,28 @@
+import json
 import re
 from datetime import date as _date, timedelta
 from html import unescape
 from pathlib import Path
 
+import pytest
+from flask import current_app
+from core.builder import BuilderFlow
+from core.builder_menu_context_flow import BuilderMenuContextFlow
+from core.components import (
+    ComponentService,
+    CompositionService,
+    InMemoryComponentAliasRepository,
+    InMemoryComponentRepository,
+    InMemoryCompositionRepository,
+    InMemoryRecipeIngredientLineRepository,
+    InMemoryRecipeRepository,
+)
 from core.admin_repo import SitesRepo
+from core.commun_builder_linkage import CommunBuilderMenuLinkService
 from core.db import create_all, get_session
+from core.menu import InMemoryCompositionAliasRepository, MenuService
+from core.menu_service import MenuServiceDB
+from core.ui_blueprint import _apply_builder_reader_weekview_overview, _build_product2_page1_menu_vm
 from sqlalchemy import text
 
 
@@ -35,6 +53,128 @@ def _seed_site(app, *, site_name: str = "Preview Site", tenant_id: int = 1) -> s
             db.close()
         site, _ = SitesRepo().create_site(name=site_name, tenant_id=tenant_id)
     return site["id"]
+
+
+def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, CompositionService]:
+    component_repository = InMemoryComponentRepository()
+    composition_repository = InMemoryCompositionRepository()
+    alias_repository = InMemoryCompositionAliasRepository()
+    recipe_repository = InMemoryRecipeRepository()
+    ingredient_repository = InMemoryRecipeIngredientLineRepository()
+
+    builder_flow = BuilderFlow(
+        component_service=ComponentService(repository=component_repository),
+        composition_service=CompositionService(repository=composition_repository),
+        composition_repository=composition_repository,
+        alias_repository=alias_repository,
+        component_alias_repository=InMemoryComponentAliasRepository(),
+    )
+    menu_context_flow = BuilderMenuContextFlow(
+        menu_service=MenuService(composition_repository=composition_repository),
+        composition_repository=composition_repository,
+        alias_repository=alias_repository,
+        recipe_repository=recipe_repository,
+        ingredient_repository=ingredient_repository,
+        library_flow=builder_flow,
+    )
+    return menu_context_flow, CompositionService(repository=composition_repository)
+
+
+def _seed_product2_publication(
+    app,
+    *,
+    site_id: str,
+    year: int,
+    week: int,
+    builder_menu_id: str,
+    builder_menu_version: int = 1,
+) -> None:
+    with app.app_context():
+        builder_flow, composition_service = _build_builder_menu_context_flow()
+        current_app.extensions["builder_menu_context_flow"] = builder_flow
+        current_app.extensions["builder_flow"] = builder_flow
+        builder_flow.create_menu(
+            menu_id=builder_menu_id,
+            site_id=site_id,
+            week_key=f"{year}-W{week:02d}",
+            version=builder_menu_version,
+            status="published",
+        )
+        composition_service.create_composition(
+            composition_id="comp-product2-mon",
+            composition_name="Måndagssoppa",
+        )
+        composition_service.create_composition(
+            composition_id="comp-product2-tue-a",
+            composition_name="Publicerad rätt A",
+        )
+        composition_service.create_composition(
+            composition_id="comp-product2-tue-b",
+            composition_name="Publicerad rätt B",
+        )
+        builder_flow.add_composition_menu_row(
+            menu_id=builder_menu_id,
+            menu_detail_id="detail-mon-1",
+            day="monday",
+            meal_slot="lunch_alt1",
+            composition_id="comp-product2-mon",
+            sort_order=5,
+        )
+        builder_flow.add_composition_menu_row(
+            menu_id=builder_menu_id,
+            menu_detail_id="detail-tue-1",
+            day="tuesday",
+            meal_slot="lunch_alt1",
+            composition_id="comp-product2-tue-a",
+            sort_order=10,
+        )
+        builder_flow.add_composition_menu_row(
+            menu_id=builder_menu_id,
+            menu_detail_id="detail-tue-2",
+            day="tuesday",
+            meal_slot="lunch_alt2",
+            composition_id="comp-product2-tue-b",
+            sort_order=20,
+        )
+        legacy_menu = MenuServiceDB().create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
+        CommunBuilderMenuLinkService(builder_menu_context_flow=builder_flow).create_or_replace_link(
+            tenant_id=1,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id=builder_menu_id,
+            legacy_menu_id=legacy_menu.id,
+            source="manual",
+        )
+        MenuServiceDB().publish_menu(tenant_id=1, menu_id=legacy_menu.id)
+
+
+def _seed_product2_legacy_only_menu(
+    app,
+    *,
+    site_id: str,
+    year: int,
+    week: int,
+) -> int:
+    with app.app_context():
+        db = get_session()
+        try:
+            db.execute(
+                text("INSERT OR IGNORE INTO dishes(id, tenant_id, name, category) VALUES(:id, :tid, :name, :category)"),
+                {"id": 99001, "tid": 1, "name": "Legacy alt1", "category": "test"},
+            )
+            db.execute(
+                text("INSERT OR IGNORE INTO dishes(id, tenant_id, name, category) VALUES(:id, :tid, :name, :category)"),
+                {"id": 99002, "tid": 1, "name": "Legacy alt2", "category": "test"},
+            )
+            db.commit()
+        finally:
+            db.close()
+        menu = MenuServiceDB().create_or_get_menu(tenant_id=1, site_id=site_id, week=week, year=year)
+        legacy_menu_service = MenuServiceDB()
+        legacy_menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tuesday", meal="lunch", variant_type="alt1", dish_id=99001)
+        legacy_menu_service.set_variant(tenant_id=1, menu_id=menu.id, day="tuesday", meal="lunch", variant_type="alt2", dish_id=99002)
+        return menu.id
 
 
 def _product2_html(client_admin, site_id: str, *, headers: dict[str, str] | None = None, query: str = "") -> str:
@@ -208,6 +348,100 @@ def test_kitchen_planering_product2_missing_tenant_fails_closed(client_admin):
         headers=_headers(tenant_id=None),
     )
     assert rv.status_code == 404
+
+
+def test_kitchen_planering_product2_published_menu_seam_uses_projection(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="Published Menu Site")
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=40,
+        builder_menu_id="builder-menu-product2",
+        builder_menu_version=1,
+    )
+
+    vm = _build_product2_page1_menu_vm(
+        tenant_id=1,
+        site_id=site_id,
+        year=2026,
+        week=40,
+        selected_day=1,
+    )
+
+    assert vm["status"] == "ok"
+    lunch = vm["lunch"]
+    assert lunch is not None
+    assert lunch.meal == "lunch"
+    assert [option.option_id for option in lunch.options] == ["detail-tue-1", "detail-tue-2"]
+    assert [option.display_title for option in lunch.options] == ["Publicerad rätt A", "Publicerad rätt B"]
+    assert [option.sort_order for option in lunch.options] == [10, 20]
+    assert [option.variant_type for option in lunch.options] == ["alt1", "alt2"]
+
+
+def test_kitchen_planering_product2_no_publication_does_not_fall_back_to_legacy(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="No Publication Site")
+    _seed_product2_legacy_only_menu(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=41,
+    )
+
+    vm = _build_product2_page1_menu_vm(
+        tenant_id=1,
+        site_id=site_id,
+        year=2026,
+        week=41,
+        selected_day=1,
+    )
+
+    assert vm["status"] == "no_publication"
+    assert vm["lunch"] is None
+
+
+def test_kitchen_planering_product2_bad_publication_fails_closed(client_admin):
+    site_id = _seed_site(client_admin.application, site_name="Bad Publication Site")
+    _seed_product2_publication(
+        client_admin.application,
+        site_id=site_id,
+        year=2026,
+        week=42,
+        builder_menu_id="builder-menu-product2-bad",
+        builder_menu_version=1,
+    )
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text(
+                "SELECT projection_snapshot_json FROM commun_builder_publication_pins "
+                "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
+            ),
+            {"tid": 1, "sid": site_id, "year": 2026, "week": 42},
+        ).fetchone()
+        assert row is not None
+        snapshot = json.loads(str(row[0]))
+        snapshot["rows"][1]["variant_type"] = "unresolved_variant"
+        db.execute(
+            text(
+                "UPDATE commun_builder_publication_pins SET projection_snapshot_json=:snapshot "
+                "WHERE tenant_id=:tid AND site_id=:sid AND year=:year AND week=:week"
+            ),
+            {"snapshot": json.dumps(snapshot, ensure_ascii=False), "tid": 1, "sid": site_id, "year": 2026, "week": 42},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    with pytest.raises(RuntimeError, match="product2_menu_contract_error"):
+        _build_product2_page1_menu_vm(
+            tenant_id=1,
+            site_id=site_id,
+            year=2026,
+            week=42,
+            selected_day=1,
+        )
 
 
 def test_kitchen_planering_product2_cross_tenant_site_fails_closed(client_admin):

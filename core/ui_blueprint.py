@@ -13,6 +13,7 @@ from .weekview.service import WeekviewService
 from .weekview_vm import build_weekview_vm
 # use string roles consistently elsewhere; avoid Role import
 from .meal_registration_repo import MealRegistrationRepo
+from .planera_product2_menu_vm import Product2MealOptionsError, build_product2_meal_options_vm
 from datetime import date as _date
 from datetime import datetime as _datetime
 from datetime import time as _time
@@ -410,6 +411,50 @@ def _build_product2_page1_vm(*, site_id: str, year: int, week: int, selected_day
         "prev_url": prev_url,
         "next_url": next_url,
     }
+
+
+_PRODUCT2_DAY_KEYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def _product2_selected_day_to_projection_day(selected_day: int | None) -> str:
+    if not isinstance(selected_day, int) or selected_day < 0 or selected_day > 6:
+        raise ValueError("selected_day invalid")
+    return _PRODUCT2_DAY_KEYS[selected_day]
+
+
+def _build_product2_page1_menu_vm(*, tenant_id: int, site_id: str, year: int, week: int, selected_day: int | None) -> dict[str, object]:
+    try:
+        projection_day = _product2_selected_day_to_projection_day(selected_day)
+    except Exception as exc:
+        raise RuntimeError("product2_menu_contract_error") from exc
+
+    try:
+        from .commun_builder_projection import get_shadow_projection_reader
+
+        outcome = get_shadow_projection_reader().get_projection(
+            tenant_id=int(tenant_id),
+            site_id=str(site_id),
+            year=int(year),
+            week=int(week),
+        )
+    except Exception as exc:
+        raise RuntimeError("product2_menu_projection_unavailable") from exc
+
+    if outcome.status == "no_publication" or outcome.projection is None:
+        return {"status": "no_publication", "lunch": None}
+    if outcome.status != "ok":
+        raise RuntimeError("product2_menu_projection_unavailable")
+
+    try:
+        lunch_vm = build_product2_meal_options_vm(
+            outcome.projection.rows,
+            day=projection_day,
+            meal="lunch",
+        )
+    except Product2MealOptionsError as exc:
+        raise RuntimeError("product2_menu_contract_error") from exc
+
+    return {"status": "ok", "lunch": lunch_vm}
 
 # Planering bulk mark: set produced for all departments' special diets with count>0
 @ui_bp.post("/api/planering/mark_produced_special")
@@ -2920,6 +2965,16 @@ def kitchen_planering_v1():
             selected_day=selected_day,
             today=today,
         )
+        try:
+            page1_vm["menu"] = _build_product2_page1_menu_vm(
+                tenant_id=int(current_tenant_id),
+                site_id=site_id,
+                year=year,
+                week=week,
+                selected_day=int(page1_vm.get("selected_day") if isinstance(page1_vm.get("selected_day"), int) else 0),
+            )
+        except Exception:
+            return abort(500)
 
         vm = {
             "shell_variant": "kitchen_product",
