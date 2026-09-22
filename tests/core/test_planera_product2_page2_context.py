@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 import uuid
+from dataclasses import dataclass, field
 
 import pytest
 from flask import current_app
@@ -33,6 +34,68 @@ from core.ui_blueprint import _apply_builder_reader_weekview_overview
 from core.builder import BuilderFlow
 from core.builder_menu_context_flow import BuilderMenuContextFlow
 from core.menu import InMemoryCompositionAliasRepository, MenuService
+
+
+@dataclass
+class _Page2TestState:
+    site_ids: set[str] = field(default_factory=set)
+    department_ids: set[str] = field(default_factory=set)
+    requirement_group_ids: set[str] = field(default_factory=set)
+
+
+_PAGE2_TEST_STATE: _Page2TestState | None = None
+
+
+def _page2_state() -> _Page2TestState:
+    assert _PAGE2_TEST_STATE is not None
+    return _PAGE2_TEST_STATE
+
+
+def _assert_page2_has_no_review_shape(context) -> None:
+    for attr in ("review_state", "selected_deviations", "adaptations", "normal_quantity", "special_diets", "planned"):
+        assert not hasattr(context, attr)
+
+
+def _cleanup_page2_test_state(state: _Page2TestState) -> None:
+    from core.db import get_session
+
+    db = get_session()
+    try:
+        for site_id in sorted(state.site_ids):
+            db.execute(text("DELETE FROM commun_builder_publication_pins WHERE site_id = :site_id"), {"site_id": site_id})
+            db.execute(text("DELETE FROM commun_builder_menu_links WHERE site_id = :site_id"), {"site_id": site_id})
+            db.execute(text("DELETE FROM department_menu_choices WHERE site_id = :site_id"), {"site_id": site_id})
+            db.execute(text("DELETE FROM dietary_types WHERE site_id = :site_id"), {"site_id": site_id})
+            db.execute(text("DELETE FROM departments WHERE site_id = :site_id"), {"site_id": site_id})
+            db.execute(text("DELETE FROM sites WHERE id = :site_id"), {"site_id": site_id})
+        for group_id in sorted(state.requirement_group_ids):
+            db.execute(text("DELETE FROM department_requirement_group_service_overrides WHERE group_id = :group_id"), {"group_id": group_id})
+            db.execute(text("DELETE FROM department_requirement_group_requirements WHERE group_id = :group_id"), {"group_id": group_id})
+            db.execute(text("DELETE FROM department_requirement_groups WHERE id = :group_id"), {"group_id": group_id})
+        db.commit()
+    finally:
+        db.close()
+
+
+@pytest.fixture(autouse=True)
+def _page2_test_hygiene(app_session):
+    global _PAGE2_TEST_STATE
+    state = _Page2TestState()
+    _PAGE2_TEST_STATE = state
+    extension_snapshot = {
+        key: (key in app_session.extensions, app_session.extensions.get(key))
+        for key in ("builder_menu_context_flow", "builder_flow")
+    }
+    try:
+        yield state
+    finally:
+        _cleanup_page2_test_state(state)
+        for key, (existed, value) in extension_snapshot.items():
+            if existed:
+                app_session.extensions[key] = value
+            else:
+                app_session.extensions.pop(key, None)
+        _PAGE2_TEST_STATE = None
 
 
 def _build_builder_menu_context_flow() -> tuple[BuilderMenuContextFlow, CompositionService]:
@@ -70,6 +133,7 @@ def _seed_site(app_session, *, site_id: str, tenant_id: int = 1) -> None:
             {"id": site_id, "name": f"Site {site_id}", "tid": tenant_id},
         )
         db.commit()
+        _page2_state().site_ids.add(site_id)
     finally:
         db.close()
 
@@ -81,6 +145,7 @@ def _seed_department(*, site_id: str, name: str, resident_count: int = 10) -> di
         resident_count_mode="fixed",
         resident_count_fixed=resident_count,
     )
+    _page2_state().department_ids.add(str(department["id"]))
     return department
 
 
@@ -107,7 +172,9 @@ def _seed_requirement(site_id: str, name: str, requirement_key: str) -> int:
 
 
 def _seed_requirement_group(*, department_id: str, requirement_ids: list[int], quantity: int, label: str) -> dict:
-    return DepartmentRequirementGroupsRepo().create_group(department_id, quantity, requirement_ids, label=label)
+    group = DepartmentRequirementGroupsRepo().create_group(department_id, quantity, requirement_ids, label=label)
+    _page2_state().requirement_group_ids.add(str(group["id"]))
+    return group
 
 
 def _builder_day_name(service_date: date) -> str:
@@ -280,7 +347,7 @@ def test_published_lunch_with_two_options_builds_context(app_session) -> None:
         assert requirement_groups[group_a["id"]].effective_quantity == 2
         assert requirement_groups[group_b["id"]].effective_quantity == 3
         assert requirement_groups[group_a["id"]].requirements[0].requirement_key is not None
-        assert not hasattr(context, "review_state")
+        _assert_page2_has_no_review_shape(context)
 
 
 def test_missing_choice_stays_none_and_does_not_default_to_alt1(app_session) -> None:
@@ -385,10 +452,109 @@ def test_requirement_group_effective_quantity_uses_override_and_excludes_zero(ap
         requirement_groups = {group.requirement_group_id: group for group in context.requirement_groups}
         assert requirement_groups[group_a["id"]].effective_quantity == 4
         assert group_b["id"] not in requirement_groups
+        _assert_page2_has_no_review_shape(context)
 
-        overrides.set_override(group_a["id"], date(2026, 9, 8), "dinner", 9)
-        assert overrides.resolve_effective_quantity(group_a["id"], service_date, "lunch") == 4
-        assert overrides.resolve_effective_quantity(group_a["id"], service_date, "dinner") == 9
+
+def test_other_date_override_does_not_leak_into_page2_context(app_session) -> None:
+    with app_session.app_context():
+        site_id = f"site-page2-other-date-{uuid.uuid4()}"
+        service_date, dept_a, dept_b, group_a, _group_b = _seed_common_context(app_session=app_session, site_id=site_id)
+        year, week, _weekday = service_date.isocalendar()
+        _seed_publication(
+            app_session=app_session,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-page2-other-date",
+            builder_menu_version=1,
+            day=_builder_day_name(service_date),
+            meal_rows=[
+                ("row-alt1", "Alt 1 Dish", 10, "lunch_alt1", _builder_day_name(service_date)),
+                ("row-alt2", "Alt 2 Dish", 20, "lunch_alt2", _builder_day_name(service_date)),
+            ],
+        )
+
+        overrides = DepartmentRequirementGroupServiceOverridesRepo()
+        overrides.set_override(group_a["id"], date(2026, 9, 9), "lunch", 7)
+
+        context = build_product2_page2_planning_context(
+            tenant_id=1,
+            site_id=site_id,
+            service_date=service_date,
+            meal="lunch",
+        )
+
+        requirement_groups = {group.requirement_group_id: group for group in context.requirement_groups}
+        assert requirement_groups[group_a["id"]].effective_quantity == 2
+        _assert_page2_has_no_review_shape(context)
+
+
+def test_other_meal_override_does_not_affect_page2_lunch_context(app_session) -> None:
+    with app_session.app_context():
+        site_id = f"site-page2-other-meal-{uuid.uuid4()}"
+        service_date, dept_a, dept_b, group_a, _group_b = _seed_common_context(app_session=app_session, site_id=site_id)
+        year, week, _weekday = service_date.isocalendar()
+        _seed_publication(
+            app_session=app_session,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-page2-other-meal",
+            builder_menu_version=1,
+            day=_builder_day_name(service_date),
+            meal_rows=[
+                ("row-alt1", "Alt 1 Dish", 10, "lunch_alt1", _builder_day_name(service_date)),
+                ("row-alt2", "Alt 2 Dish", 20, "lunch_alt2", _builder_day_name(service_date)),
+            ],
+        )
+
+        overrides = DepartmentRequirementGroupServiceOverridesRepo()
+        overrides.set_override(group_a["id"], service_date, "dinner", 9)
+
+        context = build_product2_page2_planning_context(
+            tenant_id=1,
+            site_id=site_id,
+            service_date=service_date,
+            meal="lunch",
+        )
+
+        requirement_groups = {group.requirement_group_id: group for group in context.requirement_groups}
+        assert requirement_groups[group_a["id"]].effective_quantity == 2
+        _assert_page2_has_no_review_shape(context)
+
+
+def test_inactive_requirement_group_is_excluded_from_page2_context(app_session) -> None:
+    with app_session.app_context():
+        site_id = f"site-page2-inactive-{uuid.uuid4()}"
+        service_date, dept_a, dept_b, group_a, group_b = _seed_common_context(app_session=app_session, site_id=site_id)
+        year, week, _weekday = service_date.isocalendar()
+        _seed_publication(
+            app_session=app_session,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-page2-inactive",
+            builder_menu_version=1,
+            day=_builder_day_name(service_date),
+            meal_rows=[
+                ("row-alt1", "Alt 1 Dish", 10, "lunch_alt1", _builder_day_name(service_date)),
+                ("row-alt2", "Alt 2 Dish", 20, "lunch_alt2", _builder_day_name(service_date)),
+            ],
+        )
+
+        DepartmentRequirementGroupsRepo().update_group(group_a["id"], is_active=False)
+
+        context = build_product2_page2_planning_context(
+            tenant_id=1,
+            site_id=site_id,
+            service_date=service_date,
+            meal="lunch",
+        )
+
+        requirement_groups = {group.requirement_group_id: group for group in context.requirement_groups}
+        assert group_a["id"] not in requirement_groups
+        assert group_b["id"] in requirement_groups
+        _assert_page2_has_no_review_shape(context)
 
 
 def test_no_publication_returns_explicit_no_publication_state(app_session) -> None:
