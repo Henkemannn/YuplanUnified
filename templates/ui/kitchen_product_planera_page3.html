@@ -19,6 +19,8 @@
   <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/kitchen_product_shell.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_product2_page3.css') }}" />
+  <script src="{{ url_for('static', filename='js/kitchen_product_shell.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/planera_product2_page3.js') }}" defer></script>
 </head>
 <body class="yp-product-body">
   <div class="yp-product-shell">
@@ -34,6 +36,9 @@
         <div class="yp-product-status-strip" aria-label="Progress and context">
           <div class="yp-product-status-date sr-only" id="productStatusDay">{{ vm.service_date_label }}</div>
           <div class="yp-product-status-avatar" aria-hidden="true">HJ</div>
+          <button class="yp-product-theme-toggle" id="ypProductThemeToggle" type="button" aria-pressed="false" aria-label="Växla till dark mode" data-theme-toggle>
+            <span data-theme-icon>🌙</span>
+          </button>
         </div>
       </header>
 
@@ -41,38 +46,33 @@
         <div class="yp-product-panel-inner">
           <section class="yp-planera-page3-shell" aria-labelledby="yp-planera-page3-title">
             <header class="yp-planera-page3-hero">
-              <p class="yp-planera-page3-kicker">PRODUKTIONSUNDERLAG</p>
-              <h1 class="yp-planera-page3-title" id="yp-planera-page3-title">{{ vm.service_date_label }}</h1>
-              <p class="yp-planera-page3-subtitle">{{ vm.site_name }} · {{ vm.meal_label }}</p>
-              <div class="yp-planera-page3-meta">
-                <a class="yp-planera-page3-backlink" href="{{ vm.page2_url }}">Tillbaka till granskning</a>
-                <div class="yp-planera-page3-status">
-                  <span class="yp-planera-page3-status__label">Läge</span>
-                  <p class="yp-planera-page3-status__text">{{ vm.ready_label }}</p>
+              <div class="yp-planera-page3-hero__row">
+                <div class="yp-planera-page3-hero__heading">
+                  <p class="yp-planera-page3-kicker">PRODUKTIONSUNDERLAG</p>
+                  <h1 class="yp-planera-page3-title" id="yp-planera-page3-title">Produktionsunderlag</h1>
+                </div>
+                <a class="yp-planera-page3-backlink" href="{{ vm.page2_url }}">Granska underlag</a>
+              </div>
+              <div class="yp-planera-page3-context" aria-label="Produktionskontext">
+                <div class="yp-planera-page3-date-control" aria-label="Datum">
+                  <span class="yp-planera-page3-date-control__arrow" aria-hidden="true">‹</span>
+                  <span class="yp-planera-page3-date-control__date">{{ vm.service_date_label }}</span>
+                  <span class="yp-planera-page3-date-control__arrow" aria-hidden="true">›</span>
+                </div>
+                <div class="yp-planera-page3-context__line">
+                  <p class="yp-planera-page3-subtitle">{{ vm.site_name }} · {{ vm.meal_label }}</p>
+                  <span class="yp-planera-page3-status-pill {% if vm.ready %}is-ready{% else %}is-blocked{% endif %}" aria-label="{{ vm.ready_label }}" title="{{ vm.ready_label }}">{{ vm.ready_label }}</span>
                 </div>
               </div>
             </header>
 
-            <section class="yp-planera-page3-summary" aria-label="Sammanfattning">
-              <article class="yp-planera-page3-summary-card">
-                <p class="yp-planera-page3-summary-card__label">Menyval</p>
-                <p class="yp-planera-page3-summary-card__value">{{ vm.options|length }}</p>
-              </article>
-              <article class="yp-planera-page3-summary-card">
-                <p class="yp-planera-page3-summary-card__label">Omarkerade avdelningar</p>
-                <p class="yp-planera-page3-summary-card__value">{{ vm.unassigned_destinations|length }}</p>
-              </article>
-              <article class="yp-planera-page3-summary-card">
-                <p class="yp-planera-page3-summary-card__label">Blockerare</p>
-                <p class="yp-planera-page3-summary-card__value">{{ vm.blockers|length }}</p>
-              </article>
-              <article class="yp-planera-page3-summary-card">
-                <p class="yp-planera-page3-summary-card__label">Publikation</p>
-                <p class="yp-planera-page3-summary-card__value">{% if vm.publication_identity %}V1{% else %}Saknas{% endif %}</p>
-              </article>
-            </section>
+            <nav class="yp-planera-page3-tabs" aria-label="Produktionsvyer" data-page3-tabs>
+                <a class="yp-planera-page3-tab {% if vm.view == 'overview' %}is-active{% endif %}" data-page3-view-link data-page3-view="overview" href="{{ vm.navigation_urls['overview'] }}">Översikt</a>
+                <a class="yp-planera-page3-tab {% if vm.view == 'normal' %}is-active{% endif %}" data-page3-view-link data-page3-view="normal" href="{{ vm.navigation_urls['normal'] }}">Normalkost</a>
+                <a class="yp-planera-page3-tab {% if vm.view == 'special' %}is-active{% endif %}" data-page3-view-link data-page3-view="special" data-page3-special-view="{{ vm.special_view }}" href="{{ vm.navigation_urls['special'] }}">Specialkost</a>
+            </nav>
 
-            {% if vm.blocker_messages %}
+            {% if not vm.ready and vm.blocker_messages %}
             <section class="yp-planera-page3-alert" aria-label="Blockeringar">
               <ul>
                 {% for message in vm.blocker_messages %}
@@ -82,115 +82,155 @@
             </section>
             {% endif %}
 
-            {% if vm.unassigned_destinations %}
-            <section class="yp-planera-page3-section" aria-labelledby="yp-planera-page3-unassigned-title">
-              <div class="yp-planera-page3-section__head">
-                <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-unassigned-title">Avdelningar utan menyval</h2>
-                <span class="yp-planera-page3-section__meta">{{ vm.unassigned_destinations|length }} st</span>
-              </div>
-              <div class="yp-planera-page3-cohorts">
-                {% for destination in vm.unassigned_destinations %}
-                <article class="yp-planera-page3-cohort">
-                  <div class="yp-planera-page3-cohort__head">
-                    <p class="yp-planera-page3-cohort__title">{{ destination.display_name }}</p>
-                    <span class="yp-planera-page3-cohort__count">Baslinje {{ destination.baseline_quantity }}</span>
-                  </div>
-                </article>
-                {% endfor %}
-              </div>
-            </section>
-            {% endif %}
-
-            {% for option in vm.options %}
-            <section class="yp-planera-page3-option" aria-labelledby="yp-planera-page3-option-{{ loop.index }}-title">
-              <header class="yp-planera-page3-option__head">
-                <p class="yp-planera-page3-option__kicker">{{ option.display_label|upper }}</p>
-                <h2 class="yp-planera-page3-option__title" id="yp-planera-page3-option-{{ loop.index }}-title">{{ option.display_title }}</h2>
-                {% if option.status_label %}
-                <p class="yp-planera-page3-option__status">{{ option.status_label }}</p>
+            <div class="yp-planera-page3-panels">
+              <section class="yp-planera-page3-section yp-planera-page3-section--overview" data-page3-panel="overview" {% if vm.view != 'overview' %}hidden{% endif %}>
+                <div class="yp-planera-page3-section__head">
+                  <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-overview-title">Dagens produktion</h2>
+                </div>
+                {% if vm.overview_options %}
+                {% set overview_totals = namespace(baseline=0, normal=0, special=0) %}
+                <div class="yp-planera-page3-table-wrap">
+                  <table class="yp-planera-page3-table yp-planera-page3-table--overview" aria-labelledby="yp-planera-page3-overview-title">
+                    <thead>
+                      <tr>
+                        <th scope="col">Menyval</th>
+                        <th scope="col">Totalt</th>
+                        <th scope="col">Normalkost</th>
+                        <th scope="col">Specialkost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for option in vm.overview_options %}
+                      {% set overview_totals.baseline = overview_totals.baseline + (option.baseline_total or 0) %}
+                      {% set overview_totals.normal = overview_totals.normal + (option.normal_total or 0) %}
+                      {% set overview_totals.special = overview_totals.special + (option.special_total or 0) %}
+                      <tr data-page3-overview-row>
+                        <th scope="row">
+                          <span class="yp-planera-page3-overview-row__title">{{ option.display_title }}</span>
+                          {% if option.status_label %}
+                          <span class="yp-planera-page3-overview-row__status">{{ option.status_label }}</span>
+                          {% endif %}
+                        </th>
+                        <td>{{ option.baseline_total if option.baseline_total is not none else '—' }}</td>
+                        <td>{{ option.normal_total if option.normal_total is not none else '—' }}</td>
+                        <td class="{% if option.special_total == 0 %}is-quiet{% endif %}">{{ option.special_total if option.special_total is not none else '—' }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th scope="row">Totalt</th>
+                        <th>{{ overview_totals.baseline }}</th>
+                        <th>{{ overview_totals.normal }}</th>
+                        <th>{{ overview_totals.special }}</th>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                {% else %}
+                <p class="empty-text">Inga publicerade menyval finns för dagen.</p>
                 {% endif %}
-              </header>
+              </section>
 
-              <div class="yp-planera-page3-breakdown" aria-label="Totals per option">
-                <article class="yp-planera-page3-breakdown-card">
-                  <p class="yp-planera-page3-breakdown-card__label">Baslinje</p>
-                  <p class="yp-planera-page3-breakdown-card__value">{{ option.baseline_total if option.baseline_total is not none else '—' }}</p>
-                </article>
-                <article class="yp-planera-page3-breakdown-card">
-                  <p class="yp-planera-page3-breakdown-card__label">Normalkost</p>
-                  <p class="yp-planera-page3-breakdown-card__value">{{ option.normal_total if option.normal_total is not none else '—' }}</p>
-                </article>
-                <article class="yp-planera-page3-breakdown-card">
-                  <p class="yp-planera-page3-breakdown-card__label">Specialkost</p>
-                  <p class="yp-planera-page3-breakdown-card__value">{{ option.special_total if option.special_total is not none else '—' }}</p>
-                </article>
-              </div>
-
-              <div class="yp-planera-page3-section" style="padding: 0; border: 0; background: transparent; box-shadow: none;">
+              <section class="yp-planera-page3-section yp-planera-page3-section--matrix" aria-labelledby="yp-planera-page3-normal-title" data-page3-panel="normal" {% if vm.view != 'normal' %}hidden{% endif %}>
                 <div class="yp-planera-page3-section__head">
-                  <h3 class="yp-planera-page3-section__title">Normalkost per avdelning</h3>
+                  <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-normal-title">Normalkost</h2>
                 </div>
-                <table class="yp-planera-page3-table">
-                  <thead>
-                    <tr>
-                      <th>Avdelning</th>
-                      <th>Antal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% for row in option.normal_department_rows %}
-                    <tr>
-                      <td>{{ row.display_name }}</td>
-                      <td>{{ row.quantity }}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                      <td colspan="2">Inga normalkostposter för detta menyval.</td>
-                    </tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-
-              <div class="yp-planera-page3-section" style="padding: 0; border: 0; background: transparent; box-shadow: none;">
-                <div class="yp-planera-page3-section__head">
-                  <h3 class="yp-planera-page3-section__title">Specialkostgrupper</h3>
-                </div>
-                <div class="yp-planera-page3-cohorts">
-                  {% for cohort in option.special_cohorts %}
-                  <article class="yp-planera-page3-cohort">
-                    <div class="yp-planera-page3-cohort__head">
-                      <p class="yp-planera-page3-cohort__title">{{ cohort.label }}</p>
-                      <span class="yp-planera-page3-cohort__count">{{ cohort.quantity }} st</span>
-                    </div>
-                    {% if cohort.department_quantities %}
-                    <table class="yp-planera-page3-table">
-                      <thead>
-                        <tr>
-                          <th>Avdelning</th>
-                          <th>Antal</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% for row in cohort.department_quantities %}
-                        <tr>
-                          <td>{{ row.display_name }}</td>
-                          <td>{{ row.quantity }}</td>
-                        </tr>
+                {% if vm.normal_matrix and vm.normal_matrix.columns %}
+                <div class="yp-planera-page3-table-wrap">
+                  <table class="yp-planera-page3-table yp-planera-page3-table--matrix">
+                    <thead>
+                      <tr>
+                        <th class="is-sticky">Avdelning</th>
+                        {% for column in vm.normal_matrix.columns %}
+                        <th>
+                          <span class="yp-planera-page3-matrix-column-title">{{ column.display_title }}</span>
+                          <span class="yp-planera-page3-matrix-column-total">{{ column.display_total }} portioner</span>
+                        </th>
                         {% endfor %}
-                      </tbody>
-                    </table>
-                    {% endif %}
-                  </article>
-                  {% else %}
-                  <article class="yp-planera-page3-cohort">
-                    <p class="yp-planera-page3-cohort__title">Inga specialkostgrupper beräknades för detta menyval.</p>
-                  </article>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in vm.normal_matrix.rows %}
+                      <tr>
+                        <th class="is-sticky" scope="row">{{ row.display_name }}</th>
+                        {% for cell in row.cells %}
+                        <td>{{ cell.display_value }}</td>
+                        {% endfor %}
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th class="is-sticky" scope="row">TOTALT</th>
+                        {% for total in vm.normal_matrix.totals %}
+                        <th>{{ total.display_total }}</th>
+                        {% endfor %}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                {% else %}
+                <p class="empty-text">Inga data för normalkost.</p>
+                {% endif %}
+              </section>
+
+              <section class="yp-planera-page3-section yp-planera-page3-section--special" aria-labelledby="yp-planera-page3-special-title" data-page3-panel="special" {% if vm.view != 'special' %}hidden{% endif %}>
+                <div class="yp-planera-page3-section__head">
+                  <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-special-title">Specialkost</h2>
+                </div>
+
+                {% if vm.special_production_groups %}
+                <div class="yp-planera-page3-special-list">
+                  {% for group in vm.special_production_groups %}
+                  <section class="yp-planera-page3-special-group" data-page3-special-group="{{ group.combination_key }}">
+                    <div class="yp-planera-page3-special-group__head">
+                      <span class="yp-planera-page3-pill yp-planera-page3-pill--menu">{{ group.label }}</span>
+                      <span class="yp-planera-page3-special-group__count">{{ group.quantity }} portioner</span>
+                    </div>
+                    <div class="yp-planera-page3-table-wrap">
+                      <table class="yp-planera-page3-table yp-planera-page3-table--special">
+                        <thead>
+                          <tr>
+                            <th scope="col">Rätt</th>
+                            <th scope="col">Totalt</th>
+                            <th scope="col">Avdelningar</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for dish in group.dishes %}
+                          <tr data-page3-special-dish="{{ dish.option_id }}">
+                            <th scope="row">
+                              <span class="yp-planera-page3-special-dish__title">{{ dish.display_title }}</span>
+                            </th>
+                            <td>{{ dish.quantity }}</td>
+                            <td>
+                              {% if dish.department_quantities %}
+                              <div class="yp-planera-page3-special-recipients">
+                                {% for row in dish.department_quantities %}
+                                <span class="yp-planera-page3-special-recipient" data-page3-special-destination="{{ row.destination_id }}">
+                                  <span class="yp-planera-page3-special-recipient__name">{{ row.display_name }}</span>
+                                  <strong class="yp-planera-page3-special-recipient__count">{{ row.quantity }}</strong>
+                                </span>
+                                {% endfor %}
+                              </div>
+                              {% else %}
+                              <span class="empty-text">—</span>
+                              {% endif %}
+                            </td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
                   {% endfor %}
                 </div>
-              </div>
-            </section>
-            {% endfor %}
+                {% else %}
+                <p class="empty-text">Inga specialkostgrupper beräknades för detta menyval.</p>
+                {% endif %}
+              </section>
+            </div>
           </section>
         </div>
       </main>

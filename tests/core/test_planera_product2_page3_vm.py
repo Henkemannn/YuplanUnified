@@ -150,7 +150,7 @@ def test_build_product2_page3_vm_uses_orchestration_numbers_and_page2_metadata(m
 
     assert vm.site_name == "Avdelningarnas kök"
     assert vm.ready is True
-    assert vm.ready_label == "Produktionsunderlaget är klart"
+    assert vm.ready_label == "Underlag granskat"
     assert vm.page2_url == "/ui/kitchen/planering/day?ui=product2&site_id=site-1&date=2026-09-08&meal=lunch"
     assert vm.options[0].display_label == "Alt 1"
     assert vm.options[0].baseline_total == 10
@@ -159,6 +159,307 @@ def test_build_product2_page3_vm_uses_orchestration_numbers_and_page2_metadata(m
     assert [row.display_name for row in vm.options[0].normal_department_rows] == ["Avdelning A"]
     assert vm.options[0].special_cohorts[0].label == "Vegetariskt"
     assert vm.options[0].special_cohorts[0].department_quantities[0].quantity == 3
+
+
+def test_build_product2_page3_vm_overview_and_normal_matrix_projection(monkeypatch):
+    def _page2_context(**_kwargs):
+        option_1 = Product2MealOptionVM(
+            option_id="option-1",
+            variant_type="alt1",
+            display_label="Alt 1",
+            sort_order=10,
+            display_title="Vardagsgryta med rotfrukter",
+            composition_id="comp-1",
+            resolved=True,
+        )
+        option_2 = Product2MealOptionVM(
+            option_id="option-2",
+            variant_type="alt2",
+            display_label="Alt 2",
+            sort_order=20,
+            display_title="Ugnsbakad fisk med dill",
+            composition_id="comp-2",
+            resolved=True,
+        )
+        destination_1 = Product2Page2DestinationVM(
+            destination_id="dept-a",
+            display_name="Avdelning 01",
+            baseline_quantity=79,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        destination_2 = Product2Page2DestinationVM(
+            destination_id="dept-b",
+            display_name="Avdelning 11",
+            baseline_quantity=62,
+            selected_option_id="option-2",
+            choice_source="explicit",
+        )
+        requirement_group = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-timbal",
+            destination_id="dept-b",
+            label="Timbal",
+            effective_quantity=1,
+            requirements=(
+                Product2Page2RequirementVM(
+                    dietary_type_id=1,
+                    requirement_key="timbal",
+                    name="Timbal",
+                    semantics="atomic",
+                ),
+            ),
+        )
+        return Product2Page2PlanningContext(
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            status="ok",
+            publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+            options=(option_1, option_2),
+            destinations=(destination_1, destination_2),
+            requirement_groups=(requirement_group,),
+        )
+
+    option_1_plan = PlanResult(
+        totals=Totals(baseline_total=79, deviation_total=0, normal_total=79),
+        per_combination={},
+        per_unit={"dept-a": 79, "dept-b": 0},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(baseline_total=79, deviation_total=0, normal_total=79, per_combination={}, per_form={}),
+            "dept-b": UnitBreakdown(baseline_total=0, deviation_total=0, normal_total=0, per_combination={}, per_form={}),
+        },
+        warnings=[],
+    )
+    option_2_plan = PlanResult(
+        totals=Totals(baseline_total=62, deviation_total=8, normal_total=54),
+        per_combination={"special__timbal": 8},
+        per_unit={"dept-a": 0, "dept-b": 54},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(baseline_total=0, deviation_total=0, normal_total=0, per_combination={"special__timbal": 0}, per_form={}),
+            "dept-b": UnitBreakdown(baseline_total=62, deviation_total=8, normal_total=54, per_combination={"special__timbal": 8}, per_form={"special": 8}),
+        },
+        warnings=[],
+    )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_planning_context", _page2_context)
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.run_kommun_meal_orchestration",
+        lambda **_: KommunMealOrchestrationResult(
+            tenant_id=1,
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            publication_identity=None,
+            options=(
+                KommunMealOptionResult(
+                    option_id="option-1",
+                    display_title="Vardagsgryta med rotfrukter",
+                    assigned_destination_ids=("dept-a",),
+                    assigned_destination_count=1,
+                    has_demand=True,
+                    requires_review=True,
+                    review_state="ready",
+                    review_is_stale=False,
+                    blockers=(),
+                    planning_slice=None,
+                    plan_result=option_1_plan,
+                    acceptance_issues=(),
+                ),
+                KommunMealOptionResult(
+                    option_id="option-2",
+                    display_title="Ugnsbakad fisk med dill",
+                    assigned_destination_ids=("dept-b",),
+                    assigned_destination_count=1,
+                    has_demand=True,
+                    requires_review=True,
+                    review_state="ready",
+                    review_is_stale=False,
+                    blockers=(),
+                    planning_slice=None,
+                    plan_result=option_2_plan,
+                    acceptance_issues=(),
+                ),
+            ),
+            unassigned_destinations=(),
+            blockers=(),
+            ready=True,
+        ),
+    )
+
+    vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
+
+    assert [option.display_title for option in vm.overview_options] == ["Vardagsgryta med rotfrukter", "Ugnsbakad fisk med dill"]
+    assert vm.overview_options[0].baseline_total == 79
+    assert vm.overview_options[0].normal_total == 79
+    assert vm.overview_options[0].special_total == 0
+    assert vm.overview_options[1].baseline_total == 62
+    assert vm.overview_options[1].normal_total == 54
+    assert vm.overview_options[1].special_total == 8
+
+    assert [column.display_title for column in vm.normal_matrix.columns] == ["Vardagsgryta med rotfrukter", "Ugnsbakad fisk med dill"]
+    assert vm.normal_matrix.rows[0].display_name == "Avdelning 01"
+    assert vm.normal_matrix.rows[0].cells[0].display_value == "79"
+    assert vm.normal_matrix.rows[0].cells[1].display_value == "—"
+    assert vm.normal_matrix.rows[1].cells[0].display_value == "—"
+    assert vm.normal_matrix.rows[1].cells[1].display_value == "54"
+    assert [total.display_total for total in vm.normal_matrix.totals] == ["79", "54"]
+
+
+def test_build_product2_page3_vm_special_production_and_destination_views_group_exact_cohorts(monkeypatch):
+    def _page2_context(**_kwargs):
+        option_1 = Product2MealOptionVM(
+            option_id="option-1",
+            variant_type="alt1",
+            display_label="Alt 1",
+            sort_order=10,
+            display_title="Vardagsgryta med rotfrukter",
+            composition_id="comp-1",
+            resolved=True,
+        )
+        option_2 = Product2MealOptionVM(
+            option_id="option-2",
+            variant_type="alt2",
+            display_label="Alt 2",
+            sort_order=20,
+            display_title="Ugnsbakad fisk med dill",
+            composition_id="comp-2",
+            resolved=True,
+        )
+        destination_1 = Product2Page2DestinationVM(
+            destination_id="dept-a",
+            display_name="Avdelning 16",
+            baseline_quantity=10,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        destination_2 = Product2Page2DestinationVM(
+            destination_id="dept-b",
+            display_name="Avdelning 11",
+            baseline_quantity=12,
+            selected_option_id="option-2",
+            choice_source="explicit",
+        )
+        requirement_group_timbal = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-timbal",
+            destination_id="dept-a",
+            label="Timbal",
+            effective_quantity=1,
+            requirements=(
+                Product2Page2RequirementVM(
+                    dietary_type_id=1,
+                    requirement_key="timbal",
+                    name="Timbal",
+                    semantics="atomic",
+                ),
+            ),
+        )
+        requirement_group_glutenfri = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-glutenfri",
+            destination_id="dept-b",
+            label="Glutenfri",
+            effective_quantity=1,
+            requirements=(
+                Product2Page2RequirementVM(
+                    dietary_type_id=2,
+                    requirement_key="glutenfri",
+                    name="Glutenfri",
+                    semantics="atomic",
+                ),
+            ),
+        )
+        return Product2Page2PlanningContext(
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            status="ok",
+            publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+            options=(option_1, option_2),
+            destinations=(destination_1, destination_2),
+            requirement_groups=(requirement_group_timbal, requirement_group_glutenfri),
+        )
+
+    option_1_plan = PlanResult(
+        totals=Totals(baseline_total=20, deviation_total=2, normal_total=18),
+        per_combination={"special__timbal__glutenfri": 2},
+        per_unit={"dept-a": 18},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(baseline_total=20, deviation_total=2, normal_total=18, per_combination={"special__timbal__glutenfri": 2}, per_form={"special": 2}),
+        },
+        warnings=[],
+    )
+    option_2_plan = PlanResult(
+        totals=Totals(baseline_total=15, deviation_total=1, normal_total=14),
+        per_combination={"special__timbal__glutenfri": 1},
+        per_unit={"dept-b": 14},
+        per_unit_breakdown={
+            "dept-b": UnitBreakdown(baseline_total=15, deviation_total=1, normal_total=14, per_combination={"special__timbal__glutenfri": 1}, per_form={"special": 1}),
+        },
+        warnings=[],
+    )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_planning_context", _page2_context)
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.run_kommun_meal_orchestration",
+        lambda **_: KommunMealOrchestrationResult(
+            tenant_id=1,
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            publication_identity=None,
+            options=(
+                KommunMealOptionResult(
+                    option_id="option-1",
+                    display_title="Vardagsgryta med rotfrukter",
+                    assigned_destination_ids=("dept-a",),
+                    assigned_destination_count=1,
+                    has_demand=True,
+                    requires_review=True,
+                    review_state="ready",
+                    review_is_stale=False,
+                    blockers=(),
+                    planning_slice=None,
+                    plan_result=option_1_plan,
+                    acceptance_issues=(),
+                ),
+                KommunMealOptionResult(
+                    option_id="option-2",
+                    display_title="Ugnsbakad fisk med dill",
+                    assigned_destination_ids=("dept-b",),
+                    assigned_destination_count=1,
+                    has_demand=True,
+                    requires_review=True,
+                    review_state="ready",
+                    review_is_stale=False,
+                    blockers=(),
+                    planning_slice=None,
+                    plan_result=option_2_plan,
+                    acceptance_issues=(),
+                ),
+            ),
+            unassigned_destinations=(),
+            blockers=(),
+            ready=True,
+        ),
+    )
+
+    vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
+
+    assert vm.special_production_groups[0].label == "Timbal + Glutenfri"
+    assert vm.special_production_groups[0].quantity == 3
+    assert [dish.display_title for dish in vm.special_production_groups[0].dishes] == ["Vardagsgryta med rotfrukter", "Ugnsbakad fisk med dill"]
+    assert [dish.quantity for dish in vm.special_production_groups[0].dishes] == [2, 1]
+
+    assert vm.special_destination_groups[0].display_name == "Avdelning 16"
+    assert vm.special_destination_groups[0].rows[0].label == "Timbal + Glutenfri"
+    assert vm.special_destination_groups[0].rows[0].quantity == 2
+    assert [dish.quantity for dish in vm.special_destination_groups[0].rows[0].dishes] == [2]
+
+    assert vm.special_destination_groups[1].display_name == "Avdelning 11"
+    assert vm.special_destination_groups[1].rows[0].label == "Timbal + Glutenfri"
+    assert vm.special_destination_groups[1].rows[0].quantity == 1
+    assert [dish.quantity for dish in vm.special_destination_groups[1].rows[0].dishes] == [1]
 
 
 def test_build_product2_page3_vm_combines_multi_key_cohort_and_uses_canonical_names(monkeypatch):
@@ -250,6 +551,104 @@ def test_build_product2_page3_vm_combines_multi_key_cohort_and_uses_canonical_na
     assert vm.options[0].special_cohorts[0].label == "Glutenfri + Laktosfri"
     assert vm.options[0].special_cohorts[0].quantity == 2
     assert vm.options[0].special_cohorts[0].department_quantities[0].display_name == "Avdelning A"
+
+
+def test_build_product2_page3_vm_filters_empty_special_destination_groups_and_keeps_order(monkeypatch):
+    def _page2_context(**_kwargs):
+        option = Product2MealOptionVM(
+            option_id="option-1",
+            variant_type="alt1",
+            display_label="Alt 1",
+            sort_order=10,
+            display_title="Vardagsgryta med rotfrukter",
+            composition_id="comp-1",
+            resolved=True,
+        )
+        destination_a = Product2Page2DestinationVM(
+            destination_id="dept-a",
+            display_name="Avdelning A",
+            baseline_quantity=10,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        destination_b = Product2Page2DestinationVM(
+            destination_id="dept-b",
+            display_name="Avdelning B",
+            baseline_quantity=20,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        destination_c = Product2Page2DestinationVM(
+            destination_id="dept-c",
+            display_name="Avdelning C",
+            baseline_quantity=30,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        requirement_group_b = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-b",
+            destination_id="dept-b",
+            label="Glutenfri",
+            effective_quantity=2,
+            requirements=(
+                Product2Page2RequirementVM(
+                    dietary_type_id=1,
+                    requirement_key="glutenfri",
+                    name="Glutenfri",
+                    semantics="atomic",
+                ),
+            ),
+        )
+        requirement_group_c = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-c",
+            destination_id="dept-c",
+            label="Laktosfri",
+            effective_quantity=3,
+            requirements=(
+                Product2Page2RequirementVM(
+                    dietary_type_id=2,
+                    requirement_key="laktosfri",
+                    name="Laktosfri",
+                    semantics="atomic",
+                ),
+            ),
+        )
+        return Product2Page2PlanningContext(
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            status="ok",
+            publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+            options=(option,),
+            destinations=(destination_a, destination_b, destination_c),
+            requirement_groups=(requirement_group_b, requirement_group_c),
+        )
+
+    plan_result = PlanResult(
+        totals=Totals(baseline_total=60, deviation_total=5, normal_total=55),
+        per_combination={"special__glutenfri": 2, "special__laktosfri": 3},
+        per_unit={"dept-a": 20, "dept-b": 15, "dept-c": 20},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(baseline_total=10, deviation_total=0, normal_total=10, per_combination={}, per_form={}),
+            "dept-b": UnitBreakdown(baseline_total=20, deviation_total=2, normal_total=18, per_combination={"special__glutenfri": 2}, per_form={"special": 2}),
+            "dept-c": UnitBreakdown(baseline_total=30, deviation_total=3, normal_total=27, per_combination={"special__laktosfri": 3}, per_form={"special": 3}),
+        },
+        warnings=[],
+    )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_planning_context", _page2_context)
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.run_kommun_meal_orchestration",
+        lambda **_: _meal_result_with_option(plan_result=plan_result),
+    )
+
+    vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch", view="special", special_view="department")
+
+    assert [destination.display_name for destination in vm.special_destination_groups] == ["Avdelning B", "Avdelning C"]
+    assert all(destination.display_name != "Avdelning A" for destination in vm.special_destination_groups)
+    assert [row.label for row in vm.special_destination_groups[0].rows] == ["Glutenfri"]
+    assert [row.label for row in vm.special_destination_groups[1].rows] == ["Laktosfri"]
 
 
 def test_build_product2_page3_vm_zero_demand_option_stays_visible_without_invented_totals(monkeypatch):

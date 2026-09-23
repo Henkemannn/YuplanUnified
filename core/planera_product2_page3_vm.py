@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date as _date
 
 from sqlalchemy import text
@@ -27,10 +27,77 @@ class Product2Page3DepartmentQuantityVM:
 
 
 @dataclass(frozen=True, slots=True)
+class Product2Page3NormalMatrixCellVM:
+    option_id: str
+    quantity: int | None
+    display_value: str
+
+
+@dataclass(frozen=True, slots=True)
+class Product2Page3NormalMatrixColumnVM:
+    option_id: str
+    display_title: str
+    total: int | None
+    display_total: str
+
+
+@dataclass(frozen=True, slots=True)
+class Product2Page3NormalMatrixRowVM:
+    destination_id: str
+    display_name: str
+    cells: tuple[Product2Page3NormalMatrixCellVM, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Product2Page3NormalMatrixVM:
+    columns: tuple[Product2Page3NormalMatrixColumnVM, ...]
+    rows: tuple[Product2Page3NormalMatrixRowVM, ...]
+    totals: tuple[Product2Page3NormalMatrixColumnVM, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Product2Page3SpecialCohortVM:
     label: str
     quantity: int
     department_quantities: tuple[Product2Page3DepartmentQuantityVM, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Product2Page3SpecialDishVM:
+    option_id: str
+    display_title: str
+    quantity: int
+    department_quantities: tuple[Product2Page3DepartmentQuantityVM, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Product2Page3SpecialProductionGroupVM:
+    combination_key: str
+    label: str
+    quantity: int
+    dishes: tuple[Product2Page3SpecialDishVM, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Product2Page3SpecialDestinationDishVM:
+    option_id: str
+    display_title: str
+    quantity: int
+
+
+@dataclass(frozen=True, slots=True)
+class Product2Page3SpecialDestinationRowVM:
+    combination_key: str
+    label: str
+    quantity: int
+    dishes: tuple[Product2Page3SpecialDestinationDishVM, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Product2Page3SpecialDestinationGroupVM:
+    destination_id: str
+    display_name: str
+    rows: tuple[Product2Page3SpecialDestinationRowVM, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +139,15 @@ class Product2Page3VM:
     publication_identity: object | None
     options: tuple[Product2Page3OptionVM, ...]
     unassigned_destinations: tuple[Product2Page3DestinationVM, ...]
+    view: str = "overview"
+    special_view: str = "production"
+    overview_options: tuple[Product2Page3OptionVM, ...] = ()
+    normal_matrix: Product2Page3NormalMatrixVM | None = None
+    special_production_groups: tuple[Product2Page3SpecialProductionGroupVM, ...] = ()
+    special_destination_groups: tuple[Product2Page3SpecialDestinationGroupVM, ...] = ()
+    navigation_urls: dict[str, str] = field(default_factory=dict)
+    special_navigation_urls: dict[str, str] = field(default_factory=dict)
+    service_date_compact_label: str = ""
 
 
 def _normalize_tenant_id(value: object) -> int:
@@ -136,6 +212,34 @@ def _format_service_date_label(service_date: _date) -> str:
     }
     weekday = service_date.weekday()
     return f"{day_names.get(weekday, '')} {service_date.day} {month_names.get(service_date.month, '')} {service_date.year}".strip()
+
+
+def _format_service_date_compact_label(service_date: _date) -> str:
+    day_names = {
+        0: "mån",
+        1: "tis",
+        2: "ons",
+        3: "tors",
+        4: "fre",
+        5: "lör",
+        6: "sön",
+    }
+    month_names = {
+        1: "jan",
+        2: "feb",
+        3: "mar",
+        4: "apr",
+        5: "maj",
+        6: "jun",
+        7: "jul",
+        8: "aug",
+        9: "sep",
+        10: "okt",
+        11: "nov",
+        12: "dec",
+    }
+    weekday = service_date.weekday()
+    return f"{day_names.get(weekday, '')} {service_date.day} {month_names.get(service_date.month, '')}".strip()
 
 
 def _load_site_name(*, tenant_id: int, site_id: str) -> str:
@@ -210,6 +314,18 @@ def _combo_label_from_key(key: str, requirement_name_map: dict[str, str]) -> str
     return " + ".join(labels)
 
 
+def _display_matrix_quantity(value: int | None) -> str:
+    if value is None or int(value) <= 0:
+        return "—"
+    return str(int(value))
+
+
+def _display_summary_quantity(value: int | None) -> str:
+    if value is None:
+        return "—"
+    return str(int(value))
+
+
 def _department_rows_for_combination(
     *,
     option_result: KommunMealOptionResult,
@@ -252,6 +368,237 @@ def _normal_department_rows(
             )
         )
     return tuple(rows)
+
+
+def _build_normal_matrix(
+    *,
+    options: tuple[KommunMealOptionResult, ...],
+    context_options,
+    destination_map: dict[str, Product2Page3DestinationVM],
+) -> Product2Page3NormalMatrixVM:
+    option_results = {option.option_id: option for option in options}
+    columns: list[Product2Page3NormalMatrixColumnVM] = []
+    rows: list[Product2Page3NormalMatrixRowVM] = []
+
+    for context_option in context_options:
+        option_result = option_results.get(str(context_option.option_id))
+        if option_result is None or option_result.plan_result is None:
+            columns.append(
+                Product2Page3NormalMatrixColumnVM(
+                    option_id=str(context_option.option_id),
+                    display_title=str(getattr(context_option, "display_title", "")).strip(),
+                    total=None,
+                    display_total="—",
+                )
+            )
+            continue
+        total = int(option_result.plan_result.totals.normal_total)
+        columns.append(
+            Product2Page3NormalMatrixColumnVM(
+                option_id=option_result.option_id,
+                display_title=option_result.display_title,
+                total=total,
+                display_total=_display_summary_quantity(total),
+            )
+        )
+
+    for destination in destination_map.values():
+        cells: list[Product2Page3NormalMatrixCellVM] = []
+        for context_option in context_options:
+            option_result = option_results.get(str(context_option.option_id))
+            quantity: int | None = None
+            if option_result is not None and option_result.plan_result is not None:
+                breakdown = option_result.plan_result.per_unit_breakdown.get(destination.destination_id)
+                if breakdown is not None:
+                    quantity = int(breakdown.normal_total)
+            cells.append(
+                Product2Page3NormalMatrixCellVM(
+                    option_id=str(context_option.option_id),
+                    quantity=quantity,
+                    display_value=_display_matrix_quantity(quantity),
+                )
+            )
+        rows.append(
+            Product2Page3NormalMatrixRowVM(
+                destination_id=destination.destination_id,
+                display_name=destination.display_name,
+                cells=tuple(cells),
+            )
+        )
+
+    return Product2Page3NormalMatrixVM(columns=tuple(columns), rows=tuple(rows), totals=tuple(columns))
+
+
+def _build_special_production_groups(
+    *,
+    options: tuple[KommunMealOptionResult, ...],
+    context_options,
+    destination_map: dict[str, Product2Page3DestinationVM],
+    requirement_name_map: dict[str, str],
+) -> tuple[Product2Page3SpecialProductionGroupVM, ...]:
+    option_results = {option.option_id: option for option in options}
+    grouped: dict[str, dict[str, object]] = {}
+    group_order: list[str] = []
+    option_order = {str(context_option.option_id): index for index, context_option in enumerate(context_options)}
+
+    for context_option in context_options:
+        option_result = option_results.get(str(context_option.option_id))
+        if option_result is None or option_result.plan_result is None:
+            continue
+        for combination_key, quantity in option_result.plan_result.per_combination.items():
+            if int(quantity) <= 0:
+                continue
+            label = _combo_label_from_key(combination_key, requirement_name_map)
+            group = grouped.get(combination_key)
+            if group is None:
+                group = {
+                    "combination_key": combination_key,
+                    "label": label,
+                    "quantity": 0,
+                    "dishes": {},
+                }
+                grouped[combination_key] = group
+                group_order.append(combination_key)
+            group["quantity"] = int(group["quantity"]) + int(quantity)
+            dishes: dict[str, dict[str, object]] = group["dishes"]  # type: ignore[assignment]
+            dish = dishes.get(option_result.option_id)
+            if dish is None:
+                dish = {
+                    "option_id": option_result.option_id,
+                    "display_title": option_result.display_title,
+                    "quantity": 0,
+                    "department_quantities": [],
+                    "order": option_order.get(option_result.option_id, 0),
+                }
+                dishes[option_result.option_id] = dish
+            dish["quantity"] = int(dish["quantity"]) + int(quantity)
+            department_quantities = _department_rows_for_combination(
+                option_result=option_result,
+                combination_key=combination_key,
+                destination_map=destination_map,
+            )
+            existing_rows = list(dish["department_quantities"])  # type: ignore[index]
+            existing_rows.extend(department_quantities)
+            dish["department_quantities"] = existing_rows
+
+    groups: list[Product2Page3SpecialProductionGroupVM] = []
+    for combination_key in sorted(group_order, key=lambda key: (-(int(grouped[key]["quantity"])), str(grouped[key]["label"]))):
+        group = grouped[combination_key]
+        dishes_map: dict[str, dict[str, object]] = group["dishes"]  # type: ignore[assignment]
+        dishes: list[Product2Page3SpecialDishVM] = []
+        for dish in sorted(dishes_map.values(), key=lambda item: (int(item.get("order", 0)), str(item.get("display_title", "")))):
+            rows = tuple(dish.get("department_quantities") or ())
+            dishes.append(
+                Product2Page3SpecialDishVM(
+                    option_id=str(dish.get("option_id", "")),
+                    display_title=str(dish.get("display_title", "")),
+                    quantity=int(dish.get("quantity", 0)),
+                    department_quantities=rows,
+                )
+            )
+        groups.append(
+            Product2Page3SpecialProductionGroupVM(
+                combination_key=str(group["combination_key"]),
+                label=str(group["label"]),
+                quantity=int(group["quantity"]),
+                dishes=tuple(dishes),
+            )
+        )
+    return tuple(groups)
+
+
+def _build_special_destination_groups(
+    *,
+    options: tuple[KommunMealOptionResult, ...],
+    context_options,
+    destination_map: dict[str, Product2Page3DestinationVM],
+    requirement_name_map: dict[str, str],
+) -> tuple[Product2Page3SpecialDestinationGroupVM, ...]:
+    option_results = {option.option_id: option for option in options}
+    destination_groups: dict[str, dict[str, object]] = {}
+    destination_order = {destination_id: index for index, destination_id in enumerate(destination_map.keys())}
+    option_order = {str(context_option.option_id): index for index, context_option in enumerate(context_options)}
+
+    for context_option in context_options:
+        option_result = option_results.get(str(context_option.option_id))
+        if option_result is None or option_result.plan_result is None:
+            continue
+        for destination_id, breakdown in option_result.plan_result.per_unit_breakdown.items():
+            destination = destination_map.get(destination_id)
+            if destination is None:
+                raise Product2Page3VmError(f"destination_missing:{destination_id}")
+            destination_group = destination_groups.get(destination_id)
+            if destination_group is None:
+                destination_group = {
+                    "destination_id": destination.destination_id,
+                    "display_name": destination.display_name,
+                    "rows": {},
+                    "order": destination_order.get(destination_id, 0),
+                }
+                destination_groups[destination_id] = destination_group
+            rows_map: dict[str, dict[str, object]] = destination_group["rows"]  # type: ignore[assignment]
+            for combination_key, quantity in breakdown.per_combination.items():
+                if int(quantity) <= 0:
+                    continue
+                label = _combo_label_from_key(combination_key, requirement_name_map)
+                row = rows_map.get(combination_key)
+                if row is None:
+                    row = {
+                        "combination_key": combination_key,
+                        "label": label,
+                        "quantity": 0,
+                        "dishes": {},
+                    }
+                    rows_map[combination_key] = row
+                row["quantity"] = int(row["quantity"]) + int(quantity)
+                dishes: dict[str, dict[str, object]] = row["dishes"]  # type: ignore[assignment]
+                dish = dishes.get(option_result.option_id)
+                if dish is None:
+                    dish = {
+                        "option_id": option_result.option_id,
+                        "display_title": option_result.display_title,
+                        "quantity": 0,
+                        "order": option_order.get(option_result.option_id, 0),
+                    }
+                    dishes[option_result.option_id] = dish
+                dish["quantity"] = int(dish["quantity"]) + int(quantity)
+
+    groups: list[Product2Page3SpecialDestinationGroupVM] = []
+    for destination_id, destination_group in sorted(
+        destination_groups.items(),
+        key=lambda item: (int(item[1].get("order", 0)), str(item[1].get("display_name", ""))),
+    ):
+        rows_map: dict[str, dict[str, object]] = destination_group["rows"]  # type: ignore[assignment]
+        if not rows_map:
+            continue
+        rows: list[Product2Page3SpecialDestinationRowVM] = []
+        for row in sorted(rows_map.values(), key=lambda item: (-(int(item.get("quantity", 0))), str(item.get("label", "")))):
+            dishes_map: dict[str, dict[str, object]] = row["dishes"]  # type: ignore[assignment]
+            dishes: list[Product2Page3SpecialDestinationDishVM] = []
+            for dish in sorted(dishes_map.values(), key=lambda item: (int(item.get("order", 0)), str(item.get("display_title", "")))):
+                dishes.append(
+                    Product2Page3SpecialDestinationDishVM(
+                        option_id=str(dish.get("option_id", "")),
+                        display_title=str(dish.get("display_title", "")),
+                        quantity=int(dish.get("quantity", 0)),
+                    )
+                )
+            rows.append(
+                Product2Page3SpecialDestinationRowVM(
+                    combination_key=str(row["combination_key"]),
+                    label=str(row["label"]),
+                    quantity=int(row["quantity"]),
+                    dishes=tuple(dishes),
+                )
+            )
+        groups.append(
+            Product2Page3SpecialDestinationGroupVM(
+                destination_id=str(destination_group["destination_id"]),
+                display_name=str(destination_group["display_name"]),
+                rows=tuple(rows),
+            )
+        )
+    return tuple(groups)
 
 
 def _option_status_label(option: KommunMealOptionResult) -> str | None:
@@ -327,11 +674,19 @@ def build_product2_page3_vm(
     site_id,
     service_date,
     meal,
+    view: str | None = None,
+    special_view: str | None = None,
 ) -> Product2Page3VM:
     normalized_tenant_id = _normalize_tenant_id(tenant_id)
     normalized_site_id = _normalize_site_id(site_id)
     normalized_service_date = _normalize_service_date(service_date)
     normalized_meal = _normalize_meal(meal)
+    normalized_view = str(view or "overview").strip().lower()
+    if normalized_view not in {"overview", "normal", "special"}:
+        normalized_view = "overview"
+    normalized_special_view = str(special_view or "production").strip().lower()
+    if normalized_special_view not in {"production", "department"}:
+        normalized_special_view = "production"
 
     site_name = _load_site_name(tenant_id=normalized_tenant_id, site_id=normalized_site_id)
     page2_context = build_product2_page2_planning_context(
@@ -365,6 +720,39 @@ def build_product2_page3_vm(
             )
         )
 
+    overview_options = tuple(options)
+    normal_matrix = _build_normal_matrix(
+        options=meal_result.options,
+        context_options=page2_context.options,
+        destination_map=destination_map,
+    )
+    special_production_groups = _build_special_production_groups(
+        options=meal_result.options,
+        context_options=page2_context.options,
+        destination_map=destination_map,
+        requirement_name_map=requirement_name_map,
+    )
+    special_destination_groups = _build_special_destination_groups(
+        options=meal_result.options,
+        context_options=page2_context.options,
+        destination_map=destination_map,
+        requirement_name_map=requirement_name_map,
+    )
+
+    base_url = (
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={normalized_site_id}"
+        f"&date={normalized_service_date.isoformat()}&meal={normalized_meal}"
+    )
+    navigation_urls = {
+        "overview": f"{base_url}&view=overview",
+        "normal": f"{base_url}&view=normal",
+        "special": f"{base_url}&view=special&special_view={normalized_special_view}",
+    }
+    special_navigation_urls = {
+        "production": f"{base_url}&view=special&special_view=production",
+        "department": f"{base_url}&view=special&special_view=department",
+    }
+
     unassigned_destinations: list[Product2Page3DestinationVM] = []
     for destination in meal_result.unassigned_destinations:
         mapped = destination_map.get(destination.destination_id)
@@ -388,13 +776,22 @@ def build_product2_page3_vm(
         site_name=site_name,
         service_date=normalized_service_date.isoformat(),
         service_date_label=_format_service_date_label(normalized_service_date),
+        service_date_compact_label=_format_service_date_compact_label(normalized_service_date),
         meal=normalized_meal,
         meal_label="Lunch" if normalized_meal == "lunch" else normalized_meal.capitalize(),
         ready=bool(meal_result.ready),
-        ready_label="Produktionsunderlaget är klart" if meal_result.ready else "Produktionsunderlaget är inte komplett",
+        ready_label="Underlag granskat" if meal_result.ready else "Underlag behöver granskas",
         blockers=meal_result.blockers,
         blocker_messages=tuple(blocker_messages),
+        view=normalized_view,
+        special_view=normalized_special_view,
+        overview_options=overview_options,
+        normal_matrix=normal_matrix,
+        special_production_groups=special_production_groups,
+        special_destination_groups=special_destination_groups,
         page2_url=f"/ui/kitchen/planering/day?ui=product2&site_id={normalized_site_id}&date={normalized_service_date.isoformat()}&meal={normalized_meal}",
+        navigation_urls=navigation_urls,
+        special_navigation_urls=special_navigation_urls,
         publication_identity=meal_result.publication_identity,
         options=tuple(options),
         unassigned_destinations=tuple(unassigned_destinations),
@@ -403,8 +800,17 @@ def build_product2_page3_vm(
 
 __all__ = [
     "Product2Page3DepartmentQuantityVM",
+    "Product2Page3NormalMatrixCellVM",
+    "Product2Page3NormalMatrixColumnVM",
+    "Product2Page3NormalMatrixRowVM",
+    "Product2Page3NormalMatrixVM",
     "Product2Page3OptionVM",
     "Product2Page3DestinationVM",
+    "Product2Page3SpecialDestinationDishVM",
+    "Product2Page3SpecialDestinationGroupVM",
+    "Product2Page3SpecialDestinationRowVM",
+    "Product2Page3SpecialDishVM",
+    "Product2Page3SpecialProductionGroupVM",
     "Product2Page3SpecialCohortVM",
     "Product2Page3VM",
     "Product2Page3VmError",

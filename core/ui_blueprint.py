@@ -746,6 +746,8 @@ def kitchen_planering_product2_day_production():
     site_id = (request.args.get("site_id") or "").strip()
     date_raw = (request.args.get("date") or "").strip()
     meal = (request.args.get("meal") or "").strip().lower()
+    view = (request.args.get("view") or "overview").strip().lower()
+    special_view = (request.args.get("special_view") or "production").strip().lower()
     if not site_id or not date_raw or meal != "lunch":
         return abort(404)
     try:
@@ -772,6 +774,8 @@ def kitchen_planering_product2_day_production():
             site_id=site_id,
             service_date=service_date,
             meal=meal,
+            view=view,
+            special_view=special_view,
         )
     except Product2Page3VmError:
         return abort(404)
