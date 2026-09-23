@@ -425,6 +425,8 @@ def test_two_options_render_titles_and_destination_labels(app_session):
     assert "1 st" not in html
     assert "destination saknar menyval" not in html
     assert "Inga relevanta kostbehov för den här rätten ännu." not in html
+    assert "Visa produktionsunderlag" in html
+    assert "/ui/kitchen/planering/day/production?ui=product2" in html
 
 
 def test_three_options_render_collection_shape(app_session):

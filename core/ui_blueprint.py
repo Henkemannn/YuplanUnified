@@ -23,6 +23,7 @@ from .planning_option_review import (
 )
 from .planera_product2_menu_vm import Product2MealOptionsError, build_product2_meal_options_vm
 from .planera_product2_page2_context import Product2Page2ContextError, build_product2_page2_planning_context
+from .planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
 from datetime import date as _date
 from datetime import datetime as _datetime
 from datetime import time as _time
@@ -723,6 +724,59 @@ def kitchen_planering_product2_day():
         service_date=service_date,
     )
     return render_template("ui/kitchen_product_planera_page2.html", vm=vm)
+
+
+@ui_bp.get("/ui/kitchen/planering/day/production")
+@require_roles(*KITCHEN_UI_ROLES)
+def kitchen_planering_product2_day_production():
+    from .context import get_active_context as _get_ctx
+
+    if (request.args.get("ui") or "").strip().lower() != "product2":
+        return abort(404)
+
+    ctx = _get_ctx()
+    tenant_id = ctx.get("tenant_id") if ctx.get("tenant_id") is not None else session.get("tenant_id")
+    try:
+        tenant_id = int(tenant_id)
+    except Exception:
+        return abort(404)
+    if tenant_id <= 0:
+        return abort(404)
+
+    site_id = (request.args.get("site_id") or "").strip()
+    date_raw = (request.args.get("date") or "").strip()
+    meal = (request.args.get("meal") or "").strip().lower()
+    if not site_id or not date_raw or meal != "lunch":
+        return abort(404)
+    try:
+        service_date = _date.fromisoformat(date_raw)
+    except Exception:
+        return abort(404)
+
+    db = get_session()
+    try:
+        row = db.execute(text("SELECT tenant_id FROM sites WHERE id=:i"), {"i": site_id}).fetchone()
+    finally:
+        db.close()
+    if not row:
+        return abort(404)
+    try:
+        if int(row[0]) != int(tenant_id):
+            return abort(404)
+    except Exception:
+        return abort(404)
+
+    try:
+        vm = build_product2_page3_vm(
+            tenant_id=tenant_id,
+            site_id=site_id,
+            service_date=service_date,
+            meal=meal,
+        )
+    except Product2Page3VmError:
+        return abort(404)
+
+    return render_template("ui/kitchen_product_planera_page3.html", vm=vm)
 
 
 @ui_bp.post("/ui/kitchen/planering/day/review")

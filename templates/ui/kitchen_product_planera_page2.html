@@ -171,6 +171,10 @@
                 <div class="yp-planera-page2-review-actions">
                   <button class="yp-planera-page2-review-submit" type="button" data-page2-review-submit>{{ option.review_cta_label }}</button>
                   <button class="yp-planera-page2-review-reset" type="button" data-page2-review-reset hidden>Återställ</button>
+                  <a
+                    class="yp-planera-page2-production-link"
+                    href="{{ url_for('ui.kitchen_planering_product2_day_production', ui='product2', site_id=vm.site_id, date=vm.service_date, meal=vm.meal) }}"
+                  >Visa produktionsunderlag</a>
                 </div>
                 <p class="yp-planera-page2-review-feedback" data-page2-review-feedback hidden></p>
 

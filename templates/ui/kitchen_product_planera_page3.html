@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="application-name" content="Yuplan" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Yuplan" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)" />
+  <title>{% block page_title %}Kök – Produktionsunderlag{% endblock %}</title>
+  {% set icon_version = asset_version|default('icon-20260310') %}
+  <link rel="manifest" href="/manifest.webmanifest?v={{ icon_version }}">
+  <link rel="icon" href="/favicon.ico?v={{ icon_version }}">
+  <link rel="shortcut icon" href="/favicon.ico?v={{ icon_version }}">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v={{ icon_version }}" sizes="180x180">
+  <link rel="mask-icon" href="/static/safari-pinned-tab.svg?v={{ icon_version }}" color="#111827">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/kitchen_product_shell.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/planera_product2_page3.css') }}" />
+</head>
+<body class="yp-product-body">
+  <div class="yp-product-shell">
+    <div class="yp-product-app" id="yp-product-app" data-theme="light" data-screen="production-underlag">
+      <header class="yp-product-topbar" aria-label="YUPLAN APP SHELL — LOCKED">
+        <div class="yp-product-topbar-brand">
+          <img class="yp-product-topbar-brand__mark" src="{{ url_for('static', filename='brand/v1/logo/yuplan-mark-primary.svg') }}" alt="Yuplan" />
+          <div class="yp-product-topbar-brand__copy">
+            <strong>Yuplan</strong>
+            <span>· Planera</span>
+          </div>
+        </div>
+        <div class="yp-product-status-strip" aria-label="Progress and context">
+          <div class="yp-product-status-date sr-only" id="productStatusDay">{{ vm.service_date_label }}</div>
+          <div class="yp-product-status-avatar" aria-hidden="true">HJ</div>
+        </div>
+      </header>
+
+      <main class="yp-product-panel">
+        <div class="yp-product-panel-inner">
+          <section class="yp-planera-page3-shell" aria-labelledby="yp-planera-page3-title">
+            <header class="yp-planera-page3-hero">
+              <p class="yp-planera-page3-kicker">PRODUKTIONSUNDERLAG</p>
+              <h1 class="yp-planera-page3-title" id="yp-planera-page3-title">{{ vm.service_date_label }}</h1>
+              <p class="yp-planera-page3-subtitle">{{ vm.site_name }} · {{ vm.meal_label }}</p>
+              <div class="yp-planera-page3-meta">
+                <a class="yp-planera-page3-backlink" href="{{ vm.page2_url }}">Tillbaka till granskning</a>
+                <div class="yp-planera-page3-status">
+                  <span class="yp-planera-page3-status__label">Läge</span>
+                  <p class="yp-planera-page3-status__text">{{ vm.ready_label }}</p>
+                </div>
+              </div>
+            </header>
+
+            <section class="yp-planera-page3-summary" aria-label="Sammanfattning">
+              <article class="yp-planera-page3-summary-card">
+                <p class="yp-planera-page3-summary-card__label">Menyval</p>
+                <p class="yp-planera-page3-summary-card__value">{{ vm.options|length }}</p>
+              </article>
+              <article class="yp-planera-page3-summary-card">
+                <p class="yp-planera-page3-summary-card__label">Omarkerade avdelningar</p>
+                <p class="yp-planera-page3-summary-card__value">{{ vm.unassigned_destinations|length }}</p>
+              </article>
+              <article class="yp-planera-page3-summary-card">
+                <p class="yp-planera-page3-summary-card__label">Blockerare</p>
+                <p class="yp-planera-page3-summary-card__value">{{ vm.blockers|length }}</p>
+              </article>
+              <article class="yp-planera-page3-summary-card">
+                <p class="yp-planera-page3-summary-card__label">Publikation</p>
+                <p class="yp-planera-page3-summary-card__value">{% if vm.publication_identity %}V1{% else %}Saknas{% endif %}</p>
+              </article>
+            </section>
+
+            {% if vm.blocker_messages %}
+            <section class="yp-planera-page3-alert" aria-label="Blockeringar">
+              <ul>
+                {% for message in vm.blocker_messages %}
+                <li>{{ message }}</li>
+                {% endfor %}
+              </ul>
+            </section>
+            {% endif %}
+
+            {% if vm.unassigned_destinations %}
+            <section class="yp-planera-page3-section" aria-labelledby="yp-planera-page3-unassigned-title">
+              <div class="yp-planera-page3-section__head">
+                <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-unassigned-title">Avdelningar utan menyval</h2>
+                <span class="yp-planera-page3-section__meta">{{ vm.unassigned_destinations|length }} st</span>
+              </div>
+              <div class="yp-planera-page3-cohorts">
+                {% for destination in vm.unassigned_destinations %}
+                <article class="yp-planera-page3-cohort">
+                  <div class="yp-planera-page3-cohort__head">
+                    <p class="yp-planera-page3-cohort__title">{{ destination.display_name }}</p>
+                    <span class="yp-planera-page3-cohort__count">Baslinje {{ destination.baseline_quantity }}</span>
+                  </div>
+                </article>
+                {% endfor %}
+              </div>
+            </section>
+            {% endif %}
+
+            {% for option in vm.options %}
+            <section class="yp-planera-page3-option" aria-labelledby="yp-planera-page3-option-{{ loop.index }}-title">
+              <header class="yp-planera-page3-option__head">
+                <p class="yp-planera-page3-option__kicker">{{ option.display_label|upper }}</p>
+                <h2 class="yp-planera-page3-option__title" id="yp-planera-page3-option-{{ loop.index }}-title">{{ option.display_title }}</h2>
+                {% if option.status_label %}
+                <p class="yp-planera-page3-option__status">{{ option.status_label }}</p>
+                {% endif %}
+              </header>
+
+              <div class="yp-planera-page3-breakdown" aria-label="Totals per option">
+                <article class="yp-planera-page3-breakdown-card">
+                  <p class="yp-planera-page3-breakdown-card__label">Baslinje</p>
+                  <p class="yp-planera-page3-breakdown-card__value">{{ option.baseline_total if option.baseline_total is not none else '—' }}</p>
+                </article>
+                <article class="yp-planera-page3-breakdown-card">
+                  <p class="yp-planera-page3-breakdown-card__label">Normalkost</p>
+                  <p class="yp-planera-page3-breakdown-card__value">{{ option.normal_total if option.normal_total is not none else '—' }}</p>
+                </article>
+                <article class="yp-planera-page3-breakdown-card">
+                  <p class="yp-planera-page3-breakdown-card__label">Specialkost</p>
+                  <p class="yp-planera-page3-breakdown-card__value">{{ option.special_total if option.special_total is not none else '—' }}</p>
+                </article>
+              </div>
+
+              <div class="yp-planera-page3-section" style="padding: 0; border: 0; background: transparent; box-shadow: none;">
+                <div class="yp-planera-page3-section__head">
+                  <h3 class="yp-planera-page3-section__title">Normalkost per avdelning</h3>
+                </div>
+                <table class="yp-planera-page3-table">
+                  <thead>
+                    <tr>
+                      <th>Avdelning</th>
+                      <th>Antal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in option.normal_department_rows %}
+                    <tr>
+                      <td>{{ row.display_name }}</td>
+                      <td>{{ row.quantity }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                      <td colspan="2">Inga normalkostposter för detta menyval.</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="yp-planera-page3-section" style="padding: 0; border: 0; background: transparent; box-shadow: none;">
+                <div class="yp-planera-page3-section__head">
+                  <h3 class="yp-planera-page3-section__title">Specialkostgrupper</h3>
+                </div>
+                <div class="yp-planera-page3-cohorts">
+                  {% for cohort in option.special_cohorts %}
+                  <article class="yp-planera-page3-cohort">
+                    <div class="yp-planera-page3-cohort__head">
+                      <p class="yp-planera-page3-cohort__title">{{ cohort.label }}</p>
+                      <span class="yp-planera-page3-cohort__count">{{ cohort.quantity }} st</span>
+                    </div>
+                    {% if cohort.department_quantities %}
+                    <table class="yp-planera-page3-table">
+                      <thead>
+                        <tr>
+                          <th>Avdelning</th>
+                          <th>Antal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for row in cohort.department_quantities %}
+                        <tr>
+                          <td>{{ row.display_name }}</td>
+                          <td>{{ row.quantity }}</td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                    {% endif %}
+                  </article>
+                  {% else %}
+                  <article class="yp-planera-page3-cohort">
+                    <p class="yp-planera-page3-cohort__title">Inga specialkostgrupper beräknades för detta menyval.</p>
+                  </article>
+                  {% endfor %}
+                </div>
+              </div>
+            </section>
+            {% endfor %}
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

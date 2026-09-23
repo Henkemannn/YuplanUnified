@@ -398,6 +398,29 @@ body.yp-product-body {
   transform: translateY(-1px);
 }
 
+.yp-planera-page2-production-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0.64rem 1rem;
+  border: 1px solid var(--page2-line-strong);
+  border-radius: 999px;
+  background: rgba(2, 174, 195, 0.10);
+  color: var(--page2-ink);
+  font: inherit;
+  font-weight: 750;
+  line-height: 1;
+  text-decoration: none;
+  transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, opacity 0.18s ease;
+}
+
+.yp-planera-page2-production-link:hover {
+  transform: translateY(-1px);
+  background: rgba(2, 174, 195, 0.16);
+  border-color: var(--page2-active-line);
+}
+
 .yp-planera-page2-review-feedback {
   margin: 0;
   color: var(--page2-muted);
