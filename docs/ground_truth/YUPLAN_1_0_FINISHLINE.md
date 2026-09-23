@@ -65,8 +65,8 @@ Order:
 10. Full authenticated Kommun E2E: Published Menu -> Department choice -> Page1 -> Page2 -> Planera 2.0 -> Page3.
 11. Planera 1 / Planera 2.0 parallel run and parity review.
 12. Daily destination-aware packing projection.
-13. Preserve existing fixed Serveringstillägg in production / packing output.
-14. Validate standing-needs modernization path without hardcoding only current Mos/Sallad/Ovrigt families.
+13. Preserve existing fixed Serveringstillägg in a separate Servering / Packning operational surface; do not mix them into the default normal/specialkost production worklist.
+14. Validate Serveringsanpassning modernization without hardcoding only current Mos/Sallad/Ovrigt families.
 15. Finish Department Portal / iPad / auth / print / operational polish.
 16. Kommun 1.0 Ready for Pilot.
 17. Return main development focus to Offshore 1.0.
@@ -86,7 +86,9 @@ Before Kommun 1.0 is considered operationally pilot-ready, Yuplan must be able t
 
 The packing layer must consume shared production / operational truth. It must not become a second calculation engine.
 
-Existing Serveringstillägg must be carried into this output during transition.
+Specialkost production and Serveringsanpassning remain separate operational tracks. Existing Serveringstillägg must be carried into a separate Servering / Packning surface during transition and must not clutter the default normal/specialkost production worklist.
+
+A later optional total pack list may explicitly combine both tracks for one department, one delivery location or all destinations, for example: Normalkost 8, Timbal 1, Sallad 6 — aldrig tomat, Potatismos istället för kokt potatis 1. This combined view is a downstream projection only; it does not merge the underlying domains.
 
 The architecture must also remain open to future menu-aware substitutions such as:
 - boiled potato -> mashed potato
@@ -127,8 +129,9 @@ The main launch path is now:
 Kommun Product2 flow
 -> Meal orchestration
 -> Page3 production output
--> parity
--> packing
+-> production parity
+-> separate Servering / Packning projection
+-> optional combined total-pack projection
 -> operational polish
 -> Kommun 1.0 Ready for Pilot
 
