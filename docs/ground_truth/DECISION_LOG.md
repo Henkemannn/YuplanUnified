@@ -1,5 +1,5 @@
 Status: LOCKED
-Last reviewed: 2026-08-29
+Last reviewed: 2026-09-23
 
 # Decision Log
 
@@ -50,3 +50,17 @@ Last reviewed: 2026-08-29
 - Kommun-specific `DepartmentPortalScope`, `Department`, resident/diet context, and `department_menu_choices` remain valid Kommun implementations and must not be promoted into the generic Portal Foundation model.
 - Offshore must be able to reuse the shared Portal Foundation with its own installation/vessel/site and crew/section context without replacing or weakening valid Kommun domain models.
 - Shared naming should be domain-neutral only when the concept is truly shared; avoid premature generic schemas or refactors solely for reuse.
+
+## 2026-09-23
+- The main Kommun launch phase moves from portal consolidation into the complete Product2 production chain: Page1 -> Page2 human review -> meal orchestration -> Planera 2.0 -> Page3 -> parity -> packing.
+- Planera 2.0 output is reusable production truth. Page3, packing, dashboard, print and later operational layers should consume the shared result rather than recalculate production independently.
+- Kommun 1.0 now has an explicit MVP lock in `KOMMUN_1_0_MVP_LOCK.md`.
+- A daily destination-aware packing output is part of the Kommun 1.0 operational finishline.
+- Existing `service_addons` / `department_service_addons` are valid transition input and must be preserved while Planera 2.0 replaces the production calculation path.
+- The current Mos/Sallad/Ovrigt model is not the long-term semantic boundary. Future standing operational needs must support additions, exclusions, conditional substitutions and serving/handling instructions without hardcoding specific food names into Planera Core.
+- Structured substitutions must be menu-aware and resolve against canonical Builder component knowledge where available. A replacement already present in the published dish must not create duplicate production or duplicate packing.
+- Arbitrary user-defined component substitutions such as boiled potato -> mashed potato or spaghetti -> macaroni are a required architectural capability, even if the full editor is allowed to mature after the first pilot.
+- Specialkost registration does not need a complete UI rewrite before Planera 2.0 cutover. Existing registration may remain while explicit adapters/migration produce canonical atomic requirement cohorts.
+- Planera 1 and Planera 2.0 will run in parallel before cutover. Differences must be classified as regression, legacy limitation or intentional improvement rather than forcing numerical equality when the old model is semantically weaker.
+- Packing remains an operational projection above Planera Core; it must not become a second production engine.
+- Detailed standing-needs and packing direction is captured in `docs/planera2/KOMMUN_STANDING_NEEDS_AND_PACKING.md`.
