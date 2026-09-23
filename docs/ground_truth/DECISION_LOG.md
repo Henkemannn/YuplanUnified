@@ -64,3 +64,8 @@ Last reviewed: 2026-09-23
 - Planera 1 and Planera 2.0 will run in parallel before cutover. Differences must be classified as regression, legacy limitation or intentional improvement rather than forcing numerical equality when the old model is semantically weaker.
 - Packing remains an operational projection above Planera Core; it must not become a second production engine.
 - Detailed standing-needs and packing direction is captured in `docs/planera2/KOMMUN_STANDING_NEEDS_AND_PACKING.md`.
+
+- Specialkost and Serveringsanpassning are explicitly separate Kommun tracks. Recipient-level needs belong to Specialkost and may affect Planera production; department/destination serving preferences belong to Servering/Packning and must not pollute the default normal/specialkost production worklist.
+- Scope decides the domain: one recipient "never tomato" is Specialkost, while a whole department wanting salad without tomato is Serveringsanpassning.
+- Page3 production views remain focused on normal and specialkost production. Serveringstillägg / Serveringsanpassningar are exposed through a separate operational surface.
+- A later optional total pack list may deliberately combine normal production, specialkost and resolved serveringsanpassningar for one department, one delivery location or all destinations. This is a downstream projection only and does not merge the underlying data models.
