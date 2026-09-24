@@ -1,7 +1,21 @@
 Status: LOCKED
-Last reviewed: 2026-08-27
+Last reviewed: 2026-09-24
 
 # Offshore 1.0 MVP Lock
+
+## Current Program Status
+
+No Offshore 1.0 scope change is introduced by the current Kommun Page3 work.
+
+Main development focus remains Kommun 1.0 until the Kommun Product2 production path is pilot-ready. Offshore broad MVP work stays frozen except for pilot-blocking regressions or shared-platform issues.
+
+The shared architectural boundary remains unchanged:
+
+Builder -> Business/Operational Context -> Planera 2.0
+
+Current Kommun work must not introduce Kommun-specific concepts into Planera 2.0 Core that would block Offshore reuse.
+
+When Kommun 1.0 reaches Ready for Pilot, main development focus returns to Offshore 1.0.
 
 ## Goal
 Offshore 1.0 must let a new installation be provisioned and operated without developer scripts or duplicate Builder data models. It should be pilot-ready for a real offshore kitchen while staying deliberately smaller than the long-term Offshore product.
@@ -54,6 +68,7 @@ Installation -> Menu Cycle -> Rotation Template -> Virtual Crew Slots -> Rotatio
 - Offshore owns installation, rotation, POB/crew, assignment and operational context.
 - Planera 2.0 owns production calculation.
 - Offshore must not create a second Dish/Component library or production engine.
+- Kommun-specific Specialkost primary/modifier presentation semantics must remain outside generic Planera 2.0 Core unless a future cross-domain production rule truly requires them.
 
 ## Integration Principle
 Integrate first, build own only where Yuplan creates unique value.
