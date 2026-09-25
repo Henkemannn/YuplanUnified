@@ -193,59 +193,56 @@
 .yp-planera-page3-special-production-row,
 .yp-planera-page3-special-department-row {
   display: grid;
-  grid-template-columns: max-content max-content max-content 1fr;
-  column-gap: 14px;
+  grid-template-columns: max-content max-content 1fr;
+  column-gap: 16px;
   row-gap: 6px;
   align-items: center;
   padding: 0.42rem 0;
   border-top: 1px solid var(--page2-line);
 }
 
-.yp-planera-page3-special-production-row__destination,
-.yp-planera-page3-special-department-row__label {
+.yp-planera-page3-special-production-row__primary,
+.yp-planera-page3-special-department-row__primary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
   color: var(--page2-ink);
   font-size: 0.95rem;
   font-weight: 800;
   letter-spacing: -0.02em;
-  min-width: 0;
-}
-
-.yp-planera-page3-special-production-row__count,
-.yp-planera-page3-special-department-row__count {
-  justify-self: start;
-  color: var(--page2-ink);
-  font-size: 0.95rem;
-  font-weight: 900;
-}
-
-.yp-planera-page3-special-production-row .yp-planera-page3-pill--quiet,
-.yp-planera-page3-special-department-row .yp-planera-page3-pill--quiet {
-  justify-self: start;
   white-space: nowrap;
 }
 
 .yp-planera-page3-special-production-row__destination,
-.yp-planera-page3-special-department-row__label,
-.yp-planera-page3-special-production-row__count,
-.yp-planera-page3-special-department-row__count,
-.yp-planera-page3-special-production-row .yp-planera-page3-pill--quiet,
-.yp-planera-page3-special-department-row .yp-planera-page3-pill--quiet {
+.yp-planera-page3-special-department-row__label {
   min-width: 0;
 }
 
-.yp-planera-page3-special-production-row__destination,
-.yp-planera-page3-special-department-row__label {
-  grid-column: 1;
+.yp-planera-page3-special-production-row__separator,
+.yp-planera-page3-special-department-row__separator,
+.yp-planera-page3-special-production-row__unit,
+.yp-planera-page3-special-department-row__unit {
+  color: var(--page2-muted);
+  font-weight: 650;
 }
 
-.yp-planera-page3-special-production-row__count,
-.yp-planera-page3-special-department-row__count {
-  grid-column: 2;
+.yp-planera-page3-special-production-row__quantity,
+.yp-planera-page3-special-department-row__quantity {
+  color: var(--page2-ink);
+  font-weight: 900;
+}
+
+.yp-planera-page3-special-production-row__primary,
+.yp-planera-page3-special-department-row__primary {
+  grid-column: 1;
 }
 
 .yp-planera-page3-special-production-row .yp-planera-page3-pill--quiet,
 .yp-planera-page3-special-department-row .yp-planera-page3-pill--quiet {
-  grid-column: 3;
+  grid-column: 2;
+  justify-self: start;
+  white-space: nowrap;
 }
 
 .yp-planera-page3-special-view-panel {

@@ -196,8 +196,9 @@
                         {% for dish in group.dishes %}
                           {% for row in dish.department_quantities %}
                           <div class="yp-planera-page3-special-production-row" data-page3-special-destination="{{ row.destination_id }}">
-                            <div class="yp-planera-page3-special-production-row__destination">{{ row.display_name }}</div>
-                            <strong class="yp-planera-page3-special-production-row__count">{{ row.quantity }}</strong>
+                            <div class="yp-planera-page3-special-production-row__primary">
+                              {{ row.display_name }} · {{ row.quantity }} portion{% if row.quantity != 1 %}er{% endif %}
+                            </div>
                             <span class="yp-planera-page3-pill yp-planera-page3-pill--menu yp-planera-page3-pill--quiet">{{ dish.display_title }}</span>
                           </div>
                           {% endfor %}
@@ -223,8 +224,9 @@
                         {% for row in destination.rows %}
                           {% for dish in row.dishes %}
                           <div class="yp-planera-page3-special-department-row" data-page3-special-destination="{{ destination.destination_id }}" data-page3-special-requirement="{{ row.combination_key }}">
-                            <div class="yp-planera-page3-special-department-row__label">{{ row.label }}</div>
-                            <strong class="yp-planera-page3-special-department-row__count">{{ row.quantity }}</strong>
+                            <div class="yp-planera-page3-special-department-row__primary">
+                              {{ row.label }} · {{ row.quantity }} portion{% if row.quantity != 1 %}er{% endif %}
+                            </div>
                             <span class="yp-planera-page3-pill yp-planera-page3-pill--menu yp-planera-page3-pill--quiet">{{ dish.display_title }}</span>
                           </div>
                           {% endfor %}

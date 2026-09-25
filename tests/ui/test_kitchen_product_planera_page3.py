@@ -557,6 +557,8 @@ def test_page3_route_hides_inactive_panels_for_special_department_view(app_sessi
     assert 'Glutenfri' in html
     assert 'Laktosfri' in html
     assert 'Avdelning 16' in html
+    assert 'Avdelning 11 · 1 portion' in html
+    assert 'Avdelning 16 · 3 portioner' in html
 
 
 def test_page3_route_renders_navigation_and_history_hooks(app_session, monkeypatch):
@@ -678,6 +680,7 @@ def test_page3_route_keeps_special_hierarchy_with_multi_dish_cohort(app_session,
     assert 'data-page3-special-view-panel="production"' in production_panel
     assert "RÄTT" not in production_panel
     assert "AVDELNINGAR" not in production_panel
+    assert "Avdelning 16 · 3 portioner" in production_panel
     assert "Glutenfri" in production_panel
     assert "Timbal" in production_panel
     assert "Vardagsgryta med rotfrukter" in production_panel
