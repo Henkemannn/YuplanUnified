@@ -234,6 +234,9 @@ class DepartmentRequirementGroup(Base):
     department_id: Mapped[str] = mapped_column(
         ForeignKey("departments.id", ondelete="CASCADE"), nullable=False
     )
+    primary_requirement_id: Mapped[int | None] = mapped_column(
+        ForeignKey("dietary_types.id"), nullable=True
+    )
     label: Mapped[str | None] = mapped_column(String(120), nullable=True)
     default_quantity: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true(), nullable=False)

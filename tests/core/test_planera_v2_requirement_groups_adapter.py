@@ -111,6 +111,35 @@ def test_multi_requirement_group_preserves_quantity_and_conserves_plan_total(app
         assert result.totals.normal_total == 7
 
 
+def test_primary_requirement_does_not_change_adapter_member_set(app_session) -> None:
+    with app_session.app_context():
+        site, _ = SitesRepo().create_site(f"Planera 1E primary site {uuid.uuid4()}")
+        department = _seed_department(site["id"], "Unit A")
+        gluten_key = f"req_gluten_{uuid.uuid4().hex[:8]}"
+        lactose_key = f"req_lactose_{uuid.uuid4().hex[:8]}"
+        req_a = _seed_requirement_with_key(site["id"], "Gluten", gluten_key)
+        req_b = _seed_requirement_with_key(site["id"], "Lactose", lactose_key)
+        group = DepartmentRequirementGroupsRepo().create_group(
+            department["id"],
+            2,
+            [req_a, req_b],
+            label="Primary + modifier",
+            primary_requirement_id=req_a,
+        )
+
+        slice_ = build_planning_slice_from_requirement_groups(
+            site_id=site["id"],
+            service_date=date(2026, 9, 8),
+            meal_key="lunch",
+            unit_baselines={department["id"]: 10},
+        )
+
+        assert group["primary_requirement_id"] == req_a
+        assert len(slice_.deviations) == 1
+        assert slice_.deviations[0].category_keys == [gluten_key, lactose_key]
+        assert slice_.context["requirement_group_refs"][0]["category_keys"] == [gluten_key, lactose_key]
+
+
 def test_multiple_disjoint_cohorts_count_once_per_group(app_session) -> None:
     with app_session.app_context():
         site, _ = SitesRepo().create_site(f"Planera 1E disjoint site {uuid.uuid4()}")

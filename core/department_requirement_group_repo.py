@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 import uuid
 from typing import Iterable
 
+from sqlalchemy import text
+
 from .db import get_session
 from .models import (
     Department,
@@ -13,6 +15,9 @@ from .models import (
 )
 
 
+_UNSET = object()
+
+
 class DepartmentRequirementGroupsRepo:
     def _ensure_table(self, db) -> None:
         bind = getattr(db, "bind", None)
@@ -20,6 +25,12 @@ class DepartmentRequirementGroupsRepo:
             return
         DepartmentRequirementGroup.__table__.create(bind=bind, checkfirst=True)
         DepartmentRequirementGroupRequirement.__table__.create(bind=bind, checkfirst=True)
+        try:
+            cols = {row[1] for row in db.execute(text("PRAGMA table_info('department_requirement_groups')")).fetchall()}
+            if "primary_requirement_id" not in cols:
+                db.execute(text("ALTER TABLE department_requirement_groups ADD COLUMN primary_requirement_id INTEGER"))
+        except Exception:
+            pass
 
     def _normalize_default_quantity(self, default_quantity: int | str | None) -> int:
         quantity = int(default_quantity or 0)
@@ -43,6 +54,31 @@ class DepartmentRequirementGroupsRepo:
         if not normalized:
             raise ValueError("requirements_required")
         return sorted(normalized)
+
+    def _normalize_primary_requirement_id(self, primary_requirement_id: int | str | None | object) -> int | None:
+        if primary_requirement_id is _UNSET or primary_requirement_id is None:
+            return None
+        return int(str(primary_requirement_id).strip())
+
+    def _validate_primary_against_members(
+        self,
+        *,
+        primary_requirement_id: int | None,
+        member_requirement_ids: Iterable[int],
+    ) -> None:
+        if primary_requirement_id is None:
+            return
+        if int(primary_requirement_id) not in {int(req_id) for req_id in member_requirement_ids}:
+            raise ValueError("primary_requirement_not_in_members")
+
+    def _load_group_requirement_ids(self, db, group_id: str) -> list[int]:
+        rows = (
+            db.query(DepartmentRequirementGroupRequirement.dietary_type_id)
+            .filter(DepartmentRequirementGroupRequirement.group_id == str(group_id))
+            .order_by(DepartmentRequirementGroupRequirement.dietary_type_id.asc())
+            .all()
+        )
+        return [int(row[0]) for row in rows]
 
     def _load_department_site_id(self, db, department_id: str) -> str:
         department = db.get(Department, str(department_id))
@@ -83,6 +119,7 @@ class DepartmentRequirementGroupsRepo:
         return {
             "id": str(group.id),
             "department_id": str(group.department_id),
+            "primary_requirement_id": int(group.primary_requirement_id) if getattr(group, "primary_requirement_id", None) is not None else None,
             "label": str(group.label) if group.label is not None else None,
             "default_quantity": int(group.default_quantity or 0),
             "is_active": bool(group.is_active),
@@ -103,6 +140,7 @@ class DepartmentRequirementGroupsRepo:
         default_quantity: int | str | None,
         requirement_ids: Iterable[int | str],
         label: str | None = None,
+        primary_requirement_id: int | str | None = None,
     ) -> dict:
         db = get_session()
         try:
@@ -111,6 +149,11 @@ class DepartmentRequirementGroupsRepo:
             quantity = self._normalize_default_quantity(default_quantity)
             clean_label = self._normalize_label(label)
             normalized_requirement_ids = self._normalize_requirement_ids(requirement_ids)
+            normalized_primary_requirement_id = self._normalize_primary_requirement_id(primary_requirement_id)
+            self._validate_primary_against_members(
+                primary_requirement_id=normalized_primary_requirement_id,
+                member_requirement_ids=normalized_requirement_ids,
+            )
             requirements = [
                 self._load_atomic_requirement(db, dietary_type_id, department_site_id)
                 for dietary_type_id in normalized_requirement_ids
@@ -118,6 +161,7 @@ class DepartmentRequirementGroupsRepo:
             group = DepartmentRequirementGroup(
                 id=str(uuid.uuid4()),
                 department_id=str(department_id),
+                primary_requirement_id=normalized_primary_requirement_id,
                 label=clean_label,
                 default_quantity=quantity,
                 is_active=True,
@@ -171,6 +215,7 @@ class DepartmentRequirementGroupsRepo:
         label: str | None = None,
         default_quantity: int | str | None = None,
         is_active: bool | None = None,
+        primary_requirement_id: int | str | None | object = _UNSET,
     ) -> dict | None:
         db = get_session()
         try:
@@ -178,6 +223,14 @@ class DepartmentRequirementGroupsRepo:
             group = db.get(DepartmentRequirementGroup, str(group_id))
             if group is None:
                 return None
+            if primary_requirement_id is not _UNSET:
+                normalized_primary_requirement_id = self._normalize_primary_requirement_id(primary_requirement_id)
+                current_requirement_ids = self._load_group_requirement_ids(db, group.id)
+                self._validate_primary_against_members(
+                    primary_requirement_id=normalized_primary_requirement_id,
+                    member_requirement_ids=current_requirement_ids,
+                )
+                group.primary_requirement_id = normalized_primary_requirement_id
             if label is not None:
                 group.label = self._normalize_label(label)
             if default_quantity is not None:
@@ -193,7 +246,12 @@ class DepartmentRequirementGroupsRepo:
         finally:
             db.close()
 
-    def replace_requirements(self, group_id: str, requirement_ids: Iterable[int | str]) -> dict | None:
+    def replace_requirements(
+        self,
+        group_id: str,
+        requirement_ids: Iterable[int | str],
+        primary_requirement_id: int | str | None | object = _UNSET,
+    ) -> dict | None:
         db = get_session()
         try:
             self._ensure_table(db)
@@ -202,6 +260,19 @@ class DepartmentRequirementGroupsRepo:
                 return None
             department_site_id = self._load_department_site_id(db, group.department_id)
             normalized_requirement_ids = self._normalize_requirement_ids(requirement_ids)
+            if primary_requirement_id is _UNSET:
+                current_primary_requirement_id = (
+                    int(group.primary_requirement_id)
+                    if getattr(group, "primary_requirement_id", None) is not None
+                    else None
+                )
+            else:
+                current_primary_requirement_id = self._normalize_primary_requirement_id(primary_requirement_id)
+            self._validate_primary_against_members(
+                primary_requirement_id=current_primary_requirement_id,
+                member_requirement_ids=normalized_requirement_ids,
+            )
+            group.primary_requirement_id = current_primary_requirement_id
             requirements = [
                 self._load_atomic_requirement(db, dietary_type_id, department_site_id)
                 for dietary_type_id in normalized_requirement_ids

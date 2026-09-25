@@ -233,6 +233,104 @@ def test_deterministic_reads(app_session) -> None:
         assert first["requirements"] == second["requirements"]
 
 
+def test_primary_requirement_is_serialized_and_preserved_for_singleton_group(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        requirement_id = _seed_atomic_requirements(site["id"], ["A"])[0]
+        repo = DepartmentRequirementGroupsRepo()
+
+        group = repo.create_group(
+            department["id"],
+            1,
+            [requirement_id],
+            label="Singleton",
+            primary_requirement_id=requirement_id,
+        )
+
+        assert group["primary_requirement_id"] == requirement_id
+        assert group["requirements"] == [{
+            "dietary_type_id": requirement_id,
+            "requirement_key": group["requirements"][0]["requirement_key"],
+            "name": group["requirements"][0]["name"],
+            "semantics": "atomic",
+        }]
+
+        reread = repo.get_group(str(group["id"]))
+        assert reread is not None
+        assert reread["primary_requirement_id"] == requirement_id
+
+
+def test_multi_member_group_allows_null_primary_and_valid_primary(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        a_id, b_id = _seed_atomic_requirements(site["id"], ["A", "B"])
+        repo = DepartmentRequirementGroupsRepo()
+
+        null_primary_group = repo.create_group(
+            department["id"],
+            1,
+            [a_id, b_id],
+            label="Null primary",
+            primary_requirement_id=None,
+        )
+        assert null_primary_group["primary_requirement_id"] is None
+
+        updated = repo.update_group(str(null_primary_group["id"]), primary_requirement_id=a_id)
+        assert updated is not None
+        assert updated["primary_requirement_id"] == a_id
+
+        explicit_primary_group = repo.create_group(
+            department["id"],
+            1,
+            [a_id, b_id],
+            label="Explicit primary",
+            primary_requirement_id=a_id,
+        )
+        assert explicit_primary_group["primary_requirement_id"] == a_id
+        assert {item["dietary_type_id"] for item in explicit_primary_group["requirements"]} == {a_id, b_id}
+
+
+def test_invalid_primary_is_rejected_on_create_update_and_replace(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        a_id, b_id = _seed_atomic_requirements(site["id"], ["A", "B"])
+        repo = DepartmentRequirementGroupsRepo()
+
+        with pytest.raises(ValueError, match="primary_requirement_not_in_members"):
+            repo.create_group(department["id"], 1, [a_id], label="Bad create", primary_requirement_id=b_id)
+
+        group = repo.create_group(department["id"], 1, [a_id], label="Good")
+        group_id = str(group["id"])
+
+        with pytest.raises(ValueError, match="primary_requirement_not_in_members"):
+            repo.update_group(group_id, primary_requirement_id=b_id)
+
+        updated = repo.create_group(department["id"], 1, [a_id, b_id], label="Replace target", primary_requirement_id=a_id)
+        replace_id = str(updated["id"])
+
+        with pytest.raises(ValueError, match="primary_requirement_not_in_members"):
+            repo.replace_requirements(replace_id, [b_id])
+
+        reread = repo.get_group(replace_id)
+        assert reread is not None
+        assert reread["primary_requirement_id"] == a_id
+        assert {item["dietary_type_id"] for item in reread["requirements"]} == {a_id, b_id}
+
+
+def test_replace_requirements_can_keep_primary_when_members_stay_valid(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        a_id, b_id = _seed_atomic_requirements(site["id"], ["A", "B"])
+        repo = DepartmentRequirementGroupsRepo()
+
+        group = repo.create_group(department["id"], 1, [a_id, b_id], label="Replace", primary_requirement_id=a_id)
+        updated = repo.replace_requirements(str(group["id"]), [b_id], primary_requirement_id=b_id)
+
+        assert updated is not None
+        assert updated["primary_requirement_id"] == b_id
+        assert [item["dietary_type_id"] for item in updated["requirements"]] == [b_id]
+
+
 def test_canonical_requirement_delete_is_blocked_when_group_references_it(app_session) -> None:
     with app_session.app_context():
         site, department = _seed_department(app_session)
