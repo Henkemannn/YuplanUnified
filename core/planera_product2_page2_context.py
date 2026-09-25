@@ -6,9 +6,7 @@ from datetime import date as _date
 from .commun_builder_publication import CommunBuilderPublicationService
 from .commun_builder_projection import get_shadow_projection_reader
 from .department_requirement_group_repo import DepartmentRequirementGroupsRepo
-from .department_requirement_group_service_overrides_repo import (
-    DepartmentRequirementGroupServiceOverridesRepo,
-)
+from .department_requirement_group_quantity_resolver import resolve_effective_quantity
 from .db import get_site_tenant
 from .planera_product2_menu_vm import (
     Product2MealOptionVM,
@@ -143,7 +141,6 @@ def _build_requirement_groups(
     destination_by_id: dict[str, Product2Page2DestinationVM],
 ) -> tuple[Product2Page2RequirementGroupVM, ...]:
     group_repo = DepartmentRequirementGroupsRepo()
-    override_repo = DepartmentRequirementGroupServiceOverridesRepo()
     grouped: list[Product2Page2RequirementGroupVM] = []
 
     for destination_id in destination_by_id:
@@ -151,9 +148,7 @@ def _build_requirement_groups(
             group_id = str(group.get("id") or "").strip()
             if not group_id:
                 continue
-            effective_quantity = int(
-                override_repo.resolve_effective_quantity(group_id, service_date, meal)
-            )
+            effective_quantity = int(resolve_effective_quantity(group_id, service_date, meal))
             if effective_quantity <= 0:
                 continue
             requirements = tuple(

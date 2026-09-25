@@ -25,6 +25,7 @@ from core.components import (
 from core.department_menu_choice_repo import MenuChoiceRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
 from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
+from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
 from core.planera_product2_page2_context import (
     Product2Page2ContextError,
     build_product2_page2_planning_context,
@@ -520,6 +521,42 @@ def test_other_meal_override_does_not_affect_page2_lunch_context(app_session) ->
 
         requirement_groups = {group.requirement_group_id: group for group in context.requirement_groups}
         assert requirement_groups[group_a["id"]].effective_quantity == 2
+        _assert_page2_has_no_review_shape(context)
+
+
+def test_weekday_override_applies_in_page2_context(app_session) -> None:
+    with app_session.app_context():
+        site_id = f"site-page2-weekday-{uuid.uuid4()}"
+        service_date, dept_a, dept_b, group_a, group_b = _seed_common_context(app_session=app_session, site_id=site_id)
+        year, week, _weekday = service_date.isocalendar()
+        _seed_publication(
+            app_session=app_session,
+            site_id=site_id,
+            year=year,
+            week=week,
+            builder_menu_id="builder-menu-page2-weekday",
+            builder_menu_version=1,
+            day=_builder_day_name(service_date),
+            meal_rows=[
+                ("row-alt1", "Alt 1 Dish", 10, "lunch_alt1", _builder_day_name(service_date)),
+                ("row-alt2", "Alt 2 Dish", 20, "lunch_alt2", _builder_day_name(service_date)),
+            ],
+        )
+
+        weekday_overrides = DepartmentRequirementGroupWeekdayOverridesRepo()
+        weekday_overrides.set_override(group_a["id"], service_date.isoweekday(), "lunch", 4)
+        weekday_overrides.set_override(group_b["id"], service_date.isoweekday(), "lunch", 0)
+
+        context = build_product2_page2_planning_context(
+            tenant_id=1,
+            site_id=site_id,
+            service_date=service_date,
+            meal="lunch",
+        )
+
+        requirement_groups = {group.requirement_group_id: group for group in context.requirement_groups}
+        assert requirement_groups[group_a["id"]].effective_quantity == 4
+        assert group_b["id"] not in requirement_groups
         _assert_page2_has_no_review_shape(context)
 
 

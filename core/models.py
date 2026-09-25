@@ -297,6 +297,30 @@ class DepartmentRequirementGroupServiceOverride(Base):
     )
 
 
+class DepartmentRequirementGroupWeekdayOverride(Base):
+    __tablename__ = "department_requirement_group_weekday_overrides"
+
+    group_id: Mapped[str] = mapped_column(
+        ForeignKey("department_requirement_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    weekday: Mapped[int] = mapped_column(Integer, primary_key=True)
+    meal_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    quantity: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("weekday >= 1 AND weekday <= 7", name="ck_department_requirement_group_weekday_overrides_weekday_range"),
+        CheckConstraint("quantity >= 0", name="ck_department_requirement_group_weekday_overrides_quantity_non_negative"),
+        CheckConstraint(
+            "length(trim(meal_key)) > 0",
+            name="ck_department_requirement_group_weekday_overrides_meal_key_not_empty",
+        ),
+        CheckConstraint(
+            "meal_key = lower(trim(meal_key))",
+            name="ck_department_requirement_group_weekday_overrides_meal_key_normalized",
+        ),
+    )
+
+
 class PlanningOptionReview(Base):
     __tablename__ = "planning_option_reviews"
 
