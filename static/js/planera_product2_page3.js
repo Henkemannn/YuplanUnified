@@ -5,7 +5,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const topTabs = Array.from(root.querySelectorAll("[data-page3-view-link]"));
+  const specialTabs = Array.from(root.querySelectorAll("[data-page3-special-view-link]"));
   const panels = new Map(Array.from(root.querySelectorAll("[data-page3-panel]"), (panel) => [panel.getAttribute("data-page3-panel"), panel]));
+  const specialPanels = new Map(Array.from(root.querySelectorAll("[data-page3-special-view-panel]"), (panel) => [panel.getAttribute("data-page3-special-view-panel"), panel]));
 
   const readStateFromUrl = () => {
     const params = new URLSearchParams(window.location.search);
@@ -54,6 +56,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setActiveLink(topTabs, (link) => link.getAttribute("data-page3-view") === view);
 
+    if (specialPanels.size > 0) {
+      specialPanels.forEach((panel, panelView) => {
+        panel.hidden = view !== "special" || panelView !== resolvedSpecialView;
+      });
+      setActiveLink(specialTabs, (link) => view === "special" && link.getAttribute("data-page3-special-view") === resolvedSpecialView);
+    }
+
     if (view === "special") {
       lastSpecialView = resolvedSpecialView;
     }
@@ -75,6 +84,17 @@ document.addEventListener("DOMContentLoaded", () => {
       event.preventDefault();
       const specialView = view === "special" ? lastSpecialView : lastSpecialView;
       showState({ view, specialView }, { updateHistory: true });
+    });
+  });
+
+  specialTabs.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const specialView = link.getAttribute("data-page3-special-view");
+      if (!specialView) {
+        return;
+      }
+      event.preventDefault();
+      showState({ view: "special", specialView }, { updateHistory: true });
     });
   });
 

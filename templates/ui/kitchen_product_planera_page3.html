@@ -177,57 +177,66 @@
               <section class="yp-planera-page3-section yp-planera-page3-section--special" aria-labelledby="yp-planera-page3-special-title" data-page3-panel="special" {% if vm.view != 'special' %}hidden{% endif %}>
                 <div class="yp-planera-page3-section__head">
                   <h2 class="yp-planera-page3-section__title" id="yp-planera-page3-special-title">Specialkost</h2>
+                  <nav class="yp-planera-page3-special-tabs" aria-label="Specialkostvy" data-page3-special-tabs>
+                    <a class="yp-planera-page3-special-tab {% if vm.special_view == 'production' %}is-active{% endif %}" data-page3-special-view-link data-page3-special-view="production" href="{{ vm.special_navigation_urls['production'] }}">Produktionslista</a>
+                    <a class="yp-planera-page3-special-tab {% if vm.special_view == 'department' %}is-active{% endif %}" data-page3-special-view-link data-page3-special-view="department" href="{{ vm.special_navigation_urls['department'] }}">Packlista</a>
+                  </nav>
                 </div>
 
-                {% if vm.special_production_groups %}
-                <div class="yp-planera-page3-special-list">
-                  {% for group in vm.special_production_groups %}
-                  <section class="yp-planera-page3-special-group" data-page3-special-group="{{ group.combination_key }}">
-                    <div class="yp-planera-page3-special-group__head">
-                      <span class="yp-planera-page3-pill yp-planera-page3-pill--menu">{{ group.label }}</span>
-                      <span class="yp-planera-page3-special-group__count">{{ group.quantity }} portioner</span>
-                    </div>
-                    <div class="yp-planera-page3-table-wrap">
-                      <table class="yp-planera-page3-table yp-planera-page3-table--special">
-                        <thead>
-                          <tr>
-                            <th scope="col">Rätt</th>
-                            <th scope="col">Totalt</th>
-                            <th scope="col">Avdelningar</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {% for dish in group.dishes %}
-                          <tr data-page3-special-dish="{{ dish.option_id }}">
-                            <th scope="row">
-                              <span class="yp-planera-page3-special-dish__title">{{ dish.display_title }}</span>
-                            </th>
-                            <td>{{ dish.quantity }}</td>
-                            <td>
-                              {% if dish.department_quantities %}
-                              <div class="yp-planera-page3-special-recipients">
-                                {% for row in dish.department_quantities %}
-                                <span class="yp-planera-page3-special-recipient" data-page3-special-destination="{{ row.destination_id }}">
-                                  <span class="yp-planera-page3-special-recipient__name">{{ row.display_name }}</span>
-                                  <strong class="yp-planera-page3-special-recipient__count">{{ row.quantity }}</strong>
-                                </span>
-                                {% endfor %}
-                              </div>
-                              {% else %}
-                              <span class="empty-text">—</span>
-                              {% endif %}
-                            </td>
-                          </tr>
+                <div class="yp-planera-page3-special-view-panel" data-page3-special-view-panel="production" {% if vm.special_view != 'production' %}hidden{% endif %}>
+                  {% if vm.special_production_groups %}
+                  <div class="yp-planera-page3-special-list yp-planera-page3-special-list--production">
+                    {% for group in vm.special_production_groups %}
+                    <section class="yp-planera-page3-special-group" data-page3-special-group="{{ group.combination_key }}">
+                      <div class="yp-planera-page3-special-group__head">
+                        <h3 class="yp-planera-page3-special-group__title">{{ group.label }}</h3>
+                        <span class="yp-planera-page3-special-group__count">{{ group.quantity }} portioner</span>
+                      </div>
+                      <div class="yp-planera-page3-special-production-rows">
+                        {% for dish in group.dishes %}
+                          {% for row in dish.department_quantities %}
+                          <div class="yp-planera-page3-special-production-row" data-page3-special-destination="{{ row.destination_id }}">
+                            <div class="yp-planera-page3-special-production-row__destination">{{ row.display_name }}</div>
+                            <strong class="yp-planera-page3-special-production-row__count">{{ row.quantity }}</strong>
+                            <span class="yp-planera-page3-pill yp-planera-page3-pill--menu yp-planera-page3-pill--quiet">{{ dish.display_title }}</span>
+                          </div>
                           {% endfor %}
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
-                  {% endfor %}
+                        {% endfor %}
+                      </div>
+                    </section>
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                  <p class="empty-text">Inga specialkostgrupper beräknades för detta menyval.</p>
+                  {% endif %}
                 </div>
-                {% else %}
-                <p class="empty-text">Inga specialkostgrupper beräknades för detta menyval.</p>
-                {% endif %}
+
+                <div class="yp-planera-page3-special-view-panel" data-page3-special-view-panel="department" {% if vm.special_view != 'department' %}hidden{% endif %}>
+                  {% if vm.special_destination_groups %}
+                  <div class="yp-planera-page3-special-list yp-planera-page3-special-list--department">
+                    {% for destination in vm.special_destination_groups %}
+                    <section class="yp-planera-page3-special-group" data-page3-special-destination-group="{{ destination.destination_id }}">
+                      <div class="yp-planera-page3-special-group__head">
+                        <h3 class="yp-planera-page3-special-group__title">{{ destination.display_name }}</h3>
+                      </div>
+                      <div class="yp-planera-page3-special-department-rows">
+                        {% for row in destination.rows %}
+                          {% for dish in row.dishes %}
+                          <div class="yp-planera-page3-special-department-row" data-page3-special-destination="{{ destination.destination_id }}" data-page3-special-requirement="{{ row.combination_key }}">
+                            <div class="yp-planera-page3-special-department-row__label">{{ row.label }}</div>
+                            <strong class="yp-planera-page3-special-department-row__count">{{ row.quantity }}</strong>
+                            <span class="yp-planera-page3-pill yp-planera-page3-pill--menu yp-planera-page3-pill--quiet">{{ dish.display_title }}</span>
+                          </div>
+                          {% endfor %}
+                        {% endfor %}
+                      </div>
+                    </section>
+                    {% endfor %}
+                  </div>
+                  {% else %}
+                  <p class="empty-text">Inga specialkostgrupper beräknades för detta menyval.</p>
+                  {% endif %}
+                </div>
               </section>
             </div>
           </section>

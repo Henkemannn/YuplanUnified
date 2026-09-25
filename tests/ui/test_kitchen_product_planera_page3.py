@@ -304,6 +304,28 @@ def _page3_vm_hierarchy(*, view: str = "overview", special_view: str = "producti
                         Product2Page3SpecialDestinationDishVM(option_id="option-2", display_title="Ugnsbakad fisk med dill", quantity=4),
                     ),
                 ),
+                Product2Page3SpecialDestinationRowVM(
+                    combination_key="special__laktosfri",
+                    label="Laktosfri",
+                    quantity=1,
+                    dishes=(
+                        Product2Page3SpecialDestinationDishVM(option_id="option-2", display_title="Ugnsbakad fisk med dill", quantity=1),
+                    ),
+                ),
+            ),
+        ),
+        Product2Page3SpecialDestinationGroupVM(
+            destination_id="dept-16",
+            display_name="Avdelning 16",
+            rows=(
+                Product2Page3SpecialDestinationRowVM(
+                    combination_key="special__glutenfri",
+                    label="Glutenfri",
+                    quantity=3,
+                    dishes=(
+                        Product2Page3SpecialDestinationDishVM(option_id="option-2", display_title="Ugnsbakad fisk med dill", quantity=3),
+                    ),
+                ),
             ),
         ),
     )
@@ -470,7 +492,42 @@ def test_page3_route_supports_canonical_view_params(app_session, monkeypatch):
     assert special.status_code == 200
     assert "Specialkost" in special.get_data(as_text=True)
     assert 'data-page3-special-view="department"' in special.get_data(as_text=True)
+    assert 'data-page3-special-view-link' in special.get_data(as_text=True)
     assert "Avdelning A" in special.get_data(as_text=True)
+    assert "Produktionslista" in special.get_data(as_text=True)
+    assert "Packlista" in special.get_data(as_text=True)
+
+
+def test_page3_route_renders_xor_special_views_for_production_and_department(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Special XOR Site", tenant_id=1)
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **kwargs: _page3_vm_hierarchy(view="special", special_view=str(kwargs.get("special_view") or "production")))
+
+    production = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=production",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    department = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=department",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert production.status_code == 200
+    production_html = production.get_data(as_text=True)
+    assert 'data-page3-special-view-panel="production"' in production_html
+    assert 'data-page3-special-view-panel="department"' in production_html
+    assert not _tag_has_hidden(production_html, 'data-page3-special-view-panel="production"')
+    assert _tag_has_hidden(production_html, 'data-page3-special-view-panel="department"')
+
+    assert department.status_code == 200
+    department_html = department.get_data(as_text=True)
+    assert 'data-page3-special-view-panel="production"' in department_html
+    assert 'data-page3-special-view-panel="department"' in department_html
+    assert _tag_has_hidden(department_html, 'data-page3-special-view-panel="production"')
+    assert not _tag_has_hidden(department_html, 'data-page3-special-view-panel="department"')
 
 
 def test_page3_route_hides_inactive_panels_for_special_department_view(app_session, monkeypatch):
@@ -492,8 +549,14 @@ def test_page3_route_hides_inactive_panels_for_special_department_view(app_sessi
     assert _tag_has_hidden(html, 'data-page3-panel="overview"')
     assert _tag_has_hidden(html, 'data-page3-panel="normal"')
     assert not _tag_has_hidden(html, 'data-page3-panel="special"')
-    assert 'data-page3-special-group' in html
-    assert 'Avdelning 11' in html
+    assert 'data-page3-special-view-link' in html
+    assert _tag_has_hidden(html, 'data-page3-special-view-panel="production"')
+    assert not _tag_has_hidden(html, 'data-page3-special-view-panel="department"')
+    assert 'RÄTT' not in html
+    assert 'AVDELNINGAR' not in html
+    assert 'Glutenfri' in html
+    assert 'Laktosfri' in html
+    assert 'Avdelning 16' in html
 
 
 def test_page3_route_renders_navigation_and_history_hooks(app_session, monkeypatch):
@@ -582,9 +645,15 @@ def test_page3_route_hides_empty_special_departments(app_session, monkeypatch):
     html = rv.get_data(as_text=True)
     special_section = html[html.index('data-page3-panel="special"'):]
     assert 'data-page3-special-view="department"' in html
-    assert "Specialkost" in special_section
+    assert _tag_has_hidden(html, 'data-page3-special-view-panel="production"')
+    assert not _tag_has_hidden(html, 'data-page3-special-view-panel="department"')
+    assert "Packlista" in special_section
+    assert "Avdelning 11" in special_section
     assert "Glutenfri" in special_section
-    assert "Timbal" in special_section
+    assert "Laktosfri" in special_section
+    assert "Ugnsbakad fisk med dill" in special_section
+    assert "RÄTT" not in special_section
+    assert "AVDELNINGAR" not in special_section
 
 
 def test_page3_route_keeps_special_hierarchy_with_multi_dish_cohort(app_session, monkeypatch):
@@ -606,11 +675,15 @@ def test_page3_route_keeps_special_hierarchy_with_multi_dish_cohort(app_session,
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
     production_panel = html[html.index('data-page3-panel="special"'):]
-    assert production_panel.index("Glutenfri") < production_panel.index("Ugnsbakad fisk med dill")
-    assert production_panel.index("Timbal") < production_panel.index("Vardagsgryta med rotfrukter") < production_panel.index("Avdelning 01")
-    timbal_html = production_panel[production_panel.index("Timbal"):]
-    assert timbal_html.index("Vardagsgryta med rotfrukter") < timbal_html.index("Avdelning 01")
-    assert timbal_html.index("Ugnsbakad fisk med dill") < timbal_html.index("Avdelning 16")
+    assert 'data-page3-special-view-panel="production"' in production_panel
+    assert "RÄTT" not in production_panel
+    assert "AVDELNINGAR" not in production_panel
+    assert "Glutenfri" in production_panel
+    assert "Timbal" in production_panel
+    assert "Vardagsgryta med rotfrukter" in production_panel
+    assert "Ugnsbakad fisk med dill" in production_panel
+    assert "Avdelning 01" in production_panel
+    assert "Avdelning 16" in production_panel
 
 
 def test_page3_route_allows_kitchen_role_and_fails_cross_tenant(app_session, monkeypatch):
