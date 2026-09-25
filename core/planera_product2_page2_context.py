@@ -44,6 +44,7 @@ class Product2Page2RequirementGroupVM:
     label: str | None
     effective_quantity: int
     requirements: tuple[Product2Page2RequirementVM, ...]
+    primary_requirement_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +172,7 @@ def _build_requirement_groups(
                     destination_id=destination_id,
                     label=str(group.get("label") or "").strip() or None,
                     effective_quantity=effective_quantity,
+                    primary_requirement_id=int(group.get("primary_requirement_id")) if group.get("primary_requirement_id") is not None else None,
                     requirements=requirements,
                 )
             )

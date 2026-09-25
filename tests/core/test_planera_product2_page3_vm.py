@@ -352,14 +352,6 @@ def test_build_product2_page3_vm_special_production_and_destination_views_group_
                     name="Timbal",
                     semantics="atomic",
                 ),
-            ),
-        )
-        requirement_group_glutenfri = Product2Page2RequirementGroupVM(
-            requirement_group_id="group-glutenfri",
-            destination_id="dept-b",
-            label="Glutenfri",
-            effective_quantity=1,
-            requirements=(
                 Product2Page2RequirementVM(
                     dietary_type_id=2,
                     requirement_key="glutenfri",
@@ -367,6 +359,7 @@ def test_build_product2_page3_vm_special_production_and_destination_views_group_
                     semantics="atomic",
                 ),
             ),
+            primary_requirement_id=1,
         )
         return Product2Page2PlanningContext(
             site_id="site-1",
@@ -376,7 +369,7 @@ def test_build_product2_page3_vm_special_production_and_destination_views_group_
             publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
             options=(option_1, option_2),
             destinations=(destination_1, destination_2),
-            requirement_groups=(requirement_group_timbal, requirement_group_glutenfri),
+            requirement_groups=(requirement_group_timbal,),
         )
 
     option_1_plan = PlanResult(
@@ -446,20 +439,190 @@ def test_build_product2_page3_vm_special_production_and_destination_views_group_
 
     vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
 
-    assert vm.special_production_groups[0].label == "Timbal + Glutenfri"
+    assert vm.special_production_groups[0].label == "Timbal"
     assert vm.special_production_groups[0].quantity == 3
+    assert vm.special_production_groups[0].modifier_labels == ("Glutenfri",)
+    assert vm.special_production_groups[0].unresolved_primary is False
     assert [dish.display_title for dish in vm.special_production_groups[0].dishes] == ["Vardagsgryta med rotfrukter", "Ugnsbakad fisk med dill"]
     assert [dish.quantity for dish in vm.special_production_groups[0].dishes] == [2, 1]
 
     assert vm.special_destination_groups[0].display_name == "Avdelning 16"
-    assert vm.special_destination_groups[0].rows[0].label == "Timbal + Glutenfri"
+    assert vm.special_destination_groups[0].rows[0].label == "Timbal"
     assert vm.special_destination_groups[0].rows[0].quantity == 2
+    assert vm.special_destination_groups[0].rows[0].modifier_labels == ("Glutenfri",)
+    assert vm.special_destination_groups[0].rows[0].unresolved_primary is False
     assert [dish.quantity for dish in vm.special_destination_groups[0].rows[0].dishes] == [2]
 
     assert vm.special_destination_groups[1].display_name == "Avdelning 11"
-    assert vm.special_destination_groups[1].rows[0].label == "Timbal + Glutenfri"
+    assert vm.special_destination_groups[1].rows[0].label == "Timbal"
     assert vm.special_destination_groups[1].rows[0].quantity == 1
+    assert vm.special_destination_groups[1].rows[0].modifier_labels == ("Glutenfri",)
     assert [dish.quantity for dish in vm.special_destination_groups[1].rows[0].dishes] == [1]
+
+
+def test_build_product2_page3_vm_uses_primary_not_member_order_for_special_grouping(monkeypatch):
+    def _page2_context(**_kwargs):
+        option = Product2MealOptionVM(
+            option_id="option-1",
+            variant_type="alt1",
+            display_label="Alt 1",
+            sort_order=10,
+            display_title="Fläskkarré",
+            composition_id="comp-1",
+            resolved=True,
+        )
+        destination = Product2Page2DestinationVM(
+            destination_id="dept-a",
+            display_name="Avdelning A",
+            baseline_quantity=18,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        requirement_group = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-glutenfri",
+            destination_id="dept-a",
+            label="Glutenfri",
+            effective_quantity=1,
+            requirements=(
+                Product2Page2RequirementVM(
+                    dietary_type_id=1,
+                    requirement_key="timbal",
+                    name="Timbal",
+                    semantics="atomic",
+                ),
+                Product2Page2RequirementVM(
+                    dietary_type_id=2,
+                    requirement_key="glutenfri",
+                    name="Glutenfri",
+                    semantics="atomic",
+                ),
+            ),
+            primary_requirement_id=2,
+        )
+        return Product2Page2PlanningContext(
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            status="ok",
+            publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+            options=(option,),
+            destinations=(destination,),
+            requirement_groups=(requirement_group,),
+        )
+
+    plan_result = PlanResult(
+        totals=Totals(baseline_total=18, deviation_total=2, normal_total=16),
+        per_combination={"special__timbal__glutenfri": 2},
+        per_unit={"dept-a": 16},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(
+                baseline_total=18,
+                deviation_total=2,
+                normal_total=16,
+                per_combination={"special__timbal__glutenfri": 2},
+                per_form={"special": 2},
+            )
+        },
+        warnings=[],
+    )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_planning_context", _page2_context)
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.run_kommun_meal_orchestration",
+        lambda **_: _meal_result_with_option(plan_result=plan_result),
+    )
+
+    vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
+
+    assert vm.special_production_groups[0].label == "Glutenfri"
+    assert vm.special_production_groups[0].modifier_labels == ("Timbal",)
+    assert vm.special_production_groups[0].unresolved_primary is False
+    assert vm.special_destination_groups[0].rows[0].label == "Glutenfri"
+    assert vm.special_destination_groups[0].rows[0].modifier_labels == ("Timbal",)
+
+
+def test_build_product2_page3_vm_preserves_unresolved_exact_combination(monkeypatch):
+    def _page2_context(**_kwargs):
+        option = Product2MealOptionVM(
+            option_id="option-1",
+            variant_type="alt1",
+            display_label="Alt 1",
+            sort_order=10,
+            display_title="Fläskkarré",
+            composition_id="comp-1",
+            resolved=True,
+        )
+        destination = Product2Page2DestinationVM(
+            destination_id="dept-a",
+            display_name="Avdelning A",
+            baseline_quantity=18,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        requirement_group = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-legacy",
+            destination_id="dept-a",
+            label="Legacy unresolved",
+            effective_quantity=1,
+            requirements=(
+                Product2Page2RequirementVM(
+                    dietary_type_id=1,
+                    requirement_key="timbal",
+                    name="Timbal",
+                    semantics="atomic",
+                ),
+                Product2Page2RequirementVM(
+                    dietary_type_id=2,
+                    requirement_key="glutenfri",
+                    name="Glutenfri",
+                    semantics="atomic",
+                ),
+            ),
+            primary_requirement_id=None,
+        )
+        return Product2Page2PlanningContext(
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            status="ok",
+            publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+            options=(option,),
+            destinations=(destination,),
+            requirement_groups=(requirement_group,),
+        )
+
+    plan_result = PlanResult(
+        totals=Totals(baseline_total=18, deviation_total=2, normal_total=16),
+        per_combination={"special__timbal__glutenfri": 2},
+        per_unit={"dept-a": 16},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(
+                baseline_total=18,
+                deviation_total=2,
+                normal_total=16,
+                per_combination={"special__timbal__glutenfri": 2},
+                per_form={"special": 2},
+            )
+        },
+        warnings=[],
+    )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_planning_context", _page2_context)
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.run_kommun_meal_orchestration",
+        lambda **_: _meal_result_with_option(plan_result=plan_result),
+    )
+
+    vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
+
+    assert vm.special_production_groups[0].label == "Timbal + Glutenfri"
+    assert vm.special_production_groups[0].modifier_labels == ()
+    assert vm.special_production_groups[0].unresolved_primary is True
+    assert vm.special_destination_groups[0].rows[0].label == "Timbal + Glutenfri"
+    assert vm.special_destination_groups[0].rows[0].modifier_labels == ()
+    assert vm.special_destination_groups[0].rows[0].unresolved_primary is True
 
 
 def test_build_product2_page3_vm_combines_multi_key_cohort_and_uses_canonical_names(monkeypatch):

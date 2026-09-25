@@ -189,9 +189,21 @@
                     {% for group in vm.special_production_groups %}
                     <section class="yp-planera-page3-special-group" data-page3-special-group="{{ group.combination_key }}">
                       <div class="yp-planera-page3-special-group__head">
-                        <h3 class="yp-planera-page3-special-group__title">{{ group.label }}</h3>
+                        <div class="yp-planera-page3-special-group__heading">
+                          <h3 class="yp-planera-page3-special-group__title">{{ group.label }}</h3>
+                          {% if group.unresolved_primary %}
+                          <span class="ua-muted yp-planera-page3-special-group__note">Huvudsaklig specialkost behöver anges</span>
+                          {% endif %}
+                        </div>
                         <span class="yp-planera-page3-special-group__count">{{ group.quantity }} portioner</span>
                       </div>
+                      {% if group.modifier_labels %}
+                      <div class="yp-planera-page3-special-group__modifiers">
+                        {% for modifier in group.modifier_labels %}
+                        <span class="yp-planera-page3-pill yp-planera-page3-pill--modifier">{{ modifier }}</span>
+                        {% endfor %}
+                      </div>
+                      {% endif %}
                       <div class="yp-planera-page3-special-production-rows">
                         {% for dish in group.dishes %}
                           {% for row in dish.department_quantities %}
@@ -200,6 +212,13 @@
                               {{ row.display_name }} · {{ row.quantity }} portion{% if row.quantity != 1 %}er{% endif %}
                             </div>
                             <span class="yp-planera-page3-pill yp-planera-page3-pill--menu yp-planera-page3-pill--quiet">{{ dish.display_title }}</span>
+                            {% if group.modifier_labels %}
+                            <div class="yp-planera-page3-special-production-row__modifiers">
+                              {% for modifier in group.modifier_labels %}
+                              <span class="yp-planera-page3-pill yp-planera-page3-pill--modifier">{{ modifier }}</span>
+                              {% endfor %}
+                            </div>
+                            {% endif %}
                           </div>
                           {% endfor %}
                         {% endfor %}
@@ -228,6 +247,13 @@
                               {{ row.label }} · {{ row.quantity }} portion{% if row.quantity != 1 %}er{% endif %}
                             </div>
                             <span class="yp-planera-page3-pill yp-planera-page3-pill--menu yp-planera-page3-pill--quiet">{{ dish.display_title }}</span>
+                            {% if row.modifier_labels %}
+                            <div class="yp-planera-page3-special-department-row__modifiers">
+                              {% for modifier in row.modifier_labels %}
+                              <span class="yp-planera-page3-pill yp-planera-page3-pill--modifier">{{ modifier }}</span>
+                              {% endfor %}
+                            </div>
+                            {% endif %}
                           </div>
                           {% endfor %}
                         {% endfor %}

@@ -530,6 +530,73 @@ def test_page3_route_renders_xor_special_views_for_production_and_department(app
     assert not _tag_has_hidden(department_html, 'data-page3-special-view-panel="department"')
 
 
+def test_page3_special_view_renders_primary_and_modifier_pills(app_session, monkeypatch):
+    client = app_session.test_client()
+    with client.session_transaction() as sess:
+        sess["tenant_id"] = 1
+
+    site, _ = SitesRepo().create_site(name="Page3 Modifier Site", tenant_id=1)
+    base_vm = _page3_vm_hierarchy(view="special", special_view="production")
+    custom_vm = replace(
+        base_vm,
+        special_production_groups=(
+            Product2Page3SpecialProductionGroupVM(
+                combination_key="special__timbal__glutenfri",
+                label="Timbal",
+                quantity=3,
+                dishes=(
+                    Product2Page3SpecialDishVM(
+                        option_id="option-1",
+                        display_title="Vardagsgryta med rotfrukter",
+                        quantity=3,
+                        department_quantities=(
+                            Product2Page3DepartmentQuantityVM(destination_id="dept-16", display_name="Avdelning 16", quantity=3),
+                        ),
+                    ),
+                ),
+                modifier_labels=("Glutenfri",),
+                unresolved_primary=False,
+            ),
+        ),
+        special_destination_groups=(
+            Product2Page3SpecialDestinationGroupVM(
+                destination_id="dept-16",
+                display_name="Avdelning 16",
+                rows=(
+                    Product2Page3SpecialDestinationRowVM(
+                        combination_key="special__timbal__glutenfri",
+                        label="Timbal",
+                        quantity=3,
+                        dishes=(
+                            Product2Page3SpecialDestinationDishVM(
+                                option_id="option-1",
+                                display_title="Vardagsgryta med rotfrukter",
+                                quantity=3,
+                            ),
+                        ),
+                        modifier_labels=("Glutenfri",),
+                        unresolved_primary=False,
+                    ),
+                ),
+            ),
+        ),
+    )
+    monkeypatch.setattr("core.ui_blueprint.build_product2_page3_vm", lambda **_: custom_vm)
+
+    rv = client.get(
+        f"/ui/kitchen/planering/day/production?ui=product2&site_id={site['id']}&date=2026-09-08&meal=lunch&view=special&special_view=production",
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+
+    assert rv.status_code == 200
+    html = rv.get_data(as_text=True)
+    assert "Timbal" in html
+    assert "Glutenfri" in html
+    assert "yp-planera-page3-pill--modifier" in html
+    assert "yp-planera-page3-pill--menu" in html
+    assert "Huvudsaklig specialkost behöver anges" not in html
+
+
 def test_page3_route_hides_inactive_panels_for_special_department_view(app_session, monkeypatch):
     client = app_session.test_client()
     with client.session_transaction() as sess:

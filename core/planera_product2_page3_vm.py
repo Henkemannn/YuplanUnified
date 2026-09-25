@@ -76,6 +76,8 @@ class Product2Page3SpecialProductionGroupVM:
     label: str
     quantity: int
     dishes: tuple[Product2Page3SpecialDishVM, ...]
+    modifier_labels: tuple[str, ...] = ()
+    unresolved_primary: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +93,8 @@ class Product2Page3SpecialDestinationRowVM:
     label: str
     quantity: int
     dishes: tuple[Product2Page3SpecialDestinationDishVM, ...]
+    modifier_labels: tuple[str, ...] = ()
+    unresolved_primary: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,6 +318,80 @@ def _combo_label_from_key(key: str, requirement_name_map: dict[str, str]) -> str
     return " + ".join(labels)
 
 
+@dataclass(frozen=True, slots=True)
+class _RequirementGroupDisplay:
+    label: str
+    modifier_labels: tuple[str, ...]
+    unresolved_primary: bool
+
+
+def _build_requirement_group_display_lookup(
+    context: Product2Page2PlanningContext,
+    requirement_name_map: dict[str, str],
+) -> dict[frozenset[str], _RequirementGroupDisplay]:
+    lookup: dict[frozenset[str], _RequirementGroupDisplay] = {}
+    for group in context.requirement_groups:
+        requirement_keys: list[str] = []
+        for requirement in group.requirements:
+            requirement_key = str(requirement.requirement_key or "").strip()
+            requirement_name = str(requirement.name or "").strip()
+            if not requirement_key or not requirement_name:
+                continue
+            requirement_keys.append(requirement_key)
+        if not requirement_keys:
+            continue
+
+        key_set = frozenset(requirement_keys)
+        primary_label: str | None = None
+        modifier_labels: tuple[str, ...] = ()
+        unresolved_primary = True
+
+        primary_requirement_id = getattr(group, "primary_requirement_id", None)
+        if primary_requirement_id is not None:
+            primary_requirement = next(
+                (requirement for requirement in group.requirements if int(requirement.dietary_type_id) == int(primary_requirement_id)),
+                None,
+            )
+            if primary_requirement is not None:
+                primary_key = str(primary_requirement.requirement_key or "").strip()
+                if primary_key:
+                    primary_label = str(primary_requirement.name or "").strip() or requirement_name_map.get(primary_key)
+                    modifier_labels = tuple(
+                        str(requirement.name or "").strip()
+                        for requirement in group.requirements
+                        if int(requirement.dietary_type_id) != int(primary_requirement_id) and str(requirement.name or "").strip()
+                    )
+                    unresolved_primary = False
+
+        if primary_label is None:
+            primary_label = _combo_label_from_key(f"special__{'__'.join(requirement_keys)}", requirement_name_map)
+            modifier_labels = ()
+            unresolved_primary = True
+
+        existing = lookup.get(key_set)
+        if existing is None:
+            lookup[key_set] = _RequirementGroupDisplay(
+                label=primary_label,
+                modifier_labels=modifier_labels,
+                unresolved_primary=unresolved_primary,
+            )
+            continue
+        if existing.unresolved_primary or unresolved_primary:
+            lookup[key_set] = _RequirementGroupDisplay(
+                label=_combo_label_from_key(f"special__{'__'.join(requirement_keys)}", requirement_name_map),
+                modifier_labels=(),
+                unresolved_primary=True,
+            )
+            continue
+        if existing.label != primary_label or existing.modifier_labels != modifier_labels:
+            lookup[key_set] = _RequirementGroupDisplay(
+                label=_combo_label_from_key(f"special__{'__'.join(requirement_keys)}", requirement_name_map),
+                modifier_labels=(),
+                unresolved_primary=True,
+            )
+    return lookup
+
+
 def _display_matrix_quantity(value: int | None) -> str:
     if value is None or int(value) <= 0:
         return "—"
@@ -435,6 +513,7 @@ def _build_special_production_groups(
     context_options,
     destination_map: dict[str, Product2Page3DestinationVM],
     requirement_name_map: dict[str, str],
+    requirement_group_display_lookup: dict[frozenset[str], _RequirementGroupDisplay],
 ) -> tuple[Product2Page3SpecialProductionGroupVM, ...]:
     option_results = {option.option_id: option for option in options}
     grouped: dict[str, dict[str, object]] = {}
@@ -448,12 +527,23 @@ def _build_special_production_groups(
         for combination_key, quantity in option_result.plan_result.per_combination.items():
             if int(quantity) <= 0:
                 continue
-            label = _combo_label_from_key(combination_key, requirement_name_map)
+            _form, category_keys = _parse_combination_key(combination_key)
+            display = requirement_group_display_lookup.get(frozenset(category_keys))
+            if display is None:
+                label = _combo_label_from_key(combination_key, requirement_name_map)
+                modifier_labels: tuple[str, ...] = ()
+                unresolved_primary = True
+            else:
+                label = display.label
+                modifier_labels = display.modifier_labels
+                unresolved_primary = display.unresolved_primary
             group = grouped.get(combination_key)
             if group is None:
                 group = {
                     "combination_key": combination_key,
                     "label": label,
+                    "modifier_labels": modifier_labels,
+                    "unresolved_primary": unresolved_primary,
                     "quantity": 0,
                     "dishes": {},
                 }
@@ -502,6 +592,8 @@ def _build_special_production_groups(
                 label=str(group["label"]),
                 quantity=int(group["quantity"]),
                 dishes=tuple(dishes),
+                modifier_labels=tuple(group.get("modifier_labels") or ()),
+                unresolved_primary=bool(group.get("unresolved_primary")),
             )
         )
     return tuple(groups)
@@ -513,6 +605,7 @@ def _build_special_destination_groups(
     context_options,
     destination_map: dict[str, Product2Page3DestinationVM],
     requirement_name_map: dict[str, str],
+    requirement_group_display_lookup: dict[frozenset[str], _RequirementGroupDisplay],
 ) -> tuple[Product2Page3SpecialDestinationGroupVM, ...]:
     option_results = {option.option_id: option for option in options}
     destination_groups: dict[str, dict[str, object]] = {}
@@ -540,12 +633,23 @@ def _build_special_destination_groups(
             for combination_key, quantity in breakdown.per_combination.items():
                 if int(quantity) <= 0:
                     continue
-                label = _combo_label_from_key(combination_key, requirement_name_map)
+                _form, category_keys = _parse_combination_key(combination_key)
+                display = requirement_group_display_lookup.get(frozenset(category_keys))
+                if display is None:
+                    label = _combo_label_from_key(combination_key, requirement_name_map)
+                    modifier_labels: tuple[str, ...] = ()
+                    unresolved_primary = True
+                else:
+                    label = display.label
+                    modifier_labels = display.modifier_labels
+                    unresolved_primary = display.unresolved_primary
                 row = rows_map.get(combination_key)
                 if row is None:
                     row = {
                         "combination_key": combination_key,
                         "label": label,
+                        "modifier_labels": modifier_labels,
+                        "unresolved_primary": unresolved_primary,
                         "quantity": 0,
                         "dishes": {},
                     }
@@ -589,6 +693,8 @@ def _build_special_destination_groups(
                     label=str(row["label"]),
                     quantity=int(row["quantity"]),
                     dishes=tuple(dishes),
+                    modifier_labels=tuple(row.get("modifier_labels") or ()),
+                    unresolved_primary=bool(row.get("unresolved_primary")),
                 )
             )
         groups.append(
@@ -703,6 +809,7 @@ def build_product2_page3_vm(
     )
 
     requirement_name_map = _build_requirement_name_map(page2_context)
+    requirement_group_display_lookup = _build_requirement_group_display_lookup(page2_context, requirement_name_map)
     destination_map = _build_destination_name_map(page2_context)
     option_result_by_id = {option.option_id: option for option in meal_result.options}
     options: list[Product2Page3OptionVM] = []
@@ -731,12 +838,14 @@ def build_product2_page3_vm(
         context_options=page2_context.options,
         destination_map=destination_map,
         requirement_name_map=requirement_name_map,
+        requirement_group_display_lookup=requirement_group_display_lookup,
     )
     special_destination_groups = _build_special_destination_groups(
         options=meal_result.options,
         context_options=page2_context.options,
         destination_map=destination_map,
         requirement_name_map=requirement_name_map,
+        requirement_group_display_lookup=requirement_group_display_lookup,
     )
 
     base_url = (

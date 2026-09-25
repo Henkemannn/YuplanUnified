@@ -102,6 +102,11 @@
   gap: 12px;
 }
 
+.yp-planera-page3-special-group__heading {
+  display: grid;
+  gap: 4px;
+}
+
 .yp-planera-page3-special-group__title {
   margin: 0;
   color: var(--page2-ink);
@@ -116,6 +121,17 @@
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.yp-planera-page3-special-group__note {
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.yp-planera-page3-special-group__modifiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .yp-planera-page3-special-tabs {
@@ -243,6 +259,15 @@
   grid-column: 2;
   justify-self: start;
   white-space: nowrap;
+}
+
+.yp-planera-page3-special-production-row__modifiers,
+.yp-planera-page3-special-department-row__modifiers {
+  grid-column: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-self: start;
 }
 
 .yp-planera-page3-special-view-panel {
