@@ -396,7 +396,8 @@ def test_page3_route_renders_production_underlag(app_session, monkeypatch):
 
     assert rv.status_code == 200
     html = rv.get_data(as_text=True)
-    assert "PRODUKTIONSUNDERLAG" in html
+    assert "Produktionsunderlag" in html
+    assert "PRODUKTIONSUNDERLAG" not in html
     assert "Kommunköket" in html
     assert "Fläskkarré" in html
     assert "Översikt" in html

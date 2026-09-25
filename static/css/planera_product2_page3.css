@@ -171,7 +171,7 @@
 
 .yp-planera-page3-hero {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .yp-planera-page3-hero__row,
@@ -186,11 +186,14 @@
 
 .yp-planera-page3-hero__heading {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .yp-planera-page3-title {
-  font-size: clamp(1.7rem, 1.6vw + 1rem, 2.6rem);
+  margin: 0;
+  font-size: clamp(1.35rem, 1.15vw + 0.9rem, 2rem);
+  line-height: 1.05;
+  letter-spacing: -0.05em;
 }
 
 .yp-planera-page3-context {
@@ -352,14 +355,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
-  padding: 0.62rem 1rem;
-  border: 1px solid var(--page2-line);
-  border-radius: 999px;
-  background: var(--page2-surface-soft);
-  color: var(--page2-ink);
+  min-height: 36px;
+  padding: 0.3rem 0.1rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--page2-accent-strong);
   text-decoration: none;
-  font-weight: 750;
+  font-weight: 800;
 }
 
 .yp-planera-page3-status-pill {
