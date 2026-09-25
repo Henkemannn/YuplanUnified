@@ -1,11 +1,29 @@
 import uuid
 import re
 import pytest
+from datetime import date
 
 from core.db import get_session
-from core.admin_repo import DietDefaultsRepo, DietTypesRepo, DepartmentsRepo, SitesRepo
+from core.admin_repo import DietDefaultsRepo, DepartmentDietOverridesRepo, DietTypesRepo, DepartmentsRepo, SitesRepo
+from core.department_requirement_group_service_overrides_repo import DepartmentRequirementGroupServiceOverridesRepo
 from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+from core.department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
 from sqlalchemy import text
+
+
+def _build_weekday_override_payload(*, group_id: str, primary_requirement_id: int, default_quantity: int, overrides: dict[tuple[int, str], int | None]) -> dict[str, str]:
+    payload: dict[str, str] = {
+        "group_id": str(group_id),
+        "primary_requirement_id": str(primary_requirement_id),
+        "default_quantity": str(default_quantity),
+        "is_active": "1",
+    }
+    for weekday in range(1, 8):
+        for meal in ("lunch", "dinner"):
+            key = f"weekday_quantity_{group_id}_{weekday}_{meal}"
+            value = overrides.get((weekday, meal), default_quantity)
+            payload[key] = "" if value is None else str(value)
+    return payload
 
 def test_edit_form_shows_specialkost_heading(client_admin):
     # Create a department
@@ -347,3 +365,207 @@ def test_edit_form_shows_unresolved_requirement_group_and_requires_primary(clien
     assert reread is not None
     assert reread["primary_requirement_id"] == timbal_id
     assert {item["dietary_type_id"] for item in reread["requirements"]} == {timbal_id, laktosfri_id}
+
+
+def test_edit_form_renders_weekday_quantity_controls_for_registered_needs(client_admin):
+    site, _ = SitesRepo().create_site(f"Weekday UI render site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Weekday Render",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    timbal_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    glutenfri_id = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=False, semantics="atomic")
+
+    DepartmentsRepo().upsert_department_diet_defaults(
+        dep["id"],
+        expected_version=0,
+        items=[
+            {"diet_type_id": timbal_id, "default_count": 1},
+            {"diet_type_id": glutenfri_id, "default_count": 1},
+        ],
+    )
+
+    group = DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        2,
+        [timbal_id, glutenfri_id],
+        label="Timbal + Glutenfri",
+        primary_requirement_id=timbal_id,
+    )
+    weekday_repo = DepartmentRequirementGroupWeekdayOverridesRepo()
+    weekday_repo.set_override(group["id"], 4, "lunch", 1)
+    weekday_repo.set_override(group["id"], 4, "dinner", 0)
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    page = client_admin.get(f"/ui/admin/departments/{dep['id']}/edit", headers={"X-User-Role": "admin", "X-Tenant-Id": "1"})
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    assert re.search(rf'name="weekday_quantity_{re.escape(group["id"])}_1_lunch"[^>]*value="2"', html)
+    assert re.search(rf'name="weekday_quantity_{re.escape(group["id"])}_4_lunch"[^>]*value="1"', html)
+    assert re.search(rf'name="weekday_quantity_{re.escape(group["id"])}_4_dinner"[^>]*value="0"', html)
+
+
+def test_edit_form_saves_weekday_quantities_and_resets_without_touching_legacy_tables(client_admin):
+    site, _ = SitesRepo().create_site(f"Weekday UI save site {uuid.uuid4()}")
+    dep, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd Weekday Save",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    timbal_id = DietTypesRepo().create(site_id=site["id"], name="Timbal", default_select=False, semantics="atomic")
+    glutenfri_id = DietTypesRepo().create(site_id=site["id"], name="Glutenfri", default_select=False, semantics="atomic")
+
+    dept_repo = DepartmentsRepo()
+    dept_repo.upsert_department_diet_defaults(
+        dep["id"],
+        expected_version=0,
+        items=[
+            {"diet_type_id": timbal_id, "default_count": 1},
+            {"diet_type_id": glutenfri_id, "default_count": 1},
+        ],
+    )
+    legacy_defaults_before = DietDefaultsRepo().list_for_department(dep["id"])
+    DepartmentDietOverridesRepo().replace_for_department_diet(dep["id"], timbal_id, [{"day": 4, "meal": "lunch", "count": 9}])
+    legacy_overrides_before = DepartmentDietOverridesRepo().list_for_department(dep["id"])
+
+    group = DepartmentRequirementGroupsRepo().create_group(
+        dep["id"],
+        2,
+        [timbal_id, glutenfri_id],
+        label="Timbal + Glutenfri",
+        primary_requirement_id=timbal_id,
+    )
+    exact_repo = DepartmentRequirementGroupServiceOverridesRepo()
+    exact_repo.set_override(group["id"], date(2026, 9, 10), "lunch", 5)
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    create_resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/requirement-groups",
+        data=_build_weekday_override_payload(
+            group_id=group["id"],
+            primary_requirement_id=timbal_id,
+            default_quantity=2,
+            overrides={
+                (4, "lunch"): 1,
+                (4, "dinner"): 0,
+            },
+        ),
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert create_resp.status_code == 200
+
+    overrides = DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(group["id"])
+    assert overrides == [
+        {"group_id": group["id"], "weekday": 4, "meal_key": "dinner", "quantity": 0},
+        {"group_id": group["id"], "weekday": 4, "meal_key": "lunch", "quantity": 1},
+    ]
+    assert exact_repo.resolve_effective_quantity(group["id"], date(2026, 9, 10), "lunch") == 5
+    assert DietDefaultsRepo().list_for_department(dep["id"]) == legacy_defaults_before
+    assert DepartmentDietOverridesRepo().list_for_department(dep["id"]) == legacy_overrides_before
+
+    reset_resp = client_admin.post(
+        f"/ui/admin/departments/{dep['id']}/requirement-groups",
+        data=_build_weekday_override_payload(
+            group_id=group["id"],
+            primary_requirement_id=timbal_id,
+            default_quantity=2,
+            overrides={
+                (4, "lunch"): 2,
+                (4, "dinner"): None,
+            },
+        ),
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert reset_resp.status_code == 200
+    overrides_after_reset = DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(group["id"])
+    assert overrides_after_reset == []
+    assert exact_repo.resolve_effective_quantity(group["id"], date(2026, 9, 10), "lunch") == 5
+    assert DietDefaultsRepo().list_for_department(dep["id"]) == legacy_defaults_before
+    assert DepartmentDietOverridesRepo().list_for_department(dep["id"]) == legacy_overrides_before
+
+
+def test_edit_form_rejects_cross_department_and_negative_weekday_quantities(client_admin):
+    site, _ = SitesRepo().create_site(f"Weekday UI validation site {uuid.uuid4()}")
+    dep_a, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd A",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    dep_b, _ = DepartmentsRepo().create_department(
+        site_id=site["id"],
+        name="Avd B",
+        resident_count_mode="fixed",
+        resident_count_fixed=10,
+    )
+    timbal_a = DietTypesRepo().create(site_id=site["id"], name="Timbal A", default_select=False, semantics="atomic")
+    timbal_b = DietTypesRepo().create(site_id=site["id"], name="Timbal B", default_select=False, semantics="atomic")
+
+    DepartmentsRepo().upsert_department_diet_defaults(
+        dep_a["id"],
+        expected_version=0,
+        items=[{"diet_type_id": timbal_a, "default_count": 1}],
+    )
+    DepartmentsRepo().upsert_department_diet_defaults(
+        dep_b["id"],
+        expected_version=0,
+        items=[{"diet_type_id": timbal_b, "default_count": 1}],
+    )
+
+    group_a = DepartmentRequirementGroupsRepo().create_group(
+        dep_a["id"],
+        2,
+        [timbal_a],
+        label="A",
+        primary_requirement_id=timbal_a,
+    )
+    group_b = DepartmentRequirementGroupsRepo().create_group(
+        dep_b["id"],
+        2,
+        [timbal_b],
+        label="B",
+        primary_requirement_id=timbal_b,
+    )
+
+    with client_admin.session_transaction() as sess:
+        sess["site_id"] = site["id"]
+
+    negative_resp = client_admin.post(
+        f"/ui/admin/departments/{dep_a['id']}/requirement-groups",
+        data=_build_weekday_override_payload(
+            group_id=group_a["id"],
+            primary_requirement_id=timbal_a,
+            default_quantity=2,
+            overrides={(4, "lunch"): -1},
+        ),
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert negative_resp.status_code == 200
+    assert "Antal måste vara 0 eller högre." in negative_resp.get_data(as_text=True)
+    assert DepartmentRequirementGroupsRepo().get_group(group_a["id"]) is not None
+    assert DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(group_a["id"]) == []
+
+    forbidden_resp = client_admin.post(
+        f"/ui/admin/departments/{dep_a['id']}/requirement-groups",
+        data=_build_weekday_override_payload(
+            group_id=group_b["id"],
+            primary_requirement_id=timbal_b,
+            default_quantity=2,
+            overrides={(4, "lunch"): 1},
+        ),
+        follow_redirects=True,
+        headers={"X-User-Role": "admin", "X-Tenant-Id": "1"},
+    )
+    assert forbidden_resp.status_code == 200
+    assert "Avdelningen hittades inte för vald site." in forbidden_resp.get_data(as_text=True)
+    assert DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(group_b["id"]) == []

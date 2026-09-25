@@ -334,6 +334,56 @@
                     </div>
                 </div>
                 <div class="specialkost-edit-row">
+                    <span class="specialkost-edit-label">Varierat antal</span>
+                    <div class="specialkost-edit-actions" style="align-items:stretch; gap:.5rem; width:100%;">
+                        <details class="specialkost-weekday-variation" open>
+                            <summary class="yp-form-help">Justera återkommande antal per veckodag och måltid</summary>
+                            <table class="ua-table ua-table-compact" style="width:100%; margin-top:.5rem;">
+                                <thead>
+                                    <tr>
+                                        <th>Dag</th>
+                                        <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🍽️</span> Lunch</span></th>
+                                        <th><span class="yp-colhead"><span class="yp-icon" aria-hidden="true">🌙</span> Kväll</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in group.weekday_rows or [] %}
+                                    <tr>
+                                        <td>{{ row.weekday_label }}</td>
+                                        <td>
+                                            <input
+                                                type="number"
+                                                class="yp-input sk-input"
+                                                name="weekday_quantity_{{ group.id }}_{{ row.weekday }}_lunch"
+                                                value="{{ row.lunch_value }}"
+                                                min="0"
+                                                step="1"
+                                                aria-label="{{ row.weekday_label }} lunch"
+                                            >
+                                        </td>
+                                        <td>
+                                            <input
+                                                type="number"
+                                                class="yp-input sk-input"
+                                                name="weekday_quantity_{{ group.id }}_{{ row.weekday }}_dinner"
+                                                value="{{ row.dinner_value }}"
+                                                min="0"
+                                                step="1"
+                                                aria-label="{{ row.weekday_label }} kväll"
+                                            >
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            <p class="yp-form-help" style="margin:.35rem 0 0;">Lämna ett fält tomt för att återgå till normala antalet.</p>
+                            {% if group.unresolved_primary %}
+                                <p class="yp-form-help">Den här gruppen saknar huvudsaklig specialkost, men återkommande antal kan fortfarande sparas.</p>
+                            {% endif %}
+                        </details>
+                    </div>
+                </div>
+                <div class="specialkost-edit-row">
                     <span class="specialkost-edit-label">Aktiv</span>
                     <div class="specialkost-edit-actions">
                         <label class="yp-form-help" style="display:flex;align-items:center;gap:.4rem;margin:0;">

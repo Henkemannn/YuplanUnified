@@ -24,6 +24,7 @@ from .planning_option_review import (
 from .planera_product2_menu_vm import Product2MealOptionsError, build_product2_meal_options_vm
 from .planera_product2_page2_context import Product2Page2ContextError, build_product2_page2_planning_context
 from .planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
+from .department_requirement_group_weekday_overrides_repo import DepartmentRequirementGroupWeekdayOverridesRepo
 from datetime import date as _date
 from datetime import datetime as _datetime
 from datetime import time as _time
@@ -201,6 +202,45 @@ def _build_dashboard_announcements(site_id: str | None, *, kitchen_only: bool) -
             }
         )
     return out
+
+
+_WEEKDAY_LABELS = {
+    1: "Mån",
+    2: "Tis",
+    3: "Ons",
+    4: "Tor",
+    5: "Fre",
+    6: "Lör",
+    7: "Sön",
+}
+
+
+def _build_weekday_quantity_rows(*, default_quantity: int, override_rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    override_map: dict[tuple[int, str], int] = {}
+    for row in override_rows:
+        try:
+            weekday = int(row.get("weekday") or 0)
+            meal_key = str(row.get("meal_key") or "").strip().lower()
+            quantity = int(row.get("quantity") or 0)
+        except Exception:
+            continue
+        if weekday < 1 or weekday > 7 or meal_key not in {"lunch", "dinner"}:
+            continue
+        override_map[(weekday, meal_key)] = quantity
+
+    rows: list[dict[str, object]] = []
+    for weekday in range(1, 8):
+        rows.append(
+            {
+                "weekday": weekday,
+                "weekday_label": _WEEKDAY_LABELS.get(weekday, str(weekday)),
+                "lunch_value": override_map.get((weekday, "lunch"), int(default_quantity)),
+                "dinner_value": override_map.get((weekday, "dinner"), int(default_quantity)),
+                "lunch_override": (weekday, "lunch") in override_map,
+                "dinner_override": (weekday, "dinner") in override_map,
+            }
+        )
+    return rows
 
 
 @ui_bp.get("/ui/_proto/app-shell")
@@ -6750,11 +6790,17 @@ def admin_departments_edit_form(dept_id: str):
                 modifier_options = list(member_options)
             if not modifier_options and configured_types:
                 modifier_options = list(configured_types)
+            default_quantity = int(group.get("default_quantity") or 0)
+            weekday_override_rows = []
+            try:
+                weekday_override_rows = DepartmentRequirementGroupWeekdayOverridesRepo().list_for_group(str(group.get("id")))
+            except Exception:
+                weekday_override_rows = []
             formatted_groups.append(
                 {
                     "id": str(group.get("id")),
                     "label": group.get("label"),
-                    "default_quantity": int(group.get("default_quantity") or 0),
+                    "default_quantity": default_quantity,
                     "is_active": bool(group.get("is_active")),
                     "primary_requirement_id": primary_id,
                     "primary_name": primary_name,
@@ -6765,6 +6811,7 @@ def admin_departments_edit_form(dept_id: str):
                     "member_names": [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids],
                     "modifier_names": [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids if member_id != primary_id],
                     "unresolved_primary": primary_id is None,
+                    "weekday_rows": _build_weekday_quantity_rows(default_quantity=default_quantity, override_rows=weekday_override_rows),
                 }
             )
         vm["requirement_groups"] = formatted_groups
@@ -7198,6 +7245,11 @@ def admin_departments_save_requirement_group(dept_id: str):
     modifier_requirement_ids = [str(item).strip() for item in request.form.getlist("modifier_requirement_ids") if str(item).strip()]
     default_quantity = request.form.get("default_quantity")
     is_active = str(request.form.get("is_active") or "").strip().lower() in {"1", "true", "on", "yes"}
+    weekday_changes: list[tuple[int, str, int | None]] = []
+    try:
+        submitted_default_quantity = int(default_quantity or 0)
+    except Exception:
+        submitted_default_quantity = 0
 
     try:
         configured_default_ids = {
@@ -7219,6 +7271,26 @@ def admin_departments_save_requirement_group(dept_id: str):
             for row in (existing_group.get("requirements") or [])
             if str(row.get("dietary_type_id") or "").strip()
         }
+        weekday_repo = DepartmentRequirementGroupWeekdayOverridesRepo()
+        for weekday in range(1, 8):
+            for meal_key in ("lunch", "dinner"):
+                field_name = f"weekday_quantity_{group_id}_{weekday}_{meal_key}"
+                raw_value = request.form.get(field_name)
+                if raw_value is None:
+                    continue
+                clean_value = str(raw_value).strip()
+                if clean_value == "":
+                    weekday_changes.append((weekday, meal_key, None))
+                    continue
+                try:
+                    quantity = int(clean_value)
+                except ValueError:
+                    flash("Antal måste vara ett heltal.", "error")
+                    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+                if quantity < 0:
+                    flash("Antal måste vara 0 eller högre.", "error")
+                    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+                weekday_changes.append((weekday, meal_key, quantity))
 
     allowed_requirement_ids = configured_default_ids | existing_member_ids
     submitted_requirement_ids = {primary_requirement_id, *modifier_requirement_ids}
@@ -7251,6 +7323,12 @@ def admin_departments_save_requirement_group(dept_id: str):
             label=label,
             is_active=is_active,
         )
+        if group_id:
+            for weekday, meal_key, quantity in weekday_changes:
+                if quantity is None or quantity == submitted_default_quantity:
+                    weekday_repo.delete_override(group_id, weekday, meal_key)
+                else:
+                    weekday_repo.set_override(group_id, weekday, meal_key, quantity)
         flash("Registrerat behov sparat.", "success")
     except ValueError as exc:
         msg = str(exc)
