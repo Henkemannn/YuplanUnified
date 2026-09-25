@@ -321,6 +321,32 @@ class DepartmentRequirementGroupWeekdayOverride(Base):
     )
 
 
+class DepartmentRequirementGroupCompletion(Base):
+    __tablename__ = "department_requirement_group_completions"
+
+    group_id: Mapped[str] = mapped_column(
+        ForeignKey("department_requirement_groups.id", ondelete="CASCADE"), primary_key=True
+    )
+    service_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    meal_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    marked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "length(trim(meal_key)) > 0",
+            name="ck_department_requirement_group_completions_meal_key_not_empty",
+        ),
+        CheckConstraint(
+            "meal_key = lower(trim(meal_key))",
+            name="ck_department_requirement_group_completions_meal_key_normalized",
+        ),
+        CheckConstraint(
+            "meal_key IN ('lunch', 'dinner')",
+            name="ck_department_requirement_group_completions_meal_key_allowed",
+        ),
+    )
+
+
 class PlanningOptionReview(Base):
     __tablename__ = "planning_option_reviews"
 
