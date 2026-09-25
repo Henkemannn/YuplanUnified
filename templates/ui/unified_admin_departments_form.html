@@ -243,6 +243,116 @@
         </article>
 
         <article class="app-shell__card">
+        <h2 class="app-shell__card-title">Registrerade behov</h2>
+        <p class="yp-form-help">Välj specialkost, lägg till avvikelser och ange antal. Det här är ett separat register och ändrar inte avdelningens specialkostantal.</p>
+
+        <form method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" class="yp-form specialkost-edit-group">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="specialkost-edit-row">
+                <label class="specialkost-edit-label" for="new_primary_requirement_id">Specialkost</label>
+                <div class="specialkost-edit-actions">
+                    <select id="new_primary_requirement_id" name="primary_requirement_id" class="yp-input">
+                        <option value="">Välj specialkost...</option>
+                        {% for t in vm.requirement_group_diet_types or [] %}
+                        <option value="{{ t.id }}">{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="specialkost-edit-row">
+                <label class="specialkost-edit-label" for="new_modifier_requirement_ids">Ytterligare avvikelser</label>
+                <div class="specialkost-edit-actions" style="align-items:flex-start;">
+                    <select id="new_modifier_requirement_ids" name="modifier_requirement_ids" class="yp-input" multiple size="5">
+                        {% for t in vm.requirement_group_diet_types or [] %}
+                        <option value="{{ t.id }}">{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="specialkost-edit-row">
+                <label class="specialkost-edit-label" for="new_default_quantity">Antal</label>
+                <div class="specialkost-edit-actions">
+                    <input type="number" id="new_default_quantity" name="default_quantity" class="yp-input sk-input" min="0" value="1">
+                </div>
+            </div>
+            <div class="specialkost-edit-row">
+                <span class="specialkost-edit-label">Aktiv</span>
+                <div class="specialkost-edit-actions">
+                    <label class="yp-form-help" style="display:flex;align-items:center;gap:.4rem;margin:0;">
+                        <input type="checkbox" name="is_active" value="1" checked>
+                        Aktiv grupp
+                    </label>
+                </div>
+            </div>
+            <div style="margin-top:.5rem;">
+                <button type="submit" class="yp-button yp-button-primary">Skapa grupp</button>
+            </div>
+        </form>
+
+        <div class="specialkost-edit-groups" role="list" aria-label="Registrerade behov">
+            {% for group in vm.requirement_groups or [] %}
+            <form method="POST" action="{{ url_for('ui.admin_departments_save_requirement_group', dept_id=vm.department.id) }}" class="specialkost-edit-group" role="listitem">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="group_id" value="{{ group.id }}">
+                <div class="specialkost-edit-group__summary" style="margin-bottom:.5rem;">
+                    <strong>{% if group.primary_name %}{{ group.primary_name }}{% else %}Huvudsaklig specialkost behöver anges{% endif %}</strong>
+                    {% if group.unresolved_primary %}
+                        <span class="ua-muted">Huvudsaklig specialkost behöver anges innan du sparar.</span>
+                    {% endif %}
+                    {% if group.modifier_names %}
+                        <div class="ua-muted">{% for name in group.modifier_names %}+ {{ name }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+                    {% endif %}
+                    <div>Antal: {{ group.default_quantity }}</div>
+                </div>
+                <div class="specialkost-edit-row">
+                    <label class="specialkost-edit-label" for="group_{{ group.id }}_primary_requirement_id">Specialkost</label>
+                    <div class="specialkost-edit-actions">
+                        <select id="group_{{ group.id }}_primary_requirement_id" name="primary_requirement_id" class="yp-input">
+                            {% if group.unresolved_primary %}
+                                <option value="">Välj specialkost...</option>
+                            {% endif %}
+                            {% for t in group.primary_options or [] %}
+                            <option value="{{ t.id }}" {% if group.primary_requirement_id and (t.id|string) == (group.primary_requirement_id|string) %}selected{% endif %}>{{ t.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="specialkost-edit-row">
+                    <label class="specialkost-edit-label" for="group_{{ group.id }}_modifier_requirement_ids">Ytterligare avvikelser</label>
+                    <div class="specialkost-edit-actions" style="align-items:flex-start;">
+                        <select id="group_{{ group.id }}_modifier_requirement_ids" name="modifier_requirement_ids" class="yp-input" multiple size="5">
+                            {% for t in group.modifier_options or [] %}
+                            <option value="{{ t.id }}" {% if (t.id|string) in (group.modifier_ids or []) %}selected{% endif %}>{{ t.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="specialkost-edit-row">
+                    <label class="specialkost-edit-label" for="group_{{ group.id }}_default_quantity">Antal</label>
+                    <div class="specialkost-edit-actions">
+                        <input type="number" id="group_{{ group.id }}_default_quantity" name="default_quantity" class="yp-input sk-input" min="0" value="{{ group.default_quantity }}">
+                    </div>
+                </div>
+                <div class="specialkost-edit-row">
+                    <span class="specialkost-edit-label">Aktiv</span>
+                    <div class="specialkost-edit-actions">
+                        <label class="yp-form-help" style="display:flex;align-items:center;gap:.4rem;margin:0;">
+                            <input type="checkbox" name="is_active" value="1" {% if group.is_active %}checked{% endif %}>
+                            Aktiv grupp
+                        </label>
+                    </div>
+                </div>
+                <div style="margin-top:.5rem;">
+                    <button type="submit" class="yp-button yp-button-secondary">Spara grupp</button>
+                </div>
+            </form>
+            {% else %}
+            <p class="ua-muted">Inga registrerade behov ännu.</p>
+            {% endfor %}
+        </div>
+        </article>
+
+        <article class="app-shell__card">
         <h2 class="app-shell__card-title">Serveringstillägg</h2>
         <p class="yp-form-help">Återkommande tillägg per avdelning (t.ex. Mos, Sallad, Sås separat).</p>
         <form id="service-addons-form" method="POST" action="{{ url_for('ui.admin_departments_edit_save_service_addons', dept_id=vm.department.id) }}" class="yp-form">

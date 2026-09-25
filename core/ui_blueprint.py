@@ -6673,6 +6673,8 @@ def admin_departments_edit_form(dept_id: str):
         "diet_types": [],
         "diet_defaults": {},
         "diet_overrides_present": {},
+        "requirement_groups": [],
+        "requirement_group_diet_types": [],
         "service_addons_master": [],
         "department_service_addons": [],
     }
@@ -6682,10 +6684,15 @@ def admin_departments_edit_form(dept_id: str):
         # Diet types are site-scoped; include legacy NULL-site rows via repo
         types = DietTypesRepo().list_all(site_id=active_site_id)
         defaults = DietDefaultsRepo().list_for_department(dept_id)
+        atomic_types = [t for t in types if str(t.get("semantics") or "").strip().lower() == "atomic"]
+        configured_default_ids = {str(row.get("diet_type_id") or "").strip() for row in defaults if str(row.get("diet_type_id") or "").strip()}
+        configured_atomic_types = [t for t in atomic_types if str(t.get("id")) in configured_default_ids]
         vm["diet_types"] = types
+        vm["requirement_group_diet_types"] = configured_atomic_types
         vm["diet_defaults"] = {str(it["diet_type_id"]): int(it.get("default_count", 0) or 0) for it in defaults}
     except Exception:
         vm["diet_types"] = []
+        vm["requirement_group_diet_types"] = []
         vm["diet_defaults"] = {}
     try:
         from core.admin_repo import DepartmentDietOverridesRepo
@@ -6710,6 +6717,60 @@ def admin_departments_edit_form(dept_id: str):
     except Exception:
         vm["service_addons_master"] = []
         vm["department_service_addons"] = []
+
+    try:
+        from core.admin_repo import DietTypesRepo, DietDefaultsRepo
+        from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+
+        all_types = DietTypesRepo().list_all(site_id=active_site_id)
+        atomic_types = [t for t in all_types if str(t.get("semantics") or "").strip().lower() == "atomic"]
+        configured_default_ids = {
+            str(row.get("diet_type_id") or "").strip()
+            for row in DietDefaultsRepo().list_for_department(dept_id)
+            if str(row.get("diet_type_id") or "").strip()
+        }
+        configured_types = [t for t in atomic_types if str(t.get("id")) in configured_default_ids]
+        type_lookup = {str(t.get("id")): t for t in atomic_types}
+        group_repo = DepartmentRequirementGroupsRepo()
+        groups = group_repo.list_for_department(dept_id)
+        formatted_groups: list[dict[str, object]] = []
+        for group in groups:
+            requirement_rows = group.get("requirements") or []
+            member_ids = [str(row.get("dietary_type_id")) for row in requirement_rows if str(row.get("dietary_type_id") or "").strip()]
+            primary_id = str(group.get("primary_requirement_id")) if group.get("primary_requirement_id") is not None else None
+            primary_name = None
+            if primary_id:
+                primary_name = str((type_lookup.get(primary_id) or {}).get("name") or "") or None
+            member_options = [item for item in atomic_types if str(item.get("id")) in configured_default_ids or str(item.get("id")) in member_ids]
+            if not member_options:
+                member_options = list(configured_types)
+            if primary_id:
+                modifier_options = [item for item in member_options if str(item.get("id")) != primary_id]
+            else:
+                modifier_options = list(member_options)
+            if not modifier_options and configured_types:
+                modifier_options = list(configured_types)
+            formatted_groups.append(
+                {
+                    "id": str(group.get("id")),
+                    "label": group.get("label"),
+                    "default_quantity": int(group.get("default_quantity") or 0),
+                    "is_active": bool(group.get("is_active")),
+                    "primary_requirement_id": primary_id,
+                    "primary_name": primary_name,
+                    "primary_options": member_options,
+                    "modifier_options": modifier_options,
+                    "member_ids": member_ids,
+                    "modifier_ids": [member_id for member_id in member_ids if member_id != primary_id],
+                    "member_names": [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids],
+                    "modifier_names": [str((type_lookup.get(member_id) or {}).get("name") or member_id) for member_id in member_ids if member_id != primary_id],
+                    "unresolved_primary": primary_id is None,
+                }
+            )
+        vm["requirement_groups"] = formatted_groups
+        vm["requirement_group_diet_types"] = configured_types
+    except Exception:
+        vm["requirement_groups"] = []
     
     return render_template("ui/unified_admin_departments_form.html", vm=vm)
 
@@ -7102,6 +7163,109 @@ def admin_departments_edit_save_diets(dept_id: str):
             flash("Specialkost sparad.", "success")
         except Exception as e:
             flash(f"Kunde inte spara specialkost: {str(e)}", "error")
+    return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+
+@ui_bp.post("/ui/admin/departments/<dept_id>/requirement-groups")
+@require_roles(*ADMIN_ROLES)
+def admin_departments_save_requirement_group(dept_id: str):
+    from flask import flash, redirect, url_for
+    from core.admin_repo import DietTypesRepo
+    from core.admin_repo import DietDefaultsRepo
+    from core.department_requirement_group_repo import DepartmentRequirementGroupsRepo
+
+    from .context import get_active_context as _get_ctx
+    ctx = _get_ctx()
+    active_site_id = ctx.get("site_id")
+    if not active_site_id:
+        flash("Välj site först.", "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+    db = get_session()
+    try:
+        row = db.execute(
+            text("SELECT id FROM departments WHERE id=:id AND site_id=:sid"),
+            {"id": dept_id, "sid": active_site_id},
+        ).fetchone()
+    finally:
+        db.close()
+    if not row:
+        flash("Avdelning hittades inte för vald site.", "error")
+        return redirect(url_for("ui.admin_departments_list"))
+
+    group_id = (request.form.get("group_id") or "").strip() or None
+    primary_requirement_id = (request.form.get("primary_requirement_id") or "").strip() or None
+    modifier_requirement_ids = [str(item).strip() for item in request.form.getlist("modifier_requirement_ids") if str(item).strip()]
+    default_quantity = request.form.get("default_quantity")
+    is_active = str(request.form.get("is_active") or "").strip().lower() in {"1", "true", "on", "yes"}
+
+    try:
+        configured_default_ids = {
+            str(row.get("diet_type_id") or "").strip()
+            for row in DietDefaultsRepo().list_for_department(dept_id)
+            if str(row.get("diet_type_id") or "").strip()
+        }
+    except Exception:
+        configured_default_ids = set()
+
+    existing_member_ids: set[str] = set()
+    if group_id:
+        existing_group = DepartmentRequirementGroupsRepo().get_group(group_id)
+        if existing_group is None or str(existing_group.get("department_id") or "") != str(dept_id):
+            flash("Avdelningen hittades inte för vald site.", "error")
+            return redirect(url_for("ui.admin_departments_list"))
+        existing_member_ids = {
+            str(row.get("dietary_type_id") or "").strip()
+            for row in (existing_group.get("requirements") or [])
+            if str(row.get("dietary_type_id") or "").strip()
+        }
+
+    allowed_requirement_ids = configured_default_ids | existing_member_ids
+    submitted_requirement_ids = {primary_requirement_id, *modifier_requirement_ids}
+    forbidden_requirement_ids = sorted(req_id for req_id in submitted_requirement_ids if req_id not in allowed_requirement_ids)
+    if forbidden_requirement_ids:
+        flash("Välj bara specialkost som redan är kopplad till avdelningen.", "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+    if not primary_requirement_id:
+        flash("Specialkost måste väljas.", "error")
+        return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
+
+    requirement_ids = [primary_requirement_id, *modifier_requirement_ids]
+    label = None
+    if not group_id:
+        try:
+            types = DietTypesRepo().list_all(site_id=active_site_id)
+            lookup = {str(t.get("id")): str(t.get("name") or "") for t in types if str(t.get("semantics") or "").strip().lower() == "atomic"}
+            label = lookup.get(primary_requirement_id) or None
+        except Exception:
+            label = None
+
+    try:
+        DepartmentRequirementGroupsRepo().save_group(
+            group_id=group_id,
+            department_id=dept_id,
+            default_quantity=default_quantity,
+            requirement_ids=requirement_ids,
+            primary_requirement_id=primary_requirement_id,
+            label=label,
+            is_active=is_active,
+        )
+        flash("Registrerat behov sparat.", "success")
+    except ValueError as exc:
+        msg = str(exc)
+        if msg == "primary_requirement_required":
+            flash("Specialkost måste väljas.", "error")
+        elif msg == "primary_requirement_not_in_members":
+            flash("Specialkost måste ingå i gruppens medlemmar.", "error")
+        elif msg == "duplicate_requirement_id":
+            flash("Dubblett i ytterligare avvikelser.", "error")
+        elif msg == "default_quantity_negative":
+            flash("Antal måste vara 0 eller högre.", "error")
+        else:
+            flash(f"Kunde inte spara registrerat behov: {msg}", "error")
+    except Exception as exc:
+        flash(f"Kunde inte spara registrerat behov: {str(exc)}", "error")
     return redirect(url_for("ui.admin_departments_edit_form", dept_id=dept_id))
 
 

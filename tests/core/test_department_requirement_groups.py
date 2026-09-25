@@ -421,3 +421,178 @@ def test_cleanup_invalid_all_skips_referenced_canonical_requirement(app_session)
         assert diet_row is not None
         assert rel_row is not None
         assert group_row is not None
+
+
+def test_save_group_creates_primary_only_group(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        requirement_id = _seed_atomic_requirements(site["id"], ["Timbal"])[0]
+        repo = DepartmentRequirementGroupsRepo()
+
+        group = repo.save_group(
+            department_id=department["id"],
+            default_quantity=2,
+            requirement_ids=[requirement_id],
+            primary_requirement_id=requirement_id,
+            label="Timbal",
+        )
+
+        assert group["primary_requirement_id"] == requirement_id
+        assert group["default_quantity"] == 2
+        assert [item["dietary_type_id"] for item in group["requirements"]] == [requirement_id]
+
+
+def test_save_group_creates_primary_and_modifier_group(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        timbal_id, glutenfri_id = _seed_atomic_requirements(site["id"], ["Timbal", "Glutenfri"])
+        repo = DepartmentRequirementGroupsRepo()
+
+        group = repo.save_group(
+            department_id=department["id"],
+            default_quantity=1,
+            requirement_ids=[timbal_id, glutenfri_id],
+            primary_requirement_id=timbal_id,
+            label="Timbal",
+        )
+
+        assert group["primary_requirement_id"] == timbal_id
+        assert {item["dietary_type_id"] for item in group["requirements"]} == {timbal_id, glutenfri_id}
+
+
+def test_save_group_updates_modifiers_while_preserving_primary(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        timbal_id, glutenfri_id, laktos_id = _seed_atomic_requirements(site["id"], ["Timbal", "Glutenfri", "Laktosfri"])
+        repo = DepartmentRequirementGroupsRepo()
+
+        created = repo.save_group(
+            department_id=department["id"],
+            default_quantity=1,
+            requirement_ids=[timbal_id, glutenfri_id],
+            primary_requirement_id=timbal_id,
+            label="Timbal",
+        )
+        updated = repo.save_group(
+            group_id=str(created["id"]),
+            department_id=department["id"],
+            default_quantity=1,
+            requirement_ids=[timbal_id, laktos_id],
+            primary_requirement_id=timbal_id,
+            label="Timbal",
+        )
+
+        assert updated is not None
+        assert updated["primary_requirement_id"] == timbal_id
+        assert {item["dietary_type_id"] for item in updated["requirements"]} == {timbal_id, laktos_id}
+
+
+def test_save_group_updates_primary_to_another_existing_member(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        timbal_id, glutenfri_id = _seed_atomic_requirements(site["id"], ["Timbal", "Glutenfri"])
+        repo = DepartmentRequirementGroupsRepo()
+
+        created = repo.save_group(
+            department_id=department["id"],
+            default_quantity=1,
+            requirement_ids=[timbal_id, glutenfri_id],
+            primary_requirement_id=timbal_id,
+            label="Timbal",
+        )
+        updated = repo.save_group(
+            group_id=str(created["id"]),
+            department_id=department["id"],
+            default_quantity=1,
+            requirement_ids=[timbal_id, glutenfri_id],
+            primary_requirement_id=glutenfri_id,
+            label="Timbal",
+        )
+
+        assert updated is not None
+        assert updated["primary_requirement_id"] == glutenfri_id
+        assert {item["dietary_type_id"] for item in updated["requirements"]} == {timbal_id, glutenfri_id}
+
+
+def test_save_group_rejects_missing_primary(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        requirement_id = _seed_atomic_requirements(site["id"], ["Timbal"])[0]
+        repo = DepartmentRequirementGroupsRepo()
+
+        with pytest.raises(ValueError, match="primary_requirement_required"):
+            repo.save_group(
+                department_id=department["id"],
+                default_quantity=2,
+                requirement_ids=[requirement_id],
+                primary_requirement_id=None,
+                label="Timbal",
+            )
+
+
+def test_save_group_rejects_primary_not_in_final_member_set(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        timbal_id, glutenfri_id, laktos_id = _seed_atomic_requirements(site["id"], ["Timbal", "Glutenfri", "Laktosfri"])
+        repo = DepartmentRequirementGroupsRepo()
+
+        with pytest.raises(ValueError, match="primary_requirement_not_in_members"):
+            repo.save_group(
+                department_id=department["id"],
+                default_quantity=1,
+                requirement_ids=[timbal_id, glutenfri_id],
+                primary_requirement_id=laktos_id,
+                label="Bad",
+            )
+
+
+def test_save_group_rejects_duplicate_modifier(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        timbal_id = _seed_atomic_requirements(site["id"], ["Timbal"])[0]
+        repo = DepartmentRequirementGroupsRepo()
+
+        with pytest.raises(ValueError, match="duplicate_requirement_id"):
+            repo.save_group(
+                department_id=department["id"],
+                default_quantity=1,
+                requirement_ids=[timbal_id, timbal_id],
+                primary_requirement_id=timbal_id,
+                label="Dup",
+            )
+
+
+def test_save_group_rejects_negative_quantity(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        timbal_id = _seed_atomic_requirements(site["id"], ["Timbal"])[0]
+        repo = DepartmentRequirementGroupsRepo()
+
+        with pytest.raises(ValueError, match="default_quantity_negative"):
+            repo.save_group(
+                department_id=department["id"],
+                default_quantity=-1,
+                requirement_ids=[timbal_id],
+                primary_requirement_id=timbal_id,
+                label="Bad",
+            )
+
+
+def test_save_group_persists_exact_full_member_set(app_session) -> None:
+    with app_session.app_context():
+        site, department = _seed_department(app_session)
+        timbal_id, glutenfri_id, laktos_id = _seed_atomic_requirements(site["id"], ["Timbal", "Glutenfri", "Laktosfri"])
+        repo = DepartmentRequirementGroupsRepo()
+
+        group = repo.save_group(
+            department_id=department["id"],
+            default_quantity=2,
+            requirement_ids=[timbal_id, glutenfri_id, laktos_id],
+            primary_requirement_id=timbal_id,
+            label="Timbal",
+        )
+
+        reread = repo.get_group(str(group["id"]))
+        assert reread is not None
+        assert {item["dietary_type_id"] for item in reread["requirements"]} == {timbal_id, glutenfri_id, laktos_id}
+        assert reread["primary_requirement_id"] == timbal_id

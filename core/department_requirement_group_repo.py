@@ -296,6 +296,82 @@ class DepartmentRequirementGroupsRepo:
         finally:
             db.close()
 
+    def save_group(
+        self,
+        *,
+        department_id: str,
+        default_quantity: int | str | None,
+        requirement_ids: Iterable[int | str],
+        primary_requirement_id: int | str | None,
+        group_id: str | None = None,
+        label: str | None = None,
+        is_active: bool | None = None,
+    ) -> dict:
+        db = get_session()
+        try:
+            self._ensure_table(db)
+            department_site_id = self._load_department_site_id(db, department_id)
+            quantity = self._normalize_default_quantity(default_quantity)
+            normalized_requirement_ids = self._normalize_requirement_ids(requirement_ids)
+            normalized_primary_requirement_id = self._normalize_primary_requirement_id(primary_requirement_id)
+            if normalized_primary_requirement_id is None:
+                raise ValueError("primary_requirement_required")
+            self._validate_primary_against_members(
+                primary_requirement_id=normalized_primary_requirement_id,
+                member_requirement_ids=normalized_requirement_ids,
+            )
+            requirements = [
+                self._load_atomic_requirement(db, dietary_type_id, department_site_id)
+                for dietary_type_id in normalized_requirement_ids
+            ]
+
+            now = datetime.now(UTC)
+            group = db.get(DepartmentRequirementGroup, str(group_id)) if group_id else None
+            if group_id and group is None:
+                raise ValueError("department_requirement_group_not_found")
+            if group is not None and str(group.department_id) != str(department_id):
+                raise ValueError("department_requirement_group_not_found")
+            if group is None:
+                group = DepartmentRequirementGroup(
+                    id=str(uuid.uuid4()),
+                    department_id=str(department_id),
+                    primary_requirement_id=normalized_primary_requirement_id,
+                    label=self._normalize_label(label),
+                    default_quantity=quantity,
+                    is_active=True if is_active is None else bool(is_active),
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(group)
+            else:
+                group.department_id = str(department_id)
+                if label is not None:
+                    group.label = self._normalize_label(label)
+                group.primary_requirement_id = normalized_primary_requirement_id
+                group.default_quantity = quantity
+                if is_active is not None:
+                    group.is_active = bool(is_active)
+                group.updated_at = now
+                db.query(DepartmentRequirementGroupRequirement).filter(
+                    DepartmentRequirementGroupRequirement.group_id == group.id
+                ).delete(synchronize_session=False)
+
+            for requirement in requirements:
+                db.add(
+                    DepartmentRequirementGroupRequirement(
+                        group_id=group.id,
+                        dietary_type_id=int(requirement.id),
+                    )
+                )
+
+            db.commit()
+            return self.get_group(group.id) or self._serialize_group(db, group)
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
     def deactivate_group(self, group_id: str) -> dict | None:
         return self.update_group(group_id, is_active=False)
 
