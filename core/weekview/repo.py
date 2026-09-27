@@ -271,6 +271,54 @@ class WeekviewRepo:
         finally:
             db.close()
 
+    def compare_and_bump_version(
+        self,
+        tenant_id: int | str,
+        year: int,
+        week: int,
+        department_id: str,
+        expected_version: int,
+    ) -> int | None:
+        self._ensure_schema()
+        db = get_session()
+        try:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO weekview_versions(tenant_id, department_id, year, week, version)
+                    VALUES(:tid, :dep, :yy, :ww, 0)
+                    ON CONFLICT(tenant_id, department_id, year, week) DO NOTHING
+                    """
+                ),
+                {"tid": str(tenant_id), "dep": department_id, "yy": year, "ww": week},
+            )
+            result = db.execute(
+                text(
+                    """
+                    UPDATE weekview_versions
+                    SET version = version + 1
+                    WHERE tenant_id=:tid AND department_id=:dep AND year=:yy AND week=:ww AND version=:expected_version
+                    """
+                ),
+                {
+                    "tid": str(tenant_id),
+                    "dep": department_id,
+                    "yy": year,
+                    "ww": week,
+                    "expected_version": int(expected_version),
+                },
+            )
+            if int(getattr(result, "rowcount", 0) or 0) != 1:
+                db.rollback()
+                return None
+            db.commit()
+            return int(expected_version) + 1
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
     def apply_operations(
         self,
         tenant_id: int | str,
