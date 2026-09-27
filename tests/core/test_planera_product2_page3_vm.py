@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
+from core.app_factory import create_app
 from core.planera_product2_menu_vm import Product2MealOptionVM
 from core.planera_product2_page2_context import (
     Product2Page2DestinationVM,
@@ -10,8 +13,8 @@ from core.planera_product2_page2_context import (
     Product2Page2RequirementGroupVM,
     Product2Page2RequirementVM,
 )
-from core.planera_product2_page3_vm import build_product2_page3_vm
-from core.planera_v2.domain import PlanResult, Totals, UnitBreakdown
+from core.planera_product2_page3_vm import Product2Page3VmError, build_product2_page3_vm
+from core.planera_v2.domain import PlanResult, PlanningSlice, Totals, UnitBreakdown
 from core.planera_v2.meal_orchestration import (
     KommunMealOptionResult,
     KommunMealOrchestrationResult,
@@ -104,6 +107,22 @@ def _meal_result() -> KommunMealOrchestrationResult:
     )
 
 
+def _planning_slice_with_refs(*refs: dict[str, object]) -> PlanningSlice:
+    return PlanningSlice(
+        baseline=0,
+        units=(),
+        deviations=(),
+        context={
+            "source": "planning_option_review",
+            "date": "2026-09-08",
+            "meal_key": "lunch",
+            "requirement_group_refs": list(refs),
+        },
+        warnings=(),
+        compatibility_status="resolved",
+    )
+
+
 def _meal_result_with_option(
     *,
     plan_result: PlanResult | None,
@@ -113,6 +132,7 @@ def _meal_result_with_option(
     display_title: str = "Fläskkarré",
     assigned_destination_ids: tuple[str, ...] = ("dept-a",),
     assigned_destination_count: int = 1,
+    planning_slice: PlanningSlice | None = None,
 ) -> KommunMealOrchestrationResult:
     option = KommunMealOptionResult(
         option_id=option_id,
@@ -124,7 +144,7 @@ def _meal_result_with_option(
         review_state=None,
         review_is_stale=False,
         blockers=blockers,
-        planning_slice=None,
+        planning_slice=planning_slice,
         plan_result=plan_result,
         acceptance_issues=(),
     )
@@ -159,6 +179,367 @@ def test_build_product2_page3_vm_uses_orchestration_numbers_and_page2_metadata(m
     assert [row.display_name for row in vm.options[0].normal_department_rows] == ["Avdelning A"]
     assert vm.options[0].special_cohorts[0].label == "Vegetariskt"
     assert vm.options[0].special_cohorts[0].department_quantities[0].quantity == 3
+
+
+def test_build_product2_page3_vm_completion_targets_use_refs_and_keep_aggregation(monkeypatch):
+    def _page2_context(**_kwargs):
+        option = Product2MealOptionVM(
+            option_id="option-1",
+            variant_type="alt1",
+            display_label="Alt 1",
+            sort_order=10,
+            display_title="Ugnsbakad fisk med dill",
+            composition_id="comp-1",
+            resolved=True,
+        )
+        destination = Product2Page2DestinationVM(
+            destination_id="dept-a",
+            display_name="Avdelning A",
+            baseline_quantity=10,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        requirement_group_a = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-a",
+            destination_id="dept-a",
+            label="Timbal + Laktosfri",
+            effective_quantity=1,
+            requirements=(
+                Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
+                Product2Page2RequirementVM(dietary_type_id=2, requirement_key="laktosfri", name="Laktosfri", semantics="atomic"),
+            ),
+        )
+        requirement_group_b = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-b",
+            destination_id="dept-a",
+            label="Timbal + Laktosfri",
+            effective_quantity=2,
+            requirements=(
+                Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
+                Product2Page2RequirementVM(dietary_type_id=2, requirement_key="laktosfri", name="Laktosfri", semantics="atomic"),
+            ),
+        )
+        zero_group = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-zero",
+            destination_id="dept-a",
+            label="Glutenfri",
+            effective_quantity=0,
+            requirements=(
+                Product2Page2RequirementVM(dietary_type_id=3, requirement_key="glutenfri", name="Glutenfri", semantics="atomic"),
+            ),
+        )
+        unused_group = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-unused",
+            destination_id="dept-b",
+            label="Vegetarisk + Äggfri",
+            effective_quantity=1,
+            requirements=(
+                Product2Page2RequirementVM(dietary_type_id=4, requirement_key="vegetarisk", name="Vegetarisk", semantics="atomic"),
+                Product2Page2RequirementVM(dietary_type_id=5, requirement_key="aggfri", name="Äggfri", semantics="atomic"),
+            ),
+        )
+        return Product2Page2PlanningContext(
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            status="ok",
+            publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+            options=(option,),
+            destinations=(destination,),
+            requirement_groups=(requirement_group_a, requirement_group_b, zero_group, unused_group),
+        )
+
+    plan_result = PlanResult(
+        totals=Totals(baseline_total=10, deviation_total=3, normal_total=7),
+        per_combination={"special__timbal__laktosfri": 3},
+        per_unit={"dept-a": 7},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(
+                baseline_total=10,
+                deviation_total=3,
+                normal_total=7,
+                per_combination={"special__timbal__laktosfri": 3},
+                per_form={"special": 3},
+            )
+        },
+        warnings=[],
+    )
+    planning_slice = _planning_slice_with_refs(
+        {
+            "requirement_group_id": "group-a",
+            "destination_id": "dept-a",
+            "unit_id": "dept-a",
+            "category_keys": ["timbal", "laktosfri"],
+            "quantity": 1,
+        },
+        {
+            "requirement_group_id": "group-a",
+            "destination_id": "dept-a",
+            "unit_id": "dept-a",
+            "category_keys": ["timbal", "laktosfri"],
+            "quantity": 1,
+        },
+        {
+            "requirement_group_id": "group-b",
+            "destination_id": "dept-a",
+            "unit_id": "dept-a",
+            "category_keys": ["timbal", "laktosfri"],
+            "quantity": 2,
+        },
+        {
+            "requirement_group_id": "group-zero",
+            "destination_id": "dept-a",
+            "unit_id": "dept-a",
+            "category_keys": ["glutenfri"],
+            "quantity": 0,
+        },
+    )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_planning_context", _page2_context)
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.run_kommun_meal_orchestration",
+        lambda **_: _meal_result_with_option(plan_result=plan_result, planning_slice=planning_slice),
+    )
+
+    vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
+
+    assert vm.special_production_groups[0].label == "Timbal + Laktosfri"
+    assert vm.special_production_groups[0].quantity == 3
+    assert [dish.quantity for dish in vm.special_production_groups[0].dishes] == [3]
+
+    completion_targets = {target.requirement_group_id: target for target in vm.completion_targets}
+    assert set(completion_targets) == {"group-a", "group-b"}
+    assert completion_targets["group-a"].destination_id == "dept-a"
+    assert completion_targets["group-a"].service_date == "2026-09-08"
+    assert completion_targets["group-a"].meal == "lunch"
+    assert completion_targets["group-a"].quantity == 1
+    assert completion_targets["group-b"].destination_id == "dept-a"
+    assert completion_targets["group-b"].service_date == "2026-09-08"
+    assert completion_targets["group-b"].meal == "lunch"
+    assert completion_targets["group-b"].quantity == 2
+    assert "group-zero" not in completion_targets
+    assert "group-unused" not in completion_targets
+
+
+@pytest.mark.parametrize(
+    "ref,match",
+    [
+        ({"destination_id": "dept-a", "unit_id": "dept-a", "category_keys": ["timbal"], "quantity": 1}, "completion_target_requirement_group_missing"),
+        ({"requirement_group_id": "group-a", "unit_id": "dept-a", "category_keys": ["timbal"], "quantity": 1}, "completion_target_destination_missing"),
+        ({"requirement_group_id": "group-a", "destination_id": "dept-a", "unit_id": "dept-a", "category_keys": ["timbal"], "quantity": "abc"}, "completion_target_quantity_invalid:group-a"),
+        ({"requirement_group_id": "group-a", "destination_id": "dept-a", "unit_id": "dept-b", "category_keys": ["timbal"], "quantity": 1}, "completion_target_destination_mismatch:group-a"),
+    ],
+)
+def test_build_product2_page3_vm_rejects_malformed_positive_completion_refs(monkeypatch, ref, match):
+    def _page2_context(**_kwargs):
+        option = Product2MealOptionVM(
+            option_id="option-1",
+            variant_type="alt1",
+            display_label="Alt 1",
+            sort_order=10,
+            display_title="Ugnsbakad fisk med dill",
+            composition_id="comp-1",
+            resolved=True,
+        )
+        destination = Product2Page2DestinationVM(
+            destination_id="dept-a",
+            display_name="Avdelning A",
+            baseline_quantity=10,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        requirement_group = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-a",
+            destination_id="dept-a",
+            label="Timbal",
+            effective_quantity=1,
+            requirements=(
+                Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
+            ),
+        )
+        return Product2Page2PlanningContext(
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            status="ok",
+            publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+            options=(option,),
+            destinations=(destination,),
+            requirement_groups=(requirement_group,),
+        )
+
+    plan_result = PlanResult(
+        totals=Totals(baseline_total=10, deviation_total=1, normal_total=9),
+        per_combination={"special__timbal": 1},
+        per_unit={"dept-a": 9},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(
+                baseline_total=10,
+                deviation_total=1,
+                normal_total=9,
+                per_combination={"special__timbal": 1},
+                per_form={"special": 1},
+            )
+        },
+        warnings=[],
+    )
+    planning_slice = _planning_slice_with_refs(ref)
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_planning_context", _page2_context)
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.run_kommun_meal_orchestration",
+        lambda **_: _meal_result_with_option(plan_result=plan_result, planning_slice=planning_slice),
+    )
+
+    with pytest.raises(Product2Page3VmError, match=match):
+        build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
+
+
+def test_build_product2_page3_vm_omits_zero_quantity_completion_refs(monkeypatch):
+    def _page2_context(**_kwargs):
+        option = Product2MealOptionVM(
+            option_id="option-1",
+            variant_type="alt1",
+            display_label="Alt 1",
+            sort_order=10,
+            display_title="Ugnsbakad fisk med dill",
+            composition_id="comp-1",
+            resolved=True,
+        )
+        destination = Product2Page2DestinationVM(
+            destination_id="dept-a",
+            display_name="Avdelning A",
+            baseline_quantity=10,
+            selected_option_id="option-1",
+            choice_source="explicit",
+        )
+        requirement_group = Product2Page2RequirementGroupVM(
+            requirement_group_id="group-a",
+            destination_id="dept-a",
+            label="Timbal",
+            effective_quantity=1,
+            requirements=(
+                Product2Page2RequirementVM(dietary_type_id=1, requirement_key="timbal", name="Timbal", semantics="atomic"),
+            ),
+        )
+        return Product2Page2PlanningContext(
+            site_id="site-1",
+            service_date="2026-09-08",
+            meal="lunch",
+            status="ok",
+            publication_identity=Product2Page2PublicationIdentity(builder_menu_id="menu-1", builder_menu_version=1),
+            options=(option,),
+            destinations=(destination,),
+            requirement_groups=(requirement_group,),
+        )
+
+    plan_result = PlanResult(
+        totals=Totals(baseline_total=10, deviation_total=1, normal_total=9),
+        per_combination={"special__timbal": 1},
+        per_unit={"dept-a": 9},
+        per_unit_breakdown={
+            "dept-a": UnitBreakdown(
+                baseline_total=10,
+                deviation_total=1,
+                normal_total=9,
+                per_combination={"special__timbal": 1},
+                per_form={"special": 1},
+            )
+        },
+        warnings=[],
+    )
+    planning_slice = _planning_slice_with_refs(
+        {
+            "requirement_group_id": "group-a",
+            "destination_id": "dept-a",
+            "unit_id": "dept-a",
+            "category_keys": ["timbal"],
+            "quantity": 0,
+        }
+    )
+
+    monkeypatch.setattr("core.planera_product2_page3_vm._load_site_name", lambda **_: "Avdelningarnas kök")
+    monkeypatch.setattr("core.planera_product2_page3_vm.build_product2_page2_planning_context", _page2_context)
+    monkeypatch.setattr(
+        "core.planera_product2_page3_vm.run_kommun_meal_orchestration",
+        lambda **_: _meal_result_with_option(plan_result=plan_result, planning_slice=planning_slice),
+    )
+
+    vm = build_product2_page3_vm(tenant_id=1, site_id="site-1", service_date="2026-09-08", meal="lunch")
+
+    assert vm.completion_targets == ()
+
+
+def test_build_product2_page3_vm_live_completion_targets_are_read_only(monkeypatch, tmp_path):
+    from scripts.seed_product2_e2e import BUILDER_DB_PATH, MAIN_DB_PATH
+
+    temp_main_db = tmp_path / "product2_e2e.db"
+    temp_builder_db = tmp_path / "product2_e2e_builder.db"
+    shutil.copy2(MAIN_DB_PATH, temp_main_db)
+    shutil.copy2(BUILDER_DB_PATH, temp_builder_db)
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "database_url": f"sqlite:///{temp_main_db.as_posix()}",
+            "BUILDER_DB_PATH": str(temp_builder_db),
+        }
+    )
+
+    class _ReadOnlyProxy:
+        def __init__(self, session):
+            self._session = session
+            self.statements: list[str] = []
+            self.committed = False
+
+        def execute(self, statement, params=None):
+            sql = str(statement).strip().lower()
+            self.statements.append(sql)
+            if sql.startswith(("insert", "update", "delete", "replace", "alter", "drop", "create")):
+                raise AssertionError(f"unexpected write SQL: {statement}")
+            if params is None:
+                return self._session.execute(statement)
+            return self._session.execute(statement, params)
+
+        def commit(self):
+            self.committed = True
+            raise AssertionError("unexpected commit")
+
+        def close(self):
+            self._session.close()
+
+        def rollback(self):
+            return self._session.rollback()
+
+    proxies: list[_ReadOnlyProxy] = []
+    original_get_session = __import__("core.planera_product2_page3_vm", fromlist=["get_session"]).get_session
+
+    def _get_read_only_session():
+        proxy = _ReadOnlyProxy(original_get_session())
+        proxies.append(proxy)
+        return proxy
+
+    monkeypatch.setattr("core.planera_product2_page3_vm.get_session", _get_read_only_session)
+
+    with app.app_context():
+        vm = build_product2_page3_vm(
+            tenant_id=1,
+            site_id="yuplan-e2e-centralkoket",
+            service_date="2026-09-08",
+            meal="lunch",
+        )
+
+    assert any(target.requirement_group_id == "2b4a2844-5b18-42cd-895f-d3d20358fe9e" and target.quantity == 3 for target in vm.completion_targets)
+    assert any(target.requirement_group_id == "6250379d-69d3-4d41-b457-2b9ad6630b0e" and target.quantity == 1 for target in vm.completion_targets)
+    assert any(target.requirement_group_id == "5c12b02f-d96b-488d-b9b6-7ee374b1ea33" and target.quantity == 1 for target in vm.completion_targets)
+    assert any(target.requirement_group_id == "f0a6d83b-c135-4e79-8fa2-180ec3b05891" and target.quantity == 1 for target in vm.completion_targets)
+    assert all(target.service_date == "2026-09-08" for target in vm.completion_targets)
+    assert all(target.meal == "lunch" for target in vm.completion_targets)
+    assert len(proxies) == 1
+    assert proxies[0].committed is False
+    assert all(statement.startswith("select") for statement in proxies[0].statements)
 
 
 def test_build_product2_page3_vm_overview_and_normal_matrix_projection(monkeypatch):

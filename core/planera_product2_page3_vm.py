@@ -127,6 +127,15 @@ class Product2Page3DestinationVM:
 
 
 @dataclass(frozen=True, slots=True)
+class Product2Page3CompletionTargetVM:
+    requirement_group_id: str
+    destination_id: str
+    service_date: str
+    meal: str
+    quantity: int
+
+
+@dataclass(frozen=True, slots=True)
 class Product2Page3VM:
     tenant_id: int
     site_id: str
@@ -143,6 +152,7 @@ class Product2Page3VM:
     publication_identity: object | None
     options: tuple[Product2Page3OptionVM, ...]
     unassigned_destinations: tuple[Product2Page3DestinationVM, ...]
+    completion_targets: tuple[Product2Page3CompletionTargetVM, ...] = ()
     view: str = "overview"
     special_view: str = "production"
     overview_options: tuple[Product2Page3OptionVM, ...] = ()
@@ -293,6 +303,17 @@ def _build_destination_name_map(context: Product2Page2PlanningContext) -> dict[s
             baseline_quantity=int(destination.baseline_quantity),
         )
     return destination_map
+
+
+def _build_requirement_group_destination_map(context: Product2Page2PlanningContext) -> dict[str, str]:
+    requirement_group_destination_map: dict[str, str] = {}
+    for group in context.requirement_groups:
+        requirement_group_id = str(group.requirement_group_id).strip()
+        destination_id = str(group.destination_id).strip()
+        if not requirement_group_id or not destination_id:
+            continue
+        requirement_group_destination_map[requirement_group_id] = destination_id
+    return requirement_group_destination_map
 
 
 def _parse_combination_key(key: str) -> tuple[str, tuple[str, ...]]:
@@ -707,6 +728,74 @@ def _build_special_destination_groups(
     return tuple(groups)
 
 
+def _build_completion_targets(
+    *,
+    options: tuple[KommunMealOptionResult, ...],
+    destination_map: dict[str, Product2Page3DestinationVM],
+    requirement_group_destination_map: dict[str, str],
+    service_date: str,
+    meal: str,
+) -> tuple[Product2Page3CompletionTargetVM, ...]:
+    targets_by_key: dict[tuple[str, str, str], Product2Page3CompletionTargetVM] = {}
+    destination_order = {destination_id: index for index, destination_id in enumerate(destination_map.keys())}
+
+    for option in options:
+        if option.plan_result is None or option.planning_slice is None:
+            continue
+        context = option.planning_slice.context if isinstance(option.planning_slice.context, dict) else {}
+        refs = context.get("requirement_group_refs")
+        if not isinstance(refs, list):
+            continue
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            requirement_group_id = str(ref.get("requirement_group_id") or "").strip()
+            destination_id = str(ref.get("destination_id") or "").strip()
+            unit_id = str(ref.get("unit_id") or "").strip()
+            if not requirement_group_id:
+                raise Product2Page3VmError("completion_target_requirement_group_missing")
+            if not destination_id:
+                raise Product2Page3VmError("completion_target_destination_missing")
+            if unit_id and unit_id != destination_id:
+                raise Product2Page3VmError(f"completion_target_destination_mismatch:{requirement_group_id}")
+            raw_quantity = ref.get("quantity")
+            try:
+                quantity = int(raw_quantity)
+            except Exception as exc:
+                raise Product2Page3VmError(f"completion_target_quantity_invalid:{requirement_group_id}") from exc
+            if quantity == 0:
+                continue
+            if quantity < 0:
+                raise Product2Page3VmError(f"completion_target_quantity_invalid:{requirement_group_id}")
+            if destination_id not in destination_map:
+                raise Product2Page3VmError(f"completion_target_destination_missing:{destination_id}")
+            expected_destination_id = requirement_group_destination_map.get(requirement_group_id)
+            if expected_destination_id is None:
+                raise Product2Page3VmError(f"completion_target_group_missing:{requirement_group_id}")
+            if expected_destination_id != destination_id:
+                raise Product2Page3VmError(f"completion_target_destination_mismatch:{requirement_group_id}")
+            key = (requirement_group_id, service_date, meal)
+            if key in targets_by_key:
+                existing = targets_by_key[key]
+                if existing.destination_id != destination_id or existing.quantity != quantity:
+                    raise Product2Page3VmError(f"completion_target_duplicate_conflict:{requirement_group_id}")
+                continue
+            targets_by_key[key] = Product2Page3CompletionTargetVM(
+                requirement_group_id=requirement_group_id,
+                destination_id=destination_id,
+                service_date=service_date,
+                meal=meal,
+                quantity=quantity,
+            )
+
+    return tuple(
+        sorted(
+            targets_by_key.values(),
+            key=lambda item: (int(destination_order.get(item.destination_id, 0)), item.requirement_group_id),
+        )
+    )
+
+
 def _option_status_label(option: KommunMealOptionResult) -> str | None:
     if not option.has_demand:
         return "Inga avdelningar har valt denna rätt."
@@ -811,6 +900,7 @@ def build_product2_page3_vm(
     requirement_name_map = _build_requirement_name_map(page2_context)
     requirement_group_display_lookup = _build_requirement_group_display_lookup(page2_context, requirement_name_map)
     destination_map = _build_destination_name_map(page2_context)
+    requirement_group_destination_map = _build_requirement_group_destination_map(page2_context)
     option_result_by_id = {option.option_id: option for option in meal_result.options}
     options: list[Product2Page3OptionVM] = []
 
@@ -832,6 +922,13 @@ def build_product2_page3_vm(
         options=meal_result.options,
         context_options=page2_context.options,
         destination_map=destination_map,
+    )
+    completion_targets = _build_completion_targets(
+        options=meal_result.options,
+        destination_map=destination_map,
+        requirement_group_destination_map=requirement_group_destination_map,
+        service_date=normalized_service_date.isoformat(),
+        meal=normalized_meal,
     )
     special_production_groups = _build_special_production_groups(
         options=meal_result.options,
@@ -904,6 +1001,7 @@ def build_product2_page3_vm(
         publication_identity=meal_result.publication_identity,
         options=tuple(options),
         unassigned_destinations=tuple(unassigned_destinations),
+        completion_targets=completion_targets,
     )
 
 
@@ -915,6 +1013,7 @@ __all__ = [
     "Product2Page3NormalMatrixVM",
     "Product2Page3OptionVM",
     "Product2Page3DestinationVM",
+    "Product2Page3CompletionTargetVM",
     "Product2Page3SpecialDestinationDishVM",
     "Product2Page3SpecialDestinationGroupVM",
     "Product2Page3SpecialDestinationRowVM",
